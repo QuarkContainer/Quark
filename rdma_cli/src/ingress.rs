@@ -263,6 +263,7 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient) {
                                     if oriFd >= 0 {
                                         ipAddr = oriAddr.sin_addr.s_addr;
                                         port = oriAddr.sin_port.to_be();
+                                        println!("Redirect ingress traffic for {}/{}",ipAddr, port);
                                     } else {
                                         error!("error to retrieve original destination.");
                                         break;
@@ -273,7 +274,7 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient) {
                                     Some(rdmaIngress) => {
                                         ipAddr = RDMA_CTLINFO.GetServiceIpFromName(rdmaIngress.service).unwrap();
                                         port = rdmaIngress.targetPortNumber;
-                                        println!("hochan GetRdmaIngressByPort found _port {} ipAddr {}, port {}", _port, ipAddr, port);
+                                        println!("GetRdmaIngressByPort found _port {} ipAddr {}, port {}", _port, ipAddr, port);
                                     }
                                     None => {
                                         error!("No RdmaIngress defined for port {}.", _port);
