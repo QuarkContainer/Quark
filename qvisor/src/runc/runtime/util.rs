@@ -12,15 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::os::unix::prelude::RawFd;
+
 use caps::*;
 use libc;
 use nix::fcntl::*;
+use nix::sys::socket::{AddressFamily, bind, SockAddr, socket, SockFlag, SockType, UnixAddr};
 use nix::sys::stat::Mode;
 use nix::unistd::*;
 
+use super::super::oci::*;
 use super::super::super::qlib::common::*;
 use super::super::super::util::*;
-use super::super::oci::*;
 
 pub fn WriteIDMapping(path: &str, maps: &[LinuxIDMapping]) -> Result<()> {
     let mut data = String::new();
@@ -107,4 +110,23 @@ pub fn SetID(uid: u32, gid: u32) -> Result<()> {
 pub fn ResetEffective() -> Result<()> {
     return set(None, CapSet::Effective, ::caps::all())
         .map_err(|e| Error::IOError(format!("io error is {:?}", e)));
+}
+
+pub fn BindSocket(socket_path: &str) -> Result<RawFd> {
+    let fd = socket(
+        AddressFamily::Unix,
+        SockType::Stream,
+        SockFlag::empty(),
+        None,
+    ).map_err(|e| Error::IOError(format!("failed to create socket fd, {}", e)))?;
+    let unix_addr = UnixAddr::new(socket_path).map_err(|e| {
+        close(fd).unwrap_or_default();
+        Error::IOError(format!("failed to new socket {}, {}", socket_path, e))
+    })?;
+    let sockaddr = SockAddr::Unix(unix_addr);
+    bind(fd, &sockaddr).map_err(|e| {
+        close(fd).unwrap_or_default();
+        Error::IOError(format!("failed to bind socket {} {}", socket_path, e))
+    })?;
+    Ok(fd)
 }

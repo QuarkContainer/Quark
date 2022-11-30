@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::sync::mpsc::Sender;
 use std::sync::Once;
@@ -46,10 +45,6 @@ use super::container::*;
 
 use super::super::super::runc::oci::LinuxResources;
 use super::super::super::runc::sandbox::sandbox::*;
-
-lazy_static! {
-    pub static ref SANDBOX: Mutex<Sandbox> = Mutex::new(Sandbox::default());
-}
 
 type EventSender = Sender<(String, Box<dyn Message>)>;
 
@@ -87,7 +82,7 @@ impl ShimTask {
     pub fn WaitAll(&self, containers: Arc<Mutex<HashMap<String, CommonContainer>>>) {
         let tx = self.tx.clone();
         thread::spawn(move || {
-            let client = SANDBOX.lock().unwrap().WaitAll().unwrap();
+            let client = crate::SANDBOX.lock().WaitAll().unwrap();
             loop {
                 let resp = match Sandbox::GetWaitAllResp(&client) {
                     Ok(resp) => resp,
@@ -233,10 +228,11 @@ impl Task for ShimTask {
         let pid = container.pid() as u32;
         resp.pid = pid;
 
-        let mut sandboxLock = SANDBOX.lock().unwrap();
-        sandboxLock.ID = container.SandboxId();
-        sandboxLock.Pid = container.Pid();
-
+        if !crate::QUARK_CONFIG.lock().Sandboxed {
+            let mut sandboxLock = crate::SANDBOX.lock();
+            sandboxLock.ID = container.SandboxId();
+            sandboxLock.Pid = container.Pid();
+        }
         let len = containers.len();
         if len == 0 {
             // root container

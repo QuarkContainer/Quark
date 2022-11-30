@@ -89,6 +89,7 @@ use self::qlib::qmsg::*;
 use self::qlib::ShareSpace;
 use self::qlib::ShareSpaceRef;
 use self::runc::cmd::command::*;
+use self::runc::sandbox::sandbox::*;
 use self::runc::shim::service::*;
 use self::vmspace::host_pma_keeper::*;
 use self::vmspace::hostfdnotifier::*;
@@ -155,6 +156,7 @@ lazy_static! {
     };
     pub static ref KERNEL_IO_THREAD: KIOThread = KIOThread::New();
     pub static ref GLOCK: Mutex<()> = Mutex::new(());
+    pub static ref SANDBOX: Mutex<Sandbox> = Mutex::new(Sandbox::default());
 }
 
 pub const LOG_FILE: &'static str = "/var/log/quark/quark.log";

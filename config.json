@@ -24,5 +24,6 @@
   "HiberODirect"  : true,
   "DisableCgroup" : true,
   "CopyDataWithPf": true,
-  "TlbShootdownWait": true
+  "TlbShootdownWait": true,
+  "Sandboxed": false
 }

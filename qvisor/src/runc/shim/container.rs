@@ -14,38 +14,42 @@
    limitations under the License.
 */
 
-use nix::sys::stat::Mode;
-use nix::unistd::mkdir;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::mpsc::sync_channel;
 use std::sync::mpsc::Receiver;
-use time::OffsetDateTime;
+use std::sync::mpsc::sync_channel;
 
-use super::super::super::runc::oci::LinuxResources;
 use containerd_shim::api::*;
 use containerd_shim::mount::*;
 use containerd_shim::protos::cgroups::metrics::Metrics;
-use containerd_shim::protos::protobuf::well_known_types::Timestamp;
 use containerd_shim::protos::protobuf::{CodedInputStream, Message};
-use containerd_shim::util::read_spec_from_file;
+use containerd_shim::protos::protobuf::well_known_types::Timestamp;
 use containerd_shim::util::*;
+use containerd_shim::util::read_spec_from_file;
+use nix::sys::stat::Mode;
+use nix::unistd::mkdir;
 use oci_spec::runtime::LinuxNamespaceType;
+use time::OffsetDateTime;
 
-use super::super::super::qlib::common::*;
-use super::super::cmd::config::*;
-use super::super::container::container::*;
 use super::container_io::*;
 use super::process::*;
+use super::super::cmd::config::*;
+use super::super::container::container::*;
+use super::super::super::qlib::common::*;
+use super::super::super::runc::oci::LinuxResources;
 
 #[derive(Clone, Default)]
 pub struct ContainerFactory {}
 
 impl ContainerFactory {
     pub fn Create(ns: &str, req: &CreateTaskRequest) -> Result<CommonContainer> {
-        let bundle = req.bundle.as_str();
+        let mut bundle = req.bundle.clone();
+        if crate::QUARK_CONFIG.lock().Sandboxed {
+            bundle = format!("/{}", req.id);
+        }
+
         let mut opts = Options::new();
         if let Some(any) = req.options.as_ref() {
             let mut input = CodedInputStream::from_bytes(any.value.as_ref());
@@ -56,14 +60,14 @@ impl ContainerFactory {
             debug!("create options: {:?}", &opts);
         }
         let runtime = opts.binary_name.as_str();
-        write_options(bundle, &opts)
+        write_options(&bundle, &opts)
             .map_err(|e| Error::Common(format!("ContainerFactory {:?}", e)))?;
-        write_runtime(bundle, runtime)
+        write_runtime(&bundle, runtime)
             .map_err(|e| Error::Common(format!("ContainerFactory {:?}", e)))?;
 
         let rootfs_vec = req.get_rootfs().to_vec();
         let rootfs = if !rootfs_vec.is_empty() {
-            let tmp_rootfs = Path::new(bundle).join("rootfs");
+            let tmp_rootfs = Path::new(&bundle).join("rootfs");
             if !tmp_rootfs.as_path().exists() {
                 mkdir(tmp_rootfs.as_path(), Mode::from_bits(0o711).unwrap())
                     .map_err(|e| Error::Common(format!("ttrpc error is {:?}", e)))?;
@@ -84,7 +88,7 @@ impl ContainerFactory {
         }
 
         let root = Path::new(opts.root.as_str()).join(ns);
-        let log_buf = Path::new(bundle).join("log.json");
+        let log_buf = Path::new(&bundle).join("log.json");
 
         let id = req.get_id();
         let stdio = ContainerStdio {
@@ -94,9 +98,9 @@ impl ContainerFactory {
             terminal: req.get_terminal(),
         };
 
-        let mut init = InitProcess::New(id, bundle, stdio);
+        let mut init = InitProcess::New(id, &bundle, stdio);
         init.rootfs = rootfs.to_string();
-        let work_dir = Path::new(bundle).join("work");
+        let work_dir = Path::new(&bundle).join("work");
         let work_dir = work_dir
             .as_path()
             .to_str()

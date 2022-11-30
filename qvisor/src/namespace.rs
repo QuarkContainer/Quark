@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use libc::*;
 use std::ffi::CString;
 use std::fs::{create_dir_all, OpenOptions};
 use std::io::prelude::*;
 use std::string::String;
+
+use libc::*;
 
 use super::qlib::SysCallID;
 use super::vmspace::syscall::*;

@@ -93,7 +93,7 @@ impl ContainerIO {
             Self::PtyIO(c) => return c.Set(cmd),
             Self::FifoIO(c) => return c.Set(cmd),
             Self::NullIO(c) => return c.Set(cmd),
-            Self::None => panic!("ContainerIO::None"),
+            Self::None => Ok(()),
         }
     }
 
@@ -102,7 +102,7 @@ impl ContainerIO {
             Self::PtyIO(c) => return c.CloseAfterStart(),
             Self::FifoIO(c) => return c.CloseAfterStart(),
             Self::NullIO(c) => return c.CloseAfterStart(),
-            Self::None => panic!("ContainerIO::None"),
+            Self::None => {},
         }
     }
 

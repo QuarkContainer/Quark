@@ -13,23 +13,43 @@
 // limitations under the License.
 
 use alloc::vec::Vec;
+use std::fs::{canonicalize, create_dir_all};
+use std::fs::File;
+use std::fs::OpenOptions;
+use std::os::unix::io::AsRawFd;
+use std::os::unix::io::FromRawFd;
+use std::os::unix::prelude::RawFd;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::Arc;
+use std::sync::mpsc::channel;
+
+use containerd_shim::ExitSignal;
+use containerd_shim::protos::create_task;
+use containerd_shim::protos::ttrpc::Server;
 use kvm_ioctls::Kvm;
 use libc;
 use nix::fcntl::*;
-use nix::mount::MsFlags;
-use nix::sys::stat::Mode;
-use nix::unistd::getcwd;
+use nix::mount::{mount, MsFlags};
+use nix::sys::stat::{Mode, umask};
+use nix::unistd::{chdir, getcwd};
 use procfs;
 use serde_json;
 use simplelog::*;
-use std::fs::File;
-use std::fs::OpenOptions;
-use std::fs::{canonicalize, create_dir_all};
-use std::os::unix::io::AsRawFd;
-use std::os::unix::io::FromRawFd;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 
+use crate::runc::shim::shim_task::ShimTask;
+
+use super::console::*;
+use super::loader::*;
+use super::signal_handle::*;
+use super::super::cmd::config::*;
+use super::super::container::*;
+use super::super::container::container::*;
+use super::super::container::mounts::*;
+use super::super::container::nix_ext::*;
+use super::super::oci::*;
+use super::super::shim::container_io::*;
+use super::super::specutils::specutils::*;
 use super::super::super::console::pty::*;
 use super::super::super::console::unix_socket::UnixSocket;
 use super::super::super::namespace::*;
@@ -38,20 +58,10 @@ use super::super::super::qlib::config::DebugLevel;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::path::*;
 use super::super::super::qlib::unix_socket;
+use super::super::super::QUARK_CONFIG;
 use super::super::super::ucall::ucall::*;
 use super::super::super::ucall::usocket::*;
 use super::super::super::util::*;
-use super::super::super::QUARK_CONFIG;
-use super::super::cmd::config::*;
-use super::super::container::container::*;
-use super::super::container::mounts::*;
-use super::super::container::nix_ext::*;
-use super::super::oci::*;
-use super::super::shim::container_io::*;
-use super::super::specutils::specutils::*;
-use super::console::*;
-use super::loader::*;
-use super::signal_handle::*;
 use super::util::*;
 use super::vm::*;
 
@@ -110,6 +120,8 @@ pub struct SandboxProcess {
 
     /// Root path for this sandbox, FS images for containers running in this sandbox should be mount inside this dir
     pub SandboxRootDir: String,
+
+    pub TaskSocket: Option<String>,
 }
 
 impl SandboxProcess {
@@ -142,6 +154,7 @@ impl SandboxProcess {
             PCond: Cond::New()?,
             Rootfs: "".to_string(),
             SandboxRootDir: Join(QUARK_SANDBOX_ROOT_PATH, id),
+            TaskSocket: None,
         };
 
         let spec = &process.spec;
@@ -157,7 +170,7 @@ impl SandboxProcess {
         return Ok(process);
     }
 
-    pub fn Run(&self, controlSock: i32, rdmaSvcCliSock: i32) {
+    pub fn Run(&self, controlSock: i32, rdmaSvcCliSock: i32, taskSockFd: i32) {
         let id = &self.containerId;
         let sid = unsafe {
             //signal (SIGHUP, SIG_IGN);
@@ -181,9 +194,18 @@ impl SandboxProcess {
         args.Rootfs = Join(QUARK_SANDBOX_ROOT_PATH, id.as_str());
         args.ControlSock = controlSock;
         args.RDMASvcCliSock = rdmaSvcCliSock;
+        if taskSockFd > 0 {
+            args.Pivot = false;
+        }
 
         let exitStatus = match VirtualMachine::Init(args) {
             Ok(mut vm) => {
+                if taskSockFd > 0 {
+                    if self.pivot {
+                        crate::VMS.lock().PivotRoot(&self.SandboxRootDir);
+                    }
+                    self.StartTaskService(taskSockFd as RawFd).unwrap();
+                }
                 let ret = vm.run().expect("vm.run() fail");
                 ret
             }
@@ -218,6 +240,41 @@ impl SandboxProcess {
         );
         if ret < 0 {
             panic!("InitRootfs: mount sandboxRootDir fails, error is {}", ret);
+        }
+        if self.TaskSocket.is_some() {
+            // create /dev for sandbox process to use
+            let devPath = Join(&self.SandboxRootDir, "dev");
+            create_dir_all(&devPath)
+                .map_err(|e| Error::IOError(format!("failed to create dir {}, {}", devPath, e)))?;
+            let pts_path = Join(&devPath, "pts");
+            create_dir_all(&pts_path)
+                .map_err(|e| Error::IOError(format!("failed to create dir {}, {}", pts_path, e)))?;
+            mount(
+                None::<&str>,
+                &*pts_path,
+                Some("devpts"),
+                MsFlags::empty(),
+                None::<&str>,
+            )
+                .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+            let olddir = getcwd().map_err(|e| Error::IOError(format!("failed to get cwd {:?}", e)))?;
+            chdir(&*self.SandboxRootDir).map_err(|e| Error::IOError(format!("failed to chdir {:?}", e)))?;
+            let old_mask = umask(Mode::from_bits_truncate(0o000));
+            for dev in DEFAULT_DEVICES.iter() {
+                mknod_dev(dev)?;
+            }
+            mknod_dev(&LinuxDevice {
+                path: "/dev/ptmx".to_string(),
+                typ: LinuxDeviceType::c,
+                major: 5,
+                minor: 2,
+                file_mode: Some(0o066),
+                uid: None,
+                gid: None,
+            })?;
+            umask(old_mask);
+            chdir(&olddir).map_err(|e| Error::IOError(format!("failed to chdir {:?}", e)))?;
+            return Ok(());
         }
         let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
         match create_dir_all(&rootContainerPath) {
@@ -568,27 +625,41 @@ impl SandboxProcess {
                 File::create(&self.conf.DebugLog).unwrap(),
             ),
         ])
-        .unwrap();
+            .unwrap();
     }
 
     pub fn Child(&self) -> Result<()> {
-        //self.StartLog();
-
         // set rlimits (before entering user ns)
         for rlimit in &self.RLimits {
             SetRLimit(rlimit.typ as u32, rlimit.soft, rlimit.hard)?;
         }
 
-        let addr = ControlSocketAddr(&self.containerId);
-        let controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");
         let mut rdmaSvcCliSock = 0;
         if QUARK_CONFIG.lock().EnableRDMA {
             rdmaSvcCliSock = unix_socket::UnixSocket::NewClient("/var/quarkrdma/rdma_srv_socket").unwrap();
         }
+
+        let addr = ControlSocketAddr(&self.containerId);
+        let mut taskSockFd = 0;
+        let mut controlSock = 0;
+        if let Some(task_socket) = &self.TaskSocket {
+            // TODO add sandbox cgroup support
+            taskSockFd = USocket::CreateServerSocket(&task_socket).expect("can't create control sock");
+            info!("Child: succeed create socket with path {}", task_socket);
+            let mut sandbox = crate::SANDBOX.lock();
+            sandbox.ID = self.containerId.clone();
+            sandbox.Pid = std::process::id() as i32;
+        } else {
+            // TODO control socket may not be abstract
+            controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");
+        }
         self.MakeSandboxRootDirectory()?;
         self.EnableNamespace()?;
-
-        self.Run(controlSock, rdmaSvcCliSock);
+        if taskSockFd != 0 {
+            // It seems control socket should be created in the same net ns
+            controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");
+        }
+        self.Run(controlSock, rdmaSvcCliSock, taskSockFd);
         panic!("Child: should never reach here");
     }
 
@@ -606,6 +677,32 @@ impl SandboxProcess {
         self.PCond.Notify()?;
 
         return Ok(());
+    }
+
+    fn StartTaskService(&self, taskfd: RawFd) -> Result<()> {
+        let exit = Arc::new(ExitSignal::default());
+        let (tx, rx) = channel();
+        std::thread::spawn(move || {
+            for (_topic, e) in rx.iter() {
+                debug!("Sandbox event: {:?}", e);
+            }
+        });
+        // TODO get namespace from parameter
+        let task = ShimTask::New("k8s.io", exit.clone(), tx);
+        let task_service = create_task(Arc::new(std::boxed::Box::new(task)));
+        let mut server = Server::new().register_service(task_service);
+        server = server.add_listener(taskfd).map_err(|e| {
+            Error::InvalidArgument(format!("failed to add listener {}, {:?}", taskfd, e))
+        })?;
+        server.start().map_err(|e| {
+            Error::IOError(format!("failed to start task server {:?}", e))
+        })?;
+        std::thread::spawn(move || {
+            exit.wait();
+            unsafe { libc::exit(0); }
+        });
+        debug!("task server succeed listen at fd {}", taskfd);
+        Ok(())
     }
 }
 
@@ -680,20 +777,21 @@ pub fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &st
 
         if let Err(e) = setfilecon(&dest, label) {
             warn! {"could not set mount label of {} to {}: {:?}",
-            &m.destination, &label, e};
+            &m.destination, &label, e}
+            ;
         }
     }
 
     // remount bind mounts if they have other flags (like MsFlags::MS_RDONLY)
     if flags.contains(MsFlags::MS_BIND)
         && flags.intersects(
-            !(MsFlags::MS_REC
-                | MsFlags::MS_REMOUNT
-                | MsFlags::MS_BIND
-                | MsFlags::MS_PRIVATE
-                | MsFlags::MS_SHARED
-                | MsFlags::MS_SLAVE),
-        )
+        !(MsFlags::MS_REC
+            | MsFlags::MS_REMOUNT
+            | MsFlags::MS_BIND
+            | MsFlags::MS_PRIVATE
+            | MsFlags::MS_SHARED
+            | MsFlags::MS_SLAVE),
+    )
     {
         let ret = Util::Mount(&dest, &dest, "", (flags | MsFlags::MS_REMOUNT).bits(), "");
         if ret < 0 {

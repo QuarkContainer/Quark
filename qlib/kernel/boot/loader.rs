@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
@@ -21,6 +20,18 @@ use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::ops::Deref;
 
+use crate::qlib::mutex::*;
+
+use super::fs::*;
+use super::super::fs::file::*;
+use super::super::fs::host::tty::*;
+use super::super::fs::mount::*;
+use super::super::kernel::ipc_namespace::*;
+use super::super::kernel::kernel::*;
+use super::super::kernel::uts_namespace::*;
+use super::super::kernel::waiter::qlock::*;
+use super::super::SHARESPACE;
+use super::super::SignalDef::*;
 use super::super::super::auth;
 use super::super::super::auth::cap_set::*;
 use super::super::super::auth::id::*;
@@ -30,19 +41,9 @@ use super::super::super::cpuid::*;
 use super::super::super::limits::*;
 use super::super::super::linux_def::*;
 use super::super::super::loader::*;
-use super::super::fs::host::tty::*;
-use super::super::fs::file::*;
-use super::super::fs::mount::*;
-use super::super::kernel::ipc_namespace::*;
-use super::super::kernel::kernel::*;
-use super::super::kernel::uts_namespace::*;
-use super::super::kernel::waiter::qlock::*;
 use super::super::task::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::thread_group::*;
-use super::super::SignalDef::*;
-use super::super::SHARESPACE;
-use super::fs::*;
 
 impl Process {
     pub fn TaskCaps(&self) -> TaskCaps {
@@ -104,6 +105,34 @@ impl Deref for Loader {
 }
 
 impl Loader {
+    pub fn InitKernel(&self, process: Process) -> Result<()> {
+        let mut gids = Vec::with_capacity(process.AdditionalGids.len());
+        for gid in &process.AdditionalGids {
+            gids.push(KGID(*gid))
+        }
+
+        let userns = UserNameSpace::NewRootUserNamespace();
+        let hostName = process.HostName.to_string();
+
+        let utsns = UTSNamespace::New(hostName.to_string(), hostName.to_string(), userns.clone());
+        let ipcns = IPCNamespace::New(&userns);
+
+        let kernalArgs = InitKernalArgs {
+            FeatureSet: Arc::new(QMutex::new(HostFeatureSet())),
+            RootUserNamespace: userns.clone(),
+            ApplicationCores: process.NumCpu,
+            ExtraAuxv: Vec::new(),
+            RootUTSNamespace: utsns,
+            RootIPCNamespace: ipcns,
+        };
+
+        let kernel = Kernel::Init(kernalArgs);
+        *SHARESPACE.kernel.lock() = Some(kernel.clone());
+        let task = Task::Current();
+        self.Lock(task)?.kernel = kernel;
+        Ok(())
+    }
+
     pub fn WaitContainer(&self, cid: String) -> Result<u32> {
         let task = Task::Current();
         let (tg, _) = self
@@ -127,7 +156,7 @@ impl Loader {
                 return Err(Error::Common(format!(
                     "Loader::WaitPID pid {} doesn't exist",
                     pid
-                )))
+                )));
             }
             Some((tg, _)) => tg,
         };
@@ -308,7 +337,7 @@ impl Loader {
                 return Err(Error::Common(format!(
                     "trying to start a deleted container {}",
                     &execId.cid
-                )))
+                )));
             }
             Some(p) => p,
         };
@@ -567,9 +596,9 @@ impl LoaderInternal {
         // In this case, find the process in the container's PID namespace and
         // signal it.
         let (initTG, _) = match self.ThreadGroupFromID(&ExecID {
-                cid: cid.clone(),
-                pid: 0,
-            }) {
+            cid: cid.clone(),
+            pid: 0,
+        }) {
             None => return Err(Error::SysError(SysErr::ENOENT)),
             Some(d) => d,
         };
@@ -647,7 +676,7 @@ impl LoaderInternal {
                     return Err(Error::Common(format!(
                         "sending SIGKILL to container processes: {:?}",
                         e
-                    )))
+                    )));
                 }
             },
             Err(_e) => (),

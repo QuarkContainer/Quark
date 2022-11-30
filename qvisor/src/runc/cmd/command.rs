@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap::{App, AppSettings, Arg};
 use std::env;
 
-use super::super::super::qlib::common::*;
+use clap::{App, AppSettings, Arg};
+
 use super::boot::*;
 use super::cmd::*;
 use super::config;
@@ -29,8 +29,10 @@ use super::pause::*;
 use super::ps::*;
 use super::resume::*;
 use super::run::*;
+use super::sandbox::*;
 use super::start::*;
 use super::state::*;
+use super::super::super::qlib::common::*;
 use super::wait::*;
 
 fn id_validator(val: String) -> core::result::Result<(), String> {
@@ -181,6 +183,7 @@ pub fn Parse() -> Result<Arguments> {
         .subcommand(KillCmd::SubCommand(&common))
         .subcommand(DeleteCmd::SubCommand(&common))
         .subcommand(StateCmd::SubCommand(&common))
+        .subcommand(SandboxCmd::SubCommand(&common))
         .get_matches_from(get_args());
 
     let level = match matches.occurrences_of("v") {
@@ -268,6 +271,10 @@ pub fn Parse() -> Result<Arguments> {
             config: gConfig,
             cmd: Command::StateCmd(StateCmd::Init(&cmd_matches)?),
         },
+        ("sandbox", Some(cmd_matches)) => Arguments {
+            config: gConfig,
+            cmd: Command::SandboxCmd(SandboxCmd::Init(&cmd_matches)?),
+        },
         // We should never reach here because clap already enforces this
         _ => panic!("command not recognized"),
     };
@@ -297,6 +304,7 @@ pub enum Command {
     KillCmd(KillCmd),
     DeleteCmd(DeleteCmd),
     StateCmd(StateCmd),
+    SandboxCmd(SandboxCmd),
 }
 
 pub fn Run(args: &mut Arguments) -> Result<()> {
@@ -315,5 +323,6 @@ pub fn Run(args: &mut Arguments) -> Result<()> {
         Command::KillCmd(cmd) => return cmd.Run(&mut args.config),
         Command::DeleteCmd(cmd) => return cmd.Run(&mut args.config),
         Command::StateCmd(cmd) => return cmd.Run(&mut args.config),
+        Command::SandboxCmd(cmd) => return cmd.Run(&mut args.config),
     }
 }

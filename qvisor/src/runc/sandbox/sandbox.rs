@@ -365,6 +365,12 @@ impl Sandbox {
         let mounter = FsImageMounter::New(self.ID.as_str());
         mounter.MountContainerFs(bundleDir, spec, id)?;
         let client = self.SandboxConnect()?;
+
+        let container_root = if crate::QUARK_CONFIG.lock().Sandboxed {
+            format!("/{}/rootfs", id)
+        } else {
+            format!("/{}", id)
+        };
         // to avoid sharing the spec structure with qkernel, construct the process spec from oci Spec.
         let process = loader::Process {
             UID: spec.process.user.uid,
@@ -379,7 +385,7 @@ impl Sandbox {
                 .GetInternalCopy(),
             ID: id.to_string(),
             Caps: specutils::Capabilities(false, &spec.process.capabilities),
-            Root: format!("{}{}", "/", id),
+            Root: container_root,
             ..Default::default()
         };
 
