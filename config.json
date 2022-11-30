@@ -25,5 +25,5 @@
   "DisableCgroup" : true,
   "CopyDataWithPf": true,
   "TlbShootdownWait": true,
-  "Sandboxed": true
+  "Sandboxed": false
 }
