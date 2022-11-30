@@ -37,7 +37,6 @@ use procfs;
 use serde_json;
 use simplelog::*;
 
-use crate::runc::shim::shim_task::SANDBOX;
 use crate::runc::shim::shim_task::ShimTask;
 
 use super::console::*;
@@ -264,14 +263,14 @@ impl SandboxProcess {
             for dev in DEFAULT_DEVICES.iter() {
                 mknod_dev(dev)?;
             }
-            mknod_dev(&LinuxDevice{
+            mknod_dev(&LinuxDevice {
                 path: "/dev/ptmx".to_string(),
                 typ: LinuxDeviceType::c,
                 major: 5,
                 minor: 2,
                 file_mode: Some(0o066),
                 uid: None,
-                gid: None
+                gid: None,
             })?;
             umask(old_mask);
             chdir(&olddir).map_err(|e| Error::IOError(format!("failed to chdir {:?}", e)))?;
@@ -647,10 +646,9 @@ impl SandboxProcess {
             // TODO add sandbox cgroup support
             taskSockFd = USocket::CreateServerSocket(&task_socket).expect("can't create control sock");
             info!("Child: succeed create socket with path {}", task_socket);
-            let mut sandbox = SANDBOX.lock().unwrap();
+            let mut sandbox = crate::SANDBOX.lock();
             sandbox.ID = self.containerId.clone();
             sandbox.Pid = std::process::id() as i32;
-            sandbox.kuasar = true;
         } else {
             // TODO control socket may not be abstract
             controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");

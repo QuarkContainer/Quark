@@ -33,8 +33,6 @@ use nix::unistd::mkdir;
 use oci_spec::runtime::LinuxNamespaceType;
 use time::OffsetDateTime;
 
-use crate::runc::sandbox::sandbox::Sandbox;
-
 use super::container_io::*;
 use super::process::*;
 use super::super::cmd::config::*;
@@ -46,9 +44,9 @@ use super::super::super::runc::oci::LinuxResources;
 pub struct ContainerFactory {}
 
 impl ContainerFactory {
-    pub fn Create(ns: &str, req: &CreateTaskRequest, sandbox: &Sandbox) -> Result<CommonContainer> {
+    pub fn Create(ns: &str, req: &CreateTaskRequest) -> Result<CommonContainer> {
         let mut bundle = req.bundle.clone();
-        if sandbox.kuasar {
+        if crate::QUARK_CONFIG.lock().Sandboxed {
             bundle = format!("/{}", req.id);
         }
 
@@ -128,7 +126,7 @@ impl ContainerFactory {
         };
 
         let container = init
-            .Create(&config, sandbox)
+            .Create(&config)
             .map_err(|e| Error::Common(format!("ttrpc error is {:?}", e)))?;
         init.common.pid = container.SandboxPid();
         let container = CommonContainer {

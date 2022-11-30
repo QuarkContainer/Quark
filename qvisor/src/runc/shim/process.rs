@@ -42,7 +42,6 @@ use super::super::container::container::*;
 use super::super::oci;
 use super::super::oci::Spec;
 use super::container_io::*;
-use crate::runc::sandbox::sandbox::Sandbox;
 
 pub struct Console {
     pub file: File,
@@ -309,7 +308,7 @@ impl InitProcess {
         }
     }
 
-    pub fn Create(&self, config: &GlobalConfig, sandbox: &Sandbox) -> Result<Container> {
+    pub fn Create(&self, config: &GlobalConfig) -> Result<Container> {
         let specfile = Join(&self.bundle, "config.json");
         let spec = Spec::load(&specfile).unwrap();
         let container = Container::Create1(
@@ -321,7 +320,6 @@ impl InitProcess {
             "",
             &self.common.containerIO,
             !self.no_pivot_root,
-            sandbox
         )
         .map_err(|e| Error::Other(format!("{:?}", e)))?;
         self.common.CopyIO(&*container.ID, 0)?;

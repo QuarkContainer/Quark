@@ -638,13 +638,12 @@ impl Container {
         userlog: &str,
         io: &ContainerIO,
         pivot: bool,
-        sandbox: &Sandbox,
     ) -> Result<Self> {
         info!("Create container {} in root dir: {}, bundleDir {}", id, &conf.RootDir, bundleDir);
         //debug!("container spec is {:?}", &spec);
         ValidateID(id)?;
 
-        let _unlockRoot = if sandbox.ID.is_empty() {
+        let _unlockRoot = if !crate::QUARK_CONFIG.lock().Sandboxed {
             Some(maybeLockRootContainer(bundleDir, &spec, &conf.RootDir)?)
         } else {
             None
@@ -688,11 +687,11 @@ impl Container {
                 sandboxed: false,
             };
 
-            if !sandbox.ID.is_empty() {
+            if crate::QUARK_CONFIG.lock().Sandboxed {
+                let sandbox = crate::SANDBOX.lock();
                 c.Sandbox = Some(Sandbox {
                     ID: sandbox.ID.to_string(),
                     Pid: sandbox.Pid,
-                    kuasar: true,
                     ..Default::default()
                 });
                 c.sandboxed = true;

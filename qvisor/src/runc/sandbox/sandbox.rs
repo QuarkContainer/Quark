@@ -183,9 +183,6 @@ pub struct Sandbox {
 
     #[serde(skip_serializing, skip_deserializing)]
     pub console: Console,
-
-    #[serde(skip_serializing, skip_deserializing)]
-    pub kuasar: bool,
 }
 
 impl Sandbox {
@@ -369,7 +366,7 @@ impl Sandbox {
         mounter.MountContainerFs(bundleDir, spec, id)?;
         let client = self.SandboxConnect()?;
 
-        let container_root = if self.kuasar {
+        let container_root = if crate::QUARK_CONFIG.lock().Sandboxed {
             format!("/{}/rootfs", id)
         } else {
             format!("/{}", id)
