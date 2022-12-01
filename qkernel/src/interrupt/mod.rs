@@ -706,8 +706,10 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
     //currTask.mm.VcpuLeave();
 
     if ptRegs.cs & 0x3 == 0 { // kernel mode
-        CPULocal::Myself().SetMode(VcpuMode::User);
+        error!("VirtualizationHandler kernel ...");
+        //CPULocal::Myself().SetMode(VcpuMode::User);
         currTask.mm.HandleTlbShootdown();
+        return;
     }
 
     let mut rflags = ptRegs.eflags;
