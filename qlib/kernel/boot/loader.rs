@@ -301,7 +301,7 @@ impl Loader {
     }
 
     pub fn CreateSubContainer(&self, cid: String, fds: Vec<i32>) -> Result<()> {
-        let tty = if fds.len() == 0 { fds[0] } else { -1 };
+        let tty = if fds.len() == 1 { fds[0] } else { -1 };
         let stdios = if fds.len() == 3 {
             [fds[0], fds[1], fds[2]]
         } else {
