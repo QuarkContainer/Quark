@@ -59,7 +59,7 @@ impl FsImageMounter {
         info!("unmount destination: {}", dest);
             let ret = Util::Umount2(&dest, 0);
             if ret < 0 {
-                if ret != -16 || retry_cnt >= 3 {
+                if ret != -16 || retry_cnt > 5 {
                   break ret
                 }
                 thread::sleep(wait_dur);
