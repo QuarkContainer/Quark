@@ -954,7 +954,6 @@ impl Container {
 
     pub fn Destroy(&mut self) -> Result<()> {
         info!("Destroy container {}", &self.ID);
-
         // We must perform the following cleanup steps:
         // * stop the container,
         // * remove the container filesystem on the host, and
@@ -963,8 +962,13 @@ impl Container {
         // It's possible for one or more of these steps to fail, but we should
         // do our best to perform all of the cleanups. Hence, we keep a slice
         // of errors return their concatenation.
-        let mut errs = Vec::new();
+        info!("Find sandbox id for container {}", &self.ID);
+        let mut sandboxId = self.ID.clone();
+        if self.Sandbox.is_some() {
+            sandboxId = self.Sandbox.as_mut().unwrap().ID.clone()
+        }
 
+        let mut errs = Vec::new();
         let _unlockRoot = if !self.sandboxed {
             Some(maybeLockRootContainer(&self.BundleDir, &self.Spec, &self.RootContainerDir)?)
         } else {
@@ -991,12 +995,6 @@ impl Container {
         // This is a workaround to fix the issue that sandbox directory mounts
         // were not cleaned up after container removal. Ideally the mounts
         // should be done in a separate mount namespace, invisible to the host.
-        info!("Find sandbox id for container {}", &self.ID);
-        let mut sandboxId = self.ID.clone();
-        if self.Sandbox.is_some() {
-            sandboxId = self.Sandbox.as_mut().unwrap().ID.clone()
-        }
-
         let fsMounter = FsImageMounter::New(&sandboxId);
         let ret = fsMounter.UnmountContainerFs(&self.Spec, &self.ID);
         if ret.is_err() {

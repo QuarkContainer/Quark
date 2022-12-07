@@ -15,6 +15,7 @@
 use nix::mount::MsFlags;
 use std::fs::create_dir_all;
 use std::fs;
+use std::{thread, time};
 use std::path::Path;
 
 use super::super::container::mounts::*;
@@ -48,6 +49,27 @@ impl FsImageMounter {
 
     fn sandboxRoot(&self) -> String {
         return Join(&self.rootPath, &self.sandboxId);
+    }
+
+    fn umountRetry(&self, dest: &str) -> () {
+        let mut retry_cnt = 0;
+        let wait_dur = time::Duration::from_millis(500);
+        let ret = loop {
+            retry_cnt += 1;
+        info!("unmount destination: {}", dest);
+            let ret = Util::Umount2(&dest, 0);
+            if ret < 0 {
+                if ret != -16 || retry_cnt > 5 {
+                  break ret
+                }
+                thread::sleep(wait_dur);
+                continue
+            }
+            break ret
+        };
+        if ret < 0 {
+            warn!("MountContainerFs: unmount container fs {} fail, error is {}", dest, ret);
+        }
     }
 
     // This method mount the fs image specified in spec into the quark sandbox path and made available to qkernel
@@ -134,11 +156,7 @@ impl FsImageMounter {
             } else {
                 let dest = format!("{}{}", containerFsRootTarget, m.destination);
                 if Path::new(&dest).exists() {
-                    info!("unmount destination: {}", dest);
-                    let ret = Util::Umount2(&dest, 0);
-                    if ret < 0 {
-                        warn!("MountContainerFs: unmount container fs {} fail, error is {}", dest, ret);
-                    }
+                    self.umountRetry(&dest);
                 }
             }
         }
@@ -146,19 +164,11 @@ impl FsImageMounter {
         // unmount dev at last
         let dest = format!("{}{}", containerFsRootTarget, "/dev");
         if Path::new(&dest).exists() {
-            info!("unmount destination: {}", dest);
-            let ret = Util::Umount2(&dest, 0);
-            if ret < 0 {
-                warn!("MountContainerFs: unmount container fs {} fail, error is {}", dest, ret);
-            }
+            self.umountRetry(&dest);
         }
        
         if Path::new(&containerFsRootTarget).exists() {
-            info!("unmount container rootfs: {}", containerFsRootTarget);
-            let ret = Util::Umount2(&containerFsRootTarget, 0);
-            if ret < 0 {
-                warn!("MountContainerFs: unmount container rootfs fail, error is {}", ret);
-            }
+            self.umountRetry(&containerFsRootTarget);
 
             info!("deleting container root directory...{}", containerFsRootTarget);
             let res = fs::remove_dir_all(&containerFsRootTarget);
@@ -172,14 +182,7 @@ impl FsImageMounter {
 
         info!("unmount sandbox root: {}", self.sandboxRoot());
         if Path::new(&self.sandboxRoot()).exists() {
-            let ret = Util::Umount2(&self.sandboxRoot(), 0);
-            if ret < 0 {
-                warn!(
-                    "MountContainerFs: unmount sandbox root fail, error is {}",
-                    ret
-                );
-            }
-
+            self.umountRetry(&self.sandboxRoot());
             info!("deleting sandbox root directory...{}", self.sandboxRoot());
             let res = fs::remove_dir_all(&self.sandboxRoot());
             match res {

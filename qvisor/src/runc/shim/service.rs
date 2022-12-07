@@ -14,6 +14,7 @@
 
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::Arc;
+use std::{thread, time};
 
 use super::super::container::container::*;
 use super::super::container::status::Status;
@@ -98,15 +99,17 @@ impl Shim for Service {
             None => {}
         }
 
-        // cri put all containers' meta.json file in sandbox directory, have to get sandbox bundle dir
-        let mut root_dir = std::env::current_dir().unwrap();
+        let mut container_root_dir = std::env::current_dir().unwrap();
         if self.id != sandbox_id {
-            root_dir = std::env::current_dir().unwrap().parent().unwrap().join(&sandbox_id).join(&self.namespace);
+            // cri put all containers' meta.json file in sandbox bundle directory, have to get sandbox bundle dir
+            container_root_dir = std::env::current_dir().unwrap().parent().unwrap().join(&sandbox_id).join(&self.namespace);
         } else {
-            root_dir = root_dir.join(&self.namespace);
+            let wait_dur = time::Duration::from_millis(100);
+            thread::sleep(wait_dur);
+            container_root_dir = container_root_dir.join(&self.namespace);
         }
 
-        let mut container = Container::Load(&root_dir.to_str().unwrap(), &self.id)
+        let mut container = Container::Load(&container_root_dir.to_str().unwrap(), &self.id)
             .or_else( |e| {
                 error!("failed to load container{:?}", &e);
                 return Err(Error::NotFoundError(self.id.to_string()));}
