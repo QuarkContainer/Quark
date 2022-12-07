@@ -674,11 +674,12 @@ fn RDMAProcess(epoll_fd: i32, hostname: &String) {
     loop {
         // let count = RDMAProcessOnce(&mut channels);
         events.clear();
-        let mut count = 0;
+        let mut totalCount = 0;
         loop {
-            count += RDMAProcessOnce();
+            let currentCount = RDMAProcessOnce();
+            totalCount += currentCount;
             // 1000 can be tuned further based on perf data
-            if count == 0 || count > 1000 {
+            if currentCount == 0 || totalCount > 1000 {
                 break;
             }
         }
@@ -696,7 +697,7 @@ fn RDMAProcess(epoll_fd: i32, hostname: &String) {
         unsafe { events.set_len(res as usize) };
         // println!("RDMAProcess, res: {}, events len: {}, len2: {}", res, events.len(), &events.len());
         let _ = HandleEvents(epoll_fd, &events, hostname);
-        if count > 0 || res > 0{
+        if totalCount > 0 || res > 0{
             start = TSC.Rdtsc();
         }
         if TSC.Rdtsc() - start >= (IO_WAIT_CYCLES/100) {
