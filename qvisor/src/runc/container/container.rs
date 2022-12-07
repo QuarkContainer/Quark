@@ -953,6 +953,7 @@ impl Container {
     }
 
     pub fn Destroy(&mut self) -> Result<()> {
+        info!("Destroy container {}", &self.ID);
         // We must perform the following cleanup steps:
         // * stop the container,
         // * remove the container filesystem on the host, and
@@ -961,7 +962,6 @@ impl Container {
         // It's possible for one or more of these steps to fail, but we should
         // do our best to perform all of the cleanups. Hence, we keep a slice
         // of errors return their concatenation.
-        info!("Destroy container {}", &self.ID);
         info!("Find sandbox id for container {}", &self.ID);
         let mut sandboxId = self.ID.clone();
         if self.Sandbox.is_some() {
@@ -1047,7 +1047,7 @@ impl Container {
         let mut cgroup: Option<Cgroup> = None;
 
         if self.Sandbox.is_some() {
-            info!("Stopping container {}", &self.ID);
+            info!("Destroying container {}", &self.ID);
             let sandbox = self.Sandbox.as_mut().unwrap();
 
             sandbox.DestroyContainer(&self.ID)?;
