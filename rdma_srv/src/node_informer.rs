@@ -85,7 +85,6 @@ impl NodeInformer {
     fn handle(&mut self, node_message: &NodeMessage) {
         println!("Start to handle Node: {:?}", node_message);
         let ip = node_message.ip;
-        let mut nodes_map = RDMA_CTLINFO.nodes.lock();
         let fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
         let epoll_fd = RDMA_CTLINFO.epoll_fd_get();
         if node_message.event_type == EVENT_TYPE_SET {
@@ -97,7 +96,7 @@ impl NodeInformer {
                 timestamp: node_message.creation_timestamp,
                 resource_version: node_message.resource_version,
             };
-            nodes_map.insert(ip, node);
+            RDMA_CTLINFO.node_insert(ip, node);
             if node_message.resource_version > self.max_resource_version {
                 self.max_resource_version = node_message.resource_version;
             }
@@ -113,9 +112,10 @@ impl NodeInformer {
                 }
             }            
         } else if node_message.event_type == EVENT_TYPE_DELETE {
-            if nodes_map.contains_key(&ip) {
-                if nodes_map[&ip].resource_version < node_message.resource_version {
-                    nodes_map.remove(&ip);
+            if RDMA_CTLINFO.node_contains_key(ip) {
+                let node = RDMA_CTLINFO.node_get(ip);
+                if node.resource_version < node_message.resource_version {
+                    RDMA_CTLINFO.node_remove(ip);
                     RDMA_CTLINFO.fds_insert(fd, Srv_FdType::NodeEventFd(NodeEvent{
                         is_delete: true,
                         ip: ip,
@@ -134,6 +134,6 @@ impl NodeInformer {
             self.max_resource_version = node_message.resource_version;
         }
         println!("Handled Node: {:?}", node_message);
-        println!("Debug: nodes_map len:{} {:?}", nodes_map.len(), nodes_map);
+        RDMA_CTLINFO.nodes_map_print();
     }
 }

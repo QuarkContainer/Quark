@@ -324,6 +324,23 @@ impl CtrlInfo {
         debug!("node_get, ip: {}", ip);
         self.nodes.lock().get(&ip).unwrap().clone()
     }
+
+    pub fn node_insert(&self, ip: u32, node: Node) {
+        self.nodes.lock().insert(ip, node);
+    }
+
+    pub fn node_contains_key(&self, ip: u32) -> bool {
+        self.nodes.lock().contains_key(&ip)
+    }
+
+    pub fn node_remove(&self, ip: u32) {
+        self.nodes.lock().remove(&ip);
+    }
+
+    pub fn nodes_map_print(&self) {
+        let nodes_map = self.nodes.lock();
+        println!("Debug: nodes_map len:{} {:?}", nodes_map.len(), nodes_map);
+    }
 }
 
 pub struct ClusterSubnetInfo {
