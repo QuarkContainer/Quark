@@ -23,6 +23,8 @@ use std::ops::{Deref, DerefMut};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::str::FromStr;
 use std::{env, mem, ptr, thread, time};
+use std::time::Duration;
+use std::thread::sleep;
 
 use super::id_mgr::IdMgr;
 use super::qlib::common::*;
@@ -92,6 +94,17 @@ impl Drop for RDMAAgentIntern {
                 );
             }
         }
+    }
+}
+
+impl RDMAAgentIntern {
+    pub fn GetVpcId(&self) -> u32 {
+        return self.vpcId.lock().clone();
+    }
+
+    pub fn SetVpcId(&mut self, id: u32)
+    {
+        *self.vpcId.lock() = id;
     }
 }
 
@@ -466,7 +479,11 @@ impl RDMAAgent {
                 let vpcId;
                 let ipAddr;
                 if RDMA_CTLINFO.isK8s {
-                    vpcId = *self.vpcId.lock();
+                    while self.GetVpcId() == 0 {
+                        println!("Waiting for control plane to get vpcId");
+                        sleep(Duration::from_millis(100));
+                    }
+                    vpcId = self.GetVpcId();
                     ipAddr = self.ipAddr.lock().to_be();
                 } else {
                     let podId = "client".to_string();
@@ -504,6 +521,18 @@ impl RDMAAgent {
                             println!("RDMAConnectUsingPodId: The traffic is connecting to a service. Change the connection to {:?}", ipWithPort);
                             dstIpAddr = ipWithPort.ip;
                             dstPort = ipWithPort.port.port;
+                            if RDMA_CTLINFO.IsEgress(dstIpAddr) {
+                                self.SendControlMsgInternal(
+                                    msg.sockfd,
+                                    RDMA_CTLINFO.localIp_get(),
+                                    // ipAddr.to_be(),
+                                    srcVpcIpAddr,
+                                    msg.srcPort,
+                                    dstIpAddr,
+                                    dstPort,
+                                );
+                                return;
+                            }
                         }
                     }
                     match RDMA_CTLINFO.get_node_ip_by_pod_ip(&dstIpAddr) {
@@ -589,7 +618,7 @@ impl RDMAAgent {
                 let vpcId;
                 let ipAddr;
                 if RDMA_CTLINFO.isK8s {
-                    vpcId = *self.vpcId.lock();
+                    vpcId = self.GetVpcId();
                     ipAddr = self.ipAddr.lock().to_be();
                 } else {
                     let podId = "client".to_string();
