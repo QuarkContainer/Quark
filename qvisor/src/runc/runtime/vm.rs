@@ -239,6 +239,8 @@ impl VirtualMachine {
             LOG.Reset(&args.ID[0..12]);
         }
 
+        let cpuCount = args.GetCpuCount();
+
         let kvmfd = args.KvmFd;
 
         /*if QUARK_CONFIG.lock().EnableRDMA {
@@ -249,7 +251,9 @@ impl VirtualMachine {
         }*/
 
         let reserveCpuCount = QUARK_CONFIG.lock().ReserveCpuCount;
-        let cpuCount = VMSpace::VCPUCount() - reserveCpuCount;
+        let cpuCount = cpuCount.min(VMSpace::VCPUCount() - reserveCpuCount);
+        let cpuCount = cpuCount.max(2); // minimal 2 cpus
+
         VMS.lock().vcpuCount = cpuCount; //VMSpace::VCPUCount();
         VMS.lock().RandomVcpuMapping();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
