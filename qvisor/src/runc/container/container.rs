@@ -438,7 +438,7 @@ impl Container {
         pivot: bool,
     ) -> Result<Self> {
         info!("Create container {} in root dir: {}", id, &conf.RootDir);
-        debug!("spec for creating container: {:?}", &spec);
+        debug!("spec for creating container: {:#?}", &spec);
         //debug!("container spec is {:?}", &spec);
         ValidateID(id)?;
 

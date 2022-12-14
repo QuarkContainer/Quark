@@ -50,3 +50,35 @@ pub struct Args {
 
     pub RDMASvcCliSock: i32,
 }
+
+impl Args {
+    pub fn GetCpuCount(&self) -> usize {
+        match &self.Spec.linux {
+            None => return 1,
+            Some(linux) => {
+                match &linux.resources {
+                    None => return 1,
+                    Some(resources) => {
+                        match &resources.cpu {
+                            None => return 1,
+                            Some(cpu) => {
+                                let quota = match cpu.quota {
+                                    None => return 1,
+                                    Some(q) => q,
+                                };
+
+                                let period = match cpu.period {
+                                    None => return 1,
+                                    Some(p) => p,
+                                };
+
+                                let count = (quota as u64 + period - 1) / period;
+                                return count as usize;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    } 
+}
