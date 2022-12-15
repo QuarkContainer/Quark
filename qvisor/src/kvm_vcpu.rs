@@ -126,7 +126,7 @@ pub enum KVMVcpuState {
 
 pub struct KVMVcpu {
     pub id: usize,
-    pub cordId: usize,
+    pub cordId: isize,
     pub threadid: AtomicU64,
     pub tgid: AtomicU64,
     pub state: AtomicU64,
@@ -201,7 +201,12 @@ impl KVMVcpu {
             .create_vcpu(id as u64)
             .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))
             .expect("create vcpu fail");
-        let vcpuCoreId = VMS.lock().ComputeVcpuCoreId(id);
+        let cpuAffinit = VMS.lock().cpuAffinit;
+        let vcpuCoreId = if !cpuAffinit {
+            -1
+        } else {
+            VMS.lock().ComputeVcpuCoreId(id) as isize
+        };
 
         return Ok(Self {
             id: id,
@@ -445,10 +450,12 @@ impl KVMVcpu {
         let mut lastVal: u32 = 0;
         let mut first = true;
 
-        let coreid = core_affinity::CoreId { id: self.cordId };
-        // print cpu id
-        core_affinity::set_for_current(coreid);
-
+        if self.cordId > 0 {
+            let coreid = core_affinity::CoreId { id: self.cordId as usize };
+            // print cpu id
+            core_affinity::set_for_current(coreid);
+        }
+        
         self.SignalMask();
 
         info!(

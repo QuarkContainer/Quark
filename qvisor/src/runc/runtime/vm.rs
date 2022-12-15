@@ -252,6 +252,12 @@ impl VirtualMachine {
 
         let reserveCpuCount = QUARK_CONFIG.lock().ReserveCpuCount;
         let cpuCount = cpuCount.min(VMSpace::VCPUCount() - reserveCpuCount);
+        if cpuCount < 2 { // only do cpu affinit when there more than 2 cores
+            VMS.lock().cpuAffinit = false;
+        } else {
+            VMS.lock().cpuAffinit = true;
+        }
+
         let cpuCount = cpuCount.max(2); // minimal 2 cpus
 
         VMS.lock().vcpuCount = cpuCount; //VMSpace::VCPUCount();
