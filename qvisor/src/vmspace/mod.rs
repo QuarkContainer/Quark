@@ -109,6 +109,7 @@ pub struct VMSpace {
     pub sharedLoasdOffset: u64,
     pub vdsoAddr: u64,
     pub vcpuCount: usize,
+    pub cpuAffinit: bool,
     pub vcpuMappingDelta: usize,
 
     pub rng: RandGen,
@@ -1743,6 +1744,7 @@ impl VMSpace {
             hostAddrTop: 0,
             sharedLoasdOffset: 0x0000_5555_0000_0000,
             vdsoAddr: 0,
+            cpuAffinit: false,
             vcpuCount: 0,
             vcpuMappingDelta: 0,
             rng: RandGen::Init(),
