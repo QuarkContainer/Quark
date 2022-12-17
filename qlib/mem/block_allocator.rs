@@ -171,7 +171,6 @@ impl PageBlockAlloc {
             PageBlockAction::AddPageCount => {
                 self.freeCount.fetch_add(1, Ordering::Release);
             }
-            _ => ()
         }
 
         return Ok(())
@@ -320,7 +319,7 @@ impl FreePageBitmap {
         let l1idx = idx / 64;
         let l2idx = idx % 64;
 
-        return self.l2bitmap[l1idx] & (1<<l2idx) == 1;
+        return self.l2bitmap[l1idx] & (1<<l2idx) != 0;
     }
 }
 
@@ -343,7 +342,6 @@ impl PageBlockInternal {
 
 #[derive(Debug)]
 pub enum PageBlockAction {
-    None,
     OkForFree,
     OkForAlloc,
     AddPageCount,
@@ -442,7 +440,7 @@ impl PageBlock {
     pub fn FreePage(&self, addr: u64) -> Result<PageBlockAction> {
         let mut allocaor = self.allocator.lock();
         allocaor.freePageList.Push(self.Idx(addr));
-        let mut action = PageBlockAction::None;
+        let mut action = PageBlockAction::AddPageCount;
         if allocaor.freePageList.totalFreeCount == 1 {
             action = PageBlockAction::OkForAlloc;
         } else if allocaor.freePageList.totalFreeCount == BLOCK_PAGE_COUNT {
