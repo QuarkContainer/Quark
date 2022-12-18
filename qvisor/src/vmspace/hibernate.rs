@@ -60,7 +60,7 @@ impl<const ORDER: usize> Heap<ORDER> {
 }
 
 impl HiberMgr {
-    pub fn GetAllPagetablePages(&self) -> Result<()> {
+    pub fn GetAllPagetablePages(&self) -> Result<BTreeSet<u64>> {
         let intern = self.lock();
 		let mut map = BTreeSet::new();
 		for (_, mm) in &intern.memmgrs {
@@ -69,7 +69,7 @@ impl HiberMgr {
 		}
 
         //info!("GetAllPagetablePages {} pages, {:x?}", map.len(), map);
-        return Ok(())
+        return Ok(map)
     }
 
     pub fn SwapOutUserPages(&self, start: u64, len: u64) -> Result<()> {
@@ -102,12 +102,11 @@ impl HiberMgr {
         return Ok(())
     }
 
-    pub fn ReapSwapOut(&self, start: u64, len: u64) -> Result<()> {
+    pub fn ReapSwapOut(&self, start: u64, len: u64, map: &mut BTreeSet<u64>) -> Result<()> {
         let mut intern = self.lock();
-		let mut map = BTreeSet::new();
 		for (_, mm) in &intern.memmgrs {
 			let mm = mm.Upgrade();
-			mm.pagetable.write().pt.SwapOutPages(start, len, &mut map, false).unwrap();
+			mm.pagetable.write().pt.SwapOutPages(start, len, map, false).unwrap();
 		}
 
         for page in map.iter() {
@@ -132,13 +131,13 @@ impl HiberMgr {
         return Ok(())
     }
 
-    pub fn SwapOut(&self, start: u64, len: u64) -> Result<()> {
-        //self.GetAllPagetablePages()?;
+    pub fn SwapOut(&self, start: u64, len: u64) -> Result<()> {        
         if !self.lock().reap {
             self.SwapOutUserPages(start, len)?;
             self.lock().reap = true
         } else {
-            self.ReapSwapOut(start, len)?;
+            let mut map = self.GetAllPagetablePages()?;
+            self.ReapSwapOut(start, len, &mut map)?;
         }
 
         let cnt = SHARE_SPACE.pageMgr.pagepool.DontneedFreePages()?;
@@ -151,7 +150,7 @@ impl HiberMgr {
         let allocated2 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
         info!("free pagepool {} pages, total allocated1 {} allocated2 {} free bytes {}", 
             cnt, allocated1, allocated2, allocated1 - allocated2);
-        info!("heap usage1 is {:?}", &GLOBAL_ALLOCATOR.Allocator().counts);
+        //info!("heap usage1 is {:?}", &GLOBAL_ALLOCATOR.Allocator().counts);
         /*for i in 3..20 {
             info!("heap usage2 is {}/{:x}/{:?}/{:?}", i, 1<<i, GLOBAL_ALLOCATOR.Allocator().counts[i], GLOBAL_ALLOCATOR.Allocator().maxnum[i]);
         }
@@ -159,6 +158,7 @@ impl HiberMgr {
 
         GLOBAL_ALLOCATOR.Allocator().heap.lock().DontNeed();
 
+        error!("swap out done ...");
         return Ok(())
 	}
 
