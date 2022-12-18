@@ -54,21 +54,21 @@ pub struct Args {
 impl Args {
     pub fn GetCpuCount(&self) -> usize {
         match &self.Spec.linux {
-            None => return 1,
+            None => return 0,
             Some(linux) => {
                 match &linux.resources {
-                    None => return 1,
+                    None => return 0,
                     Some(resources) => {
                         match &resources.cpu {
-                            None => return 1,
+                            None => return 0,
                             Some(cpu) => {
                                 let quota = match cpu.quota {
-                                    None => return 1,
+                                    None => return 0,
                                     Some(q) => q,
                                 };
 
                                 let period = match cpu.period {
-                                    None => return 1,
+                                    None => return 0,
                                     Some(p) => p,
                                 };
 
