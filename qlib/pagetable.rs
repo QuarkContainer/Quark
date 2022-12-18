@@ -681,6 +681,21 @@ impl PageTables {
         return start;
     }
 
+    pub fn UnusedEntryCount(tbl: * const PageTable) -> usize {
+        let mut count = 0;
+        unsafe {
+            for idx in 0..MemoryDef::ENTRY_COUNT as usize {
+                let entry: &PageTableEntry =
+                                    &(*tbl)[PageTableIndex::new(idx as u16)];
+                if entry.is_unused() {
+                    count += 1;
+                }
+            }
+
+            return count;
+        } 
+    }
+
     pub fn Unmap(&self, start: u64, end: u64, pagePool: &Allocator) -> Result<()> {
         Addr(start).PageAligned()?;
         Addr(end).PageAligned()?;
@@ -697,13 +712,13 @@ impl PageTables {
                 }
 
                 let pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
+                let unusedPUDEntryCount = Self::UnusedEntryCount(pudTbl);
                 let mut clearPUDEntries = 0;
 
                 let mut p3Idx: u16 = VirtAddr::new(start).p3_index().into();
                 while p3Idx < MemoryDef::ENTRY_COUNT && start < end {
                     let pudEntry: &mut PageTableEntry = &mut (*pudTbl)[PageTableIndex::new(p3Idx)];
                     if pudEntry.is_unused() {
-                        clearPUDEntries += 1;
                         start = Self::UnmapNext(start, MemoryDef::PUD_SIZE);
                         p3Idx += 1;
                         continue;
@@ -712,12 +727,12 @@ impl PageTables {
                     let pmdTbl = pudEntry.addr().as_u64() as *mut PageTable;
                     let mut clearPMDEntries = 0;
                     let mut p2Idx: u16 = VirtAddr::new(start).p2_index().into();
+                    let unusedPMDEntryCount = Self::UnusedEntryCount(pmdTbl);
 
                     while p2Idx < MemoryDef::ENTRY_COUNT && start < end {
                         let pmdEntry: &mut PageTableEntry =
                             &mut (*pmdTbl)[PageTableIndex::new(p2Idx)];
                         if pmdEntry.is_unused() {
-                            clearPMDEntries += 1;
                             start = Self::UnmapNext(start, MemoryDef::PMD_SIZE);
                             p2Idx += 1;
                             continue;
@@ -727,16 +742,17 @@ impl PageTables {
                         let mut clearPTEEntries = 0;
                         let mut p1Idx: u16 = VirtAddr::new(start).p1_index().into();
 
+                        let unusedPTEEntryCount = Self::UnusedEntryCount(pteTbl);
                         while p1Idx < MemoryDef::ENTRY_COUNT && start < end {
                             let pteEntry: &mut PageTableEntry =
                                 &mut (*pteTbl)[PageTableIndex::new(p1Idx)];
-                            clearPTEEntries += 1;
                             if pteEntry.is_unused() {
                                 start += MemoryDef::PAGE_SIZE;
                                 p1Idx += 1;
                                 continue;
                             }
 
+                            clearPTEEntries += 1;
                             match self.freeEntry(pteEntry, pagePool) {
                                 Err(_e) => {
                                     //info!("pagetable::Unmap Error: paddr {:x}, vaddr is {:x}, error is {:x?}",
@@ -750,7 +766,7 @@ impl PageTables {
                             p1Idx += 1;
                         }
 
-                        if clearPTEEntries == MemoryDef::ENTRY_COUNT {
+                        if clearPTEEntries + unusedPTEEntryCount == MemoryDef::ENTRY_COUNT as usize {
                             let currAddr = pmdEntry.addr().as_u64();
                             let refCnt = pagePool.Deref(currAddr)?;
                             if refCnt == 0 {
@@ -758,14 +774,13 @@ impl PageTables {
                             }
                             pmdEntry.set_unused();
                             clearPMDEntries += 1;
-
                             //info!("unmap pmdEntry {:x}", currAddr);
                         }
 
                         p2Idx += 1;
                     }
 
-                    if clearPMDEntries == MemoryDef::ENTRY_COUNT {
+                    if clearPMDEntries + unusedPMDEntryCount == MemoryDef::ENTRY_COUNT as usize {
                         let currAddr = pudEntry.addr().as_u64();
                         let refCnt = pagePool.Deref(currAddr)?;
                         if refCnt == 0 {
@@ -780,7 +795,7 @@ impl PageTables {
                     p3Idx += 1;
                 }
 
-                if clearPUDEntries == MemoryDef::ENTRY_COUNT {
+                if clearPUDEntries + unusedPUDEntryCount == MemoryDef::ENTRY_COUNT as usize {
                     let currAddr = pgdEntry.addr().as_u64();
                     let refCnt = pagePool.Deref(currAddr)?;
                     if refCnt == 0 {
