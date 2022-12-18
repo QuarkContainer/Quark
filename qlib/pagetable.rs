@@ -852,7 +852,7 @@ impl PageTables {
             let mut p2Idx = VirtAddr::new(start.0).p2_index();
             let mut p1Idx = VirtAddr::new(start.0).p1_index();
 
-            pages.insert(self.GetRoot());
+            //pages.insert(self.GetRoot());
             //error!("l1 page {:x}", self.GetRoot());
             while Self::ToVirtualAddr(p4Idx, p3Idx, p2Idx, p1Idx).0 < end.0 {
                 let pgdEntry = &mut (*pt)[p4Idx];
@@ -867,7 +867,7 @@ impl PageTables {
                     continue;
                 } else {
                     //error!("l2 page {:x}", pgdEntry.addr().as_u64());
-                    pages.insert(pgdEntry.addr().as_u64());
+                    //pages.insert(pgdEntry.addr().as_u64());
                     pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
                 }
 
