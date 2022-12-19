@@ -239,6 +239,9 @@ impl CtrlInfo {
     }
 
     pub fn get_node_ip_by_pod_ip(&self, ip: &u32) -> Option<u32> {
+        if *ip == 2130706433 || *ip == 0 { //handle dstIp = 127.0.0.1 or 0
+            return Some(*self.localIp.lock());
+        }
         for (_, node) in self.nodes.lock().iter() {
             // if !self.isK8s {
             //     return Some(node.ipAddr);
