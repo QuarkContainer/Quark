@@ -397,6 +397,14 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
 
                     // we have to clone fdtbl at first to avoid lock the thread when drop fdtbl
                     drop(fdtbl);
+
+                    {
+                        // the block has to been dropped after drop the fdtbl
+                        // It is because we might to wait for QAsyncLockGuard in AsyncBufWrite
+                        let dummyTask = DUMMY_TASK.read();
+                        currTask.blocker = dummyTask.blocker.clone();
+                    }
+                    
                     let mm = thread.lock().memoryMgr.clone();
                     thread.lock().memoryMgr = currTask.mm.clone();
                     CPULocal::SetPendingFreeStack(currTask.taskId);

@@ -232,7 +232,7 @@ impl Task {
         self.fsContext = dummyTask.fsContext.clone();
 
         self.fdTbl = dummyTask.fdTbl.clone();
-        self.blocker = dummyTask.blocker.clone();
+        //self.blocker = dummyTask.blocker.clone();
         self.thread = None;
         self.syscallRestartBlock = None;
         self.futexMgr = dummyTask.futexMgr.clone();

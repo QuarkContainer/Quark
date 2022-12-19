@@ -23,6 +23,7 @@ use super::super::fasync::*;
 use super::super::futex::*;
 use super::waiter::*;
 use super::*;
+use crate::qlib::TaskId;
 
 pub enum WaitContext {
     None,
@@ -70,6 +71,24 @@ impl WaitContext {
 
             _ => panic!("WaitContext is not EpollContext"),
         }
+    }
+
+    pub fn TaskId(&self) -> Option<TaskId> {
+        match self {
+            WaitContext::EpollContext(_) => {
+                return None;
+            }
+            WaitContext::ThreadContext(t) => {
+                let context = t.borrow_mut();
+                return Some(context.waiter.lock().taskId);
+            }
+            WaitContext::FileAsync(_) => {
+                return None
+            }
+            _ => (),
+        }
+
+        return None;
     }
 
     pub fn CallBack(&self, mask: EventMask) {
@@ -153,6 +172,10 @@ impl WaitEntry {
     pub fn Downgrade(&self) -> WaitEntryWeak {
         let c = Arc::downgrade(&self.0);
         return WaitEntryWeak(c);
+    }
+
+    pub fn TaskId(&self) -> Option<TaskId> {
+        return self.lock().context.TaskId();
     }
 
     pub fn New() -> Self {
