@@ -461,15 +461,20 @@ impl RDMAAgent {
                 }
             }
             RDMAReqMsg::RDMAConnectUsingPodId(msg) => {
-                // println!("qq1: RDMAReqMsg::RDMAConnectUsingPodId Enter");
+                // println!("qq1: RDMAReqMsg::RDMAConnectUsingPodId Enter, msg: {:?}", msg);
                 // RDMA_SRV.timestamps.lock().push(TSC.Rdtsc()); //0
                 let vpcId;
                 let ipAddr;
+                let mut dstIpAddr = msg.dstIpAddr;
                 if RDMA_CTLINFO.isK8s {
                     vpcId = *self.vpcId.lock();
                     ipAddr = self.ipAddr.lock().to_be();
                 } else {
-                    let podId = "client".to_string();
+                    let mut podId = "client".to_string();
+                    if dstIpAddr == 2130706433 || dstIpAddr == 0 {
+                        podId = "server".to_string();
+                    }
+                    
                     let vpcIpAddr = RDMA_CTLINFO
                         .podIdToVpcIpAddr
                         .lock()
@@ -484,7 +489,10 @@ impl RDMAAgent {
                 }
 
                 let srcVpcIpAddr = VpcIpAddr { vpcId, ipAddr };
-                let mut dstIpAddr = msg.dstIpAddr;
+                
+                if dstIpAddr == 2130706433 || dstIpAddr == 0 { //handle dstIpAddr = 127.0.0.1 or 0
+                    dstIpAddr = ipAddr;
+                }
                 let mut dstPort = msg.dstPort;
                 if RDMA_CTLINFO.IsEgress(dstIpAddr) {
                     self.SendControlMsgInternal(
