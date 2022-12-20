@@ -40,11 +40,12 @@ use crate::qlib::mem::buddy_allocator::*;
 
 impl<const ORDER: usize> Heap<ORDER> {
     pub fn DontNeed(&self) {
+    // DO NOT ADD any debug print, it require heap lock
         let mut arr : [usize; 1024] = [0; 1024];
-        let mut total = 0;
+        // let mut total = 0;
         for i in 13..ORDER {
             let count = self.free_list[i].GetVals(&mut arr);
-            //error!("heap order {} addresses {:x?}", i, &arr[0..count]);
+            // error!("heap order {} addresses {:x?}", i, &arr[0..count]);
 
             for addr in &arr[0..count] {
                 let pageCount = 1 << (i - 12);
@@ -52,10 +53,10 @@ impl<const ORDER: usize> Heap<ORDER> {
                     libc::madvise((*addr + MemoryDef::PAGE_SIZE_4K as usize) as _, (pageCount - 1) * MemoryDef::PAGE_SIZE_4K as usize, libc::MADV_DONTNEED)
                 };
             }
-            total += count;
+            // total += count;
         }
 
-       error!("DontNeed total {}", total);
+       // error!("DontNeed total {}", total);
     }
 }
 
