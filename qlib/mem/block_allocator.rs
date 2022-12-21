@@ -19,6 +19,7 @@ use alloc::collections::btree_set::BTreeSet;
 use alloc::vec::Vec;
 
 use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::SHARESPACE;
 use super::super::linux_def::*;
 use super::super::common::*;
 use super::super::mutex::*;
@@ -150,8 +151,10 @@ impl PageBlockAlloc {
 
         // try to swap in the page in case it is freed before swap in
         // todo: if disable this, system is not stable. root cause this.
-        let _ret = HostSpace::SwapInPage(addr);
-
+        if SHARESPACE.hiberMgr.ContainersPage(addr) {
+            let _ret = HostSpace::SwapInPage(addr);
+        }       
+    
         match action {
             // the pb was empty and get just get one freed page, so it can allocate page now
             PageBlockAction::OkForAlloc => {

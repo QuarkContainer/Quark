@@ -58,4 +58,9 @@ impl HiberMgr {
 			Some(_) => return true,
 		}
 	}
+
+    pub fn ContainersPage(&self, phyAddr: u64) -> bool {
+        let intern = self.lock();
+        return intern.pageMap.contains_key(&phyAddr);
+    }
 }
