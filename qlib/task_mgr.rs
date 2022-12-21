@@ -161,7 +161,15 @@ impl Scheduler {
     }
 
     pub fn HaltVcpuCnt(&self) -> usize {
-        return self.haltVcpuCnt.load(Ordering::Acquire);
+        return self.haltVcpuCnt.load(Ordering::SeqCst);
+    }
+
+    pub fn ReadyForHibernate(&self) -> bool {
+        // Hibernate needs to wait all vcpu is halt
+        // there are 2 exception: first is io_thread, second is the hibernate vcpu
+        let ret = self.HaltVcpuCnt() + 2 == self.vcpuCnt; 
+        //error!("ReadyForHibernate haltvcpu {}, vcpu count is {}", self.HaltVcpuCnt(), self.vcpuCnt);
+        return ret; 
     }
 
     pub fn ReadyTaskCnt(&self, vcpuId: usize) -> u64 {

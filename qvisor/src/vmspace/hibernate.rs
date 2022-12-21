@@ -24,6 +24,7 @@ use userfaultfd::UffdBuilder;
 use userfaultfd::Uffd;
 use std::os::unix::io::AsRawFd;
 use libc::*;
+use core::hint::spin_loop;
 
 use crate::qlib::*;
 use crate::qlib::common::*;
@@ -131,7 +132,14 @@ impl HiberMgr {
         return Ok(())
     }
 
-    pub fn SwapOut(&self, start: u64, len: u64) -> Result<()> {        
+    pub fn SwapOut(&self, start: u64, len: u64) -> Result<()> {    
+        while !SHARE_SPACE.scheduler.ReadyForHibernate() {
+            // wait until all other vcpu halt
+            for _ in 0..100 {
+                spin_loop();
+            }           
+        }
+        
         if !self.lock().reap {
             self.SwapOutUserPages(start, len)?;
             self.lock().reap = true
