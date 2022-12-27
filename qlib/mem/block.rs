@@ -17,6 +17,140 @@ use alloc::vec::Vec;
 
 use super::super::linux_def::IoVec;
 
+#[derive(Debug)]
+pub struct IOVecs {
+    pub data: Vec<IoVec>,
+    pub len: usize,
+}
+
+impl IOVecs {
+    pub fn NewWithIoVec(iov: IoVec) -> Self {
+        return Self::New(vec![iov]);
+    }
+
+    pub fn New(data: Vec<IoVec>) -> Self {
+        let len = {
+            let mut count = 0;
+            for iov in &data {
+                count += iov.Len();
+            }
+            count
+        };
+        return Self {
+            data: data,
+            len: len 
+        }
+    }
+
+    pub fn Split(&mut self, offset: usize) -> Option<Self> {
+        if self.len <= offset {
+            return None;
+        }
+
+        let mut count = 0;
+
+        for i in 0..self.data.len() {
+            if count + self.data[i].Len() >= offset {
+                let splitOffset = offset - count; 
+                
+                if splitOffset == 0 {
+                    let remain = self.data.split_off(i+1);
+                    self.len = offset;
+                    return Some(Self {
+                        data: remain,
+                        len: self.len - offset,
+                    });
+                } else {
+                    let mut remain = self.data.split_off(i);
+                    self.data.push(IoVec {
+                        start: remain[0].start ,
+                        len: splitOffset,
+                    });
+                    
+                    let remainLen = self.len - offset;
+                    self.len = offset;
+
+                    remain[0].start += splitOffset as u64;
+                    remain[0].len -= splitOffset;
+                    return Some(Self {
+                        data: remain,
+                        len: remainLen,
+                    });
+                }
+            }
+
+            count += self.data[i].Len()
+        }
+
+        panic!("IOVecs split faill with {:x?} offset {:x?}", self, offset);
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct IOVecsRef <'a> {
+    pub iovs: &'a [IoVec],
+    pub skip: usize,
+    pub len: usize,
+}
+
+impl <'a> IOVecsRef <'a> {
+    pub fn Split(&self, offset: usize) -> (IOVecsRef,  IOVecsRef){
+        assert!(self.iovs[0].Len() > self.skip);
+        let offset = offset + self.skip;
+        let mut count = 0;
+        if self.len as usize <= offset {
+            let first = *self;
+            let second = IOVecsRef {
+                iovs: self.iovs,
+                skip: 0,
+                len: 0,
+            };
+
+            return (first, second)
+        }
+
+        for i in 0..self.iovs.len() {
+            if count + self.iovs[i].Len() >= offset {
+                let first = IOVecsRef {
+                    iovs: &self.iovs[0..i+1],
+                    skip: self.skip,
+                    len: offset + self.skip,
+                };
+
+                let skip = count + self.iovs[i].Len() - offset;
+                let second;
+                if skip == 0 {
+                    if i == self.iovs.len()-1 {
+                        second = IOVecsRef {
+                            iovs: self.iovs,
+                            skip: 0,
+                            len: 0,
+                        };
+                    } else {
+                        second = IOVecsRef {
+                            iovs: &self.iovs[i+1..],
+                            skip: 0,
+                            len: 0,
+                        };
+                    }
+                } else {
+                    second = IOVecsRef {
+                        iovs: &self.iovs[i+1..],
+                        skip: skip,
+                        len: self.len - offset,
+                    };
+                }
+
+                return (first, second);
+            }
+
+            count += self.iovs[i].Len()
+        }
+
+        panic!("IOVecsRef split faill with {:x?} offset {:x?}", self, offset);
+    }  
+}
+
 pub struct Iovs<'a>(pub &'a [IoVec]);
 
 impl<'a> Iovs<'a> {

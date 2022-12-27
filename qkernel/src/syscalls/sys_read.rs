@@ -135,8 +135,38 @@ pub fn Pread64(task: &Task, fd: i32, addr: u64, size: i64, offset: i64) -> Resul
     }
 
     let iov = IoVec::NewFromAddr(addr, size as usize);
-    let mut iovs: [IoVec; 1] = [iov];
-    return preadv(task, &file, &mut iovs, offset);
+    let mut iovs = [iov];
+    let iovs = task.AdjustIOVecPermission(&mut iovs, true, true)?;
+    let iovs = IOVecs::New(iovs);
+
+    return preadvfull(task, &file, iovs, offset)
+
+    //return preadv(task, &file, &mut iovs.data, offset);
+}
+
+fn preadvfull(task: &Task, f: &File, mut iovs: IOVecs, offset: i64) -> Result<i64> {
+    let mut count = 0;
+    loop {
+        let remain = iovs.Split(MemoryDef::TWO_MB as _);
+        match preadv(task, &f, &mut iovs.data, offset + count) {
+            Ok(cnt) => {
+                assert!(cnt == iovs.len as i64, "cnt is {}, len is {}", cnt, iovs.len);
+                count += cnt;
+            }
+            Err(e) => {
+                if count > 0 {
+                    return Ok(count);
+                }
+                return Err(e);
+            }
+        }
+
+        match remain {
+            None => return Ok(count),
+            Some(r) => iovs = r,
+        }
+    }
+
 }
 
 pub fn SysReadv(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -239,7 +269,9 @@ pub fn Preadv(task: &Task, fd: i32, addr: u64, iovcnt: i32, offset: i64) -> Resu
     }
 
     let mut dsts = task.IovsFromAddr(addr, iovcnt as usize)?;
-    return preadv(task, &file, &mut dsts, offset);
+    let iovs = task.AdjustIOVecPermission(&mut dsts, true, true)?;
+    let iovs = IOVecs::New(iovs);
+    return preadvfull(task, &file, iovs, offset);
 }
 
 fn RepReadv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
@@ -379,10 +411,7 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
 }
 
 fn preadv(task: &Task, f: &File, dsts: &mut [IoVec], offset: i64) -> Result<i64> {
-    let mut iovs = task.AdjustIOVecPermission(dsts, true, true)?;
-    let dsts = &mut iovs;
-
-    match f.Preadv(task, dsts, offset) {
+     match f.Preadv(task, dsts, offset) {
         Err(e) => {
             if e != Error::SysError(SysErr::EWOULDBLOCK) || f.Flags().NonBlocking {
                 return Err(e);
