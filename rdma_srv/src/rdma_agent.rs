@@ -636,7 +636,7 @@ impl RDMAAgent {
                         .get(&podId)
                         .unwrap()
                         .clone();
-                    if vpcIpAddr.ipAddr == udpPacket.dstIpAddr {
+                    if vpcIpAddr.ipAddr.to_be() == udpPacket.dstIpAddr {
                         vpcIpAddr = RDMA_CTLINFO
                             .podIdToVpcIpAddr
                             .lock()

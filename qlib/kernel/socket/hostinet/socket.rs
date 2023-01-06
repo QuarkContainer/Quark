@@ -908,6 +908,11 @@ impl SockOperations for SocketOperations {
             socketaddr = &socketaddr[..SIZEOF_SOCKADDR]
         }
 
+        if self.udpRDMA {
+            self.SetRemoteAddr(socketaddr.to_vec())?;
+            return Ok(0);
+        }
+
         let res;
         if self.tcpRDMA {
             let sockAddr = GetAddr(sockaddr[0] as i16, &sockaddr[0..sockaddr.len()])?;
@@ -2135,13 +2140,23 @@ impl SockOperations for SocketOperations {
             udpPacket.srcPort = port;
             udpPacket.length = totalLen as u16;
 
-            let dstAddr = unsafe {
-                GetAddr(
-                    *(msgHdr.msgName as *const i16),
-                    slice::from_raw_parts(msgHdr.msgName as *const u8, msgHdr.nameLen as usize),
-                )
+            let dstAddr;
+            if msgHdr.msgName != 0 {
+                dstAddr = unsafe {
+                    GetAddr(
+                        *(msgHdr.msgName as *const i16),
+                        slice::from_raw_parts(msgHdr.msgName as *const u8, msgHdr.nameLen as usize),
+                    )
+                }
+                .unwrap();
             }
-            .unwrap();
+            else if self.remoteAddr.lock().is_some() {
+                dstAddr = self.remoteAddr.lock().as_ref().unwrap().clone();
+            }
+            else {
+                return Err(Error::SysError(SysErr::ENETUNREACH));
+            }
+
             match dstAddr {
                 SockAddr::Inet(ipv4) => {
                     udpPacket.dstIpAddr = u32::from_be_bytes(ipv4.Addr);
