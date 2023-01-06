@@ -116,9 +116,11 @@ int main(int argc, char *argv[])
 
     int n, len;
 
-    sendto(sockfd, (const char *)hello, strlen(hello),
-           0, (const struct sockaddr *)&servaddr,
-           sizeof(servaddr));
+    connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+    send(sockfd, (const char *)hello, strlen(hello), 0);
+    // sendto(sockfd, (const char *)hello, strlen(hello),
+    //        0, (const struct sockaddr *)&servaddr,
+    //        sizeof(servaddr));
     printf("Hello Quark message sent 1...\n");
 
     printf("after calling sendto()******************************\n");
