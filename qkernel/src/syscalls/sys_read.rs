@@ -150,8 +150,10 @@ fn preadvfull(task: &Task, f: &File, mut iovs: IOVecs, offset: i64) -> Result<i6
         let remain = iovs.Split(MemoryDef::TWO_MB as _);
         match preadv(task, &f, &mut iovs.data, offset + count) {
             Ok(cnt) => {
-                assert!(cnt == iovs.len as i64, "cnt is {}, len is {}", cnt, iovs.len);
                 count += cnt;
+                if cnt < iovs.len as _ {
+                    return Ok(count)
+                }
             }
             Err(e) => {
                 if count > 0 {
