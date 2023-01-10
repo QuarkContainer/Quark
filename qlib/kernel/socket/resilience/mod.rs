@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,16 +12,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod buffer;
-pub mod control;
-pub mod epsocket;
-pub mod hostinet;
-pub mod socket;
-pub mod unix;
-pub mod socketopts;
-pub mod resilience;
-
-pub fn Init() {
-    self::hostinet::Init();
-    self::unix::Init();
-}
+pub mod message;
+pub mod rsocket;
