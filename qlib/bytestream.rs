@@ -16,7 +16,7 @@ use alloc::alloc::{alloc, dealloc, Layout};
 use alloc::slice;
 use alloc::vec::Vec;
 use alloc::string::String;
-use core::sync::atomic::AtomicU32;
+use core::sync::atomic::{AtomicU32, AtomicBool};
 use core::sync::atomic::Ordering;
 use alloc::sync::Arc;
 use core::ops::Deref;
@@ -306,6 +306,8 @@ impl ShareAllocator {
 pub struct RingBuf {
     pub buf: u64,
     pub ringMask: u32,
+    pub waitingRead: AtomicBool,
+    pub waitingWrite: AtomicBool,
     pub headtail: &'static [AtomicU32],
     pub allocator: RingeBufAllocator,
 }
@@ -339,6 +341,8 @@ impl RingBuf {
 
         return Self {
             buf: buf,
+            waitingRead: AtomicBool::new(true),
+            waitingWrite: AtomicBool::new(false),
             ringMask: (pagecount * MemoryDef::PAGE_SIZE as usize - 1) as u32,
             headtail: headtail,
             allocator: allocator,
@@ -385,13 +389,12 @@ impl RingBuf {
     }
 
     /****************************************** read *********************************************************/
-    //return (initial size is full, how much read)
+    //return (whether there is task waiting write, how much read)
     pub fn read(&self, buf: &mut [u8]) -> Result<(bool, usize)> {
         let head = self.headtail[0].load(Ordering::Relaxed);
         let tail = self.headtail[1].load(Ordering::Acquire);
 
         let mut available = tail.wrapping_sub(head) as usize;
-        let full = available == self.Len();
 
         if available > buf.len() {
             available = buf.len();
@@ -415,7 +418,9 @@ impl RingBuf {
         }
 
         self.headtail[0].store(head.wrapping_add(available as u32), Ordering::Release);
-        return Ok((full, available));
+
+        let waitingWrite = self.SwapWaitingWrite();
+        return Ok((waitingWrite, available));
     }
 
     pub fn readViaAddr(&self, buf: u64, count: u64) -> (bool, usize) {
@@ -513,9 +518,10 @@ impl RingBuf {
         let head = self.headtail[0].load(Ordering::SeqCst);
         self.headtail[0].store(head.wrapping_add(count as u32), Ordering::SeqCst);
 
-        let tail = self.headtail[1].load(Ordering::SeqCst);
-        let available = tail.wrapping_sub(head) as usize;
-        let trigger = available == self.Len();
+        if self.AvailableDataSize() == 0 {
+            self.SetWaitingRead();
+        }
+        let trigger = self.SwapWaitingWrite();
         return trigger
     }
     /****************************************** write *********************************************************/
@@ -606,14 +612,31 @@ impl RingBuf {
         return Ok(trigger);
     }
 
+    pub fn SetWaitingWrite(&self) {
+        self.waitingWrite.store(true, Ordering::SeqCst);
+    }
+
+    pub fn SetWaitingRead(&self) {
+        self.waitingRead.store(true, Ordering::SeqCst);
+    }
+
+    pub fn SwapWaitingRead(&self) -> bool {
+        return self.waitingRead.swap(false, Ordering::Release);
+    }
+
+    pub fn SwapWaitingWrite(&self) -> bool {
+        return self.waitingWrite.swap(false, Ordering::Release);
+    }
+
     pub fn Produce(&self, count: usize) -> bool {
         //TODO: Revisit memory order to loose constraints
         let tail = self.headtail[1].load(Ordering::SeqCst);
         self.headtail[1].store(tail.wrapping_add(count as u32), Ordering::SeqCst);
 
-        let head = self.headtail[0].load(Ordering::SeqCst);
-        let available = tail.wrapping_sub(head) as usize;
-        let trigger = available == 0;
+        if self.AvailableSpace() == 0 {
+            self.SetWaitingWrite();
+        }
+        let trigger = self.SwapWaitingRead();
         return trigger
     }
 
@@ -629,10 +652,13 @@ impl RingBuf {
         let writePos = (tail & self.ringMask) as usize;
         let mut writeSize = self.Len() - available;
 
+        let waitingWrite = writeSize < buf.len();
+        
         if writeSize > buf.len() {
             writeSize = buf.len();
         }
 
+        
         let (firstLen, hasSecond) = {
             let toEnd = self.Len() - writePos;
             if toEnd < writeSize {
@@ -650,6 +676,9 @@ impl RingBuf {
         }
 
         self.headtail[1].store(tail.wrapping_add(writeSize as u32), Ordering::Release);
+        if waitingWrite {
+            self.SetWaitingWrite();
+        }
         return Ok((empty, writeSize));
     }
 
@@ -853,6 +882,14 @@ impl ByteStreamIntern {
     //consume count data
     pub fn Consume(&mut self, count: usize) -> bool {
         return self.buf.Consume(count);
+    }
+
+    pub fn SetWaitingRead(&mut self) {
+        self.buf.SetWaitingRead();
+    }
+
+    pub fn SetWaitingWrite(&mut self) {
+        self.buf.SetWaitingWrite();
     }
 
     /****************************************** write *********************************************************/
