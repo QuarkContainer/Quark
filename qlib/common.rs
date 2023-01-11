@@ -386,6 +386,7 @@ pub enum Error {
     NoneIdx,
     AddressNotMap(u64),
     InvalidInput,
+    InvalidString,
     NotExist,
     Signal,
     Exit,

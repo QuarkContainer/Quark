@@ -15,11 +15,13 @@
 use alloc::alloc::{alloc, dealloc, Layout};
 use alloc::slice;
 use alloc::vec::Vec;
+use alloc::string::String;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
 use alloc::sync::Arc;
 use core::ops::Deref;
-use core::fmt;
+use core::{fmt, mem};
+use core::ptr;
 
 use super::common::*;
 use super::linux_def::*;
@@ -69,6 +71,116 @@ impl SocketBufIovs {
         }
 
         return count;
+    }
+
+    pub fn Consume(&mut self, size: usize) {
+        assert!(self.Count() >= size);
+        if self.iovs[0].len > size {
+            self.iovs[0].start += size as u64;
+            self.iovs[0].len -= size;
+        } else if self.iovs[0].len == size {
+            self.iovs[0] = self.iovs[1];
+            self.cnt -= 1;
+        } else {
+            let left = self.Count() - size;
+            self.iovs[0].start = self.iovs[1].start + (size - self.iovs[0].len) as u64;
+            self.iovs[0].len = left;
+            self.cnt = 1;
+        }
+    }
+
+    pub fn ReadVec(&mut self, size: usize) -> Result<Vec<u8>> {
+        let mut buf : Vec<u8> = Vec::with_capacity(size);
+        buf.resize(size, 0);
+
+        if self.iovs[0].len >= size {
+            let src = self.iovs[0].start as * const u8;
+            let dst = buf.as_mut_ptr();
+            unsafe {
+                ptr::copy_nonoverlapping(src, dst, size);
+            }
+        } else {
+            let src = self.iovs[0].start as * const u8;
+            let dst = buf.as_mut_ptr();
+            unsafe {
+                ptr::copy_nonoverlapping(src, dst, self.iovs[0].len);
+            }
+    
+            let src = self.iovs[0].start as * const u8;
+            unsafe {
+                let dst = buf.as_mut_ptr().add(self.iovs[0].len);
+                ptr::copy_nonoverlapping(src, dst, size - self.iovs[0].len);
+            }
+        }
+
+        return Ok(buf)
+    }  
+
+    pub fn ReadString(&mut self, size: usize) -> Result<String> {
+        let buf = self.ReadVec(size)?;
+        match String::from_utf8(buf) {
+            Err(_) => return Err(Error::InvalidString),
+            Ok(s) => return Ok(s),
+        };
+    }
+
+    pub fn ReadObj<T: Sized + Copy>(&mut self) -> Result<T> {
+        let size = mem::size_of::<T>();
+        let datasize = self.Count();
+        if datasize < size {
+            return Err(Error::NoEnoughData);
+        }
+
+        if self.iovs[0].len >= size {
+            let data = unsafe {*(self.iovs[0].start as * const T)};
+            return Ok(data)
+        } else {
+            let buf = self.ReadVec(size);
+            match buf {
+                Ok(b) => {
+                    let data = unsafe {*(&b[0] as * const _ as u64 as * const T)};
+                    return Ok(data)
+                } 
+                Err(e) => {
+                    return Err(e)
+                }
+            }
+        }
+    }
+
+    pub fn WriteSlice(&mut self, data: &[u8]) -> Result<()> {
+        let size = data.len();
+        if self.Count() < size {
+            return Err(Error::NoEnoughSpace)
+        }
+
+        let src = data.as_ptr();
+        let dst = self.iovs[0].start as * mut u8;
+        if self.iovs[0].len >= size {
+            unsafe {
+                ptr::copy_nonoverlapping(src, dst, size);
+            }
+        } else {
+            unsafe {
+                ptr::copy_nonoverlapping(src, dst, self.iovs[0].len);
+            
+
+                let src = data.as_ptr().add(self.iovs[0].len);
+                let dst = self.iovs[1].start as * mut u8;
+                ptr::copy_nonoverlapping(src, dst, size - self.iovs[0].len);
+            }
+        }
+
+        self.Consume(size);
+        return Ok(())       
+    }
+
+    pub fn WriteObj<T: Sized>(&mut self, obj: &T) -> Result<()> {
+        let size = mem::size_of_val(obj);
+        let ptr = obj as * const _ as u64 as * const u8;
+
+        let buf = unsafe { slice::from_raw_parts(ptr, size) };
+        return self.WriteSlice(buf);
     }
 }
 
@@ -795,4 +907,15 @@ impl ByteStreamIntern {
     pub fn writeViaAddr(&mut self, buf: u64, count: u64) -> (bool, usize) {
         return self.buf.writeViaAddr(buf, count);
     }
+}
+
+pub trait RingBufIO : Sized {
+    // data size, used for write check
+    fn Size(&self) -> usize;
+
+    // read obj, return <Obj, whether trigger>
+    fn Read(buf: &mut ByteStreamIntern) -> Result<(Self, bool)>;
+    
+    // write obj, return <whether trigger>
+    fn Write(&self, buf: &mut ByteStreamIntern) -> Result<bool>;
 }
