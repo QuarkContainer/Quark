@@ -244,8 +244,8 @@ impl SocketOperations {
             //&& family == AFType::AF_INET
             && (stype == SockType::SOCK_STREAM);
         let udpRDMA = SHARESPACE.config.read().EnableRDMA
-            // && (family == AFType::AF_INET || family == AFType::AF_INET6)
-            && family == AFType::AF_INET
+            && (family == AFType::AF_INET || family == AFType::AF_INET6)
+            // && family == AFType::AF_INET
             && (stype == SockType::SOCK_DGRAM);
 
         let ret = SocketOperationsIntern {
@@ -1897,9 +1897,9 @@ impl SockOperations for SocketOperations {
             let _len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
             return Ok((res as i64, msgFlags, senderAddr, controlVec));
         } else {
-            if msgHdr.msgControlLen != 0 {
-                panic!("TODO: UDP over RDMA doesn't support control msg yet!");
-            }
+            // if msgHdr.msgControlLen != 0 {
+            //     panic!("TODO: UDP over RDMA doesn't support control msg yet!");
+            // }
             let sockInfo = GlobalIOMgr()
                 .GetByHost(self.fd)
                 .unwrap()
@@ -1957,12 +1957,31 @@ impl SockOperations for SocketOperations {
                     }
                     let _res = GlobalRDMASvcCli().returnUDPBuff(recvUdpItem.udpBuffIdx);
                     let senderAddr = if senderRequested {
-                        let addr = SockAddr::Inet(SockAddrInet {
-                            Family: AFType::AF_INET as u16,
-                            Port: srcPort,
-                            Addr: srcIpAddr.to_be_bytes(),
-                            Zero: [0; 8],
-                        });
+                        let addr;
+                        if self.family == AFType::AF_INET {
+                            addr = SockAddr::Inet(SockAddrInet {
+                                Family: AFType::AF_INET as u16,
+                                Port: srcPort,
+                                Addr: srcIpAddr.to_be_bytes(),
+                                Zero: [0; 8],
+                            });
+                        }
+                        else {
+                        // if self.family == AFType::AF_INET6 {
+                            let srcIp = srcIpAddr.to_be_bytes();
+                            addr = SockAddr::Inet6(SocketAddrInet6 {
+                                // Family: AFType::AF_INET as u16,
+                                // Port: srcPort,
+                                // Addr: srcIpAddr.to_be_bytes(),
+                                // Zero: [0; 8],
+                                Family: AFType::AF_INET6 as u16,
+                                Port: srcPort,
+                                Flowinfo: 0,
+                                Addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, srcIp[0], srcIp[1], srcIp[2], srcIp[3]],
+                                Scope_id: 0,
+                            });
+                        }
+                        
                         let l = addr.Len();
                         Some((addr, l))
                     } else {
@@ -2165,6 +2184,12 @@ impl SockOperations for SocketOperations {
                 SockAddr::Inet(ipv4) => {
                     udpPacket.dstIpAddr = u32::from_be_bytes(ipv4.Addr);
                     udpPacket.dstPort = ipv4.Port.to_le();
+                }
+                SockAddr::Inet6(ipv6) => {
+                    assert!(ipv6.Addr[10]==0xFF && ipv6.Addr[11] == 0xFF, "UDP over RDMA only support send to IPv4 address, current address is {:?}", ipv6);
+                    let ipv4Bytes = [ipv6.Addr[12], ipv6.Addr[13], ipv6.Addr[14], ipv6.Addr[15]];
+                    udpPacket.dstIpAddr = u32::from_be_bytes(ipv4Bytes);
+                    udpPacket.dstPort = ipv6.Port.to_le();
                 }
                 _ => {
                     panic!("dstAddr: {:?} can't enable RDMA!", dstAddr);
