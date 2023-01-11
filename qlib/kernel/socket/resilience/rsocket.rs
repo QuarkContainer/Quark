@@ -16,7 +16,7 @@ use alloc::sync::Arc;
 use core::ops::Deref;
 
 use crate::qlib::kernel::fs::file::*;
-use super::message::*;
+//use super::message::*;
 
 pub struct ResilienceSocketInner {
     pub connection: Arc<File>,
@@ -40,9 +40,9 @@ impl Deref for ResilienceSocketOps {
 }
 
 
-impl ResilienceSocketOps {
-    pub fn Write(&self, _funcName: &[u8], buf: &[u8]) {
-        let msgCall = UserFuncCall::New(buf);
-        msgCall.UserData();
-    }
-}
+// impl ResilienceSocketOps {
+//     pub fn Write(&self, _funcName: &[u8], buf: &[u8]) {
+//         let msgCall = UserFuncCall::New(buf);
+//         msgCall.UserData();
+//     }
+// }
