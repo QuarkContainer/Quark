@@ -419,7 +419,10 @@ impl RingBuf {
 
         self.headtail[0].store(head.wrapping_add(available as u32), Ordering::Release);
 
-        let waitingWrite = self.SwapWaitingWrite();
+        if self.AvailableDataSize() == 0 {
+            self.SetWaitingRead();
+        }
+        let waitingWrite = self.ResetWaitingWrite();
         return Ok((waitingWrite, available));
     }
 
@@ -521,7 +524,7 @@ impl RingBuf {
         if self.AvailableDataSize() == 0 {
             self.SetWaitingRead();
         }
-        let trigger = self.SwapWaitingWrite();
+        let trigger = self.ResetWaitingWrite();
         return trigger
     }
     /****************************************** write *********************************************************/
@@ -620,11 +623,11 @@ impl RingBuf {
         self.waitingRead.store(true, Ordering::SeqCst);
     }
 
-    pub fn SwapWaitingRead(&self) -> bool {
+    pub fn ResetWaitingRead(&self) -> bool {
         return self.waitingRead.swap(false, Ordering::Release);
     }
 
-    pub fn SwapWaitingWrite(&self) -> bool {
+    pub fn ResetWaitingWrite(&self) -> bool {
         return self.waitingWrite.swap(false, Ordering::Release);
     }
 
@@ -636,7 +639,7 @@ impl RingBuf {
         if self.AvailableSpace() == 0 {
             self.SetWaitingWrite();
         }
-        let trigger = self.SwapWaitingRead();
+        let trigger = self.ResetWaitingRead();
         return trigger
     }
 
@@ -647,13 +650,9 @@ impl RingBuf {
 
         let available = tail.wrapping_sub(head) as usize;
 
-        let empty = available == 0;
-
         let writePos = (tail & self.ringMask) as usize;
         let mut writeSize = self.Len() - available;
 
-        let waitingWrite = writeSize < buf.len();
-        
         if writeSize > buf.len() {
             writeSize = buf.len();
         }
@@ -676,10 +675,11 @@ impl RingBuf {
         }
 
         self.headtail[1].store(tail.wrapping_add(writeSize as u32), Ordering::Release);
-        if waitingWrite {
+        if self.AvailableSpace() == 0 {
             self.SetWaitingWrite();
         }
-        return Ok((empty, writeSize));
+        let trigger = self.ResetWaitingRead();
+        return Ok((trigger, writeSize));
     }
 
     pub fn writeFull(&mut self, buf: &[u8]) -> Result<(bool, usize)> {
