@@ -613,6 +613,7 @@ impl RDMASvcClient {
                                             udpSock
                                                 .recvQueue
                                                 .EnqSocket(response.udpBuffIdx, Queue::default());
+                                            fdInfo.lock().waitInfo.Notify(EVENT_IN);
                                         }
                                         _ => {
                                             panic!("RDMARespMsg::RDMARecvUDPPacket, sockInfo: {:?} is not expected for UDP over RDMA", sockInfo);
@@ -620,7 +621,7 @@ impl RDMASvcClient {
                                     }
                                 }
                                 None => {
-                                    error!("RDMARespMsg::RDMARecvUDPPacket, no FdInfo found for port: {}", udpPacket.dstPort);
+                                    error!("RDMARespMsg::RDMARecvUDPPacket, no FdInfo found for port: {}, ipAddr: {}", udpPacket.dstPort, udpPacket.dstIpAddr);
                                 }
                             }
                         }
