@@ -551,6 +551,25 @@ impl Waitable for SocketOperations {
             return self.SocketBuf().Events() & mask;
         };
 
+        if self.udpRDMA {
+            let sockInfo = GlobalIOMgr()
+                    .GetByHost(self.fd)
+                    .unwrap()
+                    .lock()
+                    .sockInfo
+                    .lock()
+                    .clone();
+            match sockInfo {
+                SockInfo::RDMAUDPSocket(sock) => {
+                    return sock.recvQueue.lock().Events() & mask;
+                }
+                _ => {
+                    return 0;
+                }
+            }
+            
+        }
+
         match self.AcceptQueue() {
             Some(q) => return q.lock().Events() & mask,
             None => (),
