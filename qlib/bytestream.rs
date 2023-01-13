@@ -90,6 +90,7 @@ impl SocketBufIovs {
     }
 
     pub fn ReadVec(&mut self, size: usize) -> Result<Vec<u8>> {
+        assert!(self.Count() >= size);
         let mut buf : Vec<u8> = Vec::with_capacity(size);
         buf.resize(size, 0);
 
@@ -119,7 +120,7 @@ impl SocketBufIovs {
     pub fn ReadString(&mut self, size: usize) -> Result<String> {
         let buf = self.ReadVec(size)?;
         match String::from_utf8(buf) {
-            Err(_) => return Err(Error::InvalidString),
+            Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
             Ok(s) => return Ok(s),
         };
     }
@@ -128,7 +129,7 @@ impl SocketBufIovs {
         let size = mem::size_of::<T>();
         let datasize = self.Count();
         if datasize < size {
-            return Err(Error::NoEnoughData);
+            return Err(Error::SysError(SysErr::EAGAIN));
         }
 
         if self.iovs[0].len >= size {
@@ -151,7 +152,7 @@ impl SocketBufIovs {
     pub fn WriteSlice(&mut self, data: &[u8]) -> Result<()> {
         let size = data.len();
         if self.Count() < size {
-            return Err(Error::NoEnoughSpace)
+            return Err(Error::SysError(SysErr::EAGAIN));
         }
 
         let src = data.as_ptr();
@@ -164,7 +165,6 @@ impl SocketBufIovs {
             unsafe {
                 ptr::copy_nonoverlapping(src, dst, self.iovs[0].len);
             
-
                 let src = data.as_ptr().add(self.iovs[0].len);
                 let dst = self.iovs[1].start as * mut u8;
                 ptr::copy_nonoverlapping(src, dst, size - self.iovs[0].len);
@@ -761,7 +761,7 @@ impl ByteStream {
 pub struct ByteStreamIntern {
     pub buf: RingBuf,
     pub dataIovs: SocketBufIovs,
-    pub spaceiovs: SocketBufIovs,
+    pub spaceIovs: SocketBufIovs,
 }
 
 impl fmt::Debug for ByteStreamIntern {
@@ -792,7 +792,7 @@ impl ByteStreamIntern {
         return Self {
             buf: buf,
             dataIovs: SocketBufIovs::default(),
-            spaceiovs: SocketBufIovs::default(),
+            spaceIovs: SocketBufIovs::default(),
         };
     }
 
@@ -813,7 +813,7 @@ impl ByteStreamIntern {
         return Self {
             buf: buf,
             dataIovs: SocketBufIovs::default(),
-            spaceiovs: SocketBufIovs::default(),
+            spaceIovs: SocketBufIovs::default(),
         };
     }
 
@@ -899,12 +899,12 @@ impl ByteStreamIntern {
     }
 
     pub fn PrepareSpaceIovs(&mut self) {
-        self.buf.PrepareSpaceIovs(&mut self.spaceiovs)
+        self.buf.PrepareSpaceIovs(&mut self.spaceIovs)
     }
 
     pub fn GetSpaceIovs(&mut self) -> (u64, usize) {
         self.PrepareSpaceIovs();
-        return self.spaceiovs.Address();
+        return self.spaceIovs.Address();
     }
 
     pub fn GetSpaceIovsOffset(&self, iovs: &mut SocketBufIovs) {
@@ -917,7 +917,7 @@ impl ByteStreamIntern {
 
     pub fn GetSpaceIovsVec(&mut self) -> Vec<IoVec> {
         self.PrepareSpaceIovs();
-        return self.spaceiovs.Iovs();
+        return self.spaceIovs.Iovs();
     }
 
     pub fn GetSpaceBuf(&mut self) -> (u64, usize) {
@@ -946,13 +946,14 @@ impl ByteStreamIntern {
     }
 }
 
-pub trait RingBufIO : Sized {
+pub trait MessageIO : Sized {
     // data size, used for write check
     fn Size(&self) -> usize;
 
-    // read obj, return <Obj, whether trigger>
-    fn Read(buf: &mut ByteStreamIntern) -> Result<(Self, bool)>;
+    // read obj
+    fn Read(buf: &mut SocketBufIovs) -> Result<Self>;
     
-    // write obj, return <whether trigger>
-    fn Write(&self, buf: &mut ByteStreamIntern) -> Result<bool>;
+    // write obj
+    fn Write(&self, buf: &mut SocketBufIovs) -> Result<()>;
 }
+
