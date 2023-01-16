@@ -238,3 +238,13 @@ impl BitmapAllocatorWrapper {
 pub fn ReapSwapIn() {
     HostSpace::SwapIn();
 }
+
+impl From<std::io::Error> for Error {
+    fn from(error: std::io::Error) -> Self {
+        if let Some(errcode) = error.raw_os_error() {
+            Self::SysError(errcode)
+        } else {
+            Self::SysError(SysErr::EINVAL)
+        }
+    }
+}

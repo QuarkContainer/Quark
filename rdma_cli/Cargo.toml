@@ -55,6 +55,10 @@ prost = "0.10"
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 tokio-stream = { version = "0.1", features = ["net"] }
 tonic = "0.7"
+tokio-eventfd = "0.2.0"
+tokio-io = "0.1"
+futures-lite = "1.11"
+bytes = "1.3.0"
 
 [dependencies.lazy_static]
 version = "1.4"
@@ -83,6 +87,10 @@ path = "src/ingress.rs"
 [[bin]]
 name = "rdma_egress"
 path = "src/egress.rs"
+
+[[bin]]
+name = "async_test"
+path = "src/async_test.rs"
 
 [build-dependencies]
 tonic-build = "0.7"
