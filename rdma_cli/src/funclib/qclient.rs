@@ -29,9 +29,9 @@ use tokio::io::ReadBuf;
 use crate::common::*;
 use crate::RDMASvcClient;
 
-use crate::qasync::uid::*;
-use crate::qasync::eventfd::*;
-use crate::qasync::qstream::*;
+use crate::funclib::uid::*;
+use crate::funclib::eventfd::*;
+use crate::funclib::qstream::*;
 use crate::qlib::common::*;
 use crate::qlib::rdma_share::*;
 

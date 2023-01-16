@@ -51,6 +51,14 @@ impl SocketBufIovs {
         return Ok(ret);
     }
 
+    pub fn NewFromBuf(buf: &[u8]) -> Self {
+        let mut iovs = SocketBufIovs::default();
+        iovs.iovs[0].start = &buf[0] as * const _ as u64;
+        iovs.iovs[0].len = buf.len();
+        iovs.cnt = 1;
+        return iovs;
+    }
+
     pub fn Address(&self) -> (u64, usize) {
         return (&self.iovs[0] as *const _ as u64, self.cnt as usize);
     }
@@ -955,5 +963,20 @@ pub trait MessageIO : Sized {
     
     // write obj
     fn Write(&self, buf: &mut SocketBufIovs) -> Result<()>;
+
+    fn Serialize(&self, buf: &mut [u8]) -> Result<usize> {
+        if self.Size() > buf.len() {
+            return Err(Error::SysError(SysErr::EAGAIN));
+        }
+
+        let mut iovs = SocketBufIovs::NewFromBuf(buf);
+        self.Write(&mut iovs)?;
+        return Ok(self.Size());
+    }
+
+    fn Deserialize(buf: &[u8]) -> Result<Self> {
+        let mut iovs = SocketBufIovs::NewFromBuf(buf);
+        return Self::Read(&mut iovs);
+    }
 }
 

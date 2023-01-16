@@ -30,7 +30,7 @@ use tokio::io::ReadBuf;
 use crate::common::*;
 use crate::RDMASvcClient;
 
-use crate::qasync::uid::*;
+use crate::funclib::uid::*;
 use crate::qlib::common::*;
 //use crate::qlib::linux_def::*;
 

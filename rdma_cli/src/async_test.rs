@@ -78,7 +78,7 @@ pub mod service_informer;
 pub mod unix_socket_def;
 use qlib::common::*;
 
-pub mod qasync;
+pub mod funclib;
 
 use self::qlib::ShareSpaceRef;
 use alloc::slice;
