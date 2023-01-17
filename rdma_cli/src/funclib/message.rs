@@ -47,29 +47,41 @@ pub trait MsgIO : Sized {
 
 
 #[repr(u8)]
-pub enum UserMsgType {
+pub enum MsgType {
     UserFuncCall = 1,
-    UserFuncResp
+    UserFuncResp,
+    AgentFuncCall,
+    AgentFuncResp
 }
 
 // serialize format
 // len: u32
 // type: 1 byte
 // msg: UserFuncCall or UserFuncResp
-pub enum UserMsg {
+pub enum QMsg {
     UserFuncCall(UserFuncCall),
     UserFuncResp(UserFuncResp),
+    AgentFuncCall(AgentFuncCall),
+    AgentFuncResp(AgentFuncResp),
 }
 
-impl MsgIO for UserMsg {
+impl MsgIO for QMsg {
     // data size, used for write check
     fn Size(&self) -> usize {
         match self {
-            UserMsg::UserFuncCall(msg) => {
+            QMsg::UserFuncCall(msg) => {
                 // msg type + msgboday
                 return 1 + msg.Size()
             }
-            UserMsg::UserFuncResp(msg) => {
+            QMsg::UserFuncResp(msg) => {
+                // msg type + msgboday
+                return 1 + msg.Size()
+            }
+            QMsg::AgentFuncCall(msg) => {
+                // msg type + msgboday
+                return 1 + msg.Size()
+            }
+            QMsg::AgentFuncResp(msg) => {
                 // msg type + msgboday
                 return 1 + msg.Size()
             }
@@ -81,13 +93,21 @@ impl MsgIO for UserMsg {
         let msgType = buf.ReadObj::<u8>()?;
 
         match msgType {
-            x if x == UserMsgType::UserFuncCall as u8 => {
+            x if x == MsgType::UserFuncCall as u8 => {
                 let msg = UserFuncCall::Read(buf)?;
                 return Ok(Self::UserFuncCall(msg))
             }
-            x if x == UserMsgType::UserFuncResp as u8 => {
+            x if x == MsgType::UserFuncResp as u8 => {
                 let msg = UserFuncResp::Read(buf)?;
                 return Ok(Self::UserFuncResp(msg))
+            }
+            x if x == MsgType::AgentFuncCall as u8 => {
+                let msg = AgentFuncCall::Read(buf)?;
+                return Ok(Self::AgentFuncCall(msg))
+            }
+            x if x == MsgType::AgentFuncResp as u8 => {
+                let msg = AgentFuncResp::Read(buf)?;
+                return Ok(Self::AgentFuncResp(msg))
             }
             _ => return Err(Error::SysError(SysErr::EINVAL))
         }
@@ -97,11 +117,19 @@ impl MsgIO for UserMsg {
     fn Write(&self, buf: &mut SocketBufIovs) -> Result<()> {
         match self {
             Self::UserFuncCall(msg) => {
-                buf.WriteObj(&(UserMsgType::UserFuncCall as u8))?;
+                buf.WriteObj(&(MsgType::UserFuncCall as u8))?;
                 msg.Write(buf)?;
             }
             Self::UserFuncResp(msg) => {
-                buf.WriteObj(&(UserMsgType::UserFuncResp as u8))?;
+                buf.WriteObj(&(MsgType::UserFuncResp as u8))?;
+                msg.Write(buf)?;
+            }
+            Self::AgentFuncCall(msg) => {
+                buf.WriteObj(&(MsgType::AgentFuncCall as u8))?;
+                msg.Write(buf)?;
+            }
+            Self::AgentFuncResp(msg) => {
+                buf.WriteObj(&(MsgType::AgentFuncResp as u8))?;
                 msg.Write(buf)?;
             }
         }

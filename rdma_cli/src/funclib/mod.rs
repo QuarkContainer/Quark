@@ -16,5 +16,5 @@ pub mod qstream;
 pub mod uid;
 pub mod eventfd;
 pub mod qclient;
-pub mod func_client;
 pub mod message;
+pub mod msg_stream;

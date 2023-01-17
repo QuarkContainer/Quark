@@ -109,6 +109,16 @@ impl QStreamInner {
         return Ok(count);
     }
 
+    pub async fn WriteAll(&self, buf: &[u8]) -> Result<()> {
+        let mut offset = 0;
+        while offset < buf.len() {
+            let count = self.WriteBuf(&buf[offset..]).await?;
+            offset += count;
+        }
+
+        return Ok(())
+    }
+
     pub async fn ReadBuf(&self, buf: &mut [u8]) -> Result<usize> {
         let count;
         loop {
@@ -130,5 +140,15 @@ impl QStreamInner {
         }
             
         return Ok(count)
+    }
+
+    pub async fn ReadAll(&self, buf: &mut [u8]) -> Result<()> {
+        let mut offset = 0;
+        while offset < buf.len() {
+            let count = self.ReadBuf(&mut buf[offset..]).await?;
+            offset += count;
+        }
+
+        return Ok(());
     }
 }
