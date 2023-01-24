@@ -561,13 +561,12 @@ impl Waitable for SocketOperations {
                     .clone();
             match sockInfo {
                 SockInfo::RDMAUDPSocket(sock) => {
-                    return sock.recvQueue.lock().Events() & mask;
+                    return (sock.recvQueue.lock().Events() | WRITEABLE_EVENT) & mask;
                 }
                 _ => {
                     return 0;
                 }
             }
-            
         }
 
         match self.AcceptQueue() {
@@ -875,7 +874,32 @@ impl FileOperations for SocketOperations {
                     let v = self.SocketBuf().readBuf.lock().AvailableDataSize() as i32;
                     task.CopyOutObj(&v, val)?;
                     return Ok(());
-                } else {
+                } else if self.udpRDMA {
+                    let sockInfo = GlobalIOMgr()
+                        .GetByHost(self.fd)
+                        .unwrap()
+                        .lock()
+                        .sockInfo
+                        .lock()
+                        .clone();
+                    match sockInfo {
+                        SockInfo::RDMAUDPSocket(udpSock) => {
+                            let mut v = udpSock.recvQueue.lock().udpRecvQueue.len();
+                            if v != 0 {
+                                let idx = udpSock.recvQueue.lock().udpRecvQueue.get(0).unwrap().udpBuffIdx;
+                                let udpPacket = &GlobalRDMASvcCli().cliShareRegion.lock().udpBufRecv[idx as usize];
+                                v = udpPacket.length as usize;
+                            }
+
+                            task.CopyOutObj(&v, val)?;
+                            return Ok(());
+                        }
+                        _ => {
+                            return Err(Error::SysError(SysErr::EINVAL));
+                        }
+                    }
+                } 
+                else {
                     let tmp: i32 = 0;
                     let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
                     if res < 0 {
@@ -1977,28 +2001,29 @@ impl SockOperations for SocketOperations {
                     let _res = GlobalRDMASvcCli().returnUDPBuff(recvUdpItem.udpBuffIdx);
                     let senderAddr = if senderRequested {
                         let addr;
-                        if self.family == AFType::AF_INET {
-                            addr = SockAddr::Inet(SockAddrInet {
-                                Family: AFType::AF_INET as u16,
-                                Port: srcPort,
-                                Addr: srcIpAddr.to_be_bytes(),
-                                Zero: [0; 8],
-                            });
+                        if self.remoteAddr.lock().is_some() {
+                            addr = self.remoteAddr.lock().as_ref().unwrap().clone();
                         }
                         else {
-                        // if self.family == AFType::AF_INET6 {
-                            let srcIp = srcIpAddr.to_be_bytes();
-                            addr = SockAddr::Inet6(SocketAddrInet6 {
-                                // Family: AFType::AF_INET as u16,
-                                // Port: srcPort,
-                                // Addr: srcIpAddr.to_be_bytes(),
-                                // Zero: [0; 8],
-                                Family: AFType::AF_INET6 as u16,
-                                Port: srcPort,
-                                Flowinfo: 0,
-                                Addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, srcIp[0], srcIp[1], srcIp[2], srcIp[3]],
-                                Scope_id: 0,
-                            });
+                            if self.family == AFType::AF_INET {
+                                addr = SockAddr::Inet(SockAddrInet {
+                                    Family: AFType::AF_INET as u16,
+                                    Port: srcPort,
+                                    Addr: srcIpAddr.to_be_bytes(),
+                                    Zero: [0; 8],
+                                });
+                            }
+                            else {
+                            // if self.family == AFType::AF_INET6 {
+                                let srcIp = srcIpAddr.to_be_bytes();
+                                addr = SockAddr::Inet6(SocketAddrInet6 {
+                                    Family: AFType::AF_INET6 as u16,
+                                    Port: srcPort,
+                                    Flowinfo: 0,
+                                    Addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, srcIp[0], srcIp[1], srcIp[2], srcIp[3]],
+                                    Scope_id: 0,
+                                });
+                            }
                         }
                         
                         let l = addr.Len();
@@ -2006,8 +2031,8 @@ impl SockOperations for SocketOperations {
                     } else {
                         None
                     };
-
-                    return Ok((len as i64, 0, senderAddr, controlVec));
+                    let msgFlags = msgHdr.msgFlags & !MsgType::MSG_CTRUNC;
+                    return Ok((len as i64, msgFlags, senderAddr, controlVec));
                 }
                 _ => {
                     panic!("SockInfo: {:?} is not expected for UDP", sockInfo);

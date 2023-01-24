@@ -125,7 +125,11 @@ int main(int argc, char *argv[])
 
     int n, len;
 
+    add_event(epoll_fd, sockfd, EPOLLIN|EPOLLOUT);
+    int ret;
+    printf("epoll_wait, 1 ret: %d\n", ret);
     connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+    ret = epoll_wait(epoll_fd,events,MAX_EVENTS,-1);
     send(sockfd, (const char *)hello, strlen(hello), 0);
     // sendto(sockfd, (const char *)hello, strlen(hello),
     //        0, (const struct sockaddr *)&servaddr,
@@ -190,10 +194,8 @@ int main(int argc, char *argv[])
     //     printf("Remote IP address for sockfd is: %s\n", inet_ntoa(sa.sin_addr));
     //     printf("Remote port for sockfd is: %d\n", (int)ntohs(sa.sin_port));
     // }
-    add_event(epoll_fd, sockfd, EPOLLIN);
-    int ret;
     ret = epoll_wait(epoll_fd,events,MAX_EVENTS,-1);
-    printf("epoll_wait, ret: %d\n", ret);
+    printf("epoll_wait, 2 ret: %d\n", ret);
     len = sizeof(servaddr);
     n = recvfrom(sockfd, (char *)buffer, MAXLINE,
                  MSG_WAITALL, (struct sockaddr *)&servaddr,
