@@ -1,0 +1,19 @@
+[package]
+name = "resilience_function"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+prost = "0.10"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+tonic = "0.7"
+
+[build-dependencies]
+tonic-build = "0.7"
+
+[[bin]]
+name = "service_directory"
+path = "src/service_directory_main.rs"
