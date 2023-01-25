@@ -25,6 +25,7 @@ use tokio::sync::Notify;
 //use tokio_io::{AsyncRead, AsyncWrite};
 use tokio::io::AsyncRead;
 use tokio::io::ReadBuf;
+use tokio::sync::Mutex as Lock;
 //use bytes::Buf;
 
 use crate::common::*;
@@ -49,7 +50,8 @@ pub struct QStreamInner {
     pub dataSock: DataSock,
     pub canReadNotify: Arc<Notify>, // underlying socket has more data to read
     pub canWriteNotify: Arc<Notify>, // underlying socket has more space to write
-    pub hasWriteDataNotify: Arc<Notify>, // has more deta to write
+    pub readLock: Lock<()>,
+    pub writeLock: Lock<()>,
     pub rdmaCli: RDMASvcClient,
     pub outputBufs: Mutex<VecDeque<Vec<u8>>>,
 }
@@ -60,35 +62,15 @@ impl QStreamInner {
             dataSock: dataSock,
             canReadNotify: Arc::new(Notify::new()),
             canWriteNotify: Arc::new(Notify::new()),
-            hasWriteDataNotify: Arc::new(Notify::new()),
+            readLock: Lock::new(()),
+            writeLock: Lock::new(()),
             rdmaCli: rdmaCli,
             outputBufs: Mutex::new(VecDeque::new()),
         }
     }
 
-    pub async fn WriteProcess(&self) -> Result<()> {
-        loop {
-            self.hasWriteDataNotify.clone().notified().await;
-            while let Some(buf) = self.outputBufs.lock().pop_front() {
-                let mut offset = 0; 
-                while offset < buf.len() {
-                    let cnt = self.WriteBuf(&buf[offset..]).await?;
-                    offset += cnt;
-                }
-            }
-        }
-    }
-
-    pub fn Sendbuf(&self, buf: Vec<u8>) {
-        let mut bufs = self.outputBufs.lock();
-        
-        bufs.push_back(buf);
-        if bufs.len() == 1{
-            self.hasWriteDataNotify.notify_one();
-        }
-    }
-
     pub async fn WriteBuf(&self, buf: &[u8]) -> Result<usize> {
+        let _l = self.writeLock.lock().await;
         let count;
         loop {
             let (_trigger, cnt) = self.dataSock.sockBuff.writeBuf.lock().write(buf)?;
@@ -120,6 +102,7 @@ impl QStreamInner {
     }
 
     pub async fn ReadBuf(&self, buf: &mut [u8]) -> Result<usize> {
+        let _l = self.readLock.lock().await;
         let count;
         loop {
             let (_trigger, cnt) = self.dataSock.sockBuff.readBuf.lock().read(buf)?;

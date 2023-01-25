@@ -14,6 +14,7 @@
 
 use alloc::vec::Vec;
 use alloc::string::String;
+use std::fmt;
 
 use crate::qlib::common::*;
 use crate::qlib::linux_def::*;
@@ -45,91 +46,185 @@ pub trait MsgIO : Sized {
     }
 }
 
+pub struct QMsg {
+    pub messageId: u64,
+    pub payload: MsgPayload,
+}
+
+impl QMsg {
+    pub fn NewErrRespMsg(messageId: u64, errcode: i32) -> Self {
+        return Self {
+            messageId: messageId,
+            payload: MsgPayload::NewErrorFuncResp(errcode),
+        }
+    }
+    
+    pub fn NewMsg(messageId: u64, payload: MsgPayload) -> Self {
+        return Self {
+            messageId: messageId,
+            payload: payload,
+        }
+    }
+}
+
+impl fmt::Debug for QMsg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QMsg")
+         .field("messageId", &self.messageId)
+         .finish()
+    }
+}
+
+impl MsgIO for QMsg {
+    fn Size(&self) -> usize {
+        let mut size = 0;
+        size += 4; // message size field: 4 bytes;
+        size += 8; // message Id: 8 bytes
+        size += self.payload.Size();
+        return size;
+    }
+
+    fn Read(buf: &mut SocketBufIovs) -> Result<Self> {
+        let len = buf.ReadObj::<u32>()? as usize;
+        let messageId = buf.ReadObj::<u64>()?;
+        let payload = MsgPayload::Read(buf)?;
+
+        let msg = Self {
+            messageId: messageId,
+            payload: payload,
+        };
+        assert!(len == msg.Size());
+        return Ok(msg)
+    }
+
+    fn Write(&self, buf: &mut SocketBufIovs) -> Result<()> {
+        buf.WriteObj(&(self.Size() as u32))?;
+        buf.WriteObj(&self.messageId)?;
+        self.payload.Write(buf)?;
+        return Ok(())
+    }
+}
 
 #[repr(u8)]
-pub enum MsgType {
+pub enum PayloadType {
     UserFuncCall = 1,
-    UserFuncResp,
     AgentFuncCall,
-    AgentFuncResp
+    FuncResp,
+    Credential,
 }
+
+// https://developer.mozilla.org/en-US/docs/Web/HTTP/Status#server_error_responses
+
+// Internal Server Error
+// The server has encountered a situation it does not know how to handle.
+pub const HTTP_INTERN_ERR: i32 = 500;
+
+// Not Implemented
+// The request method is not supported by the server and cannot be handled. 
+// The only methods that servers are required to support (and therefore that must not return this code) 
+// are GET and HEAD.
+pub const HTTP_NOT_IMPL: i32 = 501;
 
 // serialize format
 // len: u32
 // type: 1 byte
 // msg: UserFuncCall or UserFuncResp
-pub enum QMsg {
+pub enum MsgPayload {
     UserFuncCall(UserFuncCall),
-    UserFuncResp(UserFuncResp),
     AgentFuncCall(AgentFuncCall),
-    AgentFuncResp(AgentFuncResp),
+    FuncResp(FuncResp),
+    Credential(Credential),
 }
 
-impl MsgIO for QMsg {
+impl MsgPayload {
+    pub fn NewErrorFuncResp(errcode: i32) -> Self {
+        let resp = FuncResp::NewErr(errcode);
+        return Self::FuncResp(resp);
+    }
+
+    pub fn NewUserFuncCall(funcName: String, payload: Vec<u8>) -> Self {
+        let call = UserFuncCall {
+            funcName: funcName,
+            payload: payload,
+        };
+
+        return Self::UserFuncCall(call);
+    }
+
+    pub fn NewAgentFuncCall(appId: u64, funcName: String, payload: Vec<u8>) -> Self {
+        let call = AgentFuncCall {
+            appId: appId,
+            funcName: funcName,
+            payload: payload,
+        };
+
+        return Self::AgentFuncCall(call);
+    }
+}
+
+impl MsgIO for MsgPayload {
     // data size, used for write check
     fn Size(&self) -> usize {
         match self {
-            QMsg::UserFuncCall(msg) => {
+            MsgPayload::UserFuncCall(msg) => {
                 // msg type + msgboday
                 return 1 + msg.Size()
             }
-            QMsg::UserFuncResp(msg) => {
+            MsgPayload::AgentFuncCall(msg) => {
                 // msg type + msgboday
                 return 1 + msg.Size()
             }
-            QMsg::AgentFuncCall(msg) => {
+            MsgPayload::FuncResp(msg) => {
                 // msg type + msgboday
                 return 1 + msg.Size()
             }
-            QMsg::AgentFuncResp(msg) => {
+            MsgPayload::Credential(msg) => {
                 // msg type + msgboday
                 return 1 + msg.Size()
             }
         }
     }
 
-    // read obj, return <Obj, whether trigger>
     fn Read(buf: &mut SocketBufIovs) -> Result<Self> {
         let msgType = buf.ReadObj::<u8>()?;
 
         match msgType {
-            x if x == MsgType::UserFuncCall as u8 => {
+            x if x == PayloadType::UserFuncCall as u8 => {
                 let msg = UserFuncCall::Read(buf)?;
                 return Ok(Self::UserFuncCall(msg))
             }
-            x if x == MsgType::UserFuncResp as u8 => {
-                let msg = UserFuncResp::Read(buf)?;
-                return Ok(Self::UserFuncResp(msg))
-            }
-            x if x == MsgType::AgentFuncCall as u8 => {
+            x if x == PayloadType::AgentFuncCall as u8 => {
                 let msg = AgentFuncCall::Read(buf)?;
                 return Ok(Self::AgentFuncCall(msg))
             }
-            x if x == MsgType::AgentFuncResp as u8 => {
-                let msg = AgentFuncResp::Read(buf)?;
-                return Ok(Self::AgentFuncResp(msg))
+            x if x == PayloadType::FuncResp as u8 => {
+                let msg = FuncResp::Read(buf)?;
+                return Ok(Self::FuncResp(msg))
+            }
+            x if x == PayloadType::Credential as u8 => {
+                let msg = Credential::Read(buf)?;
+                return Ok(Self::Credential(msg))
             }
             _ => return Err(Error::SysError(SysErr::EINVAL))
         }
     }
     
-    // write obj, return <whether trigger>
     fn Write(&self, buf: &mut SocketBufIovs) -> Result<()> {
         match self {
             Self::UserFuncCall(msg) => {
-                buf.WriteObj(&(MsgType::UserFuncCall as u8))?;
-                msg.Write(buf)?;
-            }
-            Self::UserFuncResp(msg) => {
-                buf.WriteObj(&(MsgType::UserFuncResp as u8))?;
+                buf.WriteObj(&(PayloadType::UserFuncCall as u8))?;
                 msg.Write(buf)?;
             }
             Self::AgentFuncCall(msg) => {
-                buf.WriteObj(&(MsgType::AgentFuncCall as u8))?;
+                buf.WriteObj(&(PayloadType::AgentFuncCall as u8))?;
                 msg.Write(buf)?;
             }
-            Self::AgentFuncResp(msg) => {
-                buf.WriteObj(&(MsgType::AgentFuncResp as u8))?;
+            Self::FuncResp(msg) => {
+                buf.WriteObj(&(PayloadType::FuncResp as u8))?;
+                msg.Write(buf)?;
+            }
+            Self::Credential(msg) => {
+                buf.WriteObj(&(PayloadType::Credential as u8))?;
                 msg.Write(buf)?;
             }
         }
@@ -138,9 +233,39 @@ impl MsgIO for QMsg {
     }
 }
  
-pub struct UserFuncCall {
-    pub requestId: u64,
+
+pub struct Credential {
+    pub appId: u64,
+}
+
+impl MsgIO for Credential {
+    // data size, used for write check
+    fn Size(&self) -> usize {
+        let size = 8;
+        return size
+    }
+
+    // read obj, return <Obj, whether trigger>
+    fn Read(buf: &mut SocketBufIovs) -> Result<Self> {
+        let appId = buf.ReadObj::<u64>()?;
+
+        let obj = Self {
+            appId: appId,
+        };
+
+        return Ok(obj)
+    }
     
+    // write obj, return <whether trigger>
+    fn Write(&self, buf: &mut SocketBufIovs) -> Result<()> {
+        buf.WriteObj(&self.appId)?;
+
+        return Ok(())
+    }
+}
+
+
+pub struct UserFuncCall {
     // <len: u16, bytes: [u8]>
     pub funcName: String,
     
@@ -159,8 +284,6 @@ impl MsgIO for UserFuncCall {
 
     // read obj, return <Obj, whether trigger>
     fn Read(buf: &mut SocketBufIovs) -> Result<Self> {
-        let requestId = buf.ReadObj::<u64>()?;
-
         let namelen = buf.ReadObj::<u16>()?;
         let name= buf.ReadString(namelen as usize)?;
 
@@ -168,7 +291,6 @@ impl MsgIO for UserFuncCall {
         let payload = buf.ReadVec(buflen as usize)?;
 
         let obj = Self {
-            requestId: requestId,
             funcName: name,
             payload: payload,
         };
@@ -178,7 +300,6 @@ impl MsgIO for UserFuncCall {
     
     // write obj, return <whether trigger>
     fn Write(&self, buf: &mut SocketBufIovs) -> Result<()> {
-        buf.WriteObj(&self.requestId)?;
         buf.WriteObj(&(self.funcName.len() as u16))?;
         buf.WriteSlice(self.funcName.as_bytes())?;
         buf.WriteObj(&(self.payload.len() as u16))?;
@@ -188,53 +309,7 @@ impl MsgIO for UserFuncCall {
     }
 }
 
-pub struct UserFuncResp {
-    pub requestId: u64,
-    pub payload: Vec<u8>,
-}
-
-impl MsgIO for UserFuncResp {
-    // data size, used for write check
-    fn Size(&self) -> usize {
-        let mut size = 0;
-
-        // request id
-        size += 8;
-
-        // 2 is the len of payload
-        size += 2 + self.payload.len();
-        return size
-    }
-
-    // read obj, return <Obj, whether trigger>
-    fn Read(buf: &mut SocketBufIovs) -> Result<Self> {
-        let requestId = buf.ReadObj::<u64>()?;
-        let buflen = buf.ReadObj::<u16>()?;
-        let payload = buf.ReadVec(buflen as usize)?;
-
-        let obj = Self {
-            requestId: requestId,
-            payload: payload,
-        };
-
-        return Ok(obj)
-    }
-    
-    // write obj, return <whether trigger>
-    fn Write(&self, buf: &mut SocketBufIovs) -> Result<()> {
-        buf.WriteObj(&self.requestId)?;
-        buf.WriteObj(&(self.payload.len() as u16))?;
-        buf.WriteSlice(&self.payload)?;
-
-        return Ok(());
-    }
-}
-
 pub struct AgentFuncCall {
-    pub requestId: u64,
-
-    pub namespaceId: u64,
-
     pub appId: u64,
 
     // <len: u16, bytes: [u8]>
@@ -249,12 +324,6 @@ impl MsgIO for AgentFuncCall {
     fn Size(&self) -> usize {
         let mut size = 0;
 
-        // request id
-        size += 8;
-
-        // namespaceId id
-        size += 8;
-
         // appId id
         size += 8;
 
@@ -268,8 +337,6 @@ impl MsgIO for AgentFuncCall {
 
     // read obj, return <Obj, whether trigger>
     fn Read(buf: &mut SocketBufIovs) -> Result<Self> {
-        let requestId = buf.ReadObj::<u64>()?;
-        let namespaceId = buf.ReadObj::<u64>()?;
         let appId = buf.ReadObj::<u64>()?;
         
         let funcNameLen = buf.ReadObj::<u16>()?;
@@ -279,8 +346,6 @@ impl MsgIO for AgentFuncCall {
         let payload = buf.ReadVec(payloadLen as usize)?;
 
         let obj = Self {
-            requestId: requestId,
-            namespaceId: namespaceId,
             appId: appId,
             funcName: funcName,
             payload: payload,
@@ -291,8 +356,6 @@ impl MsgIO for AgentFuncCall {
     
     // write obj, return <whether trigger>
     fn Write(&self, buf: &mut SocketBufIovs) -> Result<()> {
-        buf.WriteObj(&self.requestId)?;
-        buf.WriteObj(&self.namespaceId)?;
         buf.WriteObj(&self.appId)?;
 
         buf.WriteObj(&(self.funcName.len() as u16))?;
@@ -305,4 +368,61 @@ impl MsgIO for AgentFuncCall {
     }
 }
 
-pub type AgentFuncResp = UserFuncResp;
+pub struct FuncResp {
+    pub errcode: i32,
+    pub payload: Vec<u8>,
+}
+
+impl FuncResp {
+    pub fn NewErr(errcode: i32) -> Self {
+        return Self {
+            errcode: errcode,
+            payload: Vec::new(),
+        }
+    }
+}
+
+impl fmt::Debug for FuncResp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FuncResp")
+         .field("errcode", &self.errcode)
+         .finish()
+    }
+}
+
+impl MsgIO for FuncResp {
+    // data size, used for write check
+    fn Size(&self) -> usize {
+        let mut size = 0;
+
+        // errcode id
+        size += 4;
+
+        // 2 is the len of payload
+        size += 2 + self.payload.len();
+        return size
+    }
+
+    // read obj, return <Obj, whether trigger>
+    fn Read(buf: &mut SocketBufIovs) -> Result<Self> {
+        let errcode = buf.ReadObj::<i32>()?;
+        let buflen = buf.ReadObj::<u16>()?;
+        let payload = buf.ReadVec(buflen as usize)?;
+
+        let obj = Self {
+            errcode: errcode,
+            payload: payload,
+        };
+
+        return Ok(obj)
+    }
+    
+    // write obj, return <whether trigger>
+    fn Write(&self, buf: &mut SocketBufIovs) -> Result<()> {
+        buf.WriteObj(&self.errcode)?;
+        buf.WriteObj(&(self.payload.len() as u16))?;
+        buf.WriteSlice(&self.payload)?;
+
+        return Ok(());
+    }
+}
