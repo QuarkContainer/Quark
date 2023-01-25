@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod qstream;
-pub mod uid;
-pub mod eventfd;
-pub mod qclient;
-pub mod message;
-pub mod msg_stream;
-pub mod user_srv;
-pub mod agent;
-pub mod func_agent;
-pub mod tcp_teststream;
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
+use tokio::net::TcpListener;
+
+use crate::qlib::common::*;
+use crate::qlib::bytestream::*;
+
+pub struct UserSrv {
+    pub listener: TcpListener,
+}

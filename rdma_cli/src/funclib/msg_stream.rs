@@ -12,21 +12,53 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::sync::Arc;
+use core::ops::Deref;
+
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
+use tokio::sync::Mutex as TMutex;
 
 use super::qstream::*;
 use super::message::*;
 use crate::qlib::common::*;
 use crate::qlib::bytestream::*;
 
-pub enum MsgStream {
+#[derive(Clone)]
+pub struct MsgStream(Arc<TMutex<MsgStreamInner>>);
+
+impl Deref for MsgStream {
+    type Target = Arc<TMutex<MsgStreamInner>>;
+
+    fn deref(&self) -> &Arc<TMutex<MsgStreamInner>> {
+        &self.0
+    }
+}
+
+impl MsgStream {
+    pub fn NewWithTcpStream(stream: TcpStream) -> Self {
+        let stream = QTcpStream(stream);
+        let inner = MsgStreamInner::QTcpStream(stream);
+
+        return Self(Arc::new(TMutex::new(inner)));
+    }
+
+    pub async fn ReadMsg(&self) -> Result<QMsg> {
+        return self.lock().await.ReadMsg().await;
+    }
+
+    pub async fn WriteMsg(&self, msg: &QMsg) -> Result<()> {
+        return self.lock().await.WriteMsg(msg).await;
+    }
+}
+
+pub enum MsgStreamInner {
     QStream(QStream),
     QTcpStream(QTcpStream),
 }
 
-impl MsgStream {
+impl MsgStreamInner {
     pub async fn ReadAll(&mut self, buf: &mut [u8]) -> Result<()> {
         match self {
             Self::QStream(s) => return s.ReadAll(buf).await,
@@ -85,7 +117,6 @@ impl QTcpStream {
         self.0.write_all(buf).await?;
         return Ok(())
     }
-
 }
 
 
