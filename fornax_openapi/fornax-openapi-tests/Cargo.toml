@@ -1,0 +1,27 @@
+[package]
+name = "fornax-openapi-tests"
+version = "0.1.0"
+authors = ["Fornax serverless"]
+publish = false
+edition = "2021"
+include = [
+	# "build.rs",
+	"Cargo.toml",
+	"src/**/*",
+]
+
+[dependencies]
+futures-core = { version = "0.3", default-features = false }
+futures-io = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false, features = [
+	"io", # for futures_util::StreamExt::into_async_read
+] }
+fornax-openapi= { path = "..", features = [
+] }
+tokio = { version = "1", default-features = false, features = [
+	"macros", # for #[tokio::test]
+	"test-util", # for tokio::time::pause
+	"time", # for tokio::time::sleep
+] }
+
+[features]
