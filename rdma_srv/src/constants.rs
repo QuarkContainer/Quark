@@ -23,3 +23,6 @@ pub const GRPC_SERVER_ADDRESS: &str = "http://[::1]:51051";
 pub const SO_ORIGINAL_DST: i32 = 80;
 pub const SOL_IP: i32 = 0;
 pub const INCLUSTER_INGRESS_PORT: u16 = 7981;
+
+pub const PROTOCOL_TCP: &str = "TCP";
+pub const PROTOCOL_UDP: &str = "UDP";

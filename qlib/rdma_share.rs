@@ -522,7 +522,7 @@ pub enum DuplexMode {
     SHUTDOWN_RDWR,
 }
 
-#[derive(Eq, Hash, PartialEq, Default)]
+#[derive(Eq, Hash, PartialEq, Default, Debug)]
 pub struct Endpoint {
     // same as vpcId
     pub ipAddr: u32,

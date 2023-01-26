@@ -203,6 +203,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         });
 
+        while !RDMA_CTLINFO.isCMConnected_get() {
+            thread::sleep_ms(1000);
+        }
+
         tokio::spawn(async {
             while !RDMA_CTLINFO.isCMConnected_get() {
                 thread::sleep_ms(1000);

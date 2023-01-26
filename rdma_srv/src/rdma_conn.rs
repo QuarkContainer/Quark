@@ -892,7 +892,7 @@ impl RDMAControlChannel {
                         .bytes()
                         .zip(podId.iter_mut())
                         .for_each(|(b, ptr)| *ptr = b);
-                    let endPoint = EndpointUsingPodId {
+                    let endpoint = EndpointUsingPodId {
                         podId,
                         port: connectRequest.dstPort,
                     };
@@ -901,7 +901,7 @@ impl RDMAControlChannel {
                     //     "HandleConnectRequest, 1, srvPodIdEndpoints: {:?}",
                     //     RDMA_SRV.srvPodIdEndpoints.lock()
                     // );
-                    match RDMA_SRV.srvPodIdEndpoints.lock().get(&endPoint) {
+                    match RDMA_SRV.GetSrvEndpoint(endpoint) {
                         Some(srvEndpoint) => match srvEndpoint.status {
                             SrvEndPointStatus::Listening => {
                                 found = true;
@@ -926,11 +926,11 @@ impl RDMAControlChannel {
                             .bytes()
                             .zip(podId.iter_mut())
                             .for_each(|(b, ptr)| *ptr = b);
-                        let endPoint = EndpointUsingPodId {
+                        let endpoint = EndpointUsingPodId {
                             podId,
                             port: connectRequest.dstPort,
                         };
-                        match RDMA_SRV.srvPodIdEndpoints.lock().get(&endPoint) {
+                        match RDMA_SRV.GetSrvEndpoint(endpoint) {
                             Some(srvEndpoint) => match srvEndpoint.status {
                                 SrvEndPointStatus::Listening => {
                                     found = true;
@@ -958,8 +958,7 @@ impl RDMAControlChannel {
 
         if found {
             // println!("HandleConnectRequest 2");
-            let agents = RDMA_SRV.agents.lock();
-            let agent = agents.get(&agentId).unwrap();
+            let agent = RDMA_SRV.agents.lock().get(&agentId).unwrap().clone();
             let rdmaChannel = agent
                 .CreateServerRDMAChannel(connectRequest, self.chan.upgrade().unwrap().conn.clone());
 

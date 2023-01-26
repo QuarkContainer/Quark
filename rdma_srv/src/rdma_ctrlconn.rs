@@ -251,26 +251,25 @@ impl CtrlInfo {
         None
     }
 
-    pub fn IsService(&self, ip: u32, port: &u16) -> Option<IpWithPort> {
+    pub fn IsService(&self, ip: u32, protocol: String, port: &u16) -> Option<IpWithPort> {
         let services = self.services.lock();
         if services.contains_key(&ip) {
             for p in services[&ip].ports.iter() {
-                if p.port == *port {
+                if p.protocol == protocol && p.port == *port {
                     let endpointses = self.endpointses.lock();
                     let ipWithPorts = &endpointses[&services[&ip].name].ip_with_ports;
-                    let atomicIndex = &endpointses[&services[&ip].name].index;
-
-                    let mut expectedIndex = atomicIndex.fetch_add(1, Ordering::SeqCst);
-                    if expectedIndex >= ipWithPorts.len() {
-                        expectedIndex = 0;
-                        atomicIndex.store(0, Ordering::SeqCst)
-                    }
-                    let mut currentIndex = 0;
-                    for ipWithPort in ipWithPorts.iter() {
-                        if currentIndex == expectedIndex {
-                            return Some(ipWithPort.clone());
+                    let atomicIndex = &endpointses[&services[&ip].name].index[&protocol];
+                    let mut count = 0;
+                    while count < ipWithPorts.len() {                        
+                        let mut expectedIndex = atomicIndex.fetch_add(1, Ordering::SeqCst);
+                        if expectedIndex >= ipWithPorts.len() {
+                            expectedIndex = 0;
+                            atomicIndex.store(expectedIndex + 1, Ordering::SeqCst)
                         }
-                        currentIndex += 1;
+                        if ipWithPorts[expectedIndex].port.protocol == protocol {
+                            return Some(ipWithPorts[expectedIndex].clone());
+                        }
+                        count += 1;
                     }
                 }
             }
@@ -283,7 +282,7 @@ impl CtrlInfo {
             return false;
         }
         if self.IsInSubnet(ip.clone(), String::from("podSubnet")) {
-            println!("IP {} belongs to cluster's pod subnet", ip);
+            // println!("IP {} belongs to cluster's pod subnet", ip);
             return false;
         }
         if self.IsInSubnet(ip.clone(), String::from("serviceSubnet")) {
@@ -392,7 +391,7 @@ pub struct Service {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Port {
-    pub protocal: String,
+    pub protocol: String,
     pub port: u16,
 }
 
@@ -405,9 +404,9 @@ pub struct IpWithPort {
 #[derive(Default, Debug)]
 pub struct Endpoints {
     pub name: String,
-    pub ip_with_ports: HashSet<IpWithPort>,
+    pub ip_with_ports: Vec<IpWithPort>,
     pub resource_version: i32,
-    pub index: AtomicUsize,
+    pub index: HashMap<String, AtomicUsize>,
 }
 
 #[derive(Default, Debug)]
