@@ -251,14 +251,14 @@ impl CtrlInfo {
         None
     }
 
-    pub fn IsService(&self, ip: u32, protocal: String, port: &u16) -> Option<IpWithPort> {
+    pub fn IsService(&self, ip: u32, protocol: String, port: &u16) -> Option<IpWithPort> {
         let services = self.services.lock();
         if services.contains_key(&ip) {
             for p in services[&ip].ports.iter() {
-                if p.protocal == protocal && p.port == *port {
+                if p.protocol == protocol && p.port == *port {
                     let endpointses = self.endpointses.lock();
                     let ipWithPorts = &endpointses[&services[&ip].name].ip_with_ports;
-                    let atomicIndex = &endpointses[&services[&ip].name].index[&protocal];
+                    let atomicIndex = &endpointses[&services[&ip].name].index[&protocol];
                     let mut count = 0;
                     while count < ipWithPorts.len() {                        
                         let mut expectedIndex = atomicIndex.fetch_add(1, Ordering::SeqCst);
@@ -266,7 +266,7 @@ impl CtrlInfo {
                             expectedIndex = 0;
                             atomicIndex.store(expectedIndex + 1, Ordering::SeqCst)
                         }
-                        if ipWithPorts[expectedIndex].port.protocal == protocal {
+                        if ipWithPorts[expectedIndex].port.protocol == protocol {
                             return Some(ipWithPorts[expectedIndex].clone());
                         }
                         count += 1;
@@ -391,7 +391,7 @@ pub struct Service {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Port {
-    pub protocal: String,
+    pub protocol: String,
     pub port: u16,
 }
 

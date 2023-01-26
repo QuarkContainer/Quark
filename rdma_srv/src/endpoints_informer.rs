@@ -95,7 +95,7 @@ impl EndpointsInformer {
                 ip_with_ports.push(IpWithPort {
                     ip: splitted[0].to_string().parse::<u32>().unwrap().to_be(),
                     port: Port {
-                        protocal: splitted[1].to_string(),
+                        protocol: splitted[1].to_string(),
                         port: splitted[2].to_string().parse::<u16>().unwrap().to_be(),
                     }
                 });
