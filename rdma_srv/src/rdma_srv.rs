@@ -42,6 +42,7 @@ pub enum SrvEndPointStatus {
     Listening,
 }
 
+#[derive(Debug)]
 pub struct SrvEndpoint {
     //pub srvEndpointId: u32, // to be returned as bind
     pub agentId: u32,
@@ -51,7 +52,7 @@ pub struct SrvEndpoint {
                                    //pub acceptQueue: [RDMAChannel; 5], // hold rdma channel which can be assigned.
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SrvEndpointUsingPodId {
     //pub srvEndpointId: u32, // to be returned as bind
     pub agentId: u32,
@@ -324,31 +325,25 @@ impl RDMASrv {
         }
     }
 
+    pub fn GetSrvEndpoint(&self, endpoint: EndpointUsingPodId) -> Option<SrvEndpointUsingPodId> {
+        match self.srvPodIdEndpoints.lock().get(&endpoint) {
+            None => None,
+            Some(srvEndpoint) => Some(srvEndpoint.clone()),
+        }
+    }
+
     pub fn ProcessRDMAWriteImmFinish(&self, channelId: u32, qpNum: u32) {
         let finSent = channelId & 0x80000000 == 0x80000000;
         let channelId = channelId & 0x7FFFFFFF;
         if channelId != 0 {
-            let channel = self.channels.lock().get(&channelId).unwrap().clone();
-            // {
-            //     let channels = self.channels.lock();
-            //     let item1 = channels.get(&channelId).unwrap();
-            //     channel = item1.clone();
-            // }
-
-            channel.ProcessRDMAWriteImmFinish(finSent);
-
-            // match self.channels.lock().get(&channelId) {
-            // match item {
-            //     None => {
-            //         panic!(
-            //             "ProcessRDMAWriteImmFinish get unexpected channelId: {}",
-            //             channelId
-            //         );
-            //     }
-            //     Some(channel) => {
-            //         channel.ProcessRDMAWriteImmFinish(finSent);
-            //     }
-            // }
+            match self.getRDMAChannel(channelId) {
+                Some(channel) => {
+                    channel.ProcessRDMAWriteImmFinish(finSent);
+                },
+                None => {
+                    println!("ProcessRDMAWriteImmFinish get unexpected channelId: {}", channelId);
+                }
+            }
         } else {
             match self.controlChannels.lock().get(&qpNum) {
                 None => {
@@ -427,7 +422,7 @@ impl RDMASrv {
         if RDMA_CTLINFO.isK8s {
             match self.vpcIpAddrToAgents.lock().get(&VpcIpAddr {
                 vpcId: udpPacket.vpcId,
-                ipAddr: udpPacket.dstIpAddr,
+                ipAddr: udpPacket.dstIpAddr.to_be(),
             }) {
                 Some(rdmaAgent) => {
                     rdmaAgent.HandleUDPPacketRecv(udpPacket);

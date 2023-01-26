@@ -19,7 +19,7 @@ use crate::RDMA_CTLINFO;
 use svc_client::quark_cm_service_client::QuarkCmServiceClient;
 use svc_client::MaxResourceVersionMessage;
 use svc_client::EndpointsMessage;
-use std::collections::HashSet;
+use std::collections::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::time::*;
 use tonic::Request;
@@ -86,13 +86,13 @@ impl EndpointsInformer {
         let name = &endpoints_message.name;
         let mut endpointses_map = RDMA_CTLINFO.endpointses.lock();
         if endpoints_message.event_type == EVENT_TYPE_SET {
-            let mut ip_with_ports = HashSet::new();
+            let mut ip_with_ports = Vec::new();
             for ipWithPortStr in &endpoints_message.ip_with_ports {
                 if !ipWithPortStr.contains(":") {
                     continue;
                 }
                 let splitted = ipWithPortStr.split(":").collect::<Vec<_>>();
-                ip_with_ports.insert(IpWithPort {
+                ip_with_ports.push(IpWithPort {
                     ip: splitted[0].to_string().parse::<u32>().unwrap().to_be(),
                     port: Port {
                         protocal: splitted[1].to_string(),
@@ -105,7 +105,7 @@ impl EndpointsInformer {
                 name: name.clone(),
                 ip_with_ports: ip_with_ports,
                 resource_version: endpoints_message.resource_version,
-                index: AtomicUsize::new(0),
+                index: HashMap::from([(PROTOCOL_TCP.into(), AtomicUsize::new(0)), (PROTOCOL_UDP.into(), AtomicUsize::new(0))]),
             };
             endpointses_map.insert(name.clone(), endpoints);
             if endpoints_message.resource_version > self.max_resource_version {

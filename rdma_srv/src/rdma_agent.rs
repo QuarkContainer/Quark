@@ -442,10 +442,10 @@ impl RDMAAgent {
             RDMAReqMsg::RDMAConnect(msg) => {
                 let mut msgCloned = msg.clone();
 
-                match RDMA_CTLINFO.IsService(msgCloned.dstIpAddr, &msgCloned.dstPort) {
+                match RDMA_CTLINFO.IsService(msgCloned.dstIpAddr, String::from("TCP"), &msgCloned.dstPort) {
                     None => {}
                     Some(ipWithPort) => {
-                        println!("RDMAConnect: The traffic is connecting to a service. Change the connection to {:?}", ipWithPort);
+                        println!("RDMAConnect: The traffic {} is connecting to a service. Change the connection to {:?}", msgCloned.dstIpAddr, ipWithPort);
                         msgCloned.dstIpAddr = ipWithPort.ip;
                         msgCloned.dstPort = ipWithPort.port.port;
                     }
@@ -523,10 +523,10 @@ impl RDMAAgent {
                     );
                 } else {
                     // error!("RDMAConnectUsingPodId: Connect to ip {} port {}", dstIpAddr, dstPort);
-                    match RDMA_CTLINFO.IsService(dstIpAddr, &dstPort) {
+                    match RDMA_CTLINFO.IsService(dstIpAddr, String::from("TCP"), &dstPort) {
                         None => {}
                         Some(ipWithPort) => {
-                            println!("RDMAConnectUsingPodId: The traffic is connecting to a service. Change the connection to {:?}", ipWithPort);
+                            println!("RDMAConnectUsingPodId: The traffic {} is connecting to a service. Change the connection to {:?}", dstIpAddr, ipWithPort);
                             dstIpAddr = ipWithPort.ip;
                             dstPort = ipWithPort.port.port;
                             if RDMA_CTLINFO.IsEgress(dstIpAddr) {
@@ -626,6 +626,10 @@ impl RDMAAgent {
                 let vpcId;
                 let ipAddr;
                 if RDMA_CTLINFO.isK8s {
+                    while self.GetVpcId() == 0 {
+                        println!("Waiting for control plane to get vpcId");
+                        sleep(Duration::from_millis(1000));
+                    }
                     vpcId = self.GetVpcId();
                     ipAddr = self.ipAddr.lock().to_be();
                 } else {
@@ -655,24 +659,44 @@ impl RDMAAgent {
                 udpPacket.srcIpAddr = ipAddr;
                 udpPacket.vpcId = vpcId;
 
-                match RDMA_CTLINFO.get_node_ip_by_pod_ip(&udpPacket.dstIpAddr) {
-                    Some(nodeIpAddr) => {
-                        let conns = RDMA_SRV.conns.lock();
-                        let rdmaConn = conns.get(&nodeIpAddr).unwrap().clone();
-                        let wrId = (self.id as u64) << 32 | msg.udpBuffIdx as u64;
-                        let laddr = udpPacket as *const _ as u64;
-                        // debug!("RDMAReqMsg::RDMASendUDPPacket, 1, agentId: {:x}, udpBuffIdx: {:x}, wrId: {:x}, laddr: {:x}", self.id, msg.udpBuffIdx, wrId, laddr);
-                        rdmaConn
-                            .RDMAUDQPSend(
-                                laddr,
-                                (udpPacket.length + UDP_BUFF_OFFSET as u16) as u32,
-                                wrId,
-                                self.udpMR.LKey(),
-                            )
-                            .expect("RDMAUDQPSend failed...");
+                if udpPacket.dstIpAddr == 2130706433 || udpPacket.dstIpAddr == 0 { //handle dstIpAddr = 127.0.0.1 or 0
+                    udpPacket.dstIpAddr = ipAddr;
+                }
+
+                if RDMA_CTLINFO.IsEgress(udpPacket.dstIpAddr) {
+                    panic!("TODO: Should handle udp to egress");
+                } else {
+                    match RDMA_CTLINFO.IsService(udpPacket.dstIpAddr, String::from("UDP"), &udpPacket.dstPort) {
+                        None => {}
+                        Some(ipWithPort) => {
+                            println!("RDMASendUDPPacket: The traffic {} is connecting to a service. Change the connection to {:?}", udpPacket.dstIpAddr, ipWithPort);
+                            udpPacket.dstIpAddr = ipWithPort.ip;
+                            udpPacket.dstPort = ipWithPort.port.port;
+                            if RDMA_CTLINFO.IsEgress(udpPacket.dstIpAddr) {
+                                panic!("TODO: Should handle udp to egress");
+                            }
+                        }
                     }
-                    None => {
-                        println!("TODO: return error as no ip to node mapping is found");
+
+                    match RDMA_CTLINFO.get_node_ip_by_pod_ip(&udpPacket.dstIpAddr) {
+                        Some(nodeIpAddr) => {
+                            let conns = RDMA_SRV.conns.lock();
+                            let rdmaConn = conns.get(&nodeIpAddr).unwrap().clone();
+                            let wrId = (self.id as u64) << 32 | msg.udpBuffIdx as u64;
+                            let laddr = udpPacket as *const _ as u64;
+                            // debug!("RDMAReqMsg::RDMASendUDPPacket, 1, agentId: {:x}, udpBuffIdx: {:x}, wrId: {:x}, laddr: {:x}", self.id, msg.udpBuffIdx, wrId, laddr);
+                            rdmaConn
+                                .RDMAUDQPSend(
+                                    laddr,
+                                    (udpPacket.length + UDP_BUFF_OFFSET as u16) as u32,
+                                    wrId,
+                                    self.udpMR.LKey(),
+                                )
+                                .expect("RDMAUDQPSend failed...");
+                        }
+                        None => {
+                            println!("TODO: return error as no ip to node mapping is found");
+                        }
                     }
                 }
             }
