@@ -2,7 +2,13 @@
 name = "resilience_function"
 version = "0.1.0"
 edition = "2021"
-
+include = [
+	"build.rs",
+	"Cargo.toml",
+	"LICENSE",
+	"README.md",
+	"src/**/*",
+]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -20,8 +26,7 @@ futures-io = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = [
 	"io", # for futures_util::StreamExt::into_async_read
 ] }
-fornax-openapi= { path = "../fornax_openapi", features = [
-] }
+fornax-openapi= { path = "../fornax_openapi", features = [ ] }
 
 [features]
 
