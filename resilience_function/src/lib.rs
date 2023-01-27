@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,13 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let proto_file = "./proto/service_directory.proto";
-    tonic_build::configure()
-        .build_server(true)
-        .out_dir("./src/service_directory")
-        .compile(&[proto_file], &["."])
-        .unwrap_or_else(|e| panic!("protobuf compile error: {}", e));
+extern crate alloc;
+extern crate fornax_openapi;
 
-    Ok(())
-}
+mod service_directory;
+mod service_broker;
+mod fornax_informer;
