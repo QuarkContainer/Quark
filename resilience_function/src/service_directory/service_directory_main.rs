@@ -13,7 +13,7 @@
 // limitations under the License.
 
 pub mod service_directory {
-    tonic::include_proto!("service_directory");
+    include!("service_directory.rs");
 }
 
 use tonic::{transport::Server, Request, Response, Status};
