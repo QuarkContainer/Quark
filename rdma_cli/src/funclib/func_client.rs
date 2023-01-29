@@ -12,14 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod qstream;
-pub mod uid;
-pub mod eventfd;
-pub mod qclient;
-pub mod message;
-pub mod msg_stream;
-pub mod user_srv;
-pub mod agent;
-pub mod func_agent;
-pub mod tcp_teststream;
-pub mod func_client;
+use crate::qlib::common::*;
+use super::tcp_teststream::*;
+use super::msg_stream::*;
+
+pub struct FuncClient {
+    pub msgStream: MsgStream,
+}
+
+impl FuncClient {
+    pub async fn NewTestTCPClient(appId: u64) -> Result<Self> {
+        println!("NewTestTCPClient 1");
+        let stream = TestTCPClient::Connect(appId, "127.0.0.1:8080".to_string()).await?;
+        println!("NewTestTCPClient 2");
+        return Ok(Self {
+            msgStream: stream
+        })
+    }
+}

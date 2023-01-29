@@ -109,6 +109,9 @@ use rdma_ingress_informer::RdmaIngressInformer;
 use service_informer::ServiceInformer;
 use crate::constants::*;
 
+use crate::funclib::func_agent::*;
+use crate::funclib::agent::*;
+
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 lazy_static! {
@@ -118,5 +121,10 @@ lazy_static! {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    return Ok(());
+    tokio::select! {
+        _a = Execution() => {}
+        _b = ChannelProcess() => {}
+    };
+
+    return Ok(())
 }
