@@ -109,6 +109,8 @@ use rdma_ingress_informer::RdmaIngressInformer;
 use service_informer::ServiceInformer;
 use crate::constants::*;
 
+use crate::funclib::func_client::*;
+
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 lazy_static! {
@@ -118,6 +120,12 @@ lazy_static! {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    //not_semaphore_reads_and_resets().await?;
+    println!("main ....");
+    let client1 = FuncClient::NewTestTCPClient(1).await?;
+    let client2 = FuncClient::NewTestTCPClient(1).await?;
+    tokio::select! {
+        _ = client1.msgStream.ReadMsg() => {},
+        _ = client2.msgStream.ReadMsg() => {},
+    }
     Ok(())
 }

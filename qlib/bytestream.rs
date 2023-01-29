@@ -107,7 +107,7 @@ impl SocketBufIovs {
             let dst = buf.as_mut_ptr();
             unsafe {
                 ptr::copy_nonoverlapping(src, dst, size);
-            }
+            }            
         } else {
             let src = self.iovs[0].start as * const u8;
             let dst = buf.as_mut_ptr();
@@ -121,12 +121,14 @@ impl SocketBufIovs {
                 ptr::copy_nonoverlapping(src, dst, size - self.iovs[0].len);
             }
         }
-
+        
+        self.Consume(size);
         return Ok(buf)
     }  
 
     pub fn ReadString(&mut self, size: usize) -> Result<String> {
         let buf = self.ReadVec(size)?;
+        self.Consume(size);
         match String::from_utf8(buf) {
             Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
             Ok(s) => return Ok(s),
@@ -142,12 +144,14 @@ impl SocketBufIovs {
 
         if self.iovs[0].len >= size {
             let data = unsafe {*(self.iovs[0].start as * const T)};
+            self.Consume(size);
             return Ok(data)
         } else {
             let buf = self.ReadVec(size);
             match buf {
                 Ok(b) => {
                     let data = unsafe {*(&b[0] as * const _ as u64 as * const T)};
+                    self.Consume(size);
                     return Ok(data)
                 } 
                 Err(e) => {
