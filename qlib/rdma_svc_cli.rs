@@ -329,7 +329,13 @@ impl RDMASvcClient {
                                             &shareRegion.ioMetas[ioBufIndex].readBufAtoms
                                                 as *const _
                                                 as u64,
+                                            &shareRegion.ioMetas[ioBufIndex].readBufWaitingRW
+                                                as *const _
+                                                as u64,
                                             &shareRegion.ioMetas[ioBufIndex].writeBufAtoms
+                                                as *const _
+                                                as u64,
+                                            &shareRegion.ioMetas[ioBufIndex].writeBufWaitingRW
                                                 as *const _
                                                 as u64,
                                             &shareRegion.ioMetas[ioBufIndex].consumeReadData
@@ -413,7 +419,13 @@ impl RDMASvcClient {
                                             &shareRegion.ioMetas[ioBufIndex].readBufAtoms
                                                 as *const _
                                                 as u64,
+                                            &shareRegion.ioMetas[ioBufIndex].readBufWaitingRW
+                                                as *const _
+                                                as u64,
                                             &shareRegion.ioMetas[ioBufIndex].writeBufAtoms
+                                                as *const _
+                                                as u64,
+                                            &shareRegion.ioMetas[ioBufIndex].writeBufWaitingRW
                                                 as *const _
                                                 as u64,
                                             &shareRegion.ioMetas[ioBufIndex].consumeReadData

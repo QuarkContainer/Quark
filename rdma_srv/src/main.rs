@@ -477,7 +477,11 @@ fn HandleEvents(epoll_fd: i32, events: &Vec<EpollEvent>, hostname: &String) -> R
                     MemoryDef::DEFAULT_BUF_PAGE_COUNT,
                     &RDMA_SRV.controlRegion.ioMetas[controlRegionId].readBufAtoms as *const _
                         as u64,
+                    &RDMA_SRV.controlRegion.ioMetas[controlRegionId].readBufWaitingRW as *const _
+                        as u64,
                     &RDMA_SRV.controlRegion.ioMetas[controlRegionId].writeBufAtoms as *const _
+                        as u64,
+                    &RDMA_SRV.controlRegion.ioMetas[controlRegionId].writeBufWaitingRW as *const _
                         as u64,
                     &RDMA_SRV.controlRegion.ioMetas[controlRegionId].consumeReadData as *const _
                         as u64,
@@ -832,7 +836,9 @@ fn SetupConnection(ip: &u32) {
     let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::InitWithShareMemory(
         MemoryDef::DEFAULT_BUF_PAGE_COUNT,
         &RDMA_SRV.controlRegion.ioMetas[controlRegionId].readBufAtoms as *const _ as u64,
+        &RDMA_SRV.controlRegion.ioMetas[controlRegionId].readBufWaitingRW as *const _ as u64,
         &RDMA_SRV.controlRegion.ioMetas[controlRegionId].writeBufAtoms as *const _ as u64,
+        &RDMA_SRV.controlRegion.ioMetas[controlRegionId].writeBufWaitingRW as *const _ as u64,
         &RDMA_SRV.controlRegion.ioMetas[controlRegionId].consumeReadData as *const _ as u64,
         &RDMA_SRV.controlRegion.iobufs[controlRegionId].read as *const _ as u64,
         &RDMA_SRV.controlRegion.iobufs[controlRegionId].write as *const _ as u64,

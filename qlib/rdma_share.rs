@@ -14,10 +14,8 @@
 
 use alloc::sync::Arc;
 use core::ops::Deref;
-use core::sync::atomic::AtomicU32;
-use core::sync::atomic::AtomicU64;
-use core::sync::atomic::Ordering;
-//use std::sync::atomic::AtomicI64;
+use core::sync::atomic::{ AtomicBool, AtomicU32, AtomicU64, Ordering };
+
 use super::common::*;
 use super::kernel::kernel::waiter::Queue;
 use super::linux_def::*;
@@ -349,7 +347,9 @@ pub struct IOBuf {
 #[repr(C)]
 pub struct IOMetas {
     pub readBufAtoms: [AtomicU32; 2],
+    pub readBufWaitingRW: [AtomicBool; 2],
     pub writeBufAtoms: [AtomicU32; 2],
+    pub writeBufWaitingRW: [AtomicBool; 2],
     pub consumeReadData: AtomicU64,
 }
 
