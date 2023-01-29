@@ -146,15 +146,19 @@ int main(int argc, char const *argv[])
     }
 
     valread = read(sock , buffer, 1024);
-    printf("%s\n",buffer );
+    printf("1 %s\n",buffer );
     int i = write(sock , hello , strlen(hello));
-    printf("client: Hello message sent %d bytes\n", i);
+    printf("2 client: Hello message sent %d bytes\n", i);
 
-    sleep(1);
-    i = send(sock , hello , strlen(hello) , 0 );
-    printf("client: Hello message sent %d bytes\n", i);
+    valread = read(sock , buffer, 1024);
+    printf("3 %s\n",buffer );
+    // sleep(1);
+    // i = send(sock , hello , strlen(hello) , 0 );
+    i = write(sock , hello , strlen(hello));
+    printf("4 client: Hello message sent %d bytes\n", i);
+    printf("qq******* 1\n");
     valread = recvfrom(sock , buffer, 1024, 0, &sa, &sa_len);
-    printf("%d recvfrom: %s\n", valread, buffer);
+    printf("5 %d recvfrom: %s\n", valread, buffer);
     printf("recvfrom: Remote IP address is: %s\n", inet_ntoa(sa.sin_addr));
     printf("recvfrom: Remote port is: %d\n", (int) ntohs(sa.sin_port));
 

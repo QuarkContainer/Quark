@@ -195,15 +195,24 @@ impl SocketBufIovs {
 pub enum RingeBufAllocator {
     HeapAllocator,
     //ShareAllocator {headTailAddr: u64, bufAddr: u64},
-    ShareAllocator(u64, u64, bool),
+    ShareAllocator(u64, u64, u64, bool),
 }
 
 impl RingeBufAllocator {
     pub fn AllocHeadTail(&self) -> &'static [AtomicU32] {
         match self {
             Self::HeapAllocator => return HeapAllocator::AllocHeadTail(),
-            Self::ShareAllocator(headTailAddr, _, init) => {
+            Self::ShareAllocator(headTailAddr, _, _, init) => {
                 return ShareAllocator::AllocHeadTail(*headTailAddr, *init)
+            }
+        }
+    }
+
+    pub fn AllocWaitingRW(&self) -> &'static [AtomicBool] {
+        match self {
+            Self::HeapAllocator => return HeapAllocator::AllocWaitingRW(),
+            Self::ShareAllocator(_, waitingRWAddr, _, init) => {
+                return ShareAllocator::AllocWaitingRW(*waitingRWAddr, *init)
             }
         }
     }
@@ -211,21 +220,28 @@ impl RingeBufAllocator {
     pub fn FreeHeadTail(&self, data: &'static [AtomicU32]) {
         match self {
             Self::HeapAllocator => return HeapAllocator::FreeHeadTail(data),
-            Self::ShareAllocator(_, _, _) => return ShareAllocator::FreeHeadTail(data),
+            Self::ShareAllocator(_, _, _, _) => return ShareAllocator::FreeHeadTail(data),
+        }
+    }
+
+    pub fn FreeWaitingRW(&self, data: &'static [AtomicBool]) {
+        match self {
+            Self::HeapAllocator => return HeapAllocator::FreeWaitingRW(data),
+            Self::ShareAllocator(_, _, _, _) => return ShareAllocator::FreeWaitingRW(data),
         }
     }
 
     pub fn AlllocBuf(&self, pageCount: usize) -> u64 {
         match self {
             Self::HeapAllocator => return HeapAllocator::AlllocBuf(pageCount),
-            Self::ShareAllocator(_, buffAddr, _) => return ShareAllocator::AlllocBuf(*buffAddr),
+            Self::ShareAllocator(_, _, buffAddr, _) => return ShareAllocator::AlllocBuf(*buffAddr),
         }
     }
 
     pub fn FreeBuf(&self, addr: u64, size: usize) {
         match self {
             Self::HeapAllocator => return HeapAllocator::FreeBuf(addr, size),
-            Self::ShareAllocator(_, _, _) => return ShareAllocator::FreeBuf(addr, size),
+            Self::ShareAllocator(_, _, _, _) => return ShareAllocator::FreeBuf(addr, size),
         }
     }
 }
@@ -252,11 +268,31 @@ impl HeapAllocator {
         return slice;
     }
 
+    pub fn AllocWaitingRW() -> &'static [AtomicBool] {
+        let layout = Layout::from_size_align(2, 8)
+            .expect("HeapAllocator::AllocWaitingRW can't allocate memory");
+        let addr = unsafe { alloc(layout) };
+
+        let ptr = addr as *mut AtomicBool;
+        let slice = unsafe { slice::from_raw_parts(ptr, 2 as usize) };
+        slice[0].store(true, Ordering::Release);
+        slice[1].store(false, Ordering::Release);
+        return slice;
+    }
+
     pub fn FreeHeadTail(data: &'static [AtomicU32]) {
         assert!(data.len() == 2);
         let addr = &data[0] as *const _ as u64;
         let layout = Layout::from_size_align(8, 8)
-            .expect("RingeBufAllocator::FreeHeadTail can't free memory");
+            .expect("HeapAllocator::FreeHeadTail can't free memory");
+        unsafe { dealloc(addr as *mut u8, layout) };
+    }
+
+    pub fn FreeWaitingRW(data: &'static [AtomicBool]) {
+        assert!(data.len() == 2);
+        let addr = &data[0] as *const _ as u64;
+        let layout = Layout::from_size_align(2, 8)
+            .expect("HeapAllocator::FreeWaitingRW can't free memory");
         unsafe { dealloc(addr as *mut u8, layout) };
     }
 
@@ -266,7 +302,7 @@ impl HeapAllocator {
             pageCount * MemoryDef::PAGE_SIZE as usize,
             MemoryDef::PAGE_SIZE as usize,
         )
-        .expect("RingeBufAllocator::AlllocBuf can't allocate memory");
+        .expect("HeapAllocator::AlllocBuf can't allocate memory");
         let addr = unsafe { alloc(layout) };
 
         return addr as u64;
@@ -275,7 +311,7 @@ impl HeapAllocator {
     pub fn FreeBuf(addr: u64, size: usize) {
         assert!(IsPowerOfTwo(size) && addr % MemoryDef::PAGE_SIZE == 0);
         let layout = Layout::from_size_align(size, MemoryDef::PAGE_SIZE as usize)
-            .expect("RingeBufAllocator::FreeBuf can't free memory");
+            .expect("HeapAllocator::FreeBuf can't free memory");
         unsafe { dealloc(addr as *mut u8, layout) };
     }
 }
@@ -297,8 +333,23 @@ impl ShareAllocator {
         return slice;
     }
 
+    pub fn AllocWaitingRW(waitingRWAddr: u64, init: bool) -> &'static [AtomicBool] {
+        let ptr = waitingRWAddr as *mut AtomicBool;
+        let slice = unsafe { slice::from_raw_parts(ptr, 2 as usize) };
+        if init {
+            slice[0].store(true, Ordering::Release);
+            slice[1].store(false, Ordering::Release);
+        }
+
+        return slice;
+    }
+
     pub fn FreeHeadTail(_data: &'static [AtomicU32]) {
         // println!("ShareAllocator::FreeHeadTail");
+    }
+
+    pub fn FreeWaitingRW(_data: &'static [AtomicBool]) {
+        // println!("ShareAllocator::FreeWaitingRW");
     }
 
     pub fn AlllocBuf(addr: u64) -> u64 {
@@ -314,9 +365,8 @@ impl ShareAllocator {
 pub struct RingBuf {
     pub buf: u64,
     pub ringMask: u32,
-    pub waitingRead: AtomicBool,
-    pub waitingWrite: AtomicBool,
     pub headtail: &'static [AtomicU32],
+    pub waitingRW: &'static [AtomicBool],
     pub allocator: RingeBufAllocator,
 }
 
@@ -333,6 +383,7 @@ impl fmt::Debug for RingBuf {
 impl Drop for RingBuf {
     fn drop(&mut self) {
         self.allocator.FreeHeadTail(self.headtail);
+        self.allocator.FreeWaitingRW(self.waitingRW);
         self.allocator.FreeBuf(self.buf, self.Len());
     }
 }
@@ -344,15 +395,15 @@ impl RingBuf {
 
     pub fn New(pagecount: usize, allocator: RingeBufAllocator) -> Self {
         let headtail = allocator.AllocHeadTail();
+        let waitingRW = allocator.AllocWaitingRW();
         assert!(headtail.len() == 2);
         let buf = allocator.AlllocBuf(pagecount);
 
         return Self {
             buf: buf,
-            waitingRead: AtomicBool::new(true),
-            waitingWrite: AtomicBool::new(false),
             ringMask: (pagecount * MemoryDef::PAGE_SIZE as usize - 1) as u32,
             headtail: headtail,
+            waitingRW,
             allocator: allocator,
         };
     }
@@ -624,19 +675,19 @@ impl RingBuf {
     }
 
     pub fn SetWaitingWrite(&self) {
-        self.waitingWrite.store(true, Ordering::SeqCst);
+        self.waitingRW[1].store(true, Ordering::SeqCst);
     }
 
     pub fn SetWaitingRead(&self) {
-        self.waitingRead.store(true, Ordering::SeqCst);
+        self.waitingRW[0].store(true, Ordering::SeqCst);
     }
 
     pub fn ResetWaitingRead(&self) -> bool {
-        return self.waitingRead.swap(false, Ordering::Release);
+        return self.waitingRW[0].swap(false, Ordering::Release);
     }
 
     pub fn ResetWaitingWrite(&self) -> bool {
-        return self.waitingWrite.swap(false, Ordering::Release);
+        return self.waitingRW[1].swap(false, Ordering::Release);
     }
 
     pub fn Produce(&self, count: usize) -> bool {
@@ -753,12 +804,14 @@ impl ByteStream {
     pub fn InitWithShareMemory(
         pageCount: u64,
         headTailAddr: u64,
+        waitingRWAddr: u64,
         bufAddr: u64,
         init: bool,
     ) -> Self {
         return Self(Arc::new(QMutex::new(ByteStreamIntern::InitWithShareMemory(
             pageCount, 
             headTailAddr,
+            waitingRWAddr,
             bufAddr,
             init
         ))));
@@ -807,6 +860,7 @@ impl ByteStreamIntern {
     pub fn InitWithShareMemory(
         pageCount: u64,
         headTailAddr: u64,
+        waitingRWAddr: u64,
         bufAddr: u64,
         init: bool,
     ) -> Self {
@@ -815,7 +869,7 @@ impl ByteStreamIntern {
             "Bytetream pagecount is not power of two: {}",
             pageCount
         );
-        let allocator = RingeBufAllocator::ShareAllocator(headTailAddr, bufAddr, init);
+        let allocator = RingeBufAllocator::ShareAllocator(headTailAddr, waitingRWAddr, bufAddr, init);
         let buf = RingBuf::New(pageCount as usize, allocator);
 
         return Self {

@@ -219,14 +219,17 @@ int main(int argc, char const *argv[])
     printf("Remote port is: %d\n", (int) ntohs(sa.sin_port));
 
     int n = write(new_socket , hello , strlen(hello));
-    printf("Server::write Hello message sent %d\n", n);
+    printf("1 Server::write Hello message sent %d\n", n);
     valread = read( new_socket , buffer, 1024);
-    printf("Server::read get message  %d: %s\n", valread, buffer);
-
+    printf("2 Server::read get message  %d: %s\n", valread, buffer);
+    printf("qq******* 1\n");
+    // n = send(new_socket, hello , strlen(hello) , 0 );
+    n = write(new_socket , hello , strlen(hello));
+    printf("3 Server::send %d Server: Hello message sent\n", n);
     valread = recv( new_socket , buffer, 1024, 0);
-    printf("Server::recv %d get message recv: %s\n", valread, buffer);
+    printf("4 Server::recv %d get message recv: %s\n", valread, buffer);
     n = send(new_socket, hello , strlen(hello) , 0 );
-    printf("Server::send %d Server: Hello message sent\n", n);
+    printf("5 Server::send %d Server: Hello message sent\n", n);
 
     struct iovec iov[1];
     iov[0].iov_base = buffer;
