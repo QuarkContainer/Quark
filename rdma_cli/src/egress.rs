@@ -211,7 +211,13 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                                 &shareRegion.ioMetas[ioBufIndex].readBufAtoms
                                                     as *const _
                                                     as u64,
+                                                &shareRegion.ioMetas[ioBufIndex].readBufWaitingRW
+                                                    as *const _
+                                                    as u64,
                                                 &shareRegion.ioMetas[ioBufIndex].writeBufAtoms
+                                                    as *const _
+                                                    as u64,
+                                                &shareRegion.ioMetas[ioBufIndex].writeBufWaitingRW
                                                     as *const _
                                                     as u64,
                                                 &shareRegion.ioMetas[ioBufIndex].consumeReadData
@@ -254,7 +260,13 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                             &shareRegion.ioMetas[ioBufIndex].readBufAtoms
                                                 as *const _
                                                 as u64,
+                                            &shareRegion.ioMetas[ioBufIndex].readBufWaitingRW
+                                                as *const _
+                                                as u64,
                                             &shareRegion.ioMetas[ioBufIndex].writeBufAtoms
+                                                as *const _
+                                                as u64,
+                                            &shareRegion.ioMetas[ioBufIndex].writeBufWaitingRW
                                                 as *const _
                                                 as u64,
                                             &shareRegion.ioMetas[ioBufIndex].consumeReadData

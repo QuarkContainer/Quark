@@ -233,7 +233,9 @@ impl RDMAAgent {
         let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::InitWithShareMemory(
             MemoryDef::DEFAULT_BUF_PAGE_COUNT,
             &shareRegion.ioMetas[ioBufIndex].readBufAtoms as *const _ as u64,
+            &shareRegion.ioMetas[ioBufIndex].readBufWaitingRW as *const _ as u64,
             &shareRegion.ioMetas[ioBufIndex].writeBufAtoms as *const _ as u64,
+            &shareRegion.ioMetas[ioBufIndex].writeBufWaitingRW as *const _ as u64,
             &shareRegion.ioMetas[ioBufIndex].consumeReadData as *const _ as u64,
             &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
             &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,
@@ -265,7 +267,9 @@ impl RDMAAgent {
         let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::InitWithShareMemory(
             MemoryDef::DEFAULT_BUF_PAGE_COUNT,
             &shareRegion.ioMetas[ioBufIndex].readBufAtoms as *const _ as u64,
+            &shareRegion.ioMetas[ioBufIndex].readBufWaitingRW as *const _ as u64,
             &shareRegion.ioMetas[ioBufIndex].writeBufAtoms as *const _ as u64,
+            &shareRegion.ioMetas[ioBufIndex].writeBufWaitingRW as *const _ as u64,
             &shareRegion.ioMetas[ioBufIndex].consumeReadData as *const _ as u64,
             &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
             &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,

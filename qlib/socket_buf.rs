@@ -146,7 +146,9 @@ impl SocketBuffIntern {
     pub fn InitWithShareMemory(
         pageCount: u64,
         readBufHeadTailAddr: u64,
+        readBufWaitingRWAddr: u64,
         writeBufHeadTailAddr: u64,
+        writeBufWaitingRWAddr: u64,
         consumeReadDataAddr: u64,
         readBufAddr: u64,
         writeBufAddr: u64,
@@ -169,12 +171,14 @@ impl SocketBuffIntern {
             readBuf: ByteStream(Arc::new(QMutex::new(ByteStreamIntern::InitWithShareMemory(
                 pageCount,
                 readBufHeadTailAddr,
+                readBufWaitingRWAddr,
                 readBufAddr,
                 init,
             )))),
             writeBuf: ByteStream(Arc::new(QMutex::new(ByteStreamIntern::InitWithShareMemory(
                 pageCount,
                 writeBufHeadTailAddr,
+                writeBufWaitingRWAddr,
                 writeBufAddr,
                 init,
             )))),
