@@ -90,7 +90,7 @@ impl ServiceInformer {
             for portStr in &service_message.ports {
                 let splitted = portStr.split(":").collect::<Vec<_>>();
                 ports.insert(Port {
-                    protocal: splitted[0].to_string(),
+                    protocol: splitted[0].to_string(),
                     port: splitted[1].to_string().parse::<u16>().unwrap().to_be(),
                 });
             }

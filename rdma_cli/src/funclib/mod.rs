@@ -18,3 +18,7 @@ pub mod eventfd;
 pub mod qclient;
 pub mod message;
 pub mod msg_stream;
+pub mod user_srv;
+pub mod agent;
+pub mod func_agent;
+pub mod tcp_teststream;
