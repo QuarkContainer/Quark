@@ -5,18 +5,18 @@ async fn watch_sessions() {
     use futures_util::StreamExt;
 
     println!("GWJ, starting watch sessions");
-    let mut client = fornax_openapi::Client::new("watch_sessions");
+    let mut client = fornax_openapi::Client::new().expect("can not create client");
 
-    let (request, response_body) =
-        fornax::ApplicationSession::watch("", Default::default())
-            .expect("couldn't watch application");
+    let (request, response_body) = fornax::ApplicationSession::watch("", Default::default())
+        .expect("couldn't watch application");
     let watch_events = client.get_multiple_values(request, response_body);
     futures_util::pin_mut!(watch_events);
 
     let mut watch_events = watch_events.filter_map(|event| {
         let app = match event {
-            (fornax_openapi::WatchResponse::Ok(event), _) => event,
-            (other, status_code) => panic!("{other:?} {status_code}"),
+            Ok((fornax_openapi::WatchResponse::Ok(event), _)) => event,
+            Ok((other, status_code)) => panic!("{other:?} {status_code}"),
+            Err(msg) => panic!("unexpected error, {}", msg),
         };
         std::future::ready(Some(app))
     });

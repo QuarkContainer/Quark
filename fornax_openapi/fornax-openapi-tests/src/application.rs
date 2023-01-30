@@ -5,7 +5,7 @@ async fn create_list_delete() {
     use fornax_openapi::apimachinery::pkg::apis::meta::v1 as meta;
     use fornax_openapi::fornax_serverless::pkg::apis::core::v1 as fornax;
 
-    let mut client = fornax_openapi::Client::new("application");
+    let mut client = fornax_openapi::Client::new().expect("can not create client");
 
     // Create deployment with container that uses alpine:3.6
     let app_spec = fornax::ApplicationSpec {
@@ -45,15 +45,17 @@ async fn create_list_delete() {
         fornax::Application::create("fornaxtest", &app, Default::default())
             .expect("couldn't create deployment");
     match client.get_single_value(request, response_body).await {
-        (fornax_openapi::CreateResponse::Created(_), _) => (),
-        (other, status_code) => panic!("{other:?} {status_code}"),
+        Ok((fornax_openapi::CreateResponse::Created(_), _)) => (),
+        Ok((other, status_code)) => panic!("{other:?} {status_code}"),
+        Err(msg) => panic!("fatal error: {msg}"),
     }
 
     let (request, response_body) = fornax::Application::list("fornaxtest", Default::default())
         .expect("couldn't list applications");
     let application_list = match client.get_single_value(request, response_body).await {
-        (fornax_openapi::ListResponse::Ok(list), _) => list,
-        (other, status_code) => panic!("{other:?} {status_code}"),
+        Ok((fornax_openapi::ListResponse::Ok(list), _)) => list,
+        Ok((other, status_code)) => panic!("{other:?} {status_code}"),
+        Err(msg) => panic!("fatal error: {msg}"),
     };
     assert_eq!(fornax_openapi::kind(&application_list), "ApplicationList");
 
@@ -68,31 +70,33 @@ async fn create_list_delete() {
         fornax::Application::delete("echo0", "fornaxtest", Default::default())
             .expect("couldn't delete deployment");
     match client.get_single_value(request, response_body).await {
-        (
+        Ok((
             fornax_openapi::DeleteResponse::OkStatus(_)
             | fornax_openapi::DeleteResponse::OkValue(_),
             _,
-        ) => (),
-        (other, status_code) => panic!("{other:?} {status_code}"),
+        )) => (),
+        Ok((other, status_code)) => panic!("{other:?} {status_code}"),
+        Err(msg) => panic!("fatal error: {msg}"),
     }
 }
 
-// #[tokio::test]
+#[tokio::test]
 async fn watch_applications() {
     use fornax_openapi::apimachinery::pkg::apis::meta::v1 as meta;
     use fornax_openapi::fornax_serverless::pkg::apis::core::v1 as fornax;
 
-    let mut client = fornax_openapi::Client::new("watch_applications");
+    let mut client = fornax_openapi::Client::new().expect("can not create client");
 
-    let (request, response_body) = fornax::Application::watch("", Default::default())
-        .expect("couldn't watch application");
+    let (request, response_body) =
+        fornax::Application::watch("", Default::default()).expect("couldn't watch application");
     let watch_events = client.get_multiple_values(request, response_body);
     futures_util::pin_mut!(watch_events);
 
     let mut watch_events = watch_events.filter_map(|watch_event| {
         let app = match watch_event {
-            (fornax_openapi::WatchResponse::Ok(event), _) => event,
-            (other, status_code) => panic!("{other:?} {status_code}"),
+            Ok((fornax_openapi::WatchResponse::Ok(event), _)) => event,
+            Ok((other, status_code)) => panic!("{other:?} {status_code}"),
+            Err(msg) => panic!("unexpected error, {}", msg),
         };
         std::future::ready(Some(app))
     });
@@ -107,15 +111,15 @@ async fn watch_applications() {
             .expect("couldn't find apiserver app");
         match app_event {
             meta::WatchEvent::Added(app) => {
-                add_events +=1;
+                add_events += 1;
                 println!("add application = {:?}", app.metadata.name);
             }
             meta::WatchEvent::Deleted(app) => {
-                del_events +=1;
+                del_events += 1;
                 println!("delete application = {:?}", app.metadata.name);
             }
             meta::WatchEvent::Modified(app) => {
-                upd_events +=1;
+                upd_events += 1;
                 println!("modify application = {:?}", app.metadata.name);
             }
             _ => {
@@ -128,4 +132,3 @@ async fn watch_applications() {
         );
     }
 }
-
