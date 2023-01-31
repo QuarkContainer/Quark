@@ -5,7 +5,7 @@
     clippy::let_underscore_drop,
     clippy::let_unit_value,
     clippy::too_many_lines
-    )]
+)]
 
 use crate::http;
 use http::StatusCode;
@@ -26,24 +26,36 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(_name: &'static str) -> Self {
+    pub fn new() -> Result<Self, String> {
         let kubeconfig_file = if std::env::var("KUBECONFIG").is_ok() {
-            std::fs::File::open(std::env::var("KUBECONFIG").unwrap())
-                .expect("couldn't open kube config")
+            match std::fs::File::open(std::env::var("KUBECONFIG").unwrap()) {
+                Ok(d) => d,
+                Err(_) => return Err("couldn't open kube config".to_string()),
+            }
         } else {
-            let mut kubeconfig_path = dirs::home_dir().expect("can't find home directory");
+            let mut kubeconfig_path = match dirs::home_dir() {
+                Some(d) => d,
+                None => return Err("couldn't open home dir".to_string()),
+            };
             kubeconfig_path.push(".kube");
             kubeconfig_path.push("config");
-            std::fs::File::open(kubeconfig_path).expect("couldn't open kube config")
+            match std::fs::File::open(kubeconfig_path) {
+                Ok(d) => d,
+                Err(_) => return Err("couldn't open kube config".to_string()),
+            }
         };
-        let kubeconfig: KubeConfig = {
-            serde_yaml::from_reader(std::io::BufReader::new(kubeconfig_file))
-                .expect("couldn't parse kube config")
-        };
+        let kubeconfig: KubeConfig =
+            match serde_yaml::from_reader(std::io::BufReader::new(kubeconfig_file)) {
+                Ok(d) => d,
+                Err(_) => return Err("couldn't parse kube config".to_string()),
+            };
 
         let context = std::env::var("K8S_CONTEXT").unwrap_or(kubeconfig.current_context);
 
-        let KubeConfigContext { cluster, user } = kubeconfig
+        let KubeConfigContext {
+            cluster: cluster_name,
+            user,
+        } = kubeconfig
             .contexts
             .into_iter()
             .find(|c| c.name == context)
@@ -54,53 +66,66 @@ impl Client {
             insecure_skip_tls_verify,
             server,
             certificate_authority,
-        } = kubeconfig
-        .clusters
+        } = match kubeconfig
+            .clusters
             .into_iter()
-            .find(|c| c.name == cluster)
-            .unwrap_or_else(|| panic!("couldn't find cluster named {cluster}"))
-            .cluster;
+            .find(|c| c.name == cluster_name)
+        {
+            Some(e) => e.cluster,
+            None => return Err("couldn't find cluster named {clusterName}".to_string()),
+        };
 
-        let server: http::Uri = server.parse().expect("couldn't parse server URL");
+        let server: http::Uri = match server.parse() {
+            Ok(e) => e,
+            Err(_) => return Err("couldn't parse server URL".to_string()),
+        };
         if let Some(path_and_query) = server.path_and_query() {
             assert_eq!(
                 path_and_query, "/",
                 "server URL {server} has path and query {path_and_query}"
-                );
+            );
         }
 
         if insecure_skip_tls_verify.unwrap_or(false) {
-            let inner = reqwest::Client::builder()
+            let inner = match reqwest::Client::builder()
                 .danger_accept_invalid_certs(true)
                 .build()
-                .expect("couldn't create client");
-            Client { inner, server }
+            {
+                Ok(e) => e,
+                Err(_) => return Err("can not create client".to_string()),
+            };
+            Ok(Client { inner, server })
         } else {
             let ca_certificate = {
                 let ca_cert_pem = match certificate_authority {
-                    Some(CertificateAuthority::File(path)) => {
-                        std::fs::read(path).expect("couldn't read CA certificate file")
-                    }
-                    Some(CertificateAuthority::Inline(data)) => {
-                        base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data)
-                            .expect("couldn't parse CA certificate data")
-                    }
-                    None => panic!("ca_certificate is empty"),
+                    Some(CertificateAuthority::File(path)) => match std::fs::read(path) {
+                        Ok(e) => e,
+                        Err(_) => return Err("couldn't read CA certificate file".to_string()),
+                    },
+                    Some(CertificateAuthority::Inline(data)) => match base64::Engine::decode(
+                        &base64::engine::general_purpose::STANDARD,
+                        data,
+                    ) {
+                        Ok(e) => e,
+                        Err(_) => return Err("couldn't parse CA certificate file".to_string()),
+                    },
+                    None => return Err("ca_certificate is empty".to_string()),
                 };
-                reqwest::Certificate::from_pem(&ca_cert_pem)
-                    .expect("couldn't create CA certificate")
+                let c = match reqwest::Certificate::from_pem(&ca_cert_pem) {
+                    Ok(e) => e,
+                    Err(_) => return Err("couldn't create CA certificate".to_string()),
+                };
+                c
             };
 
             let KubeConfigUser {
                 client_certificate,
                 client_key,
                 username: _,
-            } = kubeconfig
-            .users
-                .into_iter()
-                .find(|u| u.name == user)
-                .unwrap_or_else(|| panic!("couldn't find user named {user}"))
-                .user;
+            } = match kubeconfig.users.into_iter().find(|u| u.name == user) {
+                Some(e) => e.user,
+                None => return Err("couldn't find user named {user}".to_string()),
+            };
 
             // reqwest::Identity supports from_pem, which is implemented using rustls to parse the PEM.
             // This also requires the reqwest::Client to be built with use_rustls_tls(), otherwise the Identity is ignored.
@@ -111,48 +136,73 @@ impl Client {
             // So we need to use the native-tls backend, and thus Identity::from_pkcs12_der
             let client_tls_identity = {
                 let public_key_pem = match client_certificate {
-                    Some(ClientCertificate::File(path)) => {
-                        std::fs::read(path).expect("couldn't read client certificate file")
-                    }
-                    Some(ClientCertificate::Inline(data)) => {
-                        base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data)
-                            .expect("couldn't parse client certificate data")
-                    }
-                    None => panic!("client_certificate is empty"),
+                    Some(ClientCertificate::File(path)) => match std::fs::read(path) {
+                        Ok(e) => e,
+                        Err(_) => return Err("couldn't read client certificate file".to_string()),
+                    },
+                    Some(ClientCertificate::Inline(data)) => match base64::Engine::decode(
+                        &base64::engine::general_purpose::STANDARD,
+                        data,
+                    ) {
+                        Ok(e) => e,
+                        Err(_) => return Err("couldn't read client certificate file".to_string()),
+                    },
+                    None => return Err("client_certificate is empty".to_string()),
                 };
-                let public_key = openssl::x509::X509::from_pem(&public_key_pem)
-                    .expect("couldn't parse client certificate data");
+                let public_key = match openssl::x509::X509::from_pem(&public_key_pem) {
+                    Ok(e) => e,
+                    Err(_) => return Err("couldn't parse client certificate".to_string()),
+                };
 
                 let private_key_pem = match client_key {
-                    Some(ClientKey::File(path)) => {
-                        std::fs::read(path).expect("couldn't read client key file")
-                    }
-                    Some(ClientKey::Inline(data)) => {
-                        base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data)
-                            .expect("couldn't parse client key data")
-                    }
-                    None => panic!("client_certificate is empty"),
+                    Some(ClientKey::File(path)) => match std::fs::read(path) {
+                        Ok(e) => e,
+                        Err(_) => return Err("couldn't read client key file".to_string()),
+                    },
+                    Some(ClientKey::Inline(data)) => match base64::Engine::decode(
+                        &base64::engine::general_purpose::STANDARD,
+                        data,
+                    ) {
+                        Ok(e) => e,
+                        Err(_) => return Err("couldn't parse client key file".to_string()),
+                    },
+                    None => return Err("client_certificate is empty".to_string()),
                 };
-                let private_key = openssl::pkey::PKey::private_key_from_pem(&private_key_pem)
-                    .expect("couldn't parse client key data");
+                let private_key = match openssl::pkey::PKey::private_key_from_pem(&private_key_pem)
+                {
+                    Ok(e) => e,
+                    Err(_) => return Err("couldn't parse client key file".to_string()),
+                };
 
-                let pkcs12 = openssl::pkcs12::Pkcs12::builder()
-                    .build("", "admin", &private_key, &public_key)
-                    .expect("couldn't construct client identity")
-                    .to_der()
-                    .expect("couldn't construct client identity");
+                let pkcs12 = match openssl::pkcs12::Pkcs12::builder().build(
+                    "",
+                    "admin",
+                    &private_key,
+                    &public_key,
+                ) {
+                    Ok(e) => match e.to_der() {
+                        Ok(e) => e,
+                        Err(_) => return Err("couldn't construct client identity".to_string()),
+                    },
+                    Err(_) => return Err("couldn't construct client identity".to_string()),
+                };
 
-                let tls_identity = reqwest::Identity::from_pkcs12_der(&pkcs12, "")
-                    .expect("couldn't construct client identity");
+                let tls_identity = match reqwest::Identity::from_pkcs12_der(&pkcs12, "") {
+                    Ok(e) => e,
+                    Err(_) => return Err("couldn't construct client identity".to_string()),
+                };
                 tls_identity
             };
-            let inner = reqwest::Client::builder()
+            let inner = match reqwest::Client::builder()
                 .use_native_tls()
                 .add_root_certificate(ca_certificate)
                 .identity(client_tls_identity)
                 .build()
-                .expect("couldn't create client");
-            Client { inner, server }
+            {
+                Ok(e) => e,
+                Err(_) => return Err("couldn't create client".to_string()),
+            };
+            Ok(Client { inner, server })
         }
     }
 
@@ -160,33 +210,36 @@ impl Client {
         &mut self,
         request: http::Request<Vec<u8>>,
         response_body: fn(http::StatusCode) -> crate::ResponseBody<R>,
-        ) -> (R, http::StatusCode)
-        where
+    ) -> Result<(R, http::StatusCode), String>
+    where
         R: crate::Response,
-        {
-            let stream = self.get_multiple_values(request, response_body);
-            futures_util::pin_mut!(stream);
-            stream.next().await.expect("unexpected EOF")
-        }
+    {
+        let stream = self.get_multiple_values(request, response_body);
+        futures_util::pin_mut!(stream);
+        stream
+            .next()
+            .await
+            .map_or(Err("unexpected EOF".to_string()), |s| s)
+    }
 
     pub fn get_multiple_values<'a, R>(
         &'a mut self,
         request: http::Request<Vec<u8>>,
         response_body: fn(http::StatusCode) -> crate::ResponseBody<R>,
-        ) -> impl Stream<Item = (R, http::StatusCode)> + 'a
-        where
+    ) -> impl Stream<Item = Result<(R, http::StatusCode), String>> + 'a
+    where
         R: crate::Response + 'a,
-        {
-            MultipleValuesStream::ExecutingRequest {
-                f: self.execute(request),
-                response_body,
-            }
+    {
+        MultipleValuesStream::ExecutingRequest {
+            f: self.execute(request),
+            response_body,
         }
+    }
 
     async fn execute(
         &mut self,
         request: http::Request<Vec<u8>>,
-        ) -> ClientResponse<'_, impl AsyncRead> {
+    ) -> Result<ClientResponse<'_, impl AsyncRead>, String> {
         let (path, method, body, content_type) = {
             let content_type = request
                 .headers()
@@ -200,17 +253,20 @@ impl Client {
 
             let (parts, body) = request.into_parts();
             let mut url: http::uri::Parts = parts.uri.into();
-            let path = url
-                .path_and_query
-                .take()
-                .expect("request doesn't have path and query");
+            let path = match url.path_and_query.take() {
+                Some(s) => s,
+                None => return Err("request doesn't have path and query".to_string()),
+            };
 
             (path, parts.method, body, content_type)
         };
 
         let mut url: http::uri::Parts = self.server.clone().into();
         url.path_and_query = Some(path);
-        let url = http::Uri::from_parts(url).expect("couldn't parse URL from parts");
+        let url = match http::Uri::from_parts(url) {
+            Ok(s) => s,
+            Err(_) => return Err("couldn't parse URL".to_string()),
+        };
 
         let request = self.inner.request(method, url.to_string());
         let request = if let Some(content_type) = content_type {
@@ -218,11 +274,10 @@ impl Client {
         } else {
             request
         };
-        let response = request
-            .body(body)
-            .send()
-            .await
-            .expect("couldn't send HTTP request");
+        let response = match request.body(body).send().await {
+            Ok(s) => s,
+            Err(_) => return Err("couldn't send HTTP request".to_string()),
+        };
         let response_status_code = response.status();
 
         let response = response
@@ -232,10 +287,10 @@ impl Client {
 
         let mut a = Vec::new();
         a.push(response_status_code);
-        ClientResponse {
+        Ok(ClientResponse {
             status_code: response_status_code,
             body: ClientResponseBody::Response(response),
-        }
+        })
     }
 }
 
@@ -256,21 +311,19 @@ enum ClientResponseBody<'a, TResponse> {
 
 impl<'a, TResponse> AsyncRead for ClientResponse<'a, TResponse>
 where
-TResponse: AsyncRead,
+    TResponse: AsyncRead,
 {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
-        ) -> Poll<std::io::Result<usize>> {
+    ) -> Poll<std::io::Result<usize>> {
         match self.project().body.project() {
             ClientResponseBodyProj::Response(response) => response.poll_read(cx, buf).map(|read| {
                 let read = read?;
                 Ok(read)
             }),
-            ClientResponseBodyProj::Error(err) => {
-                Poll::Pending
-            }
+            ClientResponseBodyProj::Error(_) => Poll::Pending,
         }
     }
 }
@@ -291,28 +344,36 @@ enum MultipleValuesStream<'a, TResponseFuture, TResponse, R> {
 }
 
 impl<'a, TResponseFuture, TResponse, R> Stream
-for MultipleValuesStream<'a, TResponseFuture, TResponse, R>
+    for MultipleValuesStream<'a, TResponseFuture, TResponse, R>
 where
-TResponseFuture: Future<Output = ClientResponse<'a, TResponse>>,
-ClientResponse<'a, TResponse>: AsyncRead,
-R: crate::Response,
+    TResponseFuture: Future<Output = Result<ClientResponse<'a, TResponse>, String>>,
+    ClientResponse<'a, TResponse>: AsyncRead,
+    R: crate::Response,
 {
-    type Item = (R, http::StatusCode);
+    type Item = Result<(R, http::StatusCode), String>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             match self.as_mut().project() {
                 MultipleValuesStreamProj::ExecutingRequest { f, response_body } => {
                     match f.poll(cx) {
-                        Poll::Ready(response) => {
-                            let response_body = response_body(response.status_code);
-                            let buf = Box::new([0_u8; 4096]);
-                            self.set(MultipleValuesStream::Response {
-                                response,
-                                response_body,
-                                buf,
-                            });
-                        }
+                        Poll::Ready(response) => match response {
+                            Ok(response) => {
+                                let response_body = response_body(response.status_code);
+                                let buf = Box::new([0_u8; 4096]);
+                                self.set(MultipleValuesStream::Response {
+                                    response,
+                                    response_body,
+                                    buf,
+                                });
+                            }
+                            Err(msg) => {
+                                return Poll::Ready(Some(Err(format!(
+                                    "get error message: {}",
+                                    msg
+                                ))))
+                            }
+                        },
                         Poll::Pending => return Poll::Pending,
                     }
                 }
@@ -321,28 +382,35 @@ R: crate::Response,
                     mut response,
                     response_body,
                     buf,
-                } => {
-                    loop {
-                        let poll = match response_body.parse() {
-                            Ok(value) => Poll::Ready(Some((value, response_body.status_code))),
-                            Err(crate::ResponseError::NeedMoreData) => Poll::Pending,
-                            Err(err) => panic!("{err}"),
-                        };
+                } => loop {
+                    let poll = match response_body.parse() {
+                        Ok(value) => Poll::Ready(Some((value, response_body.status_code))),
+                        Err(crate::ResponseError::NeedMoreData) => Poll::Pending,
+                        Err(err) => panic!("{err}"),
+                    };
 
-                        match poll {
-                            Poll::Pending => {
-                                match response.as_mut().poll_read(cx, &mut buf[..]) {
-                                    Poll::Ready(Ok(0)) if response_body.is_empty() => return Poll::Ready(None),
-                                    Poll::Ready(Ok(0)) => panic!("unexpected EOF"),
-                                    Poll::Ready(Ok(read)) => response_body.append_slice(&buf[..read]),
-                                    Poll::Ready(Err(err)) => panic!("{err}"),
-                                    Poll::Pending => return Poll::Pending,
-                                };
-                            }
-                            Poll::Ready(_) => return poll,
+                    match poll {
+                        Poll::Pending => {
+                            match response.as_mut().poll_read(cx, &mut buf[..]) {
+                                Poll::Pending => return Poll::Pending,
+                                Poll::Ready(Ok(0)) if response_body.is_empty() => {
+                                    return Poll::Pending
+                                }
+                                Poll::Ready(Ok(0)) => {
+                                    return Poll::Ready(Some(Err("unexpected EOF".to_string())))
+                                }
+                                Poll::Ready(Ok(read)) => response_body.append_slice(&buf[..read]),
+                                Poll::Ready(Err(err)) => {
+                                    return Poll::Ready(Some(Err(err.to_string())))
+                                }
+                            };
                         }
+                        Poll::Ready(r) => match r {
+                            Some(r) => return Poll::Ready(Some(Ok(r))),
+                            None => return Poll::Pending,
+                        },
                     }
-                }
+                },
             }
         }
     }
@@ -432,53 +500,53 @@ enum ClientKey {
 
 mod bytestring {
     pub(super) fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
-        where
+    where
         D: crate::serde::Deserializer<'de>,
-        {
-            let s: String = crate::serde::Deserialize::deserialize(deserializer)?;
-            Ok(s.into_bytes())
-        }
+    {
+        let s: String = crate::serde::Deserialize::deserialize(deserializer)?;
+        Ok(s.into_bytes())
+    }
 
     pub(super) fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
-        where
+    where
         S: crate::serde::Serializer,
-        {
-            let s = std::str::from_utf8(bytes).expect("bytes are not valid utf-8");
-            crate::serde::Serialize::serialize(&s, serializer)
-        }
+    {
+        let s = std::str::from_utf8(bytes).expect("bytes are not valid utf-8");
+        crate::serde::Serialize::serialize(&s, serializer)
+    }
 }
 
 mod methodstring {
     use super::http;
 
     pub(super) fn deserialize<'de, D>(deserializer: D) -> Result<http::Method, D::Error>
-        where
+    where
         D: crate::serde::Deserializer<'de>,
-        {
-            struct Visitor;
+    {
+        struct Visitor;
 
-            impl<'de> crate::serde::de::Visitor<'de> for Visitor {
-                type Value = http::Method;
+        impl<'de> crate::serde::de::Visitor<'de> for Visitor {
+            type Value = http::Method;
 
-                fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                    formatter.write_str("an HTTP method name")
-                }
-
-                fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-                    where
-                        E: crate::serde::de::Error,
-                    {
-                        v.parse().map_err(crate::serde::de::Error::custom)
-                    }
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("an HTTP method name")
             }
 
-            deserializer.deserialize_str(Visitor)
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: crate::serde::de::Error,
+            {
+                v.parse().map_err(crate::serde::de::Error::custom)
+            }
         }
 
+        deserializer.deserialize_str(Visitor)
+    }
+
     pub(super) fn serialize<S>(method: &http::Method, serializer: S) -> Result<S::Ok, S::Error>
-        where
+    where
         S: crate::serde::Serializer,
-        {
-            crate::serde::Serialize::serialize(&method.to_string(), serializer)
-        }
+    {
+        crate::serde::Serialize::serialize(&method.to_string(), serializer)
+    }
 }
