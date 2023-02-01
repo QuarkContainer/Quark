@@ -1619,12 +1619,26 @@ impl SockOperations for SocketOperations {
                     panic!("Incorrect sockInfo")
                 }
             }
-            let sockAddr = SockAddr::Inet(SockAddrInet {
-                Family: AFType::AF_INET as u16,
-                Port: port,
-                Addr: ipAddr.to_be_bytes(),
-                Zero: [0; 8],
-            });
+            
+            let sockAddr;
+            let addrSlice = ipAddr.to_be_bytes(); 
+            if self.family == AFType::AF_INET {
+                sockAddr = SockAddr::Inet(SockAddrInet {
+                    Family: AFType::AF_INET as u16,
+                    Port: port,
+                    Addr: addrSlice,
+                    Zero: [0; 8],
+                });
+            }
+            else {
+                sockAddr = SockAddr::Inet6(SocketAddrInet6 {
+                    Family: AFType::AF_INET6 as u16,
+                    Port: port,
+                    Flowinfo: 0,
+                    Addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, addrSlice[0], addrSlice[1], addrSlice[2], addrSlice[3]],
+                    Scope_id: 0,
+                });
+            }
             let len = socketaddr.len() as usize;
             sockAddr.Marsh(socketaddr, len)?;
 
@@ -1997,6 +2011,7 @@ impl SockOperations for SocketOperations {
                         len = task.CopyDataOutToIovs(buf, dsts, false)?;
                         srcPort = udpPacket.srcPort.clone();
                         srcIpAddr = udpPacket.srcIpAddr.clone();
+                        debug!("qq, RecvMsg 4.1 fd: {}, len: {}, buf {:?} ", self.fd, len, buf);
                     }
                     let _res = GlobalRDMASvcCli().returnUDPBuff(recvUdpItem.udpBuffIdx);
                     let senderAddr = if senderRequested {
