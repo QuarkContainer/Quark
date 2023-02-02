@@ -419,7 +419,7 @@ impl SandboxProcess {
                 //mount_cgroups(m, rootfs, flags, &data, &linux.mount_label, cpath)?;
                 // won't mount cgroup
                 continue;
-            } else if m.destination == "/dev" {
+            } else if m.destination.starts_with("/dev") {
                 // dev can't be read only yet because we have to mount devices
                 /*MountFrom(
                     m,
@@ -430,8 +430,8 @@ impl SandboxProcess {
                 )?;*/
                 continue;
             } else {
-                error!("mount type {:?}", m.destination);
                 MountFrom(m, &self.Rootfs, flags, &data, &linux.mount_label)?;
+                //continue;
             }
         }
 
