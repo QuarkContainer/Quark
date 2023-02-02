@@ -421,14 +421,16 @@ impl SandboxProcess {
                 continue;
             } else if m.destination == "/dev" {
                 // dev can't be read only yet because we have to mount devices
-                MountFrom(
+                /*MountFrom(
                     m,
                     &self.Rootfs,
                     flags & !MsFlags::MS_RDONLY,
                     &data,
                     &linux.mount_label,
-                )?;
+                )?;*/
+                continue;
             } else {
+                error!("mount type {:?}", m.destination);
                 MountFrom(m, &self.Rootfs, flags, &data, &linux.mount_label)?;
             }
         }
