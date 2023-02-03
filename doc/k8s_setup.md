@@ -61,6 +61,8 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
 # Optional, make master node runable for pod:
 kubectl taint nodes --all node-role.kubernetes.io/master-
+# Starting with 1.20 the command should be: 
+kubectl taint node mymasternode  node-role.kubernetes.io/control-plane:NoSchedule-
 ```
 
 ```
