@@ -20,6 +20,7 @@ package service_directory;
 service ServiceDirectoryService {
   // Test
   rpc TestPing (TestRequestMessage) returns (TestResponseMessage) {}
+  rpc Put (PutRequestMessage) returns (PutResponseMessage) {}
 }
 
 message TestRequestMessage {
@@ -28,4 +29,42 @@ message TestRequestMessage {
 
 message TestResponseMessage {
     string server_name = 1;
+}
+
+message KV {
+    string key = 1;
+    string val = 2;
+} 
+
+message ObjectKey {
+    string kind = 1;
+    string namespace = 2;
+    string name = 3;
+}
+
+message ObjectMeta {
+    repeated KV labels = 1;
+    repeated KV annotations = 2;
+}
+
+message ObjectAttribute {
+    string UID = 1;
+    string ResourceVersion = 2;
+}
+
+message Object {
+    ObjectKey key = 1;
+    ObjectMeta meta = 2;
+    ObjectAttribute attribute = 3;
+    bytes val = 4;
+}
+
+message PutRequestMessage {
+    ObjectKey key = 1;
+    ObjectMeta meta = 2;
+    bytes val = 3;
+}
+
+message PutResponseMessage {
+    int64 revision = 1;
 }

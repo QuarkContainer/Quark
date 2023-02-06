@@ -13,12 +13,7 @@
 // limitations under the License.
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let proto_file = "./proto/service_directory.proto";
-    tonic_build::configure()
-        .build_server(true)
-        .out_dir("./src/service_directory")
-        .compile(&[proto_file], &["."])
-        .unwrap_or_else(|e| panic!("protobuf compile error: {}", e));
+    tonic_build::compile_protos("proto/service_directory.proto")?;
 
     Ok(())
 }

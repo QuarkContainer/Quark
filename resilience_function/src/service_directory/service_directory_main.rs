@@ -13,12 +13,12 @@
 // limitations under the License.
 
 pub mod service_directory {
-    include!("service_directory.rs");
+    tonic::include_proto!("service_directory"); // The string specified here must match the proto package name
 }
 
 use tonic::{transport::Server, Request, Response, Status};
 use service_directory::service_directory_service_server::{ServiceDirectoryService, ServiceDirectoryServiceServer};
-use service_directory::{TestRequestMessage, TestResponseMessage};
+use service_directory::*;
 
 #[derive(Default)]
 pub struct ServiceDirectoryImpl {}
@@ -38,6 +38,18 @@ impl ServiceDirectoryService for ServiceDirectoryImpl {
 
         let response = TestResponseMessage {
             server_name: "Server".to_owned(),
+        };
+        Ok(Response::new(response))
+    }
+
+    async fn put(
+        &self,
+        request: Request<PutRequestMessage>,
+    ) -> Result<Response<PutResponseMessage>, Status> {
+        println!("Request from {:?}", request.remote_addr());
+
+        let response = PutResponseMessage {
+            revision: 1,
         };
         Ok(Response::new(response))
     }
