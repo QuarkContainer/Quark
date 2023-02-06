@@ -12,27 +12,26 @@ include = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-prost = "0.10"
-tokio = { version = "1.0", default-features = false, features = [
-	"macros", # for #[tokio::test]
-  "rt-multi-thread",
-	"test-util", # for tokio::time::pause
-	"time", # for tokio::time::sleep
-] }
+prost = "0.11"
+tokio = { version = "1.0", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["net"] }
-tonic = "0.7"
+tonic = "0.8"
 futures-core = { version = "0.3", default-features = false }
 futures-io = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = [
 	"io", # for futures_util::StreamExt::into_async_read
 ] }
-fornax-openapi= { path = "../fornax_openapi", features = [ ] }
+#fornax-openapi= { path = "../fornax_openapi", features = [ ] }
 
 [features]
 
 [build-dependencies]
-tonic-build = "0.7"
+tonic-build = "0.8"
 
 [[bin]]
 name = "service_directory"
 path = "src/service_directory/service_directory_main.rs"
+
+[[bin]]
+name = "test"
+path = "src/protobtest/main.rs"
