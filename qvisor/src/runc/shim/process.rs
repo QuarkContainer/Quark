@@ -69,10 +69,10 @@ impl Drop for CommonProcess {
 }
 
 impl CommonProcess {
-    pub fn CopyIO(&self, cid: &str, pid: i32) -> Result<()> {
+    pub fn CopyIO(&self, cid: &str, pid: i32, sandboxId: String) -> Result<()> {
         return self
             .containerIO
-            .CopyIO(&self.stdio, cid, pid)
+            .CopyIO(&self.stdio, cid, pid, sandboxId)
             .map_err(|e| Error::Other(format!("{:?}", e)));
     }
 
@@ -322,7 +322,8 @@ impl InitProcess {
             !self.no_pivot_root,
         )
         .map_err(|e| Error::Other(format!("{:?}", e)))?;
-        self.common.CopyIO(&*container.ID, 0)?;
+        let sandboxId = container.Sandbox.as_ref().unwrap().ID.clone();
+        self.common.CopyIO(&*container.ID, 0, sandboxId)?;
         return Ok(container);
     }
 

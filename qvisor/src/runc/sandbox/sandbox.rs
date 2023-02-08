@@ -147,6 +147,34 @@ pub fn SignalProcess(cid: &str, pid: i32, signo: i32, fgProcess: bool) -> Result
     }
 }
 
+pub fn SignalExecProcess(cid: &str, pid: i32, signo: i32, fgProcess: bool, sandboxId: &str) -> Result<()> {
+    info!("Signal sandbox {}, exec id {}", sandboxId, pid);
+
+    let addr = ControlSocketAddr(sandboxId);
+    info!("SandboxConnect connect address is {}", &addr);
+    let client = UCallClient::Init(&addr)?;
+
+    let mut mode = SignalDeliveryMode::DeliverToProcess;
+    if fgProcess {
+        mode = SignalDeliveryMode::DeliverToForegroundProcessGroup;
+    }
+
+    let req = UCallReq::Signal(SignalArgs {
+        CID: cid.to_string(),
+        Signo: signo,
+        PID: pid,
+        Mode: mode,
+    });
+
+    let resp = client.Call(&req)?;
+    match resp {
+        UCallResp::SignalResp => return Ok(()),
+        resp => {
+            panic!("SignalProcess get unknow resp {:?}", resp);
+        }
+    }
+}
+
 // Sandbox wraps a sandbox process.
 //
 // Note: Sandbox must be immutable because a copy of it is saved for each
