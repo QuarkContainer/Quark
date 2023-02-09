@@ -483,9 +483,10 @@ impl CommonContainer {
                     &fds,
                 )?;
                 process.common.pid = pid;
+                let sandboxId = self.container.Sandbox.as_ref().unwrap().ID.clone();
                 process
                     .common
-                    .CopyIO(&*self.id, pid)
+                    .CopyIO(&*self.id, pid, sandboxId)
                     .map_err(|e| Error::Common(format!("{:?}", e)))?;
                 return Ok(pid);
             }

@@ -46,6 +46,8 @@ use super::container::*;
 use super::super::super::runc::oci::LinuxResources;
 use super::super::super::runc::sandbox::sandbox::*;
 
+use super::container_io::{ContainerStdio, ContainerIO};
+
 type EventSender = Sender<(String, Box<dyn Message>)>;
 
 #[derive(Clone)]
@@ -177,8 +179,21 @@ impl ShimTask {
                                 ..Default::default()
                             },
                         );
+                    }
+                }
+
+                match cont.processes.get_mut(&execId) {
+                    None => {
                         return;
                     }
+                    Some(p) => {
+                        info!("terminal/io redirection thread stopped");
+                        p.common.stdio = ContainerStdio::default();
+                        p.common.containerIO = ContainerIO::default();
+                        // drop(&p.common.containerIO);
+                        // drop(&p.common.stdio);
+                        return;
+                    } 
                 }
             }
         }
