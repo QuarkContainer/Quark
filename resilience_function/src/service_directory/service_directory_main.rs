@@ -12,6 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(dead_code)]
+#![allow(non_snake_case)]
+
+//#[macro_use]
+extern crate lazy_static;
+
+pub mod etcd_store;
+pub mod shared;
+pub mod selector;
+pub mod validation;
+
 pub mod service_directory {
     tonic::include_proto!("service_directory"); // The string specified here must match the proto package name
 }
@@ -20,8 +31,13 @@ use tonic::{transport::Server, Request, Response, Status};
 use service_directory::service_directory_service_server::{ServiceDirectoryService, ServiceDirectoryServiceServer};
 use service_directory::*;
 
+use crate::etcd_store::*;
+use crate::shared::common::Result as QResult;
+
 #[derive(Default)]
 pub struct ServiceDirectoryImpl {}
+
+pub const KEY_PREFIX : &str = "Quark";
 
 #[tonic::async_trait]
 impl ServiceDirectoryService for ServiceDirectoryImpl {
@@ -56,7 +72,13 @@ impl ServiceDirectoryService for ServiceDirectoryImpl {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> QResult<()> {
+    EtcdStoreTest().await?;
+
+    Ok(())
+}
+
+async fn gRpcServer() -> QResult<()> {
     let addr = "[::1]:50071".parse().unwrap();    
     let service_directory_server = ServiceDirectoryImpl::default();
 
@@ -68,4 +90,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     Ok(())
+}
+
+async fn EtcdStoreTest() -> QResult<()> {
+    let mut store = EtcdStore::New("localhost:2379").await?;
+
+    let val = "test";
+    let obj = Object {
+        key: Some(ObjectKey {
+            kind: "test_kind".into(),
+            namespace: "test_namespace".into(),
+            name: "test_name".into(),
+        }),
+        meta: Some(ObjectMeta { labels: Vec::new(), annotations: Vec::new() }),
+        attribute: None,
+        val: val.as_bytes().to_vec(),
+    };
+
+    store.Create("testkey", &DataObject(obj)).await?;
+    let obj = store.Get("testkey", 0).await?;
+    println!("obj is {:?}", obj);
+
+    store.Delete("testkey", obj.unwrap().0.attribute.unwrap().reversion).await?;
+    return Ok(())
 }

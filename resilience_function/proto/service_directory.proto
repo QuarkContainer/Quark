@@ -49,7 +49,7 @@ message ObjectMeta {
 
 message ObjectAttribute {
     string UID = 1;
-    string ResourceVersion = 2;
+    int64 Reversion = 2;
 }
 
 message Object {
