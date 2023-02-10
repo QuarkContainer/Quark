@@ -80,9 +80,20 @@ async fn main() -> QResult<()> {
     Ok(())
 }
 
+fn ExepctMatch(selector: &str, ls: &Labels) {
+    let lq = match Parse(selector) {
+        Ok(lq) => lq,
+        Err(e) => {
+            assert!(false, "error {:?}", e); 
+            return;
+        }
+    };
+
+    assert!(lq.Match(ls),  "Wanted '{:?}' to match '{:?}', but it did not.", &lq, ls)
+}
+
 pub fn SelectorTest() {
-    let selector = Parse("foo in (a), a=1");
-    println!("selector is {:?}", selector);
+    ExepctMatch("", &Labels([("x".to_string(), "y".to_string())].into_iter().collect()),)
 }
 
 async fn gRpcServer() -> QResult<()> {
