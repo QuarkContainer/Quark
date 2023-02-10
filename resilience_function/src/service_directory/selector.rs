@@ -24,6 +24,7 @@ use super::validation::*;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum SelectionOp {
+    None,           // ""
     DoesNotExist,   // "!"
 	Equals,         // "="
 	DoubleEquals,   // "=="
@@ -44,6 +45,7 @@ impl Default for SelectionOp {
 impl SelectionOp {
     pub fn as_str(&self) -> &'static str {
         match self {
+            Self::None => return "",
             Self::DoesNotExist => return "!",
             Self::Equals => return "=",
             Self::DoubleEquals => return "==",
@@ -183,6 +185,7 @@ impl Requirement {
     pub fn New(key: &str, op: SelectionOp, vals: Vec<String>) -> Result<Requirement> {
         IsValidLabelValue(key)?;
         match op {
+            SelectionOp::None => panic!("selector::None"),
             SelectionOp::In | SelectionOp::NotIn => {
                 if vals.len() == 0 {
                     return Err(Error::CommonError("for 'in', 'notin' operators, values set can't be empty".to_owned()))
@@ -241,6 +244,7 @@ impl Requirement {
     //     the Requirement's key and the corresponding value satisfies mathematical inequality.
     pub fn Matchs(&self, ls: &Labels) -> bool {
         match self.op {
+            SelectionOp::None => panic!("selector::None"),
             SelectionOp::In | SelectionOp::Equals | SelectionOp::DoubleEquals => {
                 let val = match ls.Get(&self.key) {
                     None => return false,
@@ -378,6 +382,7 @@ impl Requirement {
             SelectionOp::NotIn => output = output + " notin ",
             SelectionOp::GreaterThan => output = output + ">",
             SelectionOp::LessThan => output = output + "<",
+            _ => {}
         }
 
         if self.op == SelectionOp::In || self.op == SelectionOp::NotIn {
@@ -484,7 +489,7 @@ impl Labels {
 
         for (k, v) in &small.0 {
             match big.0.get(k) {
-                None => return true,
+                None => return false,
                 Some(val) => {
                     if v != val {
                         return true
@@ -646,6 +651,7 @@ pub fn IsSpecialSymbol(ch: char) -> bool {
 
 // Lexer represents the Lexer struct for label selector.
 // It contains necessary informationt to tokenize the input string
+#[derive(Debug)]
 pub struct Lexer {
     // s stores the string to be tokenized
     pub s: Vec<char>,
@@ -768,6 +774,7 @@ impl Lexer {
 }
 
 // Parser data structure contains the label selector parser data structure
+#[derive(Debug)]
 pub struct Parser {
     pub l: Lexer,
     pub scanItems: Vec<ScannedItem>,
@@ -788,25 +795,30 @@ impl Parser {
     // lookahead func returns the current token and string. No increment of current position
     pub fn Lookahead(&self, context: ParserContext) -> (Token, String) {
         let (mut tok, lit) = (self.scanItems[self.position].tok, self.scanItems[self.position].literal.clone());
+        println!("Lookahead 1 {:?} {:?}", tok, lit);
         if context == ParserContext::Values {
             if tok == Token::InToken || tok == Token::NotInToken {
                 tok = Token::IdentifierToken
             }
         }
 
+        println!("Lookahead 2 {:?} {:?}", tok, lit);
         return (tok, lit)
     }
 
     // consume returns current token and string. Increments the position
     pub fn Consume(&mut self, context: ParserContext) -> (Token, String) {
+        println!("consume 1 {}", self.position);
         self.position += 1;
         let (mut tok, lit) = (self.scanItems[self.position-1].tok, self.scanItems[self.position-1].literal.clone());
+        println!("consume 2 {:?} {:?}", tok, lit);
         if context == ParserContext::Values {
             if tok == Token::InToken || tok == Token::NotInToken {
                 tok = Token::IdentifierToken
             }
         }
-
+        println!("consume 3 {:?} {:?}", tok, lit);
+        
         return (tok, lit)
     }
 
@@ -824,13 +836,17 @@ impl Parser {
 
     pub fn Parse(&mut self) -> Result<Selector> {
         self.Scan();
+        println!("scan {:?}", self);
         let mut requirements = Selector::default();
         loop {
             let (tok, lit) = self.Lookahead(ParserContext::Values);
             match tok {
                 Token::IdentifierToken | Token::DoesNotExistToken => {
+                    println!("parse1 ");
                     let r = self.ParseRequirement()?;
+                    println!("parse 2 {:?} ", r);
                     requirements.Add(r);
+                    println!("parse 3");
                     let (t, l) = self.Consume(ParserContext::Values);
                     match t {
                         Token::EndOfStringToken => {
@@ -886,7 +902,7 @@ impl Parser {
     // in case of no operator '!, in, notin, ==, =, !=' are found
     // the 'exists' operator is inferred
     pub fn ParseKeyAndInferOperator(&mut self) -> Result<(String, SelectionOp)> {
-        let mut operator = SelectionOp::DoesNotExist;
+        let mut operator = SelectionOp::None;
         let (mut tok, mut literal) = self.Consume(ParserContext::Values);
         if tok == Token::DoesNotExistToken {
             operator = SelectionOp::DoesNotExist;
@@ -902,12 +918,14 @@ impl Parser {
         ValidateLabelKey(&literal)?;
 
         let (t, _) = self.Lookahead(ParserContext::Values);
+        println!("ParseKeyAndInferOperator 2 {:?}/{:?}", t, operator);
         if t == Token::EndOfStringToken || t == Token::CommaToken {
             if operator != SelectionOp::DoesNotExist {
                 operator = SelectionOp::Exists;
             }
         }
 
+        println!("ParseKeyAndInferOperator 3 {:?}/{:?}", literal, operator);
         return Ok((literal, operator))
     }
 
@@ -1110,3 +1128,168 @@ pub fn SelectorFromValidatedSet(ls: &Labels) -> Selector {
     return rs;
 }
 
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    fn matches(ls: &Labels, want: &str) {
+        assert_eq!(ls.String(), want);
+    }
+
+    #[test]
+    fn TestSetString() {
+        matches(&Labels([("x".to_string(), "y".to_string())].into_iter().collect()), "x=y");
+        matches(&Labels([("foo".to_string(), "bar".to_string())].into_iter().collect()), "foo=bar");
+        matches(&Labels([("foo".to_string(), "bar".to_string()), ("x".to_string(), "y".to_string())].into_iter().collect()), "foo=bar,x=y");
+    }
+
+    #[test]
+    fn TestLabelHas() {
+        struct Test {
+            Ls: Labels,
+            Key: String,
+            Has: bool,
+        }
+
+        let labelHasTests: [Test; 3] = [
+            Test {
+                Ls: Labels([("x".to_string(), "y".to_string())].into_iter().collect()),
+                Key: "x".to_owned(),
+                Has: true,
+            },
+            Test {
+                Ls: Labels([("x".to_string(), "".to_string())].into_iter().collect()),
+                Key: "x".to_owned(),
+                Has: true,
+            },
+            Test {
+                Ls: Labels([("x".to_string(), "y".to_string())].into_iter().collect()),
+                Key: "foo".to_owned(),
+                Has: false,
+            },
+        ];
+
+        for lh in labelHasTests {
+            let has = lh.Ls.Has(&lh.Key);
+            assert_eq!(has, lh.Has, "{:?}.Has({}) => {}, expected {}", lh.Ls, lh.Key, has, lh.Has);
+        }
+    }
+
+    #[test]
+    fn TestLabelConflict() {
+        struct Test {
+            labels1: Labels,
+            labels2: Labels,
+            conflict: bool,
+        }
+
+        let tests = [
+            Test {
+                labels1: Labels([].into_iter().collect()),
+                labels2: Labels([].into_iter().collect()),
+                conflict: false
+            },
+            Test {
+                labels1: Labels([("env".to_string(), "test".to_string())].into_iter().collect()),
+                labels2: Labels([("infra".to_string(), "true".to_string())].into_iter().collect()),
+                conflict: false
+            },
+            Test {
+                labels1: Labels([("env".to_string(), "test".to_string())].into_iter().collect()),
+                labels2: Labels([("infra".to_string(), "true".to_string()), ("env".to_string(), "test".to_string())].into_iter().collect()),
+                conflict: false
+            },
+            Test {
+                labels1: Labels([("env".to_string(), "test".to_string())].into_iter().collect()),
+                labels2: Labels([("env".to_string(), "test1".to_string())].into_iter().collect()),
+                conflict: true
+            },
+            Test {
+                labels1: Labels([("env".to_string(), "test".to_string()), ("infra".to_string(), "false".to_string())].into_iter().collect()),
+                labels2: Labels([("infra".to_string(), "true".to_string()), ("env".to_string(), "test".to_string())].into_iter().collect()),
+                conflict: true
+            },
+        ];
+
+        for t in &tests {
+            let conflict = t.labels1.Conflict(&t.labels2);
+            assert_eq!(conflict, t.conflict);
+        }
+    }
+
+    #[test]
+    fn TestLabelMerge() {
+        struct Test {
+            labels1: Labels,
+            labels2: Labels,
+            mergedLabels: Labels,
+        }
+
+        let tests = [
+            Test {
+                labels1: Labels([].into_iter().collect()),
+                labels2: Labels([].into_iter().collect()),
+                mergedLabels: Labels([].into_iter().collect()),
+            },
+            Test {
+                labels1: Labels([("env".to_string(), "test".to_string())].into_iter().collect()),
+                labels2: Labels([].into_iter().collect()),
+                mergedLabels: Labels([("env".to_string(), "test".to_string())].into_iter().collect()),
+            },
+            Test {
+                labels1: Labels([("env".to_string(), "test".to_string()), ("infra".to_string(), "false".to_string())].into_iter().collect()),
+                labels2: Labels([("infra".to_string(), "true".to_string()), ("a".to_string(), "b".to_string())].into_iter().collect()),
+                mergedLabels: Labels([("infra".to_string(), "true".to_string()), ("env".to_string(), "test".to_string()), ("a".to_string(), "b".to_string())].into_iter().collect()),
+            },
+        ];
+
+        for t in &tests {
+            let mergedLabels = t.labels1.Merge(&t.labels2);
+            assert_eq!(mergedLabels.Equals(&t.mergedLabels), true);
+        }
+    }
+
+    #[test]
+    fn TestLabelSelectorParse() {
+        struct Test {
+            selector: String,
+            labels: Labels,
+            valid: bool,
+        }
+
+        let tests = [
+            Test {
+                selector: "".to_owned(),
+                labels: Labels([].into_iter().collect()),
+                valid: true,
+            },
+            Test {
+                selector: ",".to_owned(),
+                labels: Labels([].into_iter().collect()),
+                valid: false,
+            },
+            Test {
+                selector: "x=y".to_owned(),
+                labels: Labels([("x".to_string(), "y".to_string())].into_iter().collect()),
+                valid: true,
+            },
+            Test {
+                selector: "test= dddy, a =b, c=d".to_owned(),
+                labels: Labels([("test".to_string(), "dddy".to_string()),("a".to_string(), "b".to_string()),("c".to_string(), "d".to_string())].into_iter().collect()),
+                valid: true,
+            },
+        ];
+
+        for t in &tests {
+            let labels = match Labels::New(&t.selector) {
+                Err(_) => {
+                    assert_eq!(t.valid, false);
+                    continue;
+                }
+                Ok(l) => l,
+            };
+            assert_eq!(labels.Equals(&t.labels), t.valid);
+        }
+    }
+}
