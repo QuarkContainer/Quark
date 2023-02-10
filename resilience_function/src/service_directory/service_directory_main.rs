@@ -30,6 +30,7 @@ pub mod service_directory {
 use tonic::{transport::Server, Request, Response, Status};
 use service_directory::service_directory_service_server::{ServiceDirectoryService, ServiceDirectoryServiceServer};
 use service_directory::*;
+use selector::*;
 
 use crate::etcd_store::*;
 use crate::shared::common::Result as QResult;
@@ -73,9 +74,15 @@ impl ServiceDirectoryService for ServiceDirectoryImpl {
 
 #[tokio::main]
 async fn main() -> QResult<()> {
-    EtcdStoreTest().await?;
-
+    //EtcdStoreTest().await?;
+    //println!("test 1");
+    SelectorTest();
     Ok(())
+}
+
+pub fn SelectorTest() {
+    let selector = Parse("foo in (a), a=1");
+    println!("selector is {:?}", selector);
 }
 
 async fn gRpcServer() -> QResult<()> {

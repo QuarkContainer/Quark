@@ -12,13 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use lazy_static::lazy_static;
+use std::collections::HashMap;
+use std::cmp::Ordering;
+use std::cmp::Ord;
 
 use crate::shared::common::*;
 
 use super::validation::*;
 
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum SelectionOp {
+    None,           // ""
     DoesNotExist,   // "!"
 	Equals,         // "="
 	DoubleEquals,   // "=="
@@ -30,9 +36,16 @@ pub enum SelectionOp {
 	LessThan,       // "lt"
 }
 
+impl Default for SelectionOp {
+    fn default() -> Self {
+        return Self::DoesNotExist
+    }
+}
+
 impl SelectionOp {
     pub fn as_str(&self) -> &'static str {
         match self {
+            Self::None => return "",
             Self::DoesNotExist => return "!",
             Self::Equals => return "=",
             Self::DoubleEquals => return "==",
@@ -46,13 +59,122 @@ impl SelectionOp {
     }
 }
 
+
+#[derive(Debug, Default)]
+pub struct Selector(Vec<Requirement>);
+
+impl Selector {
+    pub fn Copy(&self) -> Self{
+        let mut copy = Self::default();
+        for r in &self.0 {
+            copy.0.push(r.Copy());
+        }
+
+        return copy;
+    }
+
+    pub fn Sort(&mut self) {
+        self.0.sort();
+    }
+
+    pub fn Add(&mut self, r: Requirement) {
+        self.0.push(r);
+    }
+
+    // Matches for a internalSelector returns true if all
+    // its Requirements match the input Labels. If any
+    // Requirement does not match, false is returned.
+    pub fn Match(&self, l: &Labels) -> bool {
+        for r in &self.0 {
+            if !r.Matchs(l) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // String returns a comma-separated string of all
+    // the internalSelector Requirements' human-readable strings.
+    pub fn String(&self) -> String {
+        let mut reqs : Vec<String> = Vec::new();
+        for r in &self.0 {
+            reqs.push(r.String());
+        }
+
+        return reqs.join(",")
+    }
+
+    // RequiresExactMatch introspects whether a given selector requires a single specific field
+    // to be set, and if so returns the value it requires.
+    pub fn RequiresExactMatch(&self, label: &str) -> Option<String> {
+        for r in &self.0 {
+            if &r.key == label {
+                match r.op {
+                    SelectionOp::Equals | SelectionOp::DoubleEquals | SelectionOp::In => {
+                        if r.strVals.len() == 1 {
+                            return Some(r.strVals[0].clone());
+                        }
+                    }
+                    _ => return None,
+                }
+            } else {
+                return None;
+            }
+        }
+
+        return None;
+    }
+
+    pub fn Empty(&self) -> bool {
+        return self.0.len() == 0;
+    }
+}
+
+#[derive(Debug)]
 pub struct Requirement {
     pub key: String,
     pub op: SelectionOp,
-    pub strVal: Vec<String>
+    pub strVals: Vec<String>
+}
+
+impl Ord for Requirement {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.key.cmp(&other.key)
+    }
+}
+
+impl PartialOrd for Requirement {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Requirement {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+    }
+}
+
+impl Eq for Requirement {
+
 }
 
 impl Requirement {
+    pub fn Copy(&self) -> Self {
+        let mut out = Self {
+            key: self.key.clone(),
+            op: self.op,
+            strVals: Vec::new(),
+        };
+
+        for str in &self.strVals {
+            out.strVals.push(str.clone());
+        }
+
+        return out;
+    }
+
     // If any of these rules is violated, an error is returned:
     //  1. The operator can only be In, NotIn, Equals, DoubleEquals, Gt, Lt, NotEquals, Exists, or DoesNotExist.
     //  2. If the operator is In or NotIn, the values set must be non-empty.
@@ -63,6 +185,7 @@ impl Requirement {
     pub fn New(key: &str, op: SelectionOp, vals: Vec<String>) -> Result<Requirement> {
         IsValidLabelValue(key)?;
         match op {
+            SelectionOp::None => panic!("selector::None"),
             SelectionOp::In | SelectionOp::NotIn => {
                 if vals.len() == 0 {
                     return Err(Error::CommonError("for 'in', 'notin' operators, values set can't be empty".to_owned()))
@@ -95,11 +218,11 @@ impl Requirement {
             }
         }
 
-        return Ok(Requirement { key: key.to_owned(), op: op, strVal: vals })
+        return Ok(Requirement { key: key.to_owned(), op: op, strVals: vals })
     }
 
     pub fn HasValue(&self, val: &str) -> bool {
-        for str in &self.strVal {
+        for str in &self.strVals {
             if str == val {
                 return true
             }
@@ -107,13 +230,216 @@ impl Requirement {
 
         return false;
     }
+
+    // Matches returns true if the Requirement matches the input Labels.
+    // There is a match in the following cases:
+    //  1. The operator is Exists and Labels has the Requirement's key.
+    //  2. The operator is In, Labels has the Requirement's key and Labels'
+    //     value for that key is in Requirement's value set.
+    //  3. The operator is NotIn, Labels has the Requirement's key and
+    //     Labels' value for that key is not in Requirement's value set.
+    //  4. The operator is DoesNotExist or NotIn and Labels does not have the
+    //     Requirement's key.
+    //  5. The operator is GreaterThanOperator or LessThanOperator, and Labels has
+    //     the Requirement's key and the corresponding value satisfies mathematical inequality.
+    pub fn Matchs(&self, ls: &Labels) -> bool {
+        match self.op {
+            SelectionOp::None => panic!("selector::None"),
+            SelectionOp::In | SelectionOp::Equals | SelectionOp::DoubleEquals => {
+                let val = match ls.Get(&self.key) {
+                    None => return false,
+                    Some(v) => v,
+                };
+                return self.HasValue(&val);
+            }
+            SelectionOp::NotIn | SelectionOp::NotEquals => {
+                let val = match ls.Get(&self.key) {
+                    None => return true,
+                    Some(v) => v,
+                };
+
+                return !self.HasValue(&val);
+            }
+            SelectionOp::Exists => {
+                return ls.Has(&self.key);
+            }
+            SelectionOp::DoesNotExist => {
+                return !ls.Has(&self.key);
+            }
+            SelectionOp::GreaterThan | SelectionOp::LessThan => {
+                if !ls.Has(&self.key) {
+                    return false;
+                }
+
+                let val = match ls.Get(&self.key) {
+                    None => {
+                        return false;
+                    }
+                    Some(v) => v,
+                };
+
+
+                let lsValue: i64 = match val.parse() {
+                    Err(_) => {
+                        println!("ParseInt failed for value {} in label {:?}", val, ls);
+                        return false;
+                    }
+                    Ok(v) => v,
+                };
+
+                if self.strVals.len() != 1 {
+                    println!("Invalid values count {} of requirement {:?}, for 'Gt', 'Lt' operators, exactly one value is required", self.strVals.len(), self);
+                    return false;
+                }
+
+                for val in &self.strVals {
+                    let rValue : i64 = match val.parse() {
+                        Err(_) => {
+                            println!("ParseInt failed for value {} in requirement {:?}, for 'Gt', 'Lt' operators, the value must be an integer", val, self);
+                            return false;
+                        }
+                        Ok(v) => v
+                    };
+
+                    if self.op == SelectionOp::GreaterThan {
+                        return lsValue > rValue;
+                    }
+
+                    //if self.op == SelectionOp::LessThan {
+                        return lsValue < rValue;
+                    //}
+                }
+
+                // won't reach
+                return false;
+            }
+        }
+    }
+
+    // Key returns requirement key
+    pub fn Key(&self) -> String {
+        return self.key.clone();
+    }
+
+    // Operator returns requirement operator
+    pub fn Operator(&self) -> SelectionOp {
+        return self.op;
+    }
+
+    // Values returns requirement values
+    pub fn Values(&self) -> BTreeSet<String> {
+        let mut set = BTreeSet::new();
+        for v in &self.strVals {
+            set.insert(v.clone());
+        }
+
+        return set;
+    }
+
+    // Equal checks the equality of requirement.
+    pub fn Equal(&self, x: &Self) -> bool {
+        if self.key !=  x.key {
+            return false;
+        }
+
+        if self.op != x.op {
+            return false;
+        }
+
+        if self.strVals.len() != x.strVals.len() {
+            return false;
+        }
+
+        for i in 0..self.strVals.len() {
+            if self.strVals[i] != self.strVals[i] {
+                return false
+            }
+        }
+        
+        return true;
+    }
+
+    // String returns a human-readable string that represents this
+    // Requirement. If called on an invalid Requirement, an error is
+    // returned. See NewRequirement for creating a valid Requirement.
+    pub fn String(&self) -> String {
+        let mut output = "".to_owned();
+
+        if self.op == SelectionOp::DoesNotExist {
+            output = output + "!";
+        }
+
+        output = output + &self.key;
+
+        match self.op {
+            SelectionOp::DoesNotExist | SelectionOp::Exists => { 
+                return output;
+            }
+            SelectionOp::Equals => output = output + "=",
+            SelectionOp::DoubleEquals => output = output + "==",
+            SelectionOp::In => output = output + " in ",
+            SelectionOp::NotEquals => output = output + "!=",
+            SelectionOp::NotIn => output = output + " notin ",
+            SelectionOp::GreaterThan => output = output + ">",
+            SelectionOp::LessThan => output = output + "<",
+            _ => {}
+        }
+
+        if self.op == SelectionOp::In || self.op == SelectionOp::NotIn {
+            output = output + "(";
+        }
+
+        let values = self.Values();
+        let mut first = true;
+        for v in &values {
+            if first {
+                first = false;
+            } else {
+                output = output + ",";
+            }
+
+            output = output + v;
+        }
+
+        if self.op == SelectionOp::In || self.op == SelectionOp::NotIn {
+            output = output + ")";
+        }
+
+        return output;
+    }
 }
 
 #[derive(Debug, Default)]
 pub struct Labels(BTreeMap<String, String>);
 
 impl Labels {
-    //!pub fn New(selector: &str)
+    // ConvertSelectorToLabelsMap converts selector string to labels map
+    // and validates keys and values
+    pub fn New(selector: &str) -> Result<Self> {
+        let mut map = BTreeMap::new();
+
+        if selector.len() == 0 {
+            return Ok(Self(map));
+        }
+
+        let labels : Vec<&str> = selector.split(",").collect();
+        for label in labels {
+            let l : Vec<&str> = label.split("=").collect();
+            if l.len() != 2 {
+                return Err(Error::CommonError(format!("invalid selector: {}", label)));
+            }
+
+            let key = l[0].trim();
+            ValidateLabelKey(key)?;
+
+            let value = l[1].trim();
+            ValidateLabelValue(key, value)?;
+
+            map.insert(key.to_string(), value.to_string());
+        }
+
+        return Ok(Self(map))
+    }
 
     // String returns all labels listed as a human readable string.
     // Conveniently, exactly the format that ParseSelector takes.
@@ -163,7 +489,7 @@ impl Labels {
 
         for (k, v) in &small.0 {
             match big.0.get(k) {
-                None => return true,
+                None => return false,
                 Some(val) => {
                     if v != val {
                         return true
@@ -209,5 +535,750 @@ impl Labels {
         }
 
         return true;
+    }
+
+    pub fn Matches(&self, labels: &Labels) -> bool {
+        for (k, v) in &self.0 {
+            if !labels.Has(k) || Some(v.to_string()) != labels.Get(k) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    pub fn Empty(&self) -> bool {
+        return self.0.len() == 0;
+    }
+
+    pub fn ToSelector(&self) -> Selector {
+        let mut res = Selector::default();
+        for (k, v) in &self.0 {
+            res.Add(Requirement { key: k.to_string(), op: SelectionOp::Equals, strVals: vec![v.to_string()] })
+        }
+
+        return res;
+    }
+
+    pub fn RequiresExactMatch(&self, lable: &str) -> Option<String> {
+        return self.Get(lable)
+    }
+
+    pub fn toFullSelector(&self) -> Selector {
+        return SelectorFromSet(self);
+    }
+}
+
+
+// Token represents constant definition for lexer token
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Token {
+   	// ErrorToken represents scan error
+	ErrorToken = 0 as isize,
+	// EndOfStringToken represents end of string
+	EndOfStringToken,
+	// ClosedParToken represents close parenthesis
+	ClosedParToken,
+	// CommaToken represents the comma
+	CommaToken,
+	// DoesNotExistToken represents logic not
+	DoesNotExistToken,
+	// DoubleEqualsToken represents double equals
+	DoubleEqualsToken,
+	// EqualsToken represents equal
+	EqualsToken,
+	// GreaterThanToken represents greater than
+	GreaterThanToken,
+	// IdentifierToken represents identifier, e.g. keys and values
+	IdentifierToken,
+	// InToken represents in
+	InToken,
+	// LessThanToken represents less than
+	LessThanToken,
+	// NotEqualsToken represents not equal
+	NotEqualsToken,
+	// NotInToken represents not in
+	NotInToken,
+	// OpenParToken represents open parenthesis
+	OpenParToken,
+}
+
+impl Default for Token {
+    fn default() -> Self {
+        return Self::ErrorToken;
+    }
+}
+
+lazy_static! {
+    // STRING2TOKEN contains the mapping between lexer Token and token literal
+    // (except IdentifierToken, EndOfStringToken and ErrorToken since it makes no sense)
+    pub static ref STRING2TOKEN : HashMap<String, Token> = [
+        (")".to_owned(),     Token::ClosedParToken),
+        (",".to_owned(),     Token::CommaToken),
+        ("!".to_owned(),     Token::DoesNotExistToken),
+        ("==".to_owned(),    Token::DoubleEqualsToken),
+        ("=".to_owned(),     Token::EqualsToken),
+        (">".to_owned(),     Token::GreaterThanToken),
+        ("in".to_owned(),    Token::InToken),
+        ("<".to_owned(),     Token::LessThanToken),
+        ("!=".to_owned(),    Token::NotEqualsToken),
+        ("notin".to_owned(), Token::NotInToken),
+        ("(".to_owned(),     Token::OpenParToken),
+    ].into_iter().collect();
+}
+
+// ScannedItem contains the Token and the literal produced by the lexer.
+#[derive(Debug, Default)]
+pub struct ScannedItem {
+    pub tok: Token,
+    pub literal: String,
+}
+
+// isWhitespace returns true if the rune is a space, tab, or newline.
+pub fn IsWhitespace(ch: char) -> bool {
+    return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
+}
+
+// isSpecialSymbol detects if the character ch can be an operator
+pub fn IsSpecialSymbol(ch: char) -> bool {
+    match ch {
+        '=' | '!' | '(' | ')' | ',' | '>' | '<' => {
+            return true;
+        }
+        _ => return false,
+    }
+}
+
+// Lexer represents the Lexer struct for label selector.
+// It contains necessary informationt to tokenize the input string
+#[derive(Debug)]
+pub struct Lexer {
+    // s stores the string to be tokenized
+    pub s: Vec<char>,
+    // pos is the position currently tokenized
+    pub pos: usize,
+}
+
+impl Lexer {
+    // read returns the character currently lexed
+    // increment the position and check the buffer overflow
+    pub fn Read(&mut self) -> char {
+        let mut b = '\0';
+        if self.pos < self.s.len() {
+            b = self.s[self.pos];
+            self.pos += 1;
+        }
+
+        return b;
+    }
+
+    // unread 'undoes' the last read character
+    pub fn Unread(&mut self) {
+        self.pos -= 1;
+    }
+
+    // scanIDOrKeyword scans string to recognize literal token (for example 'in') or an identifier.
+    pub fn ScanIDOrKeyword(&mut self) -> (Token, String) {
+        let mut buf : Vec<char> = Vec::new();
+        loop {
+            let ch = self.Read();
+            if ch == '\0' {
+                break;
+            } else if IsSpecialSymbol(ch) || IsWhitespace(ch) {
+                self.Unread();
+                break;
+            } else {
+                buf.push(ch);
+            }
+        }
+
+        let s : String = buf.iter().collect();
+        match STRING2TOKEN.get(&s) {
+            None => (),
+            Some(v) => {
+                return (v.clone(), s)
+            }
+        }
+
+        return (Token::IdentifierToken, s)
+    }
+
+    // scanSpecialSymbol scans string starting with special symbol.
+    // special symbol identify non literal operators. "!=", "==", "="
+    pub fn ScanSpecialSymbol(&mut self) -> (Token, String) {
+        let mut lastScannedItem = ScannedItem::default();
+        let mut buf : Vec<char> = Vec::new();
+
+        loop {
+            let ch = self.Read();
+            if ch == '\0' {
+                break;
+            } else if IsSpecialSymbol(ch) {
+                buf.push(ch);
+                let s : String = buf.iter().collect();
+                match STRING2TOKEN.get(&s) {
+                    Some(token) => {
+                        lastScannedItem = ScannedItem {
+                            tok: token.clone(),
+                            literal: s,
+                        }
+                    }
+                    None => {
+                        if lastScannedItem.tok != Token::ErrorToken {
+                            self.Unread();
+                            break;
+                        }
+                    }
+                }
+            } else {
+                self.Unread();
+                break;
+            }
+        }
+
+        let s : String = buf.iter().collect();
+        if lastScannedItem.tok == Token::ErrorToken {
+            return (Token::ErrorToken, format!("error expected: keyword found '{}'", s))
+        }
+
+        return (lastScannedItem.tok, lastScannedItem.literal)
+    }
+
+    // skipWhiteSpaces consumes all blank characters
+    // returning the first non blank character
+    pub fn SkipWhiteSpaces(&mut self, ch: char) -> char {
+        let mut ch = ch;
+        loop {
+            if !IsWhitespace(ch) {
+                return ch
+            }
+            ch = self.Read();
+        }
+    }
+
+    // Lex returns a pair of Token and the literal
+    // literal is meaningfull only for IdentifierToken token
+    pub fn Lex(&mut self) -> (Token, String) {
+        let ch = self.Read();
+        let ch = self.SkipWhiteSpaces(ch);
+        if ch == '\0' {
+            return (Token::EndOfStringToken, "".to_owned());
+        } else if IsSpecialSymbol(ch) {
+            self.Unread();
+            return self.ScanSpecialSymbol();
+        } else {
+            self.Unread();
+            return self.ScanIDOrKeyword();
+        }
+    }
+}
+
+// Parser data structure contains the label selector parser data structure
+#[derive(Debug)]
+pub struct Parser {
+    pub l: Lexer,
+    pub scanItems: Vec<ScannedItem>,
+    pub position: usize,
+}
+
+// ParserContext represents context during parsing:
+// some literal for example 'in' and 'notin' can be
+// recognized as operator for example 'x in (a)' but
+// it can be recognized as value for example 'value in (in)'
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ParserContext {
+    KeyAndOperator,
+	Values,
+}
+
+impl Parser {
+    // lookahead func returns the current token and string. No increment of current position
+    pub fn Lookahead(&self, context: ParserContext) -> (Token, String) {
+        let (mut tok, lit) = (self.scanItems[self.position].tok, self.scanItems[self.position].literal.clone());
+        if context == ParserContext::Values {
+            if tok == Token::InToken || tok == Token::NotInToken {
+                tok = Token::IdentifierToken
+            }
+        }
+
+        return (tok, lit)
+    }
+
+    // consume returns current token and string. Increments the position
+    pub fn Consume(&mut self, context: ParserContext) -> (Token, String) {
+        self.position += 1;
+        let (mut tok, lit) = (self.scanItems[self.position-1].tok, self.scanItems[self.position-1].literal.clone());
+        if context == ParserContext::Values {
+            if tok == Token::InToken || tok == Token::NotInToken {
+                tok = Token::IdentifierToken
+            }
+        }
+        
+        return (tok, lit)
+    }
+
+    // scan runs through the input string and stores the ScannedItem in an array
+    // Parser can now lookahead and consume the tokens
+    pub fn Scan(&mut self) {
+        loop {
+            let (token, literal) = self.l.Lex();
+            self.scanItems.push(ScannedItem { tok: token, literal: literal });
+            if token == Token::EndOfStringToken {
+                break;
+            }
+        }
+    }
+
+    pub fn Parse(&mut self) -> Result<Selector> {
+        self.Scan();
+        let mut requirements = Selector::default();
+        loop {
+            let (tok, lit) = self.Lookahead(ParserContext::Values);
+            match tok {
+                Token::IdentifierToken | Token::DoesNotExistToken => {
+                    let r = self.ParseRequirement()?;
+                    requirements.Add(r);
+                    let (t, l) = self.Consume(ParserContext::Values);
+                    match t {
+                        Token::EndOfStringToken => {
+                            return Ok(requirements)
+                        }
+                        Token::CommaToken => {
+                            let (t2, l2) = self.Lookahead(ParserContext::Values);
+                            if t2 != Token::IdentifierToken && t2 != Token::DoesNotExistToken {
+                                return Err(Error::CommonError(format!("found '{}', expected: identifier after ','", l2)))
+                            }
+                        }
+                        _ => {
+                            return Err(Error::CommonError(format!("found '{}', expected: ',' or 'end of string'", l)))
+                        }
+                    }
+                }
+                Token::EndOfStringToken => {
+                    return Ok(requirements)
+                }
+                _ => {
+                    return Err(Error::CommonError(format!("found '{}', expected: !, identifier, or 'end of string'", lit)))
+                }
+            }
+        }
+    }
+
+    pub fn ParseRequirement(&mut self) -> Result<Requirement> {
+        let (key, operator) = self.ParseKeyAndInferOperator()?;
+        if operator == SelectionOp::Exists || operator == SelectionOp::DoesNotExist {
+            return Ok(Requirement::New(&key, operator, Vec::new())?);
+        }
+
+        let operator = self.ParseOperator()?;
+        let mut values = HashSet::new();
+        match operator {
+            SelectionOp::In | SelectionOp::NotIn => {
+                values = self.ParseValues()?;
+            }
+            SelectionOp::Equals | 
+            SelectionOp::DoubleEquals | 
+            SelectionOp::NotEquals | 
+            SelectionOp::GreaterThan | 
+            SelectionOp::LessThan => {
+                values = self.ParseExactValue()?;
+            }
+            _ => ()
+        }
+
+        return Ok(Requirement::New(&key, operator, values.into_iter().collect())?);
+    }
+
+    // parseKeyAndInferOperator parses literals.
+    // in case of no operator '!, in, notin, ==, =, !=' are found
+    // the 'exists' operator is inferred
+    pub fn ParseKeyAndInferOperator(&mut self) -> Result<(String, SelectionOp)> {
+        let mut operator = SelectionOp::None;
+        let (mut tok, mut literal) = self.Consume(ParserContext::Values);
+        if tok == Token::DoesNotExistToken {
+            operator = SelectionOp::DoesNotExist;
+            let (tt, tl) = self.Consume(ParserContext::Values);
+            tok = tt;
+            literal = tl;
+        }
+
+        if tok != Token::IdentifierToken {
+            return Err(Error::CommonError(format!("found '{}', expected: identifier", literal)));
+        }
+
+        ValidateLabelKey(&literal)?;
+
+        let (t, _) = self.Lookahead(ParserContext::Values);
+        if t == Token::EndOfStringToken || t == Token::CommaToken {
+            if operator != SelectionOp::DoesNotExist {
+                operator = SelectionOp::Exists;
+            }
+        }
+
+        return Ok((literal, operator))
+    }
+
+    // parseOperator returns operator and eventually matchType
+    // matchType can be exact
+    pub fn ParseOperator(&mut self) -> Result<SelectionOp> {
+        let op;
+        let (tok, lit) = self.Consume(ParserContext::KeyAndOperator);
+        match tok {
+            Token::InToken => op = SelectionOp::In,
+            Token::EqualsToken => op = SelectionOp::Equals,
+            Token::DoubleEqualsToken => op = SelectionOp::DoubleEquals,
+            Token::GreaterThanToken => op = SelectionOp::GreaterThan,
+            Token::LessThanToken => op = SelectionOp::LessThan,
+            Token::NotInToken => op = SelectionOp::NotIn,
+            Token::NotEqualsToken => op = SelectionOp::NotEquals,
+            _ => {
+                return Err(Error::CommonError(format!("found '{}', expected: In, NotIn ...", lit)));
+            }
+        }
+
+        return Ok(op)
+    }
+
+    // parseValues parses the values for set based matching (x,y,z)
+    pub fn ParseValues(&mut self) -> Result<HashSet<String>> {
+        let (tok, lit) = self.Consume(ParserContext::Values);
+        if tok != Token::OpenParToken {
+            return Err(Error::CommonError(format!("found '{}' expected: '('", lit)));
+        }
+
+        let (tok, lit) = self.Lookahead(ParserContext::Values);
+        match tok {
+            Token::IdentifierToken | Token::CommaToken => {
+                let s = self.ParseIdentifiersList()?;
+                let (tok, _) = self.Consume(ParserContext::Values);
+                if tok != Token::ClosedParToken {
+                    return Err(Error::CommonError(format!("found '{}', expected: ')'", lit)))
+                }
+                return Ok(s)
+            }
+            Token::ClosedParToken => {
+                self.Consume(ParserContext::Values);
+                return Ok(HashSet::new());
+            }
+            _ => {
+                return Err(Error::CommonError(format!("found '{}', expected: ',', ')' or identifier", lit)));
+            }
+        }
+    }
+
+    pub fn ParseIdentifiersList(&mut self) -> Result<HashSet<String>> {
+        let mut s = HashSet::new();
+        loop {
+            let (tok, lit) = self.Consume(ParserContext::Values);
+            match tok {
+                Token::IdentifierToken => {
+                    s.insert(lit);
+                    let (tok2, lit2) = self.Lookahead(ParserContext::Values);
+                    match tok2 {
+                        Token::CommaToken => continue,
+                        Token::ClosedParToken => return Ok(s),
+                        _ => return Err(Error::CommonError(format!("found '{}', expected: ',' or ')'", lit2))),
+                    }
+                }
+                Token::CommaToken => {  // handled here since we can have "(,"
+                    if s.len() == 0 {
+                        s.insert("".to_owned()); // to handle (,
+                    }
+
+                    let (tok2, _lit2) = self.Lookahead(ParserContext::Values);
+                    if tok == Token::ClosedParToken {
+                        s.insert("".to_owned()); // to handle ,)  Double "" removed by StringSet
+                        return Ok(s)
+                    }
+                    if tok2 == Token::CommaToken {
+                        self.Consume(ParserContext::Values);
+                        s.insert("".to_owned()); // to handle ,, Double "" removed by StringSet
+                    }
+                }
+                _ => {
+                    return Err(Error::CommonError(format!("found '{}', expected: ',', or identifier", lit)))
+                }
+            }
+        }
+    }
+
+    // parseExactValue parses the only value for exact match style
+    pub fn ParseExactValue(&mut self) -> Result<HashSet<String>> {
+        let mut s = HashSet::new();
+        let (tok, _) = self.Lookahead(ParserContext::Values);
+        if tok == Token::EndOfStringToken || tok == Token::CommaToken {
+            s.insert("".to_owned());
+            return Ok(s);
+        }
+
+        let (tok, lit) = self.Consume(ParserContext::Values);
+        if tok == Token::IdentifierToken {
+            s.insert(lit);
+            return Ok(s);
+        }
+
+        return Err(Error::CommonError(format!("found '{}', expected: identifier", lit)))
+    }
+}
+
+// Parse takes a string representing a selector and returns a selector
+// object, or an error. This parsing function differs from ParseSelector
+// as they parse different selectors with different syntaxes.
+// The input will cause an error if it does not follow this form:
+//
+//	<selector-syntax>         ::= <requirement> | <requirement> "," <selector-syntax>
+//	<requirement>             ::= [!] KEY [ <set-based-restriction> | <exact-match-restriction> ]
+//	<set-based-restriction>   ::= "" | <inclusion-exclusion> <value-set>
+//	<inclusion-exclusion>     ::= <inclusion> | <exclusion>
+//	<exclusion>               ::= "notin"
+//	<inclusion>               ::= "in"
+//	<value-set>               ::= "(" <values> ")"
+//	<values>                  ::= VALUE | VALUE "," <values>
+//	<exact-match-restriction> ::= ["="|"=="|"!="] VALUE
+//
+// KEY is a sequence of one or more characters following [ DNS_SUBDOMAIN "/" ] DNS_LABEL. Max length is 63 characters.
+// VALUE is a sequence of zero or more characters "([A-Za-z0-9_-\.])". Max length is 63 characters.
+// Delimiter is white space: (' ', '\t')
+// Example of valid syntax:
+//
+//	"x in (foo,,baz),y,z notin ()"
+//
+// Note:
+//  1. Inclusion - " in " - denotes that the KEY exists and is equal to any of the
+//     VALUEs in its requirement
+//  2. Exclusion - " notin " - denotes that the KEY is not equal to any
+//     of the VALUEs in its requirement or does not exist
+//  3. The empty string is a valid VALUE
+//  4. A requirement with just a KEY - as in "y" above - denotes that
+//     the KEY exists and can be any VALUE.
+//  5. A requirement with just !KEY requires that the KEY not exist.
+pub fn Parse(selector: &str) -> Result<Selector> {
+    let mut p =  Parser {
+        l: Lexer { s: selector.chars().collect(), pos: 0 },
+        scanItems: Vec::new(),
+        position: 0,
+    };
+
+    let mut items = p.Parse()?;
+    items.Sort();
+    return Ok(items)
+}
+
+pub fn ValidateLabelKey(k: &str) -> Result<()> {
+    return IsQualifiedName(k);
+}
+
+pub fn ValidateLabelValue(_k: &str, v: &str) -> Result<()> {
+    return IsValidLabelValue(v);
+}
+
+// SelectorFromSet returns a Selector which will match exactly the given Set. A
+// nil and empty Sets are considered equivalent to Everything().
+// It does not perform any validation, which means the server will reject
+// the request if the Set contains invalid values.
+pub fn SelectorFromSet(ls : &Labels) -> Selector {
+    return SelectorFromValidatedSet(ls);
+}
+
+// ValidatedSelectorFromSet returns a Selector which will match exactly the given Set. A
+// nil and empty Sets are considered equivalent to Everything().
+// The Set is validated client-side, which allows to catch errors early.
+pub fn ValidatedSelectorFromSet(ls: &Labels) -> Result<Selector> {
+    let mut rs = Selector::default();
+    if ls.0.len() ==  0 {
+        return Ok(rs);
+    }
+
+    for (label, value) in &ls.0 {
+        let r = Requirement::New(label, SelectionOp::Equals, vec![value.clone()])?;
+        rs.0.push(r);
+    }
+
+    rs.Sort();
+    return Ok(rs);
+}
+
+// SelectorFromValidatedSet returns a Selector which will match exactly the given Set.
+// A nil and empty Sets are considered equivalent to Everything().
+// It assumes that Set is already validated and doesn't do any validation.
+// Note: this method copies the Set; if the Set is immutable, consider wrapping it with ValidatedSetSelector
+// instead, which does not copy.
+pub fn SelectorFromValidatedSet(ls: &Labels) -> Selector {
+    let mut rs = Selector::default();
+    if ls.0.len() ==  0 {
+        return rs;
+    }
+
+    for (label, value) in &ls.0 {
+        rs.0.push(Requirement { key: label.clone(), op: SelectionOp::Equals, strVals: vec![value.clone()] });
+    }
+
+    rs.Sort();
+    return rs;
+}
+
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    fn matches(ls: &Labels, want: &str) {
+        assert_eq!(ls.String(), want);
+    }
+
+    #[test]
+    fn TestSetString() {
+        matches(&Labels([("x".to_string(), "y".to_string())].into_iter().collect()), "x=y");
+        matches(&Labels([("foo".to_string(), "bar".to_string())].into_iter().collect()), "foo=bar");
+        matches(&Labels([("foo".to_string(), "bar".to_string()), ("x".to_string(), "y".to_string())].into_iter().collect()), "foo=bar,x=y");
+    }
+
+    #[test]
+    fn TestLabelHas() {
+        struct Test {
+            Ls: Labels,
+            Key: String,
+            Has: bool,
+        }
+
+        let labelHasTests: [Test; 3] = [
+            Test {
+                Ls: Labels([("x".to_string(), "y".to_string())].into_iter().collect()),
+                Key: "x".to_owned(),
+                Has: true,
+            },
+            Test {
+                Ls: Labels([("x".to_string(), "".to_string())].into_iter().collect()),
+                Key: "x".to_owned(),
+                Has: true,
+            },
+            Test {
+                Ls: Labels([("x".to_string(), "y".to_string())].into_iter().collect()),
+                Key: "foo".to_owned(),
+                Has: false,
+            },
+        ];
+
+        for lh in labelHasTests {
+            let has = lh.Ls.Has(&lh.Key);
+            assert_eq!(has, lh.Has, "{:?}.Has({}) => {}, expected {}", lh.Ls, lh.Key, has, lh.Has);
+        }
+    }
+
+    #[test]
+    fn TestLabelConflict() {
+        struct Test {
+            labels1: Labels,
+            labels2: Labels,
+            conflict: bool,
+        }
+
+        let tests = [
+            Test {
+                labels1: Labels([].into_iter().collect()),
+                labels2: Labels([].into_iter().collect()),
+                conflict: false
+            },
+            Test {
+                labels1: Labels([("env".to_string(), "test".to_string())].into_iter().collect()),
+                labels2: Labels([("infra".to_string(), "true".to_string())].into_iter().collect()),
+                conflict: false
+            },
+            Test {
+                labels1: Labels([("env".to_string(), "test".to_string())].into_iter().collect()),
+                labels2: Labels([("infra".to_string(), "true".to_string()), ("env".to_string(), "test".to_string())].into_iter().collect()),
+                conflict: false
+            },
+            Test {
+                labels1: Labels([("env".to_string(), "test".to_string())].into_iter().collect()),
+                labels2: Labels([("env".to_string(), "test1".to_string())].into_iter().collect()),
+                conflict: true
+            },
+            Test {
+                labels1: Labels([("env".to_string(), "test".to_string()), ("infra".to_string(), "false".to_string())].into_iter().collect()),
+                labels2: Labels([("infra".to_string(), "true".to_string()), ("env".to_string(), "test".to_string())].into_iter().collect()),
+                conflict: true
+            },
+        ];
+
+        for t in &tests {
+            let conflict = t.labels1.Conflict(&t.labels2);
+            assert_eq!(conflict, t.conflict);
+        }
+    }
+
+    #[test]
+    fn TestLabelMerge() {
+        struct Test {
+            labels1: Labels,
+            labels2: Labels,
+            mergedLabels: Labels,
+        }
+
+        let tests = [
+            Test {
+                labels1: Labels([].into_iter().collect()),
+                labels2: Labels([].into_iter().collect()),
+                mergedLabels: Labels([].into_iter().collect()),
+            },
+            Test {
+                labels1: Labels([("env".to_string(), "test".to_string())].into_iter().collect()),
+                labels2: Labels([].into_iter().collect()),
+                mergedLabels: Labels([("env".to_string(), "test".to_string())].into_iter().collect()),
+            },
+            Test {
+                labels1: Labels([("env".to_string(), "test".to_string()), ("infra".to_string(), "false".to_string())].into_iter().collect()),
+                labels2: Labels([("infra".to_string(), "true".to_string()), ("a".to_string(), "b".to_string())].into_iter().collect()),
+                mergedLabels: Labels([("infra".to_string(), "true".to_string()), ("env".to_string(), "test".to_string()), ("a".to_string(), "b".to_string())].into_iter().collect()),
+            },
+        ];
+
+        for t in &tests {
+            let mergedLabels = t.labels1.Merge(&t.labels2);
+            assert_eq!(mergedLabels.Equals(&t.mergedLabels), true);
+        }
+    }
+
+    #[test]
+    fn TestLabelSelectorParse() {
+        struct Test {
+            selector: String,
+            labels: Labels,
+            valid: bool,
+        }
+
+        let tests = [
+            Test {
+                selector: "".to_owned(),
+                labels: Labels([].into_iter().collect()),
+                valid: true,
+            },
+            Test {
+                selector: ",".to_owned(),
+                labels: Labels([].into_iter().collect()),
+                valid: false,
+            },
+            Test {
+                selector: "x=y".to_owned(),
+                labels: Labels([("x".to_string(), "y".to_string())].into_iter().collect()),
+                valid: true,
+            },
+            Test {
+                selector: "test= dddy, a =b, c=d".to_owned(),
+                labels: Labels([("test".to_string(), "dddy".to_string()),("a".to_string(), "b".to_string()),("c".to_string(), "d".to_string())].into_iter().collect()),
+                valid: true,
+            },
+        ];
+
+        for t in &tests {
+            let labels = match Labels::New(&t.selector) {
+                Err(_) => {
+                    assert_eq!(t.valid, false);
+                    continue;
+                }
+                Ok(l) => l,
+            };
+            assert_eq!(labels.Equals(&t.labels), t.valid);
+        }
     }
 }
