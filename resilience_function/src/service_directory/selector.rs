@@ -64,6 +64,20 @@ impl SelectionOp {
 pub struct Selector(Vec<Requirement>);
 
 impl Selector {
+    pub fn Equ(&self, other: &Self) -> bool {
+        if self.0.len() != other.0.len() {
+            return false;
+        }
+
+        for i in 0..self.0.len() {
+            if !self.0[i].Equ(&other.0[i]) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     pub fn Copy(&self) -> Self{
         let mut copy = Self::default();
         for r in &self.0 {
@@ -131,7 +145,7 @@ impl Selector {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Requirement {
     pub key: String,
     pub op: SelectionOp,
@@ -161,6 +175,26 @@ impl Eq for Requirement {
 }
 
 impl Requirement {
+    pub fn Equ(&self, other: &Self) -> bool {
+        if self.strVals.len() != other.strVals.len() {
+            return false;
+        }
+
+        let mut set : BTreeSet<String> = BTreeSet::new();
+
+        for str in &self.strVals {
+            set.insert(str.to_string());
+        }
+
+        for str in &other.strVals {
+            if !set.contains(str) {
+                return false;
+            }
+        }
+
+        return self.key == other.key && self.op == other.op;
+    }
+
     pub fn Copy(&self) -> Self {
         let mut out = Self {
             key: self.key.clone(),
@@ -183,7 +217,7 @@ impl Requirement {
     //  5. If the operator is Gt or Lt, the values set must contain only one value, which will be interpreted as an integer.
     //  6. The key is invalid due to its length, or sequence of characters. See validateLabelKey for more details.
     pub fn New(key: &str, op: SelectionOp, vals: Vec<String>) -> Result<Requirement> {
-        IsValidLabelValue(key)?;
+        ValidateLabelKey(key)?;
         match op {
             SelectionOp::None => panic!("selector::None"),
             SelectionOp::In | SelectionOp::NotIn => {
@@ -410,7 +444,7 @@ impl Requirement {
 }
 
 #[derive(Debug, Default)]
-pub struct Labels(BTreeMap<String, String>);
+pub struct Labels(pub BTreeMap<String, String>);
 
 impl Labels {
     // ConvertSelectorToLabelsMap converts selector string to labels map
@@ -1279,6 +1313,444 @@ mod tests {
                 Ok(l) => l,
             };
             assert_eq!(labels.Equals(&t.labels), t.valid);
+        }
+    }
+
+    #[test]
+    fn TestSelectorParse() {
+        let testGoodStrings = [
+            "x=a,y=b,z=c",
+            "",
+            "x!=a,y=b",
+            "x=",
+            "x= ",
+            "x=,z= ",
+            "x= ,z= ",
+            "!x",
+            "x>1",
+            "x>1,z<5",
+        ];
+
+        for t in &testGoodStrings {
+            let lq = Parse(t).unwrap();
+            assert_eq!(t.to_string().replace(" ", ""), lq.String());
+        }
+
+        let testBadStrings = [
+            "x=a||y=b",
+            "x==a==b",
+            "!x=a",
+            "x<a",
+        ];
+
+        for t in &testBadStrings {
+            match Parse(t) {
+                Err(_) => continue,
+                Ok(_) => {
+                    assert!(false);
+                    continue;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn TestDeterministicParse() {
+        let s1 = Parse("x=a,a=x").unwrap();
+        let s2 = Parse("a=x,x=a").unwrap();
+        assert_eq!(s1.String(), s2.String());
+    }
+
+    fn ExepctMatch(selector: &str, ls: &Labels) {
+        let lq = match Parse(selector) {
+            Ok(lq) => lq,
+            Err(e) => {
+                assert!(false, "error {:?}", e); 
+                return;
+            }
+        };
+
+        assert!(lq.Match(ls),  "Wanted '{:?}' to match '{:?}', but it did not.", &lq, ls)
+    }
+
+    fn ExepctNoMatch(selector: &str, ls: &Labels) {
+        let lq = match Parse(selector) {
+            Ok(lq) => lq,
+            Err(e) => {
+                assert!(false, "error {:?}", e); 
+                return;
+            }
+        };
+
+        assert!(!lq.Match(ls),  "Wanted '{}' to not match '{:?}', but it did.", selector, ls)
+    }
+
+    #[test]
+    fn TestSelectorMatches() {
+        ExepctMatch("", &Labels([("x".to_string(), "y".to_string())].into_iter().collect()));
+        ExepctMatch("x=y", &Labels([("x".to_string(), "y".to_string())].into_iter().collect()));
+        ExepctMatch("x>1", &Labels([("x".to_string(), "2".to_string())].into_iter().collect()));
+        ExepctMatch("x<1", &Labels([("x".to_string(), "0".to_string())].into_iter().collect()));
+        ExepctMatch("x", &Labels([("x".to_string(), "y".to_string())].into_iter().collect()));
+        ExepctMatch("!x", &Labels([("z".to_string(), "y".to_string())].into_iter().collect()));
+        ExepctMatch("in=notin", &Labels([("in".to_string(), "notin".to_string())].into_iter().collect()));
+        ExepctMatch("x=y,z=w", &Labels([("x".to_string(), "y".to_string()), ("z".to_string(), "w".to_string())].into_iter().collect()));
+        ExepctMatch("x!=y,z!=w", &Labels([("x".to_string(), "z".to_string()), ("z".to_string(), "a".to_string())].into_iter().collect()));
+
+        ExepctNoMatch("x=y", &Labels([].into_iter().collect()));
+        ExepctNoMatch("x=y", &Labels([("x".to_string(), "z".to_string())].into_iter().collect()));
+        ExepctNoMatch("x=y,z=w", &Labels([("x".to_string(), "w".to_string()), ("z".to_string(), "w".to_string())].into_iter().collect()));
+        ExepctNoMatch("x!=y,z!=w", &Labels([("x".to_string(), "z".to_string()), ("z".to_string(), "w".to_string())].into_iter().collect()));
+        ExepctNoMatch("x", &Labels([("z".to_string(), "y".to_string())].into_iter().collect()));
+        ExepctNoMatch("!x", &Labels([("x".to_string(), "y".to_string())].into_iter().collect()));
+        ExepctNoMatch("x>1", &Labels([("x".to_string(), "0".to_string())].into_iter().collect()));
+        ExepctNoMatch("x<1", &Labels([("x".to_string(), "1".to_string())].into_iter().collect()));
+        
+        let labelSet = Labels([("foo".to_string(), "bar".to_string()), ("baz".to_string(), "blah".to_string())].into_iter().collect());
+
+        ExepctMatch("foo=bar", &labelSet);
+        ExepctMatch("baz=blah", &labelSet);
+        ExepctMatch("foo=bar,baz=blah", &labelSet);
+
+        ExepctNoMatch("foo=blah", &labelSet);
+        ExepctNoMatch("baz=bar", &labelSet);
+        ExepctNoMatch("foo=bar,foobar=bar,baz=blah", &labelSet);
+    }
+
+    fn ExpectMatchDirect(selector: &Labels, ls: &Labels) {
+        assert!(SelectorFromSet(&selector).Match(&ls), 
+            "Wanted {:?} to match '{:?}', but it did not.\n", selector, ls);
+    }
+
+    fn ExpectNoMatchDirect(selector: &Labels, ls: &Labels) {
+        assert!(!SelectorFromSet(&selector).Match(&ls), 
+            "Wanted {:?} to not match '{:?}', but it did.\n", selector, ls);
+    }
+
+    #[test]
+    fn TestSetMatches() {
+        let labelSet = Labels([("foo".to_string(), "bar".to_string()), ("baz".to_string(), "blah".to_string())].into_iter().collect());
+
+        ExpectMatchDirect(&Labels([].into_iter().collect()), &labelSet);
+        ExpectMatchDirect(&Labels([("foo".to_string(), "bar".to_string())].into_iter().collect()), &labelSet);
+        ExpectMatchDirect(&Labels([("baz".to_string(), "blah".to_string())].into_iter().collect()), &labelSet);
+        ExpectMatchDirect(&Labels([("foo".to_string(), "bar".to_string()), ("baz".to_string(), "blah".to_string())].into_iter().collect()), &labelSet);
+    }
+
+    #[test]
+    fn TestSetIsEmpty() {
+        let labelSet = Labels::default();
+        assert!(labelSet.Empty());
+
+    }
+
+    #[test]
+    fn TestLexer() {
+        struct Test {
+            s: String,
+            t: Token,
+        }
+
+        let testcases = [
+            Test {s: "".to_owned(), t: Token::EndOfStringToken},
+            Test {s: ",".to_owned(), t: Token::CommaToken},
+            Test {s: "notin".to_owned(), t: Token::NotInToken},
+            Test {s: "in".to_owned(), t: Token::InToken},
+            Test {s: "=".to_owned(), t: Token::EqualsToken},
+            Test {s: "==".to_owned(), t: Token::DoubleEqualsToken},
+            Test {s: ">".to_owned(), t: Token::GreaterThanToken},
+            Test {s: "<".to_owned(), t: Token::LessThanToken},
+            Test {s: "!".to_owned(), t: Token::DoesNotExistToken},
+            Test {s: "!=".to_owned(), t: Token::NotEqualsToken},
+            Test {s: "(".to_owned(), t: Token::OpenParToken},
+            Test {s: ")".to_owned(), t: Token::ClosedParToken},
+            Test {s: "~".to_owned(), t: Token::IdentifierToken},
+            Test {s: "||".to_owned(), t: Token::IdentifierToken},
+        ];
+
+        for t in &testcases {
+            let mut l = Lexer {
+                s: t.s.chars().collect(),
+                pos: 0
+            };
+
+            let (token, lit) = l.Lex();
+            assert_eq!(token, t.t, "Got {:?} it should be {:?} for '{}'", token, t.t, t.s);
+
+            if t.t != Token::ErrorToken {
+                assert_eq!(lit, t.s)
+            }
+        }
+    }
+
+    fn GetRequirement(key: &str, op: SelectionOp, vals: Vec<String>) -> Requirement {
+        let req = match Requirement::New(key, op, vals) {
+            Err(_e) => {
+                //assert!(false, "error is {:?}", e);
+                Requirement::default()
+            }
+            Ok(r) => r,
+        };
+
+        return req;
+    }
+
+    #[test]
+    fn TestSetSelectorParser() {
+        struct Test {
+            In: String,
+            Out: Selector,
+            Match: bool,
+            Valid: bool,
+        }
+
+        let tests = [
+            Test {
+                In: "".to_owned(),
+                Out: Selector::default(),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "\rx".to_owned(),
+                Out: Selector(vec![GetRequirement("x", SelectionOp::Exists, vec![])]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "this-is-a-dns.domain.com/key-with-dash".to_owned(),
+                Out: Selector(vec![GetRequirement("this-is-a-dns.domain.com/key-with-dash", SelectionOp::Exists, vec![])]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "this-is-another-dns.domain.com/key-with-dash in (so,what)".to_owned(),
+                Out: Selector(vec![GetRequirement("this-is-another-dns.domain.com/key-with-dash", SelectionOp::In, vec!["so".to_owned(), "what".to_owned()])]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "0.1.2.domain/99 notin (10.10.100.1, tick.tack.clock)".to_owned(),
+                Out: Selector(vec![GetRequirement("0.1.2.domain/99", SelectionOp::NotIn, vec!["10.10.100.1".to_owned(), "tick.tack.clock".to_owned()])]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "foo  in	 (abc)".to_owned(),
+                Out: Selector(vec![GetRequirement("foo", SelectionOp::In, vec!["abc".to_owned()])]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "x notin\n (abc)".to_owned(),
+                Out: Selector(vec![GetRequirement("x", SelectionOp::NotIn, vec!["abc".to_owned()])]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "x  notin	\t	(abc,def)".to_owned(),
+                Out: Selector(vec![GetRequirement("x", SelectionOp::NotIn, vec!["abc".to_owned(), "def".to_owned()])]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "x in (abc,def)".to_owned(),
+                Out: Selector(vec![GetRequirement("x", SelectionOp::In, vec!["abc".to_owned(), "def".to_owned()])]),
+                Match: true,
+                Valid: true
+            },
+            // todo: debug
+            Test {
+                In: "x in (abc,)".to_owned(),
+                Out: Selector(vec![GetRequirement("x", SelectionOp::In, vec!["abc".to_owned()])]),
+                Match: true,
+                Valid: false
+            },
+            Test {
+                In: "x in ()".to_owned(),
+                Out: Selector(vec![GetRequirement("x", SelectionOp::In, vec![])]),
+                Match: true,
+                Valid: false
+            },
+            Test {
+                In: "x=a,y!=b,z in (h,i,j)".to_owned(),
+                Out: Selector(vec![
+                    GetRequirement("x", SelectionOp::Equals, vec!["a".to_owned()]),
+                    GetRequirement("y", SelectionOp::NotEquals, vec!["b".to_owned()]),
+                    GetRequirement("z", SelectionOp::In, vec!["h".to_owned(), "i".to_owned(), "j".to_owned()]),
+                ]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "x,y in (a)".to_owned(),
+                Out: Selector(vec![
+                    GetRequirement("x", SelectionOp::Exists, vec![]),
+                    GetRequirement("y", SelectionOp::In, vec!["a".to_owned()]),
+                ]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "x=a".to_owned(),
+                Out: Selector(vec![
+                    GetRequirement("x", SelectionOp::Equals, vec!["a".to_owned()]),
+                ]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "x>1".to_owned(),
+                Out: Selector(vec![
+                    GetRequirement("x", SelectionOp::GreaterThan, vec!["1".to_owned()]),
+                ]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "x<1".to_owned(),
+                Out: Selector(vec![
+                    GetRequirement("x", SelectionOp::LessThan, vec!["1".to_owned()]),
+                ]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "x=a,y!=b".to_owned(),
+                Out: Selector(vec![
+                    GetRequirement("x", SelectionOp::Equals, vec!["a".to_owned()]),
+                    GetRequirement("y", SelectionOp::NotEquals, vec!["b".to_owned()]),
+                ]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "x=a,y!=b,z in (h,i,j)".to_owned(),
+                Out: Selector(vec![
+                    GetRequirement("x", SelectionOp::Equals, vec!["a".to_owned()]),
+                    GetRequirement("y", SelectionOp::NotEquals, vec!["b".to_owned()]),
+                    GetRequirement("z", SelectionOp::In, vec!["h".to_owned(), "i".to_owned(), "j".to_owned()]),
+                ]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "x=a||y=b".to_owned(),
+                Out: Selector(vec![                   
+                ]),
+                Match: false,
+                Valid: false
+            },
+            Test {
+                In: "x,,y".to_owned(),
+                Out: Selector(vec![                   
+                ]),
+                Match: true,
+                Valid: false
+            },
+            Test {
+                In: ",x,y".to_owned(),
+                Out: Selector(vec![                   
+                ]),
+                Match: true,
+                Valid: false
+            },
+            Test {
+                In: "x nott in (y)".to_owned(),
+                Out: Selector(vec![                   
+                ]),
+                Match: true,
+                Valid: false
+            },
+            Test {
+                In: "x notin ( )".to_owned(),
+                Out: Selector(vec![   
+                    GetRequirement("x", SelectionOp::NotIn, vec![]),                
+                ]),
+                Match: true,
+                Valid: false
+            },
+            Test {
+                In: "x notin (, a)".to_owned(),
+                Out: Selector(vec![    
+                    GetRequirement("x", SelectionOp::NotIn, vec!["".to_owned(), "a".to_owned()]),        
+                ]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "a in (xyz),".to_owned(),
+                Out: Selector(vec![           
+                ]),
+                Match: true,
+                Valid: false
+            },
+            Test {
+                In: "a in (xyz)b notin ()".to_owned(),
+                Out: Selector(vec![           
+                ]),
+                Match: true,
+                Valid: false
+            },
+            Test {
+                In: "a ".to_owned(),
+                Out: Selector(vec![  
+                    GetRequirement("a", SelectionOp::Exists, vec![]),         
+                ]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "a in (x,y,notin, z,in)".to_owned(),
+                Out: Selector(vec![  
+                    GetRequirement("a", SelectionOp::In, vec!["in".to_owned(), "notin".to_owned(),"x".to_owned(), "y".to_owned(),"z".to_owned()]),         
+                ]),
+                Match: true,
+                Valid: true
+            },
+            Test {
+                In: "a in (xyz abc)".to_owned(),
+                Out: Selector(vec![           
+                ]),
+                Match: true,
+                Valid: false
+            },
+            Test {
+                In: "a notin(".to_owned(),
+                Out: Selector(vec![           
+                ]),
+                Match: true,
+                Valid: false
+            },
+            Test {
+                In: "a (".to_owned(),
+                Out: Selector(vec![           
+                ]),
+                Match: true,
+                Valid: false
+            },
+            Test {
+                In: "(".to_owned(),
+                Out: Selector(vec![           
+                ]),
+                Match: true,
+                Valid: false
+            },
+        ];
+
+        for t in &tests {
+            match Parse(&t.In) {
+                Err(e) =>  {
+                    assert!(!t.Valid, "Parse({}) => {:?} expected no error", t.In, e);
+                    continue;
+                }
+                Ok(sel) => {
+                    assert!(t.Valid, "Parse({}) => {:#?} expected error", t.In, sel);
+                    if t.Match {
+                        assert!(sel.Equ(&t.Out), "Parse({:#?}) => parse output '{:#?}' doesn't match '{:#?}' expected match", t.In, sel, t.Out)
+                    }
+                }
+            }
         }
     }
 }
