@@ -115,20 +115,19 @@ async fn EtcdStoreTest() -> QResult<()> {
 
     let val = "test";
     let obj = Object {
-        key: Some(ObjectKey {
-            kind: "test_kind".into(),
-            namespace: "test_namespace".into(),
-            name: "test_name".into(),
-        }),
-        meta: Some(ObjectMeta { labels: Vec::new(), annotations: Vec::new() }),
-        attribute: None,
+        kind: "test_kind".into(),
+        namespace: "test_namespace".into(),
+        name: "test_name".into(),
+        labels: Vec::new(), 
+        annotations: Vec::new(),
+        reversion: 0,
         val: val.as_bytes().to_vec(),
     };
 
-    store.Create("testkey", &DataObject(obj)).await?;
+    store.Create("testkey", &obj.into()).await?;
     let obj = store.Get("testkey", 0).await?;
     println!("obj is {:?}", obj);
 
-    store.Delete("testkey", obj.unwrap().0.attribute.unwrap().reversion).await?;
+    store.Delete("testkey", obj.unwrap().reversion).await?;
     return Ok(())
 }
