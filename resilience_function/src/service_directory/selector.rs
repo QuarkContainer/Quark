@@ -795,29 +795,24 @@ impl Parser {
     // lookahead func returns the current token and string. No increment of current position
     pub fn Lookahead(&self, context: ParserContext) -> (Token, String) {
         let (mut tok, lit) = (self.scanItems[self.position].tok, self.scanItems[self.position].literal.clone());
-        println!("Lookahead 1 {:?} {:?}", tok, lit);
         if context == ParserContext::Values {
             if tok == Token::InToken || tok == Token::NotInToken {
                 tok = Token::IdentifierToken
             }
         }
 
-        println!("Lookahead 2 {:?} {:?}", tok, lit);
         return (tok, lit)
     }
 
     // consume returns current token and string. Increments the position
     pub fn Consume(&mut self, context: ParserContext) -> (Token, String) {
-        println!("consume 1 {}", self.position);
         self.position += 1;
         let (mut tok, lit) = (self.scanItems[self.position-1].tok, self.scanItems[self.position-1].literal.clone());
-        println!("consume 2 {:?} {:?}", tok, lit);
         if context == ParserContext::Values {
             if tok == Token::InToken || tok == Token::NotInToken {
                 tok = Token::IdentifierToken
             }
         }
-        println!("consume 3 {:?} {:?}", tok, lit);
         
         return (tok, lit)
     }
@@ -836,17 +831,13 @@ impl Parser {
 
     pub fn Parse(&mut self) -> Result<Selector> {
         self.Scan();
-        println!("scan {:?}", self);
         let mut requirements = Selector::default();
         loop {
             let (tok, lit) = self.Lookahead(ParserContext::Values);
             match tok {
                 Token::IdentifierToken | Token::DoesNotExistToken => {
-                    println!("parse1 ");
                     let r = self.ParseRequirement()?;
-                    println!("parse 2 {:?} ", r);
                     requirements.Add(r);
-                    println!("parse 3");
                     let (t, l) = self.Consume(ParserContext::Values);
                     match t {
                         Token::EndOfStringToken => {
@@ -918,14 +909,12 @@ impl Parser {
         ValidateLabelKey(&literal)?;
 
         let (t, _) = self.Lookahead(ParserContext::Values);
-        println!("ParseKeyAndInferOperator 2 {:?}/{:?}", t, operator);
         if t == Token::EndOfStringToken || t == Token::CommaToken {
             if operator != SelectionOp::DoesNotExist {
                 operator = SelectionOp::Exists;
             }
         }
 
-        println!("ParseKeyAndInferOperator 3 {:?}/{:?}", literal, operator);
         return Ok((literal, operator))
     }
 
