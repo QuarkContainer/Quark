@@ -36,33 +36,19 @@ message KV {
     string val = 2;
 } 
 
-message ObjectKey {
+message Object {
     string kind = 1;
     string namespace = 2;
     string name = 3;
-}
+    int64 Reversion = 4;
+    repeated KV labels = 5;
+    repeated KV annotations = 6;
 
-message ObjectMeta {
-    repeated KV labels = 1;
-    repeated KV annotations = 2;
-}
-
-message ObjectAttribute {
-    string UID = 1;
-    int64 Reversion = 2;
-}
-
-message Object {
-    ObjectKey key = 1;
-    ObjectMeta meta = 2;
-    ObjectAttribute attribute = 3;
-    bytes val = 4;
+    bytes val = 7;
 }
 
 message PutRequestMessage {
-    ObjectKey key = 1;
-    ObjectMeta meta = 2;
-    bytes val = 3;
+    Object obj = 1;
 }
 
 message PutResponseMessage {

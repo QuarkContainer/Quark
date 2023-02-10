@@ -12,25 +12,75 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::Arc;
+use core::ops::Deref;
+
 use etcd_client::{Client, Compare, Txn, TxnOp, CompareOp, TxnOpResponse};
 use prost::Message;
 
-use crate::shared::common::*;
+use crate::{shared::common::*, selector::Labels};
 use super::service_directory::*;
 
 #[derive(Debug)]
-pub struct DataObject(pub Object);
+pub struct DataObjInner {
+    pub kind: String,
+    pub namespace: String,
+    pub name: String,
+    pub reversion: i64,
+    pub lables: Labels,
+    pub obj: Object,
+}
+
+impl From<Object> for DataObjInner {
+    fn from(item: Object) -> Self {
+        let mut labels = Labels::default();
+        for l in &item.labels {
+            labels.0.insert(l.key.clone(), l.val.clone());
+        }
+
+        let inner = DataObjInner {
+            kind: item.kind.clone(),
+            namespace: item.namespace.clone(),
+            name: item.name.clone(),
+            lables: labels,
+            reversion: item.reversion,
+            obj: item,
+        };
+
+        return inner;
+    }
+}
+
+#[derive(Debug)]
+pub struct DataObject(Arc<DataObjInner>);
+
+impl From<Object> for DataObject {
+    fn from(item: Object) -> Self {
+        let inner = item.into();
+
+        return Self(Arc::new(inner));
+    }
+}
+
+
+impl Deref for DataObject {
+    type Target = Arc<DataObjInner>;
+
+    fn deref(&self) -> &Arc<DataObjInner> {
+        &self.0
+    }
+}
 
 impl DataObject {
     pub fn Decode(buf: &[u8]) -> Result<Self> {
         let obj = Object::decode(buf)?;
-        return Ok(Self(obj))
+        return Ok(Self(Arc::new(obj.into())))
     }
 
     pub fn Encode(&self) -> Result<Vec<u8>> {
         let mut buf : Vec<u8> = Vec::new();
-        buf.reserve(self.0.encoded_len());
-        self.0.encode(&mut buf)?;
+        buf.reserve(self.obj.encoded_len());
+        self.obj.encode(&mut buf)?;
         return Ok(buf)
     }
 }
@@ -100,12 +150,9 @@ impl EtcdStore {
         let val = kv.value();
 
         let mut obj = Object::decode(val)?;
-        obj.attribute = Some(ObjectAttribute {
-            uid: "test".to_string(),
-            reversion: actualRev,
-        });
+        obj.reversion = actualRev;
         
-        return Ok(Some(DataObject(obj)))
+        return Ok(Some(obj.into()))
     }
 
     pub async fn Create(&mut self, key: &str, obj: &DataObject) -> Result<i64> {
