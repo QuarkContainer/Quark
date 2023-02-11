@@ -22,6 +22,7 @@ pub mod etcd_store;
 pub mod shared;
 pub mod selector;
 pub mod validation;
+pub mod selection_predicate;
 
 pub mod service_directory {
     tonic::include_proto!("service_directory"); // The string specified here must match the proto package name
@@ -93,7 +94,7 @@ fn ExepctMatch(selector: &str, ls: &Labels) {
 }
 
 pub fn SelectorTest() {
-    ExepctMatch("", &Labels([("x".to_string(), "y".to_string())].into_iter().collect()),)
+    ExepctMatch("", &Labels::NewFromSlice(&[("x".to_string(), "y".to_string())]))
 }
 
 async fn gRpcServer() -> QResult<()> {
@@ -111,7 +112,7 @@ async fn gRpcServer() -> QResult<()> {
 }
 
 async fn EtcdStoreTest() -> QResult<()> {
-    let mut store = EtcdStore::New("localhost:2379").await?;
+    let mut store = EtcdStore::New("localhost:2379", false).await?;
 
     let val = "test";
     let obj = Object {
@@ -120,7 +121,6 @@ async fn EtcdStoreTest() -> QResult<()> {
         name: "test_name".into(),
         labels: Vec::new(), 
         annotations: Vec::new(),
-        reversion: 0,
         val: val.as_bytes().to_vec(),
     };
 
