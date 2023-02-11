@@ -40,7 +40,6 @@ message Object {
     string kind = 1;
     string namespace = 2;
     string name = 3;
-    int64 Reversion = 4;
     repeated KV labels = 5;
     repeated KV annotations = 6;
 

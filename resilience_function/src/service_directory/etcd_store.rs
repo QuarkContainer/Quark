@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors
+// Copyright (c) 2021 Quark Container Authors / 2014 The Kubernetes Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,42 +12,72 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
+
+use std::{sync::Arc, collections::BTreeMap};
 use core::ops::Deref;
 
 use etcd_client::{Client, Compare, Txn, TxnOp, CompareOp, TxnOpResponse};
+use etcd_client::GetOptions;
 use prost::Message;
 
 use crate::{shared::common::*, selector::Labels};
 use super::service_directory::*;
+use super::selection_predicate::*;
 
 #[derive(Debug)]
 pub struct DataObjInner {
     pub kind: String,
     pub namespace: String,
     pub name: String,
-    pub reversion: i64,
     pub lables: Labels,
+    pub fields: Labels,
+    
+    // revision number set by etcd
+    pub reversion: i64,
+
     pub obj: Object,
 }
 
 impl From<Object> for DataObjInner {
     fn from(item: Object) -> Self {
-        let mut labels = Labels::default();
+        let mut map = BTreeMap::new();
         for l in &item.labels {
-            labels.0.insert(l.key.clone(), l.val.clone());
+            map.insert(l.key.clone(), l.val.clone());
         }
+
+        let mut fields = BTreeMap::new();
+        fields.insert("metadata.name".to_owned(), item.name.clone());
+        fields.insert("metadata.namespace".to_owned(), item.namespace.clone());
 
         let inner = DataObjInner {
             kind: item.kind.clone(),
             namespace: item.namespace.clone(),
             name: item.name.clone(),
-            lables: labels,
-            reversion: item.reversion,
+            lables: map.into(),
+            fields: fields.into(),
+            reversion: 0,
             obj: item,
         };
 
         return inner;
+    }
+}
+
+pub struct DataObjList {
+    pub objs: Vec<DataObject>,
+    pub revision: i64,
+    pub next: Option<Continue>,
+    pub remainCount: i64,
+}
+
+impl DataObjList {
+    pub fn New(objs: Vec<DataObject>, revision: i64, next: Option<Continue>, remainCount: i64) -> Self {
+        return Self {
+            objs: objs,
+            revision:  revision,
+            next: next,
+            remainCount: remainCount,
+        }
     }
 }
 
@@ -62,6 +92,11 @@ impl From<Object> for DataObject {
     }
 }
 
+impl From<DataObjInner> for DataObject {
+    fn from(inner: DataObjInner) -> Self {
+        return Self(Arc::new(inner));
+    }
+}
 
 impl Deref for DataObject {
     type Target = Arc<DataObjInner>;
@@ -83,6 +118,10 @@ impl DataObject {
         self.obj.encode(&mut buf)?;
         return Ok(buf)
     }
+
+    pub fn Attributes(&self) -> (Labels, Labels) {
+        return (self.lables.clone(), self.fields.clone())
+    }
 }
 
 async fn test() -> Result<()> {
@@ -103,15 +142,17 @@ pub const PATH_PREFIX : &str = "/registry";
 pub struct EtcdStore {
     pub client: Client,
     pub pathPrefix: String,
+    pub pagingEnable: bool,
 }
 
 impl EtcdStore {
-    pub async fn New(addr: &str) -> Result<Self> {
+    pub async fn New(addr: &str, pagingEnable: bool) -> Result<Self> {
         let client = Client::connect([addr], None).await?;
 
         return Ok(Self {
             client: client,
             pathPrefix: PATH_PREFIX.to_string(),
+            pagingEnable,
         })
     }
 
@@ -149,10 +190,11 @@ impl EtcdStore {
         let kv = &kvs[0];
         let val = kv.value();
 
-        let mut obj = Object::decode(val)?;
-        obj.reversion = actualRev;
+        let obj = Object::decode(val)?;
+        let mut inner : DataObjInner = obj.into();
+        inner.reversion = kv.mod_revision();
         
-        return Ok(Some(obj.into()))
+        return Ok(Some(DataObject(Arc::new(inner))))
     }
 
     pub async fn Create(&mut self, key: &str, obj: &DataObject) -> Result<i64> {
@@ -231,30 +273,231 @@ impl EtcdStore {
         }
     }
 
-    /*pub async fn List(&mut self, prefix: &str, opts: &ListOption) -> Result<Vec<DataObject>> {
-        let mut keyPrefix = self.PrepareKey(prefix)?;
+    pub fn GetPrefixRangeEnd(prefix: &str) -> String {
+        let arr: Vec<u8> = prefix.as_bytes().to_vec();
+        let arr = Self::GetPrefix(&arr);
+        return String::from_utf8(arr).unwrap();
+    }
 
-        if !keyPrefix.ends_with("/") {
-            keyPrefix = keyPrefix + "/";
+    pub fn GetPrefix(prefix: &[u8]) -> Vec<u8> {
+        let mut end = Vec::with_capacity(prefix.len());
+        for c in prefix {
+            end.push(*c);
         }
 
-        let 
+        for i in (0..prefix.len()).rev() {
+            if end[i] < 0xff {
+                end[i] += 1;
+                let _ = end.split_off(i+1);
+                return end;
+            }
+        }
 
-        return Ok(Vec::new())
-    }*/
+        // next prefix does not exist (e.g., 0xffff);
+	    // default to WithFromKey policy
+        return vec![0];
+    }
+
+    pub async fn List(&mut self, prefix: &str, opts: &ListOption) -> Result<DataObjList> {
+        let mut preparedKey = self.PrepareKey(prefix)?;
+
+        let revision = opts.revision;
+        let match_ = opts.revisionMatch;
+        let pred = &opts.predicate;
+
+        if !preparedKey.ends_with("/") {
+            preparedKey = preparedKey + "/";
+        }
+
+        let keyPrefix = preparedKey.clone();
+
+        let mut limit = pred.limit;
+        let mut getOption = EtcdOption::default();
+        let mut paging = false;
+        if self.pagingEnable && pred.limit > 0 {
+            paging = true;
+            getOption.WithLimit(pred.limit as i64);
+        }
+
+        let fromRv = revision;
+
+        let mut returnedRV = 0;
+        let continueRv;
+        let mut withRev = 0;
+        let continueKey;
+        if self.pagingEnable && pred.HasContinue() {
+            //let (tk, trv) = pred.Continue(&keyPrefix)?; 
+            (continueKey, continueRv) = pred.Continue(&keyPrefix)?; 
+
+            let rangeEnd = Self::GetPrefixRangeEnd(&keyPrefix);
+            getOption.WithRange(rangeEnd);
+            preparedKey = continueKey.clone();
+
+            // If continueRV > 0, the LIST request needs a specific resource version.
+		    // continueRV==0 is invalid.
+		    // If continueRV < 0, the request is for the latest resource version.
+            if continueRv > 0 {
+                withRev = continueRv.clone();
+                returnedRV = continueRv;
+            }
+        } else if self.pagingEnable && pred.limit > 0 {
+            if fromRv > 0 {
+                match match_ {
+                    RevisionMatch::NotOlderThan => (),
+                    RevisionMatch::Exact => {
+                        returnedRV = fromRv;
+                        withRev = returnedRV;
+                    }
+                }
+            }
+
+            let rangeEnd = Self::GetPrefixRangeEnd(&keyPrefix);
+            getOption.WithRange(rangeEnd);
+        } else {
+            if fromRv > 0 {
+                match match_ {
+                    RevisionMatch::NotOlderThan => (),
+                    RevisionMatch::Exact => {
+                        returnedRV = fromRv;
+                        withRev = returnedRV;
+                    }
+                }
+            }
+        }
+
+        if withRev != 0 {
+            getOption.WithRevision(withRev);
+        }
+
+        //let mut numFetched = 0;
+        let mut hasMore;
+        let mut v = Vec::new();
+        let mut lastKey = Vec::new();
+        //let mut numEvald = 0;
+        let mut getResp;
+
+        loop {
+            let option = getOption.ToGetOption();
+            getResp = self.client.get(preparedKey.clone(), Some(option)).await?;
+            let actualRev = getResp.header().unwrap().revision();
+            Self::ValidateMinimumResourceVersion(revision, actualRev)?;
+
+            //numFetched += getResp.kvs().len();
+            hasMore = getResp.more();
+
+            if getResp.kvs().len() == 0 && hasMore {
+                return Err(Error::CommonError("no results were found, but etcd indicated there were more values remaining".to_owned()));
+            }
+
+            for kv in getResp.kvs() {
+                if paging && v.len() >= pred.limit {
+                    hasMore = true;
+                    break;
+                }
+
+                lastKey = kv.key().to_vec();
+                let obj = Object::decode(kv.value())?;
+                let mut inner : DataObjInner = obj.into();
+                inner.reversion = kv.mod_revision();
+                let obj = inner.into();
+
+                if pred.Match(&obj)? {
+                    v.push(obj)
+                }
+
+                //numEvald += 1;
+            }
+
+            // indicate to the client which resource version was returned
+            if returnedRV == 0 {
+                returnedRV = getResp.header().unwrap().revision();
+            }
+
+            // no more results remain or we didn't request paging
+            if !hasMore || !paging {
+                break;
+            }
+
+            // we're paging but we have filled our bucket
+            if v.len() >= pred.limit {
+                break;
+            }
+
+            if limit < MAX_LIMIT {
+                // We got incomplete result due to field/label selector dropping the object.
+			    // Double page size to reduce total number of calls to etcd.
+                limit *= 2;
+                if limit > MAX_LIMIT {
+                    limit = MAX_LIMIT;
+                }
+
+                getOption.WithLimit(limit as i64);
+            }
+        }
+
+        // instruct the client to begin querying from immediately after the last key we returned
+        // we never return a key that the client wouldn't be allowed to see
+        if hasMore {
+            let newKey = String::from_utf8(lastKey).unwrap();
+            let next = EncodeContinue(&(newKey+ "\x00"), &keyPrefix, returnedRV)?;
+            let mut remainingItemCount = -1;
+            if pred.Empty() {
+                remainingItemCount = getResp.count() as i64 - pred.limit as i64;
+            }
+            
+            return Ok(DataObjList::New(v, returnedRV, Some(next), remainingItemCount));
+        }
+
+        return Ok(DataObjList::New(v, returnedRV, None, -1));
+    }
+
+    
 }
 
-#[derive(Debug)]
-pub enum RevisionMatch {
-    NotOlderThan,
-    Exact
+// maxLimit is a maximum page limit increase used when fetching objects from etcd.
+// This limit is used only for increasing page size by kube-apiserver. If request
+// specifies larger limit initially, it won't be changed.
+pub const MAX_LIMIT : usize = 10000;
+
+#[derive(Debug, Default)]
+pub struct EtcdOption {
+    pub limit: Option<i64>,
+    pub endKey: Option<Vec<u8>>,
+    pub revision: Option<i64>
 }
 
+impl EtcdOption {
+    pub fn WithLimit(&mut self, limit: i64) {
+        self.limit = Some(limit);
+    }
 
-#[derive(Debug)]
-pub struct ListOption {
-    pub revision: i64,
+    pub fn WithRange(&mut self, endKey: impl Into<Vec<u8>>) {
+        self.endKey = Some(endKey.into());
+    }
 
-    pub revisionMatch: RevisionMatch,
+    pub fn WithRevision(&mut self, revision: i64) {
+        self.revision = Some(revision);
+    }
 
+    pub fn ToGetOption(&self) -> GetOptions {
+        let mut getOption = GetOptions::new();
+        match self.limit {
+            None => (),
+            Some(l) => getOption = getOption.with_limit(l),
+        }
+
+        match &self.endKey {
+            None => (),
+            Some(k) => {
+                getOption = getOption.with_range(k.to_vec());
+            }
+        }
+
+        match self.revision {
+            None => (),
+            Some(rv) => getOption = getOption.with_revision(rv),
+        }
+
+        return getOption;
+    }
 }

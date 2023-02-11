@@ -17,6 +17,8 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::cmp::Ordering;
 use std::cmp::Ord;
+use std::sync::Arc;
+use core::ops::Deref;
 
 use crate::shared::common::*;
 
@@ -443,17 +445,39 @@ impl Requirement {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct Labels(pub BTreeMap<String, String>);
+#[derive(Debug, Default, Clone)]
+pub struct Labels(Arc<BTreeMap<String, String>>);
+
+impl From<BTreeMap<String, String>> for Labels {
+    fn from(item: BTreeMap<String, String>) -> Self {
+        return Self(Arc::new(item));
+    }
+}
+
+impl Deref for Labels {
+    type Target = Arc<BTreeMap<String, String>>;
+
+    fn deref(&self) -> &Arc<BTreeMap<String, String>> {
+        &self.0
+    }
+}
 
 impl Labels {
+    pub fn NewFromSlice(item: &[(String, String)]) -> Self {
+        let mut map = BTreeMap::new();
+        for (k, v) in item {
+            map.insert(k.clone(), v.clone());
+        }
+        return map.into();
+    }
+
     // ConvertSelectorToLabelsMap converts selector string to labels map
     // and validates keys and values
     pub fn New(selector: &str) -> Result<Self> {
         let mut map = BTreeMap::new();
 
         if selector.len() == 0 {
-            return Ok(Self(map));
+            return Ok(map.into());
         }
 
         let labels : Vec<&str> = selector.split(",").collect();
@@ -472,14 +496,14 @@ impl Labels {
             map.insert(key.to_string(), value.to_string());
         }
 
-        return Ok(Self(map))
+        return Ok(map.into())
     }
 
     // String returns all labels listed as a human readable string.
     // Conveniently, exactly the format that ParseSelector takes.
     pub fn String(&self) -> String {
         let mut ret = "".to_owned();
-        for (k, v) in &self.0 {
+        for (k, v) in self.as_ref() {
             if ret.len() != 0 {
                 ret = ret + ",";
             }
@@ -521,7 +545,7 @@ impl Labels {
             (labels, self)
         };
 
-        for (k, v) in &small.0 {
+        for (k, v) in small.as_ref() {
             match big.0.get(k) {
                 None => return false,
                 Some(val) => {
@@ -538,17 +562,17 @@ impl Labels {
     // Merge combines given maps, and does not check for any conflicts
     // between the maps. In case of conflicts, second map (labels2) wins
     pub fn Merge(&self, labels: &Self) -> Self {
-        let mut merged = Self::default();
+        let mut merged = BTreeMap::new();
 
-        for (k, v) in &self.0 {
-            merged.0.insert(k.to_string(), v.to_string());
+        for (k, v) in self.as_ref() {
+            merged.insert(k.to_string(), v.to_string());
         }
 
-        for (k, v) in &labels.0 {
-            merged.0.insert(k.to_string(), v.to_string());
+        for (k, v) in labels.as_ref() {
+            merged.insert(k.to_string(), v.to_string());
         }
 
-        return merged;
+        return merged.into();
     }
 
     // Equals returns true if the given maps are equal
@@ -557,7 +581,7 @@ impl Labels {
             return false;
         }
 
-        for (k, v) in &self.0 {
+        for (k, v) in self.as_ref() {
             match labels.0.get(k) {
                 None => return false,
                 Some(val) => {
@@ -572,7 +596,7 @@ impl Labels {
     }
 
     pub fn Matches(&self, labels: &Labels) -> bool {
-        for (k, v) in &self.0 {
+        for (k, v) in self.as_ref() {
             if !labels.Has(k) || Some(v.to_string()) != labels.Get(k) {
                 return false;
             }
@@ -587,7 +611,7 @@ impl Labels {
 
     pub fn ToSelector(&self) -> Selector {
         let mut res = Selector::default();
-        for (k, v) in &self.0 {
+        for (k, v) in self.as_ref() {
             res.Add(Requirement { key: k.to_string(), op: SelectionOp::Equals, strVals: vec![v.to_string()] })
         }
 
@@ -1123,7 +1147,7 @@ pub fn ValidatedSelectorFromSet(ls: &Labels) -> Result<Selector> {
         return Ok(rs);
     }
 
-    for (label, value) in &ls.0 {
+    for (label, value) in ls.as_ref() {
         let r = Requirement::New(label, SelectionOp::Equals, vec![value.clone()])?;
         rs.0.push(r);
     }
@@ -1143,7 +1167,7 @@ pub fn SelectorFromValidatedSet(ls: &Labels) -> Selector {
         return rs;
     }
 
-    for (label, value) in &ls.0 {
+    for (label, value) in ls.as_ref() {
         rs.0.push(Requirement { key: label.clone(), op: SelectionOp::Equals, strVals: vec![value.clone()] });
     }
 
