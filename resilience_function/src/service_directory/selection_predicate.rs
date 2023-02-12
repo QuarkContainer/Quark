@@ -17,7 +17,7 @@ use crate::shared::common::*;
 use super::etcd_store::*;
 use super::selector::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Continue {
     pub key: String,
     pub revision: i64,
@@ -83,10 +83,11 @@ impl SelectionPredicate {
 
 pub fn EncodeContinue(key: &str, keyPrefix: &str, revision: i64) -> Result<Continue> {
     let nextKey = match key.strip_prefix(keyPrefix) {
-        Some(n) => return Err(Error::CommonError(format!("unable to encode next field: the key '{}' and key prefix '{}' do not match", n, keyPrefix))),
-        None => key,
+        Some(n) => n,
+        None => return Err(Error::CommonError(format!("unable to encode next field: the key '{}' and key prefix '{}' do not match", key, keyPrefix))),
     };
 
+    //let nextKey = key;
     return Ok(Continue {
         revision: revision,
         key: nextKey.to_owned(),
