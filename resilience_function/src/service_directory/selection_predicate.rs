@@ -42,7 +42,7 @@ impl Continue {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SelectionPredicate {
     pub label: Selector,
     pub field: Selector,
@@ -95,11 +95,18 @@ pub fn EncodeContinue(key: &str, keyPrefix: &str, revision: i64) -> Result<Conti
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum RevisionMatch {
+    None,
     NotOlderThan,
     Exact,
 }
 
-#[derive(Debug)]
+impl Default for RevisionMatch {
+    fn default() -> Self {
+        return Self::None;
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct ListOption {
     // revision provides a resource version constraint to apply to the list operation
 	// as a "not older than" constraint: the result contains data at least as new as the provided
