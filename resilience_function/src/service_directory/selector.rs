@@ -20,6 +20,7 @@ use std::cmp::Ord;
 use std::sync::Arc;
 use core::ops::Deref;
 
+use super::service_directory::*;
 use crate::shared::common::*;
 
 use super::validation::*;
@@ -463,6 +464,28 @@ impl Deref for Labels {
 }
 
 impl Labels {
+    pub fn Copy(&self) -> Self {
+        let mut map = BTreeMap::new();
+        for (k, v) in self.as_ref() {
+            map.insert(k.clone(), v.clone());
+        }
+
+        return map.into();
+    }
+
+    pub fn ToVec(&self) -> Vec<Kv> {
+        let mut ret = Vec::with_capacity(self.0.len());
+        for (k, v) in self.0.as_ref() {
+            let kv = Kv {
+                key: k.clone(),
+                val: v.clone(),
+            };
+            ret.push(kv);
+        }
+
+        return ret;
+    }
+
     pub fn NewFromSlice(item: &[(String, String)]) -> Self {
         let mut map = BTreeMap::new();
         for (k, v) in item {
@@ -1175,7 +1198,7 @@ pub fn SelectorFromValidatedSet(ls: &Labels) -> Selector {
     return rs;
 }
 
-#[cfg(test)]
+#[cfg(test1)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;

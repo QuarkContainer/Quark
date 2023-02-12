@@ -16,6 +16,7 @@ use etcd_client::Error as EtcdError;
 use prost::DecodeError;
 use prost::EncodeError;
 use tonic::Status as TonicStatus;
+use serde_json::Error as SerdeJsonError;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -56,6 +57,7 @@ pub enum Error {
     TonicStatus(TonicStatus),
     StdErr(Box<dyn std::error::Error>),
     TonicTransportErr(tonic::transport::Error),
+    SerdeJsonError(SerdeJsonError),
 }
 
 impl Error {
@@ -85,6 +87,12 @@ impl Error {
             expectRv: expectRv,
             actualRv: actualRv
         })
+    }
+}
+
+impl From<SerdeJsonError> for Error {
+    fn from(item: SerdeJsonError) -> Self {
+        return Self::SerdeJsonError(item)
     }
 }
 

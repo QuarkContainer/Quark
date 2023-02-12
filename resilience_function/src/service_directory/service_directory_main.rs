@@ -17,12 +17,15 @@
 
 //#[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate serde_derive;
 
 pub mod etcd_store;
 pub mod shared;
 pub mod selector;
 pub mod validation;
 pub mod selection_predicate;
+pub mod types;
 
 pub mod service_directory {
     tonic::include_proto!("service_directory"); // The string specified here must match the proto package name
@@ -31,9 +34,9 @@ pub mod service_directory {
 use tonic::{transport::Server, Request, Response, Status};
 use service_directory::service_directory_service_server::{ServiceDirectoryService, ServiceDirectoryServiceServer};
 use service_directory::*;
-use selector::*;
 
 use crate::etcd_store::*;
+use crate::selection_predicate::ListOption;
 use crate::shared::common::Result as QResult;
 
 #[derive(Default)]
@@ -75,26 +78,10 @@ impl ServiceDirectoryService for ServiceDirectoryImpl {
 
 #[tokio::main]
 async fn main() -> QResult<()> {
-    //EtcdStoreTest().await?;
+    EtcdStoreTest().await?;
     //println!("test 1");
-    SelectorTest();
+    //SelectorTest();
     Ok(())
-}
-
-fn ExepctMatch(selector: &str, ls: &Labels) {
-    let lq = match Parse(selector) {
-        Ok(lq) => lq,
-        Err(e) => {
-            assert!(false, "error {:?}", e); 
-            return;
-        }
-    };
-
-    assert!(lq.Match(ls),  "Wanted '{:?}' to match '{:?}', but it did not.", &lq, ls)
-}
-
-pub fn SelectorTest() {
-    ExepctMatch("", &Labels::NewFromSlice(&[("x".to_string(), "y".to_string())]))
 }
 
 async fn gRpcServer() -> QResult<()> {
@@ -124,10 +111,16 @@ async fn EtcdStoreTest() -> QResult<()> {
         val: val.as_bytes().to_vec(),
     };
 
-    store.Create("testkey", &obj.into()).await?;
-    let obj = store.Get("testkey", 0).await?;
+    store.Clear("testkey").await?;
+    
+
+    store.Create("testkey/abc", &obj.into()).await?;
+    let obj = store.Get("testkey/abc", 0).await?;
     println!("obj is {:?}", obj);
 
-    store.Delete("testkey", obj.unwrap().reversion).await?;
+    let objs = store.List("testkey/", &ListOption::default()).await?;
+
+    println!("objs is {:?}", objs);
+    store.Delete("testkey/abc", obj.unwrap().reversion).await?;
     return Ok(())
 }

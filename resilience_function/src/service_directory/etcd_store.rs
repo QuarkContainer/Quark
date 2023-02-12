@@ -14,9 +14,9 @@
 
 
 use std::{sync::Arc, collections::BTreeMap};
-use core::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
-use etcd_client::{Client, Compare, Txn, TxnOp, CompareOp, TxnOpResponse};
+use etcd_client::{Client, Compare, Txn, TxnOp, CompareOp, TxnOpResponse, DeleteOptions};
 use etcd_client::GetOptions;
 use prost::Message;
 
@@ -24,8 +24,8 @@ use crate::{shared::common::*, selector::Labels};
 use super::service_directory::*;
 use super::selection_predicate::*;
 
-#[derive(Debug)]
-pub struct DataObjInner {
+#[derive(Debug, Default)]
+pub struct MetaDataInner {
     pub kind: String,
     pub namespace: String,
     pub name: String,
@@ -34,12 +34,10 @@ pub struct DataObjInner {
     
     // revision number set by etcd
     pub reversion: i64,
-
-    pub obj: Object,
 }
 
-impl From<Object> for DataObjInner {
-    fn from(item: Object) -> Self {
+impl MetaDataInner {
+    pub fn New(item: &Object) -> Self {
         let mut map = BTreeMap::new();
         for l in &item.labels {
             map.insert(l.key.clone(), l.val.clone());
@@ -49,13 +47,67 @@ impl From<Object> for DataObjInner {
         fields.insert("metadata.name".to_owned(), item.name.clone());
         fields.insert("metadata.namespace".to_owned(), item.namespace.clone());
 
-        let inner = DataObjInner {
+        let inner = MetaDataInner {
             kind: item.kind.clone(),
             namespace: item.namespace.clone(),
             name: item.name.clone(),
             lables: map.into(),
             fields: fields.into(),
             reversion: 0,
+        };
+
+        return inner;
+    }
+
+    pub fn Copy(&self) -> Self {
+        return Self {
+            kind: self.kind.clone(),
+            namespace: self.namespace.clone(),
+            name: self.name.clone(),
+            lables: self.lables.Copy(),
+            fields: self.fields.Copy(),
+            reversion: self.reversion,
+        }
+    }
+
+    pub fn ToObject(&self) -> Object {
+        let mut obj = Object::default();
+        obj.kind = self.kind.clone();
+        obj.namespace = self.namespace.clone();
+        obj.name = self.name.clone();
+        obj.labels = self.lables.ToVec();
+
+        return obj;
+    }
+}
+
+#[derive(Debug)]
+pub struct DataObjInner {
+    pub metadata: MetaDataInner,
+
+    pub obj: Object,
+}
+
+impl Deref for DataObjInner {
+    type Target = MetaDataInner;
+
+    fn deref(&self) -> &MetaDataInner {
+        &self.metadata
+    }
+}
+
+impl DerefMut for DataObjInner {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.metadata
+    }
+}
+
+impl From<Object> for DataObjInner {
+    fn from(item: Object) -> Self {
+        let metadata : MetaDataInner = MetaDataInner::New(&item);
+
+        let inner = Self {
+            metadata: metadata,
             obj: item,
         };
 
@@ -63,6 +115,7 @@ impl From<Object> for DataObjInner {
     }
 }
 
+#[derive(Debug)]
 pub struct DataObjList {
     pub objs: Vec<DataObject>,
     pub revision: i64,
@@ -214,10 +267,22 @@ impl EtcdStore {
                     return Ok(actualRev)
                 }
                 _ => {
-                    panic!("Delete get unexpect response")
+                    panic!("create get unexpect response")
                 }
             };
         }
+    }
+
+    pub async fn Clear(&mut self, prefix: &str) -> Result<i64> {
+        let preparedKey = self.PrepareKey(prefix)?;
+        let keyVec: &str = &preparedKey;
+
+        let mut options = DeleteOptions::new();
+        options = options.with_prefix();
+        let resp = self.client.delete(keyVec, Some(options)).await?;
+
+        let rv = resp.header().unwrap().revision();
+        return Ok(rv)
     }
 
     pub async fn Delete(&mut self, key: &str, expectedRev: i64) -> Result<()> {
@@ -343,6 +408,7 @@ impl EtcdStore {
         } else if self.pagingEnable && pred.limit > 0 {
             if fromRv > 0 {
                 match match_ {
+                    RevisionMatch::None => (),
                     RevisionMatch::NotOlderThan => (),
                     RevisionMatch::Exact => {
                         returnedRV = fromRv;
@@ -356,6 +422,7 @@ impl EtcdStore {
         } else {
             if fromRv > 0 {
                 match match_ {
+                    RevisionMatch::None => (),
                     RevisionMatch::NotOlderThan => (),
                     RevisionMatch::Exact => {
                         returnedRV = fromRv;
@@ -363,6 +430,8 @@ impl EtcdStore {
                     }
                 }
             }
+
+            getOption.WithPrefix();
         }
 
         if withRev != 0 {
@@ -463,7 +532,8 @@ pub const MAX_LIMIT : usize = 10000;
 pub struct EtcdOption {
     pub limit: Option<i64>,
     pub endKey: Option<Vec<u8>>,
-    pub revision: Option<i64>
+    pub revision: Option<i64>,
+    pub prefix: bool,
 }
 
 impl EtcdOption {
@@ -477,6 +547,10 @@ impl EtcdOption {
 
     pub fn WithRevision(&mut self, revision: i64) {
         self.revision = Some(revision);
+    }
+
+    pub fn WithPrefix(&mut self) {
+        self.prefix = true;
     }
 
     pub fn ToGetOption(&self) -> GetOptions {
@@ -498,6 +572,46 @@ impl EtcdOption {
             Some(rv) => getOption = getOption.with_revision(rv),
         }
 
+        if self.prefix {
+            getOption = getOption.with_prefix();
+        }
+
         return getOption;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::types::QType;
+
+    use super::*;
+
+    // SeedMultiLevelData creates a set of keys with a multi-level structure, returning a resourceVersion
+    // from before any were created along with the full set of objects that were persisted
+    fn SeedMultiLevelData(store: &EtcdStore) -> Result<()> {
+        // Setup storage with the following structure:
+        //  /
+        //   - first/
+        //  |         - bar
+        //  |
+        //   - second/
+        //  |         - bar
+        //  |         - foo
+        //  |
+        //   - third/
+        //  |         - barfoo
+        //  |         - foo
+        let barFirst = QType::NewPod("first", "bar");
+        let barSecond = QType::NewPod("second", "bar");
+        let fooSecond = QType::NewPod("second", "foo");
+        let barfooThird = QType::NewPod("third", "barfoo");
+        let fooThird = QType::NewPod("third", "foo");
+
+        return Ok(())
+    }
+
+    #[test]
+    fn Test() {
+
     }
 }
