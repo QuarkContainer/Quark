@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//use nix::mount::MsFlags;
+use nix::mount::MsFlags;
 use std::fs::create_dir_all;
 use std::fs;
 use std::{thread, time};
@@ -125,17 +125,15 @@ impl FsImageMounter {
                 //mount_cgroups(m, rootfs, flags, &data, &linux.mount_label, cpath)?;
                 // won't mount cgroup
                 continue;
-            } else if m.destination.starts_with("/dev") {
+            } else if m.destination == "/dev" {
                 // dev can't be read only yet because we have to mount devices
-                /*MountFrom(
+                MountFrom(
                     m,
                     &containerFsRootTarget,
                     flags & !MsFlags::MS_RDONLY,
                     &data,
                     &linux.mount_label,
-                )?;*/
-                // skip /dev mount as Quark implment Dev 
-                continue;
+                )?;
             } else {
                 MountFrom(m, &containerFsRootTarget, flags, &data, &linux.mount_label)?;
             }

@@ -419,16 +419,15 @@ impl SandboxProcess {
                 //mount_cgroups(m, rootfs, flags, &data, &linux.mount_label, cpath)?;
                 // won't mount cgroup
                 continue;
-            } else if m.destination.starts_with("/dev") {
+            } else if m.destination == "/dev" {
                 // dev can't be read only yet because we have to mount devices
-                /*MountFrom(
+                MountFrom(
                     m,
                     &self.Rootfs,
                     flags & !MsFlags::MS_RDONLY,
                     &data,
                     &linux.mount_label,
-                )?;*/
-                continue;
+                )?;
             } else {
                 MountFrom(m, &self.Rootfs, flags, &data, &linux.mount_label)?;
                 //continue;
