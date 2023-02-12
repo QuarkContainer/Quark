@@ -14,11 +14,14 @@
 
 //use serde::{Deserialize, Serialize};
 
+use std::collections::BTreeMap;
+
 use crate::shared::common::*;
 
 use super::etcd_store::*;
 use super::service_directory::*;
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct QType {
     pub metadata: MetaDataInner,
     pub data: QTypes,
@@ -27,8 +30,13 @@ pub struct QType {
 impl QType {
     pub fn NewPod(namespace: &str, name: &str) -> Self {
         let meta = MetaDataInner {
-            namespace: namespace.to_owned(),
-            name: name.to_owned(),
+            namespace: namespace.to_string(),
+            name: name.to_string(),
+            fields: [
+                ("metadata.name".to_owned(), name.to_owned()),
+                ("metadata.namespace".to_owned(), namespace.to_owned()),
+
+            ].into_iter().collect::<BTreeMap<String, String>>().into(),
             ..Default::default()
         };
 
@@ -40,7 +48,7 @@ impl QType {
     }
 
     pub fn StoreKey(&self) -> String {
-        return "/".to_owned() + self.Prefix() + "/" + &self.metadata.namespace + "/" + &self.metadata.name;
+        return self.Prefix().to_string() + "/" + &self.metadata.namespace + "/" + &self.metadata.name;
     }
 
     pub fn New(metadata: MetaDataInner, data: QTypes) -> Self {
@@ -50,23 +58,24 @@ impl QType {
         };
     }
 
-    pub fn Deserialize(obj: Object) -> Result<Self> {
-        let data: QTypes = serde_json::from_slice(&obj.val)?;
-        let metadata: MetaDataInner = MetaDataInner::New(&obj);
+    pub fn Decode(obj: &DataObject) -> Result<Self> {
+        let data: QTypes = serde_json::from_slice(&obj.obj.val)?;
+        let mut metadata: MetaDataInner = MetaDataInner::New(&obj.obj);
+        metadata.reversion = obj.reversion;
         return Ok(Self {
             metadata: metadata,
             data: data,
         })
     }
 
-    pub fn Serialize(&self) -> Result<Object> {
+    pub fn Encode(&self) -> Result<Object> {
         let mut obj = self.metadata.ToObject();
         obj.val = serde_json::to_vec(&self.data)?;
         return Ok(obj)
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Pod {
     // NodeName is a request to schedule this pod onto a specific node.  If it is non-empty,
 	// the scheduler simply schedules this pod onto that node, assuming that it fits resource
@@ -79,7 +88,7 @@ pub struct Pod {
 	pub Hostname: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Podset {
     // NodeName is a request to schedule this pod onto a specific node.  If it is non-empty,
 	// the scheduler simply schedules this pod onto that node, assuming that it fits resource
@@ -93,7 +102,7 @@ pub struct Podset {
 }
 
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum QTypes {
     Pod(Pod),
     Podset(Podset)

@@ -446,7 +446,7 @@ impl Requirement {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Labels(Arc<BTreeMap<String, String>>);
 
 impl From<BTreeMap<String, String>> for Labels {

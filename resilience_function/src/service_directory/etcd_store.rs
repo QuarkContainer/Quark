@@ -24,7 +24,7 @@ use crate::{shared::common::*, selector::Labels};
 use super::service_directory::*;
 use super::selection_predicate::*;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct MetaDataInner {
     pub kind: String,
     pub namespace: String,
@@ -119,16 +119,16 @@ impl From<Object> for DataObjInner {
 pub struct DataObjList {
     pub objs: Vec<DataObject>,
     pub revision: i64,
-    pub next: Option<Continue>,
+    pub continue_: Option<Continue>,
     pub remainCount: i64,
 }
 
 impl DataObjList {
-    pub fn New(objs: Vec<DataObject>, revision: i64, next: Option<Continue>, remainCount: i64) -> Self {
+    pub fn New(objs: Vec<DataObject>, revision: i64, continue_: Option<Continue>, remainCount: i64) -> Self {
         return Self {
             objs: objs,
             revision:  revision,
-            next: next,
+            continue_: continue_,
             remainCount: remainCount,
         }
     }
@@ -190,6 +190,15 @@ async fn test() -> Result<()> {
     Ok(())
 }
 
+impl Object {
+    pub fn Encode(&self) -> Result<Vec<u8>> {
+        let mut buf : Vec<u8> = Vec::new();
+        buf.reserve(self.encoded_len());
+        self.encode(&mut buf)?;
+        return Ok(buf)
+    }
+}
+
 pub const PATH_PREFIX : &str = "/registry";
 
 pub struct EtcdStore {
@@ -210,8 +219,13 @@ impl EtcdStore {
     }
 
     pub fn PrepareKey(&self, key: &str) -> Result<String> {
+        let mut key = key;
         if key == "." || key == "/" {
             return Err(Error::CommonError(format!("invalid key: {}", key)));
+        }
+
+        if key.starts_with("/") {
+            key = key.get(1..).unwrap();
         }
 
         return Ok(format!("{}/{}", self.pathPrefix, key));
@@ -225,6 +239,7 @@ impl EtcdStore {
         if minRevision > actualRevision {
             return Err(Error::NewMinRevsionErr(minRevision, actualRevision))
         }
+        
 
         return Ok(())
     }
@@ -250,7 +265,7 @@ impl EtcdStore {
         return Ok(Some(DataObject(Arc::new(inner))))
     }
 
-    pub async fn Create(&mut self, key: &str, obj: &DataObject) -> Result<i64> {
+    pub async fn Create(&mut self, key: &str, obj: &Object) -> Result<i64> {
         let preparedKey = self.PrepareKey(key)?;
         let keyVec: &str = &preparedKey;
         let txn = Txn::new()
@@ -275,6 +290,7 @@ impl EtcdStore {
 
     pub async fn Clear(&mut self, prefix: &str) -> Result<i64> {
         let preparedKey = self.PrepareKey(prefix)?;
+
         let keyVec: &str = &preparedKey;
 
         let mut options = DeleteOptions::new();
@@ -392,12 +408,13 @@ impl EtcdStore {
         let continueKey;
         if self.pagingEnable && pred.HasContinue() {
             //let (tk, trv) = pred.Continue(&keyPrefix)?; 
+            
             (continueKey, continueRv) = pred.Continue(&keyPrefix)?; 
 
             let rangeEnd = Self::GetPrefixRangeEnd(&keyPrefix);
             getOption.WithRange(rangeEnd);
             preparedKey = continueKey.clone();
-
+            
             // If continueRV > 0, the LIST request needs a specific resource version.
 		    // continueRV==0 is invalid.
 		    // If continueRV < 0, the request is for the latest resource version.
@@ -446,6 +463,7 @@ impl EtcdStore {
         let mut getResp;
 
         loop {
+            //println!("key is {}, option is {:?}", &preparedKey, &getOption);
             let option = getOption.ToGetOption();
             getResp = self.client.get(preparedKey.clone(), Some(option)).await?;
             let actualRev = getResp.header().unwrap().revision();
@@ -508,7 +526,7 @@ impl EtcdStore {
         // we never return a key that the client wouldn't be allowed to see
         if hasMore {
             let newKey = String::from_utf8(lastKey).unwrap();
-            let next = EncodeContinue(&(newKey+ "\x00"), &keyPrefix, returnedRV)?;
+            let next = EncodeContinue(&(newKey+ "\x000"), &keyPrefix, returnedRV)?;
             let mut remainingItemCount = -1;
             if pred.Empty() {
                 remainingItemCount = getResp.count() as i64 - pred.limit as i64;
@@ -582,13 +600,13 @@ impl EtcdOption {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::QType;
-
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use super::super::types::*;
 
     // SeedMultiLevelData creates a set of keys with a multi-level structure, returning a resourceVersion
     // from before any were created along with the full set of objects that were persisted
-    fn SeedMultiLevelData(store: &EtcdStore) -> Result<()> {
+    async fn SeedMultiLevelData(store: &mut EtcdStore) -> Result<(i64, Vec<QType>)> {
         // Setup storage with the following structure:
         //  /
         //   - first/
@@ -607,11 +625,206 @@ mod tests {
         let barfooThird = QType::NewPod("third", "barfoo");
         let fooThird = QType::NewPod("third", "foo");
 
+        struct Test {
+            key: String,
+            obj: QType,
+        }
+
+        let mut tests = [
+            Test {
+                key: barFirst.StoreKey(),
+                obj: barFirst,
+            },
+            Test {
+                key: barSecond.StoreKey(),
+                obj: barSecond,
+            },
+            Test {
+                key: fooSecond.StoreKey(),
+                obj: fooSecond,
+            },
+            Test {
+                key: barfooThird.StoreKey(),
+                obj: barfooThird,
+            },
+            Test {
+                key: fooThird.StoreKey(),
+                obj: fooThird,
+            },
+        ];
+
+        let initRv = store.Clear("pods").await?;
+
+        for t in &mut tests {
+            let rev = store.Create(&t.key, &t.obj.Encode()?).await?;
+            t.obj.metadata.reversion = rev;
+        }
+
+        let mut pods = Vec::new();
+        for t in tests {
+            pods.push(t.obj);
+        }
+
+        return Ok((initRv, pods))
+    }
+
+    pub async fn RunTestListWithoutPaging() -> Result<()> {
+        let mut store = EtcdStore::New("localhost:2379", true).await?;
+
+        let (_, preset) = SeedMultiLevelData(&mut store).await?;
+        
+        let listOptions = ListOption {
+            revision: 0,
+            revisionMatch: RevisionMatch::Exact,
+            predicate: SelectionPredicate { limit:2, ..Default::default() },
+        };
+
+        let list = store.List("/pods/second", &listOptions).await?;
+        assert!(list.continue_.is_some()==false);
+
+        assert!(list.objs.len()==2, "objs is {:#?}", list);
+        for i in 0..list.objs.len() {
+            assert!(preset[i+1]==QType::Decode(&list.objs[i])?, 
+                "expect {:#?}, actual {:#?}", preset[i+1], QType::Decode(&list.objs[i])?);
+        }
+
+        return Ok(())
+    }
+
+    //#[test]
+    pub fn RunTestListWithoutPagingSync() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build().unwrap();
+        
+        rt.block_on(RunTestListWithoutPaging()).unwrap();
+    }
+
+    pub async fn RunTestListContinuation() -> Result<()> {
+        // Setup storage with the following structure:
+        //  /
+        //   - first/
+        //  |         - bar
+        //  |
+        //   - second/
+        //  |         - bar
+        //  |         - foo
+        let barFirst = QType::NewPod("first", "bar");
+        let barSecond = QType::NewPod("second", "bar");
+        let fooSecond = QType::NewPod("second", "foo");
+        
+        struct Test {
+            key: String,
+            obj: QType,
+        }
+
+        let mut tests = [
+            Test {
+                key: barFirst.StoreKey(),
+                obj: barFirst,
+            },
+            Test {
+                key: barSecond.StoreKey(),
+                obj: barSecond,
+            },
+            Test {
+                key: fooSecond.StoreKey(),
+                obj: fooSecond,
+            },
+        ];
+
+        let mut store = EtcdStore::New("localhost:2379", true).await?;
+
+        let _initRv = store.Clear("pods").await?;
+
+        for t in &mut tests {
+            let rev = store.Create(&t.key, &t.obj.Encode()?).await?;
+            t.obj.metadata.reversion = rev;
+        }
+
+        let mut preset = Vec::new();
+        for t in tests {
+            preset.push(t.obj);
+        }
+
+        let listOptions = ListOption {
+            revision: 0,
+            revisionMatch: RevisionMatch::None,
+            predicate: SelectionPredicate { limit:1, ..Default::default() },
+        };
+
+        let mut list = store.List("/pods", &listOptions).await?;
+        
+        assert!(list.objs.len()==1, "objs is {:#?}", list);
+        assert!(list.continue_.is_some()==true);
+        for i in 0..list.objs.len() {
+            assert!(preset[i]==QType::Decode(&list.objs[i])?, 
+                "expect {:#?}, actual {:#?}", preset[i+1], QType::Decode(&list.objs[i])?);
+        }
+
+        let continueFromSecondItem = list.continue_.take().unwrap();
+
+        let listOptions = ListOption {
+            revision: 0,
+            revisionMatch: RevisionMatch::None,
+            predicate: SelectionPredicate { 
+                limit:0, 
+                continue_: Some(continueFromSecondItem.clone()),
+                ..Default::default()
+            },
+        };
+
+        let list = store.List("/pods", &listOptions).await?;
+
+        assert!(list.continue_.is_some()==false, "list is {:#?}", &list);
+        for i in 0..list.objs.len() {
+            assert!(preset[i+1]==QType::Decode(&list.objs[i])?, 
+                "expect {:#?}, actual {:#?}", preset[i+1], QType::Decode(&list.objs[i])?);
+        }
+
+        let listOptions = ListOption {
+            revision: 0,
+            revisionMatch: RevisionMatch::None,
+            predicate: SelectionPredicate { 
+                limit:1, 
+                continue_: Some(continueFromSecondItem.clone()),
+                ..Default::default()
+            },
+        };
+
+        let mut list = store.List("/pods", &listOptions).await?;
+
+        assert!(list.continue_.is_some()==true, "list is {:#?}", &list);
+        for i in 0..list.objs.len() {
+            assert!(preset[i+1]==QType::Decode(&list.objs[i])?, 
+                "expect {:#?}, actual {:#?}", preset[i+1], QType::Decode(&list.objs[i])?);
+        }
+
+        let listOptions = ListOption {
+            revision: 0,
+            revisionMatch: RevisionMatch::None,
+            predicate: SelectionPredicate { 
+                limit:1, 
+                continue_: list.continue_.take(),
+                ..Default::default()
+            },
+        };
+
+        let list = store.List("/pods", &listOptions).await?;
+        assert!(list.continue_.is_some()==false, "list is {:#?}", &list);
+        for i in 0..list.objs.len() {
+            assert!(preset[i+2]==QType::Decode(&list.objs[i])?, 
+                "expect {:#?}, actual {:#?}", preset[i+1], QType::Decode(&list.objs[i])?);
+        }
         return Ok(())
     }
 
     #[test]
-    fn Test() {
-
+    pub fn RunTestListContinuationSync() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build().unwrap();
+        
+        rt.block_on(RunTestListContinuation()).unwrap();
     }
 }
