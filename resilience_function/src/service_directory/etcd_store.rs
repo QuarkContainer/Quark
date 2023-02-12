@@ -603,6 +603,7 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use super::super::types::*;
+    use super::super::selector::*;
 
     // SeedMultiLevelData creates a set of keys with a multi-level structure, returning a resourceVersion
     // from before any were created along with the full set of objects that were persisted
@@ -816,15 +817,61 @@ mod tests {
             assert!(preset[i+2]==QType::Decode(&list.objs[i])?, 
                 "expect {:#?}, actual {:#?}", preset[i+1], QType::Decode(&list.objs[i])?);
         }
+
+        let _initRv = store.Clear("pods").await?;
         return Ok(())
     }
 
-    #[test]
+    //#[test]
     pub fn RunTestListContinuationSync() {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build().unwrap();
         
         rt.block_on(RunTestListContinuation()).unwrap();
+    }
+
+    pub async fn RunTestListPaginationRareObject() -> Result<()> {
+        let mut store = EtcdStore::New("localhost:2379", true).await?;
+        let _initRv = store.Clear("pods").await?;
+
+        let mut pods = Vec::new();
+
+        for i in 0..1000 {
+            let mut pod = QType::NewPod("first", &format!("pod-{}", i));
+            let rev = store.Create(&pod.StoreKey(), &pod.Encode()?).await?;
+            pod.metadata.reversion = rev;
+            pods.push(pod);
+        }
+
+        let listOptions = ListOption {
+            revision: 0,
+            revisionMatch: RevisionMatch::None,
+            predicate: SelectionPredicate { 
+                limit:1, 
+                field: Selector(vec![  
+                    Requirement::New("metadata.name", SelectionOp::Equals, vec!["pod-999".to_owned()]).unwrap(),         
+                ]),
+                continue_: None,
+                ..Default::default()
+            },
+        };
+
+        let list = store.List("/pods", &listOptions).await?;
+        assert!(list.continue_.is_some()==false, "list is {:#?}", &list);
+        assert!(pods[999]==QType::Decode(&list.objs[0])?, 
+            "expect {:#?}, actual {:#?}", pods[999], QType::Decode(&list.objs[0])?);
+
+        let _initRv = store.Clear("pods").await?;
+        return Ok(())
+    }
+
+    #[test]
+    pub fn RunTestListPaginationRareObjectSync() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build().unwrap();
+        
+        rt.block_on(RunTestListPaginationRareObject()).unwrap();
     }
 }

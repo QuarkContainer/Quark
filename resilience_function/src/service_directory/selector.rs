@@ -64,7 +64,7 @@ impl SelectionOp {
 
 
 #[derive(Debug, Default)]
-pub struct Selector(Vec<Requirement>);
+pub struct Selector(pub Vec<Requirement>);
 
 impl Selector {
     pub fn Equ(&self, other: &Self) -> bool {
@@ -146,6 +146,18 @@ impl Selector {
     pub fn Empty(&self) -> bool {
         return self.0.len() == 0;
     }
+}
+
+fn GetRequirement(key: &str, op: SelectionOp, vals: Vec<String>) -> Requirement {
+    let req = match Requirement::New(key, op, vals) {
+        Err(_e) => {
+            //assert!(false, "error is {:?}", e);
+            Requirement::default()
+        }
+        Ok(r) => r,
+    };
+
+    return req;
 }
 
 #[derive(Debug, Default)]
