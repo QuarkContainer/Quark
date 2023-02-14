@@ -20,9 +20,10 @@ use etcd_client::{Client, Compare, Txn, TxnOp, CompareOp, TxnOpResponse, DeleteO
 use etcd_client::GetOptions;
 use prost::Message;
 
+use crate::etcd_client::EtcdClient;
 use crate::{shared::common::*, selector::Labels};
-use super::service_directory::*;
-use super::selection_predicate::*;
+use crate::service_directory::*;
+use crate::selection_predicate::*;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct MetaDataInner {
@@ -81,7 +82,7 @@ impl MetaDataInner {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct DataObjInner {
     pub metadata: MetaDataInner,
 
@@ -134,7 +135,7 @@ impl DataObjList {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct DataObject(Arc<DataObjInner>);
 
 impl From<Object> for DataObject {
@@ -202,7 +203,7 @@ impl Object {
 pub const PATH_PREFIX : &str = "/registry";
 
 pub struct EtcdStore {
-    pub client: Client,
+    pub client: EtcdClient,
     pub pathPrefix: String,
     pub pagingEnable: bool,
 }
@@ -212,7 +213,7 @@ impl EtcdStore {
         let client = Client::connect([addr], None).await?;
 
         return Ok(Self {
-            client: client,
+            client: EtcdClient::New(client),
             pathPrefix: PATH_PREFIX.to_string(),
             pagingEnable,
         })
@@ -246,7 +247,7 @@ impl EtcdStore {
 
     pub async fn Get(&mut self, key: &str, minRevision: i64) -> Result<Option<DataObject>> {
         let preparedKey = self.PrepareKey(key)?;
-        let getResp = self.client.get(preparedKey, None).await?;
+        let getResp = self.client.lock().await.get(preparedKey, None).await?;
         let kvs = getResp.kvs();
         let actualRev = getResp.header().unwrap().revision();
         Self::ValidateMinimumResourceVersion(minRevision, actualRev)?;
@@ -272,7 +273,7 @@ impl EtcdStore {
             .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, 0)])
             .and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)]);
 
-        let resp = self.client.txn(txn).await?;
+        let resp = self.client.lock().await.txn(txn).await?;
         if !resp.succeeded() {
             return Err(Error::NewNewKeyExistsErr(preparedKey, 0));
         } else {
@@ -295,7 +296,7 @@ impl EtcdStore {
 
         let mut options = DeleteOptions::new();
         options = options.with_prefix();
-        let resp = self.client.delete(keyVec, Some(options)).await?;
+        let resp = self.client.lock().await.delete(keyVec, Some(options)).await?;
 
         let rv = resp.header().unwrap().revision();
         return Ok(rv)
@@ -308,7 +309,7 @@ impl EtcdStore {
             .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, expectedRev)])
             .and_then(vec![TxnOp::delete(keyVec, None)])
             .or_else(vec![TxnOp::get(keyVec, None)]);
-        let resp = self.client.txn(txn).await?;
+        let resp = self.client.lock().await.txn(txn).await?;
         if !resp.succeeded() {
             match &resp.op_responses()[0] {
                 TxnOpResponse::Get(getresp) => {
@@ -330,7 +331,7 @@ impl EtcdStore {
             .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, expectedRev)])
             .and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)])
             .or_else(vec![TxnOp::get(keyVec, None)]);
-        let resp = self.client.txn(txn).await?;
+        let resp = self.client.lock().await.txn(txn).await?;
         if !resp.succeeded() {
             match &resp.op_responses()[0] {
                 TxnOpResponse::Get(getresp) => {
@@ -465,7 +466,7 @@ impl EtcdStore {
         loop {
             //println!("key is {}, option is {:?}", &preparedKey, &getOption);
             let option = getOption.ToGetOption();
-            getResp = self.client.get(preparedKey.clone(), Some(option)).await?;
+            getResp = self.client.lock().await.get(preparedKey.clone(), Some(option)).await?;
             let actualRev = getResp.header().unwrap().revision();
             Self::ValidateMinimumResourceVersion(revision, actualRev)?;
 

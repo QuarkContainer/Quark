@@ -17,6 +17,9 @@ use prost::DecodeError;
 use prost::EncodeError;
 use tonic::Status as TonicStatus;
 use serde_json::Error as SerdeJsonError;
+use std::string::FromUtf8Error;
+
+use crate::watch::WatchEvent;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -46,6 +49,7 @@ pub struct UpdateRevNotMatchErr {
 
 #[derive(Debug)]
 pub enum Error {
+    ContextCancel,
     EtcdError(EtcdError),
     CommonError(String),
     MinRevsionErr(MinRevsionErr),
@@ -58,6 +62,8 @@ pub enum Error {
     StdErr(Box<dyn std::error::Error>),
     TonicTransportErr(tonic::transport::Error),
     SerdeJsonError(SerdeJsonError),
+    MpscSendErrWatchEvent(tokio::sync::mpsc::error::SendError<WatchEvent>),
+    FromUtf8Error(FromUtf8Error),
 }
 
 impl Error {
@@ -87,6 +93,18 @@ impl Error {
             expectRv: expectRv,
             actualRv: actualRv
         })
+    }
+}
+
+impl From<FromUtf8Error> for Error {
+    fn from(item: FromUtf8Error) -> Self {
+        return Self::FromUtf8Error(item)
+    }
+}
+
+impl From<tokio::sync::mpsc::error::SendError<WatchEvent>> for Error {
+    fn from(item: tokio::sync::mpsc::error::SendError<WatchEvent>) -> Self {
+        return Self::MpscSendErrWatchEvent(item)
     }
 }
 
