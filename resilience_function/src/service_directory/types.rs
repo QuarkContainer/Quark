@@ -27,6 +27,15 @@ pub struct QType {
     pub data: QTypes,
 }
 
+impl DeepCopy for QType {
+    fn DeepCopy(&self) -> Self {
+        return Self {
+            metadata: self.metadata.Copy(),
+            data: self.data.DeepCopy(),
+        }
+    }
+}
+
 impl QType {
     pub fn NewPod(namespace: &str, name: &str) -> Self {
         let meta = MetaDataInner {
@@ -41,6 +50,21 @@ impl QType {
         };
 
         return Self::New(meta, QTypes::Pod(Pod::default()));
+    }
+
+    pub fn NewPodWithData(namespace: &str, name: &str, pod: Pod) -> Self {
+        let meta = MetaDataInner {
+            namespace: namespace.to_string(),
+            name: name.to_string(),
+            fields: [
+                ("metadata.name".to_owned(), name.to_owned()),
+                ("metadata.namespace".to_owned(), namespace.to_owned()),
+
+            ].into_iter().collect::<BTreeMap<String, String>>().into(),
+            ..Default::default()
+        };
+
+        return Self::New(meta, QTypes::Pod(pod));
     }
 
     pub fn Prefix(&self) -> &str {
@@ -59,7 +83,7 @@ impl QType {
     }
 
     pub fn Decode(obj: &DataObject) -> Result<Self> {
-        let data: QTypes = serde_json::from_slice(&obj.obj.val)?;
+        let data: QTypes = serde_json::from_str(&obj.obj.val)?;
         let mut metadata: MetaDataInner = MetaDataInner::New(&obj.obj);
         metadata.reversion = obj.reversion;
         return Ok(Self {
@@ -70,9 +94,20 @@ impl QType {
 
     pub fn Encode(&self) -> Result<Object> {
         let mut obj = self.metadata.ToObject();
-        obj.val = serde_json::to_vec(&self.data)?;
+        obj.val = serde_json::to_string(&self.data)?;
         return Ok(obj)
     }
+
+    pub fn DataObj(&self) -> Result<DataObject> {
+        let obj = self.Encode()?;
+        let mut dataObj : DataObjInner = obj.into();
+        dataObj.reversion = self.metadata.reversion;
+        return Ok(dataObj.into())
+    }
+}
+
+pub trait DeepCopy {
+    fn DeepCopy(&self) -> Self;
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -88,6 +123,15 @@ pub struct Pod {
 	pub Hostname: String,
 }
 
+impl DeepCopy for Pod {
+    fn DeepCopy(&self) -> Self {
+        return Self {
+            NodeName: self.NodeName.clone(),
+            Hostname: self.Hostname.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Podset {
     // NodeName is a request to schedule this pod onto a specific node.  If it is non-empty,
@@ -101,11 +145,29 @@ pub struct Podset {
 	pub Hostname: String,
 }
 
+impl DeepCopy for Podset {
+    fn DeepCopy(&self) -> Self {
+        return Self {
+            NodeName: self.NodeName.clone(),
+            Hostname: self.Hostname.clone(),
+        }
+    }
+}
+
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum QTypes {
     Pod(Pod),
     Podset(Podset)
+}
+
+impl DeepCopy for QTypes {
+    fn DeepCopy(&self) -> Self {
+        match self {
+            Self::Pod(item) => return Self::Pod(item.DeepCopy()),
+            Self::Podset(item) => Self::Podset(item.DeepCopy()),
+        }
+    }
 }
 
 impl QTypes {

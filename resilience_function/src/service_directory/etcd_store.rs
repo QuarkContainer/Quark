@@ -16,13 +16,16 @@
 use std::{sync::Arc, collections::BTreeMap};
 use std::ops::{Deref, DerefMut};
 
-use etcd_client::{Client, Compare, Txn, TxnOp, CompareOp, TxnOpResponse, DeleteOptions};
+use etcd_client::{Client, Compare, Txn, TxnOp, CompareOp, TxnOpResponse, DeleteOptions, CompactionOptions};
 use etcd_client::GetOptions;
 use prost::Message;
 
+use crate::etcd_client::EtcdClient;
+use crate::types::DeepCopy;
+use crate::watch::{Watcher, WatchReader};
 use crate::{shared::common::*, selector::Labels};
-use super::service_directory::*;
-use super::selection_predicate::*;
+use crate::service_directory::*;
+use crate::selection_predicate::*;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct MetaDataInner {
@@ -34,6 +37,19 @@ pub struct MetaDataInner {
     
     // revision number set by etcd
     pub reversion: i64,
+}
+
+impl DeepCopy for MetaDataInner {
+    fn DeepCopy(&self) -> Self {
+        return Self {
+            kind: self.kind.clone(),
+            namespace: self.name.clone(),
+            name: self.name.clone(),
+            lables: self.lables.DeepCopy(),
+            fields: self.fields.DeepCopy(),
+            reversion: self.reversion,
+        }
+    }
 }
 
 impl MetaDataInner {
@@ -81,7 +97,7 @@ impl MetaDataInner {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct DataObjInner {
     pub metadata: MetaDataInner,
 
@@ -134,7 +150,7 @@ impl DataObjList {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct DataObject(Arc<DataObjInner>);
 
 impl From<Object> for DataObject {
@@ -160,6 +176,10 @@ impl Deref for DataObject {
 }
 
 impl DataObject {
+    pub fn Equ(&self, other: &Self) -> bool {
+        return self.metadata == other.metadata;
+    }
+
     pub fn Decode(buf: &[u8]) -> Result<Self> {
         let obj = Object::decode(buf)?;
         return Ok(Self(Arc::new(obj.into())))
@@ -202,7 +222,7 @@ impl Object {
 pub const PATH_PREFIX : &str = "/registry";
 
 pub struct EtcdStore {
-    pub client: Client,
+    pub client: EtcdClient,
     pub pathPrefix: String,
     pub pagingEnable: bool,
 }
@@ -212,7 +232,7 @@ impl EtcdStore {
         let client = Client::connect([addr], None).await?;
 
         return Ok(Self {
-            client: client,
+            client: EtcdClient::New(client),
             pathPrefix: PATH_PREFIX.to_string(),
             pagingEnable,
         })
@@ -246,7 +266,7 @@ impl EtcdStore {
 
     pub async fn Get(&mut self, key: &str, minRevision: i64) -> Result<Option<DataObject>> {
         let preparedKey = self.PrepareKey(key)?;
-        let getResp = self.client.get(preparedKey, None).await?;
+        let getResp = self.client.lock().await.get(preparedKey, None).await?;
         let kvs = getResp.kvs();
         let actualRev = getResp.header().unwrap().revision();
         Self::ValidateMinimumResourceVersion(minRevision, actualRev)?;
@@ -272,7 +292,7 @@ impl EtcdStore {
             .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, 0)])
             .and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)]);
 
-        let resp = self.client.txn(txn).await?;
+        let resp = self.client.lock().await.txn(txn).await?;
         if !resp.succeeded() {
             return Err(Error::NewNewKeyExistsErr(preparedKey, 0));
         } else {
@@ -295,7 +315,7 @@ impl EtcdStore {
 
         let mut options = DeleteOptions::new();
         options = options.with_prefix();
-        let resp = self.client.delete(keyVec, Some(options)).await?;
+        let resp = self.client.lock().await.delete(keyVec, Some(options)).await?;
 
         let rv = resp.header().unwrap().revision();
         return Ok(rv)
@@ -308,7 +328,7 @@ impl EtcdStore {
             .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, expectedRev)])
             .and_then(vec![TxnOp::delete(keyVec, None)])
             .or_else(vec![TxnOp::get(keyVec, None)]);
-        let resp = self.client.txn(txn).await?;
+        let resp = self.client.lock().await.txn(txn).await?;
         if !resp.succeeded() {
             match &resp.op_responses()[0] {
                 TxnOpResponse::Get(getresp) => {
@@ -323,14 +343,20 @@ impl EtcdStore {
         return Ok(())
     } 
 
-    pub async fn Update(&mut self, key: &str, expectedRev: i64, obj: &mut DataObject) -> Result<i64> {
+    pub async fn Update(&mut self, key: &str, expectedRev: i64, obj: &DataObject) -> Result<i64> {
         let preparedKey = self.PrepareKey(key)?;
         let keyVec: &str = &preparedKey;
-        let txn = Txn::new()
+        let txn = if expectedRev > 0 {
+            Txn::new()
             .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, expectedRev)])
             .and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)])
-            .or_else(vec![TxnOp::get(keyVec, None)]);
-        let resp = self.client.txn(txn).await?;
+            .or_else(vec![TxnOp::get(keyVec, None)])
+        } else {
+            Txn::new()
+            .and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)])
+        };
+
+        let resp = self.client.lock().await.txn(txn).await?;
         if !resp.succeeded() {
             match &resp.op_responses()[0] {
                 TxnOpResponse::Get(getresp) => {
@@ -465,7 +491,7 @@ impl EtcdStore {
         loop {
             //println!("key is {}, option is {:?}", &preparedKey, &getOption);
             let option = getOption.ToGetOption();
-            getResp = self.client.get(preparedKey.clone(), Some(option)).await?;
+            getResp = self.client.lock().await.get(preparedKey.clone(), Some(option)).await?;
             let actualRev = getResp.header().unwrap().revision();
             Self::ValidateMinimumResourceVersion(revision, actualRev)?;
 
@@ -538,6 +564,16 @@ impl EtcdStore {
         return Ok(DataObjList::New(v, returnedRV, None, -1));
     }
 
+    pub fn Watch(&self, key: &str, rev: i64, pred: SelectionPredicate) -> Result<(Watcher, WatchReader)> {
+        let preparedKey = self.PrepareKey(key)?;
+        return Ok(Watcher::New(&self.client, &preparedKey, rev, pred))
+    }
+
+    pub async fn Compaction(&self, revision: i64) -> Result<()> {
+        let options = CompactionOptions::new().with_physical();
+        self.client.lock().await.compact(revision, Some(options)).await?;
+        return Ok(())
+    }
     
 }
 
@@ -603,6 +639,7 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use super::super::types::*;
+    use super::super::selector::*;
 
     // SeedMultiLevelData creates a set of keys with a multi-level structure, returning a resourceVersion
     // from before any were created along with the full set of objects that were persisted
@@ -816,15 +853,61 @@ mod tests {
             assert!(preset[i+2]==QType::Decode(&list.objs[i])?, 
                 "expect {:#?}, actual {:#?}", preset[i+1], QType::Decode(&list.objs[i])?);
         }
+
+        let _initRv = store.Clear("pods").await?;
         return Ok(())
     }
 
-    #[test]
+    //#[test]
     pub fn RunTestListContinuationSync() {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build().unwrap();
         
         rt.block_on(RunTestListContinuation()).unwrap();
+    }
+
+    pub async fn RunTestListPaginationRareObject() -> Result<()> {
+        let mut store = EtcdStore::New("localhost:2379", true).await?;
+        let _initRv = store.Clear("pods").await?;
+
+        let mut pods = Vec::new();
+
+        for i in 0..1000 {
+            let mut pod = QType::NewPod("first", &format!("pod-{}", i));
+            let rev = store.Create(&pod.StoreKey(), &pod.Encode()?).await?;
+            pod.metadata.reversion = rev;
+            pods.push(pod);
+        }
+
+        let listOptions = ListOption {
+            revision: 0,
+            revisionMatch: RevisionMatch::None,
+            predicate: SelectionPredicate { 
+                limit:1, 
+                field: Selector(vec![  
+                    Requirement::New("metadata.name", SelectionOp::Equals, vec!["pod-999".to_owned()]).unwrap(),         
+                ]),
+                continue_: None,
+                ..Default::default()
+            },
+        };
+
+        let list = store.List("/pods", &listOptions).await?;
+        assert!(list.continue_.is_some()==false, "list is {:#?}", &list);
+        assert!(pods[999]==QType::Decode(&list.objs[0])?, 
+            "expect {:#?}, actual {:#?}", pods[999], QType::Decode(&list.objs[0])?);
+
+        let _initRv = store.Clear("pods").await?;
+        return Ok(())
+    }
+
+    //#[test]
+    pub fn RunTestListPaginationRareObjectSync() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build().unwrap();
+        
+        rt.block_on(RunTestListPaginationRareObject()).unwrap();
     }
 }

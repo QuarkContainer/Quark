@@ -26,6 +26,8 @@ pub mod selector;
 pub mod validation;
 pub mod selection_predicate;
 pub mod types;
+pub mod watch;
+pub mod etcd_client;
 
 pub mod service_directory {
     tonic::include_proto!("service_directory"); // The string specified here must match the proto package name
@@ -111,7 +113,7 @@ async fn EtcdStoreTest() -> QResult<()> {
         name: "test_name".into(),
         labels: Vec::new(), 
         annotations: Vec::new(),
-        val: val.as_bytes().to_vec(),
+        val: val.to_string(),
     };
 
     store.Clear("testkey").await?;

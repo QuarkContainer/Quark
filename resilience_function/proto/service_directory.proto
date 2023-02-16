@@ -43,7 +43,7 @@ message Object {
     repeated KV labels = 5;
     repeated KV annotations = 6;
 
-    bytes val = 7;
+    string val = 7;
 }
 
 message PutRequestMessage {

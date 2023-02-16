@@ -22,6 +22,7 @@ use core::ops::Deref;
 
 use super::service_directory::*;
 use crate::shared::common::*;
+use crate::types::DeepCopy;
 
 use super::validation::*;
 
@@ -64,9 +65,13 @@ impl SelectionOp {
 
 
 #[derive(Debug, Default)]
-pub struct Selector(Vec<Requirement>);
+pub struct Selector(pub Vec<Requirement>);
 
 impl Selector {
+    pub fn Parse(selector: &str) -> Result<Self> {
+        return Parse(selector)
+    }
+
     pub fn Equ(&self, other: &Self) -> bool {
         if self.0.len() != other.0.len() {
             return false;
@@ -146,6 +151,18 @@ impl Selector {
     pub fn Empty(&self) -> bool {
         return self.0.len() == 0;
     }
+}
+
+fn GetRequirement(key: &str, op: SelectionOp, vals: Vec<String>) -> Requirement {
+    let req = match Requirement::New(key, op, vals) {
+        Err(_e) => {
+            //assert!(false, "error is {:?}", e);
+            Requirement::default()
+        }
+        Ok(r) => r,
+    };
+
+    return req;
 }
 
 #[derive(Debug, Default)]
@@ -460,6 +477,12 @@ impl Deref for Labels {
 
     fn deref(&self) -> &Arc<BTreeMap<String, String>> {
         &self.0
+    }
+}
+
+impl DeepCopy for Labels {
+    fn DeepCopy(&self) -> Self {
+        return self.Copy();
     }
 }
 
