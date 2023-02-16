@@ -113,7 +113,7 @@ async fn EtcdStoreTest() -> QResult<()> {
         name: "test_name".into(),
         labels: Vec::new(), 
         annotations: Vec::new(),
-        val: val.as_bytes().to_vec(),
+        val: val.to_string(),
     };
 
     store.Clear("testkey").await?;

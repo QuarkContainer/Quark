@@ -66,6 +66,8 @@ pub enum Error {
     FromUtf8Error(FromUtf8Error),
 }
 
+unsafe impl core::marker::Send for Error {}
+
 impl Error {
     pub fn NewMinRevsionErr(minRevision: i64, actualRevision: i64) -> Self {
         return Self::MinRevsionErr(MinRevsionErr { 

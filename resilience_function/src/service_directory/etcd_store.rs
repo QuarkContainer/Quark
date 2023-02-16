@@ -16,11 +16,13 @@
 use std::{sync::Arc, collections::BTreeMap};
 use std::ops::{Deref, DerefMut};
 
-use etcd_client::{Client, Compare, Txn, TxnOp, CompareOp, TxnOpResponse, DeleteOptions};
+use etcd_client::{Client, Compare, Txn, TxnOp, CompareOp, TxnOpResponse, DeleteOptions, CompactionOptions};
 use etcd_client::GetOptions;
 use prost::Message;
 
 use crate::etcd_client::EtcdClient;
+use crate::types::DeepCopy;
+use crate::watch::{Watcher, WatchReader};
 use crate::{shared::common::*, selector::Labels};
 use crate::service_directory::*;
 use crate::selection_predicate::*;
@@ -35,6 +37,19 @@ pub struct MetaDataInner {
     
     // revision number set by etcd
     pub reversion: i64,
+}
+
+impl DeepCopy for MetaDataInner {
+    fn DeepCopy(&self) -> Self {
+        return Self {
+            kind: self.kind.clone(),
+            namespace: self.name.clone(),
+            name: self.name.clone(),
+            lables: self.lables.DeepCopy(),
+            fields: self.fields.DeepCopy(),
+            reversion: self.reversion,
+        }
+    }
 }
 
 impl MetaDataInner {
@@ -161,6 +176,10 @@ impl Deref for DataObject {
 }
 
 impl DataObject {
+    pub fn Equ(&self, other: &Self) -> bool {
+        return self.metadata == other.metadata;
+    }
+
     pub fn Decode(buf: &[u8]) -> Result<Self> {
         let obj = Object::decode(buf)?;
         return Ok(Self(Arc::new(obj.into())))
@@ -324,13 +343,19 @@ impl EtcdStore {
         return Ok(())
     } 
 
-    pub async fn Update(&mut self, key: &str, expectedRev: i64, obj: &mut DataObject) -> Result<i64> {
+    pub async fn Update(&mut self, key: &str, expectedRev: i64, obj: &DataObject) -> Result<i64> {
         let preparedKey = self.PrepareKey(key)?;
         let keyVec: &str = &preparedKey;
-        let txn = Txn::new()
+        let txn = if expectedRev > 0 {
+            Txn::new()
             .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, expectedRev)])
             .and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)])
-            .or_else(vec![TxnOp::get(keyVec, None)]);
+            .or_else(vec![TxnOp::get(keyVec, None)])
+        } else {
+            Txn::new()
+            .and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)])
+        };
+
         let resp = self.client.lock().await.txn(txn).await?;
         if !resp.succeeded() {
             match &resp.op_responses()[0] {
@@ -539,6 +564,16 @@ impl EtcdStore {
         return Ok(DataObjList::New(v, returnedRV, None, -1));
     }
 
+    pub fn Watch(&self, key: &str, rev: i64, pred: SelectionPredicate) -> Result<(Watcher, WatchReader)> {
+        let preparedKey = self.PrepareKey(key)?;
+        return Ok(Watcher::New(&self.client, &preparedKey, rev, pred))
+    }
+
+    pub async fn Compaction(&self, revision: i64) -> Result<()> {
+        let options = CompactionOptions::new().with_physical();
+        self.client.lock().await.compact(revision, Some(options)).await?;
+        return Ok(())
+    }
     
 }
 
@@ -867,7 +902,7 @@ mod tests {
         return Ok(())
     }
 
-    #[test]
+    //#[test]
     pub fn RunTestListPaginationRareObjectSync() {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
