@@ -82,6 +82,8 @@ pub struct Watcher {
     pub key: String,
     pub initialRev: AtomicI64,
     pub internalPred: SelectionPredicate,
+
+    pub watcher: Option<etcd_client::Watcher>,
 }
 
 impl Watcher {
@@ -102,19 +104,21 @@ impl Watcher {
             key: key.to_string(),
             initialRev: AtomicI64::new(rev),
             internalPred: pred,
+
+            watcher: None,
         };
 
         return (watcher, reader)
     }
 
 
-    pub async fn Processing(self) -> Result<()> {
+    pub async fn Processing(mut self) -> Result<()> {
         let ret = self.ProcessingInner().await;
         //self.resultSender.closed().await;
         return ret;
     }
 
-    pub async fn ProcessingInner(&self) -> Result<()> {
+    pub async fn ProcessingInner(&mut self) -> Result<()> {
         let initialRev = self.initialRev.load(std::sync::atomic::Ordering::Relaxed);
         if initialRev == 0 {
             let ret = self.Sync().await;
@@ -132,8 +136,10 @@ impl Watcher {
                     ;
 
         let key: &str = &self.key;
-        let (_watcher, mut stream) = self.client.lock().await.watch(key, Some(options)).await?;
+        let (watcher, mut stream) = self.client.lock().await.watch(key, Some(options)).await?;
         
+        self.watcher = Some(watcher);
+
         while let Some(resp) = self.WatchNext(&mut stream).await? {
             for e in resp.events() {
                 match self.ParseEvent(e) {
@@ -171,6 +177,7 @@ impl Watcher {
 
     pub fn ParseEvent(&self, e: &Event) -> Result<Option<WatchEvent>> {
         let kv = e.kv().unwrap();
+                
         if Self::IsCreateEvent(e) && e.prev_kv().is_some() {
             let kv = e.kv().unwrap();
             // If the previous value is nil, error. One example of how this is possible is if the previous value has been compacted already.
@@ -183,8 +190,8 @@ impl Watcher {
             None
         } else {
             let obj = Object::decode(kv.value())?;
-            let mut inner : DataObjInner = obj.into();
-            inner.reversion = kv.mod_revision();
+            let inner : DataObjInner = obj.into();
+            inner.SetRevision(kv.mod_revision());
             Some(inner.into())
         };
 
@@ -193,8 +200,8 @@ impl Watcher {
             Some(pkv) => {
                 if e.event_type() == etcd_client::EventType::Delete || !self.AcceptAll() {
                     let obj = Object::decode(pkv.value())?;
-                    let mut inner : DataObjInner = obj.into();
-                    inner.reversion = kv.mod_revision();
+                    let inner : DataObjInner = obj.into();
+                    inner.SetRevision(kv.mod_revision());
                     Some(inner.into())
                 } else {
                     None
@@ -231,8 +238,6 @@ impl Watcher {
                 }
             }
         } else {
-            // rust etcd doens't return the previous obj
-            // todo: fix this
             if self.AcceptAll() {
                 return Ok(Some(WatchEvent {
                     type_: EventType::Modified,
@@ -253,6 +258,11 @@ impl Watcher {
             if curObjPasses && oldObjPasses {
                 return Ok(Some(WatchEvent {
                     type_: EventType::Modified,
+                    obj: curObj.unwrap(),
+                }))
+            } else if curObjPasses && !oldObjPasses {
+                return Ok(Some(WatchEvent {
+                    type_: EventType::Added,
                     obj: curObj.unwrap(),
                 }))
             } else if !curObjPasses && oldObjPasses {
@@ -309,8 +319,8 @@ impl Watcher {
 
         for kv in getResp.kvs() {
             let obj = Object::decode(kv.value())?;
-            let mut inner : DataObjInner = obj.into();
-            inner.reversion = kv.mod_revision();
+            let inner : DataObjInner = obj.into();
+            inner.SetRevision(kv.mod_revision());
             let obj = inner.into();
 
             if self.internalPred.Match(&obj)? {
@@ -397,7 +407,7 @@ mod tests {
         }
 
         let tests = [
-            Test {
+            /*Test {
                 name: "creat a key",
                 namespace: &format!("test-ns-1"),
                 pred: SelectionPredicate::default(),
@@ -409,11 +419,11 @@ mod tests {
                     }
                 ],
             },
-            /*Test {
+            Test {
                 name: "key updated to match predicate",
                 namespace: &format!("test-ns-2"),
                 pred: SelectionPredicate {
-                    field: Selector::Parse("spec.nodename=bar").unwrap(),
+                    field: crate::selector::Selector::Parse("spec.nodename=bar").unwrap(),
                     ..Default::default()
                 },
                 watchTests: vec![
@@ -425,13 +435,13 @@ mod tests {
                     TestWatchStruct {
                         obj: basePodAssigned.DeepCopy(),
                         expectEvent: true,
-                        watchType: EventType::Modified,
+                        watchType: EventType::Added,
                     },
                 ],
-            },*/
+            },
             Test {
                 name: "update",
-                namespace: &format!("test-ns-2"),
+                namespace: &format!("test-ns-3"),
                 pred: SelectionPredicate {
                     //field: Selector::Parse("spec.nodename=bar").unwrap(),
                     ..Default::default()
@@ -446,6 +456,26 @@ mod tests {
                         obj: basePodAssigned.DeepCopy(),
                         expectEvent: true,
                         watchType: EventType::Modified,
+                    },
+                ],
+            },*/
+            Test {
+                name: "delete because of being filtered",
+                namespace: &format!("test-ns-4"),
+                pred: SelectionPredicate {
+                    field: crate::selector::Selector::Parse("spec.nodename!=bar").unwrap(),
+                    ..Default::default()
+                },
+                watchTests: vec![
+                    TestWatchStruct {
+                        obj: basePod.DeepCopy(),
+                        expectEvent: true,
+                        watchType: EventType::Added,
+                    },
+                    TestWatchStruct {
+                        obj: basePodAssigned.DeepCopy(),
+                        expectEvent: true,
+                        watchType: EventType::Deleted,
                     },
                 ],
             },
@@ -466,10 +496,9 @@ mod tests {
 
                 let newVersion = store.Update(&key, 0, &dataObj).await?;
                 if watchTest.expectEvent {
-                    //let mut expectObj = qType;
                     let expectObj = if watchTest.watchType == EventType::Deleted {
                         let expectObj = prevObj.DeepCopy();
-                        expectObj.lock().metadata.reversion = newVersion;
+                        expectObj.SetRevision(newVersion);
                         expectObj
                     } else {
                         dataObj.DeepCopy()

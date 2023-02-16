@@ -13,9 +13,10 @@
 // limitations under the License.
 
 
+use std::sync::atomic::AtomicI64;
 use std::{sync::Arc, collections::BTreeMap};
-use spin::mutex::Mutex;
 use std::ops::{Deref, DerefMut};
+use std::sync::atomic::Ordering;
 
 use etcd_client::{Client, Compare, Txn, TxnOp, CompareOp, TxnOpResponse, DeleteOptions, CompactionOptions};
 use etcd_client::GetOptions;
@@ -28,7 +29,7 @@ use crate::{shared::common::*, selector::Labels};
 use crate::service_directory::*;
 use crate::selection_predicate::*;
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub struct MetaDataInner {
     pub kind: String,
     pub namespace: String,
@@ -37,21 +38,25 @@ pub struct MetaDataInner {
     pub annotations: Labels,
     
     // revision number set by etcd
-    pub reversion: i64,
+    pub reversion: AtomicI64,
 }
 
 impl DeepCopy for MetaDataInner {
     fn DeepCopy(&self) -> Self {
-        return Self {
-            kind: self.kind.clone(),
-            namespace: self.namespace.clone(),
-            name: self.name.clone(),
-            lables: self.lables.DeepCopy(),
-            annotations: self.annotations.DeepCopy(),
-            reversion: self.reversion,
-        }
+        return self.Copy();
     }
 }
+
+impl PartialEq for MetaDataInner {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind &&
+        self.namespace == other.namespace &&
+        self.lables == other.lables &&
+        self.annotations == other.annotations &&
+        self.reversion.load(Ordering::Relaxed) == other.reversion.load(Ordering::Relaxed)
+    }
+}
+impl Eq for MetaDataInner {}
 
 impl MetaDataInner {
     pub fn New(item: &Object) -> Self {
@@ -71,10 +76,18 @@ impl MetaDataInner {
             name: item.name.clone(),
             lables: lables.into(),
             annotations: annotations.into(),
-            reversion: 0,
+            reversion: AtomicI64::new(0),
         };
 
         return inner;
+    }
+
+    pub fn Revision(&self) -> i64 {
+        return self.reversion.load(Ordering::Relaxed);
+    }
+
+    pub fn SetRevision(&self, rev: i64) {
+        return self.reversion.store(rev, Ordering::SeqCst);
     }
 
     pub fn Copy(&self) -> Self {
@@ -84,7 +97,7 @@ impl MetaDataInner {
             name: self.name.clone(),
             lables: self.lables.Copy(),
             annotations: self.annotations.Copy(),
-            reversion: self.reversion,
+            reversion: AtomicI64::new(self.Revision()),
         }
     }
 
@@ -169,11 +182,11 @@ impl DataObjList {
 }
 
 #[derive(Debug, Default)]
-pub struct DataObject(Arc<Mutex<DataObjInner>>);
+pub struct DataObject(Arc<DataObjInner>);
 
 impl PartialEq for DataObject {
     fn eq(&self, other: &Self) -> bool {
-        return *self.lock() == *other.lock();
+        return self.0 == other.0;
     }
 }
 impl Eq for DataObject {}
@@ -182,60 +195,68 @@ impl From<Object> for DataObject {
     fn from(item: Object) -> Self {
         let inner = item.into();
 
-        return Self(Arc::new(Mutex::new(inner)));
+        return Self(Arc::new(inner));
     }
 }
 
 impl From<DataObjInner> for DataObject {
     fn from(inner: DataObjInner) -> Self {
-        return Self(Arc::new(Mutex::new(inner)));
+        return Self(Arc::new(inner));
     }
 }
 
 impl Deref for DataObject {
-    type Target = Arc<Mutex<DataObjInner>>;
+    type Target = Arc<DataObjInner>;
 
-    fn deref(&self) -> &Arc<Mutex<DataObjInner>> {
+    fn deref(&self) -> &Arc<DataObjInner> {
         &self.0
     }
 }
 
 impl DeepCopy for DataObject {
     fn DeepCopy(&self) -> Self {
-        return Self(Arc::new(Mutex::new(self.lock().DeepCopy())));
+        return Self(Arc::new(self.0.DeepCopy()));
     }
 }
 
 impl DataObject {
     pub fn Namespace(&self) -> String {
-        return self.lock().metadata.namespace.clone();
+        return self.metadata.namespace.clone();
     }
 
     pub fn Name(&self) -> String {
-        return self.lock().metadata.name.clone();
+        return self.metadata.name.clone();
     }
 
     pub fn Obj(&self) -> Object {
-        return self.lock().obj.clone();
+        return self.obj.clone();
+    }
+
+    pub fn Revision(&self) -> i64 {
+        return self.metadata.Revision();
     }
 
     pub fn Decode(buf: &[u8]) -> Result<Self> {
         let obj = Object::decode(buf)?;
-        return Ok(Self(Arc::new(Mutex::new(obj.into()))))
+        return Ok(Self(Arc::new(obj.into())))
     }
 
     pub fn Encode(&self) -> Result<Vec<u8>> {
         let mut buf : Vec<u8> = Vec::new();
-        let l = self.lock();
-        buf.reserve(l.obj.encoded_len());
-        l.obj.encode(&mut buf)?;
+        buf.reserve(self.obj.encoded_len());
+        self.obj.encode(&mut buf)?;
         return Ok(buf)
     }
 
     pub fn Labels(&self) -> Labels {
-        let lables = self.lock().lables.clone();
+        let lables = self.lables.clone();
         return lables
     }
+
+    pub fn SetRevision(&self, rev: i64) {
+        self.metadata.SetRevision(rev)
+    }
+    
 }
 
 async fn test() -> Result<()> {
@@ -320,8 +341,8 @@ impl EtcdStore {
         let val = kv.value();
 
         let obj = Object::decode(val)?;
-        let mut inner : DataObjInner = obj.into();
-        inner.reversion = kv.mod_revision();
+        let inner : DataObjInner = obj.into();
+        inner.SetRevision(kv.mod_revision());
         
         return Ok(Some(inner.into()))
     }
@@ -412,7 +433,7 @@ impl EtcdStore {
             match &resp.op_responses()[0] {
                 TxnOpResponse::Put(getresp) => {
                     let actualRev = getresp.header().unwrap().revision();
-                    obj.lock().metadata.reversion = actualRev;
+                    obj.SetRevision(actualRev);
                     return Ok(actualRev)
                 }
                 _ => {
@@ -552,8 +573,8 @@ impl EtcdStore {
 
                 lastKey = kv.key().to_vec();
                 let obj = Object::decode(kv.value())?;
-                let mut inner : DataObjInner = obj.into();
-                inner.reversion = kv.mod_revision();
+                let inner : DataObjInner = obj.into();
+                inner.SetRevision(kv.mod_revision());
                 let obj = inner.into();
 
                 if pred.Match(&obj)? {
@@ -738,9 +759,9 @@ mod tests {
         let initRv = store.Clear("pods").await?;
 
         for t in &mut tests {
-            let obj = t.obj.lock().obj.clone();
+            let obj = t.obj.obj.clone();
             let rev = store.Create(&t.key, &obj).await?;
-            t.obj.lock().metadata.reversion = rev;
+            t.obj.SetRevision(rev);
         }
 
         let mut pods = Vec::new();
@@ -822,7 +843,7 @@ mod tests {
 
         for t in &mut tests {
             let rev = store.Create(&t.key, &t.obj.Obj()).await?;
-            t.obj.lock().metadata.reversion = rev;
+            t.obj.SetRevision(rev);
         }
 
         let mut preset = Vec::new();
@@ -922,7 +943,7 @@ mod tests {
         for i in 0..1000 {
             let pod = DataObject::NewPod("first", &format!("pod-{}", i), "", "")?;
             let rev = store.Create(&ComputePodKey(&pod), &pod.Obj()).await?;
-            pod.lock().metadata.reversion = rev;
+            pod.SetRevision(rev);
             pods.push(pod);
         }
 

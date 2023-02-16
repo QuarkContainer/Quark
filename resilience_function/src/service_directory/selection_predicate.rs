@@ -59,7 +59,7 @@ impl SelectionPredicate {
         let labels = obj.Labels();
         let mut matched = self.label.Match(&labels);
         if matched {
-            let val = obj.lock().obj.val.clone();
+            let val = obj.obj.val.clone();
             let jsonVal = match serde_json::from_str(&val) {
                 Err(_) => return Ok(false),
                 Ok(v) => v,
