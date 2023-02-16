@@ -125,7 +125,7 @@ async fn EtcdStoreTest() -> QResult<()> {
     let objs = store.List("testkey/", &ListOption::default()).await?;
 
     println!("objs is {:?}", objs);
-    store.Delete("testkey/abc", obj.unwrap().lock().reversion).await?;
+    store.Delete("testkey/abc", obj.unwrap().Revision()).await?;
     return Ok(())
 }
 
@@ -187,9 +187,9 @@ async fn SeedMultiLevelData(store: &mut EtcdStore) -> QResult<(i64, Vec<DataObje
     let initRv = store.Clear("pods").await?;
 
     for t in &mut tests {
-        let obj = t.obj.lock().obj.clone();
+        let obj = t.obj.obj.clone();
         let rev = store.Create(&t.key, &obj).await?;
-        t.obj.lock().metadata.reversion = rev;
+        t.obj.SetRevision(rev);
     }
 
     let mut pods = Vec::new();
