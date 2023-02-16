@@ -56,12 +56,32 @@ impl SelectionPredicate {
             return Ok(true);
         }
 
-        let (labels, fields) = obj.Attributes();
+        let labels = obj.Labels();
         let mut matched = self.label.Match(&labels);
         if matched {
-            matched = self.field.Match(&fields);
-        }
+            let val = obj.lock().obj.val.clone();
+            let jsonVal = match serde_json::from_str(&val) {
+                Err(_) => return Ok(false),
+                Ok(v) => v,
+            };
 
+            let mut attrs = match self.field.GetAttributes(&jsonVal) {
+                None => return Ok(false),
+                Some(l) => l,
+            };
+
+            for r in &self.field.0 {
+                if &r.key == "metadata.name" {
+                    attrs.insert("metadata.name".to_string(), obj.Name());
+                } else if &r.key == "metadata.namespace" {
+                    attrs.insert("metadata.namespace".to_string(), obj.Namespace());
+                }
+            }
+
+            let attrs = attrs.into();
+            matched = self.field.Match(&attrs);
+        }
+        
         return Ok(matched);
     }
 

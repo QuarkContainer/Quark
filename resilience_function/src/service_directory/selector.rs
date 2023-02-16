@@ -14,6 +14,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use lazy_static::lazy_static;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::cmp::Ordering;
 use std::cmp::Ord;
@@ -114,6 +115,40 @@ impl Selector {
         }
 
         return true;
+    }
+
+    pub fn ToString(val: &Value) -> String {
+        match val {
+            Value::Null => "".to_string(),
+            Value::Bool(boolean) => format!("{}", boolean),
+            Value::Number(number) => format!("{}", number),
+            Value::String(string) => format!("{}", string),
+            Value::Array(vec) => format!("{:?}", vec),
+            Value::Object(map) => format!("{:?}", map),
+        }
+    }
+
+    pub fn GetAttributes(&self, val: &serde_json::Value) -> Option<BTreeMap<String, String>> {
+        let mut map = BTreeMap::new();
+        for r in &self.0 {
+            let split = r.key.split(".");
+            let mut tmp = val;
+            for s in split {
+                tmp = match tmp.get(s) {
+                    None => {
+                        return None
+                    },
+                    Some(v) => {
+                        &v
+                    }
+                };
+            }
+
+            let str = Self::ToString(tmp);
+            map.insert(r.key.clone(), str);
+        }
+
+        return Some(map);
     }
 
     // String returns a comma-separated string of all

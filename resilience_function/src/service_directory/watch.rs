@@ -123,13 +123,13 @@ impl Watcher {
                 Ok(()) => (),
             }
         }
-
-            
+           
         let initialRev = self.initialRev.load(std::sync::atomic::Ordering::Relaxed);
         let options = WatchOptions::new()
-                    .with_prefix()
                     .with_start_revision(initialRev + 1)
-                    .with_prev_key();
+                    .with_prev_key()
+                    .with_prefix()
+                    ;
 
         let key: &str = &self.key;
         let (_watcher, mut stream) = self.client.lock().await.watch(key, Some(options)).await?;
@@ -231,6 +231,8 @@ impl Watcher {
                 }
             }
         } else {
+            // rust etcd doens't return the previous obj
+            // todo: fix this
             if self.AcceptAll() {
                 return Ok(Some(WatchEvent {
                     type_: EventType::Modified,
@@ -326,9 +328,7 @@ impl Watcher {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::DeepCopy;
-    use crate::types::QType;
-    use crate::types::Pod;
+    use crate::{types::DeepCopy};
     use super::*;
 
     pub async fn TestCheckResultFunc(
@@ -344,7 +344,6 @@ mod tests {
                 match event {
                     None => assert!(false, "no event recv"),
                     Some(event) => {
-                        
                         assert!(event.type_== expectEventType, "actual is {:?} expected {:?}", event.type_, expectEventType);
                         check(&event.obj).unwrap();
                     }
@@ -362,7 +361,7 @@ mod tests {
         expectObj: &DataObject) {
 
         TestCheckResultFunc(r, expectEventType, |obj|{
-            assert!(obj.Equ(expectObj), "actual {:#?} expected {:#?}", obj, expectObj);
+            assert!(obj == expectObj, "actual {:#?} expected {:#?}", obj, expectObj);
             return Ok(())
         }).await;
     }
@@ -370,13 +369,13 @@ mod tests {
     pub async fn TestCheckQTypeResult(
         r: &WatchReader, 
         expectEventType: EventType, 
-        expectObj: &QType) {
+        expectObj: &DataObject) {
             
-            return TestCheckResult(r, expectEventType, &expectObj.DataObj().unwrap()).await;
+            return TestCheckResult(r, expectEventType, &expectObj).await;
     }
 
     pub struct TestWatchStruct {
-        pub obj: QType,
+        pub obj: DataObject,
         pub expectEvent: bool,
         pub watchType: EventType,
     }
@@ -387,15 +386,8 @@ mod tests {
         let mut store = EtcdStore::New("localhost:2379", true).await?;
         let _initRv = store.Clear("pods").await?;
 
-        let basePod = QType::NewPodWithData("", "foo", Pod {
-            NodeName: "".to_owned(),
-            ..Default::default()
-        });
-
-        let basePodAssigned = QType::NewPodWithData("", "foo", Pod {
-            NodeName: "bar".to_owned(),
-            ..Default::default()
-        });
+        let basePod = DataObject::NewPod("", "foo", "", "").unwrap();
+        let basePodAssigned = DataObject::NewPod("", "foo", "bar", "").unwrap();
 
         struct Test <'a> {
             name: &'a str,
@@ -417,6 +409,26 @@ mod tests {
                     }
                 ],
             },
+            /*Test {
+                name: "key updated to match predicate",
+                namespace: &format!("test-ns-2"),
+                pred: SelectionPredicate {
+                    field: Selector::Parse("spec.nodename=bar").unwrap(),
+                    ..Default::default()
+                },
+                watchTests: vec![
+                    TestWatchStruct {
+                        obj: basePod.DeepCopy(),
+                        expectEvent: false,
+                        watchType: EventType::Added,
+                    },
+                    TestWatchStruct {
+                        obj: basePodAssigned.DeepCopy(),
+                        expectEvent: true,
+                        watchType: EventType::Modified,
+                    },
+                ],
+            },*/
             Test {
                 name: "update",
                 namespace: &format!("test-ns-2"),
@@ -448,26 +460,24 @@ mod tests {
                 w.Processing().await
             });
 
-            let mut prevObj = QType::NewPod("", "");
+            let mut prevObj = DataObject::NewPod("", "", "", "")?;
             for watchTest in tt.watchTests {
-                let mut dataObj = watchTest.obj.DataObj()?;
+                let dataObj = watchTest.obj;
 
-                let newVersion = store.Update(&key, 0, &mut dataObj).await?;
-                let mut qType = QType::Decode(&dataObj)?;
-                qType.metadata.reversion = newVersion;
+                let newVersion = store.Update(&key, 0, &dataObj).await?;
                 if watchTest.expectEvent {
                     //let mut expectObj = qType;
                     let expectObj = if watchTest.watchType == EventType::Deleted {
-                        let mut expectObj = prevObj.DeepCopy();
-                        expectObj.metadata.reversion = qType.metadata.reversion;
+                        let expectObj = prevObj.DeepCopy();
+                        expectObj.lock().metadata.reversion = newVersion;
                         expectObj
                     } else {
-                        qType.DeepCopy()
+                        dataObj.DeepCopy()
                     };
 
                     TestCheckQTypeResult(&r, watchTest.watchType, &expectObj).await;
                 }
-                prevObj = qType;
+                prevObj = dataObj;
              }
 
              r.Close();
