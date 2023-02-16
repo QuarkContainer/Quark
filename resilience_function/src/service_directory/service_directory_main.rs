@@ -41,7 +41,6 @@ use crate::etcd_store::*;
 use crate::selection_predicate::ListOption;
 use crate::shared::common::Result as QResult;
 use crate::selection_predicate::*;
-use crate::types::*;
 
 #[derive(Default)]
 pub struct ServiceDirectoryImpl {}
@@ -126,13 +125,17 @@ async fn EtcdStoreTest() -> QResult<()> {
     let objs = store.List("testkey/", &ListOption::default()).await?;
 
     println!("objs is {:?}", objs);
-    store.Delete("testkey/abc", obj.unwrap().reversion).await?;
+    store.Delete("testkey/abc", obj.unwrap().lock().reversion).await?;
     return Ok(())
+}
+
+pub fn ComputePodKey(obj: &DataObject) -> String {
+    return format!("/pods/{}/{}", &obj.Namespace(), &obj.Name());
 }
 
 // SeedMultiLevelData creates a set of keys with a multi-level structure, returning a resourceVersion
 // from before any were created along with the full set of objects that were persisted
-async fn SeedMultiLevelData(store: &mut EtcdStore) -> QResult<(i64, Vec<QType>)> {
+async fn SeedMultiLevelData(store: &mut EtcdStore) -> QResult<(i64, Vec<DataObject>)> {
     // Setup storage with the following structure:
     //  /
     //   - first/
@@ -145,38 +148,38 @@ async fn SeedMultiLevelData(store: &mut EtcdStore) -> QResult<(i64, Vec<QType>)>
     //   - third/
     //  |         - barfoo
     //  |         - foo
-    let barFirst = QType::NewPod("first", "bar");
-    let barSecond = QType::NewPod("second", "bar");
-    let fooSecond = QType::NewPod("second", "foo");
-    let barfooThird = QType::NewPod("third", "barfoo");
-    let fooThird = QType::NewPod("third", "foo");
+    let barFirst = DataObject::NewPod("first", "bar", "", "")?;
+    let barSecond = DataObject::NewPod("second", "bar", "", "")?;
+    let fooSecond = DataObject::NewPod("second", "foo", "", "")?;
+    let barfooThird = DataObject::NewPod("third", "barfoo", "", "")?;
+    let fooThird = DataObject::NewPod("third", "foo", "", "")?;
 
     store.Clear("pods").await?;
 
     struct Test {
         key: String,
-        obj: QType,
+        obj: DataObject,
     }
 
     let mut tests = [
         Test {
-            key: barFirst.StoreKey(),
+            key: ComputePodKey(&barFirst),
             obj: barFirst,
         },
         Test {
-            key: barSecond.StoreKey(),
+            key: ComputePodKey(&barSecond),
             obj: barSecond,
         },
         Test {
-            key: fooSecond.StoreKey(),
+            key: ComputePodKey(&fooSecond),
             obj: fooSecond,
         },
         Test {
-            key: barfooThird.StoreKey(),
+            key: ComputePodKey(&barfooThird),
             obj: barfooThird,
         },
         Test {
-            key: fooThird.StoreKey(),
+            key: ComputePodKey(&fooThird),
             obj: fooThird,
         },
     ];
@@ -184,8 +187,9 @@ async fn SeedMultiLevelData(store: &mut EtcdStore) -> QResult<(i64, Vec<QType>)>
     let initRv = store.Clear("pods").await?;
 
     for t in &mut tests {
-        let rev = store.Create(&t.key, &t.obj.Encode()?).await?;
-        t.obj.metadata.reversion = rev;
+        let obj = t.obj.lock().obj.clone();
+        let rev = store.Create(&t.key, &obj).await?;
+        t.obj.lock().metadata.reversion = rev;
     }
 
     let mut pods = Vec::new();
@@ -212,8 +216,8 @@ pub async fn EtcdTest1() -> QResult<()> {
 
     assert!(list.objs.len()==2, "objs is {:?}", list);
     for i in 0..list.objs.len() {
-        assert!(preset[i+1]==QType::Decode(&list.objs[i])?, 
-            "expect {:#?}, actual {:#?}", preset[i+1], QType::Decode(&list.objs[i])?);
+        assert!(preset[i+1] == list.objs[i], 
+            "expect {:#?}, actual {:#?}", preset[i+1], &list.objs[i]);
     }
 
     return Ok(())

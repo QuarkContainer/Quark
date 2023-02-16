@@ -14,6 +14,7 @@
 
 
 use std::{sync::Arc, collections::BTreeMap};
+use spin::mutex::Mutex;
 use std::ops::{Deref, DerefMut};
 
 use etcd_client::{Client, Compare, Txn, TxnOp, CompareOp, TxnOpResponse, DeleteOptions, CompactionOptions};
@@ -33,7 +34,7 @@ pub struct MetaDataInner {
     pub namespace: String,
     pub name: String,
     pub lables: Labels,
-    pub fields: Labels,
+    pub annotations: Labels,
     
     // revision number set by etcd
     pub reversion: i64,
@@ -43,10 +44,10 @@ impl DeepCopy for MetaDataInner {
     fn DeepCopy(&self) -> Self {
         return Self {
             kind: self.kind.clone(),
-            namespace: self.name.clone(),
+            namespace: self.namespace.clone(),
             name: self.name.clone(),
             lables: self.lables.DeepCopy(),
-            fields: self.fields.DeepCopy(),
+            annotations: self.annotations.DeepCopy(),
             reversion: self.reversion,
         }
     }
@@ -54,21 +55,22 @@ impl DeepCopy for MetaDataInner {
 
 impl MetaDataInner {
     pub fn New(item: &Object) -> Self {
-        let mut map = BTreeMap::new();
+        let mut lables = BTreeMap::new();
         for l in &item.labels {
-            map.insert(l.key.clone(), l.val.clone());
+            lables.insert(l.key.clone(), l.val.clone());
         }
 
-        let mut fields = BTreeMap::new();
-        fields.insert("metadata.name".to_owned(), item.name.clone());
-        fields.insert("metadata.namespace".to_owned(), item.namespace.clone());
+        let mut annotations = BTreeMap::new();
+        for l in &item.annotations {
+            annotations.insert(l.key.clone(), l.val.clone());
+        }
 
         let inner = MetaDataInner {
             kind: item.kind.clone(),
             namespace: item.namespace.clone(),
             name: item.name.clone(),
-            lables: map.into(),
-            fields: fields.into(),
+            lables: lables.into(),
+            annotations: annotations.into(),
             reversion: 0,
         };
 
@@ -81,7 +83,7 @@ impl MetaDataInner {
             namespace: self.namespace.clone(),
             name: self.name.clone(),
             lables: self.lables.Copy(),
-            fields: self.fields.Copy(),
+            annotations: self.annotations.Copy(),
             reversion: self.reversion,
         }
     }
@@ -104,11 +106,27 @@ pub struct DataObjInner {
     pub obj: Object,
 }
 
+impl PartialEq for DataObjInner {
+    fn eq(&self, other: &Self) -> bool {
+        return self.metadata == other.metadata && self.obj.val == other.obj.val;
+    }
+}
+impl Eq for DataObjInner {}
+
 impl Deref for DataObjInner {
     type Target = MetaDataInner;
 
     fn deref(&self) -> &MetaDataInner {
         &self.metadata
+    }
+}
+
+impl DeepCopy for DataObjInner {
+    fn DeepCopy(&self) -> Self {
+        return Self {
+            metadata: self.metadata.DeepCopy(),
+            obj: self.obj.clone(),
+        }
     }
 }
 
@@ -151,49 +169,72 @@ impl DataObjList {
 }
 
 #[derive(Debug, Default)]
-pub struct DataObject(Arc<DataObjInner>);
+pub struct DataObject(Arc<Mutex<DataObjInner>>);
+
+impl PartialEq for DataObject {
+    fn eq(&self, other: &Self) -> bool {
+        return *self.lock() == *other.lock();
+    }
+}
+impl Eq for DataObject {}
 
 impl From<Object> for DataObject {
     fn from(item: Object) -> Self {
         let inner = item.into();
 
-        return Self(Arc::new(inner));
+        return Self(Arc::new(Mutex::new(inner)));
     }
 }
 
 impl From<DataObjInner> for DataObject {
     fn from(inner: DataObjInner) -> Self {
-        return Self(Arc::new(inner));
+        return Self(Arc::new(Mutex::new(inner)));
     }
 }
 
 impl Deref for DataObject {
-    type Target = Arc<DataObjInner>;
+    type Target = Arc<Mutex<DataObjInner>>;
 
-    fn deref(&self) -> &Arc<DataObjInner> {
+    fn deref(&self) -> &Arc<Mutex<DataObjInner>> {
         &self.0
     }
 }
 
+impl DeepCopy for DataObject {
+    fn DeepCopy(&self) -> Self {
+        return Self(Arc::new(Mutex::new(self.lock().DeepCopy())));
+    }
+}
+
 impl DataObject {
-    pub fn Equ(&self, other: &Self) -> bool {
-        return self.metadata == other.metadata;
+    pub fn Namespace(&self) -> String {
+        return self.lock().metadata.namespace.clone();
+    }
+
+    pub fn Name(&self) -> String {
+        return self.lock().metadata.name.clone();
+    }
+
+    pub fn Obj(&self) -> Object {
+        return self.lock().obj.clone();
     }
 
     pub fn Decode(buf: &[u8]) -> Result<Self> {
         let obj = Object::decode(buf)?;
-        return Ok(Self(Arc::new(obj.into())))
+        return Ok(Self(Arc::new(Mutex::new(obj.into()))))
     }
 
     pub fn Encode(&self) -> Result<Vec<u8>> {
         let mut buf : Vec<u8> = Vec::new();
-        buf.reserve(self.obj.encoded_len());
-        self.obj.encode(&mut buf)?;
+        let l = self.lock();
+        buf.reserve(l.obj.encoded_len());
+        l.obj.encode(&mut buf)?;
         return Ok(buf)
     }
 
-    pub fn Attributes(&self) -> (Labels, Labels) {
-        return (self.lables.clone(), self.fields.clone())
+    pub fn Labels(&self) -> Labels {
+        let lables = self.lock().lables.clone();
+        return lables
     }
 }
 
@@ -282,7 +323,7 @@ impl EtcdStore {
         let mut inner : DataObjInner = obj.into();
         inner.reversion = kv.mod_revision();
         
-        return Ok(Some(DataObject(Arc::new(inner))))
+        return Ok(Some(inner.into()))
     }
 
     pub async fn Create(&mut self, key: &str, obj: &Object) -> Result<i64> {
@@ -371,6 +412,7 @@ impl EtcdStore {
             match &resp.op_responses()[0] {
                 TxnOpResponse::Put(getresp) => {
                     let actualRev = getresp.header().unwrap().revision();
+                    obj.lock().metadata.reversion = actualRev;
                     return Ok(actualRev)
                 }
                 _ => {
@@ -638,12 +680,15 @@ impl EtcdOption {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-    use super::super::types::*;
     use super::super::selector::*;
+
+    pub fn ComputePodKey(obj: &DataObject) -> String {
+        return format!("/pods/{}/{}", &obj.Namespace(), &obj.Name());
+    }    
 
     // SeedMultiLevelData creates a set of keys with a multi-level structure, returning a resourceVersion
     // from before any were created along with the full set of objects that were persisted
-    async fn SeedMultiLevelData(store: &mut EtcdStore) -> Result<(i64, Vec<QType>)> {
+    async fn SeedMultiLevelData(store: &mut EtcdStore) -> Result<(i64, Vec<DataObject>)> {
         // Setup storage with the following structure:
         //  /
         //   - first/
@@ -656,45 +701,46 @@ mod tests {
         //   - third/
         //  |         - barfoo
         //  |         - foo
-        let barFirst = QType::NewPod("first", "bar");
-        let barSecond = QType::NewPod("second", "bar");
-        let fooSecond = QType::NewPod("second", "foo");
-        let barfooThird = QType::NewPod("third", "barfoo");
-        let fooThird = QType::NewPod("third", "foo");
+        let barFirst = DataObject::NewPod("first", "bar", "", "")?;
+        let barSecond = DataObject::NewPod("second", "bar", "", "")?;
+        let fooSecond = DataObject::NewPod("second", "foo", "", "")?;
+        let barfooThird = DataObject::NewPod("third", "barfoo", "", "")?;
+        let fooThird = DataObject::NewPod("third", "foo", "", "")?;
 
         struct Test {
             key: String,
-            obj: QType,
+            obj: DataObject,
         }
 
         let mut tests = [
-            Test {
-                key: barFirst.StoreKey(),
-                obj: barFirst,
-            },
-            Test {
-                key: barSecond.StoreKey(),
-                obj: barSecond,
-            },
-            Test {
-                key: fooSecond.StoreKey(),
-                obj: fooSecond,
-            },
-            Test {
-                key: barfooThird.StoreKey(),
-                obj: barfooThird,
-            },
-            Test {
-                key: fooThird.StoreKey(),
-                obj: fooThird,
-            },
-        ];
+        Test {
+            key: ComputePodKey(&barFirst),
+            obj: barFirst,
+        },
+        Test {
+            key: ComputePodKey(&barSecond),
+            obj: barSecond,
+        },
+        Test {
+            key: ComputePodKey(&fooSecond),
+            obj: fooSecond,
+        },
+        Test {
+            key: ComputePodKey(&barfooThird),
+            obj: barfooThird,
+        },
+        Test {
+            key: ComputePodKey(&fooThird),
+            obj: fooThird,
+        },
+    ];
 
         let initRv = store.Clear("pods").await?;
 
         for t in &mut tests {
-            let rev = store.Create(&t.key, &t.obj.Encode()?).await?;
-            t.obj.metadata.reversion = rev;
+            let obj = t.obj.lock().obj.clone();
+            let rev = store.Create(&t.key, &obj).await?;
+            t.obj.lock().metadata.reversion = rev;
         }
 
         let mut pods = Vec::new();
@@ -721,8 +767,8 @@ mod tests {
 
         assert!(list.objs.len()==2, "objs is {:#?}", list);
         for i in 0..list.objs.len() {
-            assert!(preset[i+1]==QType::Decode(&list.objs[i])?, 
-                "expect {:#?}, actual {:#?}", preset[i+1], QType::Decode(&list.objs[i])?);
+            assert!(preset[i+1]==list.objs[i], 
+                "expect {:#?}, actual {:#?}", preset[i+1], &list.objs[i]);
         }
 
         return Ok(())
@@ -746,26 +792,26 @@ mod tests {
         //   - second/
         //  |         - bar
         //  |         - foo
-        let barFirst = QType::NewPod("first", "bar");
-        let barSecond = QType::NewPod("second", "bar");
-        let fooSecond = QType::NewPod("second", "foo");
+        let barFirst = DataObject::NewPod("first", "bar", "", "")?;
+        let barSecond = DataObject::NewPod("second", "bar", "", "")?;
+        let fooSecond = DataObject::NewPod("second", "foo", "", "")?;
         
         struct Test {
             key: String,
-            obj: QType,
+            obj: DataObject,
         }
 
         let mut tests = [
             Test {
-                key: barFirst.StoreKey(),
+                key: ComputePodKey(&barFirst),
                 obj: barFirst,
             },
             Test {
-                key: barSecond.StoreKey(),
+                key: ComputePodKey(&barSecond),
                 obj: barSecond,
             },
             Test {
-                key: fooSecond.StoreKey(),
+                key: ComputePodKey(&fooSecond),
                 obj: fooSecond,
             },
         ];
@@ -775,8 +821,8 @@ mod tests {
         let _initRv = store.Clear("pods").await?;
 
         for t in &mut tests {
-            let rev = store.Create(&t.key, &t.obj.Encode()?).await?;
-            t.obj.metadata.reversion = rev;
+            let rev = store.Create(&t.key, &t.obj.Obj()).await?;
+            t.obj.lock().metadata.reversion = rev;
         }
 
         let mut preset = Vec::new();
@@ -795,8 +841,8 @@ mod tests {
         assert!(list.objs.len()==1, "objs is {:#?}", list);
         assert!(list.continue_.is_some()==true);
         for i in 0..list.objs.len() {
-            assert!(preset[i]==QType::Decode(&list.objs[i])?, 
-                "expect {:#?}, actual {:#?}", preset[i+1], QType::Decode(&list.objs[i])?);
+            assert!(preset[i]==list.objs[i], 
+                "expect {:#?}, actual {:#?}", preset[i+1], &list.objs[i]);
         }
 
         let continueFromSecondItem = list.continue_.take().unwrap();
@@ -815,8 +861,8 @@ mod tests {
 
         assert!(list.continue_.is_some()==false, "list is {:#?}", &list);
         for i in 0..list.objs.len() {
-            assert!(preset[i+1]==QType::Decode(&list.objs[i])?, 
-                "expect {:#?}, actual {:#?}", preset[i+1], QType::Decode(&list.objs[i])?);
+            assert!(preset[i+1]==list.objs[i], 
+                "expect {:#?}, actual {:#?}", preset[i+1], &list.objs[i]);
         }
 
         let listOptions = ListOption {
@@ -833,8 +879,8 @@ mod tests {
 
         assert!(list.continue_.is_some()==true, "list is {:#?}", &list);
         for i in 0..list.objs.len() {
-            assert!(preset[i+1]==QType::Decode(&list.objs[i])?, 
-                "expect {:#?}, actual {:#?}", preset[i+1], QType::Decode(&list.objs[i])?);
+            assert!(preset[i+1]==list.objs[i], 
+                "expect {:#?}, actual {:#?}", preset[i+1], &list.objs[i]);
         }
 
         let listOptions = ListOption {
@@ -850,8 +896,8 @@ mod tests {
         let list = store.List("/pods", &listOptions).await?;
         assert!(list.continue_.is_some()==false, "list is {:#?}", &list);
         for i in 0..list.objs.len() {
-            assert!(preset[i+2]==QType::Decode(&list.objs[i])?, 
-                "expect {:#?}, actual {:#?}", preset[i+1], QType::Decode(&list.objs[i])?);
+            assert!(preset[i+2]==list.objs[i], 
+                "expect {:#?}, actual {:#?}", preset[i+1], &list.objs[i]);
         }
 
         let _initRv = store.Clear("pods").await?;
@@ -874,9 +920,9 @@ mod tests {
         let mut pods = Vec::new();
 
         for i in 0..1000 {
-            let mut pod = QType::NewPod("first", &format!("pod-{}", i));
-            let rev = store.Create(&pod.StoreKey(), &pod.Encode()?).await?;
-            pod.metadata.reversion = rev;
+            let pod = DataObject::NewPod("first", &format!("pod-{}", i), "", "")?;
+            let rev = store.Create(&ComputePodKey(&pod), &pod.Obj()).await?;
+            pod.lock().metadata.reversion = rev;
             pods.push(pod);
         }
 
@@ -895,8 +941,8 @@ mod tests {
 
         let list = store.List("/pods", &listOptions).await?;
         assert!(list.continue_.is_some()==false, "list is {:#?}", &list);
-        assert!(pods[999]==QType::Decode(&list.objs[0])?, 
-            "expect {:#?}, actual {:#?}", pods[999], QType::Decode(&list.objs[0])?);
+        assert!(pods[999]==list.objs[0], 
+            "expect {:#?}, actual {:#?}", pods[999], &list.objs[0]);
 
         let _initRv = store.Clear("pods").await?;
         return Ok(())
