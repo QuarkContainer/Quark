@@ -31,12 +31,31 @@ use crate::service_directory::*;
 
 use super::etcd_store::*;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EventType {
+    None,
     Added,
     Modified,
     Deleted,
     Error(String),
+}
+
+impl EventType {
+    pub fn DeepCopy(&self) -> Self {
+        match self {
+            Self::None => return Self::None,
+            Self::Added => return Self::Added,
+            Self::Modified => return Self::Modified,
+            Self::Deleted => return Self::Deleted,
+            Self::Error(str) => return Self::Error(str.to_string()),
+        }
+    }
+}
+
+impl Default for EventType {
+    fn default() -> Self {
+        return Self::None;
+    }
 }
 
 #[derive(Debug)]
@@ -112,7 +131,7 @@ impl Watcher {
     }
 
 
-    pub async fn Processing(mut self) -> Result<()> {
+    pub async fn Processing(&mut self) -> Result<()> {
         let ret = self.ProcessingInner().await;
         //self.resultSender.closed().await;
         return ret;

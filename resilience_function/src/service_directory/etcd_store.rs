@@ -82,6 +82,10 @@ impl MetaDataInner {
         return inner;
     }
 
+    pub fn Key(&self) -> String {
+        return format!("/{}/{}", &self.namespace, &self.name);
+    }
+
     pub fn Revision(&self) -> i64 {
         return self.reversion.load(Ordering::Relaxed);
     }
@@ -181,7 +185,7 @@ impl DataObjList {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct DataObject(Arc<DataObjInner>);
 
 impl PartialEq for DataObject {
@@ -226,6 +230,10 @@ impl DataObject {
 
     pub fn Name(&self) -> String {
         return self.metadata.name.clone();
+    }
+
+    pub fn Key(&self) -> String {
+        return self.metadata.Key();
     }
 
     pub fn Obj(&self) -> Object {
@@ -298,6 +306,14 @@ impl EtcdStore {
             pathPrefix: PATH_PREFIX.to_string(),
             pagingEnable,
         })
+    }
+
+    pub fn Copy(&self) -> Self {
+        return Self {
+            client: self.client.clone(),
+            pathPrefix: self.pathPrefix.clone(),
+            pagingEnable: self.pagingEnable,
+        }
     }
 
     pub fn PrepareKey(&self, key: &str) -> Result<String> {
@@ -386,10 +402,16 @@ impl EtcdStore {
     pub async fn Delete(&mut self, key: &str, expectedRev: i64) -> Result<()> {
         let preparedKey = self.PrepareKey(key)?;
         let keyVec: &str = &preparedKey;
-        let txn = Txn::new()
+        let txn = if expectedRev != 0 {
+            Txn::new()
             .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, expectedRev)])
             .and_then(vec![TxnOp::delete(keyVec, None)])
-            .or_else(vec![TxnOp::get(keyVec, None)]);
+            .or_else(vec![TxnOp::get(keyVec, None)])
+        } else {
+            Txn::new()
+            .and_then(vec![TxnOp::delete(keyVec, None)])
+        };
+           
         let resp = self.client.lock().await.txn(txn).await?;
         if !resp.succeeded() {
             match &resp.op_responses()[0] {
