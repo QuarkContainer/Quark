@@ -28,6 +28,7 @@ pub mod selection_predicate;
 pub mod types;
 pub mod watch;
 pub mod etcd_client;
+pub mod cache;
 
 pub mod service_directory {
     tonic::include_proto!("service_directory"); // The string specified here must match the proto package name

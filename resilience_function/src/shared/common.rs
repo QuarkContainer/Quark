@@ -64,6 +64,8 @@ pub enum Error {
     SerdeJsonError(SerdeJsonError),
     MpscSendErrWatchEvent(tokio::sync::mpsc::error::SendError<WatchEvent>),
     FromUtf8Error(FromUtf8Error),
+    TokioChannFull,
+    TokioChannClose,
 }
 
 unsafe impl core::marker::Send for Error {}
