@@ -19,6 +19,9 @@
 extern crate lazy_static;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate log;
+extern crate simple_logging;
 
 pub mod etcd_store;
 pub mod shared;
@@ -82,9 +85,13 @@ impl ServiceDirectoryService for ServiceDirectoryImpl {
 
 #[tokio::main]
 async fn main() -> QResult<()> {
+    use log::LevelFilter;
+
+    simple_logging::log_to_file("/var/log/quark/service_diretory.log", LevelFilter::Info).unwrap();
+
     //EtcdStoreTest().await?;
-    EtcdTest1().await?;
-    //println!("test 1");
+    //EtcdTest1().await?;
+    info!("test 1");
     //SelectorTest();
     Ok(())
 }
@@ -93,7 +100,7 @@ async fn gRpcServer() -> QResult<()> {
     let addr = "[::1]:50071".parse().unwrap();    
     let service_directory_server = ServiceDirectoryImpl::default();
 
-    println!("service_resilience server listening on {}", addr);
+    info!("service_resilience server listening on {}", addr);
 
     Server::builder()
         .add_service(ServiceDirectoryServiceServer::new(service_directory_server))
