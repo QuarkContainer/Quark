@@ -166,7 +166,7 @@ impl From<Object> for DataObjInner {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct DataObjList {
     pub objs: Vec<DataObject>,
     pub revision: i64,
@@ -342,7 +342,7 @@ impl EtcdStore {
         return Ok(())
     }
 
-    pub async fn Get(&mut self, key: &str, minRevision: i64) -> Result<Option<DataObject>> {
+    pub async fn Get(&self, key: &str, minRevision: i64) -> Result<Option<DataObject>> {
         let preparedKey = self.PrepareKey(key)?;
         let getResp = self.client.lock().await.get(preparedKey, None).await?;
         let kvs = getResp.kvs();
@@ -363,12 +363,12 @@ impl EtcdStore {
         return Ok(Some(inner.into()))
     }
 
-    pub async fn Create(&mut self, key: &str, obj: &Object) -> Result<i64> {
+    pub async fn Create(&self, key: &str, obj: &DataObject) -> Result<()> {
         let preparedKey = self.PrepareKey(key)?;
         let keyVec: &str = &preparedKey;
         let txn = Txn::new()
             .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, 0)])
-            .and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)]);
+            .and_then(vec![TxnOp::put(keyVec, obj.obj.Encode()?, None)]);
 
         let resp = self.client.lock().await.txn(txn).await?;
         if !resp.succeeded() {
@@ -377,7 +377,8 @@ impl EtcdStore {
             match &resp.op_responses()[0] {
                 TxnOpResponse::Put(getresp) => {
                     let actualRev = getresp.header().unwrap().revision();
-                    return Ok(actualRev)
+                    obj.SetRevision(actualRev);
+                    return Ok(())
                 }
                 _ => {
                     panic!("create get unexpect response")
@@ -399,7 +400,7 @@ impl EtcdStore {
         return Ok(rv)
     }
 
-    pub async fn Delete(&mut self, key: &str, expectedRev: i64) -> Result<()> {
+    pub async fn Delete(&self, key: &str, expectedRev: i64) -> Result<()> {
         let preparedKey = self.PrepareKey(key)?;
         let keyVec: &str = &preparedKey;
         let txn = if expectedRev != 0 {
@@ -427,7 +428,7 @@ impl EtcdStore {
         return Ok(())
     } 
 
-    pub async fn Update(&mut self, key: &str, expectedRev: i64, obj: &DataObject) -> Result<i64> {
+    pub async fn Update(&self, key: &str, expectedRev: i64, obj: &DataObject) -> Result<()> {
         let preparedKey = self.PrepareKey(key)?;
         let keyVec: &str = &preparedKey;
         let txn = if expectedRev > 0 {
@@ -456,7 +457,7 @@ impl EtcdStore {
                 TxnOpResponse::Put(getresp) => {
                     let actualRev = getresp.header().unwrap().revision();
                     obj.SetRevision(actualRev);
-                    return Ok(actualRev)
+                    return Ok(())
                 }
                 _ => {
                     panic!("Delete get unexpect response")
@@ -490,7 +491,7 @@ impl EtcdStore {
         return vec![0];
     }
 
-    pub async fn List(&mut self, prefix: &str, opts: &ListOption) -> Result<DataObjList> {
+    pub async fn List(&self, prefix: &str, opts: &ListOption) -> Result<DataObjList> {
         let mut preparedKey = self.PrepareKey(prefix)?;
 
         let revision = opts.revision;
@@ -781,9 +782,7 @@ mod tests {
         let initRv = store.Clear("pods").await?;
 
         for t in &mut tests {
-            let obj = t.obj.obj.clone();
-            let rev = store.Create(&t.key, &obj).await?;
-            t.obj.SetRevision(rev);
+            store.Create(&t.key, &t.obj).await?;
         }
 
         let mut pods = Vec::new();
@@ -864,8 +863,7 @@ mod tests {
         let _initRv = store.Clear("pods").await?;
 
         for t in &mut tests {
-            let rev = store.Create(&t.key, &t.obj.Obj()).await?;
-            t.obj.SetRevision(rev);
+            store.Create(&t.key, &t.obj).await?;
         }
 
         let mut preset = Vec::new();
@@ -964,8 +962,7 @@ mod tests {
 
         for i in 0..1000 {
             let pod = DataObject::NewPod("first", &format!("pod-{}", i), "", "")?;
-            let rev = store.Create(&ComputePodKey(&pod), &pod.Obj()).await?;
-            pod.SetRevision(rev);
+            store.Create(&ComputePodKey(&pod), &pod).await?;
             pods.push(pod);
         }
 
