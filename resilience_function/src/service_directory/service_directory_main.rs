@@ -44,7 +44,6 @@ use service_directory::*;
 use crate::etcd_store::*;
 use crate::selection_predicate::ListOption;
 use crate::shared::common::Result as QResult;
-use crate::selection_predicate::*;
 
 #[derive(Default)]
 pub struct ServiceDirectoryImpl {}
@@ -139,94 +138,4 @@ async fn EtcdStoreTest() -> QResult<()> {
 
 pub fn ComputePodKey(obj: &DataObject) -> String {
     return format!("/pods/{}/{}", &obj.Namespace(), &obj.Name());
-}
-
-// SeedMultiLevelData creates a set of keys with a multi-level structure, returning a resourceVersion
-// from before any were created along with the full set of objects that were persisted
-async fn SeedMultiLevelData(store: &mut EtcdStore) -> QResult<(i64, Vec<DataObject>)> {
-    // Setup storage with the following structure:
-    //  /
-    //   - first/
-    //  |         - bar
-    //  |
-    //   - second/
-    //  |         - bar
-    //  |         - foo
-    //  |
-    //   - third/
-    //  |         - barfoo
-    //  |         - foo
-    let barFirst = DataObject::NewPod("first", "bar", "", "")?;
-    let barSecond = DataObject::NewPod("second", "bar", "", "")?;
-    let fooSecond = DataObject::NewPod("second", "foo", "", "")?;
-    let barfooThird = DataObject::NewPod("third", "barfoo", "", "")?;
-    let fooThird = DataObject::NewPod("third", "foo", "", "")?;
-
-    store.Clear("pods").await?;
-
-    struct Test {
-        key: String,
-        obj: DataObject,
-    }
-
-    let mut tests = [
-        Test {
-            key: ComputePodKey(&barFirst),
-            obj: barFirst,
-        },
-        Test {
-            key: ComputePodKey(&barSecond),
-            obj: barSecond,
-        },
-        Test {
-            key: ComputePodKey(&fooSecond),
-            obj: fooSecond,
-        },
-        Test {
-            key: ComputePodKey(&barfooThird),
-            obj: barfooThird,
-        },
-        Test {
-            key: ComputePodKey(&fooThird),
-            obj: fooThird,
-        },
-    ];
-
-    let initRv = store.Clear("pods").await?;
-
-    for t in &mut tests {
-        let obj = t.obj.obj.clone();
-        let rev = store.Create(&t.key, &obj).await?;
-        t.obj.SetRevision(rev);
-    }
-
-    let mut pods = Vec::new();
-    for t in tests {
-        pods.push(t.obj);
-    }
-
-    return Ok((initRv, pods))
-}
-
-pub async fn EtcdTest1() -> QResult<()> {
-    let mut store = EtcdStore::New("localhost:2379", true).await?;
-
-    let (_, preset) = SeedMultiLevelData(&mut store).await?;
-    
-    let listOptions = ListOption {
-        revision: 0,
-        revisionMatch: RevisionMatch::Exact,
-        predicate: SelectionPredicate { limit:2, ..Default::default() },
-    };
-
-    let list = store.List("/pods/second", &listOptions).await?;
-    assert!(list.continue_.is_some()==false);
-
-    assert!(list.objs.len()==2, "objs is {:?}", list);
-    for i in 0..list.objs.len() {
-        assert!(preset[i+1] == list.objs[i], 
-            "expect {:#?}, actual {:#?}", preset[i+1], &list.objs[i]);
-    }
-
-    return Ok(())
 }

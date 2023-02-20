@@ -12,15 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::time::{Duration, Instant};
 use std::{sync::Arc, collections::BTreeMap, time::SystemTime};
 use tokio::sync::{mpsc::error::TrySendError};
-use tokio::sync::Mutex as TMutex;
+use tokio::sync::RwLock as TRwLock;
 use spin::Mutex;
-use std::ops::Deref;
+use std::ops::{Deref};
 use tokio::sync::{mpsc::Receiver, Notify, mpsc::Sender, mpsc::channel};
 use tokio::task::JoinHandle;
+use crate::etcd_store::DataObjList;
 use crate::{etcd_store::{DataObject, EtcdStore}, watch::{EventType, WatchEvent}, selection_predicate::{SelectionPredicate}, types::DeepCopy};
 use crate::shared::common::*;
+use crate::ListOption;
 
 pub struct ThreadSafeStoreInner {
     pub map: BTreeMap<String, DataObject>
@@ -154,6 +157,15 @@ impl RingBuf {
         }
     }
 
+    pub fn Reset(&mut self) {
+        for i in 0..self.buf.len() {
+            self.buf[i] = None;
+        }
+
+        self.head = 0;
+        self.tail = 0;
+    }
+
     pub fn GetAllEvents(&self, startRev: i64, pred: &SelectionPredicate) -> Result<Vec<WatchCacheEvent>> {
         let mut buf = Vec::new();
         for i in self.head..self.tail {
@@ -207,78 +219,76 @@ impl RingBuf {
 }
 
 #[derive(Clone)]
-pub struct Cacher(Arc<TMutex<CacherInner>>);
+pub struct Cacher(Arc<TRwLock<CacherInner>>);
 
 impl Deref for Cacher {
-    type Target = Arc<TMutex<CacherInner>>;
+    type Target = Arc<TRwLock<CacherInner>>;
 
-    fn deref(&self) -> &Arc<TMutex<CacherInner>> {
+    fn deref(&self) -> &Arc<TRwLock<CacherInner>> {
         &self.0
     }
 }
 
 impl Cacher {
     pub async fn ProcessEvent(&self, event: &WatchEvent) -> Result<()> {
-        let key = event.obj.Key();
+        let mut inner = self.write().await;
+        return inner.ProcessEvent(event).await;
+    }
 
-        let mut wcEvent = WatchCacheEvent {
-            type_: event.type_.DeepCopy(),
-            obj: event.obj.clone(),
-            prevObj: None,
-            key: key.clone(),
-            revision: event.obj.Revision(),
-            recordTime: SystemTime::now(),
-        };
 
-        let mut inner = self.lock().await;
-        match inner.cacheStore.get(&key) {
-            None => (),
-            Some(o) => {
-                wcEvent.prevObj = Some(o.clone());
-            }
+    pub async fn WaitUntilRev(&self, revision: i64) -> Result<()> {
+        if revision == 0 { // 0 means current rev
+            return Ok(())
         }
 
-        let mut removeWatches = Vec::new();
-        
-        for (idx, w) in &mut inner.watchs {
-            match w.SendWatchCacheEvent(&wcEvent) {
-                Ok(()) => (),
-                Err(_) => {
-                    removeWatches.push(*idx);
+        let time = Instant::now();
+        let until = time.checked_add(Duration::from_secs(3)).unwrap();
+
+        let revNotify = self.read().await.revNotify.clone();
+        loop {
+            if self.read().await.revision >= revision {
+                return Ok(())
+            }
+            tokio::select! {
+                _ = revNotify.notified() => {
+                    return Ok(())
                 }
-            }
+                _ = tokio::time::sleep(until.duration_since(time)) => {
+                    return Err(Error::Timeout)
+                }
+            }           
         }
-
-        for idx in removeWatches {
-            inner.watchs.remove(&idx);
-        }
-
-        inner.cache.Push(wcEvent);
-
-        if event.type_ == EventType::Deleted {
-            inner.cacheStore.remove(&key);
-        } else {
-            inner.cacheStore.insert(key, event.obj.clone());
-        }
-
-        
-        return Ok(())
     }
 
     pub async fn New(store: &EtcdStore, prefix: &str, rev: i64) -> Result<Self> {
         let inner = CacherInner::New(store, prefix);
-        let notify = inner.notify.clone();
-        let ret = Self(Arc::new(TMutex::new(inner)));
+        let notify = inner.closeNotify.clone();
+        let ret = Self(Arc::new(TRwLock::new(inner)));
 
         let storeClone = store.Copy();
         let prefixClone = prefix.to_string();
 
         
         let watch = ret.clone();
+        let ready = Arc::new(Notify::new());
+        let readyClone = ready.clone();
         let future = tokio::spawn(async move {
-            
+            let list = storeClone.List(&prefixClone, &ListOption::default()).await?;
+            {
+                let mut inner = watch.write().await;
+                inner.listRevision = list.revision;
+                inner.revision = list.revision;
+                
+                for o in list.objs {
+                    let key = o.Key();
+                    inner.cacheStore.insert(key, o);
+                }
+            }
+
+            ready.notify_one();            
             loop  {
                 let (mut w, r) = storeClone.Watch(&prefixClone, rev, SelectionPredicate::default())?;
+
                 loop {
                     tokio::select! {
                         prossResult = w.Processing() => {
@@ -297,25 +307,123 @@ impl Cacher {
                         }
                     }
                 }
-            
+
+                let list = storeClone.List(&prefixClone, &ListOption::default()).await?;
+
+                {
+                    let mut inner = watch.write().await;
+                     // close all watches
+                     inner.watchers.clear();
+                    // clear all cached data
+                    inner.cacheStore.clear();
+                    inner.cache.Reset();
+
+                    inner.listRevision = list.revision;
+                    inner.revision = list.revision;
+                    
+                    for o in list.objs {
+                        let key = o.Key();
+                        inner.cacheStore.insert(key, o);
+                    }
+
+                    inner.revNotify.notify_waiters();
+                }
             }
         });
 
-        ret.0.lock().await.future  = Some(future);
+        ret.0.write().await.bgWorker  = Some(future);
 
+        readyClone.notified().await;
         return Ok(ret);
     }
 
-    pub async fn Close(&self) {
-        let notify = self.lock().await.notify.clone();
+    pub async fn Stop(&self) -> Result<()> {
+        let notify = self.read().await.closeNotify.clone();
         notify.notify_waiters();
+        let worker = self.write().await.bgWorker.take();
+        match worker {
+            None => {
+                return Ok(())
+            },
+            Some(w) => {
+                return w.await?;
+            }
+        }
+    }
+
+    pub async fn Create(&self, key: &str, obj: &DataObject) -> Result<()> {
+        let store = self.read().await.etcdStore.Copy();
+        return store.Create(key, &obj).await;
+    }
+
+    pub async fn Delete(&mut self, key: &str) -> Result<()> {
+        let inner = self.write().await;
+        match inner.cacheStore.get(key) {
+            None => {
+                return inner.etcdStore.Delete(key, 0).await;
+            }
+            Some(obj) => {
+                return inner.etcdStore.Delete(key, obj.Revision()).await;
+            }
+        }
     }
 
     pub async fn Watch(&self, key: &str, revision: i64, predicate: SelectionPredicate) -> Result<CacheWatchStream> {
-        let mut inner = self.lock().await;
+        let mut inner = self.write().await;
         return inner.Watch(key, revision, predicate).await;
     }
 
+    pub async fn Get(&self, key: &str, revision: i64) -> Result<Option<DataObject>> {
+        if revision == -1 { // -1 means get from etcd
+            let store = self.read().await.etcdStore.Copy();
+            return store.Get(key, revision).await;
+        }
+
+        self.WaitUntilRev(revision).await?;
+        match self.read().await.cacheStore.get(key) {
+            None => return Ok(None),
+            Some(o) => return Ok(Some(o.clone())),
+        }
+    }
+
+    pub async fn List(&self, prefix: &str, opts: &ListOption) -> Result<DataObjList> {
+        if opts.revision == -1 {
+            let store = self.read().await.etcdStore.Copy();
+            let mut opts = opts.DeepCopy();
+            opts.revision = 0;
+            return store.List(prefix, &opts).await;
+        }
+
+        self.WaitUntilRev(opts.revision).await?;
+
+        let mut objs: Vec<DataObject> = Vec::new();
+
+        let inner = self.read().await;
+        for (_, obj) in &inner.cacheStore {
+            if opts.predicate.Match(obj)? {
+                objs.push(obj.clone());
+            }
+        }
+
+        return Ok(DataObjList {
+            objs: objs,
+            revision: inner.revision,
+            ..Default::default()
+        })
+    }
+
+    pub async fn Update(&self, key: &str, obj: &DataObject) -> Result<()> {
+        let inner = self.read().await;
+        match self.read().await.cacheStore.get(key) {
+            None => {
+                return inner.etcdStore.Update(key, 0, obj).await;
+            },
+            Some(o) => {
+                let rev = o.Revision();
+                return inner.etcdStore.Update(key, rev, obj).await;
+            }
+        }
+    }
 }
 
 pub const DEFAULT_CACHE_COUNT: usize = 2000;
@@ -335,13 +443,15 @@ pub struct CacherInner {
 
     pub lastWatcherId: u64,
 
-    pub notify: Arc<Notify>,
+    pub closeNotify: Arc<Notify>,
+
+    pub revNotify: Arc<Notify>,
 
     pub cacheStore: BTreeMap<String, DataObject>,
 
-    pub watchs: BTreeMap<u64, CacheWatcher>,
+    pub watchers: BTreeMap<u64, CacheWatcher>,
 
-    pub future: Option<JoinHandle<Result<()>>>,
+    pub bgWorker: Option<JoinHandle<Result<()>>>,
 }
 
 impl CacherInner {
@@ -353,11 +463,58 @@ impl CacherInner {
             revision: 0,
             listRevision: 0,
             lastWatcherId: 0,
-            notify: Arc::new(Notify::new()),
+            closeNotify: Arc::new(Notify::new()),
+            revNotify: Arc::new(Notify::new()),
             cacheStore: BTreeMap::new(),
-            watchs: BTreeMap::new(),
-            future: None,
+            watchers: BTreeMap::new(),
+            bgWorker: None,
         }
+    }
+
+    pub async fn ProcessEvent(&mut self, event: &WatchEvent) -> Result<()> {
+        let key = event.obj.Key();
+
+        let mut wcEvent = WatchCacheEvent {
+            type_: event.type_.DeepCopy(),
+            obj: event.obj.clone(),
+            prevObj: None,
+            key: key.clone(),
+            revision: event.obj.Revision(),
+            recordTime: SystemTime::now(),
+        };
+
+        match self.cacheStore.get(&key) {
+            None => (),
+            Some(o) => {
+                wcEvent.prevObj = Some(o.clone());
+            }
+        }
+
+        let mut removeWatches = Vec::new();
+        
+        for (idx, w) in &mut self.watchers {
+            match w.SendWatchCacheEvent(&wcEvent) {
+                Ok(()) => (),
+                Err(_) => {
+                    removeWatches.push(*idx);
+                }
+            }
+        }
+
+        for idx in removeWatches {
+            self.watchers.remove(&idx);
+        }
+
+        self.cache.Push(wcEvent);
+
+        if event.type_ == EventType::Deleted {
+            self.cacheStore.remove(&key);
+        } else {
+            self.cacheStore.insert(key, event.obj.clone());
+        }
+
+        self.revision = event.obj.Revision();
+        return Ok(())
     }
 
     pub fn GetByKey(&self, key: &str) -> Option<DataObject> {
@@ -366,22 +523,7 @@ impl CacherInner {
             Some(o) => return Some(o.clone()),
         }
     }
-    
-    pub async fn Create(&mut self, key: &str, obj: &DataObject) -> Result<()> {
-        self.etcdStore.Create(key, &obj.obj).await?;
-        return Ok(())
-    }
 
-    pub async fn Delete(&mut self, key: &str) -> Result<()> {
-        match self.cacheStore.get(key) {
-            None => {
-                return self.etcdStore.Delete(key, 0).await;
-            }
-            Some(obj) => {
-                return self.etcdStore.Delete(key, obj.Revision()).await;
-            }
-        }
-    }
 
     pub fn GetAllEventsFromStore(&self, revision: i64, pred: &SelectionPredicate) -> Result<Vec<WatchCacheEvent>> {
         let mut buf = Vec::new();
@@ -446,7 +588,7 @@ impl CacherInner {
             watcher.SendWatchCacheEvent(&e)?;
         }
 
-        self.watchs.insert(wid, watcher);
+        self.watchers.insert(wid, watcher);
         return Ok(stream)
     }
 }
@@ -595,5 +737,110 @@ impl WatchCacheBuf {
         let idx = self.head % self.buffer.capacity();
         self.head += 1;
         return self.buffer[idx].take();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+    //use super::super::selector::*;
+
+    pub fn ComputePodKey(obj: &DataObject) -> String {
+        return format!("/pods/{}/{}", &obj.Namespace(), &obj.Name());
+    }    
+
+    // SeedMultiLevelData creates a set of keys with a multi-level structure, returning a resourceVersion
+    // from before any were created along with the full set of objects that were persisted
+    async fn SeedMultiLevelData(store: &mut EtcdStore) -> Result<(i64, Vec<DataObject>)> {
+        // Setup storage with the following structure:
+        //  /
+        //   - first/
+        //  |         - bar
+        //  |
+        //   - second/
+        //  |         - bar
+        //  |         - fooo
+        //  |
+        //   - third/
+        //  |         - barfooo
+        //  |         - fooo
+        let barFirst = DataObject::NewPod("first", "bar", "", "")?;
+        let barSecond = DataObject::NewPod("second", "bar", "", "")?;
+        let foooSecond = DataObject::NewPod("second", "fooo", "", "")?;
+        let barfoooThird = DataObject::NewPod("third", "barfooo", "", "")?;
+        let foooThird = DataObject::NewPod("third", "fooo", "", "")?;
+
+        struct Test {
+            key: String,
+            obj: DataObject,
+        }
+
+        let mut tests = [
+        Test {
+            key: ComputePodKey(&barFirst),
+            obj: barFirst,
+        },
+        Test {
+            key: ComputePodKey(&barSecond),
+            obj: barSecond,
+        },
+        Test {
+            key: ComputePodKey(&foooSecond),
+            obj: foooSecond,
+        },
+        Test {
+            key: ComputePodKey(&barfoooThird),
+            obj: barfoooThird,
+        },
+        Test {
+            key: ComputePodKey(&foooThird),
+            obj: foooThird,
+        },
+    ];
+
+        let initRv = store.Clear("").await?;
+        for t in &mut tests {
+            store.Create(&t.key, &t.obj).await?;
+        }
+
+        let mut pods = Vec::new();
+        for t in tests {
+            pods.push(t.obj);
+        }
+
+        return Ok((initRv, pods))
+    }
+
+    pub async fn RunTestCacher1() -> Result<()> {
+        let mut store = EtcdStore::New("localhost:2379", true).await?;
+
+        let (_, preset) = SeedMultiLevelData(&mut store).await?;
+        
+        let listOptions = ListOption {
+            revision: 0,
+            ..Default::default()
+        };
+
+        let cacher = Cacher::New(&store, "pods", 0).await?;
+        
+        let list = cacher.List("pods/second", &listOptions).await?;
+
+        assert!(list.objs.len()==6, "objs is {:#?}", list.objs.len());
+        for i in 0..list.objs.len() {
+            assert!(preset[i]==list.objs[i], 
+                "expect {:#?}, actual {:#?}", preset[i], &list.objs[i]);
+        }
+
+        return Ok(())
+    }
+
+    #[test]
+    pub fn RunTestCacher1Sync() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build().unwrap();
+        
+        rt.block_on(RunTestCacher1()).unwrap();
     }
 }

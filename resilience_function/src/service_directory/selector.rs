@@ -87,7 +87,7 @@ impl Selector {
         return true;
     }
 
-    pub fn Copy(&self) -> Self{
+    pub fn DeepCopy(&self) -> Self{
         let mut copy = Self::default();
         for r in &self.0 {
             copy.0.push(r.Copy());

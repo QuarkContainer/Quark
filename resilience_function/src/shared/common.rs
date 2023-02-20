@@ -15,6 +15,7 @@
 use etcd_client::Error as EtcdError;
 use prost::DecodeError;
 use prost::EncodeError;
+use tokio::task::JoinError;
 use tonic::Status as TonicStatus;
 use serde_json::Error as SerdeJsonError;
 use std::string::FromUtf8Error;
@@ -64,8 +65,10 @@ pub enum Error {
     SerdeJsonError(SerdeJsonError),
     MpscSendErrWatchEvent(tokio::sync::mpsc::error::SendError<WatchEvent>),
     FromUtf8Error(FromUtf8Error),
+    JoinError(JoinError),
     TokioChannFull,
     TokioChannClose,
+    Timeout,
 }
 
 unsafe impl core::marker::Send for Error {}
@@ -103,6 +106,12 @@ impl Error {
 impl From<FromUtf8Error> for Error {
     fn from(item: FromUtf8Error) -> Self {
         return Self::FromUtf8Error(item)
+    }
+}
+
+impl From<JoinError> for Error {
+    fn from(item: JoinError) -> Self {
+        return Self::JoinError(item)
     }
 }
 

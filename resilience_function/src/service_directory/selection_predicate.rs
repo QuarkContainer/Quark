@@ -40,6 +40,13 @@ impl Continue {
 
         return Ok((keyPrefix.to_string() + &key[1..], self.revision));
     }
+
+    pub fn DeepCopy(&self) -> Self {
+        return Self {
+            key: self.key.clone(),
+            revision: self.revision,
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -83,6 +90,18 @@ impl SelectionPredicate {
         }
         
         return Ok(matched);
+    }
+
+    pub fn DeepCopy(&self) -> Self {
+        return Self {
+            label: self.label.DeepCopy(),
+            field: self.field.DeepCopy(),
+            limit: self.limit,
+            continue_: match &self.continue_{
+                None => None,
+                Some(c) => Some(c.DeepCopy()),
+            }
+        }
     }
 
     pub fn Empty(&self) -> bool {
@@ -141,4 +160,14 @@ pub struct ListOption {
 
     // Predicate provides the selection rules for the list operation.
     pub predicate: SelectionPredicate,
+}
+
+impl ListOption {
+    pub fn DeepCopy(&self) -> Self {
+        return Self {
+            revision: self.revision,
+            revisionMatch: self.revisionMatch,
+            predicate: self.predicate.DeepCopy(),
+        }
+    }
 }
