@@ -83,7 +83,7 @@ impl MetaDataInner {
     }
 
     pub fn Key(&self) -> String {
-        return format!("/{}/{}", &self.namespace, &self.name);
+        return format!("{}/{}", &self.namespace, &self.name);
     }
 
     pub fn Revision(&self) -> i64 {
