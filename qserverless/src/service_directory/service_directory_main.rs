@@ -22,6 +22,8 @@ extern crate serde_derive;
 #[macro_use]
 extern crate log;
 extern crate simple_logging;
+#[macro_use]
+extern crate scopeguard;
 
 pub mod etcd_store;
 pub mod shared;

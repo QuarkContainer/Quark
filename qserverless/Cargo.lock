@@ -783,6 +783,7 @@ dependencies = [
  "log",
  "prost",
  "regex",
+ "scopeguard",
  "serde",
  "serde_derive",
  "serde_json",

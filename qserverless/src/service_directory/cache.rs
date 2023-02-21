@@ -348,6 +348,9 @@ impl Cacher {
         let notify = self.read().await.closeNotify.clone();
         notify.notify_waiters();
         let worker = self.write().await.bgWorker.take();
+        //println!("stop 4");
+        let objType = self.read().await.objectType.clone();
+        defer!(info!("cacher[{}] stop ... ", &objType));
         match worker {
             None => {
                 return Ok(())
@@ -381,6 +384,14 @@ impl Cacher {
     pub async fn Watch(&self, namespace: &str, revision: i64, predicate: SelectionPredicate) -> Result<CacheWatchStream> {
         let mut inner = self.write().await;
         return inner.Watch(namespace, revision, predicate).await;
+    }
+
+    pub async fn RemoveWatch(&self, watcherId: u64) -> Result<()> {
+        let mut inner = self.write().await;
+        match inner.watchers.remove(&watcherId) {
+            None => return Err(Error::CommonError(format!("doesn't existing watcher {}", watcherId))),
+            Some(_) => return Ok(())
+        }
     }
 
     pub async fn Get(&self, namespace: &str, name: &str, revision: i64) -> Result<Option<DataObject>> {
@@ -613,6 +624,7 @@ impl CacherInner {
 }
 
 pub struct CacheWatchStream {
+    pub id: u64,
     pub stream: Receiver<WatchEvent>,
 }
 
@@ -641,6 +653,7 @@ impl CacheWatcher {
         };
 
         return (w, CacheWatchStream {
+            id: id,
             stream: rx,
         });
     }
@@ -796,27 +809,27 @@ mod tests {
         }
 
         let mut tests = [
-        Test {
-            key: ComputePodKey(&barFirst),
-            obj: barFirst,
-        },
-        Test {
-            key: ComputePodKey(&barSecond),
-            obj: barSecond,
-        },
-        Test {
-            key: ComputePodKey(&foooSecond),
-            obj: foooSecond,
-        },
-        Test {
-            key: ComputePodKey(&barfoooThird),
-            obj: barfoooThird,
-        },
-        Test {
-            key: ComputePodKey(&foooThird),
-            obj: foooThird,
-        },
-    ];
+            Test {
+                key: ComputePodKey(&barFirst),
+                obj: barFirst,
+            },
+            Test {
+                key: ComputePodKey(&barSecond),
+                obj: barSecond,
+            },
+            Test {
+                key: ComputePodKey(&foooSecond),
+                obj: foooSecond,
+            },
+            Test {
+                key: ComputePodKey(&barfoooThird),
+                obj: barfoooThird,
+            },
+            Test {
+                key: ComputePodKey(&foooThird),
+                obj: foooThird,
+            },
+        ];
 
         let initRv = store.Clear("").await?;
         for t in &mut tests {
@@ -842,7 +855,7 @@ mod tests {
         };
 
         let cacher = Cacher::New(&store, "pods", 0).await?;
-        
+
         let list = cacher.List("second", &listOptions).await?;
 
         assert!(list.objs.len()==2, "objs is {:#?}", list.objs.len());
@@ -869,6 +882,10 @@ mod tests {
 
         let list = cacher.List("", &ListOption::default()).await?;
         assert!(list.objs.len() == 5);
+        for i in 0..list.objs.len() {
+            assert!(preset[i]==list.objs[i], 
+                "expect {:#?}, actual {:#?}", preset[i], &list.objs[i]);
+        }
         
         let mut w = cacher.Watch("", list.revision+1, SelectionPredicate::default()).await?;
         
@@ -925,12 +942,147 @@ mod tests {
         return Ok(())
     }
 
-    #[test]
+    //#[test]
     pub fn RunTestCacher1Sync() {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build().unwrap();
         
         rt.block_on(RunTestCacher1()).unwrap();
+    }
+
+    pub async fn RunTestCacher2() -> Result<()> {
+        let mut store = EtcdStore::New("localhost:2379", true).await?;
+
+        let (_, preset) = SeedMultiLevelData(&mut store).await?;
+        
+        let listOptions = ListOption {
+            revision: 0,
+            ..Default::default()
+        };
+
+        let cacher = Cacher::New(&store, "pods", 0).await?;
+
+        let list = cacher.List("second", &listOptions).await?;
+
+        assert!(list.objs.len()==2, "objs is {:#?}", list.objs.len());
+        for i in 0..list.objs.len() {
+            assert!(preset[i+1]==list.objs[i], 
+                "expect {:#?}, actual {:#?}", preset[i+1], &list.objs[i]);
+        }
+
+        let mut w = cacher.Watch("second", list.revision+1, SelectionPredicate::default()).await?;
+        let mut w2 = cacher.Watch("", list.revision+1, SelectionPredicate::default()).await?;
+        
+        let bar1Second = DataObject::NewPod("second", "bar1", "", "")?; 
+        cacher.Create(&bar1Second).await?;
+        let event =
+            tokio::select! {
+                x = w.stream.recv() => x,
+                _ = tokio::time::sleep(Duration::from_millis(2000)) => {
+                    assert!(false, "can't get create event on time");
+                    return Ok(())
+                }
+            };
+        match &event {
+            None => assert!(false, "event1 is {:#?}", event),
+            Some(e) => {
+                assert!(e.type_ == EventType::Added);
+                assert!(e.obj == bar1Second, "expect is {:#?}, actual is {:#?}", &preset[1], e.obj);
+            }
+        }
+
+        let event =
+            tokio::select! {
+                x = w2.stream.recv() => x,
+                _ = tokio::time::sleep(Duration::from_millis(2000)) => {
+                    assert!(false, "can't get create event on time");
+                    return Ok(())
+                }
+            };
+        match &event {
+            None => assert!(false, "event1 is {:#?}", event),
+            Some(e) => {
+                assert!(e.type_ == EventType::Added);
+                assert!(e.obj == bar1Second, "expect is {:#?}, actual is {:#?}", &preset[1], e.obj);
+            }
+        }
+
+        let bar1Second = DataObject::NewPod("second", "bar1", "abc", "")?; 
+        cacher.Update(&bar1Second).await?;
+
+        cacher.RemoveWatch(w2.id).await?;
+
+        let event =
+            tokio::select! {
+                x = w.stream.recv() => x,
+                _ = tokio::time::sleep(Duration::from_millis(2000)) => {
+                    assert!(false, "can't get create event on time");
+                    return Ok(())
+                }
+            };
+        match event {
+            None => assert!(false, "event2 is {:#?}", event),
+            Some(e) => {
+                assert!(e.type_ == EventType::Modified, "e is {:#?}", e);
+                assert!(bar1Second == e.obj, "expect is {:#?}, actual is {:#?}", bar1Second, e.obj);
+            }
+        }
+
+        let event =
+            tokio::select! {
+                x = w2.stream.recv() => x,
+                _ = tokio::time::sleep(Duration::from_millis(2000)) => {
+                    assert!(false, "can't get create event on time");
+                    return Ok(())
+                }
+            };
+        match event {
+            None => assert!(false, "event2 is {:#?}", event),
+            Some(e) => {
+                assert!(e.type_ == EventType::Modified, "e is {:#?}", e);
+                assert!(bar1Second == e.obj, "expect is {:#?}, actual is {:#?}", bar1Second, e.obj);
+            }
+        }
+
+        cacher.RemoveWatch(w.id).await?;
+        
+        cacher.Delete("second", "bar1").await?;
+
+        let event = w.stream.recv().await;
+        match event {
+            None => (),
+            Some(e) => {
+                assert!(false, "event is {:#?}", e)
+            }
+        }
+
+        let event =
+            tokio::select! {
+                x = w2.stream.recv() => x,
+                _ = tokio::time::sleep(Duration::from_millis(2000)) => {
+                    assert!(false, "can't get create event on time");
+                    return Ok(())
+                }
+            };
+        match event {
+            None => (),
+            Some(_e) => {
+                assert!(false);
+            }
+        }
+
+        cacher.Stop().await?;
+        
+        return Ok(())
+    }
+
+    #[test]
+    pub fn RunTestCacher2Sync() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build().unwrap();
+        
+        rt.block_on(RunTestCacher2()).unwrap();
     }
 }
