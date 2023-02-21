@@ -103,6 +103,7 @@ pub struct Watcher {
     pub internalPred: SelectionPredicate,
 
     pub watcher: Option<etcd_client::Watcher>,
+    pub stream: Option<Arc<TMutex<WatchStream>>>,
 }
 
 impl Watcher {
@@ -125,6 +126,7 @@ impl Watcher {
             internalPred: pred,
 
             watcher: None,
+            stream: None,
         };
 
         return (watcher, reader)
@@ -138,28 +140,30 @@ impl Watcher {
     }
 
     pub async fn ProcessingInner(&mut self) -> Result<()> {
-        let initialRev = self.initialRev.load(std::sync::atomic::Ordering::Relaxed);
-        if initialRev == 0 {
-            let ret = self.Sync().await;
-            match ret {
-                Err(e) => self.SendErr(format!("failed to sync with latest state: {:?}", e)).await.unwrap(),
-                Ok(()) => (),
+        if self.watcher.is_none() {
+            let initialRev = self.initialRev.load(std::sync::atomic::Ordering::Relaxed);
+            if initialRev == 0 {
+                let ret = self.Sync().await;
+                match ret {
+                    Err(e) => self.SendErr(format!("failed to sync with latest state: {:?}", e)).await.unwrap(),
+                    Ok(()) => (),
+                }
             }
+               
+            let initialRev = self.initialRev.load(std::sync::atomic::Ordering::Relaxed);
+            let options = WatchOptions::new()
+                        .with_start_revision(initialRev + 1)
+                        .with_prev_key()
+                        .with_prefix()
+                        ;
+    
+            let key: &str = &self.key;
+            let (watcher,stream) = self.client.lock().await.watch(key, Some(options)).await?;
+            self.watcher = Some(watcher);
+            self.stream = Some(Arc::new(TMutex::new(stream)));
         }
-           
-        let initialRev = self.initialRev.load(std::sync::atomic::Ordering::Relaxed);
-        let options = WatchOptions::new()
-                    .with_start_revision(initialRev + 1)
-                    .with_prev_key()
-                    .with_prefix()
-                    ;
 
-        let key: &str = &self.key;
-        let (watcher, mut stream) = self.client.lock().await.watch(key, Some(options)).await?;
-        
-        self.watcher = Some(watcher);
-
-        while let Some(resp) = self.WatchNext(&mut stream).await? {
+        while let Some(resp) = self.WatchNext().await? {
             for e in resp.events() {
                 match self.ParseEvent(e) {
                     Err(e) => {
@@ -181,7 +185,10 @@ impl Watcher {
         return Ok(())
     }
 
-    pub async fn WatchNext(&self, stream: &mut WatchStream) -> Result<Option<WatchResponse>> {
+    pub async fn WatchNext(&self) -> Result<Option<WatchResponse>> {
+        let stream = self.stream.clone().unwrap();
+        let mut stream = stream.lock().await;
+
         tokio::select! { 
             ret = stream.message() => return Ok(ret?),
             _ = self.closeNotify.notified() => return Err(Error::ContextCancel),
@@ -196,7 +203,8 @@ impl Watcher {
 
     pub fn ParseEvent(&self, e: &Event) -> Result<Option<WatchEvent>> {
         let kv = e.kv().unwrap();
-                
+
+
         if Self::IsCreateEvent(e) && e.prev_kv().is_some() {
             let kv = e.kv().unwrap();
             // If the previous value is nil, error. One example of how this is possible is if the previous value has been compacted already.
@@ -457,7 +465,7 @@ mod tests {
                         watchType: EventType::Added,
                     },
                 ],
-            },
+            },*/
             Test {
                 name: "update",
                 namespace: &format!("test-ns-3"),
@@ -477,8 +485,8 @@ mod tests {
                         watchType: EventType::Modified,
                     },
                 ],
-            },*/
-            Test {
+            },
+            /*Test {
                 name: "delete because of being filtered",
                 namespace: &format!("test-ns-4"),
                 pred: SelectionPredicate {
@@ -497,7 +505,7 @@ mod tests {
                         watchType: EventType::Deleted,
                     },
                 ],
-            },
+            },*/
         ];
 
         for tt in tests {

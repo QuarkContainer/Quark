@@ -417,7 +417,7 @@ impl EtcdStore {
         if !resp.succeeded() {
             match &resp.op_responses()[0] {
                 TxnOpResponse::Get(getresp) => {
-                    let actualRev = getresp.header().unwrap().revision();
+                    let actualRev = getresp.kvs()[0].mod_revision();
                     return Err(Error::NewDeleteRevNotMatchErr(expectedRev, actualRev));
                 }
                 _ => {

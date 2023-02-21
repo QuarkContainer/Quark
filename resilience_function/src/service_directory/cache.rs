@@ -193,7 +193,7 @@ impl RingBuf {
     }
 
     pub fn Full(&self) -> bool {
-        return self.head - self.tail == self.buf.capacity();
+        return self.tail - self.head == self.buf.capacity();
     }
 
     pub fn Push(&mut self, event: WatchCacheEvent) {
@@ -273,7 +273,10 @@ impl Cacher {
         let ready = Arc::new(Notify::new());
         let readyClone = ready.clone();
         let future = tokio::spawn(async move {
-            let list = storeClone.List(&prefixClone, &ListOption::default()).await?;
+            let list = storeClone.List(&prefixClone, &ListOption {
+                revision: rev,
+                ..Default::default()
+            }).await?;
             {
                 let mut inner = watch.write().await;
                 inner.listRevision = list.revision;
@@ -287,7 +290,7 @@ impl Cacher {
 
             ready.notify_one();            
             loop  {
-                let (mut w, r) = storeClone.Watch(&prefixClone, rev, SelectionPredicate::default())?;
+                let (mut w, r) = storeClone.Watch(&prefixClone, list.revision, SelectionPredicate::default())?;
 
                 loop {
                     tokio::select! {
@@ -353,11 +356,13 @@ impl Cacher {
 
     pub async fn Create(&self, key: &str, obj: &DataObject) -> Result<()> {
         let store = self.read().await.etcdStore.Copy();
+        let key = &self.read().await.StoreKey(key);
         return store.Create(key, &obj).await;
     }
 
-    pub async fn Delete(&mut self, key: &str) -> Result<()> {
+    pub async fn Delete(&self, key: &str) -> Result<()> {
         let inner = self.write().await;
+        let key = &inner.StoreKey(key);
         match inner.cacheStore.get(key) {
             None => {
                 return inner.etcdStore.Delete(key, 0).await;
@@ -376,6 +381,7 @@ impl Cacher {
     pub async fn Get(&self, key: &str, revision: i64) -> Result<Option<DataObject>> {
         if revision == -1 { // -1 means get from etcd
             let store = self.read().await.etcdStore.Copy();
+            let key = &self.read().await.StoreKey(key);
             return store.Get(key, revision).await;
         }
 
@@ -391,6 +397,8 @@ impl Cacher {
             let store = self.read().await.etcdStore.Copy();
             let mut opts = opts.DeepCopy();
             opts.revision = 0;
+            let prefix = &self.read().await.StoreKey(prefix);
+                
             return store.List(prefix, &opts).await;
         }
 
@@ -398,9 +406,15 @@ impl Cacher {
 
         let mut objs: Vec<DataObject> = Vec::new();
 
+        let prefix = if !prefix.starts_with("/") {
+            "/".to_owned() + prefix
+        } else {
+            prefix.to_string()
+        };
+
         let inner = self.read().await;
         for (_, obj) in &inner.cacheStore {
-            if opts.predicate.Match(obj)? {
+            if obj.Key().starts_with(&prefix) && opts.predicate.Match(obj)? {
                 objs.push(obj.clone());
             }
         }
@@ -416,11 +430,14 @@ impl Cacher {
         let inner = self.read().await;
         match self.read().await.cacheStore.get(key) {
             None => {
+                let key = &inner.StoreKey(key);
                 return inner.etcdStore.Update(key, 0, obj).await;
             },
-            Some(o) => {
+            Some(o) => {    
                 let rev = o.Revision();
+                let key = &inner.StoreKey(key);
                 return inner.etcdStore.Update(key, rev, obj).await;
+                //return inner.etcdStore.Update(key, 0, obj).await;
             }
         }
     }
@@ -431,7 +448,7 @@ pub const DEFAULT_CACHE_COUNT: usize = 2000;
 pub struct CacherInner {
     pub etcdStore: EtcdStore,
 
-    pub resourcePrefix: String,
+    pub resourcePrefix: String, // like "pods"
 
     pub cache: RingBuf,
 
@@ -469,6 +486,13 @@ impl CacherInner {
             watchers: BTreeMap::new(),
             bgWorker: None,
         }
+    }
+
+    pub fn StoreKey(&self, key: &str) -> String {
+        if key.starts_with("/") {
+            return "/".to_string() + &self.resourcePrefix + key;
+        }
+        return "/".to_string() + &self.resourcePrefix + "/" + key;
     }
 
     pub async fn ProcessEvent(&mut self, event: &WatchEvent) -> Result<()> {
@@ -523,7 +547,6 @@ impl CacherInner {
             Some(o) => return Some(o.clone()),
         }
     }
-
 
     pub fn GetAllEventsFromStore(&self, revision: i64, pred: &SelectionPredicate) -> Result<Vec<WatchCacheEvent>> {
         let mut buf = Vec::new();
@@ -643,8 +666,8 @@ impl CacheWatcher {
             }
         };
 
-        if !curObjPasses && !oldObjPasses {
-            return Ok(None)
+        if curObjPasses && oldObjPasses {
+            return Ok(Some(WatchEvent { type_:  EventType::Modified, obj: event.obj.DeepCopy()}));
         } else if curObjPasses && !oldObjPasses {
             return Ok(Some(WatchEvent { type_:  EventType::Added, obj: event.obj.DeepCopy()}));
         } else if !curObjPasses && oldObjPasses {
@@ -662,7 +685,7 @@ impl CacheWatcher {
             Some(event) => event,
         };
 
-         match self.sender.try_send(watchEvent) {
+        match self.sender.try_send(watchEvent) {
             Ok(()) => return Ok(()),
             Err(e) => {
                 match e {
@@ -824,12 +847,83 @@ mod tests {
 
         let cacher = Cacher::New(&store, "pods", 0).await?;
         
-        let list = cacher.List("pods/second", &listOptions).await?;
+        let list = cacher.List("second", &listOptions).await?;
 
-        assert!(list.objs.len()==6, "objs is {:#?}", list.objs.len());
+        assert!(list.objs.len()==2, "objs is {:#?}", list.objs.len());
         for i in 0..list.objs.len() {
-            assert!(preset[i]==list.objs[i], 
-                "expect {:#?}, actual {:#?}", preset[i], &list.objs[i]);
+            assert!(preset[i+1]==list.objs[i], 
+                "expect {:#?}, actual {:#?}", preset[i+1], &list.objs[i]);
+        }
+
+        let obj = cacher.Get("/second/bar", 0).await?;
+        match &obj {
+            None => assert!(false),
+            Some(o) => {
+                assert!(o==&preset[1], "expect is {:#?}, actual is {:#?}", &preset[1], o);
+            }
+        }
+        
+        let obj = store.Get("/pods/second/bar", 0).await?;
+        match &obj {
+            None => assert!(false),
+            Some(o) => {
+                assert!(o==&preset[1]);
+            }
+        }
+
+        let list = cacher.List("", &ListOption::default()).await?;
+        assert!(list.objs.len() == 5);
+        
+        let mut w = cacher.Watch("", list.revision+1, SelectionPredicate::default()).await?;
+        
+        let bar1Second = DataObject::NewPod("second", "bar1", "", "")?; 
+        cacher.Create("/second/bar1", &bar1Second).await?;
+        let event =
+            tokio::select! {
+                x = w.stream.recv() => x,
+                _ = tokio::time::sleep(Duration::from_millis(2000)) => {
+                    assert!(false, "can't get create event on time");
+                    return Ok(())
+                }
+            };
+        match &event {
+            None => assert!(false, "event1 is {:#?}", event),
+            Some(e) => {
+                assert!(e.type_ == EventType::Added);
+                assert!(e.obj == bar1Second, "expect is {:#?}, actual is {:#?}", &preset[1], e.obj);
+            }
+        }
+
+        let bar1Second = DataObject::NewPod("second", "bar1", "abc", "")?; 
+        cacher.Update("/second/bar1", &bar1Second).await?;
+
+        let event =
+            tokio::select! {
+                x = w.stream.recv() => x,
+                _ = tokio::time::sleep(Duration::from_millis(2000)) => {
+                    assert!(false, "can't get create event on time");
+                    return Ok(())
+                }
+            };
+        match event {
+            None => assert!(false, "event2 is {:#?}", event),
+            Some(e) => {
+                assert!(e.type_ == EventType::Modified, "e is {:#?}", e);
+                assert!(bar1Second == e.obj, "expect is {:#?}, actual is {:#?}", bar1Second, e.obj);
+            }
+        }
+        
+        
+        cacher.Delete("/second/bar1").await?;
+
+        let event = w.stream.recv().await;
+        match event {
+            None => assert!(false, "event is {:#?}", event),
+            Some(e) => {
+                assert!(e.type_ == EventType::Deleted);
+                e.obj.SetRevision(bar1Second.Revision());
+                assert!(e.obj == bar1Second, "expect is {:#?}, actual is {:#?}", &bar1Second, e.obj);
+            }
         }
 
         return Ok(())
