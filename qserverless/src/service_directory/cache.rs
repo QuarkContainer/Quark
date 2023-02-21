@@ -122,7 +122,6 @@ pub struct WatchCacheEvent {
     pub type_: EventType,
     pub obj: DataObject,
     pub prevObj: Option<DataObject>,
-    pub key: String,
     pub revision: i64,
     pub recordTime: SystemTime,
 }
@@ -133,10 +132,15 @@ impl Default for WatchCacheEvent {
             type_: Default::default(),
             obj: Default::default(),
             prevObj: Default::default(),
-            key: Default::default(),
             revision: Default::default(),
             recordTime: SystemTime::now(),
         }
+    }
+}
+
+impl WatchCacheEvent {
+    pub fn Key(&self) -> String {
+        return self.obj.Key();
     }
 }
 
@@ -354,15 +358,16 @@ impl Cacher {
         }
     }
 
-    pub async fn Create(&self, key: &str, obj: &DataObject) -> Result<()> {
+    pub async fn Create(&self, obj: &DataObject) -> Result<()> {
         let store = self.read().await.etcdStore.Copy();
-        let key = &self.read().await.StoreKey(key);
+        let key = &self.read().await.StoreKey(&obj.Key());
         return store.Create(key, &obj).await;
     }
 
-    pub async fn Delete(&self, key: &str) -> Result<()> {
+    pub async fn Delete(&self, namespace: &str, name: &str) -> Result<()> {
         let inner = self.write().await;
-        let key = &inner.StoreKey(key);
+        let key = namespace.to_string() + "/" + name;
+        let key = &inner.StoreKey(&key);
         match inner.cacheStore.get(key) {
             None => {
                 return inner.etcdStore.Delete(key, 0).await;
@@ -373,32 +378,34 @@ impl Cacher {
         }
     }
 
-    pub async fn Watch(&self, key: &str, revision: i64, predicate: SelectionPredicate) -> Result<CacheWatchStream> {
+    pub async fn Watch(&self, namespace: &str, revision: i64, predicate: SelectionPredicate) -> Result<CacheWatchStream> {
         let mut inner = self.write().await;
-        return inner.Watch(key, revision, predicate).await;
+        return inner.Watch(namespace, revision, predicate).await;
     }
 
-    pub async fn Get(&self, key: &str, revision: i64) -> Result<Option<DataObject>> {
+    pub async fn Get(&self, namespace: &str, name: &str, revision: i64) -> Result<Option<DataObject>> {
+        let objKey = namespace.to_string() + "/" + name;
         if revision == -1 { // -1 means get from etcd
             let store = self.read().await.etcdStore.Copy();
-            let key = &self.read().await.StoreKey(key);
+            let key = &self.read().await.StoreKey(&objKey);
             return store.Get(key, revision).await;
         }
 
         self.WaitUntilRev(revision).await?;
-        match self.read().await.cacheStore.get(key) {
+        match self.read().await.cacheStore.get(&objKey) {
             None => return Ok(None),
             Some(o) => return Ok(Some(o.clone())),
         }
     }
 
-    pub async fn List(&self, prefix: &str, opts: &ListOption) -> Result<DataObjList> {
+    pub async fn List(&self, namespace: &str, opts: &ListOption) -> Result<DataObjList> {
         if opts.revision == -1 {
             let store = self.read().await.etcdStore.Copy();
             let mut opts = opts.DeepCopy();
             opts.revision = 0;
-            let prefix = &self.read().await.StoreKey(prefix);
-                
+            let prefix = &self.read().await.StoreKey(namespace);
+            
+
             return store.List(prefix, &opts).await;
         }
 
@@ -406,15 +413,9 @@ impl Cacher {
 
         let mut objs: Vec<DataObject> = Vec::new();
 
-        let prefix = if !prefix.starts_with("/") {
-            "/".to_owned() + prefix
-        } else {
-            prefix.to_string()
-        };
-
         let inner = self.read().await;
         for (_, obj) in &inner.cacheStore {
-            if obj.Key().starts_with(&prefix) && opts.predicate.Match(obj)? {
+            if obj.Key().starts_with(namespace) && opts.predicate.Match(obj)? {
                 objs.push(obj.clone());
             }
         }
@@ -426,18 +427,18 @@ impl Cacher {
         })
     }
 
-    pub async fn Update(&self, key: &str, obj: &DataObject) -> Result<()> {
+    pub async fn Update(&self, obj: &DataObject) -> Result<()> {
         let inner = self.read().await;
-        match self.read().await.cacheStore.get(key) {
+        let key = obj.Key();
+        match self.read().await.cacheStore.get(&key) {
             None => {
-                let key = &inner.StoreKey(key);
+                let key = &inner.StoreKey(&key);
                 return inner.etcdStore.Update(key, 0, obj).await;
             },
             Some(o) => {    
                 let rev = o.Revision();
-                let key = &inner.StoreKey(key);
+                let key = &inner.StoreKey(&key);
                 return inner.etcdStore.Update(key, rev, obj).await;
-                //return inner.etcdStore.Update(key, 0, obj).await;
             }
         }
     }
@@ -448,7 +449,7 @@ pub const DEFAULT_CACHE_COUNT: usize = 2000;
 pub struct CacherInner {
     pub etcdStore: EtcdStore,
 
-    pub resourcePrefix: String, // like "pods"
+    pub objectType: String, // like "pods"
 
     pub cache: RingBuf,
 
@@ -472,10 +473,10 @@ pub struct CacherInner {
 }
 
 impl CacherInner {
-    pub fn New(store: &EtcdStore, prefix: &str) -> Self {
+    pub fn New(store: &EtcdStore, objectType: &str) -> Self {
         return Self {
             etcdStore: store.Copy(),
-            resourcePrefix: prefix.to_string(),
+            objectType: objectType.to_string(),
             cache: RingBuf::New(DEFAULT_CACHE_COUNT),
             revision: 0,
             listRevision: 0,
@@ -489,23 +490,19 @@ impl CacherInner {
     }
 
     pub fn StoreKey(&self, key: &str) -> String {
-        if key.starts_with("/") {
-            return "/".to_string() + &self.resourcePrefix + key;
-        }
-        return "/".to_string() + &self.resourcePrefix + "/" + key;
+        return self.objectType.clone() + "/" + key;
     }
 
     pub async fn ProcessEvent(&mut self, event: &WatchEvent) -> Result<()> {
-        let key = event.obj.Key();
-
         let mut wcEvent = WatchCacheEvent {
             type_: event.type_.DeepCopy(),
             obj: event.obj.clone(),
             prevObj: None,
-            key: key.clone(),
             revision: event.obj.Revision(),
             recordTime: SystemTime::now(),
         };
+
+        let key = event.obj.Key();
 
         match self.cacheStore.get(&key) {
             None => (),
@@ -560,7 +557,6 @@ impl CacherInner {
                 type_: EventType::Added,
                 obj: obj.clone(),
                 prevObj: None,
-                key: obj.Key(),
                 revision: revision,
                 recordTime: SystemTime::now(),
             })
@@ -597,7 +593,7 @@ impl CacherInner {
         return self.cache.GetAllEvents(revision, pred);
     }
 
-    pub async fn Watch(&mut self, key: &str, revision: i64, predicate: SelectionPredicate) -> Result<CacheWatchStream> {
+    pub async fn Watch(&mut self, namespace: &str, revision: i64, predicate: SelectionPredicate) -> Result<CacheWatchStream> {
         self.lastWatcherId += 1;
         let wid = self.lastWatcherId;
 
@@ -605,7 +601,7 @@ impl CacherInner {
         let channelSize = (events.len() + 200).max(DEFAULT_CACHE_COUNT);
 
         let (mut watcher, stream) = 
-            CacheWatcher::New(wid, channelSize, key, predicate, "");
+            CacheWatcher::New(wid, channelSize, namespace, predicate, "");
 
         for e in events {
             watcher.SendWatchCacheEvent(&e)?;
@@ -625,7 +621,7 @@ pub struct CacheWatcher {
 
     pub sender: Sender<WatchEvent>,
 
-    pub filterKey: String, // expect Key
+    pub namespace: String, // expect Key
     
     pub predicate: SelectionPredicate,
 
@@ -633,13 +629,13 @@ pub struct CacheWatcher {
 }
 
 impl CacheWatcher {
-    pub fn New(id: u64, channelSize: usize, filterKey: &str, predicate: SelectionPredicate, identifier: &str) -> (Self, CacheWatchStream) {
+    pub fn New(id: u64, channelSize: usize, namespace: &str, predicate: SelectionPredicate, identifier: &str) -> (Self, CacheWatchStream) {
         let (tx, rx) = channel(channelSize);
 
         let w = Self {
             id: id,
             sender: tx,
-            filterKey: filterKey.to_string(),
+            namespace: namespace.to_string(),
             predicate: predicate,
             identifier: identifier.to_string(),
         };
@@ -650,7 +646,7 @@ impl CacheWatcher {
     }
 
     pub fn Match(&self, objKey: &str, obj: &DataObject) -> Result<bool> {
-        if !objKey.starts_with(&self.filterKey) {
+        if !objKey.starts_with(&self.namespace) {
             return Ok(false);
         }
 
@@ -658,11 +654,11 @@ impl CacheWatcher {
     }
 
     pub fn ConvertToWatchEvent(&self, event: &WatchCacheEvent) -> Result<Option<WatchEvent>> {
-        let curObjPasses = event.type_ != EventType::Deleted && self.Match(&event.key, &event.obj)?;
+        let curObjPasses = event.type_ != EventType::Deleted && self.Match(&event.Key(), &event.obj)?;
         let oldObjPasses = match &event.prevObj {
             None => false,
             Some(old) => {
-                self.Match(&event.key, old)?
+                self.Match(&event.Key(), old)?
             }
         };
 
@@ -855,7 +851,7 @@ mod tests {
                 "expect {:#?}, actual {:#?}", preset[i+1], &list.objs[i]);
         }
 
-        let obj = cacher.Get("/second/bar", 0).await?;
+        let obj = cacher.Get("second", "bar", 0).await?;
         match &obj {
             None => assert!(false),
             Some(o) => {
@@ -877,7 +873,7 @@ mod tests {
         let mut w = cacher.Watch("", list.revision+1, SelectionPredicate::default()).await?;
         
         let bar1Second = DataObject::NewPod("second", "bar1", "", "")?; 
-        cacher.Create("/second/bar1", &bar1Second).await?;
+        cacher.Create(&bar1Second).await?;
         let event =
             tokio::select! {
                 x = w.stream.recv() => x,
@@ -895,7 +891,7 @@ mod tests {
         }
 
         let bar1Second = DataObject::NewPod("second", "bar1", "abc", "")?; 
-        cacher.Update("/second/bar1", &bar1Second).await?;
+        cacher.Update(&bar1Second).await?;
 
         let event =
             tokio::select! {
@@ -914,7 +910,7 @@ mod tests {
         }
         
         
-        cacher.Delete("/second/bar1").await?;
+        cacher.Delete("second", "bar1").await?;
 
         let event = w.stream.recv().await;
         match event {
