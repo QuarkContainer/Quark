@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors / 2014 The Kubernetes Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,14 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let proto_file = "./proto/qobjs.proto";
-    tonic_build::configure()
-        .build_server(true)
-        .out_dir("./src/qobjs/src/pb_gen")
-        .compile(&[proto_file], &["."])
-        .unwrap_or_else(|e| panic!("protobuf compile error: {}", e));
-    tonic_build::compile_protos(proto_file)?;
+#![allow(dead_code)]
+#![allow(non_snake_case)]
 
-    Ok(())
+pub mod types;
+pub mod common;
+pub mod selector;
+pub mod selection_predicate;
+pub mod validation;
+
+pub mod service_directory {
+    include!("pb_gen/service_directory.rs");
 }
+

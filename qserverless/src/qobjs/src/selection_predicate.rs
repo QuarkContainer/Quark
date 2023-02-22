@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::shared::common::*;
+use crate::common::*;
 
-use super::etcd_store::*;
+use super::types::*;
 use super::selector::*;
 
 #[derive(Debug, Clone)]
