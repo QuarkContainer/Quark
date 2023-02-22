@@ -14,7 +14,7 @@
 
 use regex::Regex;
 use lazy_static::lazy_static;
-use crate::shared::common::*;
+use crate::common::*;
 
 lazy_static! {
     pub static ref QUALIFIED_NAME_FMT : String = "(".to_owned() + QNAME_CHAR_FMT + QNAME_EXT_CHAR_FMT + "*)?" + QNAME_CHAR_FMT;

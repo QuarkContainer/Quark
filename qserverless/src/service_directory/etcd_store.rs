@@ -12,285 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use std::sync::atomic::AtomicI64;
-use std::{sync::Arc, collections::BTreeMap};
-use std::ops::{Deref, DerefMut};
-use std::sync::atomic::Ordering;
-
 use etcd_client::{Client, Compare, Txn, TxnOp, CompareOp, TxnOpResponse, DeleteOptions, CompactionOptions};
 use etcd_client::GetOptions;
-use prost::Message;
 
 use crate::etcd_client::EtcdClient;
-use crate::types::DeepCopy;
 use crate::watch::{Watcher, WatchReader};
-use crate::{shared::common::*, selector::Labels};
-use crate::service_directory::*;
-use crate::selection_predicate::*;
-
-#[derive(Debug, Default)]
-pub struct MetaDataInner {
-    pub kind: String,
-    pub namespace: String,
-    pub name: String,
-    pub lables: Labels,
-    pub annotations: Labels,
-    
-    // revision number set by etcd
-    pub reversion: AtomicI64,
-}
-
-impl DeepCopy for MetaDataInner {
-    fn DeepCopy(&self) -> Self {
-        return self.Copy();
-    }
-}
-
-impl PartialEq for MetaDataInner {
-    fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind &&
-        self.namespace == other.namespace &&
-        self.lables == other.lables &&
-        self.annotations == other.annotations &&
-        self.reversion.load(Ordering::Relaxed) == other.reversion.load(Ordering::Relaxed)
-    }
-}
-impl Eq for MetaDataInner {}
-
-impl MetaDataInner {
-    pub fn New(item: &Object) -> Self {
-        let mut lables = BTreeMap::new();
-        for l in &item.labels {
-            lables.insert(l.key.clone(), l.val.clone());
-        }
-
-        let mut annotations = BTreeMap::new();
-        for l in &item.annotations {
-            annotations.insert(l.key.clone(), l.val.clone());
-        }
-
-        let inner = MetaDataInner {
-            kind: item.kind.clone(),
-            namespace: item.namespace.clone(),
-            name: item.name.clone(),
-            lables: lables.into(),
-            annotations: annotations.into(),
-            reversion: AtomicI64::new(0),
-        };
-
-        return inner;
-    }
-
-    pub fn Key(&self) -> String {
-        return format!("{}/{}", &self.namespace, &self.name);
-    }
-
-    pub fn Revision(&self) -> i64 {
-        return self.reversion.load(Ordering::Relaxed);
-    }
-
-    pub fn SetRevision(&self, rev: i64) {
-        return self.reversion.store(rev, Ordering::SeqCst);
-    }
-
-    pub fn Copy(&self) -> Self {
-        return Self {
-            kind: self.kind.clone(),
-            namespace: self.namespace.clone(),
-            name: self.name.clone(),
-            lables: self.lables.Copy(),
-            annotations: self.annotations.Copy(),
-            reversion: AtomicI64::new(self.Revision()),
-        }
-    }
-
-    pub fn ToObject(&self) -> Object {
-        let mut obj = Object::default();
-        obj.kind = self.kind.clone();
-        obj.namespace = self.namespace.clone();
-        obj.name = self.name.clone();
-        obj.labels = self.lables.ToVec();
-
-        return obj;
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct DataObjInner {
-    pub metadata: MetaDataInner,
-
-    pub obj: Object,
-}
-
-impl PartialEq for DataObjInner {
-    fn eq(&self, other: &Self) -> bool {
-        return self.metadata == other.metadata && self.obj.val == other.obj.val;
-    }
-}
-impl Eq for DataObjInner {}
-
-impl Deref for DataObjInner {
-    type Target = MetaDataInner;
-
-    fn deref(&self) -> &MetaDataInner {
-        &self.metadata
-    }
-}
-
-impl DeepCopy for DataObjInner {
-    fn DeepCopy(&self) -> Self {
-        return Self {
-            metadata: self.metadata.DeepCopy(),
-            obj: self.obj.clone(),
-        }
-    }
-}
-
-impl DerefMut for DataObjInner {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.metadata
-    }
-}
-
-impl From<Object> for DataObjInner {
-    fn from(item: Object) -> Self {
-        let metadata : MetaDataInner = MetaDataInner::New(&item);
-
-        let inner = Self {
-            metadata: metadata,
-            obj: item,
-        };
-
-        return inner;
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct DataObjList {
-    pub objs: Vec<DataObject>,
-    pub revision: i64,
-    pub continue_: Option<Continue>,
-    pub remainCount: i64,
-}
-
-impl DataObjList {
-    pub fn New(objs: Vec<DataObject>, revision: i64, continue_: Option<Continue>, remainCount: i64) -> Self {
-        return Self {
-            objs: objs,
-            revision:  revision,
-            continue_: continue_,
-            remainCount: remainCount,
-        }
-    }
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct DataObject(Arc<DataObjInner>);
-
-impl PartialEq for DataObject {
-    fn eq(&self, other: &Self) -> bool {
-        return self.0 == other.0;
-    }
-}
-impl Eq for DataObject {}
-
-impl From<Object> for DataObject {
-    fn from(item: Object) -> Self {
-        let inner = item.into();
-
-        return Self(Arc::new(inner));
-    }
-}
-
-impl From<DataObjInner> for DataObject {
-    fn from(inner: DataObjInner) -> Self {
-        return Self(Arc::new(inner));
-    }
-}
-
-impl Deref for DataObject {
-    type Target = Arc<DataObjInner>;
-
-    fn deref(&self) -> &Arc<DataObjInner> {
-        &self.0
-    }
-}
-
-impl DeepCopy for DataObject {
-    fn DeepCopy(&self) -> Self {
-        return Self(Arc::new(self.0.DeepCopy()));
-    }
-}
-
-impl DataObject {
-    pub fn Namespace(&self) -> String {
-        return self.metadata.namespace.clone();
-    }
-
-    pub fn Name(&self) -> String {
-        return self.metadata.name.clone();
-    }
-
-    pub fn Key(&self) -> String {
-        return self.metadata.Key();
-    }
-
-    pub fn Obj(&self) -> Object {
-        return self.obj.clone();
-    }
-
-    pub fn Revision(&self) -> i64 {
-        return self.metadata.Revision();
-    }
-
-    pub fn Decode(buf: &[u8]) -> Result<Self> {
-        let obj = Object::decode(buf)?;
-        return Ok(Self(Arc::new(obj.into())))
-    }
-
-    pub fn Encode(&self) -> Result<Vec<u8>> {
-        let mut buf : Vec<u8> = Vec::new();
-        buf.reserve(self.obj.encoded_len());
-        self.obj.encode(&mut buf)?;
-        return Ok(buf)
-    }
-
-    pub fn Labels(&self) -> Labels {
-        let lables = self.lables.clone();
-        return lables
-    }
-
-    pub fn SetRevision(&self, rev: i64) {
-        self.metadata.SetRevision(rev)
-    }
-    
-}
-
-async fn test() -> Result<()> {
-    let mut client = Client::connect(["localhost:2379"], None).await?;
-    // put kv
-    client.put("foo", "bar", None).await?;
-    // get kv
-    let resp = client.get("foo", None).await?;
-    if let Some(kv) = resp.kvs().first() {
-        println!("Get kv: {{{}: {}}}", kv.key_str()?, kv.value_str()?);
-    }
-
-    Ok(())
-}
-
-impl Object {
-    pub fn Encode(&self) -> Result<Vec<u8>> {
-        let mut buf : Vec<u8> = Vec::new();
-        buf.reserve(self.encoded_len());
-        self.encode(&mut buf)?;
-        return Ok(buf)
-    }
-}
+use qobjs::common::*;
+use qobjs::service_directory::*;
+use qobjs::selection_predicate::*;
+use qobjs::types::*;
 
 pub const PATH_PREFIX : &str = "/registry";
 
+#[derive(Debug)]
 pub struct EtcdStore {
     pub client: EtcdClient,
     pub pathPrefix: String,
@@ -356,7 +90,7 @@ impl EtcdStore {
         let kv = &kvs[0];
         let val = kv.value();
 
-        let obj = Object::decode(val)?;
+        let obj = Object::Decode(val)?;
         let inner : DataObjInner = obj.into();
         inner.SetRevision(kv.mod_revision());
         
@@ -595,7 +329,7 @@ impl EtcdStore {
                 }
 
                 lastKey = kv.key().to_vec();
-                let obj = Object::decode(kv.value())?;
+                let obj = Object::Decode(kv.value())?;
                 let inner : DataObjInner = obj.into();
                 inner.SetRevision(kv.mod_revision());
                 let obj = inner.into();
@@ -724,7 +458,7 @@ impl EtcdOption {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
-    use super::super::selector::*;
+    use qobjs::selector::*;
 
     pub fn ComputePodKey(obj: &DataObject) -> String {
         return format!("/pods/{}/{}", &obj.Namespace(), &obj.Name());

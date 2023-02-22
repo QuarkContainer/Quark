@@ -24,15 +24,16 @@ pub mod service_directory {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = ServiceDirectoryServiceClient::connect("http://[::1]:50071").await?;
 
-    let val = "test";
     let request = tonic::Request::new(PutRequestMessage {
-        key: Some(ObjectKey {
+        object_type: "test".into(),
+        obj: Some(Object{
             kind: "test_kind".into(),
             namespace: "test_namespace".into(),
             name: "test_name".into(),
+            labels: Vec::new(), 
+            annotations: Vec::new(),
+            val: "test".into(),
         }),
-        meta: Some(ObjectMeta { labels: Vec::new(), annotations: Vec::new() }),
-        val: val.as_bytes().to_vec(),
     });
     let response = client.put(request).await?;
 

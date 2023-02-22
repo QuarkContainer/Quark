@@ -20,7 +20,7 @@ use tonic::Status as TonicStatus;
 use serde_json::Error as SerdeJsonError;
 use std::string::FromUtf8Error;
 
-use crate::watch::WatchEvent;
+use crate::types::WatchEvent;
 
 pub type Result<T> = core::result::Result<T, Error>;
 

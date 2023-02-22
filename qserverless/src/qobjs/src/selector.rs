@@ -22,7 +22,7 @@ use std::sync::Arc;
 use core::ops::Deref;
 
 use super::service_directory::*;
-use crate::shared::common::*;
+use crate::common::*;
 use crate::types::DeepCopy;
 
 use super::validation::*;

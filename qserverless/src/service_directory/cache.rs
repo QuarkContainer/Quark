@@ -20,9 +20,11 @@ use spin::Mutex;
 use std::ops::{Deref};
 use tokio::sync::{mpsc::Receiver, Notify, mpsc::Sender, mpsc::channel};
 use tokio::task::JoinHandle;
-use crate::etcd_store::DataObjList;
-use crate::{etcd_store::{DataObject, EtcdStore}, watch::{EventType, WatchEvent}, selection_predicate::{SelectionPredicate}, types::DeepCopy};
-use crate::shared::common::*;
+use qobjs::types::{EventType, WatchEvent};
+use qobjs::selection_predicate::{SelectionPredicate};
+use qobjs::types::*;
+use crate::{etcd_store::{EtcdStore}};
+use qobjs::common::*;
 use crate::ListOption;
 
 pub struct ThreadSafeStoreInner {
@@ -144,6 +146,8 @@ impl WatchCacheEvent {
     }
 }
 
+
+#[derive(Debug)]
 pub struct RingBuf {
     pub buf: Vec<Option<WatchCacheEvent>>,
     pub head: usize,
@@ -222,7 +226,7 @@ impl RingBuf {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Cacher(Arc<TRwLock<CacherInner>>);
 
 impl Deref for Cacher {
@@ -264,13 +268,13 @@ impl Cacher {
         }
     }
 
-    pub async fn New(store: &EtcdStore, prefix: &str, rev: i64) -> Result<Self> {
-        let inner = CacherInner::New(store, prefix);
+    pub async fn New(store: &EtcdStore, objType: &str, rev: i64) -> Result<Self> {
+        let inner = CacherInner::New(store, objType);
         let notify = inner.closeNotify.clone();
         let ret = Self(Arc::new(TRwLock::new(inner)));
 
         let storeClone = store.Copy();
-        let prefixClone = prefix.to_string();
+        let prefixClone = objType.to_string();
 
         
         let watch = ret.clone();
@@ -298,8 +302,8 @@ impl Cacher {
 
                 loop {
                     tokio::select! {
-                        prossResult = w.Processing() => {
-                            prossResult?;
+                        processResult = w.Processing() => {
+                            processResult?;
                         }
                         event = r.GetNextEvent() => {
                             match event {
@@ -457,6 +461,8 @@ impl Cacher {
 
 pub const DEFAULT_CACHE_COUNT: usize = 2000;
 
+
+#[derive(Debug)]
 pub struct CacherInner {
     pub etcdStore: EtcdStore,
 
@@ -628,6 +634,8 @@ pub struct CacheWatchStream {
     pub stream: Receiver<WatchEvent>,
 }
 
+
+#[derive(Debug)]
 pub struct CacheWatcher {
     pub id: u64,
 

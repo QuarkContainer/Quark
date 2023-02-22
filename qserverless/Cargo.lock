@@ -691,6 +691,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "qobjs"
+version = "0.1.0"
+dependencies = [
+ "etcd-client",
+ "futures-core",
+ "futures-io",
+ "futures-util",
+ "lazy_static",
+ "log",
+ "prost",
+ "regex",
+ "scopeguard",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "simple-logging",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "tonic-build",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -782,6 +805,7 @@ dependencies = [
  "lazy_static",
  "log",
  "prost",
+ "qobjs",
  "regex",
  "scopeguard",
  "serde",

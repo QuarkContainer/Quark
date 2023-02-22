@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors
+// Copyright (c) 2021 Quark Container Authors / 2014 The Kubernetes Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,4 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(dead_code)]
+#![allow(non_snake_case)]
+
+pub mod types;
 pub mod common;
+pub mod selector;
+pub mod selection_predicate;
+pub mod validation;
+
+pub mod service_directory {
+    include!("pb_gen/service_directory.rs");
+}
+

@@ -21,62 +21,13 @@ use etcd_client::WatchStream;
 use tokio::sync::mpsc;
 use tokio::sync::Notify;
 use std::sync::atomic::AtomicI64;
-use prost::Message;
 use tokio::sync::Mutex as TMutex;
 
 use crate::etcd_client::EtcdClient;
-use crate::selection_predicate::SelectionPredicate;
-use crate::shared::common::*;
-use crate::service_directory::*;
-
-use super::etcd_store::*;
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum EventType {
-    None,
-    Added,
-    Modified,
-    Deleted,
-    Error(String),
-}
-
-impl EventType {
-    pub fn DeepCopy(&self) -> Self {
-        match self {
-            Self::None => return Self::None,
-            Self::Added => return Self::Added,
-            Self::Modified => return Self::Modified,
-            Self::Deleted => return Self::Deleted,
-            Self::Error(str) => return Self::Error(str.to_string()),
-        }
-    }
-}
-
-impl Default for EventType {
-    fn default() -> Self {
-        return Self::None;
-    }
-}
-
-#[derive(Debug)]
-pub struct WatchEvent {
-    pub type_: EventType,
-
-    // Object is:
-	//  * If Type is Added or Modified: the new state of the object.
-	//  * If Type is Deleted: the state of the object immediately before deletion.
-	//  * If Type is Error:
-    pub obj: DataObject,
-}
-
-pub struct TmpEvent {
-    pub key: String,
-    pub value: Vec<u8>,
-    pub preValue: Option<Vec<u8>>,
-    pub rev: i64,
-    pub isDeleted: bool,
-    pub isCreated: bool,
-}
+use qobjs::selection_predicate::SelectionPredicate;
+use qobjs::common::*;
+use qobjs::service_directory::*;
+use qobjs::types::*;
 
 pub struct WatchReader {
     pub resultRecv: TMutex<mpsc::Receiver<WatchEvent>>,
@@ -216,7 +167,7 @@ impl Watcher {
         let curObj: Option<DataObject> = if e.event_type() == etcd_client::EventType::Delete {
             None
         } else {
-            let obj = Object::decode(kv.value())?;
+            let obj = Object::Decode(kv.value())?;
             let inner : DataObjInner = obj.into();
             inner.SetRevision(kv.mod_revision());
             Some(inner.into())
@@ -226,7 +177,7 @@ impl Watcher {
             None => None,
             Some(pkv) => {
                 if e.event_type() == etcd_client::EventType::Delete || !self.AcceptAll() {
-                    let obj = Object::decode(pkv.value())?;
+                    let obj = Object::Decode(pkv.value())?;
                     let inner : DataObjInner = obj.into();
                     inner.SetRevision(kv.mod_revision());
                     Some(inner.into())
@@ -345,7 +296,7 @@ impl Watcher {
         self.initialRev.store(initalRev, std::sync::atomic::Ordering::SeqCst);
 
         for kv in getResp.kvs() {
-            let obj = Object::decode(kv.value())?;
+            let obj = Object::Decode(kv.value())?;
             let inner : DataObjInner = obj.into();
             inner.SetRevision(kv.mod_revision());
             let obj = inner.into();
@@ -365,7 +316,8 @@ impl Watcher {
 
 #[cfg(test)]
 mod tests {
-    use crate::{types::DeepCopy};
+    use qobjs::types::*;
+    use crate::etcd_store::*;
     use super::*;
 
     pub async fn TestCheckResultFunc(
