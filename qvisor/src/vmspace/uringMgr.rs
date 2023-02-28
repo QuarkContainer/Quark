@@ -14,10 +14,10 @@
 
 use alloc::vec::Vec;
 
+use super::super::print::*;
 use super::super::qlib::common::*;
 use super::super::qlib::uring::sys::sys::*;
 use super::super::qlib::uring::*;
-use super::super::print::*;
 
 use super::super::*;
 use super::host_uring::*;
@@ -100,7 +100,7 @@ impl UringMgr {
                 &self.fds[0] as *const _ as u64,
                 self.fds.len() as u32,
             )
-                .expect("InitUring register files fail");
+            .expect("InitUring register files fail");
         }
     }
 
@@ -111,12 +111,7 @@ impl UringMgr {
             .expect("InitUring register eventfd fail");
     }
 
-    pub fn Enter(
-        &mut self,
-        toSumbit: u32,
-        minComplete: u32,
-        flags: u32,
-    ) -> Result<i32> {
+    pub fn Enter(&mut self, toSumbit: u32, minComplete: u32, flags: u32) -> Result<i32> {
         let ret = IOUringEnter(self.uringfd, toSumbit, minComplete, flags);
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
@@ -171,7 +166,7 @@ impl UringMgr {
 
     pub fn Addfd(&mut self, fd: i32) -> Result<()> {
         if !QUARK_CONFIG.lock().UringFixedFile {
-            return Ok(())
+            return Ok(());
         }
 
         if fd as usize >= self.fds.len() {
@@ -191,7 +186,7 @@ impl UringMgr {
 
     pub fn Removefd(&mut self, fd: i32) -> Result<()> {
         if !QUARK_CONFIG.lock().UringFixedFile {
-            return Ok(())
+            return Ok(());
         }
 
         if fd as usize >= self.fds.len() {

@@ -19,9 +19,9 @@ use super::common::*;
 
 pub struct QRingQueue<T: Clone>(ArrayQueue<T>);
 
-pub const MSG_QUEUE_SIZE : usize = 256;
+pub const MSG_QUEUE_SIZE: usize = 256;
 
-impl <T: Clone> Default for QRingQueue <T> {
+impl<T: Clone> Default for QRingQueue<T> {
     fn default() -> Self {
         return Self::New(MSG_QUEUE_SIZE);
     }
@@ -42,11 +42,11 @@ impl<T: Clone> QRingQueue<T> {
 
     pub fn Push(&self, data: &T) -> Result<()> {
         match self.0.push(data.clone()) {
-            Err(_) =>  {
+            Err(_) => {
                 error!("QRingQueue full...");
                 return Err(Error::QueueFull);
             }
-            _ => return Ok(())
+            _ => return Ok(()),
         }
     }
 

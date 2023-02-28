@@ -5,8 +5,8 @@ use core::sync::atomic::Ordering;
 use libc;
 
 use super::qlib::linux_def::MemoryDef;
-use super::qlib::mem::list_allocator::*;
 use super::qlib::mem::bitmap_allocator::*;
+use super::qlib::mem::list_allocator::*;
 
 pub const ENABLE_HUGEPAGE: bool = false;
 
@@ -14,7 +14,7 @@ impl BitmapAllocatorWrapper {
     pub const fn New() -> Self {
         return Self {
             addr: AtomicU64::new(0),
-        }
+        };
     }
 
     pub fn Init(&self) {

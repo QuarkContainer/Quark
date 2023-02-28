@@ -172,7 +172,7 @@ impl IdAllocator {
 
     pub fn Free(&mut self, id: u64) {
         if !self.range.Contains(id) {
-            return
+            return;
         }
         let leftRange = if id == 0 {
             None

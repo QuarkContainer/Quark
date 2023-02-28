@@ -217,10 +217,8 @@ impl ConnectionedEndPoint {
         let q2 = MsgQueue::New(bq.clone(), aq.clone(), DEFAULT_BUFFER_SIZE);
 
         if stype == SockType::SOCK_STREAM {
-            a.baseEndpoint.lock().receiver =
-                Some(Arc::new(StreamQueueReceiver::New(q1.clone())));
-            b.baseEndpoint.lock().receiver =
-                Some(Arc::new(StreamQueueReceiver::New(q2.clone())));
+            a.baseEndpoint.lock().receiver = Some(Arc::new(StreamQueueReceiver::New(q1.clone())));
+            b.baseEndpoint.lock().receiver = Some(Arc::new(StreamQueueReceiver::New(q2.clone())));
         } else {
             a.baseEndpoint.lock().receiver = Some(Arc::new(QueueReceiver {
                 readQueue: q1.clone(),
@@ -363,7 +361,11 @@ impl ConnectionedEndPoint {
             readQueue.clone(),
         )));
 
-        let writeQueue = MsgQueue::New(writeq.clone(), readq.clone(), ops.GetReceiveBufferSize() as _);
+        let writeQueue = MsgQueue::New(
+            writeq.clone(),
+            readq.clone(),
+            ops.GetReceiveBufferSize() as _,
+        );
         if self.stype == SockType::SOCK_STREAM {
             ne.baseEndpoint.lock().receiver =
                 Some(Arc::new(StreamQueueReceiver::New(writeQueue.clone())))
@@ -376,8 +378,8 @@ impl ConnectionedEndPoint {
         match chan.Write(task, ne.clone()) {
             Err(e) => {
                 //return Err(Error::SysError(SysErr::ECONNREFUSED))
-                return Err(e)
-            },
+                return Err(e);
+            }
             Ok(()) => {
                 let connected = UnixConnectedEndpoint::New(Arc::new(ne), writeQueue);
                 if self.stype == SockType::SOCK_STREAM {
@@ -645,10 +647,13 @@ impl Waitable for ConnectionedEndPoint {
 
         let mut ready = 0;
         if e.Connected() {
-            if mask & READABLE_EVENT != 0 && e.baseEndpoint.lock().receiver.as_ref().unwrap().Readable() {
+            if mask & READABLE_EVENT != 0
+                && e.baseEndpoint.lock().receiver.as_ref().unwrap().Readable()
+            {
                 ready |= READABLE_EVENT
             }
-            if mask & WRITEABLE_EVENT != 0 && e.baseEndpoint.lock().connected.as_ref().unwrap().Writable()
+            if mask & WRITEABLE_EVENT != 0
+                && e.baseEndpoint.lock().connected.as_ref().unwrap().Writable()
             {
                 ready |= WRITEABLE_EVENT
             }

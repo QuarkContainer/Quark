@@ -28,14 +28,6 @@ use regex::Regex;
 use super::hook::*;
 use super::status::*;
 //use super::super::super::qlib::util::*;
-use super::super::cgroup::cgroup::*;
-use super::super::cmd::config::*;
-use super::super::cmd::exec::*;
-use super::super::oci::*;
-use super::super::oci::serialize::*;
-use super::super::sandbox::sandbox::*;
-use super::super::shim::container_io::*;
-use super::super::specutils::specutils::*;
 use super::super::super::qlib::auth::cap_set::*;
 use super::super::super::qlib::auth::id::*;
 use super::super::super::qlib::common::*;
@@ -43,7 +35,15 @@ use super::super::super::qlib::control_msg::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::path::*;
 use super::super::super::ucall::ucall::*;
+use super::super::cgroup::cgroup::*;
+use super::super::cmd::config::*;
+use super::super::cmd::exec::*;
+use super::super::oci::serialize::*;
+use super::super::oci::*;
 use super::super::runtime::fs::FsImageMounter;
+use super::super::sandbox::sandbox::*;
+use super::super::shim::container_io::*;
+use super::super::specutils::specutils::*;
 
 // metadataFilename is the name of the metadata file relative to the
 // container root directory that holds sandbox metadata.
@@ -169,7 +169,11 @@ pub fn ValidateID(id: &str) -> Result<()> {
 
 // maybeLockRootContainer locks the sandbox root container. It is used to
 // prevent races to create and delete child container sandboxes.
-pub fn maybeLockRootContainer(bundleDir: &str, spec: &Spec, rootDir: &str) -> Result<FileLockCleanup> {
+pub fn maybeLockRootContainer(
+    bundleDir: &str,
+    spec: &Spec,
+    rootDir: &str,
+) -> Result<FileLockCleanup> {
     if IsRoot(spec) {
         return Ok(FileLockCleanup::default());
     }
@@ -183,7 +187,14 @@ pub fn maybeLockRootContainer(bundleDir: &str, spec: &Spec, rootDir: &str) -> Re
         Some(id) => id,
     };
 
-    let sandBoxRootDir = std::path::Path::new(bundleDir).parent().unwrap().join(&sbid).join(rootDir).to_str().unwrap().to_string();
+    let sandBoxRootDir = std::path::Path::new(bundleDir)
+        .parent()
+        .unwrap()
+        .join(&sbid)
+        .join(rootDir)
+        .to_str()
+        .unwrap()
+        .to_string();
     let sb = Container::Load(&sandBoxRootDir, &sbid)?;
 
     return sb.Lock();
@@ -639,7 +650,10 @@ impl Container {
         io: &ContainerIO,
         pivot: bool,
     ) -> Result<Self> {
-        info!("Create container {} in root dir: {}, bundleDir {}", id, &conf.RootDir, bundleDir);
+        info!(
+            "Create container {} in root dir: {}, bundleDir {}",
+            id, &conf.RootDir, bundleDir
+        );
         //debug!("container spec is {:?}", &spec);
         ValidateID(id)?;
 
@@ -695,7 +709,10 @@ impl Container {
                     ..Default::default()
                 });
                 c.sandboxed = true;
-                c.Sandbox.as_ref().unwrap().CreateSubContainer(conf, id, io)?;
+                c.Sandbox
+                    .as_ref()
+                    .unwrap()
+                    .CreateSubContainer(conf, id, io)?;
             } else if IsRoot(&c.Spec) {
                 // If the metadata annotations indicate that this container should be
                 // started in an existing sandbox, we must do so. The metadata will
@@ -901,7 +918,11 @@ impl Container {
         info!("Start container {}", &self.ID);
 
         let _unlockRoot = if !self.sandboxed {
-            Some(maybeLockRootContainer(&self.BundleDir, &self.Spec, &self.RootContainerDir)?)
+            Some(maybeLockRootContainer(
+                &self.BundleDir,
+                &self.Spec,
+                &self.RootContainerDir,
+            )?)
         } else {
             None
         };
@@ -970,7 +991,11 @@ impl Container {
 
         let mut errs = Vec::new();
         let _unlockRoot = if !self.sandboxed {
-            Some(maybeLockRootContainer(&self.BundleDir, &self.Spec, &self.RootContainerDir)?)
+            Some(maybeLockRootContainer(
+                &self.BundleDir,
+                &self.Spec,
+                &self.RootContainerDir,
+            )?)
         } else {
             None
         };
@@ -998,7 +1023,11 @@ impl Container {
         let fsMounter = FsImageMounter::New(&sandboxId);
         let ret = fsMounter.UnmountContainerFs(&self.Spec, &self.ID);
         if ret.is_err() {
-            info!("umount fs for container {}, err: {}", self.ID, ret.err().unwrap());
+            info!(
+                "umount fs for container {}, err: {}",
+                self.ID,
+                ret.err().unwrap()
+            );
         }
 
         self.changeStatus(Status::Stopped);

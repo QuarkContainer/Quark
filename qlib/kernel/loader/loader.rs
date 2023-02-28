@@ -23,9 +23,9 @@ use super::super::super::linux_def::*;
 use super::super::super::path::*;
 use super::super::super::range::*;
 use super::super::fs::dirent::*;
-use super::super::fs::inotify::*;
 use super::super::fs::file::*;
 use super::super::fs::flags::*;
+use super::super::fs::inotify::*;
 use super::super::kernel::timer::*;
 use super::super::kernel_util::*;
 use super::super::memmgr::*;
@@ -150,7 +150,8 @@ pub fn OpenPath(task: &mut Task, filename: &str, maxTraversals: u32) -> Result<(
         },
     )?;
 
-    file.Dirent.InotifyEvent(InotifyEvent::IN_OPEN, 0, EventType::InodeEvent);
+    file.Dirent
+        .InotifyEvent(InotifyEvent::IN_OPEN, 0, EventType::InodeEvent);
 
     return Ok((file, d));
 }
@@ -169,7 +170,9 @@ pub fn LoadExecutable(
 
     for _i in 0..MAX_LOADER_ATTEMPTS {
         let (file, executable) = OpenPath(task, &filename, 40)?;
-        defer!(file.Dirent.InotifyEvent(InotifyEvent::IN_CLOSE_NOWRITE, 0, EventType::InodeEvent));
+        defer!(file
+            .Dirent
+            .InotifyEvent(InotifyEvent::IN_CLOSE_NOWRITE, 0, EventType::InodeEvent));
         let mut hdr: [u8; 4] = [0; 4];
 
         match ReadAll(task, &file, &mut hdr, 0) {
@@ -178,7 +181,8 @@ pub fn LoadExecutable(
                 return Err(Error::SysError(SysErr::ENOEXEC));
             }
             Ok(n) => {
-                file.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
+                file.Dirent
+                    .InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
                 if n < 4 {
                     print!(
                         "Error loading ELF, there is less than 4 bytes data, cnt is {}",
@@ -235,7 +239,6 @@ pub fn LoadExecutable(
 
             //return Err(Error::SysError(SysErr::ENOEXEC));
         }
-
     }
 
     return Err(Error::SysError(SysErr::ENOEXEC));

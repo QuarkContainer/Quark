@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::arch::asm;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicI64};
-use core::arch::asm;
 
 use crate::qlib::fileinfo::*;
 use crate::qlib::rdma_svc_cli::RDMASvcClient;

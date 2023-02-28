@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use alloc::string::String;
+use alloc::sync::Arc;
 use core::any::Any;
 use core::ops::Deref;
-use alloc::sync::Arc;
 
 use super::super::super::super::super::common::*;
 use super::super::super::super::super::linux_def::*;

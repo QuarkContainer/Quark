@@ -40,12 +40,7 @@ pub fn NewAUXVec(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) 
         &FilePermissions::FromMode(FileMode(0o400)),
         FSMagic::PROC_SUPER_MAGIC,
     );
-    return NewProcInode(
-        v.into(),
-        msrc,
-        InodeType::SpecialFile,
-        Some(thread.clone()),
-    );
+    return NewProcInode(v.into(), msrc, InodeType::SpecialFile, Some(thread.clone()));
 }
 
 pub fn NewAUXVecSimpleFileInode(
@@ -63,7 +58,8 @@ pub fn NewAUXVecSimpleFileInode(
         false,
         AUXVecSimpleFileTrait {
             thread: thread.clone(),
-        }.into(),
+        }
+        .into(),
     );
 }
 
@@ -86,13 +82,12 @@ impl SimpleFileTrait for AUXVecSimpleFileTrait {
     }
 }
 
-pub fn NewAUXVecReadonlyFileOperations(
-    thread: &Thread,
-) -> ReadonlyFileOperations {
+pub fn NewAUXVecReadonlyFileOperations(thread: &Thread) -> ReadonlyFileOperations {
     return ReadonlyFileOperations {
         node: AUXVecReadonlyFileNode {
             thread: thread.clone(),
-        }.into(),
+        }
+        .into(),
     };
 }
 

@@ -14,17 +14,17 @@
 
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
+use alloc::sync::Weak;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::fmt;
 use core::ops::Deref;
 use core::ptr;
 use core::sync::atomic::AtomicBool;
-use core::sync::atomic::AtomicI64;
 use core::sync::atomic::AtomicI32;
+use core::sync::atomic::AtomicI64;
 use core::sync::atomic::AtomicU16;
 use core::sync::atomic::Ordering;
-use alloc::sync::Weak;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux::time::Timeval;
@@ -52,12 +52,12 @@ use super::super::super::SHARESPACE;
 use super::super::control::*;
 use super::super::socket::*;
 use super::super::unix::transport::unix::*;
-use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFConf;
-use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFReq;
 use crate::qlib::bytestream::*;
-use crate::qlib::kernel::socket::hostinet::loopbacksocket::*;
 use crate::qlib::kernel::kernel::abstract_socket_namespace::*;
 use crate::qlib::kernel::kernel::waiter::Queue;
+use crate::qlib::kernel::socket::hostinet::loopbacksocket::*;
+use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFConf;
+use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFReq;
 
 pub fn newUringSocketFile(
     task: &Task,
@@ -95,7 +95,7 @@ pub fn newUringSocketFile(
     );
 
     GetKernel().sockets.AddSocket(&file);
-    return Ok(file)
+    return Ok(file);
 }
 
 #[repr(u64)]
@@ -123,20 +123,15 @@ impl fmt::Debug for UringSocketType {
 impl UringSocketType {
     pub fn Accept(&self, accept: AcceptSocket) -> Self {
         match self {
-            UringSocketType::TCPUringlServer(_) => {
-                match accept {
-                    AcceptSocket::SocketBuff(socketBuf) => {
-                        return UringSocketType::Uring(socketBuf)
-                    }
-                    AcceptSocket::LoopbackSocket(loopback) => {
-                        return UringSocketType::Loopback(loopback)
-                    }
-                    AcceptSocket::None => {
-                        panic!("UringSocketType::Accept unexpect AcceptSocket::None")
-                    }
+            UringSocketType::TCPUringlServer(_) => match accept {
+                AcceptSocket::SocketBuff(socketBuf) => return UringSocketType::Uring(socketBuf),
+                AcceptSocket::LoopbackSocket(loopback) => {
+                    return UringSocketType::Loopback(loopback)
                 }
-                
-            }
+                AcceptSocket::None => {
+                    panic!("UringSocketType::Accept unexpect AcceptSocket::None")
+                }
+            },
             _ => {
                 panic!("UringSocketType::Accept unexpect type {:?}", self)
             }
@@ -145,12 +140,8 @@ impl UringSocketType {
 
     pub fn RClosed(&self) -> bool {
         let ret = match self {
-            UringSocketType::Uring(buf) => {
-                buf.RClosed()
-            }
-            UringSocketType::Loopback(loopback) => {
-                loopback.sockBuff.RClosed()
-            }
+            UringSocketType::Uring(buf) => buf.RClosed(),
+            UringSocketType::Loopback(loopback) => loopback.sockBuff.RClosed(),
             _ => {
                 panic!("Uring socket Rclose unexpect type {:?}", self);
             }
@@ -161,12 +152,8 @@ impl UringSocketType {
 
     pub fn WClosed(&self) -> bool {
         let ret = match self {
-            UringSocketType::Uring(buf) => {
-                buf.WClosed()
-            }
-            UringSocketType::Loopback(loopback) => {
-                loopback.sockBuff.WClosed()
-            }
+            UringSocketType::Uring(buf) => buf.WClosed(),
+            UringSocketType::Loopback(loopback) => loopback.sockBuff.WClosed(),
             _ => {
                 panic!("Uring socket WClosed unexpect type {:?}", self);
             }
@@ -314,7 +301,7 @@ impl UringSocketOperations {
                 );
             }
             _ => {
-                return Err(Error::SysError(SysErr::EPIPE)); 
+                return Err(Error::SysError(SysErr::EPIPE));
             }
         }
     }
@@ -333,11 +320,11 @@ impl UringSocketOperations {
                     self.queue.clone(),
                     buf,
                     count as usize,
-                    iovs
+                    iovs,
                 );
             }
             _ => {
-                return Err(Error::SysError(SysErr::EPIPE)); 
+                return Err(Error::SysError(SysErr::EPIPE));
             }
         }
     }
@@ -405,7 +392,9 @@ impl UringSocketOperations {
     }
 
     pub fn PostConnect(&self) {
-        let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT)));
+        let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(
+            MemoryDef::DEFAULT_BUF_PAGE_COUNT,
+        )));
         *self.socketType.lock() = UringSocketType::Uring(socketBuf.clone());
         QUring::BufSockInit(self.fd, self.queue.clone(), socketBuf, true).unwrap();
     }
@@ -435,12 +424,16 @@ impl UringSocketOperations {
         peek: bool,
     ) -> Result<i64> {
         let ret = match buf {
-            UringSocketType::Uring(buf) => {
-                QUring::RingFileRead(task, self.fd, self.queue.clone(), buf.clone(), dsts, true, peek)?
-            }
-            UringSocketType::Loopback(loopback) => {
-                loopback.Readv(task, dsts, peek)?
-            }
+            UringSocketType::Uring(buf) => QUring::RingFileRead(
+                task,
+                self.fd,
+                self.queue.clone(),
+                buf.clone(),
+                dsts,
+                true,
+                peek,
+            )?,
+            UringSocketType::Loopback(loopback) => loopback.Readv(task, dsts, peek)?,
             _ => {
                 //return Err(Error::SysError(SysErr::ECONNREFUSED));
                 return Err(Error::SysError(SysErr::ENOTCONN));
@@ -450,19 +443,12 @@ impl UringSocketOperations {
         return Ok(ret);
     }
 
-    pub fn WriteToBuf(
-        &self,
-        task: &Task,
-        buf: &UringSocketType,
-        srcs: &[IoVec],
-    ) -> Result<i64> {
+    pub fn WriteToBuf(&self, task: &Task, buf: &UringSocketType, srcs: &[IoVec]) -> Result<i64> {
         let ret = match buf {
             UringSocketType::Uring(buf) => {
                 QUring::SocketSend(task, self.fd, self.queue.clone(), buf.clone(), srcs, self)?
             }
-            UringSocketType::Loopback(loopback) => {
-                loopback.Writev(task, srcs)?
-            }
+            UringSocketType::Loopback(loopback) => loopback.Writev(task, srcs)?,
             _ => {
                 //return Err(Error::SysError(SysErr::ECONNREFUSED));
                 return Err(Error::SysError(SysErr::ENOTCONN));
@@ -518,7 +504,7 @@ impl Waitable for UringSocketOperations {
             UringSocketType::Loopback(loopback) => {
                 return loopback.Events() & mask;
             }
-            UringSocketType::TCPInit => ()
+            UringSocketType::TCPInit => (),
         }
 
         let fd = self.fd;
@@ -611,13 +597,20 @@ impl FileOperations for UringSocketOperations {
                 /*if self.SocketBuf().RClosed() {
                     return Err(Error::SysError(SysErr::ESPIPE))
                 }*/
-                let ret =
-                    QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true, false)?;
+                let ret = QUring::RingFileRead(
+                    task,
+                    self.fd,
+                    self.queue.clone(),
+                    socketBuf,
+                    dsts,
+                    true,
+                    false,
+                )?;
                 return Ok(ret);
             }
             UringSocketType::Loopback(loopback) => {
                 let count = loopback.Readv(task, dsts, false)?;
-                return Ok(count)
+                return Ok(count);
             }
             _ => {
                 return Ok(0);
@@ -635,7 +628,7 @@ impl FileOperations for UringSocketOperations {
     ) -> Result<i64> {
         let size = IoVec::NumBytes(srcs);
         if size == 0 {
-            return Ok(0)
+            return Ok(0);
         }
 
         let sockBufType = self.socketType.lock().clone();
@@ -645,21 +638,14 @@ impl FileOperations for UringSocketOperations {
                     return Err(Error::SysError(SysErr::EPIPE));
                 }
 
-                return QUring::SocketSend(
-                    task,
-                    self.fd,
-                    self.queue.clone(),
-                    buf,
-                    srcs,
-                    self,
-                );
+                return QUring::SocketSend(task, self.fd, self.queue.clone(), buf, srcs, self);
             }
             UringSocketType::Loopback(loopback) => {
                 let count = loopback.Writev(task, srcs)?;
-                return Ok(count)
+                return Ok(count);
             }
             _ => {
-                return Err(Error::SysError(SysErr::EPIPE)); 
+                return Err(Error::SysError(SysErr::EPIPE));
             }
         }
     }
@@ -768,9 +754,7 @@ impl SockOperations for UringSocketOperations {
         let sockType = self.SocketType();
         match sockType {
             UringSocketType::TCPInit => {
-                let addr = unsafe {
-                    &*(&sockaddr[0] as * const _ as u64 as * const SockAddrInet)
-                };
+                let addr = unsafe { &*(&sockaddr[0] as *const _ as u64 as *const SockAddrInet) };
 
                 if addr.Family == AFType::AF_INET as u16 && addr.Addr == [127, 0, 0, 1] {
                     match TCP_SOCKET.Get(addr.Port) {
@@ -778,7 +762,8 @@ impl SockOperations for UringSocketOperations {
                         None => (), //return Err(Error::SysError(SysErr::ECONNREFUSED)),
                         Some(q) => {
                             let serverQueue = Queue::default();
-                            let (clientSock, serverSock) = LoopbackSocketPair(self.queue.clone(), serverQueue.clone());
+                            let (clientSock, serverSock) =
+                                LoopbackSocketPair(self.queue.clone(), serverQueue.clone());
                             *self.socketType.lock() = UringSocketType::Loopback(clientSock);
                             let addr = SockAddrInet {
                                 Family: AFType::AF_INET as u16,
@@ -787,27 +772,34 @@ impl SockOperations for UringSocketOperations {
                                 ..Default::default()
                             };
 
-                            let res =
-                                Kernel::HostSpace::Socket(AFType::AF_INET, SocketType::SOCK_STREAM | SocketFlags::SOCK_CLOEXEC, 0);
+                            let res = Kernel::HostSpace::Socket(
+                                AFType::AF_INET,
+                                SocketType::SOCK_STREAM | SocketFlags::SOCK_CLOEXEC,
+                                0,
+                            );
                             if res < 0 {
                                 return Err(Error::SysError(-res as i32));
                             }
 
                             let fd = res as i32;
-                            
-                            q.EnqSocket(fd, TcpSockAddr::NewFromInet(addr), 16, serverSock.into(), serverQueue);
-                            return Ok(0)
+
+                            q.EnqSocket(
+                                fd,
+                                TcpSockAddr::NewFromInet(addr),
+                                16,
+                                serverSock.into(),
+                                serverQueue,
+                            );
+                            return Ok(0);
                         }
                     };
-
-
                 }
 
                 QUring::AsyncConnect(self.fd, self, sockaddr)?;
                 if !blocking {
-                    return Err(Error::SysError(SysErr::EINPROGRESS))
+                    return Err(Error::SysError(SysErr::EINPROGRESS));
                 }
-            },
+            }
             UringSocketType::TCPConnecting => {
                 if !blocking {
                     return Err(Error::SysError(SysErr::EALREADY));
@@ -835,7 +827,7 @@ impl SockOperations for UringSocketOperations {
                 _ => (),
             }
         }
-        
+
         let errno = self.ConnErrno();
         return Err(Error::SysError(-errno));
     }
@@ -927,12 +919,10 @@ impl SockOperations for UringSocketOperations {
     fn Bind(&self, task: &Task, sockaddr: &[u8]) -> Result<i64> {
         let mut socketaddr = sockaddr;
 
-        let addr = unsafe {
-            &*(&socketaddr[0] as * const _ as u64 as * const SockAddrInet)
-        };
+        let addr = unsafe { &*(&socketaddr[0] as *const _ as u64 as *const SockAddrInet) };
         info!(
             "hostinet socket bind {:?}, addr is {:?}/{:?}",
-            self.family, addr, socketaddr 
+            self.family, addr, socketaddr
         );
         if (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
             && socketaddr.len() > SIZEOF_SOCKADDR
@@ -950,8 +940,9 @@ impl SockOperations for UringSocketOperations {
             return Err(Error::SysError(-res as i32));
         }
 
-        if addr.Family == AFType::AF_INET as u16 
-            && (addr.Addr == [0, 0, 0, 0] || addr.Addr == [127, 0, 0, 1]) {
+        if addr.Family == AFType::AF_INET as u16
+            && (addr.Addr == [0, 0, 0, 0] || addr.Addr == [127, 0, 0, 1])
+        {
             self.loopbackPort.store(addr.Port, Ordering::Release);
         }
 
@@ -1139,25 +1130,23 @@ impl SockOperations for UringSocketOperations {
         */
 
         match level as u64 {
-            LibcConst::SOL_SOCKET => {
-                match name as u64 {
-                    LibcConst::SO_ERROR => {
-                        if opt.len() < 4{
-                            return Err(Error::SysError(SysErr::EINVAL));
-                        }
-                        error!("erro len is {}", opt.len());
-                        if self.ConnErrno() != 0 {
-                            let errno = self.ConnErrno();
-                            self.SetConnErrno(0);
-                            unsafe{
-                                *(&opt[0] as * const _ as u64 as * mut i32) = -errno;
-                            }
-                            return Ok(4)
-                        }
+            LibcConst::SOL_SOCKET => match name as u64 {
+                LibcConst::SO_ERROR => {
+                    if opt.len() < 4 {
+                        return Err(Error::SysError(SysErr::EINVAL));
                     }
-                    _ => (),
+                    error!("erro len is {}", opt.len());
+                    if self.ConnErrno() != 0 {
+                        let errno = self.ConnErrno();
+                        self.SetConnErrno(0);
+                        unsafe {
+                            *(&opt[0] as *const _ as u64 as *mut i32) = -errno;
+                        }
+                        return Ok(4);
+                    }
                 }
-            }
+                _ => (),
+            },
             _ => (),
         };
 
@@ -1246,7 +1235,7 @@ impl SockOperations for UringSocketOperations {
 
         // TCP_INQ is bound to buffer implementation
         if (level as u64) == LibcConst::SOL_TCP && (name as u64) == LibcConst::TCP_INQ {
-            let val : i32 = task.CopyInObj::<i32>(&opt[0] as *const _ as u64)?;
+            let val: i32 = task.CopyInObj::<i32>(&opt[0] as *const _ as u64)?;
 
             if val == 1 {
                 self.passInq.store(true, Ordering::Relaxed);
@@ -1357,17 +1346,13 @@ impl SockOperations for UringSocketOperations {
         }
 
         let len = IoVec::NumBytes(dsts);
-        let data = if trunc {
-            Some(Iovs(dsts).Data())
-        } else {
-            None
-        };
+        let data = if trunc { Some(Iovs(dsts).Data()) } else { None };
 
         let mut iovs = dsts;
 
         let mut count = 0;
         let mut tmp;
-     
+
         if dontwait {
             match self.ReadFromBuf(task, &buf, iovs, peek) {
                 Err(e) => return Err(e),
@@ -1381,7 +1366,7 @@ impl SockOperations for UringSocketOperations {
                     };
 
                     let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
-                    return Ok((count, retFlags, senderAddr, controlData))
+                    return Ok((count, retFlags, senderAddr, controlData));
                 }
             }
         }
@@ -1462,7 +1447,8 @@ impl SockOperations for UringSocketOperations {
         };
 
         if trunc {
-            task.mm.ZeroDataOutToIovs(task, &data.unwrap(), count as usize, false)?;
+            task.mm
+                .ZeroDataOutToIovs(task, &data.unwrap(), count as usize, false)?;
         }
 
         let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
@@ -1480,7 +1466,7 @@ impl SockOperations for UringSocketOperations {
         let buf = self.SocketType();
 
         if buf.WClosed() {
-            return Err(Error::SysError(SysErr::EPIPE))
+            return Err(Error::SysError(SysErr::EPIPE));
         }
 
         /*if msgHdr.msgName != 0 || msgHdr.msgControl != 0 {
@@ -1493,7 +1479,7 @@ impl SockOperations for UringSocketOperations {
         let mut count = 0;
         let mut srcs = srcs;
         let mut tmp;
-        
+
         if dontwait {
             return self.WriteToBuf(task, &buf, srcs);
         }
@@ -1579,15 +1565,20 @@ impl SockOperations for UringSocketOperations {
         let mut info = TCPInfo::default();
         let mut len = SocketSize::SIZEOF_TCPINFO;
 
-        let ret = HostSpace::GetSockOpt(self.fd,
-                              LibcConst::SOL_TCP as _,
-                              LibcConst::TCP_INFO as _,
-                              &mut info as * mut _ as u64,
-                              &mut len as * mut _ as u64) as i32;
+        let ret = HostSpace::GetSockOpt(
+            self.fd,
+            LibcConst::SOL_TCP as _,
+            LibcConst::TCP_INFO as _,
+            &mut info as *mut _ as u64,
+            &mut len as *mut _ as u64,
+        ) as i32;
 
         if ret < 0 {
             if ret != -SysErr::ENOPROTOOPT {
-                error!("fail to Failed to get TCP socket info from {} with error {}", self.fd, ret);
+                error!(
+                    "fail to Failed to get TCP socket info from {} with error {}",
+                    self.fd, ret
+                );
 
                 // For non-TCP sockets, silently ignore the failure.
                 return 0;
@@ -1603,6 +1594,6 @@ impl SockOperations for UringSocketOperations {
     }
 
     fn Type(&self) -> (i32, i32, i32) {
-        return (self.family, self.stype, -1)
+        return (self.family, self.stype, -1);
     }
 }

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use spin::Mutex;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use spin::Mutex;
 use x86_64::structures::paging::PageTable;
 use x86_64::structures::paging::PageTableFlags;
 use x86_64::PhysAddr;
@@ -23,12 +23,12 @@ use x86_64::VirtAddr;
 use super::super::super::addr::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
+use super::super::super::mem::block_allocator::*;
 use super::super::super::object_ref::*;
 use super::super::super::pagetable::*;
 use super::super::super::range::*;
 use super::super::task::*;
 use super::super::PAGE_MGR;
-use super::super::super::mem::block_allocator::*;
 
 use crate::kernel_def::Invlpg;
 //use crate::qlib::kernel::memmgr::pmamgr::PagePool;
@@ -110,7 +110,7 @@ impl PageMgr {
     }
 
     pub fn FreePage(&self, addr: u64) -> Result<()> {
-        return self.pagepool.FreePage(addr)
+        return self.pagepool.FreePage(addr);
     }
 
     pub fn VsyscallPages(&self) -> Arc<Vec<u64>> {

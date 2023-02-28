@@ -52,9 +52,7 @@ impl KVMVcpu {
 
         match msg {
             Msg::LoadProcessKernel(msg) => {
-                ret = super::VMS
-                    .lock()
-                    .LoadProcessKernel(msg.processAddr) as u64;
+                ret = super::VMS.lock().LoadProcessKernel(msg.processAddr) as u64;
             }
             Msg::GetStdfds(msg) => {
                 ret = super::VMSpace::GetStdfds(msg.addr) as u64;
@@ -77,7 +75,8 @@ impl KVMVcpu {
                 ret = super::VMSpace::Seek(msg.fd, msg.offset, msg.whence) as u64;
             }
             Msg::FSetXattr(msg) => {
-                ret = super::VMSpace::FSetXattr(msg.fd, msg.name, msg.value, msg.size, msg.flags) as u64;
+                ret = super::VMSpace::FSetXattr(msg.fd, msg.name, msg.value, msg.size, msg.flags)
+                    as u64;
             }
             Msg::FGetXattr(msg) => {
                 ret = super::VMSpace::FGetXattr(msg.fd, msg.name, msg.value, msg.size) as u64;
@@ -133,10 +132,12 @@ impl KVMVcpu {
                 ret = super::VMSpace::Unlinkat(msg.dirfd, msg.pathname, msg.flags) as u64;
             }
             Msg::Mkdirat(msg) => {
-                ret = super::VMSpace::Mkdirat(msg.dirfd, msg.pathname, msg.mode_, msg.uid, msg.gid) as u64;
+                ret = super::VMSpace::Mkdirat(msg.dirfd, msg.pathname, msg.mode_, msg.uid, msg.gid)
+                    as u64;
             }
             Msg::Mkfifoat(msg) => {
-                ret = super::VMSpace::Mkfifoat(msg.dirfd, msg.name, msg.mode, msg.uid, msg.gid) as u64;
+                ret = super::VMSpace::Mkfifoat(msg.dirfd, msg.name, msg.mode, msg.uid, msg.gid)
+                    as u64;
             }
             Msg::SysSync(_msg) => {
                 ret = super::VMSpace::SysSync() as u64;
@@ -195,7 +196,12 @@ impl KVMVcpu {
                 ret = super::VMSpace::Bind(msg.sockfd, msg.addr, msg.addrlen, msg.umask) as u64;
             }
             Msg::RDMAListen(msg) => {
-                ret = super::VMSpace::RDMAListen(msg.sockfd, msg.backlog, msg.block, msg.acceptQueue.clone()) as u64;
+                ret = super::VMSpace::RDMAListen(
+                    msg.sockfd,
+                    msg.backlog,
+                    msg.block,
+                    msg.acceptQueue.clone(),
+                ) as u64;
                 // panic!("RDMAListen qcall not implemented")
             }
             Msg::RDMANotify(msg) => {
@@ -241,7 +247,10 @@ impl KVMVcpu {
             }
             Msg::SwapOut(_msg) => {
                 let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
-                SHARE_SPACE.hiberMgr.SwapOut(heapStart, heapEnd - heapStart).unwrap();
+                SHARE_SPACE
+                    .hiberMgr
+                    .SwapOut(heapStart, heapEnd - heapStart)
+                    .unwrap();
                 ret = 0;
             }
             Msg::SwapIn(_msg) => {
@@ -255,7 +264,13 @@ impl KVMVcpu {
                 ret = super::VMSpace::SymLinkAt(msg.oldpath, msg.newdirfd, msg.newpath) as u64;
             }
             Msg::LinkAt(msg) => {
-                ret = super::VMSpace::LinkAt(msg.olddirfd, msg.oldpath, msg.newdirfd, msg.newpath, msg.flags) as u64;
+                ret = super::VMSpace::LinkAt(
+                    msg.olddirfd,
+                    msg.oldpath,
+                    msg.newdirfd,
+                    msg.newpath,
+                    msg.flags,
+                ) as u64;
             }
             Msg::Futimens(msg) => {
                 ret = super::VMSpace::Futimens(msg.fd, msg.times) as u64;
@@ -290,13 +305,17 @@ impl KVMVcpu {
                 ret = super::VMSpace::IORecvMsg(msg.fd, msg.msghdr, msg.flags) as u64;
             }
             Msg::IORecvfrom(msg) => {
-                ret = super::VMSpace::IORecvfrom(msg.fd, msg.buf, msg.size, msg.flags, msg.addr, msg.len) as u64;
+                ret = super::VMSpace::IORecvfrom(
+                    msg.fd, msg.buf, msg.size, msg.flags, msg.addr, msg.len,
+                ) as u64;
             }
             Msg::IOSendMsg(msg) => {
                 ret = super::VMSpace::IOSendMsg(msg.fd, msg.msghdr, msg.flags) as u64;
             }
             Msg::IOSendto(msg) => {
-                ret = super::VMSpace::IOSendto(msg.fd, msg.buf, msg.size, msg.flags, msg.addr, msg.len) as u64;
+                ret = super::VMSpace::IOSendto(
+                    msg.fd, msg.buf, msg.size, msg.flags, msg.addr, msg.len,
+                ) as u64;
             }
             Msg::MMapFile(msg) => {
                 ret = match super::PMA_KEEPER.MapFile(msg.len, msg.prot, msg.fd, msg.offset) {
@@ -316,15 +335,14 @@ impl KVMVcpu {
                 ret = super::VMSpace::NewTmpfsFile(msg.typ, msg.addr) as u64;
             }
             Msg::IoUringEnter(msg) => {
-                ret =
-                    match URING_MGR
-                        .lock()
-                        .Enter(msg.toSubmit, msg.minComplete, msg.flags)
-                    {
-                        Ok(v) => v as u64,
-                        Err(Error::SysError(v)) => -v as i64 as u64,
-                        _ => panic!("UringMgr Enter fail"),
-                    }
+                ret = match URING_MGR
+                    .lock()
+                    .Enter(msg.toSubmit, msg.minComplete, msg.flags)
+                {
+                    Ok(v) => v as u64,
+                    Err(Error::SysError(v)) => -v as i64 as u64,
+                    _ => panic!("UringMgr Enter fail"),
+                }
             }
             Msg::Statm(msg) => {
                 ret = super::VMSpace::Statm(msg.buf) as u64;

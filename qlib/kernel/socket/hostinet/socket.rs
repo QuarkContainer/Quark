@@ -553,12 +553,12 @@ impl Waitable for SocketOperations {
 
         if self.udpRDMA {
             let sockInfo = GlobalIOMgr()
-                    .GetByHost(self.fd)
-                    .unwrap()
-                    .lock()
-                    .sockInfo
-                    .lock()
-                    .clone();
+                .GetByHost(self.fd)
+                .unwrap()
+                .lock()
+                .sockInfo
+                .lock()
+                .clone();
             match sockInfo {
                 SockInfo::RDMAUDPSocket(sock) => {
                     return (sock.recvQueue.lock().Events() | WRITEABLE_EVENT) & mask;
@@ -886,8 +886,16 @@ impl FileOperations for SocketOperations {
                         SockInfo::RDMAUDPSocket(udpSock) => {
                             let mut v = udpSock.recvQueue.lock().udpRecvQueue.len();
                             if v != 0 {
-                                let idx = udpSock.recvQueue.lock().udpRecvQueue.get(0).unwrap().udpBuffIdx;
-                                let udpPacket = &GlobalRDMASvcCli().cliShareRegion.lock().udpBufRecv[idx as usize];
+                                let idx = udpSock
+                                    .recvQueue
+                                    .lock()
+                                    .udpRecvQueue
+                                    .get(0)
+                                    .unwrap()
+                                    .udpBuffIdx;
+                                let udpPacket =
+                                    &GlobalRDMASvcCli().cliShareRegion.lock().udpBufRecv
+                                        [idx as usize];
                                 v = udpPacket.length as usize;
                             }
 
@@ -898,8 +906,7 @@ impl FileOperations for SocketOperations {
                             return Err(Error::SysError(SysErr::EINVAL));
                         }
                     }
-                } 
-                else {
+                } else {
                     let tmp: i32 = 0;
                     let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
                     if res < 0 {
@@ -967,7 +974,12 @@ impl SockOperations for SocketOperations {
                     let port = ipv4.Port.to_le();
 
                     // TODO: handle port used up!!
-                    let srcPort = (GlobalRDMASvcCli().tcpPortAllocator.lock().AllocFromCurrent().unwrap() as u16).to_be();
+                    let srcPort = (GlobalRDMASvcCli()
+                        .tcpPortAllocator
+                        .lock()
+                        .AllocFromCurrent()
+                        .unwrap() as u16)
+                        .to_be();
                     let rdmaId = GlobalRDMASvcCli()
                         .nextRDMAId
                         .fetch_add(1, Ordering::Release);
@@ -1083,11 +1095,11 @@ impl SockOperations for SocketOperations {
         //         break;
         //     }
         //     v1 = v2;
-        //     v2 = GlobalRDMASvcCli().timestamp.lock()[i];            
+        //     v2 = GlobalRDMASvcCli().timestamp.lock()[i];
         // }
 
         // GlobalRDMASvcCli().timestamp.lock().clear();
-        
+
         return Ok(0);
     }
 
@@ -1619,9 +1631,9 @@ impl SockOperations for SocketOperations {
                     panic!("Incorrect sockInfo")
                 }
             }
-            
+
             let sockAddr;
-            let addrSlice = ipAddr.to_be_bytes(); 
+            let addrSlice = ipAddr.to_be_bytes();
             if self.family == AFType::AF_INET {
                 sockAddr = SockAddr::Inet(SockAddrInet {
                     Family: AFType::AF_INET as u16,
@@ -1629,13 +1641,29 @@ impl SockOperations for SocketOperations {
                     Addr: addrSlice,
                     Zero: [0; 8],
                 });
-            }
-            else {
+            } else {
                 sockAddr = SockAddr::Inet6(SocketAddrInet6 {
                     Family: AFType::AF_INET6 as u16,
                     Port: port,
                     Flowinfo: 0,
-                    Addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, addrSlice[0], addrSlice[1], addrSlice[2], addrSlice[3]],
+                    Addr: [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0xFF,
+                        0xFF,
+                        addrSlice[0],
+                        addrSlice[1],
+                        addrSlice[2],
+                        addrSlice[3],
+                    ],
                     Scope_id: 0,
                 });
             }
@@ -2006,20 +2034,22 @@ impl SockOperations for SocketOperations {
                     let len;
                     {
                         let udpPacket = &GlobalRDMASvcCli().cliShareRegion.lock().udpBufRecv
-                        [recvUdpItem.udpBuffIdx as usize];
+                            [recvUdpItem.udpBuffIdx as usize];
                         let buf = &udpPacket.buf[0..udpPacket.length as usize];
                         len = task.CopyDataOutToIovs(buf, dsts, false)?;
                         srcPort = udpPacket.srcPort.clone();
                         srcIpAddr = udpPacket.srcIpAddr.clone();
-                        debug!("qq, RecvMsg 4.1 fd: {}, len: {}, buf {:?} ", self.fd, len, buf);
+                        debug!(
+                            "qq, RecvMsg 4.1 fd: {}, len: {}, buf {:?} ",
+                            self.fd, len, buf
+                        );
                     }
                     let _res = GlobalRDMASvcCli().returnUDPBuff(recvUdpItem.udpBuffIdx);
                     let senderAddr = if senderRequested {
                         let addr;
                         if self.remoteAddr.lock().is_some() {
                             addr = self.remoteAddr.lock().as_ref().unwrap().clone();
-                        }
-                        else {
+                        } else {
                             if self.family == AFType::AF_INET {
                                 addr = SockAddr::Inet(SockAddrInet {
                                     Family: AFType::AF_INET as u16,
@@ -2027,20 +2057,22 @@ impl SockOperations for SocketOperations {
                                     Addr: srcIpAddr.to_be_bytes(),
                                     Zero: [0; 8],
                                 });
-                            }
-                            else {
-                            // if self.family == AFType::AF_INET6 {
+                            } else {
+                                // if self.family == AFType::AF_INET6 {
                                 let srcIp = srcIpAddr.to_be_bytes();
                                 addr = SockAddr::Inet6(SocketAddrInet6 {
                                     Family: AFType::AF_INET6 as u16,
                                     Port: srcPort,
                                     Flowinfo: 0,
-                                    Addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, srcIp[0], srcIp[1], srcIp[2], srcIp[3]],
+                                    Addr: [
+                                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, srcIp[0],
+                                        srcIp[1], srcIp[2], srcIp[3],
+                                    ],
                                     Scope_id: 0,
                                 });
                             }
                         }
-                        
+
                         let l = addr.Len();
                         Some((addr, l))
                     } else {
@@ -2171,7 +2203,12 @@ impl SockOperations for SocketOperations {
                 SockInfo::RDMAUDPSocket(sockInfo) => {
                     if sockInfo.port == 0 {
                         // TODO: handle port used up!!
-                        port = (GlobalRDMASvcCli().udpPortAllocator.lock().AllocFromCurrent().unwrap() as u16).to_be();
+                        port = (GlobalRDMASvcCli()
+                            .udpPortAllocator
+                            .lock()
+                            .AllocFromCurrent()
+                            .unwrap() as u16)
+                            .to_be();
                         *GlobalIOMgr()
                             .GetByHost(self.fd)
                             .unwrap()
@@ -2231,11 +2268,9 @@ impl SockOperations for SocketOperations {
                     )
                 }
                 .unwrap();
-            }
-            else if self.remoteAddr.lock().is_some() {
+            } else if self.remoteAddr.lock().is_some() {
                 dstAddr = self.remoteAddr.lock().as_ref().unwrap().clone();
-            }
-            else {
+            } else {
                 return Err(Error::SysError(SysErr::ENETUNREACH));
             }
 
@@ -2245,7 +2280,11 @@ impl SockOperations for SocketOperations {
                     udpPacket.dstPort = ipv4.Port.to_le();
                 }
                 SockAddr::Inet6(ipv6) => {
-                    assert!(ipv6.Addr[10]==0xFF && ipv6.Addr[11] == 0xFF, "UDP over RDMA only support send to IPv4 address, current address is {:?}", ipv6);
+                    assert!(
+                        ipv6.Addr[10] == 0xFF && ipv6.Addr[11] == 0xFF,
+                        "UDP over RDMA only support send to IPv4 address, current address is {:?}",
+                        ipv6
+                    );
                     let ipv4Bytes = [ipv6.Addr[12], ipv6.Addr[13], ipv6.Addr[14], ipv6.Addr[15]];
                     udpPacket.dstIpAddr = u32::from_be_bytes(ipv4Bytes);
                     udpPacket.dstPort = ipv6.Port.to_le();

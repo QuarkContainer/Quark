@@ -17,12 +17,12 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ops::Deref;
-use lazy_static::lazy_static;
 use hashbrown::HashMap;
+use lazy_static::lazy_static;
 
 use super::super::super::common::*;
-use super::super::super::linux_def::*;
 use super::super::super::kernel::fs::dirent::*;
+use super::super::super::linux_def::*;
 use super::super::socket::unix::transport::unix::*;
 use crate::qlib::kernel::kernel::fd_table::GapMgr;
 use crate::qlib::kernel::socket::hostinet::uring_socket::UringSocketOperationsWeak;
@@ -94,7 +94,7 @@ impl AbstractSocketNamespace {
                 // We never delete a map entry apart from a socket's destructor (although the
                 // map entry may be overwritten). Therefore, a socket should exist, even if it
                 // may not be the one we expect.
-                return
+                return;
             }
             Some(b) => b.clone(),
         };
@@ -104,7 +104,10 @@ impl AbstractSocketNamespace {
                 // We never delete a map entry apart from a socket's destructor (although the
                 // map entry may be overwritten). Therefore, a socket should exist, even if it
                 // may not be the one we expect.
-                panic!("expected socket to exist at {:?} in abstract socket namespace", name);
+                panic!(
+                    "expected socket to exist at {:?} in abstract socket namespace",
+                    name
+                );
             }
             Some(b) => b,
         };
@@ -142,10 +145,10 @@ impl UnixSocketPins {
 
 #[derive(Clone)]
 pub enum InnerSocket {
-    UringSocketServer(UringSocketOperationsWeak), 
+    UringSocketServer(UringSocketOperationsWeak),
 }
 
-impl From<UringSocketOperationsWeak> for InnerSocket  {
+impl From<UringSocketOperationsWeak> for InnerSocket {
     fn from(inner: UringSocketOperationsWeak) -> Self {
         return Self::UringSocketServer(inner);
     }
@@ -163,11 +166,11 @@ impl Deref for TCPSocketNamespace {
 
 impl TCPSocketNamespace {
     pub fn New() -> Self {
-        return Self(Arc::new(QMutex::new(TCPSocketNamespaceInner::New())))
+        return Self(Arc::new(QMutex::new(TCPSocketNamespaceInner::New())));
     }
 
     pub fn Add(&self, port: u16, q: AcceptQueue) -> Result<()> {
-        return self.lock().Add(port, q)
+        return self.lock().Add(port, q);
     }
 
     pub fn Remove(&self, port: u16) -> Result<()> {
@@ -177,9 +180,7 @@ impl TCPSocketNamespace {
     pub fn Get(&self, port: u16) -> Option<AcceptQueue> {
         match self.lock().descTbl.get(&port) {
             None => return None,
-            Some(q) => {
-                return Some(q.clone())
-            }
+            Some(q) => return Some(q.clone()),
         }
     }
 }
@@ -207,7 +208,7 @@ impl TCPSocketNamespaceInner {
     pub fn Remove(&mut self, port: u16) -> Result<()> {
         match self.descTbl.remove(&port) {
             None => return Ok(()), //panic!("TCPSocketNamespaceInner::RemoveSocket for port {}", port),
-            _ => return Ok(())
+            _ => return Ok(()),
         }
     }
 }

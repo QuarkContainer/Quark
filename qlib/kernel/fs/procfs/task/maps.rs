@@ -40,12 +40,7 @@ pub fn NewMaps(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) ->
         &FilePermissions::FromMode(FileMode(0o400)),
         FSMagic::PROC_SUPER_MAGIC,
     );
-    return NewProcInode(
-        v.into(),
-        msrc,
-        InodeType::SpecialFile,
-        Some(thread.clone()),
-    );
+    return NewProcInode(v.into(), msrc, InodeType::SpecialFile, Some(thread.clone()));
 }
 
 pub fn NewMapsSimpleFileInode(

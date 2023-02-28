@@ -52,9 +52,9 @@ extern crate spin;
 extern crate x86_64;
 extern crate xmas_elf;
 
-use core::{mem, ptr};
 use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
+use core::{mem, ptr};
 
 use spin::mutex::Mutex;
 
@@ -74,36 +74,36 @@ use self::kernel_def::*;
 use self::loader::vdso::*;
 //use linked_list_allocator::LockedHeap;
 //use buddy_system_allocator::LockedHeap;
-use self::qlib::{ShareSpaceRef, SysCallID};
 use self::qlib::common::*;
 use self::qlib::config::*;
 use self::qlib::control_msg::*;
 use self::qlib::cpuid::*;
-use self::qlib::kernel::*;
 use self::qlib::kernel::arch;
 use self::qlib::kernel::asm;
 use self::qlib::kernel::boot;
 use self::qlib::kernel::fd;
 use self::qlib::kernel::fs;
 use self::qlib::kernel::kernel;
-use self::qlib::kernel::Kernel;
 use self::qlib::kernel::loader;
 use self::qlib::kernel::memmgr;
 use self::qlib::kernel::perflog;
 use self::qlib::kernel::quring;
+use self::qlib::kernel::Kernel;
+use self::qlib::kernel::*;
+use self::qlib::{ShareSpaceRef, SysCallID};
 //use self::vcpu::*;
-use self::qlib::kernel::Scale;
-use self::qlib::kernel::SignalDef;
 use self::qlib::kernel::socket;
 use self::qlib::kernel::task;
 use self::qlib::kernel::taskMgr;
 use self::qlib::kernel::threadmgr;
-use self::qlib::kernel::TSC;
 use self::qlib::kernel::util;
 use self::qlib::kernel::vcpu;
 use self::qlib::kernel::vcpu::*;
-use self::qlib::kernel::VcpuFreqInit;
 use self::qlib::kernel::version;
+use self::qlib::kernel::Scale;
+use self::qlib::kernel::SignalDef;
+use self::qlib::kernel::VcpuFreqInit;
+use self::qlib::kernel::TSC;
 use self::qlib::linux::time::*;
 use self::qlib::linux_def::MemoryDef;
 use self::qlib::loader::*;
@@ -137,16 +137,14 @@ pub const HEAP_SIZE: usize = 0x1000_0000;
 //use buddy_system_allocator::*;
 //#[global_allocator]
 
-
 #[global_allocator]
 pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 //pub static GLOBAL_ALLOCATOR: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
 
-
 lazy_static! {
-    pub static ref GLOBAL_LOCK : Mutex<()> = Mutex::new(());
+    pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
 }
 
 //static ALLOCATOR: QAllocator = QAllocator::New();
@@ -283,7 +281,8 @@ pub extern "C" fn syscall_handler(
         let llevel = SHARESPACE.config.read().LogLevel;
         callId = if nr < SysCallID::UnknowSyscall as u64 {
             unsafe { mem::transmute(nr as u64) }
-        } else if SysCallID::sys_socket_produce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64 {
+        } else if SysCallID::sys_socket_produce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64
+        {
             unsafe { mem::transmute(nr as u64) }
         } else {
             nr = SysCallID::UnknowSyscall as _;
@@ -343,7 +342,7 @@ pub extern "C" fn syscall_handler(
         currTask.SwitchPageTable();
     }*/
     //currTask.mm.VcpuEnter();
-    
+
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
     CPULocal::Myself().SetMode(VcpuMode::User);
     currTask.mm.HandleTlbShootdown();
@@ -404,7 +403,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                         let dummyTask = DUMMY_TASK.read();
                         currTask.blocker = dummyTask.blocker.clone();
                     }
-                    
+
                     let mm = thread.lock().memoryMgr.clone();
                     thread.lock().memoryMgr = currTask.mm.clone();
                     CPULocal::SetPendingFreeStack(currTask.taskId);
@@ -488,7 +487,7 @@ pub extern "C" fn rust_main(
         GlobalIOMgr().InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
         SetVCPCount(vcpuCnt as usize);
         VDSO.Initialization(vdsoParamAddr);
-        
+
         // release other vcpus
         HyperCall64(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
     } else {
@@ -567,7 +566,10 @@ fn StartRootContainer(_para: *const u8) -> ! {
         let mut processArgs = LOADER.Lock(task).unwrap().Init(process);
         match LOADER.LoadRootProcess(&mut processArgs) {
             Err(e) => {
-                error!("load root process failure with error {:?}, shutting down...", e);
+                error!(
+                    "load root process failure with error {:?}, shutting down...",
+                    e
+                );
                 SHARESPACE.StoreShutdown();
                 Kernel::HostSpace::ExitVM(2);
                 panic!("exiting ...");

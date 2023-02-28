@@ -189,7 +189,7 @@ impl MultiDeviceKey {
             Inode: inode,
         };
 
-        return Self(Arc::new(intern))
+        return Self(Arc::new(intern));
     }
 }
 

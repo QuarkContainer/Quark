@@ -42,9 +42,8 @@ use super::super::fsutil::inode::*;
 use super::super::inode::*;
 use super::super::mount::*;
 use crate::qlib::kernel::fs::filesystems::*;
-use crate::qlib::kernel::fs::host::fs::*;
 use crate::qlib::kernel::fs::host::diriops::*;
-
+use crate::qlib::kernel::fs::host::fs::*;
 
 #[derive(Clone)]
 pub struct ProxyDevice(pub Arc<QRwLock<InodeSimpleAttributesInternal>>);
@@ -311,7 +310,7 @@ impl ProxyFileOperations {
         let fileOwner = task.FileOwner();
 
         //let fileFlags = File::GetFileFlags(fd)?;
-        
+
         let msrc = MountSource::NewHostMountSource(
             &"/".to_string(),
             &fileOwner,
@@ -326,14 +325,12 @@ impl ProxyFileOperations {
             fstat.WouldBlock(),
             &fstat,
             true,
-            false
+            false,
         );
 
-        return Ok(Self {
-            InodeOp: iops
-        })
+        return Ok(Self { InodeOp: iops });
     }
-    
+
     pub fn Fd(&self) -> i32 {
         return self.InodeOp.FD();
     }

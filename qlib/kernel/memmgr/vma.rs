@@ -19,14 +19,14 @@ use core::fmt;
 
 use super::super::super::addr::*;
 use super::super::super::common::*;
-use super::super::super::linux_def::*;
 use super::super::super::limits::*;
-use super::super::fs::host::hostinodeop::*;
-use super::super::task::*;
-use super::super::kernel::shm::*;
-use super::super::kernel::aio::aio_context::*;
+use super::super::super::linux_def::*;
 use super::super::super::mem::areaset::*;
 use super::super::super::range::*;
+use super::super::fs::host::hostinodeop::*;
+use super::super::kernel::aio::aio_context::*;
+use super::super::kernel::shm::*;
+use super::super::task::*;
 use super::arch::*;
 use super::mm::*;
 use super::*;
@@ -271,19 +271,24 @@ impl MemoryManager {
 
         let limitAS = task.Thread().ThreadGroup().Limits().Get(LimitType::AS).Cur;
         if newUsageAS > limitAS {
-            return Err(Error::SysError(SysErr::ENOMEM))
+            return Err(Error::SysError(SysErr::ENOMEM));
         }
 
         if opts.MLockMode != MLockMode::MlockNone {
-            let mlockLimit = task.Thread().ThreadGroup().Limits().Get(LimitType::MemoryLocked).Cur;
+            let mlockLimit = task
+                .Thread()
+                .ThreadGroup()
+                .Limits()
+                .Get(LimitType::MemoryLocked)
+                .Cur;
             if mlockLimit == 0 {
-                return Err(Error::SysError(SysErr::EPERM))
+                return Err(Error::SysError(SysErr::EPERM));
             }
 
             let lockedAS = self.mapping.lock().lockedAS;
             let newLockedAS = lockedAS + ar.Len() + self.mlockedBytesRangeLocked(&ar);
             if newLockedAS > mlockLimit {
-                return Err(Error::SysError(SysErr::EAGAIN))
+                return Err(Error::SysError(SysErr::EAGAIN));
             }
         }
 
@@ -364,17 +369,17 @@ pub enum MMappable {
 
 impl Default for MMappable {
     fn default() -> Self {
-        return Self::None
+        return Self::None;
     }
 }
 
 impl MMappable {
     pub fn FromHostIops(iops: HostInodeOp) -> Self {
-        return Self::HostIops(iops)
+        return Self::HostIops(iops);
     }
 
     pub fn FromShm(shm: Shm) -> Self {
-        return Self::Shm(shm)
+        return Self::Shm(shm);
     }
 
     pub fn HostIops(&self) -> Option<HostInodeOp> {
@@ -407,19 +412,15 @@ impl MMappable {
         match self {
             Self::HostIops(iops) => {
                 return iops.AddMapping(ms, ar, offset, writable);
-            },
+            }
             Self::Shm(shm) => {
                 return shm.HostIops().AddMapping(ms, ar, offset, writable);
-            },
-            Self::Socket(_) => { 
-                return Ok(())
             }
+            Self::Socket(_) => return Ok(()),
             Self::AIOMappable => {
                 return AIOMappable::AddMapping(ms, ar, offset, writable);
-            },
-            Self::None => {
-                return Ok(())
-            },
+            }
+            Self::None => return Ok(()),
         }
     }
 
@@ -433,19 +434,15 @@ impl MMappable {
         match self {
             Self::HostIops(iops) => {
                 return iops.RemoveMapping(ms, ar, offset, writable);
-            },
+            }
             Self::Shm(shm) => {
                 return shm.HostIops().RemoveMapping(ms, ar, offset, writable);
-            },
-            Self::Socket(_) => { 
-                return Ok(())
             }
+            Self::Socket(_) => return Ok(()),
             Self::AIOMappable => {
                 return AIOMappable::RemoveMapping(ms, ar, offset, writable);
-            },
-            Self::None => {
-                return Ok(())
-            },
+            }
+            Self::None => return Ok(()),
         }
     }
 
@@ -460,43 +457,33 @@ impl MMappable {
         match self {
             Self::HostIops(iops) => {
                 return iops.CopyMapping(ms, srcAr, dstAR, offset, writable);
-            },
-            Self::Shm(shm) => {
-                return shm.HostIops().CopyMapping(ms, srcAr, dstAR, offset, writable);
-            },
-            Self::Socket(_) => { 
-                return Ok(())
             }
+            Self::Shm(shm) => {
+                return shm
+                    .HostIops()
+                    .CopyMapping(ms, srcAr, dstAR, offset, writable);
+            }
+            Self::Socket(_) => return Ok(()),
             Self::AIOMappable => {
                 return AIOMappable::CopyMapping(ms, srcAr, dstAR, offset, writable);
-            },
-            Self::None => {
-                return Ok(())
-            },
+            }
+            Self::None => return Ok(()),
         }
     }
 
-    pub fn MSync(
-        &self,
-        fr: &Range,
-        msyncType: MSyncType
-    ) -> Result<()> {
+    pub fn MSync(&self, fr: &Range, msyncType: MSyncType) -> Result<()> {
         match self {
             Self::HostIops(iops) => {
                 return iops.MSync(fr, msyncType);
-            },
+            }
             Self::Shm(shm) => {
                 return shm.HostIops().MSync(fr, msyncType);
-            },
-            Self::Socket(_) => { 
-                return Ok(())
             }
+            Self::Socket(_) => return Ok(()),
             Self::AIOMappable => {
                 return AIOMappable::MSync(fr, msyncType);
-            },
-            Self::None => {
-                return Ok(())
-            },
+            }
+            Self::None => return Ok(()),
         }
     }
 }

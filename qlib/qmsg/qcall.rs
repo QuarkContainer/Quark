@@ -143,7 +143,7 @@ pub struct SwapInPage {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct HostMemoryBarrier{}
+pub struct HostMemoryBarrier {}
 
 #[derive(Clone, Default, Debug)]
 pub struct FSetXattr {
@@ -264,7 +264,7 @@ pub struct Statm {
 #[derive(Clone, Default, Debug)]
 pub struct CreateMemfd {
     pub len: i64,
-    pub flags: u32
+    pub flags: u32,
 }
 
 #[derive(Clone, Default, Debug)]

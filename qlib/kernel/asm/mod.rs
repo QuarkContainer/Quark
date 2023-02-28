@@ -15,8 +15,8 @@
 //use super::super::perf_tunning::*;
 
 use super::{SUPPORT_XSAVE, SUPPORT_XSAVEOPT};
-use core::sync::atomic::Ordering;
 use core::arch::asm;
+use core::sync::atomic::Ordering;
 
 use crate::qlib::kernel::task;
 use crate::qlib::vcpu_mgr::CPULocal;
@@ -68,7 +68,6 @@ pub fn GetVcpuId() -> usize {
     return result;
 }
 
-
 #[inline]
 pub fn Hlt() {
     unsafe { asm!("hlt") }
@@ -76,21 +75,23 @@ pub fn Hlt() {
 
 #[inline]
 pub fn LoadCr3(cr3: u64) {
-    unsafe { 
+    unsafe {
         asm!(
             "mov cr3, {0}",
             in(reg) cr3
-        ) };
+        )
+    };
 }
 
 #[inline]
 pub fn CurrentCr3() -> u64 {
     let cr3: u64;
-    unsafe { 
+    unsafe {
         asm!(
             "mov {0}, cr3",
             out(reg) cr3
-        )};
+        )
+    };
     return cr3;
 }
 
@@ -104,16 +105,18 @@ pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) -> ! {
 
     pt.rip = entry;
     pt.cs = 0x23;
-    pt.eflags = 0x2 | 1<<9 | 1<<12 | 1<<13; //USER_FLAGS_SET;
+    pt.eflags = 0x2 | 1 << 9 | 1 << 12 | 1 << 13; //USER_FLAGS_SET;
     pt.rsp = userStackAddr;
     pt.ss = 0x1b;
 
     unsafe {
-        asm!("
+        asm!(
+            "
             fninit
-            ");
+            "
+        );
     }
-   
+
     IRet(pt as *const _ as u64);
 }
 
@@ -225,8 +228,8 @@ pub fn IRet(kernelRsp: u64) -> ! {
                 swapgs
                 iretq
               ",
-              in("rax") kernelRsp
-              );
+        in("rax") kernelRsp
+        );
         panic!("won't reach");
     }
 }
@@ -234,20 +237,23 @@ pub fn IRet(kernelRsp: u64) -> ! {
 #[inline]
 pub fn GetRsp() -> u64 {
     let rsp: u64;
-    unsafe { 
+    unsafe {
         asm!(
             "mov rax, rsp",
             out("rax") rsp
-        ) };
+        )
+    };
     return rsp;
 }
 
 #[inline]
 pub fn Clflush(addr: u64) {
-    unsafe { asm!(
-        "clflush (rax)",
-        in("rax") addr
-    ) }
+    unsafe {
+        asm!(
+            "clflush (rax)",
+            in("rax") addr
+        )
+    }
 }
 
 // muldiv64 multiplies two 64-bit numbers, then divides the result by another
@@ -282,11 +288,11 @@ pub fn AsmHostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
               CPUID
               xchg {0:r}, rbx 
             ",
-            lateout(reg) bx,
-            inout("eax") ax,
-            inout("ecx") cx,
-            out("edx") dx,
-            );
+        lateout(reg) bx,
+        inout("eax") ax,
+        inout("ecx") cx,
+        out("edx") dx,
+        );
     }
 
     return (ax, bx, cx, dx);
@@ -295,9 +301,11 @@ pub fn AsmHostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
 #[inline(always)]
 fn Barrier() {
     unsafe {
-        asm!("
+        asm!(
+            "
                 mfence
-            ");
+            "
+        );
     }
 }
 
@@ -324,7 +332,6 @@ pub fn GetCpu() -> u32 {
 
     return (rcx & 0xfff) as u32;
 }
-
 
 #[inline(always)]
 pub fn GetRflags() -> u64 {
@@ -424,28 +431,34 @@ pub fn fxrstor(addr: u64) {
 #[inline(always)]
 pub fn mfence() {
     unsafe {
-        asm!("
+        asm!(
+            "
             sfence
             lfence
-        ")
+        "
+        )
     }
 }
 
 #[inline(always)]
 pub fn sfence() {
     unsafe {
-        asm!("
+        asm!(
+            "
             sfence
-        ")
+        "
+        )
     }
 }
 
 #[inline(always)]
 pub fn lfence() {
     unsafe {
-        asm!("
+        asm!(
+            "
             lfence
-        ")
+        "
+        )
     }
 }
 
@@ -488,17 +501,21 @@ pub fn FLDCW(addr: u64) {
 
 pub fn FNCLEX() {
     unsafe {
-        asm!("\
+        asm!(
+            "\
             FNCLEX
-        ")
+        "
+        )
     };
 }
 
 pub fn fninit() {
     unsafe {
-        asm!("\
+        asm!(
+            "\
             fninit
-            ")
+            "
+        )
     };
 }
 
@@ -518,7 +535,7 @@ pub fn xsetbv(val: u64) {
 }
 
 pub fn xgetbv() -> u64 {
-    let reg :u64 = 0;
+    let reg: u64 = 0;
     let val_l: u32;
     let val_h: u32;
     unsafe {

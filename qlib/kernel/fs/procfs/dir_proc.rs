@@ -32,13 +32,13 @@ use super::super::inode::*;
 use super::super::mount::*;
 use super::super::ramfs::dir::*;
 
-use crate::qlib::kernel::fs::procfs::sys::net::net::SysNetDirNode;
-use crate::qlib::kernel::fs::procfs::proc::ProcNode;
-use crate::qlib::kernel::fs::procfs::sys::vm::vm::ProcSysVMDirNode;
-use crate::qlib::kernel::fs::procfs::sys::net::ipv4::Ipv4Node;
 use crate::qlib::kernel::fs::procfs::net::NetDirNode;
-use crate::qlib::kernel::fs::procfs::task::fds::FdDirNode;
+use crate::qlib::kernel::fs::procfs::proc::ProcNode;
+use crate::qlib::kernel::fs::procfs::sys::net::ipv4::Ipv4Node;
+use crate::qlib::kernel::fs::procfs::sys::net::net::SysNetDirNode;
 use crate::qlib::kernel::fs::procfs::sys::sys::ProcSysDirNode;
+use crate::qlib::kernel::fs::procfs::sys::vm::vm::ProcSysVMDirNode;
+use crate::qlib::kernel::fs::procfs::task::fds::FdDirNode;
 use crate::qlib::kernel::fs::procfs::task::fds::FdInfoDirNode;
 use crate::qlib::kernel::fs::procfs::task::subtasks::SubTasksNode;
 use crate::qlib::kernel::fs::procfs::task::task::TaskDirNode;
@@ -78,12 +78,9 @@ pub enum DirDataNode {
 impl DirDataNode {
     pub fn ProcNode(&self) -> Option<ProcNode> {
         match self {
-            Self::ProcNode(inner) => {
-                return Some(inner.clone())
-            }
+            Self::ProcNode(inner) => return Some(inner.clone()),
             _ => None,
         }
-
     }
 }
 

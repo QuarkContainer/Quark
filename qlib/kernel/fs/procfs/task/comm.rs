@@ -39,12 +39,7 @@ pub fn NewComm(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) ->
         &FilePermissions::FromMode(FileMode(0o400)),
         FSMagic::PROC_SUPER_MAGIC,
     );
-    return NewProcInode(
-        v.into(),
-        msrc,
-        InodeType::SpecialFile,
-        Some(thread.clone()),
-    );
+    return NewProcInode(v.into(), msrc, InodeType::SpecialFile, Some(thread.clone()));
 }
 
 pub fn NewCommSimpleFileInode(
@@ -62,7 +57,8 @@ pub fn NewCommSimpleFileInode(
         false,
         CommSimpleFileTrait {
             thread: thread.clone(),
-        }.into(),
+        }
+        .into(),
     );
 }
 
@@ -84,13 +80,12 @@ impl SimpleFileTrait for CommSimpleFileTrait {
     }
 }
 
-pub fn NewCommReadonlyFileOperations(
-    thread: &Thread,
-) -> ReadonlyFileOperations {
+pub fn NewCommReadonlyFileOperations(thread: &Thread) -> ReadonlyFileOperations {
     return ReadonlyFileOperations {
         node: CommReadonlyFileNode {
             thread: thread.clone(),
-        }.into(),
+        }
+        .into(),
     };
 }
 

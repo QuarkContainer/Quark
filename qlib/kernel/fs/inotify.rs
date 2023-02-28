@@ -12,27 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::collections::btree_map::BTreeMap;
+use alloc::collections::linked_list::LinkedList;
+use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use alloc::collections::linked_list::LinkedList;
-use alloc::collections::btree_map::BTreeMap;
-use spin::Mutex;
-use core::ops::Deref;
 use core::any::Any;
-use alloc::string::String;
+use core::ops::Deref;
+use spin::Mutex;
 
-use crate::qlib::mutex::*;
-use crate::qlib::kernel::kernel::waiter::*;
-use crate::qlib::kernel::fs::dentry::*;
-use crate::qlib::kernel::fs::attr::UnstableAttr;
-use crate::qlib::kernel::memmgr::vma::MMappable;
-use super::super::task::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
-use super::super::uid::*;
-use super::super::kernel::waiter::Queue;
 use super::super::fs::dirent::*;
+use super::super::kernel::waiter::Queue;
+use super::super::task::*;
+use super::super::uid::*;
 use super::file::*;
+use crate::qlib::kernel::fs::attr::UnstableAttr;
+use crate::qlib::kernel::fs::dentry::*;
+use crate::qlib::kernel::kernel::waiter::*;
+use crate::qlib::kernel::memmgr::vma::MMappable;
+use crate::qlib::mutex::*;
 
 // inotifyEventBaseSize is the base size of linux's struct inotify_event. This
 // must be a power 2 for rounding below.
@@ -43,7 +43,7 @@ pub const INOTIFY_EVENT_BASE_SIZE: usize = 16;
 #[derive(PartialEq, Clone, Copy)]
 pub enum EventType {
     PathEvent,
-    InodeEvent
+    InodeEvent,
 }
 
 // Watch represent a particular inotify watch created by inotify_add_watch.
@@ -132,11 +132,10 @@ impl Watch {
             let effectiveMask = unmaskableBits | w.mask;
             let matchedEvents = effectiveMask & events;
             (w.owner.clone(), w.wd, matchedEvents)
-
         };
 
         owner.QueueEvent(Event::New(wd, name, matchedEvents, cookie));
-        return expire
+        return expire;
     }
 
     pub fn TargetDestroyed(&self) {
@@ -193,7 +192,7 @@ impl Watches {
     pub fn Lookup(&self, id: u64) -> Option<Watch> {
         match self.write().ws.get(&id) {
             None => return None,
-            Some(w) => return Some(w.clone())
+            Some(w) => return Some(w.clone()),
         }
     }
 
@@ -220,16 +219,17 @@ impl Watches {
             None => {
                 // todo: how to handle None?
                 if ws.destroyed {
-                    return
+                    return;
                 }
 
                 // While there's technically no problem with silently ignoring a missing
                 // watch, this is almost certainly a bug.
-                panic!("Attempt to remove a watch, but no watch found with provided id {}.", id)
+                panic!(
+                    "Attempt to remove a watch, but no watch found with provided id {}.",
+                    id
+                )
             }
-            Some(_) => {
-                return
-            }
+            Some(_) => return,
         }
     }
 
@@ -261,7 +261,6 @@ impl Watches {
                     continue;
                 }
                 watchArr.push(watch.clone());
-
             }
         }
 
@@ -308,7 +307,7 @@ impl Watches {
     // targetDestroyed is called by the inode destructor to notify the watch owners
     // of the impending destruction of the watch target.
     pub fn TargetDestroyed(&self) {
-        let watchArr : Vec<Watch>;
+        let watchArr: Vec<Watch>;
         {
             let mut ws = self.write();
             watchArr = ws.ws.values().cloned().collect();
@@ -334,7 +333,7 @@ impl WatchList {
         return Self {
             nextWatch: 1,
             watches: BTreeMap::new(),
-        }
+        };
     }
 }
 
@@ -350,7 +349,7 @@ pub struct InotifyIntern {
     pub events: Mutex<LinkedList<Event>>,
 
     // Map from watch descriptors to watch objects.
-    pub watches: Mutex<WatchList>
+    pub watches: Mutex<WatchList>,
 }
 
 #[derive(Clone)]
@@ -378,7 +377,7 @@ impl Inotify {
             id: NewUID(),
             queue: Queue::default(),
             events: Mutex::new(LinkedList::new()),
-            watches: Mutex::new(WatchList::New())
+            watches: Mutex::new(WatchList::New()),
         };
         return Self(Arc::new(internl));
     }
@@ -389,7 +388,7 @@ impl Inotify {
             let inode = w.lock().target.clone();
             match inode {
                 None => (),
-                Some(i) => i.Watches().Remove(w.Id())
+                Some(i) => i.Watches().Remove(w.Id()),
             }
         }
     }
@@ -401,7 +400,7 @@ impl Inotify {
                 None => (),
                 Some(last) => {
                     if last == &ev {
-                        return
+                        return;
                     }
                 }
             }
@@ -429,7 +428,7 @@ impl Inotify {
         ws.watches.insert(wd, watch.clone());
 
         target.Watches().Add(&watch);
-        return watch
+        return watch;
     }
 
     // targetDestroyed is called by w to notify i that w's target is gone. This
@@ -441,7 +440,7 @@ impl Inotify {
             let mut ws = self.watches.lock();
             match ws.watches.remove(&wd) {
                 None => false,
-                Some(_) => true
+                Some(_) => true,
             }
         };
 
@@ -491,7 +490,7 @@ impl Inotify {
 
             watch = match self.watches.lock().watches.remove(&wd) {
                 None => return Err(Error::SysError(SysErr::EINVAL)),
-                Some(w) => w
+                Some(w) => w,
             };
 
             let target = watch.lock().target.clone();
@@ -505,7 +504,7 @@ impl Inotify {
         let wd = watch.lock().wd;
         self.QueueEvent(Event::New(wd, "", InotifyEvent::IN_IGNORED, 0));
         watch.Destroy();
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -522,8 +521,15 @@ impl FileOperations for Inotify {
         return false;
     }
 
-    fn Seek(&self, _task: &Task, _f: &File, _whence: i32, _current: i64, _offset: i64) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ESPIPE))
+    fn Seek(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _whence: i32,
+        _current: i64,
+        _offset: i64,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ESPIPE));
     }
 
     fn ReadDir(
@@ -533,7 +539,7 @@ impl FileOperations for Inotify {
         _offset: i64,
         _serializer: &mut DentrySerializer,
     ) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTDIR))
+        return Err(Error::SysError(SysErr::ENOTDIR));
     }
 
     fn ReadAt(
@@ -548,7 +554,7 @@ impl FileOperations for Inotify {
         let size = IoVec::NumBytes(&dsts);
 
         if size < INOTIFY_EVENT_BASE_SIZE {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let size = if size >= MemoryDef::HUGE_PAGE_SIZE as usize {
@@ -560,7 +566,7 @@ impl FileOperations for Inotify {
 
         let mut events = self.events.lock();
         if events.len() == 0 {
-            return Err(Error::SysError(SysErr::EAGAIN))
+            return Err(Error::SysError(SysErr::EAGAIN));
         }
 
         let mut slice = &mut buf.buf[0..size];
@@ -578,12 +584,12 @@ impl FileOperations for Inotify {
             if slice.len() < len {
                 events.push_front(event);
                 if writelen > 0 {
-                    break
+                    break;
                 }
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             }
 
-            event.CopyOut(task, &mut slice[0] as * mut _ as u64)?;
+            event.CopyOut(task, &mut slice[0] as *mut _ as u64)?;
             writelen += len;
             slice = &mut slice[len..];
         }
@@ -600,11 +606,11 @@ impl FileOperations for Inotify {
         _offset: i64,
         _blocking: bool,
     ) -> Result<i64> {
-        return Err(Error::SysError(SysErr::EBADF))
+        return Err(Error::SysError(SysErr::EBADF));
     }
 
     fn Append(&self, _task: &Task, _f: &File, _srcs: &[IoVec]) -> Result<(i64, i64)> {
-        return Err(Error::SysError(SysErr::EBADF))
+        return Err(Error::SysError(SysErr::EBADF));
     }
 
     fn Fsync(
@@ -615,7 +621,7 @@ impl FileOperations for Inotify {
         _end: i64,
         _syncType: SyncType,
     ) -> Result<()> {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     fn Flush(&self, _task: &Task, _f: &File) -> Result<()> {
@@ -623,7 +629,7 @@ impl FileOperations for Inotify {
     }
 
     fn UnstableAttr(&self, task: &Task, f: &File) -> Result<UnstableAttr> {
-        return f.Dirent.Inode().UnstableAttr(task)
+        return f.Dirent.Inode().UnstableAttr(task);
     }
 
     fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<()> {
@@ -631,18 +637,16 @@ impl FileOperations for Inotify {
             IoCtlCmd::FIONREAD => {
                 let events = self.events.lock();
                 loop {
-                    let mut size : u32 = 0;
+                    let mut size: u32 = 0;
                     for event in events.iter() {
                         size += event.Sizeof() as u32;
                     }
 
                     task.CopyOutObj(&size, val)?;
-                    return Ok(())
+                    return Ok(());
                 }
             }
-            _ => {
-                return Err(Error::SysError(SysErr::ENOTTY))
-            }
+            _ => return Err(Error::SysError(SysErr::ENOTTY)),
         }
     }
 
@@ -657,7 +661,7 @@ impl FileOperations for Inotify {
     }
 
     fn Mappable(&self) -> Result<MMappable> {
-        return Err(Error::SysError(SysErr::ENODEV))
+        return Err(Error::SysError(SysErr::ENODEV));
     }
 }
 
@@ -701,7 +705,7 @@ pub struct Event {
 
     // The name field has special padding requirements and should only be set by
     // calling Event.setName.
-    pub name: Vec<u8>
+    pub name: Vec<u8>,
 }
 
 // paddedBytes converts a go string to a null-terminated c-string, padded with
@@ -721,26 +725,25 @@ pub fn PaddedBytes(s: &str, l: usize) -> Vec<u8> {
     }
 
     return b;
-
 }
 
 impl PartialEq for Event {
     fn eq(&self, other: &Self) -> bool {
-        let eq = self.wd == other.wd &&
-            self.mask == other.mask &&
-            self.cookie == other.cookie &&
-            self.len == other.len;
+        let eq = self.wd == other.wd
+            && self.mask == other.mask
+            && self.cookie == other.cookie
+            && self.len == other.len;
         if !eq {
-            return false
+            return false;
         }
 
         for i in 0..self.name.len() {
             if self.name[i] != other.name[i] {
-                return false
+                return false;
             }
         }
 
-        return true
+        return true;
     }
 }
 
@@ -767,7 +770,8 @@ impl Event {
         // multiple of inotifyEventBaseSize.
         let unpaddedLen = name.len() + 1;
         // Round up to nearest multiple of inotifyEventBaseSize.
-        self.len = ((unpaddedLen + INOTIFY_EVENT_BASE_SIZE - 1) & !(INOTIFY_EVENT_BASE_SIZE - 1)) as u32;
+        self.len =
+            ((unpaddedLen + INOTIFY_EVENT_BASE_SIZE - 1) & !(INOTIFY_EVENT_BASE_SIZE - 1)) as u32;
         // Make sure we haven't overflowed and wrapped around when rounding.
         if unpaddedLen > self.len as usize {
             panic!("Overflow when rounding inotify event size, the 'name' field was too big.")
@@ -777,16 +781,25 @@ impl Event {
 
     pub fn Sizeof(&self) -> usize {
         let s = INOTIFY_EVENT_BASE_SIZE + self.len as usize;
-        assert!(s>=INOTIFY_EVENT_BASE_SIZE);
+        assert!(s >= INOTIFY_EVENT_BASE_SIZE);
         return s;
     }
 
     pub fn CopyOut(&self, task: &Task, addr: u64) -> Result<()> {
-        task.CopyDataOut(self as *const _ as u64, addr, INOTIFY_EVENT_BASE_SIZE, false)?;
+        task.CopyDataOut(
+            self as *const _ as u64,
+            addr,
+            INOTIFY_EVENT_BASE_SIZE,
+            false,
+        )?;
         if self.len > 0 {
-            task.CopyOutSlice(&self.name, addr + INOTIFY_EVENT_BASE_SIZE as u64, self.len as usize)?;
+            task.CopyOutSlice(
+                &self.name,
+                addr + INOTIFY_EVENT_BASE_SIZE as u64,
+                self.len as usize,
+            )?;
         }
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -802,7 +815,9 @@ pub fn InotifyEventFromStatMask(mask: u32) -> u32 {
         ev |= InotifyEvent::IN_MODIFY;
     }
 
-    if mask & (StatxMask::STATX_ATIME | StatxMask::STATX_MTIME) == (StatxMask::STATX_ATIME | StatxMask::STATX_MTIME) {
+    if mask & (StatxMask::STATX_ATIME | StatxMask::STATX_MTIME)
+        == (StatxMask::STATX_ATIME | StatxMask::STATX_MTIME)
+    {
         ev |= InotifyEvent::IN_ATTRIB;
     } else if mask & StatxMask::STATX_ATIME == 0 {
         ev |= InotifyEvent::IN_ACCESS;
@@ -827,20 +842,28 @@ pub fn InotifyRemoveChild(_task: &Task, me: Option<Watches>, parent: Option<Watc
     match parent {
         None => (),
         Some(ws) => {
-            ws.Notify(name, InotifyEvent::IN_DELETE, 0, EventType::InodeEvent, true);
+            ws.Notify(
+                name,
+                InotifyEvent::IN_DELETE,
+                0,
+                EventType::InodeEvent,
+                true,
+            );
         }
     }
 }
 
 // InotifyRename sends the appriopriate notifications to the watch sets of the
 // file being renamed and its old/new parents.
-pub fn InotifyRename(_task: &Task,
-                     renamed: Option<Watches>,
-                     oldParent: Option<Watches>,
-                     newParent: Option<Watches>,
-                     oldName: &str,
-                     newName: &str,
-                     isDir: bool) {
+pub fn InotifyRename(
+    _task: &Task,
+    renamed: Option<Watches>,
+    oldParent: Option<Watches>,
+    newParent: Option<Watches>,
+    oldName: &str,
+    newName: &str,
+    isDir: bool,
+) {
     let mut dirEv: u32 = 0;
     if isDir {
         dirEv |= InotifyEvent::IN_ISDIR;
@@ -850,21 +873,39 @@ pub fn InotifyRename(_task: &Task,
     match oldParent {
         None => (),
         Some(ws) => {
-            ws.Notify(oldName, dirEv | InotifyEvent::IN_MOVED_FROM, cookie, EventType::InodeEvent, false);
+            ws.Notify(
+                oldName,
+                dirEv | InotifyEvent::IN_MOVED_FROM,
+                cookie,
+                EventType::InodeEvent,
+                false,
+            );
         }
     }
 
     match newParent {
         None => (),
         Some(ws) => {
-            ws.Notify(newName, dirEv | InotifyEvent::IN_MOVED_TO, cookie, EventType::InodeEvent, false);
+            ws.Notify(
+                newName,
+                dirEv | InotifyEvent::IN_MOVED_TO,
+                cookie,
+                EventType::InodeEvent,
+                false,
+            );
         }
     }
 
     match renamed {
         None => (),
         Some(ws) => {
-            ws.Notify("", dirEv | InotifyEvent::IN_MOVE_SELF, 0, EventType::InodeEvent, false);
+            ws.Notify(
+                "",
+                dirEv | InotifyEvent::IN_MOVE_SELF,
+                0,
+                EventType::InodeEvent,
+                false,
+            );
         }
     }
 }

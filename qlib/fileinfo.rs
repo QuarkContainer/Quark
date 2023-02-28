@@ -28,7 +28,7 @@ use crate::qlib::*;
 #[derive(Clone)]
 pub enum SockInfo {
     File,                             // it is not socket
-    Socket(SocketInfo),                           // normal socket
+    Socket(SocketInfo),               // normal socket
     RDMAServerSocket(RDMAServerSock), //
     RDMADataSocket(RDMADataSock),     //
     RDMAContext,
@@ -111,9 +111,7 @@ impl Default for FdTbl {
     fn default() -> Self {
         let mut map = Vec::with_capacity(32);
         map.resize(32, None);
-        return Self {
-            map: map
-        }
+        return Self { map: map };
     }
 }
 
@@ -123,7 +121,7 @@ impl FdTbl {
         if fd > self.map.len() {
             return None;
         }
-        return self.map[fd].clone()
+        return self.map[fd].clone();
     }
 
     pub fn Remove(&mut self, fd: i32) -> Option<FdInfo> {

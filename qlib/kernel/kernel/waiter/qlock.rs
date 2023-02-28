@@ -242,7 +242,6 @@ impl Drop for QAsyncLockGuard {
     }
 }
 
-
 pub enum RWState {
     NoLock,
     Write,

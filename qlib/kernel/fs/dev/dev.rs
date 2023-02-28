@@ -29,10 +29,10 @@ use super::super::ramfs::dir::*;
 use super::super::ramfs::symlink::*;
 use super::full::*;
 use super::null::*;
+use super::proxyfile::*;
 use super::random::*;
 use super::tty::*;
 use super::zero::*;
-use super::proxyfile::*;
 
 const MEM_DEV_MAJOR: u16 = 1;
 
@@ -282,33 +282,21 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
 
     contents.insert(
         "null".to_string(),
-        NewNullDevice(
-            NullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)),
-            msrc,
-        ),
+        NewNullDevice(NullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)), msrc),
     );
 
     contents.insert(
         "proxy".to_string(),
-        NewTestProxyDevice(
-            ProxyDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)),
-            msrc,
-        ),
+        NewTestProxyDevice(ProxyDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)), msrc),
     );
 
     contents.insert(
         "zero".to_string(),
-        NewZeroDevice(
-            ZeroDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)),
-            msrc,
-        ),
+        NewZeroDevice(ZeroDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)), msrc),
     );
     contents.insert(
         "full".to_string(),
-        NewFullDevice(
-            FullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)),
-            msrc,
-        ),
+        NewFullDevice(FullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)), msrc),
     );
 
     contents.insert(

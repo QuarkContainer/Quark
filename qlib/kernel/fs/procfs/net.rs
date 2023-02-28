@@ -15,26 +15,26 @@
 use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
-use alloc::vec::Vec;
 use alloc::string::ToString;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
-use super::super::super::super::linux_def::*;
-use super::super::super::super::linux::time::*;
 use super::super::super::super::kernel::kernel::kernel::GetKernel;
 use super::super::super::super::kernel::socket::control::*;
 use super::super::super::super::kernel::socket::unix::unix::*;
-use super::super::super::tcpip::tcpip::*;
-use super::super::super::task::*;
+use super::super::super::super::linux::time::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::socket::unix::transport::unix::*;
+use super::super::super::task::*;
+use super::super::super::tcpip::tcpip::*;
 use super::super::attr::*;
-use super::super::fsutil::inode::simple_file_inode::*;
-use super::super::fsutil::file::readonly_file::*;
 use super::super::dirent::*;
 use super::super::file::*;
 use super::super::flags::*;
+use super::super::fsutil::file::readonly_file::*;
+use super::super::fsutil::inode::simple_file_inode::*;
 use super::super::inode::*;
 use super::super::mount::*;
 use super::super::ramfs::dir::*;
@@ -61,10 +61,7 @@ impl DirDataNodeTrait for NetDirNode {
     }
 }
 
-pub fn NewNetDir(
-    task: &Task,
-    msrc: &Arc<QMutex<MountSource>>,
-) -> Inode {
+pub fn NewNetDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let mut contents = BTreeMap::new();
 
     // The following files are simple stubs until they are
@@ -72,28 +69,56 @@ pub fn NewNetDir(
     // header the stub is just the header otherwise it is
     // an empty file.
     let arp = "IP address       HW type     Flags       HW address            Mask     Device\n";
-    contents.insert("arp".to_string(), NewStaticProcInode(task, msrc, &Arc::new(arp.as_bytes().to_vec())));
+    contents.insert(
+        "arp".to_string(),
+        NewStaticProcInode(task, msrc, &Arc::new(arp.as_bytes().to_vec())),
+    );
 
-    let netlink = "sk       Eth Pid    Groups   Rmem     Wmem     Dump     Locks     Drops     Inode\n";
-    contents.insert("netlink".to_string(), NewStaticProcInode(task, msrc, &Arc::new(netlink.as_bytes().to_vec())));
+    let netlink =
+        "sk       Eth Pid    Groups   Rmem     Wmem     Dump     Locks     Drops     Inode\n";
+    contents.insert(
+        "netlink".to_string(),
+        NewStaticProcInode(task, msrc, &Arc::new(netlink.as_bytes().to_vec())),
+    );
 
     let netstat = "TcpExt: SyncookiesSent SyncookiesRecv SyncookiesFailed EmbryonicRsts PruneCalled RcvPruned OfoPruned OutOfWindowIcmps LockDroppedIcmps ArpFilter TW TWRecycled TWKilled PAWSPassive PAWSActive PAWSEstab DelayedACKs DelayedACKLocked DelayedACKLost ListenOverflows ListenDrops TCPPrequeued TCPDirectCopyFromBacklog TCPDirectCopyFromPrequeue TCPPrequeueDropped TCPHPHits TCPHPHitsToUser TCPPureAcks TCPHPAcks TCPRenoRecovery TCPSackRecovery TCPSACKReneging TCPFACKReorder TCPSACKReorder TCPRenoReorder TCPTSReorder TCPFullUndo TCPPartialUndo TCPDSACKUndo TCPLossUndo TCPLostRetransmit TCPRenoFailures TCPSackFailures TCPLossFailures TCPFastRetrans TCPForwardRetrans TCPSlowStartRetrans TCPTimeouts TCPLossProbes TCPLossProbeRecovery TCPRenoRecoveryFail TCPSackRecoveryFail TCPSchedulerFailed TCPRcvCollapsed TCPDSACKOldSent TCPDSACKOfoSent TCPDSACKRecv TCPDSACKOfoRecv TCPAbortOnData TCPAbortOnClose TCPAbortOnMemory TCPAbortOnTimeout TCPAbortOnLinger TCPAbortFailed TCPMemoryPressures TCPSACKDiscard TCPDSACKIgnoredOld TCPDSACKIgnoredNoUndo TCPSpuriousRTOs TCPMD5NotFound TCPMD5Unexpected TCPMD5Failure TCPSackShifted TCPSackMerged TCPSackShiftFallback TCPBacklogDrop TCPMinTTLDrop TCPDeferAcceptDrop IPReversePathFilter TCPTimeWaitOverflow TCPReqQFullDoCookies TCPReqQFullDrop TCPRetransFail TCPRcvCoalesce TCPOFOQueue TCPOFODrop TCPOFOMerge TCPChallengeACK TCPSYNChallenge TCPFastOpenActive TCPFastOpenActiveFail TCPFastOpenPassive TCPFastOpenPassiveFail TCPFastOpenListenOverflow TCPFastOpenCookieReqd TCPSpuriousRtxHostQueues BusyPollRxPackets TCPAutoCorking TCPFromZeroWindowAdv TCPToZeroWindowAdv TCPWantZeroWindowAdv TCPSynRetrans TCPOrigDataSent TCPHystartTrainDetect TCPHystartTrainCwnd TCPHystartDelayDetect TCPHystartDelayCwnd TCPACKSkippedSynRecv TCPACKSkippedPAWS TCPACKSkippedSeq TCPACKSkippedFinWait2 TCPACKSkippedTimeWait TCPACKSkippedChallenge TCPWinProbe TCPKeepAlive TCPMTUPFail TCPMTUPSuccess\n\n";
-    contents.insert("netstat".to_string(), NewStaticProcInode(task, msrc, &Arc::new(netstat.as_bytes().to_vec())));
+    contents.insert(
+        "netstat".to_string(),
+        NewStaticProcInode(task, msrc, &Arc::new(netstat.as_bytes().to_vec())),
+    );
 
     let packet = "sk       RefCnt Type Proto  Iface R Rmem   User   Inode\n";
-    contents.insert("packet".to_string(), NewStaticProcInode(task, msrc, &Arc::new(packet.as_bytes().to_vec())));
+    contents.insert(
+        "packet".to_string(),
+        NewStaticProcInode(task, msrc, &Arc::new(packet.as_bytes().to_vec())),
+    );
 
     let protocols = "protocol  size sockets  memory press maxhdr  slab module     cl co di ac io in de sh ss gs se re sp bi br ha uh gp em\n";
-    contents.insert("protocols".to_string(), NewStaticProcInode(task, msrc, &Arc::new(protocols.as_bytes().to_vec())));
+    contents.insert(
+        "protocols".to_string(),
+        NewStaticProcInode(task, msrc, &Arc::new(protocols.as_bytes().to_vec())),
+    );
 
     // Linux sets psched values to: nsec per usec, psched
     // tick in ns, 1000000, high res timer ticks per sec
     // (ClockGetres returns 1ns resolution).
-    let psched = format!("{:08x} {:08x} {:08x} {:08x}\n", MICROSECOND/NANOSECOND, 64, 1000000, SECOND/NANOSECOND);
-    contents.insert("psched".to_string(), NewStaticProcInode(task, msrc, &Arc::new(psched.as_bytes().to_vec())));
+    let psched = format!(
+        "{:08x} {:08x} {:08x} {:08x}\n",
+        MICROSECOND / NANOSECOND,
+        64,
+        1000000,
+        SECOND / NANOSECOND
+    );
+    contents.insert(
+        "psched".to_string(),
+        NewStaticProcInode(task, msrc, &Arc::new(psched.as_bytes().to_vec())),
+    );
 
     let ptype = "Type Device      Function\n";
-    contents.insert("ptype".to_string(), NewStaticProcInode(task, msrc, &Arc::new(ptype.as_bytes().to_vec())));
+    contents.insert(
+        "ptype".to_string(),
+        NewStaticProcInode(task, msrc, &Arc::new(ptype.as_bytes().to_vec())),
+    );
 
     contents.insert("tcp".to_string(), NewNetTCP(task, msrc));
     contents.insert("udp".to_string(), NewNetUDP(task, msrc));
@@ -109,12 +134,7 @@ pub fn NewNetDir(
         data: NetDirNode {}.into(),
     };
 
-    return NewProcInode(
-        taskDir.into(),
-        msrc,
-        InodeType::SpecialDirectory,
-        None,
-    );
+    return NewProcInode(taskDir.into(), msrc, InodeType::SpecialDirectory, None);
 }
 
 pub fn NetworkToHost16(n: u16) -> u16 {
@@ -126,28 +146,24 @@ pub fn NetworkToHost16(n: u16) -> u16 {
 pub fn WriteInetAddr(addr: &SockAddr) -> String {
     match addr {
         SockAddr::Inet(addr) => {
-            let ipAddr = unsafe {
-                *(&addr.Addr[0] as * const _ as * const u32)
-            };
-            return format!("{:08X}:{:04X} ", ipAddr, NetworkToHost16(addr.Port))
+            let ipAddr = unsafe { *(&addr.Addr[0] as *const _ as *const u32) };
+            return format!("{:08X}:{:04X} ", ipAddr, NetworkToHost16(addr.Port));
         }
         SockAddr::Inet6(addr) => {
-            let ipAddr0 = unsafe {
-                *(&addr.Addr[0] as * const _ as * const u32)
-            };
-            let ipAddr1 = unsafe {
-                *(&addr.Addr[4] as * const _ as * const u32)
-            };
-            let ipAddr2 = unsafe {
-                *(&addr.Addr[8] as * const _ as * const u32)
-            };
-            let ipAddr3 = unsafe {
-                *(&addr.Addr[12] as * const _ as * const u32)
-            };
-            return format!("{:08X}{:08X}{:08X}{:08X}:{:04X} ",
-                           ipAddr0, ipAddr1, ipAddr2, ipAddr3, NetworkToHost16(addr.Port))
+            let ipAddr0 = unsafe { *(&addr.Addr[0] as *const _ as *const u32) };
+            let ipAddr1 = unsafe { *(&addr.Addr[4] as *const _ as *const u32) };
+            let ipAddr2 = unsafe { *(&addr.Addr[8] as *const _ as *const u32) };
+            let ipAddr3 = unsafe { *(&addr.Addr[12] as *const _ as *const u32) };
+            return format!(
+                "{:08X}{:08X}{:08X}{:08X}:{:04X} ",
+                ipAddr0,
+                ipAddr1,
+                ipAddr2,
+                ipAddr3,
+                NetworkToHost16(addr.Port)
+            );
         }
-        _ => panic!("WriteInetAddr doesn't support address {:x?}", addr)
+        _ => panic!("WriteInetAddr doesn't support address {:x?}", addr),
     }
 }
 
@@ -237,7 +253,7 @@ pub fn GetData(task: &Task, fa: i32, header: &str) -> Result<Vec<u8>> {
         let fopsType = file.FileOp.FopsType();
         //&& fopsType != FileOpsType::UnixSocketOperations
         if fopsType != FileOpsType::SocketOperations {
-            continue
+            continue;
         }
 
         let sockops = file.FileOp.clone();
@@ -281,9 +297,7 @@ pub fn GetData(task: &Task, fa: i32, header: &str) -> Result<Vec<u8>> {
                     };
                     SockAddr::Inet(inetAddr)
                 }
-                Ok(_) => {
-                    GetAddr(AFType::AF_INET as _, &sockBuf)?
-                }
+                Ok(_) => GetAddr(AFType::AF_INET as _, &sockBuf)?,
             }
         };
 
@@ -418,7 +432,7 @@ impl NetUDPReadonlyFileNode {
             let fopsType = file.FileOp.FopsType();
             //&& fopsType != FileOpsType::UnixSocketOperations
             if fopsType != FileOpsType::SocketOperations {
-                continue
+                continue;
             }
 
             let sockops = file.FileOp.clone();
@@ -597,7 +611,7 @@ impl NetUnixReadonlyFileNode {
         for (id, file) in sockets {
             let fopsType = file.FileOp.FopsType();
             if fopsType != FileOpsType::UnixSocketOperations {
-                continue
+                continue;
             }
 
             let fops = file.FileOp.clone();
@@ -624,13 +638,16 @@ impl NetUnixReadonlyFileNode {
             // Field: local_adddress.
             let addr = match sockops.ep.GetLocalAddress() {
                 Err(e) => {
-                    error!("NetUnixReadonlyFileNode Failed to retrieve socket name from {:?}", e);
+                    error!(
+                        "NetUnixReadonlyFileNode Failed to retrieve socket name from {:?}",
+                        e
+                    );
                     SockAddrUnix {
                         Family: AFType::AF_UNIX as _,
                         Path: "<unknown>".to_string(),
                     }
                 }
-                Ok(addr) => addr
+                Ok(addr) => addr,
             };
 
             let mut sockFlags = 0;
@@ -642,7 +659,7 @@ impl NetUnixReadonlyFileNode {
                         sockFlags = SO_ACCEPTCON;
                     }
                 }
-                _ => ()
+                _ => (),
             }
 
             let inodeId = file.Dirent.Inode().StableAttr().InodeId;
@@ -665,14 +682,16 @@ impl NetUnixReadonlyFileNode {
             // the definition of this struct changes over time.
             //
             // For now, we always redact this pointer.
-            buf += &format!("{:010}: {:08X} {:08X} {:08X} {:04X} {:02X} {:>5}",
-                            0,
-                            file.ReadRefs() - 1,
-                            0,
-                            sockFlags,
-                            sockops.ep.Type(),
-                            sockops.State(),
-                            inodeId);
+            buf += &format!(
+                "{:010}: {:08X} {:08X} {:08X} {:04X} {:02X} {:>5}",
+                0,
+                file.ReadRefs() - 1,
+                0,
+                sockFlags,
+                sockops.ep.Type(),
+                sockops.State(),
+                inodeId
+            );
 
             if addr.Path.len() != 0 {
                 if addr.Path.as_bytes()[0] == 0 {

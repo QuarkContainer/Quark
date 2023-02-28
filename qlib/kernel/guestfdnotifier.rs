@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use crate::qlib::common::*;
-use crate::qlib::linux_def::*;
 use crate::qlib::fileinfo::*;
-use crate::qlib::kernel::Kernel::HostSpace;
-use crate::qlib::kernel::GlobalIOMgr;
 use crate::qlib::kernel::kernel::waiter::Queue;
+use crate::qlib::kernel::GlobalIOMgr;
+use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::linux_def::*;
 
 pub fn SetWaitInfo(fd: i32, queue: Queue) {
     GlobalIOMgr().SetWaitInfo(fd, queue);
@@ -75,7 +75,7 @@ impl IOMgr {
     pub fn FdWaitInfo(&self, fd: i32) -> Option<FdWaitInfo> {
         let fdInfo = match self.GetByHost(fd) {
             Some(info) => info,
-            None => return None
+            None => return None,
         };
 
         return Some(fdInfo.lock().waitInfo.clone());

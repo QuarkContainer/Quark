@@ -16,10 +16,10 @@ pub mod dev;
 pub mod fs;
 pub mod full;
 pub mod null;
+pub mod proxyfile;
 pub mod random;
 pub mod tty;
 pub mod zero;
-pub mod proxyfile;
 
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;

@@ -14,8 +14,8 @@
 
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
-use core::ops::Deref;
 use core::fmt;
+use core::ops::Deref;
 
 use super::entry::*;
 use super::waitlist::*;
@@ -26,10 +26,7 @@ pub struct Queue(Arc<QRwLock<WaitList>>);
 
 impl fmt::Debug for Queue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Queue",
-        )
+        write!(f, "Queue",)
     }
 }
 

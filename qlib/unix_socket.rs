@@ -13,6 +13,6 @@
 // limitations under the License.
 
 #[derive(Clone)]
-pub struct UnixSocket{
+pub struct UnixSocket {
     pub fd: i32,
 }

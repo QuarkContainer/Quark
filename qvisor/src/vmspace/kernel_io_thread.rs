@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use libc::*;
 use core::sync::atomic::Ordering;
+use libc::*;
 
 use super::super::kvm_vcpu::*;
 use super::super::qlib::common::*;
@@ -169,7 +169,11 @@ impl KIOThread {
                 return Err(Error::Exit);
             }
             if QUARK_CONFIG.lock().EnableRDMA {
-                GlobalRDMASvcCli().cliShareRegion.lock().clientBitmap.store(0, Ordering::Release);
+                GlobalRDMASvcCli()
+                    .cliShareRegion
+                    .lock()
+                    .clientBitmap
+                    .store(0, Ordering::Release);
             }
 
             Self::Process(sharespace);
@@ -204,7 +208,11 @@ impl KIOThread {
             }
 
             if QUARK_CONFIG.lock().EnableRDMA {
-                GlobalRDMASvcCli().cliShareRegion.lock().clientBitmap.store(1, Ordering::Release);
+                GlobalRDMASvcCli()
+                    .cliShareRegion
+                    .lock()
+                    .clientBitmap
+                    .store(1, Ordering::Release);
             }
 
             if sharespace.DecrHostProcessor() == 0 {

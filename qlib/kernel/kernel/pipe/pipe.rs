@@ -17,10 +17,10 @@ use alloc::collections::linked_list::LinkedList;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 use alloc::vec::Vec;
+use core::cmp::PartialEq;
 use core::ops::Deref;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
-use core::cmp::PartialEq;
 
 use super::super::super::super::common::*;
 use super::super::super::super::device::*;
@@ -138,7 +138,7 @@ impl PipeInternal {
             // (PIPE_BUF) be atomic, but requires no atomicity for writes
             // larger than this.
             if wanted < 4096 {
-                return Err(Error::SysError(SysErr::EAGAIN))
+                return Err(Error::SysError(SysErr::EAGAIN));
             }
 
             // Limit to the available capacity.
@@ -231,8 +231,13 @@ impl PartialEq for Pipe {
 
 // NewPipe initializes and returns a pipe.
 impl Pipe {
-    // we have to keep dirent to avoid cycle reference  pipe -> dirent -> inode -> pipeiops -> pipe 
-    pub fn New(task: &Task, isNamed: bool, sizeBytes: usize, atomicIOBytes: usize) -> (Self, Dirent) {
+    // we have to keep dirent to avoid cycle reference  pipe -> dirent -> inode -> pipeiops -> pipe
+    pub fn New(
+        task: &Task,
+        isNamed: bool,
+        sizeBytes: usize,
+        atomicIOBytes: usize,
+    ) -> (Self, Dirent) {
         let sizeBytes = if sizeBytes < MINIMUM_PIPE_SIZE {
             MINIMUM_PIPE_SIZE
         } else {
@@ -318,18 +323,39 @@ impl Pipe {
         if flags.Read && flags.Write {
             self.ROpen();
             self.WOpen();
-            let rw = ReaderWriter(Arc::new(ReaderWriterInner{ pipe: self.clone() }));
-            let dirent = self.intern.lock().dirent.clone().unwrap().Upgrade().unwrap();
+            let rw = ReaderWriter(Arc::new(ReaderWriterInner { pipe: self.clone() }));
+            let dirent = self
+                .intern
+                .lock()
+                .dirent
+                .clone()
+                .unwrap()
+                .Upgrade()
+                .unwrap();
             return File::New(&dirent, flags, rw.into());
         } else if flags.Read {
             self.ROpen();
             let r = Reader(Arc::new(ReaderInner { pipe: self.clone() }));
-            let dirent = self.intern.lock().dirent.clone().unwrap().Upgrade().unwrap();
+            let dirent = self
+                .intern
+                .lock()
+                .dirent
+                .clone()
+                .unwrap()
+                .Upgrade()
+                .unwrap();
             return File::New(&dirent, flags, r.into());
         } else if flags.Write {
             self.WOpen();
             let w = Writer(Arc::new(WriterInner { pipe: self.clone() }));
-            let dirent = self.intern.lock().dirent.clone().unwrap().Upgrade().unwrap();
+            let dirent = self
+                .intern
+                .lock()
+                .dirent
+                .clone()
+                .unwrap()
+                .Upgrade()
+                .unwrap();
             return File::New(&dirent, flags, w.into());
         } else {
             // Precondition violated.
@@ -514,9 +540,7 @@ impl Pipe {
                 Signo: Signal::SIGPIPE,
                 ..Default::default()
             };
-            thread
-                .SendSignal(&info)
-                .expect("SIGPIPE send signal fail");
+            thread.SendSignal(&info).expect("SIGPIPE send signal fail");
             return Err(Error::SysError(SysErr::EPIPE));
         }
 

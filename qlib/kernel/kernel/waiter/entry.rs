@@ -46,7 +46,7 @@ impl Drop for WaitContext {
                     lists.Remove(p);
                 }
             }
-            _ => ()
+            _ => (),
         }
     }
 }
@@ -82,9 +82,7 @@ impl WaitContext {
                 let context = t.borrow_mut();
                 return Some(context.waiter.lock().taskId);
             }
-            WaitContext::FileAsync(_) => {
-                return None
-            }
+            WaitContext::FileAsync(_) => return None,
             _ => (),
         }
 

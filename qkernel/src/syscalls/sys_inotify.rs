@@ -12,24 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::super::kernel::fd_table::*;
 use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::kernel::fs::inotify::*;
 use super::super::qlib::kernel::fs::anon::*;
 use super::super::qlib::kernel::fs::dirent::*;
-use super::super::qlib::kernel::fs::flags::*;
 use super::super::qlib::kernel::fs::file::*;
-use super::super::kernel::fd_table::*;
+use super::super::qlib::kernel::fs::flags::*;
+use super::super::qlib::kernel::fs::inotify::*;
+use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 use super::sys_file::*;
 
-
-const ALL_FLAGS : i32 = (InotifyEvent::IN_NONBLOCK | InotifyEvent::IN_CLOEXEC) as i32;
+const ALL_FLAGS: i32 = (InotifyEvent::IN_NONBLOCK | InotifyEvent::IN_CLOEXEC) as i32;
 
 pub fn InotifyInit1(task: &mut Task, flags: i32) -> Result<i64> {
     if flags & !ALL_FLAGS != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     // name matches fs/eventfd.c:eventfd_file_create.
@@ -52,7 +51,7 @@ pub fn InotifyInit1(task: &mut Task, flags: i32) -> Result<i64> {
         },
     )?;
 
-    return Ok(fd as i64)
+    return Ok(fd as i64);
 }
 
 // InotifyInit1 implements the inotify_init1() syscalls.
@@ -76,7 +75,7 @@ pub fn FdToInotify(task: &Task, fd: i32) -> Result<(Inotify, File)> {
         None => return Err(Error::SysError(SysErr::EINVAL)),
     };
 
-    return Ok((inotify, file))
+    return Ok((inotify, file));
 }
 
 // InotifyAddWatch implements the inotify_add_watch() syscall.
@@ -93,7 +92,7 @@ pub fn SysInotifyAddWatch(task: &mut Task, args: &SyscallArguments) -> Result<i6
     // -- inotify_add_watch(2)
     let validBits = mask & InotifyEvent::ALL_INOTIFY_BITS as i32;
     if validBits == 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let (ino, _file) = FdToInotify(task, fd)?;
@@ -110,14 +109,15 @@ pub fn SysInotifyAddWatch(task: &mut Task, args: &SyscallArguments) -> Result<i6
             let onlyDir = mask & InotifyEvent::IN_ONLYDIR as i32 != 0;
             let inode = d.Inode();
             if onlyDir && !inode.StableAttr().IsDir() {
-                return Err(Error::SysError(SysErr::ENOTDIR))
+                return Err(Error::SysError(SysErr::ENOTDIR));
             }
 
             wd = ino.AddWatch(d, mask as u32);
-            return Ok(())
-        })?;
+            return Ok(());
+        },
+    )?;
 
-    return Ok(wd as i64)
+    return Ok(wd as i64);
 }
 
 // InotifyRmWatch implements the inotify_rm_watch() syscall.
@@ -127,5 +127,5 @@ pub fn SysInotifyRmWatch(task: &mut Task, args: &SyscallArguments) -> Result<i64
 
     let (ino, _file) = FdToInotify(task, fd)?;
     ino.RmWatch(wd)?;
-    return Ok(0)
+    return Ok(0);
 }

@@ -14,19 +14,19 @@
 
 use alloc::vec::Vec;
 
-use super::super::qlib::common::*;
 use super::super::kernel::timer::*;
+use super::super::qlib::auth::id::*;
+use super::super::qlib::auth::*;
+use super::super::qlib::common::*;
 use super::super::qlib::linux::ipc::*;
 use super::super::qlib::linux::sem::*;
 use super::super::qlib::linux::time::*;
 use super::super::qlib::linux_def::*;
-use super::super::qlib::auth::id::*;
-use super::super::qlib::auth::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 use kernel::time::Time;
 
-pub const OPS_MAX : i32 = 500; // SEMOPM
+pub const OPS_MAX: i32 = 500; // SEMOPM
 
 // Semget handles: semget(key_t key, int nsems, int semflg)
 pub fn SysSemgetl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -41,9 +41,8 @@ pub fn SysSemgetl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let r = task.IPCNamespace().SemaphoreRegistry();
     let set = r.FindOrCreate(task, key, nsems, mode, private, create, exclusive)?;
-    return Ok(set.Id() as i64)
+    return Ok(set.Id() as i64);
 }
-
 
 // Semtimedop handles: semop(int semid, struct sembuf *sops, size_t nsops, const struct timespec *timeout)
 pub fn SysSemtimedop(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -57,17 +56,17 @@ pub fn SysSemtimedop(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     if nsops <= 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if nsops > OPS_MAX as _ {
-        return Err(Error::SysError(SysErr::E2BIG))
+        return Err(Error::SysError(SysErr::E2BIG));
     }
 
-    let ops : Vec<Sembuf> = task.CopyInVec(sembufAddr, nsops as usize)?;
-    let ts : Timespec = task.CopyInObj::<Timespec>(timespecAddr)?;
+    let ops: Vec<Sembuf> = task.CopyInVec(sembufAddr, nsops as usize)?;
+    let ts: Timespec = task.CopyInObj::<Timespec>(timespecAddr)?;
     SemTimedOp(task, id, &ops, Some(ts.ToDuration()?))?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // Semop handles: semop(int semid, struct sembuf *sops, size_t nsops)
@@ -77,22 +76,22 @@ pub fn SysSemop(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let nsops = args.arg2 as u32;
 
     if nsops <= 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if nsops > OPS_MAX as _ {
-        return Err(Error::SysError(SysErr::E2BIG))
+        return Err(Error::SysError(SysErr::E2BIG));
     }
 
-    let ops : Vec<Sembuf> = task.CopyInVec(sembufAddr, nsops as usize)?;
+    let ops: Vec<Sembuf> = task.CopyInVec(sembufAddr, nsops as usize)?;
     SemTimedOp(task, id, &ops, None)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SemTimedOp(task: &Task, id: i32, ops: &[Sembuf], timeout: Option<Duration>) -> Result<()> {
     let set = match task.IPCNamespace().SemaphoreRegistry().lock().findByID(id) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(s) => s
+        Some(s) => s,
     };
 
     let creds = task.creds.clone();
@@ -102,7 +101,7 @@ pub fn SemTimedOp(task: &Task, id: i32, ops: &[Sembuf], timeout: Option<Duration
     let pidns = thread.PIDNamespace();
     let pid = pidns.IDOfThreadGroup(&tg);
 
-    let deadline = match timeout  {
+    let deadline = match timeout {
         None => None,
         Some(dur) => {
             let now = MonotonicNow();
@@ -114,7 +113,7 @@ pub fn SemTimedOp(task: &Task, id: i32, ops: &[Sembuf], timeout: Option<Duration
     loop {
         let (waiterid, id) = set.ExecuteOps(task, ops, &creds, &general, pid)?;
         if id == -1 {
-            return Ok(())
+            return Ok(());
         }
 
         defer!(set.AbortWait(task, waiterid, id, &general));
@@ -144,55 +143,55 @@ pub fn SysSemctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         SETVAL => {
             let val = args.arg3 as i32;
             if val > i16::MAX as i32 {
-                return Err(Error::SysError(SysErr::ERANGE))
+                return Err(Error::SysError(SysErr::ERANGE));
             }
 
             setVal(task, id, num, val as _)?;
-            return Ok(0)
+            return Ok(0);
         }
         SETALL => {
             let array = args.arg3 as u64;
             setValAll(task, id, array)?;
-            return Ok(0)
+            return Ok(0);
         }
         GETVAL => {
             let v = getVal(task, id, num)?;
-            return Ok(v as _)
+            return Ok(v as _);
         }
         GETALL => {
             let array = args.arg3 as u64;
             getValAll(task, id, array)?;
-            return Ok(0)
+            return Ok(0);
         }
         IPC_RMID => {
             remove(task, id)?;
-            return Ok(0)
+            return Ok(0);
         }
         IPC_SET => {
             let arg = args.arg3 as u64;
-            let s : SemidDS = task.CopyInObj::<SemidDS>(arg)?;
+            let s: SemidDS = task.CopyInObj::<SemidDS>(arg)?;
             let mode = FileMode(s.SemPerm.Mode & 0o777);
             let perm = FilePermissions::FromMode(mode);
             ipcSet(task, id, UID(s.SemPerm.UID), GID(s.SemPerm.GID), &perm)?;
-            return Ok(0)
+            return Ok(0);
         }
         GETPID => {
             let v = getPid(task, id, num)?;
-            return Ok(v as _)
+            return Ok(v as _);
         }
         IPC_STAT => {
             let arg = args.arg3 as u64;
             let ds = ipcStat(task, id)?;
             task.CopyOutObj(&ds, arg)?;
-            return Ok(0)
+            return Ok(0);
         }
         GETZCNT => {
             let v = getSemzcnt(task, id, num)?;
-            return Ok(v as _)
+            return Ok(v as _);
         }
         GETNCNT => {
             let v = getSemncnt(task, id, num)?;
-            return Ok(v as _)
+            return Ok(v as _);
         }
         IPC_INFO => {
             let buf = args.arg3 as u64;
@@ -200,7 +199,7 @@ pub fn SysSemctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let info = r.IPCInfo();
             task.CopyOutObj(&info, buf)?;
             let lastIdx = r.lock().HighestIndex();
-            return Ok(lastIdx as _)
+            return Ok(lastIdx as _);
         }
         SEM_INFO => {
             let buf = args.arg3 as u64;
@@ -208,19 +207,19 @@ pub fn SysSemctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let info = r.SemInfo();
             task.CopyOutObj(&info, buf)?;
             let lastIdx = r.lock().HighestIndex();
-            return Ok(lastIdx as _)
+            return Ok(lastIdx as _);
         }
         SEM_STAT => {
             let arg = args.arg3 as u64;
             let (ds, semid) = semStat(task, id)?;
             task.CopyOutObj(&ds, arg)?;
-            return Ok(semid as _)
+            return Ok(semid as _);
         }
         SEM_STAT_ANY => {
             let arg = args.arg3 as u64;
             let (ds, semid) = semStatAny(task, id)?;
             task.CopyOutObj(&ds, arg)?;
-            return Ok(semid as _)
+            return Ok(semid as _);
         }
         _ => {
             return Err(Error::SysError(SysErr::EINVAL));
@@ -237,7 +236,7 @@ fn remove(task: &Task, id: i32) -> Result<()> {
 fn ipcSet(task: &Task, id: i32, uid: UID, gid: GID, perms: &FilePermissions) -> Result<()> {
     let set = match task.IPCNamespace().SemaphoreRegistry().lock().findByID(id) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(s) => s
+        Some(s) => s,
     };
 
     let creds = task.creds.clone();
@@ -251,47 +250,47 @@ fn ipcSet(task: &Task, id: i32, uid: UID, gid: GID, perms: &FilePermissions) -> 
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    let owner= FileOwner {
+    let owner = FileOwner {
         UID: kuid,
         GID: kgid,
     };
 
-    return set.Change(task, &creds, &owner, perms)
+    return set.Change(task, &creds, &owner, perms);
 }
 
-fn ipcStat(task: &Task, id: i32) -> Result<SemidDS>{
+fn ipcStat(task: &Task, id: i32) -> Result<SemidDS> {
     let set = match task.IPCNamespace().SemaphoreRegistry().lock().findByID(id) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(s) => s
+        Some(s) => s,
     };
     let creds = task.creds.clone();
     return set.GetStat(&creds);
 }
 
-fn semStat(task: &Task, id: i32) -> Result<(SemidDS, i32)>{
+fn semStat(task: &Task, id: i32) -> Result<(SemidDS, i32)> {
     let set = match task.IPCNamespace().SemaphoreRegistry().lock().findByID(id) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(s) => s
+        Some(s) => s,
     };
     let creds = task.creds.clone();
     let ds = set.GetStat(&creds)?;
-    return Ok((ds, set.Id()))
+    return Ok((ds, set.Id()));
 }
 
-fn semStatAny(task: &Task, id: i32) -> Result<(SemidDS, i32)>{
+fn semStatAny(task: &Task, id: i32) -> Result<(SemidDS, i32)> {
     let set = match task.IPCNamespace().SemaphoreRegistry().lock().findByID(id) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(s) => s
+        Some(s) => s,
     };
     let creds = task.creds.clone();
     let ds = set.GetStatAny(&creds)?;
-    return Ok((ds, set.Id()))
+    return Ok((ds, set.Id()));
 }
 
 fn setVal(task: &Task, id: i32, num: i32, val: i16) -> Result<()> {
     let set = match task.IPCNamespace().SemaphoreRegistry().lock().findByID(id) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(s) => s
+        Some(s) => s,
     };
     let creds = task.creds.clone();
     let thread = task.Thread();
@@ -299,13 +298,13 @@ fn setVal(task: &Task, id: i32, num: i32, val: i16) -> Result<()> {
 
     let pidns = thread.PIDNamespace();
     let pid = pidns.IDOfThreadGroup(&tg);
-    return set.SetVal(task, num, val, &creds, pid)
+    return set.SetVal(task, num, val, &creds, pid);
 }
 
 fn setValAll(task: &Task, id: i32, array: u64) -> Result<()> {
     let set = match task.IPCNamespace().SemaphoreRegistry().lock().findByID(id) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(s) => s
+        Some(s) => s,
     };
 
     let vals: Vec<u16> = task.CopyInVec(array, set.Size() as usize)?;
@@ -316,14 +315,13 @@ fn setValAll(task: &Task, id: i32, array: u64) -> Result<()> {
 
     let pidns = thread.PIDNamespace();
     let pid = pidns.IDOfThreadGroup(&tg);
-    return set.SetValAll(task, &vals, &creds, pid)
+    return set.SetValAll(task, &vals, &creds, pid);
 }
-
 
 fn getVal(task: &Task, id: i32, num: i32) -> Result<i16> {
     let set = match task.IPCNamespace().SemaphoreRegistry().lock().findByID(id) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(s) => s
+        Some(s) => s,
     };
 
     let creds = task.creds.clone();
@@ -333,20 +331,20 @@ fn getVal(task: &Task, id: i32, num: i32) -> Result<i16> {
 fn getValAll(task: &Task, id: i32, array: u64) -> Result<()> {
     let set = match task.IPCNamespace().SemaphoreRegistry().lock().findByID(id) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(s) => s
+        Some(s) => s,
     };
 
     let creds = task.creds.clone();
     let values = set.GetValAll(&creds)?;
     let cnt = values.len();
     task.CopyOutSlice(&values[0..cnt], array, cnt)?;
-    return Ok(())
+    return Ok(());
 }
 
 fn getPid(task: &Task, id: i32, num: i32) -> Result<i32> {
     let set = match task.IPCNamespace().SemaphoreRegistry().lock().findByID(id) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(s) => s
+        Some(s) => s,
     };
 
     let creds = task.creds.clone();
@@ -355,26 +353,26 @@ fn getPid(task: &Task, id: i32, num: i32) -> Result<i32> {
     let pidns = task.Thread().PIDNamespace();
     match pidns.ThreadGroupWithID(gpid) {
         None => return Ok(0),
-        Some(tg) => return Ok(tg.ID())
+        Some(tg) => return Ok(tg.ID()),
     }
 }
 
 fn getSemzcnt(task: &Task, id: i32, num: i32) -> Result<u16> {
     let set = match task.IPCNamespace().SemaphoreRegistry().lock().findByID(id) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(s) => s
+        Some(s) => s,
     };
 
     let creds = task.creds.clone();
-    return set.GetZeroWaiters(num, &creds)
+    return set.GetZeroWaiters(num, &creds);
 }
 
 fn getSemncnt(task: &Task, id: i32, num: i32) -> Result<u16> {
     let set = match task.IPCNamespace().SemaphoreRegistry().lock().findByID(id) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(s) => s
+        Some(s) => s,
     };
 
     let creds = task.creds.clone();
-    return set.GetNegativeWaiters(num, &creds)
+    return set.GetNegativeWaiters(num, &creds);
 }

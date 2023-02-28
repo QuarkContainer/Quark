@@ -13,12 +13,12 @@
 // limitations under the License.
 
 pub mod areaset;
+pub mod bitmap_allocator;
 pub mod block;
+pub mod block_allocator;
 pub mod buddy_allocator;
 pub mod io;
 pub mod list_allocator;
 pub mod pool;
 pub mod seq;
 pub mod stackvec;
-pub mod block_allocator;
-pub mod bitmap_allocator;

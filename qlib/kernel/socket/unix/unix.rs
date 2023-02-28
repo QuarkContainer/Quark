@@ -19,10 +19,10 @@ use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::Any;
+use core::ops::Deref;
 use core::ops::*;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
-use core::ops::Deref;
 
 use super::super::super::fs::attr::*;
 use super::super::super::fs::dentry::*;
@@ -31,19 +31,19 @@ use super::super::super::fs::file::*;
 use super::super::super::fs::flags::*;
 use super::super::socket::*;
 //use super::super::super::fs::attr::*;
-use super::super::super::super::common::*;
-use super::super::super::super::linux::socket::*;
-use super::super::super::super::linux_def::*;
-use super::super::super::super::linux::time::*;
-use super::super::super::super::device::*;
 use super::super::super::super::auth::*;
+use super::super::super::super::common::*;
+use super::super::super::super::device::*;
+use super::super::super::super::linux::socket::*;
+use super::super::super::super::linux::time::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::fs::fsutil::inode::*;
 use super::super::super::fs::host::hostinodeop::*;
 use super::super::super::fs::inode::*;
-use super::super::super::fs::fsutil::inode::*;
 use super::super::super::fs::mount::*;
 use super::super::super::kernel::abstract_socket_namespace::*;
-use super::super::super::kernel::kernel::GetKernel;
 use super::super::super::kernel::fd_table::*;
+use super::super::super::kernel::kernel::GetKernel;
 use super::super::super::kernel::time::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::task::*;
@@ -78,16 +78,20 @@ pub fn NewUnixSocket(task: &Task, ep: BoundEndpoint, stype: i32) -> Result<File>
     return Ok(file);
 }
 
-pub fn NewUnixSocketDummyDirent(task: &Task,
-                                d: Arc<QMutex<Device>>) -> Result<Dirent> {
+pub fn NewUnixSocketDummyDirent(task: &Task, d: Arc<QMutex<Device>>) -> Result<Dirent> {
     let ino = d.lock().NextIno();
 
-    let iops = SimpleFileInode::New(task,
-                                    &task.FileOwner(),
-                                    &FilePermissions{User: PermMask::NewReadWrite(), ..Default::default()},
-                                    FSMagic::SOCKFS_MAGIC,
-                                    true,
-                                    Dummy{}.into());
+    let iops = SimpleFileInode::New(
+        task,
+        &task.FileOwner(),
+        &FilePermissions {
+            User: PermMask::NewReadWrite(),
+            ..Default::default()
+        },
+        FSMagic::SOCKFS_MAGIC,
+        true,
+        Dummy {}.into(),
+    );
 
     let deviceId = d.lock().DeviceID();
     let inodeId = d.lock().NextIno();
@@ -107,13 +111,17 @@ pub fn NewUnixSocketDummyDirent(task: &Task,
     return Ok(Dirent::New(&inode, &name.to_string()));
 }
 
-pub fn NewUnixSocketDirent(task: &Task,
-                           ep: &BoundEndpoint) -> Result<Dirent> {
+pub fn NewUnixSocketDirent(task: &Task, ep: &BoundEndpoint) -> Result<Dirent> {
     let msrc = MountSource::NewPseudoMountSource();
-    let iops = UnixSocketInodeOps::New(task,
-                                   ep,
-                                   &task.FileOwner(),
-                                   &FilePermissions{User: PermMask::NewReadWrite(), ..Default::default()});
+    let iops = UnixSocketInodeOps::New(
+        task,
+        ep,
+        &task.FileOwner(),
+        &FilePermissions {
+            User: PermMask::NewReadWrite(),
+            ..Default::default()
+        },
+    );
     let deviceId = UNIX_SOCKET_DEVICE.lock().DeviceID();
     let inodeId = UNIX_SOCKET_DEVICE.lock().NextIno();
     let attr = StableAttr {
@@ -131,11 +139,13 @@ pub fn NewUnixSocketDirent(task: &Task,
     return Ok(Dirent::New(&inode, &name.to_string()));
 }
 
-pub fn NewUnixSocketInode(task: &Task,
-                          ep: &BoundEndpoint,
-                          owner: &FileOwner,
-                          perms: &FilePermissions,
-                          msrc: &Arc<QMutex<MountSource>>) -> Inode {
+pub fn NewUnixSocketInode(
+    task: &Task,
+    ep: &BoundEndpoint,
+    owner: &FileOwner,
+    perms: &FilePermissions,
+    msrc: &Arc<QMutex<MountSource>>,
+) -> Inode {
     let iops = UnixSocketInodeOps::New(task, ep, owner, perms);
     let deviceId = UNIX_SOCKET_DEVICE.lock().DeviceID();
     let inodeId = UNIX_SOCKET_DEVICE.lock().NextIno();
@@ -169,7 +179,7 @@ pub struct UnixSocketOperationsInner {
     pub stype: i32,
     pub send: AtomicI64,
     pub recv: AtomicI64,
-    pub name: QMutex<Option<Vec<u8>>>
+    pub name: QMutex<Option<Vec<u8>>>,
 }
 
 impl UnixSocketOperations {
@@ -314,7 +324,7 @@ impl UnixSocketOperations {
 
 impl Drop for UnixSocketOperationsInner {
     fn drop(&mut self) {
-       match *self.name.lock() {
+        match *self.name.lock() {
             None => (),
             Some(ref name) => {
                 if name[0] == 0 {
@@ -322,7 +332,6 @@ impl Drop for UnixSocketOperationsInner {
                 } else {
                     UNIX_SOCKET_PINS.Unpin(name);
                 }
-
             }
         }
 
@@ -576,9 +585,7 @@ impl SockOperations for UnixSocketOperations {
                     return Err(Error::SysError(SysErr::EPROTOTYPE));
                 }
             }
-            Err(e) => {
-                return Err(e)
-            },
+            Err(e) => return Err(e),
             _ => (),
         }
         return Ok(0);
@@ -645,7 +652,7 @@ impl SockOperations for UnixSocketOperations {
             *(self.name.lock()) = Some(p);
         } else {
             let p = String::from_utf8(p).unwrap();
-            
+
             let cwd = task.fsContext.WorkDirectory();
 
             let d;
@@ -707,7 +714,6 @@ impl SockOperations for UnixSocketOperations {
                 ..Default::default()
             };
 
-
             match d.Bind(task, &root, &name.to_string(), &bep, &permisson) {
                 Err(_) => return Err(Error::SysError(SysErr::EADDRINUSE)),
                 Ok(childDirent) => {
@@ -715,7 +721,7 @@ impl SockOperations for UnixSocketOperations {
                     let fullname = format!("{}/{}", dir, name);
                     UNIX_SOCKET_PINS.Pin(fullname.as_bytes().to_vec(), &childDirent);
                     *(self.name.lock()) = Some(fullname.as_bytes().to_vec());
-                },
+                }
             }
         }
 
@@ -737,7 +743,9 @@ impl SockOperations for UnixSocketOperations {
     fn GetSockOpt(&self, task: &Task, level: i32, name: i32, opt: &mut [u8]) -> Result<i64> {
         match level {
             SOL_SOCKET => (),
-            SOL_TCP | SOL_IPV6 | SOL_IP | SOL_UDP => return Err(Error::SysError(SysErr::ENOPROTOOPT)),
+            SOL_TCP | SOL_IPV6 | SOL_IP | SOL_UDP => {
+                return Err(Error::SysError(SysErr::ENOPROTOOPT))
+            }
             _ => return Err(Error::SysError(SysErr::ENOPROTOOPT)),
         }
 
@@ -774,7 +782,7 @@ impl SockOperations for UnixSocketOperations {
                 let ret = match sockops.GetLastError() {
                     None => SockOptResult::I32(0),
                     Some(Error::SysError(i)) => SockOptResult::I32(i),
-                    Some(e) => panic!("GetSockOpts SO_ERROR get unknow error {:?}", e)
+                    Some(e) => panic!("GetSockOpts SO_ERROR get unknow error {:?}", e),
                 };
                 ret
             }
@@ -849,7 +857,7 @@ impl SockOperations for UnixSocketOperations {
             }
             LibcConst::SO_BINDTODEVICE => {
                 error!("GetSockOpts doesn't support SO_BINDTODEVICE");
-                return Err(Error::SysError(SysErr::ENOPROTOOPT))
+                return Err(Error::SysError(SysErr::ENOPROTOOPT));
             }
             LibcConst::SO_BROADCAST => {
                 if outlen < SIZEOF_I32 {
@@ -932,7 +940,7 @@ impl SockOperations for UnixSocketOperations {
             }
             _ => {
                 error!("GetSockOpts doesn't support {}", name);
-                return Err(Error::SysError(SysErr::ENOPROTOOPT))
+                return Err(Error::SysError(SysErr::ENOPROTOOPT));
             }
         };
 
@@ -943,7 +951,9 @@ impl SockOperations for UnixSocketOperations {
     fn SetSockOpt(&self, _task: &Task, level: i32, name: i32, optVal: &[u8]) -> Result<i64> {
         match level {
             SOL_SOCKET => (),
-            SOL_TCP | SOL_IPV6 | SOL_IP | SOL_UDP => return Err(Error::SysError(SysErr::ENOPROTOOPT)),
+            SOL_TCP | SOL_IPV6 | SOL_IP | SOL_UDP => {
+                return Err(Error::SysError(SysErr::ENOPROTOOPT))
+            }
             _ => return Err(Error::SysError(SysErr::ENOPROTOOPT)),
         }
 
@@ -953,9 +963,7 @@ impl SockOperations for UnixSocketOperations {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
 
-                let v = unsafe {
-                    *(&optVal[0] as * const _ as u64 as * const u32)
-                };
+                let v = unsafe { *(&optVal[0] as *const _ as u64 as *const u32) };
                 let sockops = self.SockOps();
                 let (min, max) = sockops.SendBufferLimits();
                 let clamped = clampBufSize(v as _, min as _, max as _, false) as i64;
@@ -967,9 +975,7 @@ impl SockOperations for UnixSocketOperations {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
 
-                let v = unsafe {
-                    *(&optVal[0] as * const _ as u64 as * const u32)
-                };
+                let v = unsafe { *(&optVal[0] as *const _ as u64 as *const u32) };
                 let sockops = self.SockOps();
                 let (min, max) = sockops.ReceiveBufferLimits();
                 let clamped = clampBufSize(v as _, min as _, max as _, false) as i64;
@@ -980,9 +986,7 @@ impl SockOperations for UnixSocketOperations {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
 
-                let v = unsafe {
-                    *(&optVal[0] as * const _ as u64 as * const u32)
-                };
+                let v = unsafe { *(&optVal[0] as *const _ as u64 as *const u32) };
                 let sockops = self.SockOps();
                 let (min, max) = sockops.ReceiveBufferLimits();
                 let clamped = clampBufSize(v as _, min as _, max as _, true) as i64;
@@ -993,65 +997,53 @@ impl SockOperations for UnixSocketOperations {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
 
-                let v = unsafe {
-                    *(&optVal[0] as * const _ as u64 as * const u32)
-                };
+                let v = unsafe { *(&optVal[0] as *const _ as u64 as *const u32) };
                 let sockops = self.SockOps();
-                sockops.SetReuseAddress(v!=0);
+                sockops.SetReuseAddress(v != 0);
             }
             LibcConst::SO_REUSEPORT => {
                 if optVal.len() < SIZEOF_I32 {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
 
-                let v = unsafe {
-                    *(&optVal[0] as * const _ as u64 as * const u32)
-                };
+                let v = unsafe { *(&optVal[0] as *const _ as u64 as *const u32) };
                 let sockops = self.SockOps();
-                sockops.SetReusePort(v!=0);
+                sockops.SetReusePort(v != 0);
             }
             LibcConst::SO_BROADCAST => {
                 if optVal.len() < SIZEOF_I32 {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
 
-                let v = unsafe {
-                    *(&optVal[0] as * const _ as u64 as * const u32)
-                };
+                let v = unsafe { *(&optVal[0] as *const _ as u64 as *const u32) };
                 let sockops = self.SockOps();
-                sockops.SetBroadcast(v!=0);
+                sockops.SetBroadcast(v != 0);
             }
             LibcConst::SO_PASSCRED => {
                 if optVal.len() < SIZEOF_I32 {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
 
-                let v = unsafe {
-                    *(&optVal[0] as * const _ as u64 as * const u32)
-                };
+                let v = unsafe { *(&optVal[0] as *const _ as u64 as *const u32) };
                 let sockops = self.SockOps();
                 self.ep.BaseEndpoint().setPasscred(v != 0);
-                sockops.SetPassCred(v!=0);
+                sockops.SetPassCred(v != 0);
             }
             LibcConst::SO_KEEPALIVE => {
                 if optVal.len() < SIZEOF_I32 {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
 
-                let v = unsafe {
-                    *(&optVal[0] as * const _ as u64 as * const u32)
-                };
+                let v = unsafe { *(&optVal[0] as *const _ as u64 as *const u32) };
                 let sockops = self.SockOps();
-                sockops.SetKeepAlive(v!=0);
+                sockops.SetKeepAlive(v != 0);
             }
             LibcConst::SO_SNDTIMEO => {
                 if optVal.len() < SIZEOF_I32 {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
 
-                let v = unsafe {
-                    *(&optVal[0] as * const _ as u64 as * const Timeval)
-                };
+                let v = unsafe { *(&optVal[0] as *const _ as u64 as *const Timeval) };
 
                 if v.Usec < 0 || v.Usec >= (SECOND / MICROSECOND) {
                     return Err(Error::SysError(SysErr::EDOM));
@@ -1063,9 +1055,7 @@ impl SockOperations for UnixSocketOperations {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
 
-                let v = unsafe {
-                    *(&optVal[0] as * const _ as u64 as * const Timeval)
-                };
+                let v = unsafe { *(&optVal[0] as *const _ as u64 as *const Timeval) };
 
                 if v.Usec < 0 || v.Usec >= (SECOND / MICROSECOND) {
                     return Err(Error::SysError(SysErr::EDOM));
@@ -1077,31 +1067,25 @@ impl SockOperations for UnixSocketOperations {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
 
-                let v = unsafe {
-                    *(&optVal[0] as * const _ as u64 as * const u32)
-                };
+                let v = unsafe { *(&optVal[0] as *const _ as u64 as *const u32) };
                 let sockops = self.SockOps();
-                sockops.SetOutOfBandInline(v!=0);
+                sockops.SetOutOfBandInline(v != 0);
             }
             LibcConst::SO_NO_CHECK => {
                 if optVal.len() < SIZEOF_I32 {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
 
-                let v = unsafe {
-                    *(&optVal[0] as * const _ as u64 as * const u32)
-                };
+                let v = unsafe { *(&optVal[0] as *const _ as u64 as *const u32) };
                 let sockops = self.SockOps();
-                sockops.SetNoChecksum(v!=0);
+                sockops.SetNoChecksum(v != 0);
             }
             LibcConst::SO_LINGER => {
                 if optVal.len() < SIZEOF_LINGER {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
 
-                let v = unsafe {
-                    *(&optVal[0] as * const _ as u64 as * const Linger)
-                };
+                let v = unsafe { *(&optVal[0] as *const _ as u64 as *const Linger) };
 
                 if v != Linger::default() {
                     error!("SetSockOpts doesn't support {}", SO_LINGER);
@@ -1117,15 +1101,13 @@ impl SockOperations for UnixSocketOperations {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
 
-                let v = unsafe {
-                    *(&optVal[0] as * const _ as u64 as * const u32)
-                };
+                let v = unsafe { *(&optVal[0] as *const _ as u64 as *const u32) };
                 let sockops = self.SockOps();
                 sockops.SetRcvlowat(v as i32)?;
             }
             _ => {
                 error!("SetSockOpts doesn't support {}", name);
-                return Err(Error::SysError(SysErr::ENOPROTOOPT))
+                return Err(Error::SysError(SysErr::ENOPROTOOPT));
             }
         }
 
@@ -1309,7 +1291,8 @@ impl SockOperations for UnixSocketOperations {
                         if trunc {
                             return Ok((total as i64, msgFlags, sender, ControlVec));
                         }
-                        let len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
+                        let len =
+                            task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
                         return Ok((len as i64, msgFlags, sender, ControlVec));
                     }
 
@@ -1360,7 +1343,8 @@ impl SockOperations for UnixSocketOperations {
                         } else {
                             total
                         };
-                        let len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
+                        let len =
+                            task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
 
                         if trunc {
                             return Ok((total as i64, msgFlags, sender, ControlVector));
@@ -1376,7 +1360,8 @@ impl SockOperations for UnixSocketOperations {
             match task.blocker.BlockWithMonoTimer(true, deadline) {
                 Err(Error::SysError(SysErr::ETIMEDOUT)) => {
                     if total > 0 {
-                        let len = task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts, false)?;
+                        let len =
+                            task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts, false)?;
                         return Ok((len as i64, msgFlags, sender, ControlVec));
                     }
                     return Err(Error::SysError(SysErr::EAGAIN));
@@ -1511,15 +1496,15 @@ impl SockOperations for UnixSocketOperations {
     }
 
     fn State(&self) -> u32 {
-        return self.ep.State() as u32
+        return self.ep.State() as u32;
     }
 
     fn Type(&self) -> (i32, i32, i32) {
-        return (AFType::AF_UNIX, self.stype, 0)
+        return (AFType::AF_UNIX, self.stype, 0);
     }
 }
 
-pub struct Dummy{}
+pub struct Dummy {}
 
 impl SimpleFileTrait for Dummy {}
 
@@ -1669,7 +1654,7 @@ impl InodeOperations for UnixSocketInodeOps {
         _dirent: &Dirent,
         _flags: FileFlags,
     ) -> Result<File> {
-        return Err(Error::SysError(SysErr::ENXIO))
+        return Err(Error::SysError(SysErr::ENXIO));
     }
 
     fn UnstableAttr(&self, _task: &Task) -> Result<UnstableAttr> {
@@ -1682,7 +1667,9 @@ impl InodeOperations for UnixSocketInodeOps {
     }
 
     fn Setxattr(&self, dir: &mut Inode, name: &str, value: &[u8], flags: u32) -> Result<()> {
-        return self.simpleExtendedAttribute.Setxattr(dir, name, value, flags);
+        return self
+            .simpleExtendedAttribute
+            .Setxattr(dir, name, value, flags);
     }
 
     fn Listxattr(&self, dir: &Inode, size: usize) -> Result<Vec<String>> {

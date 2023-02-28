@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors 
+// Copyright (c) 2021 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,31 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::{ops::Deref};
-use core::sync::atomic;
-use core::mem::size_of;
-use core::cmp::max;
 use core::alloc::{GlobalAlloc, Layout};
+use core::cmp::max;
+use core::mem::size_of;
+use core::ops::Deref;
+use core::sync::atomic;
 
 use crate::qlib::linux_def::MemoryDef;
 use crate::qlib::mutex::*;
 
-
 // handle total 64 * 64 = 4K blocks
 // for 2MB block, (4K x 512B Block ~ 256 x 16 KB block)
-// 
+//
 // total 8 + 64 * 8 = 8 + 512 = 520 bytes
 #[repr(C)]
 pub struct BitmapSet<const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize> {
-    pub l1bitmap: u64,           
+    pub l1bitmap: u64,
     pub l2bitmap: [u64; 64],
     pub total: u16,
-    pub free: u16,  
+    pub free: u16,
 }
 
-impl <const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize> BitmapSet <SUB_BLOCK_ORDER, COUNT_ORDER> {
+impl<const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize>
+    BitmapSet<SUB_BLOCK_ORDER, COUNT_ORDER>
+{
     pub fn Init(&mut self) {
-        assert!(8<=COUNT_ORDER && COUNT_ORDER<=12);
+        assert!(8 <= COUNT_ORDER && COUNT_ORDER <= 12);
         let totalCount = 1 << COUNT_ORDER;
         let left = totalCount % 64;
         let l2Count = totalCount / 64;
@@ -67,12 +68,12 @@ impl <const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize> BitmapSet <SUB_BLO
     pub fn Alloc(&mut self) -> Option<usize> {
         let l1idx = self.l1bitmap.trailing_zeros() as usize;
         if l1idx == 64 {
-            return None
+            return None;
         }
         let l2idx = self.l2bitmap[l1idx].trailing_zeros() as usize;
-        self.l2bitmap[l1idx] &= !(1<<l2idx);
+        self.l2bitmap[l1idx] &= !(1 << l2idx);
         if self.l2bitmap[l1idx] == 0 {
-            self.l1bitmap &= !(1<<l1idx);
+            self.l1bitmap &= !(1 << l1idx);
         }
 
         self.free -= 1;
@@ -83,12 +84,12 @@ impl <const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize> BitmapSet <SUB_BLO
     pub fn Free(&mut self, idx: usize) {
         let l1idx = idx / 64;
         let l2idx = idx % 64;
-        
-        assert!(self.l2bitmap[l1idx] & (1<<l2idx) == 0);
+
+        assert!(self.l2bitmap[l1idx] & (1 << l2idx) == 0);
         if self.l2bitmap[l1idx] == 0 {
-            self.l1bitmap |= 1<<l1idx;
+            self.l1bitmap |= 1 << l1idx;
         }
-        self.l2bitmap[l1idx] |= 1 <<l2idx;
+        self.l2bitmap[l1idx] |= 1 << l2idx;
 
         self.free += 1;
     }
@@ -113,8 +114,9 @@ impl HeadNodeIntern {
     pub fn Rotate(&mut self, fl: &FreeListNodeAllocator) {
         let mut fll = fl.lock();
 
-        if self.head == self.tail { // only one node or not node
-            return
+        if self.head == self.tail {
+            // only one node or not node
+            return;
         }
 
         let head = self.head;
@@ -126,7 +128,7 @@ impl HeadNodeIntern {
             headNode.next = tail;
             self.head = headNode.next;
         }
-        
+
         self.tail = head;
         self.currAddr = fll.GetMut(self.head).addr;
     }
@@ -181,7 +183,7 @@ pub enum BlockType {
 }
 
 impl BlockType {
-    pub fn GetMut(order: usize, addr: u64) -> Self { 
+    pub fn GetMut(order: usize, addr: u64) -> Self {
         match order {
             3 => return Self::Block8s(Block8s::GetMut(addr)),
             4 => return Self::Block16s(Block16s::GetMut(addr)),
@@ -206,7 +208,7 @@ impl BlockType {
         }
     }
 
-    pub fn GetMutDirect(order: usize, addr: u64) -> Self { 
+    pub fn GetMutDirect(order: usize, addr: u64) -> Self {
         match order {
             3 => return Self::Block8s(Block8s::GetMutDirect(addr)),
             4 => return Self::Block16s(Block16s::GetMutDirect(addr)),
@@ -231,18 +233,18 @@ impl BlockType {
         }
     }
 
-    pub fn Init(&mut self) { 
+    pub fn Init(&mut self) {
         match self {
-            Self::Block8s(inner) => return inner.Init(4096/8),
-            Self::Block16s(inner) => return inner.Init(4096/16),
-            Self::Block32s(inner) => return inner.Init(4096/32),
-            Self::Block64s(inner) => return inner.Init(4096/64),
-            Self::Block128s(inner) => return inner.Init(4096/128),
-            Self::Block256s(inner) => return inner.Init(4096/256),
-            Self::Block512s(inner) => return inner.Init(4096/512),
-            Self::Block1ks(inner) => return inner.Init(4096/1024),
-            Self::Block2ks(inner) => return inner.Init(4096/2048),
-            Self::Block4ks(inner) => return inner.Init(4096/4096),
+            Self::Block8s(inner) => return inner.Init(4096 / 8),
+            Self::Block16s(inner) => return inner.Init(4096 / 16),
+            Self::Block32s(inner) => return inner.Init(4096 / 32),
+            Self::Block64s(inner) => return inner.Init(4096 / 64),
+            Self::Block128s(inner) => return inner.Init(4096 / 128),
+            Self::Block256s(inner) => return inner.Init(4096 / 256),
+            Self::Block512s(inner) => return inner.Init(4096 / 512),
+            Self::Block1ks(inner) => return inner.Init(4096 / 1024),
+            Self::Block2ks(inner) => return inner.Init(4096 / 2048),
+            Self::Block4ks(inner) => return inner.Init(4096 / 4096),
             Self::Block8ks(inner) => return inner.Init(1),
             Self::Block16ks(inner) => return inner.Init(),
             Self::Block32ks(inner) => return inner.Init(),
@@ -280,7 +282,7 @@ impl BlockType {
     }
 
     pub fn Free(order: usize, addr: u64) -> bool {
-        let block = Self::GetMut(order, addr) ;
+        let block = Self::GetMut(order, addr);
         match block {
             Self::Block8s(inner) => return (*inner).Free(addr),
             Self::Block16s(inner) => return (*inner).Free(addr),
@@ -302,7 +304,7 @@ impl BlockType {
             Self::Block1Ms(inner) => return (*inner).Free(addr),
             Self::Block2Ms(inner) => return (*inner).Free(addr),
         }
-    } 
+    }
 
     pub fn FreeCount(&self) -> usize {
         match self {
@@ -353,24 +355,24 @@ impl BlockType {
     }
 }
 
-pub type Block8s     = BitmapSetBlock<3, 12>;
-pub type Block16s    = BitmapSetBlock<4, 12>;
-pub type Block32s    = BitmapSetBlock<5, 12>;
-pub type Block64s    = BitmapSetBlock<6, 12>;
-pub type Block128s   = BitmapSetBlock<7, 12>;
-pub type Block256s   = BitmapSetBlock<8, 12>;
-pub type Block512s   = BitmapSetBlock<9, 12>;
-pub type Block1ks    = BitmapSetBlock<10, 11>;
-pub type Block2ks    = BitmapSetBlock<11, 10>;
-pub type Block4ks    = BitmapSetBlock<12, 9>;
-pub type Block8ks    = BitmapSetBlock<13, 8>;
-pub type Block16ks   = BitmapBlock<14>;
-pub type Block32ks   = BitmapBlock<15>;
-pub type Block64ks   = BitmapBlock<16>;
-pub type Block128ks  = BitmapBlock<17>;
-pub type Block256ks  = BitmapBlock<18>;
-pub type Block512ks  = BitmapBlock<19>;
-pub type Block1Ms    = BitmapBlock<20>;
+pub type Block8s = BitmapSetBlock<3, 12>;
+pub type Block16s = BitmapSetBlock<4, 12>;
+pub type Block32s = BitmapSetBlock<5, 12>;
+pub type Block64s = BitmapSetBlock<6, 12>;
+pub type Block128s = BitmapSetBlock<7, 12>;
+pub type Block256s = BitmapSetBlock<8, 12>;
+pub type Block512s = BitmapSetBlock<9, 12>;
+pub type Block1ks = BitmapSetBlock<10, 11>;
+pub type Block2ks = BitmapSetBlock<11, 10>;
+pub type Block4ks = BitmapSetBlock<12, 9>;
+pub type Block8ks = BitmapSetBlock<13, 8>;
+pub type Block16ks = BitmapBlock<14>;
+pub type Block32ks = BitmapBlock<15>;
+pub type Block64ks = BitmapBlock<16>;
+pub type Block128ks = BitmapBlock<17>;
+pub type Block256ks = BitmapBlock<18>;
+pub type Block512ks = BitmapBlock<19>;
+pub type Block1Ms = BitmapBlock<20>;
 
 // total 8GB/4096 * 2MB blocks
 #[repr(C)]
@@ -402,15 +404,11 @@ impl Block2Ms {
 
     pub fn GetMut(addr: u64) -> &'static mut Self {
         let alignedAddr = addr & !Self::BlockMask();
-        return unsafe {
-            &mut *(alignedAddr as * mut Self)
-        }
+        return unsafe { &mut *(alignedAddr as *mut Self) };
     }
 
     pub fn GetMutDirect(addr: u64) -> &'static mut Self {
-        return unsafe {
-            &mut *(addr as * mut Self)
-        }
+        return unsafe { &mut *(addr as *mut Self) };
     }
 
     pub fn Alloc(&mut self) -> Option<u64> {
@@ -419,7 +417,7 @@ impl Block2Ms {
             Some(addr) => addr,
         };
 
-        return Some(addr)
+        return Some(addr);
     }
 
     pub fn Free(&mut self, addr: u64) -> bool {
@@ -427,14 +425,14 @@ impl Block2Ms {
     }
 
     pub fn Idx(&self, addr: u64) -> u64 {
-        assert!(addr & ((1<<21) - 1) == 0);
+        assert!(addr & ((1 << 21) - 1) == 0);
         let idx = (addr - self.Addr()) >> 21;
-        assert!(idx<4096);
+        assert!(idx < 4096);
         return idx;
-    } 
+    }
 
     pub fn Addr(&self) -> u64 {
-        return self as * const Self as u64;
+        return self as *const Self as u64;
     }
 
     pub fn SubBlockAddr(&self, idx: u64) -> u64 {
@@ -453,8 +451,8 @@ impl Block2Ms {
 
 pub struct BitmapBlock<const SUB_BLOCK_ORDER: usize> {}
 
-impl <const SUB_BLOCK_ORDER: usize> BitmapBlock <SUB_BLOCK_ORDER> {
-    pub const COUNT_ORDER : usize = 21 - SUB_BLOCK_ORDER;
+impl<const SUB_BLOCK_ORDER: usize> BitmapBlock<SUB_BLOCK_ORDER> {
+    pub const COUNT_ORDER: usize = 21 - SUB_BLOCK_ORDER;
 
     pub fn Init(&self) {
         let count: usize = 1 << Self::COUNT_ORDER;
@@ -494,20 +492,20 @@ impl <const SUB_BLOCK_ORDER: usize> BitmapBlock <SUB_BLOCK_ORDER> {
         let idx = self.SubBlocIndex(addr);
         *bitmap = tmp | 1 << idx;
         return empty;
-    } 
+    }
 
     pub fn Parent(&self) -> &'static mut Block2Ms {
         let parentMask = (1 << 33) - 1;
         let parentAddr = self.Addr() & !parentMask;
-        return Block2Ms::GetMut(parentAddr)
+        return Block2Ms::GetMut(parentAddr);
     }
 
     // the idx in parent 8GB block
     pub fn BlockIdx(&self) -> u64 {
         let parentMask = (1 << 33) - 1;
         let parentAddr = self.Addr() & !parentMask;
-        return (self.Addr() - parentAddr) / Self::BlockSize()
-    } 
+        return (self.Addr() - parentAddr) / Self::BlockSize();
+    }
 
     pub fn BlockSize() -> u64 {
         return 1 << 21;
@@ -519,15 +517,11 @@ impl <const SUB_BLOCK_ORDER: usize> BitmapBlock <SUB_BLOCK_ORDER> {
 
     pub fn GetMut(addr: u64) -> &'static mut Self {
         let alignedAddr = addr & !Self::BlockMask();
-        return unsafe {
-            &mut *(alignedAddr as * mut Self)
-        }
+        return unsafe { &mut *(alignedAddr as *mut Self) };
     }
 
     pub fn GetMutDirect(addr: u64) -> &'static mut Self {
-        return unsafe {
-            &mut *(addr as * mut Self)
-        }
+        return unsafe { &mut *(addr as *mut Self) };
     }
 
     pub fn BlockOrder() -> usize {
@@ -535,11 +529,11 @@ impl <const SUB_BLOCK_ORDER: usize> BitmapBlock <SUB_BLOCK_ORDER> {
     }
 
     pub fn Addr(&self) -> u64 {
-        return self as * const Self as u64;
+        return self as *const Self as u64;
     }
 
     pub fn SubBlockSize(&self) -> u64 {
-        return 1 << SUB_BLOCK_ORDER
+        return 1 << SUB_BLOCK_ORDER;
     }
 
     pub fn SubBlockMask(&self) -> u64 {
@@ -549,11 +543,11 @@ impl <const SUB_BLOCK_ORDER: usize> BitmapBlock <SUB_BLOCK_ORDER> {
     pub fn SubBlocIndex(&self, addr: u64) -> u64 {
         assert!(addr & self.SubBlockMask() == 0);
         let offset = addr - self.Addr();
-        return offset / self.SubBlockSize()
+        return offset / self.SubBlockSize();
     }
 
     pub fn SubBlockAddr(&self, idx: u64) -> u64 {
-        assert!(idx < (1<<SUB_BLOCK_ORDER));
+        assert!(idx < (1 << SUB_BLOCK_ORDER));
         return self.Addr() + (idx << SUB_BLOCK_ORDER);
     }
 
@@ -578,12 +572,14 @@ pub struct BitmapSetBlock<const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize
     pub bitmapSet: BitmapSet<SUB_BLOCK_ORDER, COUNT_ORDER>, // < 4KB
 }
 
-impl <const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize> 
-    InlineStruct<SUB_BLOCK_ORDER, COUNT_ORDER> 
-    for BitmapSetBlock<SUB_BLOCK_ORDER, COUNT_ORDER> {}
+impl<const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize>
+    InlineStruct<SUB_BLOCK_ORDER, COUNT_ORDER> for BitmapSetBlock<SUB_BLOCK_ORDER, COUNT_ORDER>
+{
+}
 
-impl <const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize> 
-    BitmapSetBlock<SUB_BLOCK_ORDER, COUNT_ORDER> {
+impl<const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize>
+    BitmapSetBlock<SUB_BLOCK_ORDER, COUNT_ORDER>
+{
     // Preconditions: the block is initalized to zero
     pub fn Init(&mut self, count: usize) {
         self.bitmapSet.Init();
@@ -603,11 +599,11 @@ impl <const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize>
         let _l = self.lock.lock();
         let idx = match self.bitmapSet.Alloc() {
             None => return None,
-            Some(i) => i
+            Some(i) => i,
         } as u64;
 
         let addr = self.Addr() + idx * self.SubBlockSize();
-        return Some(addr)
+        return Some(addr);
     }
 
     // return true iff the pre-condition is empty
@@ -627,8 +623,7 @@ impl <const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize>
     }
 }
 
-
-pub trait InlineStruct<const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize> : Sized {
+pub trait InlineStruct<const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize>: Sized {
     fn BlockOrder() -> usize {
         return SUB_BLOCK_ORDER + COUNT_ORDER;
     }
@@ -640,17 +635,15 @@ pub trait InlineStruct<const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize> :
     }
 
     fn GetMutDirect(addr: u64) -> &'static mut Self {
-        return unsafe {
-            &mut *(addr as * mut Self)
-        }
+        return unsafe { &mut *(addr as *mut Self) };
     }
 
     fn Addr(&self) -> u64 {
-        return self as * const Self as u64;
+        return self as *const Self as u64;
     }
 
     fn SubBlockSize(&self) -> u64 {
-        return 1 << SUB_BLOCK_ORDER
+        return 1 << SUB_BLOCK_ORDER;
     }
 
     fn SubBlockMask(&self) -> u64 {
@@ -660,15 +653,16 @@ pub trait InlineStruct<const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize> :
     fn SubBlocIndex(&self, addr: u64) -> u64 {
         assert!(addr & self.SubBlockMask() == 0);
         let offset = addr - self.Addr();
-        return offset / self.SubBlockSize()
+        return offset / self.SubBlockSize();
     }
 }
 
 #[repr(C)]
-pub struct Block8GAllocatorIntern { // <4KB
+pub struct Block8GAllocatorIntern {
+    // <4KB
     pub availableBlockCnt: u32, // next free 8GB block idx
-    pub bitmap: u128, // maximum 128 x 8 GB = 1024 GB 
-    pub BlockArr: [u64; 128], 
+    pub bitmap: u128,           // maximum 128 x 8 GB = 1024 GB
+    pub BlockArr: [u64; 128],
     pub current8GAddr: u64,
 }
 
@@ -716,7 +710,7 @@ impl Block8GAllocator {
 pub struct FreeListNodeAllocatorIntern {
     pub nextIdx: u32,
     pub freeList: u32,
-    pub freeNodeArr: [FreeListNode; FREE_NODE_COUNT]
+    pub freeNodeArr: [FreeListNode; FREE_NODE_COUNT],
 }
 
 impl FreeListNodeAllocatorIntern {
@@ -741,7 +735,7 @@ impl Deref for FreeListNodeAllocator {
     }
 }
 
-pub const MAX_ORDER : usize = 20; // 1MB
+pub const MAX_ORDER: usize = 20; // 1MB
 pub const FREE_NODE_COUNT: usize = 4096;
 #[repr(C)]
 pub struct BitmapAllocator {
@@ -749,9 +743,9 @@ pub struct BitmapAllocator {
     // first order 3 start with Lists[0]
     // the max order is 20 at indx Lists[17]
     // so total 18 records
-    pub Lists: [HeadNode; MAX_ORDER - 3 + 1], 
-    
-    pub block8GAlllocator: Block8GAllocator, 
+    pub Lists: [HeadNode; MAX_ORDER - 3 + 1],
+
+    pub block8GAlllocator: Block8GAllocator,
     pub freeListAllocator: FreeListNodeAllocator,
 }
 
@@ -764,66 +758,56 @@ impl BitmapAllocator {
 
         for i in (0..self.Lists.len()).rev() {
             let order = i + 3;
-            let parentOrder = if order < 10 {
-                order + 12
-            } else {
-                21
-            };
+            let parentOrder = if order < 10 { order + 12 } else { 21 };
 
             let newAddr = self.Alloc(parentOrder).unwrap();
-            let mut headnode = self.Lists[order-3].lock();
-            let mut newBlock = BlockType::GetMut(order,newAddr);
+            let mut headnode = self.Lists[order - 3].lock();
+            let mut newBlock = BlockType::GetMut(order, newAddr);
             newBlock.Init();
             headnode.PushFront(newAddr, newBlock.TotalCount(), &self.freeListAllocator)
         }
     }
 
     pub fn GetMut(addr: u64) -> &'static mut Self {
-        return unsafe {
-            &mut *(addr as * mut Self)
-        }
+        return unsafe { &mut *(addr as *mut Self) };
     }
 
     pub fn Free(&self, order: usize, addr: u64) -> bool {
         if order < 21 {
-            let mut headnode = self.Lists[order-3].lock();
+            let mut headnode = self.Lists[order - 3].lock();
             headnode.totalFree += 1;
         }
         return BlockType::Free(order, addr);
-    } 
+    }
 
     pub fn Alloc(&self, order: usize) -> Option<u64> {
         if order < 21 {
-            let mut headnode = self.Lists[order-3].lock();
+            let mut headnode = self.Lists[order - 3].lock();
             loop {
                 let addr = headnode.currAddr;
                 let mut bs = BlockType::GetMut(order, addr);
                 match bs.Alloc() {
                     Some(allocAddr) => {
                         headnode.totalFree -= 1;
-                        return Some(allocAddr)
+                        return Some(allocAddr);
                     }
                     None => (),
                 }
-    
+
                 if headnode.totalFree < 256 {
-                    let parentOrder = if order < 10 {
-                        order + 12
-                    } else {
-                        21
-                    };
-    
+                    let parentOrder = if order < 10 { order + 12 } else { 21 };
+
                     let newAddr = match self.Alloc(parentOrder) {
                         None => return None,
                         Some(addr) => addr,
                     };
-    
-                    let mut newBlock = BlockType::GetMut(order,newAddr);
+
+                    let mut newBlock = BlockType::GetMut(order, newAddr);
                     newBlock.Init();
                     headnode.PushFront(newAddr, newBlock.TotalCount(), &self.freeListAllocator);
                 } else {
                     headnode.Rotate(&self.freeListAllocator);
-                }                   
+                }
             }
         } else if order == 21 {
             return self.block8GAlllocator.Alloc2M();
@@ -832,7 +816,6 @@ impl BitmapAllocator {
         }
     }
 }
-
 
 unsafe impl GlobalAlloc for BitmapAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
@@ -870,7 +853,7 @@ impl BitmapAllocatorWrapper {
             addr = self.addr.load(atomic::Ordering::Relaxed);
             let allocator = unsafe { &mut *(addr as *mut BitmapAllocator) };
             allocator.Bootstrap(addr);
-            return allocator
+            return allocator;
         }
 
         return unsafe { &mut *(addr as *mut BitmapAllocator) };
@@ -881,7 +864,10 @@ impl BitmapAllocatorWrapper {
 
     #[inline]
     pub fn HeapRange(&self) -> (u64, u64) {
-        return (MemoryDef::HEAP_OFFSET, MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE)
+        return (
+            MemoryDef::HEAP_OFFSET,
+            MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE,
+        );
     }
 }
 

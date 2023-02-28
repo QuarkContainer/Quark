@@ -37,10 +37,10 @@ use super::super::ramfs::symlink::*;
 use super::inode::*;
 
 use crate::qlib::kernel::fs::procfs::mounts::MountsNode;
-use crate::qlib::kernel::fs::procfs::task::exe::ExeNode;
-use crate::qlib::kernel::fs::procfs::task::fds::FdNode;
 use crate::qlib::kernel::fs::procfs::proc::ProcessSelfNode;
 use crate::qlib::kernel::fs::procfs::proc::ThreadSelfNode;
+use crate::qlib::kernel::fs::procfs::task::exe::ExeNode;
+use crate::qlib::kernel::fs::procfs::task::fds::FdNode;
 
 #[enum_dispatch(ReadLinkNode)]
 pub trait ReadLinkNodeTrait: Send + Sync {
@@ -74,7 +74,7 @@ pub struct SymlinkNode {
     pub node: ReadLinkNode,
 }
 
-impl  SymlinkNode {
+impl SymlinkNode {
     pub fn New(
         task: &Task,
         msrc: &Arc<QMutex<MountSource>>,
@@ -90,7 +90,7 @@ impl  SymlinkNode {
     }
 }
 
-impl  InodeOperations for SymlinkNode {
+impl InodeOperations for SymlinkNode {
     fn as_any(&self) -> &Any {
         return self;
     }

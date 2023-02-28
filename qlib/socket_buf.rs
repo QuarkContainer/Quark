@@ -26,9 +26,9 @@ use super::bytestream::*;
 use super::common::*;
 use super::linux_def::*;
 use super::mutex::*;
-use crate::qlib::kernel::Kernel::HostSpace;
-use crate::qlib::kernel::socket::hostinet::loopbacksocket::LoopbackSocket;
 use crate::qlib::kernel::kernel::waiter::Queue;
+use crate::qlib::kernel::socket::hostinet::loopbacksocket::LoopbackSocket;
+use crate::qlib::kernel::Kernel::HostSpace;
 
 #[derive(Clone, Default)]
 pub struct SocketBuffWeak(pub Weak<SocketBuffIntern>);
@@ -57,7 +57,7 @@ impl Deref for SocketBuff {
 
 impl PartialEq for SocketBuff {
     fn eq(&self, other: &Self) -> bool {
-        return Arc::ptr_eq(&self.0, &other.0)
+        return Arc::ptr_eq(&self.0, &other.0);
     }
 }
 
@@ -70,9 +70,9 @@ impl fmt::Debug for SocketBuff {
 impl SocketBuff {
     pub fn New(readbuf: ByteStream, writebuf: ByteStream) -> Self {
         let inner = SocketBuffIntern::New(readbuf, writebuf);
-        return Self(Arc::new(inner))
+        return Self(Arc::new(inner));
     }
-    
+
     pub fn Downgrade(&self) -> SocketBuffWeak {
         return SocketBuffWeak(Arc::downgrade(&self.0));
     }
@@ -100,8 +100,7 @@ impl fmt::Debug for SocketBuffIntern {
         write!(
             f,
             "wClosed {:?}, rClosed {:?}, pendingWShutdown {:?}, error {:?} readbuff {:x?}, writebuff {:x?}",
-            self.wClosed, self.wClosed, self.pendingWShutdown, self.error, 
-            self.readBuf, self.writeBuf
+            self.wClosed, self.wClosed, self.pendingWShutdown, self.error, self.readBuf, self.writeBuf
         )
     }
 }
@@ -152,7 +151,7 @@ impl SocketBuffIntern {
         consumeReadDataAddr: u64,
         readBufAddr: u64,
         writeBufAddr: u64,
-        init: bool
+        init: bool,
     ) -> Self {
         let consumeReadData = unsafe {
             let addr = consumeReadDataAddr as *mut AtomicU64;
@@ -161,27 +160,31 @@ impl SocketBuffIntern {
         if init {
             consumeReadData.store(0, Ordering::Release);
         }
-        
+
         return Self {
             wClosed: AtomicBool::new(false),
             rClosed: AtomicBool::new(false),
             pendingWShutdown: AtomicBool::new(false),
             error: AtomicI32::new(0),
             consumeReadData,
-            readBuf: ByteStream(Arc::new(QMutex::new(ByteStreamIntern::InitWithShareMemory(
-                pageCount,
-                readBufHeadTailAddr,
-                readBufWaitingRWAddr,
-                readBufAddr,
-                init,
-            )))),
-            writeBuf: ByteStream(Arc::new(QMutex::new(ByteStreamIntern::InitWithShareMemory(
-                pageCount,
-                writeBufHeadTailAddr,
-                writeBufWaitingRWAddr,
-                writeBufAddr,
-                init,
-            )))),
+            readBuf: ByteStream(Arc::new(QMutex::new(
+                ByteStreamIntern::InitWithShareMemory(
+                    pageCount,
+                    readBufHeadTailAddr,
+                    readBufWaitingRWAddr,
+                    readBufAddr,
+                    init,
+                ),
+            ))),
+            writeBuf: ByteStream(Arc::new(QMutex::new(
+                ByteStreamIntern::InitWithShareMemory(
+                    pageCount,
+                    writeBufHeadTailAddr,
+                    writeBufWaitingRWAddr,
+                    writeBufAddr,
+                    init,
+                ),
+            ))),
         };
     }
 
@@ -315,25 +318,24 @@ pub const TCP_ADDR_LEN: usize = 128;
 pub enum AcceptSocket {
     SocketBuff(SocketBuff),
     LoopbackSocket(LoopbackSocket),
-    None
+    None,
 }
 
 impl From<LoopbackSocket> for AcceptSocket {
     fn from(item: LoopbackSocket) -> Self {
-        return Self::LoopbackSocket(item)
+        return Self::LoopbackSocket(item);
     }
 }
 
 impl From<SocketBuff> for AcceptSocket {
     fn from(item: SocketBuff) -> Self {
-        return Self::SocketBuff(item)
+        return Self::SocketBuff(item);
     }
 }
 
-
 impl Default for AcceptSocket {
     fn default() -> Self {
-        return Self::None
+        return Self::None;
     }
 }
 
@@ -367,7 +369,7 @@ impl AcceptQueue {
             queue: queue,
         };
 
-        return Self(Arc::new(QMutex::new(inner)))
+        return Self(Arc::new(QMutex::new(inner)));
     }
 
     pub fn EnqSocket(
@@ -376,7 +378,7 @@ impl AcceptQueue {
         addr: TcpSockAddr,
         len: u32,
         sockBuf: AcceptSocket,
-        queue: Queue
+        queue: Queue,
     ) -> bool {
         let (trigger, hasSpace) = {
             let mut inner = self.lock();
@@ -387,11 +389,10 @@ impl AcceptQueue {
                 sockBuf: sockBuf,
                 queue: queue,
             };
-    
+
             inner.aiQueue.push_back(item);
             inner.total += 1;
             let trigger = inner.aiQueue.len() == 1;
-            
 
             (trigger, inner.aiQueue.len() < inner.queueLen)
         };
@@ -400,7 +401,7 @@ impl AcceptQueue {
             let queue = self.lock().queue.clone();
             queue.Notify(READABLE_EVENT)
         }
-        
+
         return hasSpace;
     }
 }
@@ -415,11 +416,7 @@ pub struct AcceptQueueIntern {
 
 impl fmt::Debug for AcceptQueueIntern {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "AcceptQueueIntern aiQueue {:x?}",
-            self.aiQueue
-        )
+        write!(f, "AcceptQueueIntern aiQueue {:x?}", self.aiQueue)
     }
 }
 

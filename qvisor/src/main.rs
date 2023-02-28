@@ -91,10 +91,10 @@ use self::qlib::ShareSpaceRef;
 use self::runc::cmd::command::*;
 use self::runc::sandbox::sandbox::*;
 use self::runc::shim::service::*;
+use self::vmspace::hibernate::*;
 use self::vmspace::host_pma_keeper::*;
 use self::vmspace::hostfdnotifier::*;
 use self::vmspace::kernel_io_thread::*;
-use self::vmspace::hibernate::*;
 //use crate::qlib::mem::bitmap_allocator::BitmapAllocatorWrapper;
 
 use self::vmspace::uringMgr::*;
@@ -130,7 +130,7 @@ pub fn LocalVcpu() -> Option<Arc<KVMVcpu>> {
 }
 
 lazy_static! {
-    pub static ref GLOBAL_LOCK : Mutex<()> = Mutex::new(());
+    pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
     pub static ref SHARE_SPACE_STRUCT: Arc<Mutex<ShareSpace>> =
         Arc::new(Mutex::new(ShareSpace::New()));
     pub static ref SWAP_FILE: Mutex<SwapFile> = Mutex::new(SwapFile::Init().unwrap());
@@ -164,7 +164,6 @@ pub const LOG_FILE: &'static str = "/var/log/quark/quark.log";
 pub fn InitSingleton() {
     self::qlib::InitSingleton();
 }
-
 
 //pub static ALLOCATOR: HostAllocator = HostAllocator::New();
 #[global_allocator]

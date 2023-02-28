@@ -14,11 +14,11 @@
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
-use super::super::task::*;
 use super::super::syscalls::syscalls::*;
+use super::super::task::*;
 
-pub const ONLY_SCHEDULER : i32 = Sched::SCHED_NORMAL;
-pub const ONLY_PRIORITY : i32 = 0;
+pub const ONLY_SCHEDULER: i32 = Sched::SCHED_NORMAL;
+pub const ONLY_PRIORITY: i32 = 0;
 
 // SchedParam replicates struct sched_param in sched.h.
 #[repr(C)]
@@ -52,7 +52,7 @@ pub fn SysSchedGetparam(task: &mut Task, args: &SyscallArguments) -> Result<i64>
     };
 
     task.CopyOutObj(&r, param)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // SchedGetscheduler implements linux syscall sched_getscheduler(2).
@@ -70,7 +70,7 @@ pub fn SysSchedGetscheduler(task: &mut Task, args: &SyscallArguments) -> Result<
         return Err(Error::SysError(SysErr::ESRCH));
     }
 
-    return Ok(ONLY_SCHEDULER as i64)
+    return Ok(ONLY_SCHEDULER as i64);
 }
 
 // SchedSetscheduler implements linux syscall sched_setscheduler(2).
@@ -94,20 +94,20 @@ pub fn SysSchedSetscheduler(task: &mut Task, args: &SyscallArguments) -> Result<
         return Err(Error::SysError(SysErr::ESRCH));
     }
 
-    let r : SchedParam = task.CopyInObj(param)?;
+    let r: SchedParam = task.CopyInObj(param)?;
     if r.schedPriority != ONLY_PRIORITY {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    return Ok(0)
+    return Ok(0);
 }
 
 // SchedGetPriorityMax implements linux syscall sched_get_priority_max(2).
 pub fn SysSchedGetPriorityMax(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
-    return Ok(ONLY_PRIORITY as i64)
+    return Ok(ONLY_PRIORITY as i64);
 }
 
 // SchedGetPriorityMin implements linux syscall sched_get_priority_min(2).
 pub fn SysSchedGetPriorityMin(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
-    return Ok(ONLY_PRIORITY as i64)
+    return Ok(ONLY_PRIORITY as i64);
 }

@@ -14,13 +14,13 @@
 
 use alloc::string::String;
 use chrono::prelude::*;
-use lazy_static::lazy_static;
-use std::fs::OpenOptions;
-use std::os::unix::io::IntoRawFd;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI32;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use lazy_static::lazy_static;
+use std::fs::OpenOptions;
+use std::os::unix::io::IntoRawFd;
 
 use super::qlib::kernel::Timestamp;
 use super::qlib::kernel::IOURING;
@@ -74,7 +74,7 @@ impl Log {
 
         return Self {
             fd: AtomicI32::new(file.into_raw_fd()),
-            rawfd: AtomicI32::new(rawfile.into_raw_fd()),           
+            rawfd: AtomicI32::new(rawfile.into_raw_fd()),
             lineNum: AtomicU64::new(1),
             syncPrint: AtomicBool::new(true),
             processid: AtomicI32::new(std::process::id() as _),
@@ -135,7 +135,11 @@ impl Log {
 
     fn write(&self, buf: &[u8]) -> i32 {
         let ret = unsafe {
-            libc::write(self.Logfd(), &buf[0] as * const _ as u64 as * const _, buf.len() as _)
+            libc::write(
+                self.Logfd(),
+                &buf[0] as *const _ as u64 as *const _,
+                buf.len() as _,
+            )
         };
 
         if ret < 0 {
@@ -156,23 +160,24 @@ impl Log {
 
     pub fn RawLog(&self, val1: u64, val2: u64, val3: u64, val4: u64) {
         let data = [
-                self.processid.load(Ordering::Relaxed) as u64, 
-                self.lineNum.load(Ordering::Relaxed), 
-                val1, 
-                val2, 
-                val3,
-                val4,
-            ];
+            self.processid.load(Ordering::Relaxed) as u64,
+            self.lineNum.load(Ordering::Relaxed),
+            val1,
+            val2,
+            val3,
+            val4,
+        ];
 
-        let addr = &data[0] as * const _ as u64;
+        let addr = &data[0] as *const _ as u64;
         let mut count = 0;
 
         while count < 8 * data.len() {
             let n = unsafe {
                 libc::write(
-                    self.rawfd.load(Ordering::Relaxed), 
-                    (addr + count as u64) as * const _, 
-                    8 * data.len() - count as usize)
+                    self.rawfd.load(Ordering::Relaxed),
+                    (addr + count as u64) as *const _,
+                    8 * data.len() - count as usize,
+                )
             };
 
             if n < 0 {
@@ -191,11 +196,18 @@ impl Log {
         let now = Timestamp();
         //let now = RawTimestamp();
         if MEMORY_LEAK_LOG {
-            self.Write(&format!("{:?} [{}] [{}/{}] {}\n", self.processid, level, ThreadId(), now, str));
+            self.Write(&format!(
+                "{:?} [{}] [{}/{}] {}\n",
+                self.processid,
+                level,
+                ThreadId(),
+                now,
+                str
+            ));
         } else {
             self.Write(&format!("[{}] [{}/{}] {}\n", level, ThreadId(), now, str));
         }
-     }
+    }
 
     pub fn RawPrint(&self, level: &str, str: &str) {
         //self.Write(&format!("{} [{}] {}\n", Self::Now(), level, str));

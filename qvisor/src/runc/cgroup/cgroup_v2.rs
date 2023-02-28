@@ -13,20 +13,20 @@
 // limitations under the License.
 
 use std::fs::File;
-use std::io::SeekFrom;
 use std::io::prelude::*;
+use std::io::SeekFrom;
 
 use crate::qlib::common::*;
 use crate::runc::oci::*;
 
 use super::cgroup::*;
 
-pub const SUBTREE_CONTROL  : &str = "cgroup.subtree_control";
-pub const CONTROLLERS_FILE : &str = "cgroup.controllers";
-pub const CGROUP2_KEY      : &str = "cgroup2";
+pub const SUBTREE_CONTROL: &str = "cgroup.subtree_control";
+pub const CONTROLLERS_FILE: &str = "cgroup.controllers";
+pub const CGROUP2_KEY: &str = "cgroup2";
 
 // https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html
-pub const DEFAULT_PERIOD : u64 = 100000;
+pub const DEFAULT_PERIOD: u64 = 100000;
 
 /* pub trait Controllerv2 : Controller {
     fn generateProperties(spec: &LinuxResources)
@@ -46,55 +46,53 @@ impl Controller for Cpu2 {
     fn Set(&self, spec: &Option<LinuxResources>, path: &str) -> Result<()> {
         match spec {
             None => return Ok(()),
-            Some(ref spec) => {
-                match spec.cpu {
-                    None => return Ok(()),
-                    Some(ref cpu) => {
-                        match cpu.shares {
-                            None => (),
-                            Some(ref shares) => {
-                                let weight = convertCPUSharesToCgroupV2Value(*shares);
-                                if weight != 0 {
-                                    SetValue(path, "cpu.weight", &format!("{}", weight))?;
-                                }
+            Some(ref spec) => match spec.cpu {
+                None => return Ok(()),
+                Some(ref cpu) => {
+                    match cpu.shares {
+                        None => (),
+                        Some(ref shares) => {
+                            let weight = convertCPUSharesToCgroupV2Value(*shares);
+                            if weight != 0 {
+                                SetValue(path, "cpu.weight", &format!("{}", weight))?;
                             }
                         }
-
-                        if cpu.period.is_some() || cpu.quota.is_some() {
-                            let mut v = "max".to_string();
-
-                            match cpu.quota {
-                                None => (),
-                                Some(quota) => {
-                                    if quota != 0 {
-                                        v = format!("{}", quota);
-                                    }
-                                }
-                            }
-
-                            let mut period = 0u64;
-                            match cpu.period {
-                                None => (),
-                                Some(p) => {
-                                    if p != 0 {
-                                        period = p;
-                                    } else {
-                                        period = DEFAULT_PERIOD;
-                                    }
-                                }
-                            }
-
-                            v = v + " ";
-                            v = v + &format!("{}", period);
-                            SetValue(path, "cpu.max", &v)?;
-                        }
-                        
-                        return Ok(())
                     }
+
+                    if cpu.period.is_some() || cpu.quota.is_some() {
+                        let mut v = "max".to_string();
+
+                        match cpu.quota {
+                            None => (),
+                            Some(quota) => {
+                                if quota != 0 {
+                                    v = format!("{}", quota);
+                                }
+                            }
+                        }
+
+                        let mut period = 0u64;
+                        match cpu.period {
+                            None => (),
+                            Some(p) => {
+                                if p != 0 {
+                                    period = p;
+                                } else {
+                                    period = DEFAULT_PERIOD;
+                                }
+                            }
+                        }
+
+                        v = v + " ";
+                        v = v + &format!("{}", period);
+                        SetValue(path, "cpu.max", &v)?;
+                    }
+
+                    return Ok(());
                 }
-            }
+            },
         }
-    }     
+    }
 }
 
 pub struct CpuSet2 {}
@@ -111,23 +109,21 @@ impl Controller for CpuSet2 {
     fn Set(&self, spec: &Option<LinuxResources>, path: &str) -> Result<()> {
         match spec {
             None => return Ok(()),
-            Some(ref spec) => {
-                match spec.cpu {
-                    None => return Ok(()),
-                    Some(ref cpu) => {
-                        if &cpu.cpus != "" {
-                            SetValue(path, "cpuset.cpus", &cpu.cpus)?;
-                        }
+            Some(ref spec) => match spec.cpu {
+                None => return Ok(()),
+                Some(ref cpu) => {
+                    if &cpu.cpus != "" {
+                        SetValue(path, "cpuset.cpus", &cpu.cpus)?;
+                    }
 
-                        if &cpu.mems != "" {
-                            SetValue(path, "cpuset.mems", &cpu.mems)?;
-                        }
+                    if &cpu.mems != "" {
+                        SetValue(path, "cpuset.mems", &cpu.mems)?;
                     }
                 }
-            }
+            },
         }
 
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -154,25 +150,25 @@ impl Controller for Memory2 {
                         // order to get the correct swap value.
                         match memory.swap {
                             None => (),
-                            Some(Swap) => {
-                                match memory.limit {
-                                    None => {
-                                        return Err(Error::Common("cgroup: Memory.Swap is set without Memory.Limit".to_string()));
+                            Some(Swap) => match memory.limit {
+                                None => {
+                                    return Err(Error::Common(
+                                        "cgroup: Memory.Swap is set without Memory.Limit"
+                                            .to_string(),
+                                    ));
+                                }
+                                Some(limit) => {
+                                    let swap = ConvertMemorySwapToCgroupV2Value(Swap, limit)?;
+                                    let mut swapStr = NumToStr(swap);
+                                    if &swapStr == "" && swap == 0 && Swap > 0 {
+                                        swapStr = "0".to_string();
                                     }
-                                    Some(limit) => {
-                                        let swap = ConvertMemorySwapToCgroupV2Value(Swap, limit)?;
-                                        let mut swapStr = NumToStr(swap);
-                                        if &swapStr == "" && swap == 0 && Swap > 0 {
-                                            swapStr = "0".to_string();
-                                        }
 
-                                        if &swapStr != "" {
-                                            SetValue(path, "memory.swap.max", &swapStr)?;
-                                        }
+                                    if &swapStr != "" {
+                                        SetValue(path, "memory.swap.max", &swapStr)?;
                                     }
                                 }
-                                
-                            }
+                            },
                         }
 
                         match memory.limit {
@@ -199,10 +195,9 @@ impl Controller for Memory2 {
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 }
-
 
 // Since the OCI spec is designed for cgroup v1, in some cases
 // there is need to convert from the cgroup v1 configuration to cgroup v2
@@ -223,29 +218,33 @@ pub fn convertCPUSharesToCgroupV2Value(cpuShares: u64) -> u64 {
 // swap is a separate value.
 pub fn ConvertMemorySwapToCgroupV2Value(memorySwap: i64, memory: i64) -> Result<i64> {
     // for compatibility with cgroup1 controller, set swap to unlimited in
-	// case the memory is set to unlimited, and swap is not explicitly set,
-	// treating the request as "set both memory and swap to unlimited".
-	if memory == -1 && memorySwap == 0 {
-        return Ok(-1)
+    // case the memory is set to unlimited, and swap is not explicitly set,
+    // treating the request as "set both memory and swap to unlimited".
+    if memory == -1 && memorySwap == 0 {
+        return Ok(-1);
     }
 
     if memorySwap == -1 || memorySwap == 0 {
         // -1 is "max", 0 is "unset", so treat as is.
-		return Ok(memorySwap)
+        return Ok(memorySwap);
     }
 
     // sanity checks
-	if memory == 0 || memory == -1 {
-        return Err(Error::Common("unable to set swap limit without memory limit".to_string()));
+    if memory == 0 || memory == -1 {
+        return Err(Error::Common(
+            "unable to set swap limit without memory limit".to_string(),
+        ));
     }
     if memory < 0 {
         return Err(Error::Common(format!("invalid memory value: {}", memory)));
     }
     if memorySwap < memory {
-        return Err(Error::Common("memory+swap limit should be >= memory limit".to_string()));
+        return Err(Error::Common(
+            "memory+swap limit should be >= memory limit".to_string(),
+        ));
     }
 
-    return Ok(memorySwap - memory)
+    return Ok(memorySwap - memory);
 }
 
 // Since the OCI spec is designed for cgroup v1, in some cases
@@ -254,7 +253,7 @@ pub fn ConvertMemorySwapToCgroupV2Value(memorySwap: i64, memory: i64) -> Result<
 // convert linearly from [10-1000] to [1-10000]
 pub fn ConvertBlkIOToIOWeightValue(blkIoWeight: u16) -> u64 {
     if blkIoWeight == 0 {
-        return 0
+        return 0;
     }
     return 1 + (blkIoWeight as u64 - 100) * 9999 / 990;
 }
@@ -262,10 +261,10 @@ pub fn ConvertBlkIOToIOWeightValue(blkIoWeight: u16) -> u64 {
 pub fn NumToStr(value: i64) -> String {
     if value == 0 {
         return "".to_string();
-    } else if value == - 1{
+    } else if value == -1 {
         return "max".to_string();
     } else {
-        return format!("{}", value)
+        return format!("{}", value);
     }
 }
 
@@ -286,8 +285,8 @@ pub fn bfqDeviceWeightSupported(bfq: &mut File) -> bool {
     }
 
     // If only a single number (default weight) if read back, we have older
-	// kernel.
-	match buffer.parse::<u64>() {
+    // kernel.
+    match buffer.parse::<u64>() {
         Ok(_) => return true,
         _ => return false,
     }
@@ -298,13 +297,16 @@ pub fn bfqDeviceWeightSupported(bfq: &mut File) -> bool {
 // (ParseUint is used to convert the value). For example,
 // "io_service_bytes 1234" will be returned as "io_service_bytes", 1234.
 pub fn ParseKeyValue(t: &str) -> Result<(String, u64)> {
-    let parts : Vec<&str> = t.splitn(3, " ").collect();
+    let parts: Vec<&str> = t.splitn(3, " ").collect();
     if parts.len() != 2 {
-        return Err(Error::Common(format!("line {} is not in key value format", t)))
+        return Err(Error::Common(format!(
+            "line {} is not in key value format",
+            t
+        )));
     }
-    
+
     let value = ParseUint(parts[1], 10, 64)?;
-    return Ok((parts[0].to_string(), value))
+    return Ok((parts[0].to_string(), value));
 }
 
 // parseUint converts a string to an uint64 integer.
@@ -315,16 +317,21 @@ pub fn ParseUint(s: &str, base: u32, bitSize: u32) -> Result<u64> {
         Ok(v) => return Ok(v),
         _ => {
             // 1. Handle negative values greater than MinInt64 (and)
-		// 2. Handle negative values lesser than MinInt64
-		match i64::from_str_radix(s, base) {
+            // 2. Handle negative values lesser than MinInt64
+            match i64::from_str_radix(s, base) {
                 Ok(v) => {
                     if v < 0 {
-                        return Ok(0)
+                        return Ok(0);
                     }
 
-                    return Ok(v as u64)
+                    return Ok(v as u64);
                 }
-                _ => return Err(Error::Common(format!("ParseUint fail {}/{}/{}", s, base, bitSize))),
+                _ => {
+                    return Err(Error::Common(format!(
+                        "ParseUint fail {}/{}/{}",
+                        s, base, bitSize
+                    )))
+                }
             }
         }
     }

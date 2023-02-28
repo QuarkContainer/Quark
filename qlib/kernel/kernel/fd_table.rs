@@ -20,12 +20,12 @@ use core::ops::Bound::*;
 use hashbrown::HashMap;
 
 use super::super::super::common::*;
-use super::super::super::linux_def::*;
 use super::super::super::limits::*;
+use super::super::super::linux_def::*;
 use super::super::super::range::*;
-use super::super::task::*;
 use super::super::fs::file::*;
 use super::super::fs::inotify::*;
+use super::super::task::*;
 use super::super::uid::*;
 
 #[derive(Clone, Default, Debug)]
@@ -57,7 +57,6 @@ pub struct Descriptor {
     pub flags: FDFlags,
 }
 
-
 #[derive(Debug, Clone, Default)]
 pub struct GapMgr {
     pub range: Range,
@@ -69,11 +68,8 @@ impl GapMgr {
     pub fn New(start: u64, len: u64) -> Self {
         let mut map = BTreeMap::new();
         let range = Range { start, len };
-        map.insert(range.End()-1, len);
-        return GapMgr {
-            range: range,
-            map,
-        };
+        map.insert(range.End() - 1, len);
+        return GapMgr { range: range, map };
     }
 
     pub fn LastGap(&self) -> Option<Range> {
@@ -96,16 +92,16 @@ impl GapMgr {
 
     pub fn Print(&self) {
         info!(
-        "GapMgr: the full range is {:x} to {:x}",
-        self.range.start,
-        self.range.End()
+            "GapMgr: the full range is {:x} to {:x}",
+            self.range.start,
+            self.range.End()
         );
         for (start, len) in &self.map {
             info!(
-            "the gap start is {:x}, len is {:x}, end is {:x}",
-            *start,
-            *len,
-            *start + *len
+                "the gap start is {:x}, len is {:x}, end is {:x}",
+                *start,
+                *len,
+                *start + *len
             );
         }
     }
@@ -120,15 +116,21 @@ impl GapMgr {
                 len: *gLen,
             };
 
-            assert!(gR.Contains(id), "Take fail {}/{:?}/{:?}", id, &gR, &self.map);
+            assert!(
+                gR.Contains(id),
+                "Take fail {}/{:?}/{:?}",
+                id,
+                &gR,
+                &self.map
+            );
 
             // This is the only one in the range
             if gR.Len() == 1 {
                 remove = Some(*gEnd);
-                break
+                break;
             }
 
-             // there is left range need to add
+            // there is left range need to add
             if gR.Start() < id {
                 insert = Some(Range::New(gR.Start(), id - gR.Start()));
             }
@@ -148,13 +150,13 @@ impl GapMgr {
             None => (),
             Some(end) => {
                 self.map.remove(&end);
-            },
+            }
         }
 
         match insert {
             None => (),
             Some(r) => {
-                self.map.insert(r.End()-1, r.Len());
+                self.map.insert(r.End() - 1, r.Len());
             }
         }
     }
@@ -171,15 +173,15 @@ impl GapMgr {
             Some(r) => {
                 if r.Start() < id {
                     self.Take(id);
-                    return Some(id)
+                    return Some(id);
                 } else {
                     if r.Len() > 1 {
-                        self.map.insert(r.End()-1, r.Len()-1);
+                        self.map.insert(r.End() - 1, r.Len() - 1);
                     } else {
-                        self.map.remove(&(r.End()-1));
+                        self.map.remove(&(r.End() - 1));
                     }
 
-                    return Some(r.Start())
+                    return Some(r.Start());
                 }
             }
         }
@@ -217,18 +219,18 @@ impl GapMgr {
                     self.map.insert(id, 1);
                 }
                 Some(r) => {
-                    self.map.insert(r.End()-1, r.Len() + 1);
+                    self.map.insert(r.End() - 1, r.Len() + 1);
                 }
             }
         } else {
             let leftRange = leftRange.unwrap();
-            self.map.remove(&(leftRange.End()-1));
+            self.map.remove(&(leftRange.End() - 1));
             match rightRange {
                 None => {
                     self.map.insert(leftRange.End(), leftRange.Len() + 1);
                 }
                 Some(r) => {
-                    self.map.insert(r.End()-1, r.Len() + leftRange.Len() + 1);
+                    self.map.insert(r.End() - 1, r.Len() + leftRange.Len() + 1);
                 }
             }
         }
@@ -254,7 +256,7 @@ impl FDTable {
         return Self {
             id: NewUID(),
             data: Default::default(),
-        }
+        };
     }
 
     pub fn Id(&self) -> u64 {
@@ -274,7 +276,6 @@ impl FDTable {
         return fds;
     }
 
-
     pub fn Remove(&self, fd: i32) -> Option<File> {
         return self.data.lock().Remove(self.id, fd);
     }
@@ -285,7 +286,7 @@ impl FDTable {
         for fd in startfd..endfd {
             match intern.Remove(self.id, fd) {
                 None => (),
-                Some(f)=> ret.push(f)
+                Some(f) => ret.push(f),
             }
         }
 
@@ -301,11 +302,11 @@ impl FDTable {
         for fd in startfd..endfd {
             match intern.SetFlags(fd, &flags) {
                 Err(_) => (),
-                Ok(())=> (),
+                Ok(()) => (),
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn RemoveCloseOnExec(&self) {
@@ -344,7 +345,7 @@ impl FDTable {
 
     pub fn GetLastFd(&self) -> i32 {
         let intern = self.data.lock();
-        
+
         let lastGap = intern.gaps.LastGap();
         match lastGap {
             None => return 0,
@@ -416,7 +417,12 @@ impl FDTable {
         // Default limit.
         let mut end = i32::MAX;
 
-        let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::NumberOfFiles).Cur;
+        let lim = task
+            .Thread()
+            .ThreadGroup()
+            .Limits()
+            .Get(LimitType::NumberOfFiles)
+            .Cur;
         if lim != u64::MAX {
             end = lim as i32;
         }
@@ -448,7 +454,12 @@ impl FDTable {
             return Err(Error::SysError(SysErr::EBADF));
         }
 
-        let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::NumberOfFiles).Cur;
+        let lim = task
+            .Thread()
+            .ThreadGroup()
+            .Limits()
+            .Get(LimitType::NumberOfFiles)
+            .Cur;
         if fd as u64 >= lim {
             return Err(Error::SysError(SysErr::EMFILE));
         }
@@ -474,7 +485,7 @@ impl FDTable {
         return Self {
             id: NewUID(),
             data: Arc::new(QMutex::new(tbl)),
-        }
+        };
     }
 
     pub fn Clear(&self) {
@@ -515,9 +526,15 @@ impl FDTableInternal {
         for (end, len) in &self.gaps.map {
             let start = *end - (*len - 1);
             while cur < start {
-                assert!(self.descTbl.contains_key(&(cur as i32)),
+                assert!(
+                    self.descTbl.contains_key(&(cur as i32)),
                     "verify {}/{}->{}/{:?}/{:?}",
-                    cur, start, *len, &self.descTbl.keys(), &self.gaps.map);
+                    cur,
+                    start,
+                    *len,
+                    &self.descTbl.keys(),
+                    &self.gaps.map
+                );
                 cur += 1;
             }
             cur = *end + 1;
@@ -576,12 +593,19 @@ impl FDTableInternal {
         }
     }
 
-    fn NewFDAt(&mut self, _task: &Task, uid: u64, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
+    fn NewFDAt(
+        &mut self,
+        _task: &Task,
+        uid: u64,
+        fd: i32,
+        file: &File,
+        flags: &FDFlags,
+    ) -> Result<()> {
         //self.Verify();
         match self.descTbl.remove(&fd) {
             None => {
                 self.gaps.Take(fd as u64);
-            },
+            }
             Some(desc) => {
                 self.Drop(uid, &desc.file);
             }
@@ -625,12 +649,14 @@ impl FDTableInternal {
 
         match file {
             None => return None,
-            Some(f) => return {
-                self.gaps.Free(fd as u64);
-                //self.Verify();
-                self.Drop(uid, &f.file);
-                Some(f.file)
-            },
+            Some(f) => {
+                return {
+                    self.gaps.Free(fd as u64);
+                    //self.Verify();
+                    self.Drop(uid, &f.file);
+                    Some(f.file)
+                };
+            }
         }
     }
 
@@ -648,7 +674,5 @@ impl FDTableInternal {
         }
 
         //self.Verify();
-
     }
 }
-

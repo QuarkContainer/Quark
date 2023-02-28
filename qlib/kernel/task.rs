@@ -191,7 +191,7 @@ pub struct Task {
     pub ioUsage: IO,
     pub sched: TaskSchedInfo,
     pub exiting: bool,
-    
+
     pub perfcounters: Option<Arc<Counters>>,
 
     pub guard: Guard,
@@ -213,7 +213,7 @@ impl Task {
     }
 
     pub fn Addr(&self) -> u64 {
-        return self as * const _ as u64;
+        return self as *const _ as u64;
     }
 
     pub fn IPCNamespace(&self) -> IPCNamespace {
@@ -785,7 +785,9 @@ impl Task {
         let root = self.mm.GetRoot();
         let curr = super::asm::CurrentCr3();
         if curr != root {
-            CPULocal::Myself().tlbEpoch.store(self.mm.TLBEpoch(), Ordering::Relaxed);
+            CPULocal::Myself()
+                .tlbEpoch
+                .store(self.mm.TLBEpoch(), Ordering::Relaxed);
             super::super::pagetable::PageTables::Switch(root);
         }
     }

@@ -18,8 +18,8 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::Send;
 use core::ops::Deref;
-use enum_dispatch::enum_dispatch;
 use core::sync::atomic::Ordering;
+use enum_dispatch::enum_dispatch;
 
 use super::super::super::super::kernel_def::*;
 use super::super::super::common::*;
@@ -146,7 +146,7 @@ impl UringAsyncMgr {
         let mut ops = Vec::with_capacity(size);
         for i in 0..size {
             ids.push_back(i as u16);
-            ops.push(QMutex::new(AsyncOps::None(AsyncNone{})));
+            ops.push(QMutex::new(AsyncOps::None(AsyncNone {})));
         }
         return Self {
             ops: ops,
@@ -173,7 +173,7 @@ impl UringAsyncMgr {
     }
 
     pub fn freeSlot(&self, id: usize) {
-        *self.ops[id].lock() = AsyncOps::None(AsyncNone{});
+        *self.ops[id].lock() = AsyncOps::None(AsyncNone {});
         self.ids.lock().push_back(id as u16);
     }
 
@@ -463,8 +463,13 @@ impl AsyncOpsTrait for AsyncBufWrite {
     }
 
     fn Process(&mut self, result: i32) -> bool {
-        assert!(result as usize == self.buf.Len(), "result is {}, self.buf.len() is {}, fd is {}",
-            result, self.buf.Len(), self.fd);
+        assert!(
+            result as usize == self.buf.Len(),
+            "result is {}, self.buf.len() is {}, fd is {}",
+            result,
+            self.buf.Len(),
+            self.fd
+        );
         self.lockGuard = None;
         return false;
     }
@@ -559,16 +564,19 @@ impl AsyncOpsTrait for AsyncSend {
         if result == 0 {
             self.buf.SetWClosed();
             if self.buf.ProduceReadBuf(0) {
-                self.queue.Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
+                self.queue
+                    .Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
             } else {
-                self.queue.Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
+                self.queue
+                    .Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
             }
             return false;
         }
 
         let (trigger, addr, len) = self.buf.ConsumeAndGetAvailableWriteBuf(result as usize);
         if trigger {
-            self.queue.Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
+            self.queue
+                .Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
         }
 
         if addr == 0 {
@@ -640,16 +648,19 @@ impl AsyncOpsTrait for AsyncFiletWrite {
         if result == 0 {
             self.buf.SetWClosed();
             if self.buf.HasWriteData() {
-                self.queue.Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
+                self.queue
+                    .Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
             } else {
-                self.queue.Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
+                self.queue
+                    .Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
             }
             return false;
         }
 
         let (trigger, addr, len) = self.buf.ConsumeAndGetAvailableWriteBuf(result as usize);
         if trigger {
-            self.queue.Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
+            self.queue
+                .Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
         }
 
         if addr == 0 {
@@ -733,9 +744,13 @@ impl AsyncOpsTrait for AsyncAccept {
 
         NewSocket(result);
         let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::default()));
-        let hasSpace = self
-            .acceptQueue
-            .EnqSocket(result, self.addr, self.len, sockBuf.into(), Queue::default());
+        let hasSpace = self.acceptQueue.EnqSocket(
+            result,
+            self.addr,
+            self.len,
+            sockBuf.into(),
+            Queue::default(),
+        );
 
         self.len = 16;
 
@@ -1023,7 +1038,7 @@ pub struct AIOWrite {
     pub eventfops: Option<EventOperations>,
 }
 
-impl AsyncOpsTrait for AIOWrite {   
+impl AsyncOpsTrait for AIOWrite {
     fn SEntry(&self) -> squeue::Entry {
         let op = Write::new(
             types::Fd(self.fd),
@@ -1223,7 +1238,6 @@ impl AIORead {
             eventfops: eventfops,
         });
     }
-
 }
 
 pub struct AIOFsync {
@@ -1379,7 +1393,7 @@ pub struct AsyncConnect {
 
 impl AsyncOpsTrait for AsyncConnect {
     fn SEntry(&self) -> squeue::Entry {
-        let op = opcode::Connect::new(types::Fd(self.fd), &self.addr as * const _, self.len);
+        let op = opcode::Connect::new(types::Fd(self.fd), &self.addr as *const _, self.len);
 
         if SHARESPACE.config.read().UringFixedFile {
             return op.build().flags(squeue::Flags::FIXED_FILE);
@@ -1397,22 +1411,26 @@ impl AsyncOpsTrait for AsyncConnect {
         socket.SetConnErrno(result);
 
         if result == 0 {
-            socket.SetRemoteAddr(self.addr.data[0..self.len as _].to_vec()).expect(&format!("AsyncConnect fail {:?}", &self.addr.data[0..self.len as _]));
+            socket
+                .SetRemoteAddr(self.addr.data[0..self.len as _].to_vec())
+                .expect(&format!(
+                    "AsyncConnect fail {:?}",
+                    &self.addr.data[0..self.len as _]
+                ));
             socket.PostConnect();
         } else {
             let socktype = UringSocketType::TCPInit;
             *socket.socketType.lock() = socktype;
         }
 
-        socket.queue
-            .Notify(EventMaskFromLinux((EVENT_OUT) as u32));
+        socket.queue.Notify(EventMaskFromLinux((EVENT_OUT) as u32));
 
         drop(socket);
         return false;
     }
 }
 
-impl AsyncConnect {  
+impl AsyncConnect {
     pub fn New(fd: i32, socket: &UringSocketOperations, sockAddr: &[u8]) -> Self {
         let mut addr = TcpSockAddr::default();
         let len = if sockAddr.len() < addr.data.len() {
@@ -1420,10 +1438,10 @@ impl AsyncConnect {
         } else {
             addr.data.len()
         };
-        
+
         for i in 0..len {
             addr.data[i] = sockAddr[i];
-        } 
+        }
 
         let socktype = UringSocketType::TCPConnecting;
         *socket.socketType.lock() = socktype;
@@ -1432,7 +1450,7 @@ impl AsyncConnect {
             fd,
             addr: addr,
             len: len as _,
-            socket: socket.Downgrade()
+            socket: socket.Downgrade(),
         };
     }
 }
@@ -1474,8 +1492,6 @@ impl AsyncOpsTrait for PollHostEpollWait {
 }
 
 impl PollHostEpollWait {
-
-
     pub fn New(fd: i32) -> Self {
         return Self { fd };
     }
@@ -1532,12 +1548,9 @@ impl AsyncEpollCtl {
             },
         };
     }
-
 }
 
 #[derive(Clone, Debug, Copy)]
 pub struct AsyncNone {}
 
-impl AsyncOpsTrait for AsyncNone {
-
-}
+impl AsyncOpsTrait for AsyncNone {}

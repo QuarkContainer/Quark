@@ -288,7 +288,8 @@ impl InodeOperations for SeqFile {
     ) -> Result<File> {
         let fops = SeqFileOperations {
             seqFile: self.clone(),
-        }.into();
+        }
+        .into();
 
         let internal = FileInternal {
             UniqueId: NewUID(),
@@ -316,9 +317,7 @@ impl InodeOperations for SeqFile {
     }
 
     fn Setxattr(&self, _dir: &mut Inode, name: &str, value: &[u8], _flags: u32) -> Result<()> {
-        self.write()
-            .xattrs
-            .insert(name.to_string(), value.to_vec());
+        self.write().xattrs.insert(name.to_string(), value.to_vec());
         return Ok(());
     }
 
@@ -334,7 +333,7 @@ impl InodeOperations for SeqFile {
     fn Removexattr(&self, _dir: &Inode, name: &str) -> Result<()> {
         match self.write().xattrs.remove(name) {
             None => return Err(Error::SysError(SysErr::ENOATTR)),
-            Some(_) => return Ok(())
+            Some(_) => return Ok(()),
         }
     }
 

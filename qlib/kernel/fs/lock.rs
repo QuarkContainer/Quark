@@ -19,10 +19,10 @@ use alloc::sync::Arc;
 use core::ops::Deref;
 
 use super::super::super::common::*;
-use super::super::super::linux_def::*;
-use super::super::super::linux::fcntl::*;
-use super::super::super::mem::areaset::*;
 use super::super::super::kernel::fs::file::*;
+use super::super::super::linux::fcntl::*;
+use super::super::super::linux_def::*;
+use super::super::super::mem::areaset::*;
 use super::super::super::range::*;
 use super::super::kernel::waiter::*;
 use super::super::task::*;
@@ -43,14 +43,12 @@ pub enum LockType {
 
 #[derive(Clone, Copy, Default, Debug)]
 pub struct OwnerInfo {
-    pub pid: i32
+    pub pid: i32,
 }
 
 impl OwnerInfo {
     pub fn New(pid: i32) -> Self {
-        return Self {
-            pid: pid
-        }
+        return Self { pid: pid };
     }
 }
 
@@ -275,7 +273,10 @@ impl LocksInternal {
             let gap = seg.NextGap();
             let gr = gap.Range().Intersect(r);
             if gr.Len() > 0 {
-                seg = self.locks.Insert(&gap, &gr, MakeLock(uid, t, owner)).NextSeg();
+                seg = self
+                    .locks
+                    .Insert(&gap, &gr, MakeLock(uid, t, owner))
+                    .NextSeg();
             } else {
                 seg = gap.NextSeg()
             }
@@ -487,22 +488,20 @@ impl Locks {
         };
 
         match t {
-            LockType::ReadLock => {
-                self.testRegion(r, |lock: &Lock, start: u64, len: u64|{
-                    let l = lock.lock();
-                    if l.Writer.is_none() || l.Writer == Some(uid) {
-                        return true
-                    }
+            LockType::ReadLock => self.testRegion(r, |lock: &Lock, start: u64, len: u64| {
+                let l = lock.lock();
+                if l.Writer.is_none() || l.Writer == Some(uid) {
+                    return true;
+                }
 
-                    f.Type = F_WRLCK as _;
-                    f.Pid = l.WriterInfo.pid;
-                    f.Start = start as _;
-                    f.Len = len as _;
-                    return false
-                })
-            }
+                f.Type = F_WRLCK as _;
+                f.Pid = l.WriterInfo.pid;
+                f.Start = start as _;
+                f.Len = len as _;
+                return false;
+            }),
             LockType::WriteLock => {
-                self.testRegion(r, |lock: &Lock, start: u64, len: u64|{
+                self.testRegion(r, |lock: &Lock, start: u64, len: u64| {
                     let l = lock.lock();
                     if l.Writer.is_none() {
                         for (k, v) in &l.Readers {
@@ -512,7 +511,7 @@ impl Locks {
                                 f.Pid = v.pid;
                                 f.Start = start as _;
                                 f.Len = len as _;
-                                return false
+                                return false;
                             }
                         }
                         return true;
@@ -525,7 +524,7 @@ impl Locks {
                     f.Pid = l.WriterInfo.pid;
                     f.Start = start as _;
                     f.Len = len as _;
-                    return false
+                    return false;
                 })
             }
         }
@@ -541,7 +540,7 @@ impl Locks {
             let lock = seg.Value();
             if !check(&lock, seg.Range().Start(), seg.Range().Len()) {
                 // Stop at the first conflict detected.
-                return
+                return;
             }
             seg = seg.NextSeg();
         }
@@ -549,7 +548,13 @@ impl Locks {
 }
 
 impl File {
-    pub fn ComputeLockRange(&self, task: &Task, start: i64, len: i64, whence: i32) -> Result<Range> {
+    pub fn ComputeLockRange(
+        &self,
+        task: &Task,
+        start: i64,
+        len: i64,
+        whence: i32,
+    ) -> Result<Range> {
         let offset;
         match whence {
             SeekWhence::SEEK_SET => offset = 0,
@@ -563,7 +568,7 @@ impl File {
                 let stat = self.UnstableAttr(task)?;
                 offset = stat.Size as i64;
             }
-            _ => return Err(Error::SysError(SysErr::EINVAL))
+            _ => return Err(Error::SysError(SysErr::EINVAL)),
         }
 
         return ComputeRange(start, len, offset);

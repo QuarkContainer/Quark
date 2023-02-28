@@ -13,10 +13,10 @@
 // limitations under the License.
 
 use std::collections::HashMap;
+use std::process;
 use std::sync::mpsc::Sender;
 use std::sync::Once;
 use std::sync::{Arc, Mutex};
-use std::process;
 use std::thread;
 //use std::path::Path;
 //use std::path::PathBuf;
@@ -46,7 +46,7 @@ use super::container::*;
 use super::super::super::runc::oci::LinuxResources;
 use super::super::super::runc::sandbox::sandbox::*;
 
-use super::container_io::{ContainerStdio, ContainerIO};
+use super::container_io::{ContainerIO, ContainerStdio};
 
 type EventSender = Sender<(String, Box<dyn Message>)>;
 
@@ -193,7 +193,7 @@ impl ShimTask {
                         // drop(&p.common.containerIO);
                         // drop(&p.common.stdio);
                         return;
-                    } 
+                    }
                 }
             }
         }

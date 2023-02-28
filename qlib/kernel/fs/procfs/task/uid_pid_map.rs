@@ -45,12 +45,7 @@ pub fn NewIdMap(
         FSMagic::PROC_SUPER_MAGIC,
         gids,
     );
-    return NewProcInode(
-        v.into(),
-        msrc,
-        InodeType::SpecialFile,
-        Some(thread.clone()),
-    );
+    return NewProcInode(v.into(), msrc, InodeType::SpecialFile, Some(thread.clone()));
 }
 
 pub fn NewIdMapSimpleFileInode(
@@ -70,7 +65,8 @@ pub fn NewIdMapSimpleFileInode(
         IdMapSimpleFileTrait {
             thread: thread.clone(),
             gids: gids,
-        }.into(),
+        }
+        .into(),
     );
 }
 
@@ -93,15 +89,13 @@ impl SimpleFileTrait for IdMapSimpleFileTrait {
     }
 }
 
-pub fn NewIdMapReadonlyFileOperations(
-    thread: &Thread,
-    gids: bool,
-) -> ReadonlyFileOperations {
+pub fn NewIdMapReadonlyFileOperations(thread: &Thread, gids: bool) -> ReadonlyFileOperations {
     return ReadonlyFileOperations {
         node: IdMapReadonlyFileNode {
             thread: thread.clone(),
             gids: gids,
-        }.into(),
+        }
+        .into(),
     };
 }
 

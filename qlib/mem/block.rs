@@ -38,8 +38,8 @@ impl IOVecs {
         };
         return Self {
             data: data,
-            len: len 
-        }
+            len: len,
+        };
     }
 
     pub fn Split(&mut self, offset: usize) -> Option<Self> {
@@ -51,10 +51,10 @@ impl IOVecs {
 
         for i in 0..self.data.len() {
             if count + self.data[i].Len() >= offset {
-                let splitOffset = offset - count; 
-                
+                let splitOffset = offset - count;
+
                 if splitOffset == 0 {
-                    let remain = self.data.split_off(i+1);
+                    let remain = self.data.split_off(i + 1);
                     self.len = offset;
                     return Some(Self {
                         data: remain,
@@ -63,10 +63,10 @@ impl IOVecs {
                 } else {
                     let mut remain = self.data.split_off(i);
                     self.data.push(IoVec {
-                        start: remain[0].start ,
+                        start: remain[0].start,
                         len: splitOffset,
                     });
-                    
+
                     let remainLen = self.len - offset;
                     self.len = offset;
 
@@ -87,14 +87,14 @@ impl IOVecs {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct IOVecsRef <'a> {
+pub struct IOVecsRef<'a> {
     pub iovs: &'a [IoVec],
     pub skip: usize,
     pub len: usize,
 }
 
-impl <'a> IOVecsRef <'a> {
-    pub fn Split(&self, offset: usize) -> (IOVecsRef,  IOVecsRef){
+impl<'a> IOVecsRef<'a> {
+    pub fn Split(&self, offset: usize) -> (IOVecsRef, IOVecsRef) {
         assert!(self.iovs[0].Len() > self.skip);
         let offset = offset + self.skip;
         let mut count = 0;
@@ -106,13 +106,13 @@ impl <'a> IOVecsRef <'a> {
                 len: 0,
             };
 
-            return (first, second)
+            return (first, second);
         }
 
         for i in 0..self.iovs.len() {
             if count + self.iovs[i].Len() >= offset {
                 let first = IOVecsRef {
-                    iovs: &self.iovs[0..i+1],
+                    iovs: &self.iovs[0..i + 1],
                     skip: self.skip,
                     len: offset + self.skip,
                 };
@@ -120,7 +120,7 @@ impl <'a> IOVecsRef <'a> {
                 let skip = count + self.iovs[i].Len() - offset;
                 let second;
                 if skip == 0 {
-                    if i == self.iovs.len()-1 {
+                    if i == self.iovs.len() - 1 {
                         second = IOVecsRef {
                             iovs: self.iovs,
                             skip: 0,
@@ -128,14 +128,14 @@ impl <'a> IOVecsRef <'a> {
                         };
                     } else {
                         second = IOVecsRef {
-                            iovs: &self.iovs[i+1..],
+                            iovs: &self.iovs[i + 1..],
                             skip: 0,
                             len: 0,
                         };
                     }
                 } else {
                     second = IOVecsRef {
-                        iovs: &self.iovs[i+1..],
+                        iovs: &self.iovs[i + 1..],
                         skip: skip,
                         len: self.len - offset,
                     };
@@ -147,8 +147,11 @@ impl <'a> IOVecsRef <'a> {
             count += self.iovs[i].Len()
         }
 
-        panic!("IOVecsRef split faill with {:x?} offset {:x?}", self, offset);
-    }  
+        panic!(
+            "IOVecsRef split faill with {:x?} offset {:x?}",
+            self, offset
+        );
+    }
 }
 
 pub struct Iovs<'a>(pub &'a [IoVec]);
@@ -205,7 +208,7 @@ impl<'a> Iovs<'a> {
                 n -= self.0[i].Len()
             } else {
                 res.push(IoVec::NewFromAddr(src.Start(), n));
-                break
+                break;
             }
         }
 

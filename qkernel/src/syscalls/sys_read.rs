@@ -36,7 +36,7 @@ pub fn SysRead(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 pub fn Read(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
     //task.PerfGoto(PerfType::Read);
-   // defer!(task.PerfGofrom(PerfType::Read));
+    // defer!(task.PerfGofrom(PerfType::Read));
 
     let file = task.GetFile(fd)?;
 
@@ -139,7 +139,7 @@ pub fn Pread64(task: &Task, fd: i32, addr: u64, size: i64, offset: i64) -> Resul
     let iovs = task.AdjustIOVecPermission(&mut iovs, true, true)?;
     let iovs = IOVecs::New(iovs);
 
-    return preadvfull(task, &file, iovs, offset)
+    return preadvfull(task, &file, iovs, offset);
 
     //return preadv(task, &file, &mut iovs.data, offset);
 }
@@ -152,7 +152,7 @@ fn preadvfull(task: &Task, f: &File, mut iovs: IOVecs, offset: i64) -> Result<i6
             Ok(cnt) => {
                 count += cnt;
                 if cnt < iovs.len as _ {
-                    return Ok(count)
+                    return Ok(count);
                 }
             }
             Err(e) => {
@@ -168,7 +168,6 @@ fn preadvfull(task: &Task, f: &File, mut iovs: IOVecs, offset: i64) -> Result<i6
             Some(r) => iovs = r,
         }
     }
-
 }
 
 pub fn SysReadv(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -313,7 +312,8 @@ fn RepReadv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
 
     if count > 0 {
         // Queue notification if we read anything.
-        f.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
+        f.Dirent
+            .InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
     }
     return Ok(count);
 }
@@ -336,9 +336,10 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
         }
         Ok(n) => {
             // Queue notification if we read anything.
-            f.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
-            return Ok(n)
-        },
+            f.Dirent
+                .InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
+            return Ok(n);
+        }
     };
 
     let mut deadline = None;
@@ -374,7 +375,8 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
                 Err(e) => {
                     if count > 0 {
                         // Queue notification if we read anything.
-                        f.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
+                        f.Dirent
+                            .InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
                         return Ok(count);
                     }
                     return Err(e);
@@ -387,7 +389,8 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
                     count += n;
                     if count == len as i64 || f.Flags().NonBlocking {
                         // Queue notification if we read anything.
-                        f.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
+                        f.Dirent
+                            .InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
                         return Ok(count);
                     }
 
@@ -413,7 +416,7 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
 }
 
 fn preadv(task: &Task, f: &File, dsts: &mut [IoVec], offset: i64) -> Result<i64> {
-     match f.Preadv(task, dsts, offset) {
+    match f.Preadv(task, dsts, offset) {
         Err(e) => {
             if e != Error::SysError(SysErr::EWOULDBLOCK) || f.Flags().NonBlocking {
                 return Err(e);
@@ -422,10 +425,11 @@ fn preadv(task: &Task, f: &File, dsts: &mut [IoVec], offset: i64) -> Result<i64>
         Ok(n) => {
             if n > 0 {
                 // Queue notification if we read anything.
-                f.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent)
+                f.Dirent
+                    .InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent)
             }
-            return Ok(n)
-        },
+            return Ok(n);
+        }
     };
 
     let general = task.blocker.generalEntry.clone();
@@ -442,7 +446,8 @@ fn preadv(task: &Task, f: &File, dsts: &mut [IoVec], offset: i64) -> Result<i64>
             Ok(n) => {
                 if n > 0 {
                     // Queue notification if we read anything.
-                    f.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent)
+                    f.Dirent
+                        .InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent)
                 }
                 return Ok(n);
             }

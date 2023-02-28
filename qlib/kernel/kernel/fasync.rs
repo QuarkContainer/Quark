@@ -18,8 +18,8 @@ use alloc::sync::Arc;
 use core::ops::Deref;
 
 use super::super::super::auth::*;
-use super::super::super::linux::signal::*;
 use super::super::super::common::*;
+use super::super::super::linux::signal::*;
 use super::super::super::linux_def::*;
 use super::super::task::*;
 use super::super::threadmgr::processgroup::*;
@@ -41,7 +41,6 @@ lazy_static! {
     ].iter().cloned().collect();
 }
 
-
 #[derive(Clone)]
 pub enum Recipient {
     None,
@@ -52,7 +51,7 @@ pub enum Recipient {
 
 impl Default for Recipient {
     fn default() -> Self {
-        return Recipient::None
+        return Recipient::None;
     }
 }
 
@@ -99,7 +98,7 @@ impl FileAsync {
             ..Default::default()
         };
 
-        return Self(Arc::new(QMutex::new(intern)))
+        return Self(Arc::new(QMutex::new(intern)));
     }
 
     pub fn Callback(&self, mask: EventMask) {
@@ -113,31 +112,24 @@ impl FileAsync {
         let mut tg = None;
         let mut t = None;
         match &a.recipient {
-            Recipient::PG(ref pg) => {
-                match pg.Upgrade() {
-                    None => (),
-                    Some(pg) => {
-                        tg = Some(pg.Originator());
-                    }
+            Recipient::PG(ref pg) => match pg.Upgrade() {
+                None => (),
+                Some(pg) => {
+                    tg = Some(pg.Originator());
                 }
-            }
-            Recipient::TG(threadgroup) => {
-                match threadgroup.Upgrade() {
-                    None => (),
-                    Some(threadgroup) => {
-                        tg = Some(threadgroup);
-                    }
+            },
+            Recipient::TG(threadgroup) => match threadgroup.Upgrade() {
+                None => (),
+                Some(threadgroup) => {
+                    tg = Some(threadgroup);
                 }
-            }
-            Recipient::Thread(thread) => {
-                match thread.Upgrade() {
-                    None => (),
-                    Some(thread) => {
-                        t = Some(thread);
-                    }
+            },
+            Recipient::Thread(thread) => match thread.Upgrade() {
+                None => (),
+                Some(thread) => {
+                    t = Some(thread);
                 }
-                
-            }
+            },
             Recipient::None => (),
         }
 
@@ -166,7 +158,7 @@ impl FileAsync {
                 || reqC.RealKUID == threadC.RealKUID;
 
             if !permCheck {
-                return
+                return;
             }
         }
 
@@ -202,7 +194,11 @@ impl FileAsync {
         }
 
         a.e.lock().context = WaitContext::FileAsync(self.clone());
-        w.EventRegister(task, &a.e, READABLE_EVENT | WRITEABLE_EVENT | EVENT_ERR | EVENT_HUP);
+        w.EventRegister(
+            task,
+            &a.e,
+            READABLE_EVENT | WRITEABLE_EVENT | EVENT_ERR | EVENT_HUP,
+        );
     }
 
     // Unregister stops monitoring a file.
@@ -235,7 +231,7 @@ impl FileAsync {
         a.requester = requester.Creds();
         match recipient {
             None => a.recipient = Recipient::None,
-            Some(thread) => a.recipient = Recipient::Thread(thread.Downgrade())
+            Some(thread) => a.recipient = Recipient::Thread(thread.Downgrade()),
         }
     }
 
@@ -247,7 +243,7 @@ impl FileAsync {
         a.requester = requester.Creds();
         match recipient {
             None => a.recipient = Recipient::None,
-            Some(tg) => a.recipient = Recipient::TG(tg.Downgrade())
+            Some(tg) => a.recipient = Recipient::TG(tg.Downgrade()),
         }
     }
 
@@ -260,7 +256,7 @@ impl FileAsync {
 
         match recipient {
             None => a.recipient = Recipient::None,
-            Some(pg) => a.recipient = Recipient::PG(pg.Downgrade())
+            Some(pg) => a.recipient = Recipient::PG(pg.Downgrade()),
         }
     }
 
@@ -275,7 +271,7 @@ impl FileAsync {
     // A value of zero means the signal to deliver wasn't customized, which means
     // the default signal (SIGIO) will be delivered.
     pub fn Signal(&self) -> Signal {
-        return self.lock().signal
+        return self.lock().signal;
     }
 
     // SetSignal overrides which signal to send when I/O is available.
@@ -287,6 +283,6 @@ impl FileAsync {
         }
 
         self.lock().signal = Signal(signal);
-        return Ok(())
+        return Ok(());
     }
 }

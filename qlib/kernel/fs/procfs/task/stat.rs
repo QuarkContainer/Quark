@@ -20,10 +20,10 @@ use alloc::vec::Vec;
 
 use super::super::super::super::super::auth::*;
 use super::super::super::super::super::common::*;
+use super::super::super::super::super::kernel::*;
 use super::super::super::super::super::limits::*;
 use super::super::super::super::super::linux::time::*;
 use super::super::super::super::super::linux_def::*;
-use super::super::super::super::super::kernel::*;
 use super::super::super::super::task::*;
 use super::super::super::super::threadmgr::pid_namespace::*;
 use super::super::super::super::threadmgr::thread::*;
@@ -53,12 +53,7 @@ pub fn NewStat(
         &FilePermissions::FromMode(FileMode(0o400)),
         FSMagic::PROC_SUPER_MAGIC,
     );
-    return NewProcInode(
-        v.into(),
-        msrc,
-        InodeType::SpecialFile,
-        Some(thread.clone()),
-    );
+    return NewProcInode(v.into(), msrc, InodeType::SpecialFile, Some(thread.clone()));
 }
 
 pub fn NewStatSimpleFileInode(

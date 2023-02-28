@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::any::Any;
 use alloc::sync::Arc;
+use core::any::Any;
 use core::ops::Deref;
 
 use super::super::super::super::common::*;
@@ -66,7 +66,7 @@ impl SpliceOperations for Writer {
             self.pipe.Notify(READABLE_EVENT)
         }
 
-        return Ok(n as i64)
+        return Ok(n as i64);
     }
 }
 

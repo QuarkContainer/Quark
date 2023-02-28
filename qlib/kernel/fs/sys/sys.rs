@@ -28,10 +28,7 @@ use super::super::mount::*;
 use super::super::ramfs::dir::*;
 use super::devices::*;
 
-pub fn NewFile(
-    iops: Iops,
-    msrc: &Arc<QMutex<MountSource>>,
-) -> Inode {
+pub fn NewFile(iops: Iops, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let deviceId = SYS_DEVICE.lock().id.DeviceID();
     let inodeId = SYS_DEVICE.lock().NextIno();
 

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::collections::vec_deque::VecDeque;
 use alloc::string::String;
 use cache_padded::CachePadded;
 use core::alloc::{GlobalAlloc, Layout};
@@ -20,16 +21,15 @@ use core::mem::size_of;
 use core::ptr::NonNull;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
-use alloc::collections::vec_deque::VecDeque;
 
-use crate::GLOBAL_ALLOCATOR;
-use super::buddy_allocator::Heap;
-use crate::qlib::vcpu_mgr::CPULocal;
 use super::super::super::kernel_def::VcpuId;
 use super::super::kernel::vcpu::CPU_LOCAL;
 use super::super::linux_def::*;
 use super::super::mutex::*;
 use super::super::pagetable::AlignedAllocator;
+use super::buddy_allocator::Heap;
+use crate::qlib::vcpu_mgr::CPULocal;
+use crate::GLOBAL_ALLOCATOR;
 
 pub const CLASS_CNT: usize = 16;
 pub const FREE_THRESHOLD: usize = 30; // when free size less than 30%, need to free buffer
@@ -75,9 +75,9 @@ impl GlobalVcpuAllocator {
 
     pub fn Print(&self) {
         error!(
-        "GlobalVcpuAllocator {}/{}",
-        VcpuId(),
-        CPU_LOCAL[VcpuId()].allocator.bufs.len()
+            "GlobalVcpuAllocator {}/{}",
+            VcpuId(),
+            CPU_LOCAL[VcpuId()].allocator.bufs.len()
         )
     }
 
@@ -117,9 +117,7 @@ impl PageAllocator {
     pub fn AllocPage(&mut self) -> Option<u64> {
         match self.pages.pop_front() {
             None => return None,
-            Some(addr) => {
-                return Some(addr)
-            }
+            Some(addr) => return Some(addr),
         }
     }
 
@@ -138,9 +136,12 @@ impl PageAllocator {
             match self.pages.pop_back() {
                 None => break,
                 Some(addr) => {
-                    AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
-                        .Free(addr)
-                        .unwrap();
+                    AlignedAllocator::New(
+                        MemoryDef::PAGE_SIZE as usize,
+                        MemoryDef::PAGE_SIZE as usize,
+                    )
+                    .Free(addr)
+                    .unwrap();
                 }
             }
         }
@@ -159,8 +160,8 @@ impl Default for StackAllocator {
     fn default() -> Self {
         return Self {
             stack: [0; STACK_CNT - 1],
-            next: 0
-        }
+            next: 0,
+        };
     }
 }
 
@@ -195,13 +196,13 @@ impl VcpuAllocator {
     pub fn Clear(&mut self) {
         for idx in 3..self.bufs.len() {
             let size = 1 << idx;
-            let layout = Layout::from_size_align(size, size)
-                .expect("VcpuAllocator layout alloc fail");
+            let layout =
+                Layout::from_size_align(size, size).expect("VcpuAllocator layout alloc fail");
             while !self.bufs[idx].IsEmpty() {
                 let addr = self.bufs[idx].Pop();
                 unsafe {
                     GLOBAL_ALLOCATOR.dealloc(addr as _, layout);
-                } 
+                }
             }
         }
     }
@@ -220,12 +221,9 @@ impl VcpuAllocator {
 
         let ret;
         if idx < self.bufs.len() && !self.bufs[idx].IsEmpty() {
-             ret = self.bufs[idx].Pop();
+            ret = self.bufs[idx].Pop();
         } else {
-            unsafe {
-                ret = GLOBAL_ALLOCATOR
-                    .alloc(layout) as u64
-            };
+            unsafe { ret = GLOBAL_ALLOCATOR.alloc(layout) as u64 };
         }
 
         return ret as *mut u8;
@@ -243,9 +241,7 @@ impl VcpuAllocator {
         if idx < self.bufs.len() && !self.bufs[idx].IsFull() {
             self.bufs[idx].Push(ptr as u64);
         } else {
-            unsafe {
-                GLOBAL_ALLOCATOR.dealloc(ptr, layout)
-            }
+            unsafe { GLOBAL_ALLOCATOR.dealloc(ptr, layout) }
         }
     }
 }
@@ -264,7 +260,7 @@ impl HostAllocator {
     #[inline]
     pub fn HeapRange(&self) -> (u64, u64) {
         let allocator = self.Allocator();
-        return (allocator.heapStart, allocator.heapEnd)
+        return (allocator.heapStart, allocator.heapEnd);
     }
 }
 
@@ -326,26 +322,80 @@ impl ListAllocator {
             heapEnd,
             initialized: AtomicBool::new(false),
             counts: [
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
             ],
             maxnum: [
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
-                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
             ],
         };
     }
@@ -361,7 +411,12 @@ impl ListAllocator {
         for i in 3..24 {
             total += (1 << i) * self.maxnum[i].load(Ordering::Relaxed);
         }
-        return format!("total {:?}/{}, {:?}", self.allocated, total, &self.maxnum[3..24]);
+        return format!(
+            "total {:?}/{}, {:?}",
+            self.allocated,
+            total,
+            &self.maxnum[3..24]
+        );
     }
 
     pub fn AddToHead(&self, start: usize, end: usize) {
@@ -384,12 +439,12 @@ impl ListAllocator {
         let end = start + size;
         //let order = 22;
         let size = 1 << ORDER; // 2MB
-        // note: we can't add full range (>4GB) to the buddyallocator
-        /*let alignStart = start & !(size - 1);
-        if start != alignStart {
-            self.AddToHead(start, alignStart + size);
-            start = alignStart + size;
-        }*/
+                               // note: we can't add full range (>4GB) to the buddyallocator
+                               /*let alignStart = start & !(size - 1);
+                               if start != alignStart {
+                                   self.AddToHead(start, alignStart + size);
+                                   start = alignStart + size;
+                               }*/
 
         while start + size < end {
             self.AddToHead(start, start + size);
@@ -414,10 +469,10 @@ impl ListAllocator {
 
         if total * FREE_THRESHOLD / 100 > free && // there are too little free memory
             free * BUFF_THRESHOLD /100 < bufSize
-            {
-                // there are too much bufferred memory
-                return true;
-            }
+        {
+            // there are too much bufferred memory
+            return true;
+        }
 
         return false;
     }
@@ -450,10 +505,10 @@ impl ListAllocator {
             let cnt = self.bufs[idx]
                 .lock()
                 .FreeMultiple(&self.heap, FREE_BATCH - count);
-                //.FreeAll(&self.heap);
+            //.FreeAll(&self.heap);
             /*free += self.bufs[idx]
-                .lock()
-                .TotalFree();*/
+            .lock()
+            .TotalFree();*/
             self.bufSize
                 .fetch_sub(cnt * self.bufs[idx].lock().size, Ordering::Release);
             count += cnt;
@@ -463,7 +518,7 @@ impl ListAllocator {
     }
 }
 
-pub const PRINT_CLASS : usize = 0;
+pub const PRINT_CLASS: usize = 0;
 pub const MEMORY_CHECKING: bool = false;
 
 unsafe impl GlobalAlloc for ListAllocator {
@@ -487,7 +542,6 @@ unsafe impl GlobalAlloc for ListAllocator {
             self.maxnum[class].fetch_add(1, Ordering::Release);
             self.allocated.fetch_add(size, Ordering::Release);
         }
-
 
         if 3 <= class && class < self.bufs.len() {
             let ret = self.bufs[class].lock().Alloc();
@@ -604,7 +658,10 @@ impl FreeMemBlockMgr {
 
     pub fn Alloc(&mut self) -> Option<*mut u8> {
         if self.count != self.list.count as usize {
-            error!("FreeMemBlockMgr::Alloc {}/{}/{}", self.size, self.count, self.list.count);
+            error!(
+                "FreeMemBlockMgr::Alloc {}/{}/{}",
+                self.size, self.count, self.list.count
+            );
         }
 
         if self.count > 0 {
@@ -612,10 +669,10 @@ impl FreeMemBlockMgr {
             let ret = self.list.Pop();
 
             assert!(
-            ret != 0,
-            "self.count is {}, size is {}",
-            self.count,
-            self.size
+                ret != 0,
+                "self.count is {}, size is {}",
+                self.count,
+                self.size
             );
             let ptr = ret as *mut MemBlock;
             unsafe { ptr.write(0) }
@@ -630,7 +687,10 @@ impl FreeMemBlockMgr {
 
     pub fn Dealloc(&mut self, ptr: *mut u8, _heap: &QMutex<Heap<ORDER>>) {
         if self.count != self.list.count as usize {
-            error!("FreeMemBlockMgr::Dealloc {}/{}/{}", self.size, self.count, self.list.count);
+            error!(
+                "FreeMemBlockMgr::Dealloc {}/{}/{}",
+                self.size, self.count, self.list.count
+            );
         }
         self.count += 1;
         self.list.Push(ptr as u64);
@@ -644,7 +704,10 @@ impl FreeMemBlockMgr {
         }
 
         if self.count != self.list.count as usize {
-            error!("FreeMemBlockMgr::Dealloc {}/{}/{}", self.size, self.count, self.list.count);
+            error!(
+                "FreeMemBlockMgr::Dealloc {}/{}/{}",
+                self.size, self.count, self.list.count
+            );
         }
 
         self.count -= 1;
@@ -742,11 +805,11 @@ impl MemList {
         self.head = *ptr;
 
         assert!(
-        !(self.head == 0 && self.count != 0),
-        "MemList::pop2 self.size is {}/{}/{:x}",
-        self.size,
-        self.count,
-        next
+            !(self.head == 0 && self.count != 0),
+            "MemList::pop2 self.size is {}/{}/{:x}",
+            self.size,
+            self.count,
+            next
         );
         if next % self.size != 0 {
             raw!(0x234, next, self.size as u64, 0);

@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::qlib::mutex::*;
 use crate::qlib::mem::stackvec::StackVec;
+use crate::qlib::mutex::*;
 //use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use core::any::Any;
-use core::ops::Deref;
-use hashbrown::HashMap;
-use hashbrown::hash_map::Entry;
 use core::hash::BuildHasherDefault;
+use core::ops::Deref;
+use hashbrown::hash_map::Entry;
+use hashbrown::HashMap;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
@@ -97,7 +97,7 @@ impl core::hash::Hasher for RawHasher {
     fn write_u64(&mut self, i: u64) {
         self.state = i;
     }
-    
+
     fn finish(&self) -> u64 {
         self.state
     }
@@ -114,12 +114,13 @@ pub struct EventPollInternal {
 
 impl Default for EventPollInternal {
     fn default() -> Self {
-        let hash_map = HashMap::<FileIdentifier, PollEntry, BuildHasherDefault<RawHasher>>::default();
-        return Self { 
-            queue: Queue::default(), 
-            files: QMutex::new(hash_map), 
-            lists: Default::default() 
-        }
+        let hash_map =
+            HashMap::<FileIdentifier, PollEntry, BuildHasherDefault<RawHasher>>::default();
+        return Self {
+            queue: Queue::default(),
+            files: QMutex::new(hash_map),
+            lists: Default::default(),
+        };
     }
 }
 
@@ -302,7 +303,7 @@ impl EventPoll {
         let mut files = self.files.lock();
 
         let entry = files.entry(id);
-        
+
         match entry {
             Entry::Occupied(_) => {
                 return Err(Error::SysError(SysErr::EEXIST));
@@ -444,7 +445,6 @@ impl Drop for EventPollInternal {
     fn drop(&mut self) {
         let mut lists = self.lists.lock();
         for (_, entry) in self.files.lock().iter() {
-            
             let task = Task::Current();
             let file = entry.lock().file.Upgrade();
             match file {

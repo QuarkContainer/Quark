@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors 
+// Copyright (c) 2021 Quark Container Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -11,11 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::qlib::proxy::*;
-use crate::qlib::kernel::Kernel::HostSpace;
 use super::super::qlib::common::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
+use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::proxy::*;
 
 // arg0: command id
 // arg1: data in address
@@ -25,17 +25,21 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addrIn = args.arg1 as u64;
     let addrOut = args.arg2 as u64;
 
-    let cmd : Command = unsafe { core::mem::transmute(commandId as u64) };
+    let cmd: Command = unsafe { core::mem::transmute(commandId as u64) };
     match cmd {
         Command::Cmd1 => {
             let dataIn: Cmd1In = task.CopyInObj(addrIn)?;
             let dataOut = Cmd1Out::default();
-            let ret = HostSpace::Proxy(commandId, &dataIn as * const _ as u64, &dataOut as * const _ as u64);
+            let ret = HostSpace::Proxy(
+                commandId,
+                &dataIn as *const _ as u64,
+                &dataOut as *const _ as u64,
+            );
             task.CopyOutObj(&dataOut, addrOut)?;
-            return Ok(ret)
+            return Ok(ret);
         }
         Command::Cmd2 => {}
     }
 
-    return Ok(0)
+    return Ok(0);
 }

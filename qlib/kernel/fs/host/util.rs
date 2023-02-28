@@ -25,14 +25,14 @@ use super::super::super::super::linux::time::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::qmsg::qcall::TryOpenStruct;
 use super::super::super::kernel::time::*;
-use super::super::super::util::cstring::*;
 use super::super::super::task::*;
+use super::super::super::util::cstring::*;
 
 use super::super::super::super::path;
 use super::super::super::Kernel::HostSpace;
-use super::super::attr::*;
-use super::super::super::SHARESPACE;
 use super::super::super::IOURING;
+use super::super::super::SHARESPACE;
+use super::super::attr::*;
 use super::diriops::*;
 use super::*;
 
@@ -70,7 +70,7 @@ impl Statx {
 
         let deviceId = devId.DeviceID();
         let InodeId = self.stx_ino;
-        
+
         /*let deviceId = HOSTFILE_DEVICE.lock().DeviceID();
         let InodeId =  HOSTFILE_DEVICE.lock().Map(MultiDeviceKey::New(
             devId.DeviceID(),
@@ -303,7 +303,12 @@ pub fn OpenAt(dirfd: i32, name: &str, flags: i32) -> Result<(i32, LibcStat)> {
     };
     let cstr = CString::New(&name);
 
-    let ret = HostSpace::OpenAt(dirfd, cstr.Ptr(), flags, &mut tryopen as *mut TryOpenStruct as u64);
+    let ret = HostSpace::OpenAt(
+        dirfd,
+        cstr.Ptr(),
+        flags,
+        &mut tryopen as *mut TryOpenStruct as u64,
+    );
 
     if ret < 0 {
         return Err(Error::SysError(-ret as i32));
@@ -504,20 +509,20 @@ pub fn Rename(
         .InodeOp
         .as_any()
         .downcast_ref::<HostDirOp>()
-        {
-            Some(p) => p.clone(),
-            None => panic!("&InodeOp isn't a HostInodeOp!"),
-        };
+    {
+        Some(p) => p.clone(),
+        None => panic!("&InodeOp isn't a HostInodeOp!"),
+    };
 
     let newParent = match newParent
         .lock()
         .InodeOp
         .as_any()
         .downcast_ref::<HostDirOp>()
-        {
-            Some(p) => p.clone(),
-            None => panic!("&InodeOp isn't a HostInodeOp!"),
-        };
+    {
+        Some(p) => p.clone(),
+        None => panic!("&InodeOp isn't a HostInodeOp!"),
+    };
 
     let ret = RenameAt(oldParent.HostFd(), oldname, newParent.HostFd(), newname);
 
@@ -530,7 +535,11 @@ pub fn Rename(
     return Ok(());
 }
 
-pub fn UnstableAttr(hostfd: i32, task: &Task, mo: &Arc<QMutex<MountSourceOperations>>) -> Result<UnstableAttr> {
+pub fn UnstableAttr(
+    hostfd: i32,
+    task: &Task,
+    mo: &Arc<QMutex<MountSourceOperations>>,
+) -> Result<UnstableAttr> {
     let uringStatx = SHARESPACE.config.read().UringStatx;
 
     // the statx uring call sometime become very slow. todo: root cause this.
@@ -564,16 +573,13 @@ pub fn UnstableAttr(hostfd: i32, task: &Task, mo: &Arc<QMutex<MountSourceOperati
 
 pub fn Getxattr(fd: i32, name: &str) -> Result<Vec<u8>> {
     let str = CString::New(name);
-    let val : &mut[u8; Xattr::XATTR_NAME_MAX]= &mut [0; Xattr::XATTR_NAME_MAX];
-    let ret  = HostSpace::FGetXattr(fd,
-                                    str.Ptr(),
-                                    &val[0] as * const _ as u64,
-                                    val.len()) as i32;
+    let val: &mut [u8; Xattr::XATTR_NAME_MAX] = &mut [0; Xattr::XATTR_NAME_MAX];
+    let ret = HostSpace::FGetXattr(fd, str.Ptr(), &val[0] as *const _ as u64, val.len()) as i32;
     if ret < 0 {
-        return Err(Error::SysError(-ret))
+        return Err(Error::SysError(-ret));
     };
 
-    return Ok(val[0..ret as usize].to_vec())
+    return Ok(val[0..ret as usize].to_vec());
 }
 
 pub fn Setxattr(fd: i32, name: &str, value: &[u8], flags: u32) -> Result<()> {
@@ -581,54 +587,48 @@ pub fn Setxattr(fd: i32, name: &str, value: &[u8], flags: u32) -> Result<()> {
     let addr = if value.len() == 0 {
         0
     } else {
-        &value[0] as * const _ as u64
+        &value[0] as *const _ as u64
     };
 
-    let ret  = HostSpace::FSetXattr(fd,
-                                    name.Ptr(),
-                                    addr,
-                                    value.len(),
-                                    flags) as i32;
+    let ret = HostSpace::FSetXattr(fd, name.Ptr(), addr, value.len(), flags) as i32;
 
     if ret < 0 {
-        return Err(Error::SysError(-ret))
+        return Err(Error::SysError(-ret));
     };
 
-    return Ok(())
+    return Ok(());
 }
 
 pub fn Listxattr(fd: i32) -> Result<Vec<String>> {
-    let val : &mut[u8; Xattr::XATTR_NAME_MAX]= &mut [0; Xattr::XATTR_NAME_MAX];
-    let ret  = HostSpace::FListXattr(fd,
-                                     &val[0] as * const _ as u64,
-                                     val.len()) as i32;
+    let val: &mut [u8; Xattr::XATTR_NAME_MAX] = &mut [0; Xattr::XATTR_NAME_MAX];
+    let ret = HostSpace::FListXattr(fd, &val[0] as *const _ as u64, val.len()) as i32;
     if ret < 0 {
-        return Err(Error::SysError(-ret))
+        return Err(Error::SysError(-ret));
     };
 
     let mut res = Vec::new();
     let mut cur = 0;
     for i in 0..ret as usize {
         if val[i] == 0 {
-            let str = String::from_utf8(val[cur..i].to_vec()).map_err(|e| Error::Common(format!("Getxattr fail {}", e)))?;
+            let str = String::from_utf8(val[cur..i].to_vec())
+                .map_err(|e| Error::Common(format!("Getxattr fail {}", e)))?;
             res.push(str);
-            cur = i+1;
+            cur = i + 1;
         }
     }
 
-    return Ok(res)
+    return Ok(res);
 }
 
 pub fn Removexattr(fd: i32, name: &str) -> Result<()> {
     let name = CString::New(name);
-    let ret  = HostSpace::FRemoveXattr(fd,
-                                       name.Ptr()) as i32;
+    let ret = HostSpace::FRemoveXattr(fd, name.Ptr()) as i32;
 
     if ret < 0 {
-        return Err(Error::SysError(-ret))
+        return Err(Error::SysError(-ret));
     };
 
-    return Ok(())
+    return Ok(());
 }
 
 pub fn StatFS(fd: i32) -> Result<FsInfo> {

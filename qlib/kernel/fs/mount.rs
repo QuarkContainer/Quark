@@ -1202,7 +1202,13 @@ mod tests {
             return Err(Error::None);
         }
 
-        fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &[u8], _flags: u32) -> Result<()> {
+        fn Setxattr(
+            &self,
+            _dir: &mut Inode,
+            _name: &str,
+            _value: &[u8],
+            _flags: u32,
+        ) -> Result<()> {
             return Err(Error::None);
         }
 

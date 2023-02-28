@@ -27,6 +27,7 @@ pub mod flags;
 pub mod fsutil;
 pub mod host;
 pub mod inode_overlay;
+pub mod inotify;
 pub mod lock;
 pub mod mount;
 pub mod mount_overlay;
@@ -37,7 +38,6 @@ pub mod sys;
 pub mod timerfd;
 pub mod tmpfs;
 pub mod tty;
-pub mod inotify;
 
 pub fn Init() {
     self::tty::Init();
