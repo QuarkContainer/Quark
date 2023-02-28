@@ -115,16 +115,15 @@ impl DirDataNodeTrait for SubTasksNode {
     }
 }
 
-pub fn NewSubTasksFile(
-    thread: &Thread,
-    pidns: &PIDNamespace,
-) -> DynamicDirFileOperations {
+pub fn NewSubTasksFile(thread: &Thread, pidns: &PIDNamespace) -> DynamicDirFileOperations {
     let subTaskFile = SubTasksFileNode {
         thread: thread.clone(),
         pidns: pidns.clone(),
     };
 
-    return DynamicDirFileOperations { node: subTaskFile.into() };
+    return DynamicDirFileOperations {
+        node: subTaskFile.into(),
+    };
 }
 
 #[derive(Clone)]

@@ -227,9 +227,7 @@ impl InodeOperations for Symlink {
     }
 
     fn Setxattr(&self, _dir: &mut Inode, name: &str, value: &[u8], _flags: u32) -> Result<()> {
-        self.write()
-            .xattrs
-            .insert(name.to_string(), value.to_vec());
+        self.write().xattrs.insert(name.to_string(), value.to_vec());
         return Ok(());
     }
 
@@ -245,7 +243,7 @@ impl InodeOperations for Symlink {
     fn Removexattr(&self, _dir: &Inode, name: &str) -> Result<()> {
         match self.write().xattrs.remove(name) {
             None => return Err(Error::SysError(SysErr::ENOATTR)),
-            Some(_) => return Ok(())
+            Some(_) => return Ok(()),
         }
     }
 

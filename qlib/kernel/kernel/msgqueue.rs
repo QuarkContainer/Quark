@@ -12,31 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
+use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use crate::qlib::mutex::*;
 use core::ops::Deref;
-use alloc::collections::vec_deque::VecDeque;
 
 use super::super::super::auth::userns::*;
 use super::super::super::auth::*;
 use super::super::super::common::*;
-use super::super::super::linux_def::*;
 use super::super::super::linux::ipc::*;
 use super::super::super::linux::msgqueue::*;
+use super::super::super::linux_def::*;
 use super::super::task::*;
-use super::waiter::*;
-use super::time::*;
 use super::ipc_namespace::*;
+use super::time::*;
+use super::waiter::*;
 
 // System-wide limit for maximum number of queues.
-pub const MAX_QUEUES : usize = MSGMNI;
+pub const MAX_QUEUES: usize = MSGMNI;
 
 // Maximum size of a queue in bytes.
-pub const MAX_QUEUE_BYTES : usize = MSGMNB;
+pub const MAX_QUEUE_BYTES: usize = MSGMNB;
 
 // Maximum size of a message in bytes.
-pub const MAX_MESSAGE_BYTES : usize = MSGMAX;
+pub const MAX_MESSAGE_BYTES: usize = MSGMAX;
 
 pub struct MQRegistryIntern(RegistryInternal<MsgQueue>);
 
@@ -49,12 +49,14 @@ impl Deref for MQRegistryIntern {
 }
 
 impl MQRegistryIntern {
-    pub fn NewQueue(&mut self,
-                    task: &Task,
-                    r: &MQRegistry,
-                    key: Key,
-                    creator: &FileOwner,
-                    perms: &FilePermissions) -> Result<Mechanism<MsgQueue>> {
+    pub fn NewQueue(
+        &mut self,
+        task: &Task,
+        r: &MQRegistry,
+        key: Key,
+        creator: &FileOwner,
+        perms: &FilePermissions,
+    ) -> Result<Mechanism<MsgQueue>> {
         let queue = MsgQueue {
             registry: r.clone(),
             dead: false,
@@ -67,11 +69,11 @@ impl MQRegistryIntern {
             byteCount: 0,
             maxBytes: MAX_QUEUE_BYTES as _,
             sendPID: 0,
-            receivePID: 0
+            receivePID: 0,
         };
         let mec = Mechanism::New(self.userNS.clone(), key, creator, creator, perms, queue);
         self.0.Register(Mechanism::from(mec.clone()))?;
-        return Ok(mec)
+        return Ok(mec);
     }
 }
 
@@ -89,37 +91,39 @@ impl Deref for MQRegistry {
 impl MQRegistry {
     pub fn New(userNS: &UserNameSpace) -> Self {
         let intern = RegistryInternal::New(userNS);
-        return Self(Arc::new(QMutex::new(MQRegistryIntern(intern))))
+        return Self(Arc::new(QMutex::new(MQRegistryIntern(intern))));
     }
 
     // FindOrCreate creates a new message queue or returns an existing one. See
     // msgget(2).
-    pub fn FindOrCreate(&self,
-                        task: &Task,
-                        key: Key,
-                        mode: &FileMode,
-                        private: bool,
-                        create: bool,
-                        exclusive: bool) -> Result<Mechanism<MsgQueue>> {
+    pub fn FindOrCreate(
+        &self,
+        task: &Task,
+        key: Key,
+        mode: &FileMode,
+        private: bool,
+        create: bool,
+        exclusive: bool,
+    ) -> Result<Mechanism<MsgQueue>> {
         let mut me = self.lock();
 
         if !private {
             let queue = me.Find(task, key, *mode, create, exclusive)?;
             match queue {
                 None => (),
-                Some(q) => return Ok(q)
+                Some(q) => return Ok(q),
             }
         }
 
         // Check system-wide limits.
         if me.ObjectCount() > MAX_QUEUES {
-            return Err(Error::SysError(SysErr::ENOSPC))
+            return Err(Error::SysError(SysErr::ENOSPC));
         }
 
         let creator = task.FileOwner();
         let perms = FilePermissions::FromMode(*mode);
         let queue = me.NewQueue(task, self, key, &creator, &perms)?;
-        return Ok(queue)
+        return Ok(queue);
     }
 
     // Remove removes the queue with specified ID. All waiters (readers and
@@ -128,7 +132,7 @@ impl MQRegistry {
     pub fn Remove(&self, id: ID, creds: &Credentials) -> Result<()> {
         let mut me = self.lock();
         me.0.Remove(id, creds)?;
-        return Ok(())
+        return Ok(());
     }
 
     // FindByID returns the queue with the specified ID and an error if the ID
@@ -138,7 +142,7 @@ impl MQRegistry {
 
         match me.FindById(id) {
             None => return Err(Error::SysError(SysErr::EINVAL)),
-            Some(q) => return Ok(q)
+            Some(q) => return Ok(q),
         }
     }
 
@@ -146,14 +150,14 @@ impl MQRegistry {
     pub fn IPCInfo(&self, _task: &Task) -> MsgInfo {
         return MsgInfo {
             MsgPool: MSGPOOL as _,
-            MsgMap:  MSGMAP as _,
-            MsgMax:  MSGMAX as _,
-            MsgMnb:  MSGMNB as _,
-            MsgMni:  MSGMNI as _,
-            MsgSsz:  MSGSSZ as _,
-            MsgTql:  MSGTQL as _,
+            MsgMap: MSGMAP as _,
+            MsgMax: MSGMAX as _,
+            MsgMnb: MSGMNB as _,
+            MsgMni: MSGMNI as _,
+            MsgSsz: MSGSSZ as _,
+            MsgTql: MSGTQL as _,
             MsgSeg: MSGSEG as _,
-        }
+        };
     }
 
     // MsgInfo reports global parameters for message queues. See msgctl(MSG_INFO).
@@ -162,7 +166,7 @@ impl MQRegistry {
 
         let mut messages = 0;
         let mut bytes = 0;
-        me.ForAllObjects(&mut |m : &Mechanism<MsgQueue>| {
+        me.ForAllObjects(&mut |m: &Mechanism<MsgQueue>| {
             let q = &m.lock().obj;
             messages += q.messages.len();
             bytes += q.byteCount;
@@ -170,16 +174,15 @@ impl MQRegistry {
 
         return MsgInfo {
             MsgPool: me.ObjectCount() as _,
-            MsgMap:  messages as _,
-            MsgTql:  bytes as _,
-            MsgMax:  MSGMAX as _,
-            MsgMnb:  MSGMNB as _,
-            MsgMni:  MSGMNI as _,
-            MsgSsz:  MSGSSZ as _,
+            MsgMap: messages as _,
+            MsgTql: bytes as _,
+            MsgMax: MSGMAX as _,
+            MsgMnb: MSGMNB as _,
+            MsgMni: MSGMNI as _,
+            MsgSsz: MSGSSZ as _,
             MsgSeg: MSGSEG as _,
-        }
+        };
     }
-
 }
 
 // Queue represents a SysV message queue, described by sysvipc(7).
@@ -227,9 +230,9 @@ pub struct MsgQueue {
 }
 
 impl Mechanism<MsgQueue> {
-     // Send appends a message to the message queue, and returns an error if sending
+    // Send appends a message to the message queue, and returns an error if sending
     // fails. See msgsnd(2).
-    pub fn Send(&self, task: &Task, m: &Message, wait:  bool, pid: i32) -> Result<()> {
+    pub fn Send(&self, task: &Task, m: &Message, wait: bool, pid: i32) -> Result<()> {
         let creds = task.creds.clone();
 
         match self.Push(task, m, &creds, pid) {
@@ -239,7 +242,7 @@ impl Mechanism<MsgQueue> {
         }
 
         if !wait {
-            return Err(Error::SysError(SysErr::EWOULDBLOCK))
+            return Err(Error::SysError(SysErr::EWOULDBLOCK));
         }
 
         // Slow path: at this point, the queue was found to be full, and we were
@@ -257,9 +260,7 @@ impl Mechanism<MsgQueue> {
             }
 
             match task.blocker.BlockWithMonoTimer(true, None) {
-                Err(Error::ErrInterrupted) => {
-                    return Err(Error::SysError(SysErr::ERESTARTSYS))
-                },
+                Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
                 Err(e) => {
                     return Err(e);
                 }
@@ -282,10 +283,13 @@ impl Mechanism<MsgQueue> {
         }
 
         let mut mech = self.lock();
-        if !mech.checkPermission(cred, &PermMask {
-            write: true,
-            ..Default::default()
-        }) {
+        if !mech.checkPermission(
+            cred,
+            &PermMask {
+                write: true,
+                ..Default::default()
+            },
+        ) {
             // The calling process does not have write permission on the message
             // queue, and does not have the CAP_IPC_OWNER capability in the user
             // namespace that governs its IPC namespace.
@@ -330,17 +334,19 @@ impl Mechanism<MsgQueue> {
 
         // Notify receivers about the new message.
         q.receivers.Notify(EVENT_IN);
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn Receive(&self,
-                   task: &Task,
-                   mType: i64,
-                   maxSize: i64,
-                   wait: bool,
-                   truncate: bool,
-                   except: bool,
-                   pid: i32) -> Result<Message> {
+    pub fn Receive(
+        &self,
+        task: &Task,
+        mType: i64,
+        maxSize: i64,
+        wait: bool,
+        truncate: bool,
+        except: bool,
+        pid: i32,
+    ) -> Result<Message> {
         if maxSize < 0 || maxSize > MAX_MESSAGE_BYTES as _ {
             return Err(Error::SysError(SysErr::EINVAL));
         }
@@ -350,11 +356,11 @@ impl Mechanism<MsgQueue> {
         match self.Pop(task, &creds, mType, max, truncate, except, pid) {
             Err(Error::SysError(SysErr::EWOULDBLOCK)) => (),
             Err(e) => return Err(e),
-            Ok(m) => return Ok(m)
+            Ok(m) => return Ok(m),
         }
 
         if !wait {
-            return Err(Error::SysError(SysErr::ENOMSG))
+            return Err(Error::SysError(SysErr::ENOMSG));
         }
 
         // Slow path: at this point, the queue was found to be full, and we were
@@ -369,13 +375,11 @@ impl Mechanism<MsgQueue> {
             match self.Pop(task, &creds, mType, max, truncate, except, pid) {
                 Err(Error::SysError(SysErr::EWOULDBLOCK)) => (),
                 Err(e) => return Err(e),
-                Ok(m) => return Ok(m)
+                Ok(m) => return Ok(m),
             }
 
             match task.blocker.BlockWithMonoTimer(true, None) {
-                Err(Error::ErrInterrupted) => {
-                    return Err(Error::SysError(SysErr::ERESTARTSYS))
-                },
+                Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
                 Err(e) => {
                     return Err(e);
                 }
@@ -388,20 +392,24 @@ impl Mechanism<MsgQueue> {
     // returns an error for all the cases specified in msgrcv(2). If the queue is
     // empty or no message of the specified type is available, a EWOULDBLOCK error
     // is returned, which can then be used as a signal to block the process or fail.
-    pub fn Pop(&self,
-               task: &Task,
-               creds: &Credentials,
-               mType: i64,
-               maxSize: u64,
-               truncate: bool,
-               except: bool,
-               pid: i32) -> Result<Message> {
-
+    pub fn Pop(
+        &self,
+        task: &Task,
+        creds: &Credentials,
+        mType: i64,
+        maxSize: u64,
+        truncate: bool,
+        except: bool,
+        pid: i32,
+    ) -> Result<Message> {
         let mut mech = self.lock();
-        if !mech.checkPermission(creds, &PermMask {
-            read: true,
-            ..Default::default()
-        }) {
+        if !mech.checkPermission(
+            creds,
+            &PermMask {
+                read: true,
+                ..Default::default()
+            },
+        ) {
             // The calling process does not have read permission on the message
             // queue, and does not have the CAP_IPC_OWNER capability in the user
             // namespace that governs its IPC namespace.
@@ -432,7 +440,8 @@ impl Mechanism<MsgQueue> {
                     idx = i;
                 }
             }
-        } else { //mType == 0
+        } else {
+            //mType == 0
             match q.msgOfTypeLessThan(-mType) {
                 None => return Err(Error::SysError(SysErr::EWOULDBLOCK)),
                 Some((m, i)) => {
@@ -458,7 +467,7 @@ impl Mechanism<MsgQueue> {
         // Notify senders about available space.
         q.senders.Notify(EVENT_OUT);
 
-        return Ok(msg)
+        return Ok(msg);
     }
 
     // Set modifies some values of the queue. See msgctl(IPC_SET).
@@ -467,7 +476,8 @@ impl Mechanism<MsgQueue> {
 
         let creds = task.creds.clone();
         if ds.MsgQbytes > MAX_QUEUE_BYTES as _
-            && !creds.HasCapabilityIn(Capability::CAP_SYS_RESOURCE, &mech.userNS) {
+            && !creds.HasCapabilityIn(Capability::CAP_SYS_RESOURCE, &mech.userNS)
+        {
             // "An attempt (IPC_SET) was made to increase msg_qbytes beyond the
             // system parameter MSGMNB, but the caller is not privileged (Linux:
             // does not have the CAP_SYS_RESOURCE capability)."
@@ -479,13 +489,19 @@ impl Mechanism<MsgQueue> {
         let q = &mut mech.obj;
         q.maxBytes = ds.MsgQbytes;
         q.changeTime = task.Now();
-        return Ok(())
+        return Ok(());
     }
 
     // Stat returns a MsqidDS object filled with information about the queue. See
     // msgctl(IPC_STAT) and msgctl(MSG_STAT).
     pub fn Stat(&self, task: &Task) -> Result<MsqidDS> {
-        return self.stat(task, &PermMask {read: true, ..Default::default()});
+        return self.stat(
+            task,
+            &PermMask {
+                read: true,
+                ..Default::default()
+            },
+        );
     }
 
     // StatAny is similar to Queue.Stat, but doesn't require read permission. See
@@ -521,16 +537,16 @@ impl Mechanism<MsgQueue> {
                 Seq: 0,
                 ..Default::default()
             },
-            MsgStime:  q.sendTime.TimeT(),
-            MsgRtime:  q.receiveTime.TimeT(),
-            MsgCtime:  q.changeTime.TimeT(),
+            MsgStime: q.sendTime.TimeT(),
+            MsgRtime: q.receiveTime.TimeT(),
+            MsgCtime: q.changeTime.TimeT(),
             MsgCbytes: q.byteCount,
-            MsgQnum:   q.messages.len() as _,
+            MsgQnum: q.messages.len() as _,
             MsgQbytes: q.maxBytes,
-            MsgLspid:  q.sendPID,
-            MsgLrpid:  q.receivePID,
+            MsgLspid: q.sendPID,
+            MsgLrpid: q.receivePID,
             ..Default::default()
-        })
+        });
     }
 }
 
@@ -567,20 +583,20 @@ impl MsgQueue {
             for i in 0..self.messages.len() {
                 let m = self.messages[i].clone();
                 if m.Type() != mType {
-                    return Some((m, i))
+                    return Some((m, i));
                 }
             }
 
-            return None
+            return None;
         } else {
             for i in 0..self.messages.len() {
                 let m = self.messages[i].clone();
                 if m.Type() == mType {
-                    return Some((m, i))
+                    return Some((m, i));
                 }
             }
 
-            return None
+            return None;
         }
     }
 
@@ -597,13 +613,13 @@ impl MsgQueue {
             }
         }
 
-        return m
+        return m;
     }
 
     // msgAtIndex returns a pointer to a message at given index, nil if non exits.
     pub fn msgAtIndex(&self, mType: i64) -> Option<Message> {
-        if self.messages.len() < (mType+1) as _ {
-            return None
+        if self.messages.len() < (mType + 1) as _ {
+            return None;
         }
         return Some(self.messages[mType as usize].clone());
     }
@@ -641,15 +657,15 @@ impl Message {
             Text: Text,
         };
 
-        return Self(Arc::new(QMutex::new(intern)))
+        return Self(Arc::new(QMutex::new(intern)));
     }
 
     pub fn Type(&self) -> i64 {
-        return self.lock().Type
+        return self.lock().Type;
     }
 
     pub fn Size(&self) -> u64 {
-        return self.lock().Size
+        return self.lock().Size;
     }
 
     pub fn Truncate(&self, maxSize: usize) {
@@ -669,6 +685,6 @@ impl Message {
             Size: self.Size(),
         };
 
-        return Self(Arc::new(QMutex::new(intern)))
+        return Self(Arc::new(QMutex::new(intern)));
     }
 }

@@ -12,13 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::collections::VecDeque;
 use core::mem;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use alloc::collections::VecDeque;
 use crossbeam_queue::ArrayQueue;
 
-use crate::vmspace::kernel::GlobalIOMgr;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::mutex::QMutex;
@@ -28,6 +27,7 @@ use super::super::qlib::uring::*;
 use super::super::util::*;
 use super::super::*;
 use super::syscall::*;
+use crate::vmspace::kernel::GlobalIOMgr;
 
 impl Mmap {
     pub fn new(fd: i32, offset: u64, len: usize) -> Result<Mmap> {
@@ -141,7 +141,7 @@ impl IoUring {
         let mut count = 0;
 
         let mut cq = self.cq.lock();
-        
+
         loop {
             let cqe = cq.next();
             match cqe {
@@ -158,7 +158,7 @@ impl IoUring {
             }
         }
 
-        return count
+        return count;
     }
 
     #[inline]
@@ -170,14 +170,14 @@ impl IoUring {
             {
                 let mut sq = self.sq.lock();
                 let mut submitq = self.submitq.lock();
-                if sq.dropped()!=0 {
+                if sq.dropped() != 0 {
                     error!("uring fail dropped {}", sq.dropped());
                 }
 
                 if sq.cq_overflow() {
                     error!("uring fail overflow")
                 }
-                assert!(sq.dropped()==0, "dropped {}", sq.dropped());
+                assert!(sq.dropped() == 0, "dropped {}", sq.dropped());
                 assert!(!sq.cq_overflow());
 
                 while sq.freeSlot() > 0 {
@@ -201,9 +201,8 @@ impl IoUring {
                 let ret = self.SubmitEntry(count)?;
                 return Ok(ret);
             } else {
-                return Ok(0)
+                return Ok(0);
             }
-
         } else {
             let count = self.pendingCnt.swap(0, Ordering::Acquire);
             if count == 0 {

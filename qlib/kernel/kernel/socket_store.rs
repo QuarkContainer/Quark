@@ -13,10 +13,10 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ops::Deref;
-use alloc::collections::btree_map::BTreeMap;
 
 use super::super::fs::file::*;
 
@@ -54,10 +54,13 @@ impl SocketStore {
         }
 
         store.nextRecord += 1;
-        store.sockets.insert(sockId, SocketRecord {
-            id: rid,
-            socket: sock.Downgrade(),
-        });
+        store.sockets.insert(
+            sockId,
+            SocketRecord {
+                id: rid,
+                socket: sock.Downgrade(),
+            },
+        );
     }
 
     pub fn DeleteSocket(&self, sock: &File) {

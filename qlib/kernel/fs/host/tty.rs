@@ -443,7 +443,9 @@ impl TTYFileOps {
             session: None,
             fgProcessgroup: None,
             fd: fd,
-            buf: SocketBuff(Arc::new(SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT))),
+            buf: SocketBuff(Arc::new(SocketBuffIntern::Init(
+                MemoryDef::DEFAULT_BUF_PAGE_COUNT,
+            ))),
             queue: queue,
         };
 
@@ -578,7 +580,7 @@ impl FileOperations for TTYFileOps {
 
         let size = IoVec::NumBytes(srcs);
         if size == 0 {
-            return Ok(0)
+            return Ok(0);
         }
 
         if SHARESPACE.config.read().UringIO && ENABLE_RINGBUF {
@@ -586,14 +588,7 @@ impl FileOperations for TTYFileOps {
             let queue = self.lock().queue.clone();
             let ringBuf = self.lock().buf.clone();
 
-            return QUring::RingFileWrite(
-                task,
-                fd,
-                queue,
-                ringBuf,
-                srcs,
-                Arc::new(self.clone()),
-            );
+            return QUring::RingFileWrite(task, fd, queue, ringBuf, srcs, Arc::new(self.clone()));
         }
 
         let fops = self.lock().fileOps.clone();

@@ -73,7 +73,7 @@ impl AccessType {
             flags &= PageTableFlags::NO_EXECUTE;
         }
 
-        return flags
+        return flags;
     }
 
     pub fn New(read: bool, write: bool, exec: bool) -> Self {

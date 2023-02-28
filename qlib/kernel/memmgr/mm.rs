@@ -18,13 +18,13 @@ use alloc::sync::Arc;
 use alloc::sync::Weak;
 use alloc::vec::Vec;
 use core::ops::Deref;
-use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicBool;
+use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use x86_64::structures::paging::PageTableFlags;
 
-use crate::qlib::mutex::*;
 use crate::kernel_def::Invlpg;
+use crate::qlib::mutex::*;
 
 use super::super::super::addr::*;
 use super::super::super::auxv::*;
@@ -119,15 +119,15 @@ impl MMMetadata {
         let mut auxv = Vec::new();
         for a in &self.auxv {
             auxv.push(*a)
-        };
+        }
 
         return Self {
             argv: self.argv,
             envv: self.envv,
             auxv: auxv,
             executable: self.executable.clone(),
-            dumpability: self.dumpability
-        }
+            dumpability: self.dumpability,
+        };
     }
 }
 
@@ -307,15 +307,11 @@ impl MemoryManager {
     }
 
     pub fn EnableMembarrierPrivate(&self) {
-        return self
-            .membarrierPrivateEnabled
-            .store(true, Ordering::Release);
+        return self.membarrierPrivateEnabled.store(true, Ordering::Release);
     }
 
     pub fn IsMembarrierPrivateEnabled(&self) -> bool {
-        return self
-            .membarrierPrivateEnabled
-            .load(Ordering::Acquire);
+        return self.membarrierPrivateEnabled.load(Ordering::Acquire);
     }
 
     pub fn Downgrade(&self) -> MemoryManagerWeak {
@@ -360,11 +356,10 @@ impl MemoryManager {
                 }
             }
 
-             //CPULocal::Myself().pageAllocator.lock().Clean();
+            //CPULocal::Myself().pageAllocator.lock().Clean();
         }
 
         self.pagetable.read().pt.FreePages();
-
     }
 
     pub fn ClearVcpu(&self, vcpu: usize) {
@@ -420,7 +415,8 @@ impl MemoryManager {
             let vma = vseg.Value();
 
             if !vma.kernel {
-                vma.mappable.RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
+                vma.mappable
+                    .RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
             }
             let vgap = mapping.vmas.Remove(&vseg);
             vseg = vgap.NextSeg();
@@ -481,7 +477,8 @@ impl MemoryManager {
             let vma = vseg.Value();
 
             if !vma.kernel {
-                vma.mappable.RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
+                vma.mappable
+                    .RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
 
                 mapping.usageAS -= r.Len();
                 if vma.mlockMode != MLockMode::MlockNone {
@@ -503,11 +500,13 @@ impl MemoryManager {
     // SHOULD be called before return to user space,
     // to make sure the tlb flushed
     pub fn HandleTlbShootdown(&self) {
-        let localTLBEpoch   = CPULocal::Myself().tlbEpoch.load(Ordering::Relaxed);
+        let localTLBEpoch = CPULocal::Myself().tlbEpoch.load(Ordering::Relaxed);
         let currTLBEpoch = self.TLBEpoch();
-            
+
         if localTLBEpoch != currTLBEpoch {
-            CPULocal::Myself().tlbEpoch.store(currTLBEpoch, Ordering::Relaxed);
+            CPULocal::Myself()
+                .tlbEpoch
+                .store(currTLBEpoch, Ordering::Relaxed);
             let curr = super::super::super::super::asm::CurrentCr3();
             PageTables::Switch(curr);
         }
@@ -733,15 +732,20 @@ impl MemoryManager {
             let creds = task.creds.clone();
             let userns = creds.lock().UserNamespace.Root();
             if !creds.HasCapabilityIn(Capability::CAP_IPC_LOCK, &userns) {
-                let mlockLimit = task.Thread().ThreadGroup().Limits().Get(LimitType::MemoryLocked).Cur;
+                let mlockLimit = task
+                    .Thread()
+                    .ThreadGroup()
+                    .Limits()
+                    .Get(LimitType::MemoryLocked)
+                    .Cur;
                 if mlockLimit == 0 {
-                    return Err(Error::SysError(SysErr::EPERM))
+                    return Err(Error::SysError(SysErr::EPERM));
                 }
 
                 let lockedAS = self.mapping.lock().lockedAS;
                 let newLockedAS = lockedAS + ar.Len() + self.mlockedBytesRangeLocked(&ar);
                 if newLockedAS > mlockLimit {
-                    return Err(Error::SysError(SysErr::ENOMEM))
+                    return Err(Error::SysError(SysErr::ENOMEM));
                 }
             }
         }
@@ -828,13 +832,18 @@ impl MemoryManager {
                 let creds = task.creds.clone();
                 let userns = creds.lock().UserNamespace.Root();
                 if !creds.HasCapabilityIn(Capability::CAP_IPC_LOCK, &userns) {
-                    let mlockLimit = task.Thread().ThreadGroup().Limits().Get(LimitType::MemoryLocked).Cur;
+                    let mlockLimit = task
+                        .Thread()
+                        .ThreadGroup()
+                        .Limits()
+                        .Get(LimitType::MemoryLocked)
+                        .Cur;
                     if mlockLimit == 0 {
-                        return Err(Error::SysError(SysErr::EPERM))
+                        return Err(Error::SysError(SysErr::EPERM));
                     }
 
                     if self.mapping.lock().vmas.Span() > mlockLimit {
-                        return Err(Error::SysError(SysErr::EPERM))
+                        return Err(Error::SysError(SysErr::EPERM));
                     }
                 }
             }
@@ -1034,7 +1043,7 @@ impl MemoryManager {
                 let phyAddr = iops.MapFilePage(task, fileOffset)?;
                 //error!("fault 2.1, vma.mappable.is_some() is {}, vaddr is {:x}, paddr is {:x}",
                 //      vma.mappable.is_some(), pageAddr, phyAddr);
-                
+
                 if vma.private {
                     //self.MapPageReadLocked(pageAddr, phyAddr, exec);
 
@@ -1179,7 +1188,7 @@ impl MemoryManager {
             self.FixPermissionLocked(task, &rl, iov.Start(), iov.Len() as u64, writable, false)?;
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn V2PLocked(
@@ -1330,7 +1339,8 @@ impl MemoryManager {
                 Ok(ret) => ret,
             };
 
-            if !permission.Read() { // No read permission
+            if !permission.Read() {
+                // No read permission
                 if !allowPartial || addr < vAddr {
                     return Err(Error::SysError(SysErr::EFAULT));
                 }

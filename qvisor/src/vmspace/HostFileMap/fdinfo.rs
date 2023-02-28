@@ -237,7 +237,7 @@ impl FdInfo {
     }
 
     pub fn Recvfrom(sockfd: i32, buf: u64, size: usize, flags: i32, addr: u64, len: u64) -> i64 {
-        let ret = unsafe { recvfrom(sockfd, buf as  _, size, flags, addr as _, len as _) };
+        let ret = unsafe { recvfrom(sockfd, buf as _, size, flags, addr as _, len as _) };
         return SysRet(ret as i64);
     }
 
@@ -376,7 +376,10 @@ impl FdInfo {
     }
 
     pub fn IOFcntl(&self, cmd: i32, arg: u64) -> i64 {
-        assert!(cmd == Cmd::F_GETFL || cmd == Cmd::F_GET_SEALS || cmd == Cmd::F_ADD_SEALS, "we only support Cmd::F_GETFL in Fcntl");
+        assert!(
+            cmd == Cmd::F_GETFL || cmd == Cmd::F_GET_SEALS || cmd == Cmd::F_ADD_SEALS,
+            "we only support Cmd::F_GETFL in Fcntl"
+        );
         if cmd == Cmd::F_GETFL {
             return self.lock().GetFlags() as i64;
         } else {

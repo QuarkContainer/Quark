@@ -22,16 +22,6 @@ use core::ops::Deref;
 
 use crate::qlib::mutex::*;
 
-use super::fs::*;
-use super::super::fs::file::*;
-use super::super::fs::host::tty::*;
-use super::super::fs::mount::*;
-use super::super::kernel::ipc_namespace::*;
-use super::super::kernel::kernel::*;
-use super::super::kernel::uts_namespace::*;
-use super::super::kernel::waiter::qlock::*;
-use super::super::SHARESPACE;
-use super::super::SignalDef::*;
 use super::super::super::auth;
 use super::super::super::auth::cap_set::*;
 use super::super::super::auth::id::*;
@@ -41,9 +31,19 @@ use super::super::super::cpuid::*;
 use super::super::super::limits::*;
 use super::super::super::linux_def::*;
 use super::super::super::loader::*;
+use super::super::fs::file::*;
+use super::super::fs::host::tty::*;
+use super::super::fs::mount::*;
+use super::super::kernel::ipc_namespace::*;
+use super::super::kernel::kernel::*;
+use super::super::kernel::uts_namespace::*;
+use super::super::kernel::waiter::qlock::*;
 use super::super::task::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::thread_group::*;
+use super::super::SignalDef::*;
+use super::super::SHARESPACE;
+use super::fs::*;
 
 impl Process {
     pub fn TaskCaps(&self) -> TaskCaps {
@@ -388,10 +388,10 @@ impl Loader {
             let ttyops = fileops.TTYFileOps().unwrap();
 
             /*let ttyops = fileops
-                .as_any()
-                .downcast_ref::<TTYFileOps>()
-                .expect("TTYFileOps convert fail")
-                .clone();*/
+            .as_any()
+            .downcast_ref::<TTYFileOps>()
+            .expect("TTYFileOps convert fail")
+            .clone();*/
 
             ttyops.InitForegroundProcessGroup(&tg.ProcessGroup().unwrap());
             ttyFileOps = Some(ttyops)

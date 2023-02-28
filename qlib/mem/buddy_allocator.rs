@@ -251,7 +251,7 @@ impl LinkedList {
     }
 
     pub fn Count(&self) -> usize {
-        let mut count =  0;
+        let mut count = 0;
         for _ in self.iter() {
             count += 1;
         }
@@ -269,7 +269,7 @@ impl LinkedList {
             arr[idx] = addr;
             idx += 1;
         }
-        
+
         return idx;
         */
 
@@ -277,14 +277,13 @@ impl LinkedList {
         let mut idx = 0;
         while addr != 0 && idx < arr.len() {
             arr[idx] = addr;
-            let item : * const usize = addr as * const usize;
-            addr = unsafe { * item};
+            let item: *const usize = addr as *const usize;
+            addr = unsafe { *item };
 
             idx += 1;
-
         }
-        
-        return idx;       
+
+        return idx;
     }
 
     /// Return an iterator over the items in the list

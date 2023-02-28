@@ -20,8 +20,6 @@ pub mod squeue;
 pub mod submit;
 pub mod sys;
 
-use alloc::collections::VecDeque;
-use crossbeam_queue::ArrayQueue;
 pub use self::cqueue::CompletionQueue;
 use self::porting::*;
 pub use self::register::Probe;
@@ -29,8 +27,10 @@ pub use self::squeue::SubmissionQueue;
 pub use self::submit::Submitter;
 use self::util::{Fd, Mmap};
 use super::common::*;
-use super::mutex::*;
 use super::linux_def::*;
+use super::mutex::*;
+use alloc::collections::VecDeque;
+use crossbeam_queue::ArrayQueue;
 
 use core::sync::atomic::AtomicU64;
 
@@ -72,7 +72,7 @@ impl Default for IoUring {
             cq: Default::default(),
             submitq: Default::default(),
             completeq: ArrayQueue::new(MemoryDef::QURING_SIZE),
-        }
+        };
     }
 }
 
@@ -105,7 +105,7 @@ unsafe impl Sync for IoUring {}
 
 impl IoUring {
     pub fn Addr(&self) -> u64 {
-        return self as * const _ as u64;
+        return self as *const _ as u64;
     }
 
     #[inline]

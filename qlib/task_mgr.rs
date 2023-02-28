@@ -18,11 +18,11 @@ use alloc::collections::vec_deque::VecDeque;
 use alloc::string::String;
 use alloc::vec::Vec;
 use cache_padded::CachePadded;
+use core::cmp::PartialEq;
+use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
-use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::Ordering;
-use core::cmp::PartialEq;
 
 use super::kernel::arch::x86_64::arch_x86::*;
 
@@ -167,9 +167,9 @@ impl Scheduler {
     pub fn ReadyForHibernate(&self) -> bool {
         // Hibernate needs to wait all vcpu is halt
         // there are 2 exception: first is io_thread, second is the hibernate vcpu
-        let ret = self.HaltVcpuCnt() + 2 == self.vcpuCnt; 
+        let ret = self.HaltVcpuCnt() + 2 == self.vcpuCnt;
         //error!("ReadyForHibernate haltvcpu {}, vcpu count is {}", self.HaltVcpuCnt(), self.vcpuCnt);
-        return ret; 
+        return ret;
     }
 
     pub fn ReadyTaskCnt(&self, vcpuId: usize) -> u64 {
@@ -197,7 +197,6 @@ impl Scheduler {
         let cnt = self.readyTaskCnt.fetch_sub(1, Ordering::SeqCst) - 1;
         return cnt;
     }
-
 
     pub fn ScheduleQ(&self, task: TaskId, vcpuId: u64, cpuAff: bool) {
         if self.queue[vcpuId as usize].Enqueue(task, cpuAff) {
@@ -262,10 +261,10 @@ impl Scheduler {
 }
 
 #[derive(Debug)]
-pub struct TaskQueueIntern{
+pub struct TaskQueueIntern {
     pub workingTask: TaskId,
     pub workingTaskReady: bool,
-    pub queue: VecDeque<TaskId>
+    pub queue: VecDeque<TaskId>,
 }
 
 impl Default for TaskQueueIntern {
@@ -274,14 +273,14 @@ impl Default for TaskQueueIntern {
             workingTask: TaskId::New(0),
             workingTaskReady: false,
             queue: VecDeque::with_capacity(8),
-        }
+        };
     }
 }
 
 #[derive(Debug)]
-pub struct TaskQueue{
+pub struct TaskQueue {
     pub queueSize: AtomicUsize,
-    pub data: QMutex<TaskQueueIntern>
+    pub data: QMutex<TaskQueueIntern>,
 }
 
 impl Default for TaskQueue {
@@ -294,8 +293,8 @@ impl TaskQueue {
     pub fn New() -> Self {
         return Self {
             queueSize: AtomicUsize::new(0),
-            data: QMutex::new(TaskQueueIntern::default())
-        }
+            data: QMutex::new(TaskQueueIntern::default()),
+        };
     }
 
     // used by the vcpu owner to get next task
@@ -303,13 +302,11 @@ impl TaskQueue {
         let mut data = self.data.lock();
         if data.workingTaskReady {
             data.workingTaskReady = false;
-            return Some((data.workingTask, false))
+            return Some((data.workingTask, false));
         }
 
         match data.queue.pop_front() {
-            None => {
-                return None
-            },
+            None => return None,
             Some(taskId) => {
                 self.queueSize.fetch_sub(1, Ordering::Release);
                 data.workingTask = taskId;
@@ -322,23 +319,23 @@ impl TaskQueue {
         let mut data = self.data.lock();
         if data.workingTaskReady {
             data.workingTaskReady = false;
-            return Some(data.workingTask)
+            return Some(data.workingTask);
         } else {
             data.workingTask = TaskId::New(0);
-            return None
+            return None;
         }
     }
 
     // return: None: No working task fouond
     // Some(task) => there is workingtask set,
-     pub fn SwapWoringTask(&self, task: TaskId) -> Option<TaskId> {
+    pub fn SwapWoringTask(&self, task: TaskId) -> Option<TaskId> {
         let mut data = self.data.lock();
         if data.workingTaskReady {
             data.workingTaskReady = false;
             return Some(data.workingTask);
         } else {
             data.workingTask = task;
-            return None
+            return None;
         }
     }
 
@@ -357,7 +354,7 @@ impl TaskQueue {
                         Some(taskId) => {
                             if taskId.GetTask().context.Ready() != 0 {
                                 self.queueSize.fetch_sub(1, Ordering::Release);
-                                return Some(taskId)
+                                return Some(taskId);
                             }
                             data.queue.push_back(taskId)
                         }
@@ -389,6 +386,6 @@ impl TaskQueue {
     }
 
     pub fn Len(&self) -> u64 {
-        return self.queueSize.load(Ordering::Acquire) as u64
+        return self.queueSize.load(Ordering::Acquire) as u64;
     }
 }

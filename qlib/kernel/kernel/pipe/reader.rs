@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::sync::Arc;
 use core::any::Any;
 use core::ops::Deref;
-use alloc::sync::Arc;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;

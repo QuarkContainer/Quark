@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::kernel_def::HyperCall64;
 use super::super::common::*;
 use super::super::config::*;
 use super::super::linux_def::*;
@@ -20,6 +19,7 @@ use super::super::qmsg;
 use super::super::qmsg::*;
 use super::super::socket_buf::*;
 use super::super::*;
+use crate::kernel_def::HyperCall64;
 
 extern "C" {
     pub fn rdtsc() -> i64;
@@ -53,7 +53,10 @@ impl HostSpace {
     }
 
     pub fn CreateMemfd(len: i64, flags: u32) -> i64 {
-        let mut msg = Msg::CreateMemfd(CreateMemfd { len: len, flags: flags });
+        let mut msg = Msg::CreateMemfd(CreateMemfd {
+            len: len,
+            flags: flags,
+        });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -347,16 +350,14 @@ impl HostSpace {
         let mut msg = Msg::Proxy(Proxy {
             cmd,
             addrIn,
-            addrOut
+            addrOut,
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn SwapInPage(addr: u64) -> i64 {
-        let mut msg = Msg::SwapInPage(SwapInPage {
-            addr
-        });
+        let mut msg = Msg::SwapInPage(SwapInPage { addr });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
@@ -443,7 +444,7 @@ impl HostSpace {
             name,
             value,
             size,
-            flags
+            flags,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
@@ -463,20 +464,13 @@ impl HostSpace {
     }
 
     pub fn FRemoveXattr(fd: i32, name: u64) -> i64 {
-        let mut msg = Msg::FRemoveXattr(FRemoveXattr {
-            fd,
-            name,
-        });
+        let mut msg = Msg::FRemoveXattr(FRemoveXattr { fd, name });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn FListXattr(fd: i32, list: u64, size: usize) -> i64 {
-        let mut msg = Msg::FListXattr(FListXattr {
-            fd,
-            list,
-            size,
-        });
+        let mut msg = Msg::FListXattr(FListXattr { fd, list, size });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }

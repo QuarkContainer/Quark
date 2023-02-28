@@ -67,14 +67,7 @@ pub fn TmpfsRename(
         Some(op) => op,
     };
 
-    Rename(
-        task,
-        op.into(),
-        oldname,
-        np.into(),
-        newname,
-        _replacement,
-    )
+    Rename(task, op.into(), oldname, np.into(), newname, _replacement)
 }
 
 pub fn NewTmpfsDir(

@@ -51,13 +51,13 @@ use super::fd_table::*;
 use super::ipc_namespace::*;
 use super::platform::*;
 use super::signal_handler::*;
+use super::socket_store::*;
+use super::syslog::*;
 use super::time::*;
 use super::timer::timekeeper::*;
 use super::timer::timer::*;
 use super::timer::*;
 use super::uts_namespace::*;
-use super::syslog::*;
-use super::socket_store::*;
 
 pub static ASYNC_PROCESS_TIMER: Singleton<Timer> = Singleton::<Timer>::New();
 
@@ -405,7 +405,10 @@ impl Kernel {
         envs: &Vec<String>,
         args: &mut Vec<String>,
     ) -> Result<(u64, u64, u64)> {
-        error!("LoadProcess filename: {:?} envs: {:?}, args: {:?}", fileName, envs, args);
+        error!(
+            "LoadProcess filename: {:?} envs: {:?}, args: {:?}",
+            fileName, envs, args
+        );
 
         if self.globalInit.lock().is_none() {
             panic!("kernel contains no tasks");

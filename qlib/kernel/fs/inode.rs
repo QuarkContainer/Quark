@@ -18,18 +18,18 @@ use spin::*;
 //use alloc::string::ToString;
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
+use alloc::sync::Weak;
 use core::any::Any;
 use core::ops::Deref;
-use alloc::sync::Weak;
 use enum_dispatch::enum_dispatch;
 
 use super::super::super::auth::*;
 use super::super::super::common::*;
-use super::super::super::linux_def::*;
-use super::super::super::qmsg::qcall::TmpfsFileType;
-use super::super::super::kernel::Kernel::HostSpace;
 use super::super::super::kernel::fs::filesystems::*;
 use super::super::super::kernel::fs::host::fs::*;
+use super::super::super::kernel::Kernel::HostSpace;
+use super::super::super::linux_def::*;
+use super::super::super::qmsg::qcall::TmpfsFileType;
 use super::super::kernel::time::*;
 use super::super::socket::unix::transport::unix::*;
 use super::super::task::*;
@@ -40,8 +40,8 @@ use super::dentry::*;
 use super::dirent::*;
 use super::file::*;
 use super::flags::*;
-use super::host::hostinodeop::*;
 use super::host::diriops::*;
+use super::host::hostinodeop::*;
 use super::inode_overlay::*;
 use super::lock::*;
 use super::mount::*;
@@ -55,24 +55,24 @@ use crate::qlib::kernel::fs::dev::tty::TTYDevice;
 use crate::qlib::kernel::fs::dev::zero::ZeroDevice;
 use crate::qlib::kernel::fs::fsutil::inode::SimpleFileInode;
 use crate::qlib::kernel::fs::host::fifoiops::FifoIops;
+use crate::qlib::kernel::fs::procfs::dir_proc::DirNode;
 use crate::qlib::kernel::fs::procfs::inode::StaticFileInodeOps;
 use crate::qlib::kernel::fs::procfs::inode::TaskOwnedInodeOps;
-use crate::qlib::kernel::fs::procfs::dir_proc::DirNode;
-use crate::qlib::kernel::fs::ramfs::socket::SocketInodeOps;
-use crate::qlib::kernel::kernel::pipe::node::PipeIops;
-use crate::qlib::kernel::fs::tty::slave::SlaveInodeOperations;
-use crate::qlib::kernel::fs::tty::master::MasterInodeOperations;
-use crate::qlib::kernel::fs::tty::dir::DirInodeOperations;
-use crate::qlib::kernel::fs::tmpfs::tmpfs_symlink::TmpfsSymlink;
-use crate::qlib::kernel::socket::unix::unix::UnixSocketInodeOps;
-use crate::qlib::kernel::fs::tmpfs::tmpfs_socket::TmpfsSocket;
-use crate::qlib::kernel::fs::tmpfs::tmpfs_fifo::TmpfsFifoInodeOp;
-use crate::qlib::kernel::fs::tmpfs::tmpfs_dir::TmpfsDir;
-use crate::qlib::kernel::fs::ramfs::symlink::Symlink;
-use crate::qlib::kernel::fs::ramfs::dir::Dir;
-use crate::qlib::kernel::fs::procfs::symlink_proc::SymlinkNode;
 use crate::qlib::kernel::fs::procfs::seqfile::SeqFile;
+use crate::qlib::kernel::fs::procfs::symlink_proc::SymlinkNode;
+use crate::qlib::kernel::fs::ramfs::dir::Dir;
+use crate::qlib::kernel::fs::ramfs::socket::SocketInodeOps;
+use crate::qlib::kernel::fs::ramfs::symlink::Symlink;
+use crate::qlib::kernel::fs::tmpfs::tmpfs_dir::TmpfsDir;
+use crate::qlib::kernel::fs::tmpfs::tmpfs_fifo::TmpfsFifoInodeOp;
 use crate::qlib::kernel::fs::tmpfs::tmpfs_file::TmpfsFileInodeOp;
+use crate::qlib::kernel::fs::tmpfs::tmpfs_socket::TmpfsSocket;
+use crate::qlib::kernel::fs::tmpfs::tmpfs_symlink::TmpfsSymlink;
+use crate::qlib::kernel::fs::tty::dir::DirInodeOperations;
+use crate::qlib::kernel::fs::tty::master::MasterInodeOperations;
+use crate::qlib::kernel::fs::tty::slave::SlaveInodeOperations;
+use crate::qlib::kernel::kernel::pipe::node::PipeIops;
+use crate::qlib::kernel::socket::unix::unix::UnixSocketInodeOps;
 
 pub fn ContextCanAccessFile(task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
     let creds = task.creds.clone();
@@ -189,70 +189,70 @@ impl Iops {
             Self::UnixSocketInodeOps(inner) => Some(inner.clone()),
             _ => None,
         }
-    } 
+    }
 
     pub fn HostInodeOp(&self) -> Option<HostInodeOp> {
         match self {
             Self::HostInodeOp(inner) => Some(inner.clone()),
             _ => None,
         }
-    } 
+    }
 
     pub fn TTYDevice(&self) -> Option<TTYDevice> {
         match self {
             Self::TTYDevice(inner) => Some(inner.clone()),
             _ => None,
         }
-    } 
+    }
 
     pub fn ProxyDevice(&self) -> Option<ProxyDevice> {
         match self {
             Self::ProxyDevice(inner) => Some(inner.clone()),
             _ => None,
         }
-    } 
+    }
 
     pub fn ZeroDevice(&self) -> Option<ZeroDevice> {
         match self {
             Self::ZeroDevice(inner) => Some(inner.clone()),
             _ => None,
         }
-    } 
+    }
 
     pub fn FullDevice(&self) -> Option<FullDevice> {
         match self {
             Self::FullDevice(inner) => Some(inner.clone()),
             _ => None,
         }
-    } 
+    }
 
     pub fn RandomDevice(&self) -> Option<RandomDevice> {
         match self {
             Self::RandomDevice(inner) => Some(inner.clone()),
             _ => None,
         }
-    } 
+    }
 
     pub fn Dir(&self) -> Option<Dir> {
         match self {
             Self::Dir(inner) => Some(inner.clone()),
             _ => None,
         }
-    } 
+    }
 
     pub fn TmpfsDir(&self) -> Option<TmpfsDir> {
         match self {
             Self::TmpfsDir(inner) => Some(inner.clone()),
             _ => None,
         }
-    } 
+    }
 
     pub fn SymlinkNode(&self) -> Option<SymlinkNode> {
         match self {
             Self::SymlinkNode(inner) => Some(inner.clone()),
             _ => None,
         }
-    } 
+    }
 
     pub fn PipeIops(&self) -> Option<PipeIops> {
         match self {
@@ -363,14 +363,14 @@ pub struct LockCtx {
 }
 
 #[derive(Clone)]
-pub struct InodeWeak (pub Weak<QMutex<InodeIntern>>);
+pub struct InodeWeak(pub Weak<QMutex<InodeIntern>>);
 
 impl InodeWeak {
     pub fn Upgrade(&self) -> Option<Inode> {
         return match self.0.upgrade() {
             None => None,
-            Some(n) => Some(Inode(n))
-        }
+            Some(n) => Some(Inode(n)),
+        };
     }
 }
 
@@ -420,7 +420,8 @@ impl Inode {
 
     pub fn NewTmpDirInode(task: &Task, root: &str) -> Result<Self> {
         let mut fstat = LibcStat::default();
-        let tmpDirfd = HostSpace::NewTmpfsFile(TmpfsFileType::Dir, &mut fstat as *mut _ as u64) as i32;
+        let tmpDirfd =
+            HostSpace::NewTmpfsFile(TmpfsFileType::Dir, &mut fstat as *mut _ as u64) as i32;
         if tmpDirfd < 0 {
             return Err(Error::SysError(-tmpDirfd));
         }
@@ -438,8 +439,15 @@ impl Inode {
             false,
         );
 
-        let inode = Inode::NewHostInode(task, &Arc::new(QMutex::new(ms)), tmpDirfd, &fstat, true, false)?;
-        return Ok(inode)
+        let inode = Inode::NewHostInode(
+            task,
+            &Arc::new(QMutex::new(ms)),
+            tmpDirfd,
+            &fstat,
+            true,
+            false,
+        )?;
+        return Ok(inode);
     }
 
     pub fn NewHostInode(
@@ -456,11 +464,7 @@ impl Inode {
         let inodeType = fstat.InodeType();
         match inodeType {
             InodeType::Directory | InodeType::SpecialDirectory => {
-                let iops = HostDirOp::New(
-                    &msrc.lock().MountSourceOperations.clone(),
-                    fd,
-                    &fstat
-                );
+                let iops = HostDirOp::New(&msrc.lock().MountSourceOperations.clone(), fd, &fstat);
 
                 return Ok(Self(Arc::new(QMutex::new(InodeIntern {
                     UniqueId: NewUID(),
@@ -473,7 +477,7 @@ impl Inode {
             }
             // need redesign !!!!
             // todo: fix this
-            /* 
+            /*
             InodeType::Pipe => {
                 let pipe = Pipe::New(task, true, DEFAULT_PIPE_SIZE, MemoryDef::PAGE_SIZE as usize);
                 let permission = FileMode(fstat.st_mode as u16).FilePerms();
@@ -510,7 +514,7 @@ impl Inode {
                     fstat.WouldBlock(),
                     &fstat,
                     writeable,
-                    isMemfd
+                    isMemfd,
                 );
 
                 return Ok(Self(Arc::new(QMutex::new(InodeIntern {
@@ -538,7 +542,10 @@ impl Inode {
         let inodeType = fstat.InodeType();
         match inodeType {
             InodeType::Directory | InodeType::SpecialDirectory => {
-                panic!("NewControlTTyInode fail with wrong inode type {:?}", inodeType)
+                panic!(
+                    "NewControlTTyInode fail with wrong inode type {:?}",
+                    inodeType
+                )
             }
             _ => {
                 let iops = HostInodeOp::New(
@@ -811,7 +818,14 @@ impl Inode {
         return res;
     }
 
-    pub fn Setxattr(&mut self, task: &Task, d: &Dirent, name: &str, value: &[u8], flags: u32) -> Result<()> {
+    pub fn Setxattr(
+        &mut self,
+        task: &Task,
+        d: &Dirent,
+        name: &str,
+        value: &[u8],
+        flags: u32,
+    ) -> Result<()> {
         let isOverlay = self.lock().Overlay.is_some();
         if isOverlay {
             let overlay = self.lock().Overlay.as_ref().unwrap().clone();
@@ -1026,7 +1040,7 @@ impl Inode {
 
         if uattr.Owner.UID == creds.EffectiveKUID {
             /*info!("CheckOwnership 2.2");
-        
+
             drop(uattr);
             info!("CheckOwnership 2.3");*/
             return true;

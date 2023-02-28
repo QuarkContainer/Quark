@@ -19,8 +19,8 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
-use super::super::threadmgr::thread::*;
 use super::super::threadmgr::pid_namespace::*;
+use super::super::threadmgr::thread::*;
 use super::super::SignalDef::*;
 use super::sys_poll::*;
 
@@ -187,7 +187,7 @@ pub fn SysRtSigpending(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
 
     let pending = task.Thread().PendingSignals();
     task.CopyOutObj(&pending.0, addr)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // RtSigtimedwait implements linux syscall rt_sigtimedwait(2).

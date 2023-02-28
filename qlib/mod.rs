@@ -21,12 +21,13 @@ pub mod addr;
 pub mod auxv;
 pub mod buddyallocator;
 pub mod common;
+pub mod idallocator;
 pub mod linux_def;
 pub mod pagetable;
 pub mod range;
-pub mod idallocator;
 //pub mod Process;
 pub mod auth;
+pub mod backtracer;
 pub mod bytestream;
 pub mod config;
 pub mod control_msg;
@@ -54,18 +55,17 @@ pub mod sort_arr;
 pub mod task_mgr;
 pub mod uring;
 pub mod usage;
-pub mod backtracer;
 
 pub mod kernel;
 pub mod rdma_share;
 pub mod ringbuf;
 pub mod vcpu_mgr;
 
+pub mod hiber_mgr;
+pub mod proxy;
 pub mod rdma_svc_cli;
 pub mod rdmasocket;
 pub mod unix_socket;
-pub mod hiber_mgr;
-pub mod proxy;
 
 use self::mutex::*;
 use alloc::vec::Vec;
@@ -80,6 +80,7 @@ use self::bytestream::*;
 use self::config::*;
 use self::control_msg::SignalArgs;
 use self::fileinfo::*;
+use self::hiber_mgr::*;
 use self::kernel::kernel::futex::*;
 use self::kernel::kernel::kernel::Kernel;
 use self::kernel::kernel::timer::timekeeper::*;
@@ -92,7 +93,6 @@ use self::qmsg::*;
 use self::rdma_svc_cli::*;
 use self::ringbuf::*;
 use self::task_mgr::*;
-use self::hiber_mgr::*;
 
 pub fn InitSingleton() {
     unsafe {
@@ -897,7 +897,14 @@ impl ShareSpace {
     }
 
     pub fn ReadLog(&self, buf: &mut [u8]) -> usize {
-        let (_trigger, cnt) = self.logBuf.lock().as_mut().unwrap().lock().read(buf).unwrap();
+        let (_trigger, cnt) = self
+            .logBuf
+            .lock()
+            .as_mut()
+            .unwrap()
+            .lock()
+            .read(buf)
+            .unwrap();
         return cnt;
     }
 

@@ -19,8 +19,8 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use core::any::Any;
-use spin::*;
 use core::ops::Deref;
+use spin::*;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;

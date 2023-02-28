@@ -14,20 +14,20 @@
 //
 
 use core::alloc::{GlobalAlloc, Layout};
+use core::arch::asm;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use core::arch::asm;
 
 use crate::qlib::fileinfo::*;
 
 use super::qlib::kernel::asm::*;
+use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 use super::qlib::kernel::taskMgr::*;
 use super::qlib::kernel::threadmgr::task_sched::*;
+use super::qlib::kernel::vcpu::*;
 use super::qlib::kernel::SHARESPACE;
 use super::qlib::kernel::TSC;
-use super::qlib::kernel::vcpu::*;
-use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 
 use super::qlib::common::*;
 use super::qlib::kernel::memmgr::pma::*;
@@ -35,8 +35,8 @@ use super::qlib::kernel::task::*;
 use super::qlib::kernel::taskMgr;
 use super::qlib::linux_def::*;
 use super::qlib::loader::*;
-use super::qlib::mem::list_allocator::*;
 use super::qlib::mem::bitmap_allocator::*;
+use super::qlib::mem::list_allocator::*;
 use super::qlib::mutex::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::qmsg::*;
@@ -84,12 +84,7 @@ impl IoUring {
         unsafe { self.enter(len as _, want as _, flags) }
     }
 
-    pub unsafe fn enter(
-        &self,
-        to_submit: u32,
-        min_complete: u32,
-        flag: u32,
-    ) -> Result<usize> {
+    pub unsafe fn enter(&self, to_submit: u32, min_complete: u32, flag: u32) -> Result<usize> {
         return io_uring_enter(to_submit, min_complete, flag);
     }
 
@@ -223,7 +218,7 @@ pub fn switch(from: TaskId, to: TaskId) {
         toCtx.SwitchPageTable();
     }
     toCtx.SetFS();
-    
+
     fromCtx.mm.VcpuLeave();
     toCtx.mm.VcpuEnter();
 
@@ -286,7 +281,7 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
         )
     }
 }
-    
+
 impl CPULocal {
     pub fn CpuId() -> usize {
         return GetVcpuId();
@@ -384,7 +379,7 @@ impl BitmapAllocatorWrapper {
     pub const fn New() -> Self {
         return Self {
             addr: AtomicU64::new(MemoryDef::HEAP_OFFSET),
-        }
+        };
     }
 
     pub fn Init(&self) {
@@ -431,26 +426,23 @@ pub fn HugepageDontNeed(addr: u64) {
 
 impl IOMgr {
     pub fn Init() -> Result<Self> {
-        return Err(Error::Common(format!("IOMgr can't init in kernel")))
+        return Err(Error::Common(format!("IOMgr can't init in kernel")));
     }
 }
-
 
 unsafe impl GlobalAlloc for GlobalVcpuAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         if !self.init.load(Ordering::Relaxed) {
-            return GLOBAL_ALLOCATOR
-                .alloc(layout);
+            return GLOBAL_ALLOCATOR.alloc(layout);
         }
-        return CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout)
+        return CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout);
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if !self.init.load(Ordering::Relaxed) {
-            return GLOBAL_ALLOCATOR
-                .dealloc(ptr, layout);
+            return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
         }
-        return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout)
+        return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout);
     }
 }
 
@@ -463,7 +455,7 @@ impl UringAsyncMgr {
         loop {
             let id = match self.freeids.lock().pop_front() {
                 None => break,
-                Some(id) => id
+                Some(id) => id,
             };
             self.freeSlot(id as _);
         }

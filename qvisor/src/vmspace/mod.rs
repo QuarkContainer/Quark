@@ -14,6 +14,7 @@
 
 pub mod HostFileMap;
 //pub mod TimerMgr;
+pub mod hibernate;
 pub mod host_pma_keeper;
 pub mod host_uring;
 pub mod hostfdnotifier;
@@ -23,22 +24,21 @@ pub mod random;
 pub mod syscall;
 pub mod time;
 pub mod uringMgr;
-pub mod hibernate;
 
-use std::env::temp_dir;
-use uuid::Uuid;
+use core::arch::asm;
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
 use lazy_static::lazy_static;
 use libc::*;
 use serde_json;
+use std::env::temp_dir;
 use std::fs;
 use std::marker::Send;
 use std::os::unix::io::IntoRawFd;
 use std::slice;
 use std::str;
+use uuid::Uuid;
 use x86_64::structures::paging::PageTableFlags;
-use core::arch::asm;
 
 use crate::qlib::fileinfo::*;
 use crate::vmspace::kernel::GlobalIOMgr;
@@ -196,9 +196,7 @@ impl VMSpace {
     }
 
     pub fn LoadProcessKernel(&mut self, processAddr: u64) -> i64 {
-        let process = unsafe {
-            &mut *(processAddr as * mut loader::Process)
-        };
+        let process = unsafe { &mut *(processAddr as *mut loader::Process) };
         process.ID = self.args.as_ref().unwrap().ID.to_string();
         let spec = &mut self.args.as_mut().unwrap().Spec;
 
@@ -484,14 +482,7 @@ impl VMSpace {
     pub fn OpenAt(dirfd: i32, name: u64, flags: i32, addr: u64) -> i64 {
         let tryOpenAt = unsafe { &mut *(addr as *mut TryOpenStruct) };
 
-        let ret = unsafe {
-            libc::openat(
-                dirfd,
-                name as *const c_char,
-                flags,
-                0,
-            )
-        };
+        let ret = unsafe { libc::openat(dirfd, name as *const c_char, flags, 0) };
 
         let fd = Self::GetRet(ret as i64) as i32;
         if fd < 0 {
@@ -580,21 +571,38 @@ impl VMSpace {
             match sockInfo {
                 SockInfo::RDMADataSocket(dataSock) => {
                     // error!("VMSpace::Close, dataSock fd: {}", fd);
-                    GlobalRDMASvcCli().channelToSocketMappings.lock().remove(&dataSock.channelId);
-                    GlobalRDMASvcCli().rdmaIdToSocketMappings.lock().remove(&dataSock.rdmaId);
-                    GlobalRDMASvcCli().tcpPortAllocator.lock().Free(dataSock.localPort as u64);
+                    GlobalRDMASvcCli()
+                        .channelToSocketMappings
+                        .lock()
+                        .remove(&dataSock.channelId);
+                    GlobalRDMASvcCli()
+                        .rdmaIdToSocketMappings
+                        .lock()
+                        .remove(&dataSock.rdmaId);
+                    GlobalRDMASvcCli()
+                        .tcpPortAllocator
+                        .lock()
+                        .Free(dataSock.localPort as u64);
                     let _res = GlobalRDMASvcCli().close(dataSock.channelId);
                 }
                 SockInfo::RDMAServerSocket(serverSock) => {
-                    GlobalRDMASvcCli().rdmaIdToSocketMappings.lock().remove(&serverSock.rdmaId);
+                    GlobalRDMASvcCli()
+                        .rdmaIdToSocketMappings
+                        .lock()
+                        .remove(&serverSock.rdmaId);
                     //TODO: handle server close
                 }
                 SockInfo::RDMAUDPSocket(sock) => {
-                    GlobalRDMASvcCli().portToFdInfoMappings.lock().remove(&sock.port);
-                    GlobalRDMASvcCli().udpPortAllocator.lock().Free(sock.port as u64);
+                    GlobalRDMASvcCli()
+                        .portToFdInfoMappings
+                        .lock()
+                        .remove(&sock.port);
+                    GlobalRDMASvcCli()
+                        .udpPortAllocator
+                        .lock()
+                        .Free(sock.port as u64);
                 }
-                _ => {
-                }
+                _ => {}
             }
             0
         } else {
@@ -1204,11 +1212,9 @@ impl VMSpace {
         match super::ucall::ucall_server::ReadControlMsg(fd) {
             Err(_e) => return -1,
             Ok(msg) => {
-                let controlMsg = unsafe {
-                    &mut *(addr as * mut ControlMsg)
-                };
+                let controlMsg = unsafe { &mut *(addr as *mut ControlMsg) };
                 *controlMsg = msg;
-                return 0; 
+                return 0;
             }
         }
     }
@@ -1395,19 +1401,22 @@ impl VMSpace {
         let file_name = format!("{}", Uuid::new_v4());
         td.push(file_name);
 
-        let fd  = if dir {
+        let fd = if dir {
             let folder = td.into_os_string().into_string().unwrap();
             let cstr = CString::New(&folder);
-            let ret = unsafe {
-                libc::mkdir(cstr.Ptr() as *const c_char, 0o777)
-            };
+            let ret = unsafe { libc::mkdir(cstr.Ptr() as *const c_char, 0o777) };
 
             if ret != 0 {
                 return Self::GetRet(ret as i64);
             }
 
             let fd = unsafe {
-                libc::openat(-100, cstr.Ptr() as *const c_char, libc::O_DIRECTORY | libc::O_RDONLY, 0o777)
+                libc::openat(
+                    -100,
+                    cstr.Ptr() as *const c_char,
+                    libc::O_DIRECTORY | libc::O_RDONLY,
+                    0o777,
+                )
             };
 
             Self::GetRet(fd as i64) as i32
@@ -1513,8 +1522,15 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        let ret =
-            unsafe { linkat(olddirfd, oldpath as *const c_char, newdirfd, newpath as *const c_char, flags) };
+        let ret = unsafe {
+            linkat(
+                olddirfd,
+                oldpath as *const c_char,
+                newdirfd,
+                newpath as *const c_char,
+                flags,
+            )
+        };
 
         return Self::GetRet(ret as i64);
     }
@@ -1571,16 +1587,12 @@ impl VMSpace {
 
     pub fn Proxy(cmd: u64, addrIn: u64, addrOut: u64) -> i64 {
         use super::qlib::proxy::*;
-        let cmd : Command = unsafe { core::mem::transmute(cmd as u64) };
+        let cmd: Command = unsafe { core::mem::transmute(cmd as u64) };
         match cmd {
             Command::Cmd1 => {
-                let dataIn = unsafe {
-                    &*(addrIn as * const Cmd1In)
-                };
+                let dataIn = unsafe { &*(addrIn as *const Cmd1In) };
 
-                let dataOut = unsafe {
-                    &mut *(addrOut as * mut Cmd1Out)
-                };
+                let dataOut = unsafe { &mut *(addrOut as *mut Cmd1Out) };
 
                 error!("get proxy cmd1 with val1 {}", dataIn.val);
                 dataOut.val1 = 1;
@@ -1596,7 +1608,7 @@ impl VMSpace {
         match SHARE_SPACE.hiberMgr.SwapIn(addr) {
             Ok(_) => return 0,
             Err(Error::SysError(e)) => return e as i64,
-            _ => panic!("imposible")
+            _ => panic!("imposible"),
         }
     }
 

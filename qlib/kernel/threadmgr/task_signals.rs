@@ -1153,7 +1153,10 @@ impl Task {
         }
         let fpstate = self.context.X86fpstate.as_ref().unwrap().Slice();
         if fpstate.len() > 512 {
-            userStack.PushSlice(self, &self.context.X86fpstate.as_ref().unwrap().Slice()[512..])?;
+            userStack.PushSlice(
+                self,
+                &self.context.X86fpstate.as_ref().unwrap().Slice()[512..],
+            )?;
         }
 
         let fpsw = FPSoftwareFrame {

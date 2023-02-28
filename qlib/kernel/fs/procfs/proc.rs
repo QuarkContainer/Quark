@@ -50,9 +50,9 @@ use super::filesystems::*;
 use super::loadavg::*;
 use super::meminfo::*;
 use super::mounts::*;
+use super::net::*;
 use super::stat::*;
 use super::uptime::*;
-use super::net::*;
 
 pub struct ProcNodeInternal {
     pub kernel: Kernel,

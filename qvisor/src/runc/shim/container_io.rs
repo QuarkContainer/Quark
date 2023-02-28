@@ -102,7 +102,7 @@ impl ContainerIO {
             Self::PtyIO(c) => return c.CloseAfterStart(),
             Self::FifoIO(c) => return c.CloseAfterStart(),
             Self::NullIO(c) => return c.CloseAfterStart(),
-            Self::None => {},
+            Self::None => {}
         }
     }
 
@@ -114,7 +114,13 @@ impl ContainerIO {
         }
     }
 
-    pub fn CopyIO(&self, stdio: &ContainerStdio, cid: &str, pid: i32, sandboxId: String) -> Result<()> {
+    pub fn CopyIO(
+        &self,
+        stdio: &ContainerStdio,
+        cid: &str,
+        pid: i32,
+        sandboxId: String,
+    ) -> Result<()> {
         match self {
             Self::PtyIO(c) => return c.CopyIO(stdio, cid, pid, sandboxId),
             Self::None => panic!("ContainerIO::None"),
@@ -203,7 +209,13 @@ impl PtyIO {
         return Ok(());
     }
 
-    pub fn CopyIO(&self, stdio: &ContainerStdio, cid: &str, pid: i32, sandboxId: String) -> Result<()> {
+    pub fn CopyIO(
+        &self,
+        stdio: &ContainerStdio,
+        cid: &str,
+        pid: i32,
+        sandboxId: String,
+    ) -> Result<()> {
         if !stdio.stdin.is_empty() {
             let tty = self.master.pty;
             let f = unsafe { File::from_raw_fd(tty) };
@@ -214,7 +226,16 @@ impl PtyIO {
                 .open(stdio.stdin.as_str())
                 .map_err(|e| Error::IOError(format!("IOErr {:?}", e)))?;
             //spawn_copy(stdin, f, None);
-            Redirect(stdin, f, None, self.pipeRead, cid, pid, true, sandboxId.clone());
+            Redirect(
+                stdin,
+                f,
+                None,
+                self.pipeRead,
+                cid,
+                pid,
+                true,
+                sandboxId.clone(),
+            );
         }
 
         if !stdio.stdout.is_empty() {
@@ -249,7 +270,7 @@ impl PtyIO {
                 cid,
                 pid,
                 false,
-                sandboxId.clone()
+                sandboxId.clone(),
             );
         }
 
@@ -451,7 +472,7 @@ pub fn Redirect(
     cid: &str,
     pid: i32,
     filter_sig: bool,
-    sandboxId: String
+    sandboxId: String,
 ) -> JoinHandle<()> {
     let cid = cid.to_string();
     std::thread::spawn(move || {
@@ -494,7 +515,15 @@ pub fn Redirect(
                 }
 
                 let cnt = if fd == from.as_raw_fd() {
-                    console_copy(from.as_raw_fd(), to.as_raw_fd(), &*cid, pid, filter_sig, &sandboxId).unwrap()
+                    console_copy(
+                        from.as_raw_fd(),
+                        to.as_raw_fd(),
+                        &*cid,
+                        pid,
+                        filter_sig,
+                        &sandboxId,
+                    )
+                    .unwrap()
                 } else {
                     //if fd == readPipe {
                     return;
@@ -509,7 +538,14 @@ pub fn Redirect(
     })
 }
 
-fn console_copy(from: i32, to: i32, cid: &str, pid: i32, filter_sig: bool, sandboxId: &str) -> Result<usize> {
+fn console_copy(
+    from: i32,
+    to: i32,
+    cid: &str,
+    pid: i32,
+    filter_sig: bool,
+    sandboxId: &str,
+) -> Result<usize> {
     let mut buf: [u8; 256] = [0; 256];
     let mut cnt = 0;
     loop {
@@ -529,12 +565,15 @@ fn console_copy(from: i32, to: i32, cid: &str, pid: i32, filter_sig: bool, sandb
         let ret = ret as usize;
         cnt += ret;
         if filter_sig {
-            let rawData= buf.clone();
+            let rawData = buf.clone();
             let str = String::from_utf8_lossy(&rawData[..ret]).to_string();
-            info!("filter_signal_and_write fifo to tty master to fifo, tty output {:?}", str);
+            info!(
+                "filter_signal_and_write fifo to tty master to fifo, tty output {:?}",
+                str
+            );
             filter_signal_and_write(to, &buf[..ret], cid, pid, sandboxId)?;
         } else {
-            let rawData= buf.clone();
+            let rawData = buf.clone();
             let str = String::from_utf8_lossy(&rawData[..ret]).to_string();
             info!("console_copy from tty slave to fifo, tty output {:?}", str);
             write_buf(to, &buf[..ret])?;
@@ -542,10 +581,16 @@ fn console_copy(from: i32, to: i32, cid: &str, pid: i32, filter_sig: bool, sandb
     }
 }
 
-fn filter_signal_and_write(to_fd: i32, s: &[u8], cid: &str, pid: i32, sandboxId: &str) -> Result<()> {
+fn filter_signal_and_write(
+    to_fd: i32,
+    s: &[u8],
+    cid: &str,
+    pid: i32,
+    sandboxId: &str,
+) -> Result<()> {
     let len = s.len();
     let mut offset = 0;
-    let rawData= s.clone();
+    let rawData = s.clone();
     for i in 0..len {
         if let Some(sig) = get_signal(s[i]) {
             write_buf(to_fd, &s[offset..i])?;

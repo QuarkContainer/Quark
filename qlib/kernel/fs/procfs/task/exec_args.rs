@@ -52,12 +52,7 @@ pub fn NewExecArg(
         FSMagic::PROC_SUPER_MAGIC,
         typ,
     );
-    return NewProcInode(
-        v.into(),
-        msrc,
-        InodeType::SpecialFile,
-        Some(thread.clone()),
-    );
+    return NewProcInode(v.into(), msrc, InodeType::SpecialFile, Some(thread.clone()));
 }
 
 pub fn NewExecArgSimpleFileInode(
@@ -77,7 +72,8 @@ pub fn NewExecArgSimpleFileInode(
         ExecArgSimpleFileTrait {
             typ: execArgType,
             thread: thread.clone(),
-        }.into(),
+        }
+        .into(),
     );
 }
 
@@ -108,7 +104,8 @@ pub fn NewExecArgReadonlyFileNodeFileOperations(
         node: ExecArgReadonlyFileNode {
             thread: thread.clone(),
             typ: typ,
-        }.into(),
+        }
+        .into(),
     };
 }
 

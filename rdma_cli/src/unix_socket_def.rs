@@ -144,7 +144,11 @@ impl UnixSocket {
         };
 
         if ret < 0 {
-            info!("UCliSocket connect socket fail, path is {}, errorno is: {}", path, errno::errno().0 as i32);
+            info!(
+                "UCliSocket connect socket fail, path is {}, errorno is: {}",
+                path,
+                errno::errno().0 as i32
+            );
             return Err(Error::SysError(-errno::errno().0 as i32));
         }
 

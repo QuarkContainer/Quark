@@ -28,7 +28,7 @@ impl SocketBuffIntern {
         };
 
         buf.GetDataIovsVecOffset(iovs);
-        if iovs.cnt == 0 {            
+        if iovs.cnt == 0 {
             if self.Error() != 0 {
                 return Err(Error::SysError(self.Error()));
             } else if self.RClosed() {
@@ -47,11 +47,7 @@ impl SocketBuffIntern {
         let srcIovs = buf.GetDataIovsVec();
         if srcIovs.len() > 0 {
             cnt = task.mm.CopyIovsOutFromIovs(task, &srcIovs, iovs, true)?;
-            trigger = if !peek {
-                buf.Consume(cnt)
-            } else {
-                false
-            }
+            trigger = if !peek { buf.Consume(cnt) } else { false }
         }
 
         // if srcIovs.len() > 0 {
@@ -79,7 +75,12 @@ impl SocketBuffIntern {
         }
     }
 
-    pub fn Produce(&self, _task: &Task, cnt: usize, iovs: &mut SocketBufIovs) -> Result<Option<(u64, usize)>> {
+    pub fn Produce(
+        &self,
+        _task: &Task,
+        cnt: usize,
+        iovs: &mut SocketBufIovs,
+    ) -> Result<Option<(u64, usize)>> {
         if self.Error() != 0 {
             return Err(Error::SysError(self.Error()));
         }
@@ -94,7 +95,7 @@ impl SocketBuffIntern {
         } else {
             false
         };
-        
+
         buf.GetSpaceIovsOffset(iovs);
         if !trigger {
             return Ok(None);
@@ -179,7 +180,11 @@ impl SocketBuffIntern {
         }
     }
 
-    pub fn RDMAWritev(&self, _task: &Task, iovs: &[IoVec]) -> Result<(usize, Option<(u64, usize)>)> {
+    pub fn RDMAWritev(
+        &self,
+        _task: &Task,
+        iovs: &[IoVec],
+    ) -> Result<(usize, Option<(u64, usize)>)> {
         if self.Error() != 0 {
             return Err(Error::SysError(self.Error()));
         }

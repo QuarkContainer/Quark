@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use alloc::boxed::Box;
 
 pub use xmas_elf::header::HeaderPt2;
 pub use xmas_elf::program::{Flags, ProgramHeader, ProgramHeader64};
@@ -23,16 +23,15 @@ pub use xmas_elf::sections::Rela;
 pub use xmas_elf::symbol_table::{Entry, Entry64};
 pub use xmas_elf::{P32, P64};
 
-use arch::x86_64::arch_x86::X86fpstate;
 use super::super::asm::*;
 use super::super::kernel::cpuset::*;
 use super::super::loader::loader::*;
 use super::super::memmgr::mm::*;
 use super::super::qlib::common::*;
+use super::super::qlib::linux::rusage::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::path::*;
 use super::super::qlib::LoadAddr;
-use super::super::qlib::linux::rusage::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 use super::super::taskMgr::*;
@@ -45,6 +44,7 @@ use super::super::vcpu::*;
 use super::super::SignalDef::*;
 use super::super::SHARESPACE;
 use super::sys_rusage::*;
+use arch::x86_64::arch_x86::X86fpstate;
 
 #[derive(Default, Debug)]
 pub struct ElfInfo {
@@ -136,7 +136,7 @@ const EXEC_MAX_ELEM_SIZE: usize = 32 * MemoryDef::PAGE_SIZE as usize;
 
 pub fn ExecvFilleName(task: &mut Task, dirfd: i32, filename: &str, flags: i32) -> Result<String> {
     if flags & !(ATType::AT_EMPTY_PATH | ATType::AT_SYMLINK_NOFOLLOW) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let atEmptyPath = flags & ATType::AT_EMPTY_PATH != 0;
@@ -152,15 +152,18 @@ pub fn ExecvFilleName(task: &mut Task, dirfd: i32, filename: &str, flags: i32) -
         cwd = f.Dirent.clone();
         let inode = cwd.Inode();
         if atEmptyPath && filename.len() == 0 {
-            inode.CheckPermission(task, &PermMask {
-                read: true,
-                execute: true,
-                ..Default::default()
-            })?;
-            return Ok(f.Dirent.MyFullName())
+            inode.CheckPermission(
+                task,
+                &PermMask {
+                    read: true,
+                    execute: true,
+                    ..Default::default()
+                },
+            )?;
+            return Ok(f.Dirent.MyFullName());
         } else {
             if !inode.StableAttr().IsDir() {
-                return Err(Error::SysError(SysErr::ENOTDIR))
+                return Err(Error::SysError(SysErr::ENOTDIR));
             }
         }
     };
@@ -177,20 +180,28 @@ pub fn ExecvFilleName(task: &mut Task, dirfd: i32, filename: &str, flags: i32) -
         resolveFinal,
     )?;
 
-    return Ok(d.MyFullName())
+    return Ok(d.MyFullName());
 }
 
-pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, envvAddr: u64, flags: i32) -> Result<i64> {
+pub fn Execvat(
+    task: &mut Task,
+    dirfd: i32,
+    filenameAddr: u64,
+    argvAddr: u64,
+    envvAddr: u64,
+    flags: i32,
+) -> Result<i64> {
     let (entry, usersp, kernelsp) = {
         let (fileName, err) = task.CopyInString(filenameAddr, PATH_MAX);
         match err {
             Err(e) => return Err(e),
             _ => (),
         }
-    
-        let mut argv = task.CopyInVector(argvAddr, EXEC_MAX_ELEM_SIZE, EXEC_MAX_TOTAL_SIZE as i32)?;
+
+        let mut argv =
+            task.CopyInVector(argvAddr, EXEC_MAX_ELEM_SIZE, EXEC_MAX_TOTAL_SIZE as i32)?;
         let envv = task.CopyInVector(envvAddr, EXEC_MAX_ELEM_SIZE, EXEC_MAX_TOTAL_SIZE as i32)?;
-    
+
         if argv.len() == 0 {
             argv.push(fileName.clone())
         };
@@ -199,16 +210,16 @@ pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, en
             cmd += &arg;
             cmd += " ";
         }
-    
+
         let mut envs = format!("");
         for env in &envv {
             envs += &env;
             envs += " ";
         }
         info!("in the execve: the cmd is {} \n envs is {:?}", &cmd, &envs);
-    
+
         let fileName = ExecvFilleName(task, dirfd, &fileName, flags)?;
-    
+
         {
             let t = task.Thread().clone();
             let tg = t.lock().tg.clone();
@@ -218,23 +229,23 @@ pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, en
             {
                 let ol = owner.WriteLock();
                 let sl = signallock.lock();
-    
+
                 let exiting = tg.lock().exiting;
                 let execing = tg.lock().execing.Upgrade();
-    
+
                 if exiting || execing.is_some() {
                     // We lost to a racing group-exit, kill, or exec from another thread
                     // and should just exit.
                     return Err(Error::SysError(SysErr::EINTR));
                 }
-    
+
                 // Cancel any racing group stops.
                 tg.lock().endGroupStopLocked(false);
-    
+
                 // If the task has any siblings, they have to exit before the exec can
                 // continue.
                 tg.lock().execing = t.Downgrade();
-    
+
                 let taskCnt = tg.lock().tasks.len();
                 if taskCnt != 1 {
                     // "[All] other threads except the thread group leader report death as
@@ -247,13 +258,13 @@ pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, en
                     }
                     // The last sibling to exit will wake t.
                     t.lock().beginInternalStopLocked(&Arc::new(ExecStop {}));
-    
+
                     core::mem::drop(sl);
                     core::mem::drop(ol);
                     task.DoStop();
                 }
             }
-    
+
             let mut its = Vec::new();
             {
                 let _l = owner.WriteLock();
@@ -262,28 +273,28 @@ pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, en
                     //return (*runInterrupt)(nil)
                     return Err(Error::SysError(SysErr::EINTR));
                 }
-    
+
                 t.promoteLocked();
-    
+
                 // "POSIX timers are not preserved (timer_create(2))." - execve(2). Handle
                 // this first since POSIX timers are protected by the signal mutex, which
                 // we're about to change. Note that we have to stop and destroy timers
                 // without holding any mutexes to avoid circular lock ordering.
                 {
                     let _s = signallock.lock();
-    
+
                     for (_, it) in &tg.lock().timers {
                         its.push(it.clone());
                     }
-    
+
                     tg.lock().timers.clear();
                 }
             }
-    
+
             for it in its {
                 it.DestroyTimer();
             }
-    
+
             {
                 let _l = owner.WriteLock();
                 let sh = tg.lock().signalHandlers.clone();
@@ -313,21 +324,21 @@ pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, en
                 // See the JoinProcessGroup function in sessions.go for more context.
                 tg.lock().execed = true;
             }
-    
+
             let fdtbl = t.lock().fdTbl.clone();
             fdtbl.RemoveCloseOnExec();
-    
+
             t.ExitRobustList(task);
-    
+
             t.lock().updateCredsForExecLocked();
-    
+
             t.UnstopVforkParent();
-    
+
             SetFs(0);
             task.tidInfo = TidInfo::default();
             task.context.fs = 0;
             task.context.X86fpstate = Some(Box::new(X86fpstate::default()));
-    
+
             let newMM = MemoryManager::Init(false);
             let oldMM = task.mm.clone();
             *newMM.metadata.lock() = oldMM.metadata.lock().Fork();
@@ -338,15 +349,15 @@ pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, en
             if !SHARESPACE.config.read().KernelPagetable {
                 task.SwitchPageTable();
             }
-    
+
             // make the old mm exist before switch pagetable
             core::mem::drop(oldMM);
         }
-    
+
         let extraAxv = Vec::new();
         Load(task, &fileName, &mut argv, &envv, &extraAxv)?
     };
-    
+
     //need to clean object on stack before enter_user as the stack will be destroyed
     task.AccountTaskEnter(SchedState::RunningApp);
 
@@ -847,7 +858,7 @@ pub fn SysSetpgid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
     } else {
         let localtg = task.Thread().ThreadGroup();
-         match tg.JoinProcessGroup(&pidns, pgid, tg != localtg) {
+        match tg.JoinProcessGroup(&pidns, pgid, tg != localtg) {
             Err(e) => {
                 let pg = tg.ProcessGroup().unwrap();
                 if pidns.IDOfProcessGroup(&pg) == pgid {

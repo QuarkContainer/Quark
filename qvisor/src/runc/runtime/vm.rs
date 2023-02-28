@@ -170,7 +170,13 @@ impl VirtualMachine {
     #[cfg(not(debug_assertions))]
     pub const KERNEL_IMAGE: &'static str = "/usr/local/bin/qkernel.bin";
 
-    pub fn InitShareSpace(vmfd: &VmFd, cpuCount: usize, controlSock: i32, rdmaSvcCliSock: i32, podId: [u8; 64]) {
+    pub fn InitShareSpace(
+        vmfd: &VmFd,
+        cpuCount: usize,
+        controlSock: i32,
+        rdmaSvcCliSock: i32,
+        podId: [u8; 64],
+    ) {
         SHARE_SPACE_STRUCT
             .lock()
             .Init(cpuCount, controlSock, rdmaSvcCliSock, podId);
@@ -257,7 +263,8 @@ impl VirtualMachine {
             cpuCount.min(VMSpace::VCPUCount() - reserveCpuCount)
         };
 
-        if cpuCount < 2 { // only do cpu affinit when there more than 2 cores
+        if cpuCount < 2 {
+            // only do cpu affinit when there more than 2 cores
             VMS.lock().cpuAffinit = false;
         } else {
             VMS.lock().cpuAffinit = true;
@@ -306,10 +313,7 @@ impl VirtualMachine {
 
         let heapStartAddr = MemoryDef::HEAP_OFFSET;
 
-        PMA_KEEPER.Init(
-            MemoryDef::FILE_MAP_OFFSET,
-            MemoryDef::FILE_MAP_SIZE,
-        );
+        PMA_KEEPER.Init(MemoryDef::FILE_MAP_OFFSET, MemoryDef::FILE_MAP_SIZE);
 
         info!(
             "set map region start={:x}, end={:x}",
@@ -476,7 +480,9 @@ impl VirtualMachine {
     }
 
     pub fn Schedule(shareSpace: &ShareSpace, taskId: TaskId, cpuAff: bool) {
-        shareSpace.scheduler.ScheduleQ(taskId, taskId.Queue(), cpuAff);
+        shareSpace
+            .scheduler
+            .ScheduleQ(taskId, taskId.Queue(), cpuAff);
     }
 
     pub fn PrintQ(shareSpace: &ShareSpace, vcpuId: u64) -> String {

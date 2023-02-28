@@ -30,17 +30,15 @@ use super::*;
 
 use crate::qlib::kernel::fs::procfs::meminfo::MeminfoFileNode;
 use crate::qlib::kernel::fs::procfs::net::NetTCPReadonlyFileNode;
+use crate::qlib::kernel::fs::procfs::net::NetUDPReadonlyFileNode;
+use crate::qlib::kernel::fs::procfs::net::NetUnixReadonlyFileNode;
 use crate::qlib::kernel::fs::procfs::task::auxvec::AUXVecReadonlyFileNode;
 use crate::qlib::kernel::fs::procfs::task::comm::CommReadonlyFileNode;
 use crate::qlib::kernel::fs::procfs::task::exec_args::ExecArgReadonlyFileNode;
-use crate::qlib::kernel::fs::procfs::uptime::UptimeFileNode;
 use crate::qlib::kernel::fs::procfs::task::uid_pid_map::IdMapReadonlyFileNode;
-use crate::qlib::kernel::fs::procfs::net::NetUnixReadonlyFileNode;
-use crate::qlib::kernel::fs::procfs::net::NetUDPReadonlyFileNode;
+use crate::qlib::kernel::fs::procfs::uptime::UptimeFileNode;
 
-pub fn NewSnapshotReadonlyFileOperations(
-    data: Vec<u8>,
-) -> ReadonlyFileOperations {
+pub fn NewSnapshotReadonlyFileOperations(data: Vec<u8>) -> ReadonlyFileOperations {
     let node = SnapshotReadonlyFileNode {
         data: Arc::new(data),
     };

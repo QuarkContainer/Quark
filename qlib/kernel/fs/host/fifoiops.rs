@@ -19,11 +19,11 @@ use core::any::Any;
 use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
+use super::super::super::kernel::pipe::node::*;
 use super::super::super::kernel::time::*;
 pub use super::super::super::memmgr::vma::MMappable;
 use super::super::super::socket::unix::transport::unix::*;
 use super::super::super::task::*;
-use super::super::super::kernel::pipe::node::*;
 use super::super::attr::*;
 use super::super::dirent::*;
 use super::super::file::*;
@@ -132,7 +132,15 @@ impl InodeOperations for FifoIops {
         newname: &str,
         replacement: bool,
     ) -> Result<()> {
-        return self.hosttiops.Rename(task, dir, oldParent, oldname, newParent, newname, replacement);
+        return self.hosttiops.Rename(
+            task,
+            dir,
+            oldParent,
+            oldname,
+            newParent,
+            newname,
+            replacement,
+        );
     }
 
     fn Bind(
@@ -150,18 +158,12 @@ impl InodeOperations for FifoIops {
         return None;
     }
 
-    fn GetFile(
-        &self,
-        task: &Task,
-        dir: &Inode,
-        dirent: &Dirent,
-        flags: FileFlags,
-    ) -> Result<File> {
+    fn GetFile(&self, task: &Task, dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
         return self.fifoiops.GetFile(task, dir, dirent, flags);
     }
 
     fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr> {
-        return self.fifoiops.UnstableAttr(task)
+        return self.fifoiops.UnstableAttr(task);
     }
 
     //fn StableAttr(&self) -> &StableAttr;
@@ -170,7 +172,7 @@ impl InodeOperations for FifoIops {
     }
 
     fn Setxattr(&self, dir: &mut Inode, name: &str, value: &[u8], flags: u32) -> Result<()> {
-        return self.fifoiops.Setxattr(dir, name, value, flags)
+        return self.fifoiops.Setxattr(dir, name, value, flags);
     }
 
     fn Listxattr(&self, dir: &Inode, size: usize) -> Result<Vec<String>> {
@@ -178,15 +180,15 @@ impl InodeOperations for FifoIops {
     }
 
     fn Removexattr(&self, dir: &Inode, name: &str) -> Result<()> {
-        return self.fifoiops.Removexattr(dir, name)
+        return self.fifoiops.Removexattr(dir, name);
     }
 
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
-        return self.hosttiops.Check(task, inode, reqPerms)
+        return self.hosttiops.Check(task, inode, reqPerms);
     }
 
     fn SetPermissions(&self, task: &Task, dir: &mut Inode, f: FilePermissions) -> bool {
-        return self.hosttiops.SetPermissions(task, dir, f)
+        return self.hosttiops.SetPermissions(task, dir, f);
     }
 
     fn SetOwner(&self, task: &Task, dir: &mut Inode, owner: &FileOwner) -> Result<()> {
@@ -202,7 +204,7 @@ impl InodeOperations for FifoIops {
     }
 
     fn Allocate(&self, task: &Task, dir: &mut Inode, offset: i64, length: i64) -> Result<()> {
-        return self.fifoiops.Allocate(task, dir, offset, length)
+        return self.fifoiops.Allocate(task, dir, offset, length);
     }
 
     fn ReadLink(&self, task: &Task, dir: &Inode) -> Result<String> {
@@ -230,7 +232,7 @@ impl InodeOperations for FifoIops {
     }
 
     fn StatFS(&self, task: &Task) -> Result<FsInfo> {
-        return self.hosttiops.StatFS(task)
+        return self.hosttiops.StatFS(task);
     }
 
     fn Mappable(&self) -> Result<MMappable> {

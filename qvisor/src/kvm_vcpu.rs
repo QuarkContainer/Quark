@@ -451,11 +451,13 @@ impl KVMVcpu {
         let mut first = true;
 
         if self.cordId > 0 {
-            let coreid = core_affinity::CoreId { id: self.cordId as usize };
+            let coreid = core_affinity::CoreId {
+                id: self.cordId as usize,
+            };
             // print cpu id
             core_affinity::set_for_current(coreid);
         }
-        
+
         self.SignalMask();
 
         info!(
@@ -815,7 +817,6 @@ impl KVMVcpu {
                         interrupting.0 = false;
                         interrupting.1.clear();
                     }
-                    
                 }
                 VcpuExit::Intr => {
                     self.vcpu.set_kvm_request_interrupt_window(1);
@@ -825,7 +826,7 @@ impl KVMVcpu {
                         interrupting.0 = false;
                         interrupting.1.clear();
                     }
-                    
+
                     //     SHARE_SPACE.MaskTlbShootdown(self.id as _);
                     //
                     //     let mut regs = self

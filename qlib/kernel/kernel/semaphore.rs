@@ -236,7 +236,7 @@ impl SemRegistry {
             SemUsz: SEMUSZ,
             SemVmx: SEMVMX,
             SemAem: SEMAEM,
-        }
+        };
     }
 
     pub fn SemInfo(&self) -> SemInfo {
@@ -244,7 +244,7 @@ impl SemRegistry {
         let mut info = self.IPCInfo();
         info.SemUsz = me.semaphores.len() as _;
         info.SemAem = me.totalSems() as _;
-        return info
+        return info;
     }
 
     pub fn RemoveId(&self, id: i32, creds: &Credentials) -> Result<()> {
@@ -300,7 +300,7 @@ impl<'a> SetInternal {
     }
 
     fn Size(&self) -> i32 {
-        return self.sems.len() as _
+        return self.sems.len() as _;
     }
 
     fn checkCredentials(&self, creds: &Credentials) -> bool {
@@ -341,7 +341,13 @@ impl<'a> SetInternal {
     }
 
     // ret Ok(n): if n >= 0, waiting on sems[n], if n == -1 success
-    fn executeOps(&mut self, task: &Task, ops: &[Sembuf], e: &WaitEntry, pid: i32) -> Result<(u64, i32)> {
+    fn executeOps(
+        &mut self,
+        task: &Task,
+        ops: &[Sembuf],
+        e: &WaitEntry,
+        pid: i32,
+    ) -> Result<(u64, i32)> {
         // Did it race with a removal operation?
         if self.dead {
             return Err(Error::SysError(SysErr::EIDRM));
@@ -364,7 +370,7 @@ impl<'a> SetInternal {
                     sem.waiters.insert(waiterId, op.SemOp);
 
                     sem.queue.EventRegister(task, e, EVENT_READ);
-                    return Ok((waiterId, op.SemNum as _))
+                    return Ok((waiterId, op.SemNum as _));
                 }
             } else {
                 if op.SemOp < 0 {
@@ -380,7 +386,7 @@ impl<'a> SetInternal {
                         let waiterId = NewUID();
                         sem.waiters.insert(waiterId, op.SemOp);
                         sem.queue.EventRegister(task, e, READABLE_EVENT);
-                        return Ok((waiterId, op.SemNum as _))
+                        return Ok((waiterId, op.SemNum as _));
                     }
                 } else {
                     if tmpVals[op.SemNum as usize] > VALUE_MAX - op.SemOp {
@@ -455,26 +461,29 @@ impl Set {
     }
 
     pub fn GetStat(&self, creds: &Credentials) -> Result<SemidDS> {
-        return self.semStat(creds, &PermMask {
-            read: true,
-            ..Default::default()
-        })
+        return self.semStat(
+            creds,
+            &PermMask {
+                read: true,
+                ..Default::default()
+            },
+        );
     }
 
     pub fn GetStatAny(&self, creds: &Credentials) -> Result<SemidDS> {
-        return self.semStat(creds, &PermMask {
-            ..Default::default()
-        })
+        return self.semStat(
+            creds,
+            &PermMask {
+                ..Default::default()
+            },
+        );
     }
 
     pub fn semStat(&self, creds: &Credentials, permMask: &PermMask) -> Result<SemidDS> {
         let me = self.lock();
 
         // "The calling process must have read permission on the semaphore set."
-        if !me.checkPerms(
-            creds,
-            permMask,
-        ) {
+        if !me.checkPerms(creds, permMask) {
             return Err(Error::SysError(SysErr::EACCES));
         }
 
@@ -499,7 +508,7 @@ impl Set {
             ..Default::default()
         };
 
-        return Ok(ds)
+        return Ok(ds);
     }
 
     pub fn Change(
@@ -677,7 +686,7 @@ impl Set {
 
         let sem = match me.findSem(num) {
             None => return Err(Error::SysError(SysErr::ERANGE)),
-            Some(v) => v
+            Some(v) => v,
         };
 
         let mut semzcnt = 0;
@@ -687,7 +696,7 @@ impl Set {
             }
         }
 
-        return Ok(semzcnt)
+        return Ok(semzcnt);
     }
 
     pub fn GetNegativeWaiters(&self, num: i32, creds: &Credentials) -> Result<u16> {
@@ -705,7 +714,7 @@ impl Set {
 
         let sem = match me.findSem(num) {
             None => return Err(Error::SysError(SysErr::ERANGE)),
-            Some(v) => v
+            Some(v) => v,
         };
 
         let mut semzcnt = 0;
@@ -715,7 +724,7 @@ impl Set {
             }
         }
 
-        return Ok(semzcnt)
+        return Ok(semzcnt);
     }
 
     pub fn ExecuteOps(

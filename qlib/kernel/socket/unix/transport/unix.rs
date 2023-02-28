@@ -1065,7 +1065,7 @@ impl BaseEndpoint {
 
     pub fn GetSockSendQueueSize(&self) -> Result<i32> {
         if !self.Connected() {
-            return Err(Error::SysError(SysErr::ENOTCONN))
+            return Err(Error::SysError(SysErr::ENOTCONN));
         }
 
         let e = self.lock();
@@ -1079,7 +1079,7 @@ impl BaseEndpoint {
 
     pub fn GetSockRecvQueueSize(&self) -> Result<i32> {
         if !self.Connected() {
-            return Err(Error::SysError(SysErr::ENOTCONN))
+            return Err(Error::SysError(SysErr::ENOTCONN));
         }
 
         let e = self.lock();
@@ -1152,8 +1152,7 @@ impl BaseEndpoint {
         }
 
         let receiver = e.receiver.as_ref().unwrap().clone();
-        let (recvLen, msgLen, cms, cmt, a, notify) 
-            = receiver.Recv(data, creds, numRights, peek)?;
+        let (recvLen, msgLen, cms, cmt, a, notify) = receiver.Recv(data, creds, numRights, peek)?;
 
         if notify {
             receiver.RecvNotify();

@@ -23,8 +23,8 @@ use core::ops::Deref;
 
 use super::super::super::super::addr::*;
 use super::super::super::super::common::*;
-use super::super::super::super::range::*;
 use super::super::super::super::linux_def::*;
+use super::super::super::super::range::*;
 use super::super::super::memmgr::mm::*;
 use super::super::super::memmgr::vma::*;
 use super::super::super::memmgr::*;
@@ -202,10 +202,10 @@ impl AIOMappable {
         // Don't allow mappings to be expanded (in Linux, fs/aio.c:aio_ring_mmap()
         // sets VM_DONTEXPAND).
         if offset != 0 || ar.Len() != AIOContext::AIO_RINGBUF_SIZE {
-            return Err(Error::SysError(SysErr::EFAULT))
+            return Err(Error::SysError(SysErr::EFAULT));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn RemoveMapping(
@@ -214,7 +214,7 @@ impl AIOMappable {
         _offset: u64,
         _writeable: bool,
     ) -> Result<()> {
-        return Ok(())
+        return Ok(());
     }
 
     pub fn CopyMapping(
@@ -227,7 +227,7 @@ impl AIOMappable {
         // Don't allow mappings to be expanded (in Linux, fs/aio.c:aio_ring_mmap()
         // sets VM_DONTEXPAND).
         if offset != 0 || dstAR.Len() != AIOContext::AIO_RINGBUF_SIZE {
-            return Err(Error::SysError(SysErr::EFAULT))
+            return Err(Error::SysError(SysErr::EFAULT));
         }
 
         let am = mm.aioManager.clone();
@@ -244,7 +244,7 @@ impl AIOMappable {
 
         am.contexts.insert(dstAR.Start(), context);
         am.contexts.remove(&oldId);
-        return Ok(())
+        return Ok(());
     }
 
     pub fn MSync(_fr: &Range, _msyncType: MSyncType) -> Result<()> {

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
+use core::arch::asm;
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::hint::spin_loop;
@@ -21,7 +22,6 @@ use core::ops::{Deref, DerefMut};
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use core::arch::asm;
 use spin::*;
 
 use super::kernel::uid::*;

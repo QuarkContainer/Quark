@@ -12,28 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
-use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
+use alloc::sync::Arc;
+use core::ops::Deref;
 
+use super::super::super::addr::*;
+use super::super::super::auth::id::*;
 use super::super::super::auth::userns::*;
 use super::super::super::auth::*;
-use super::super::super::auth::id::*;
-use super::super::super::addr::*;
 use super::super::super::common::*;
-use super::super::super::linux_def::*;
-use super::super::memmgr::mm::MemoryManager;
-use super::super::task::*;
-use super::super::super::range::*;
 use super::super::super::device::SHM_DEVICE;
-use super::super::memmgr::*;
-use super::super::fs::host::hostinodeop::*;
 use super::super::super::linux::ipc::*;
 use super::super::super::linux::shm::*;
-use super::time::*;
+use super::super::super::linux_def::*;
+use super::super::super::range::*;
+use super::super::fs::host::hostinodeop::*;
+use super::super::memmgr::mm::MemoryManager;
+use super::super::memmgr::*;
+use super::super::task::*;
 use super::ipc_namespace::*;
+use super::time::*;
 
 #[derive(Default)]
 pub struct ShmRegistryInternal {
@@ -67,7 +67,7 @@ impl ShmRegistry {
             lastIDUsed: 0,
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn FindByID(&self, id: ID) -> Option<Shm> {
@@ -75,7 +75,7 @@ impl ShmRegistry {
         return match me.shms.get(&id) {
             None => None,
             Some(shm) => Some(shm.clone()),
-        }
+        };
     }
 
     fn dissociateKey(&self, shm: &Shm) {
@@ -88,16 +88,25 @@ impl ShmRegistry {
         }
     }
 
-    pub fn FindOrCreate(&self, task: &Task, pid: i32, key: Key, size: u64,
-                        mode: &FileMode, private: bool, create: bool, exclusive: bool) -> Result<Shm> {
+    pub fn FindOrCreate(
+        &self,
+        task: &Task,
+        pid: i32,
+        key: Key,
+        size: u64,
+        mode: &FileMode,
+        private: bool,
+        create: bool,
+        exclusive: bool,
+    ) -> Result<Shm> {
         if (create || private) && (size < SHMMIN || size > SHMMAX) {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         {
             let me = self.lock();
             if me.shms.len() > SHMMNI as usize {
-                return Err(Error::SysError(SysErr::ENOSPC))
+                return Err(Error::SysError(SysErr::ENOSPC));
             }
 
             if !private {
@@ -108,15 +117,15 @@ impl ShmRegistry {
                             let shm = s.lock();
 
                             if !shm.checkPermission(task, &PermMask::FromMode(mode.clone())) {
-                                return Err(Error::SysError(SysErr::EACCES))
+                                return Err(Error::SysError(SysErr::EACCES));
                             }
 
                             if size > shm.size {
-                                return Err(Error::SysError(SysErr::EINVAL))
+                                return Err(Error::SysError(SysErr::EINVAL));
                             }
 
                             if create && exclusive {
-                                return Err(Error::SysError(SysErr::EEXIST))
+                                return Err(Error::SysError(SysErr::EEXIST));
                             }
                         }
 
@@ -125,7 +134,7 @@ impl ShmRegistry {
                 };
 
                 if !create {
-                    return Err(Error::SysError(SysErr::ENOENT))
+                    return Err(Error::SysError(SysErr::ENOENT));
                 }
             }
 
@@ -146,7 +155,15 @@ impl ShmRegistry {
         return self.newShm(task, pid, key, &creator, &perms, size);
     }
 
-    fn newShm(&self, task: &Task, pid: i32, key: Key, creator: &FileOwner, perms: &FilePermissions, size: u64) -> Result<Shm> {
+    fn newShm(
+        &self,
+        task: &Task,
+        pid: i32,
+        key: Key,
+        creator: &FileOwner,
+        perms: &FilePermissions,
+        size: u64,
+    ) -> Result<Shm> {
         let effectiveSize = Addr(size).MustRoundUp().0;
         let fr = Range::New(0, effectiveSize);
 
@@ -189,7 +206,7 @@ impl ShmRegistry {
             me.shms.insert(id, shm.clone());
             me.keysToShms.insert(key, shm.clone());
             me.totalPages += effectiveSize / MemoryDef::PAGE_SIZE;
-            return Ok(shm)
+            return Ok(shm);
         }
 
         return Err(Error::SysError(SysErr::ENOSPC));
@@ -202,7 +219,7 @@ impl ShmRegistry {
             ShmMni: SHMMNI,
             ShmSeg: SHMSEG,
             ShmAll: SHMALL,
-        }
+        };
     }
 
     pub fn ShmInfo(&self) -> ShmInfo {
@@ -214,7 +231,7 @@ impl ShmRegistry {
             // We could probably get a better estimate from memory accounting.
             ShmSwp: 0,
             ..Default::default()
-        }
+        };
     }
 
     fn remove(&self, s: &Shm) {
@@ -260,12 +277,12 @@ impl ShmInternal {
         let effectiveKUID = creds.lock().EffectiveKUID;
 
         if self.owner.UID == effectiveKUID || self.creator.UID == effectiveKUID {
-            return true
+            return true;
         }
 
         let userns = self.registry.lock().userNS.clone();
 
-        return creds.HasCapabilityIn(Capability::CAP_SYS_ADMIN, &userns)
+        return creds.HasCapabilityIn(Capability::CAP_SYS_ADMIN, &userns);
     }
 
     // checkPermissions verifies whether a segment is accessible by ctx for access
@@ -281,11 +298,11 @@ impl ShmInternal {
         }
 
         if p.SupersetOf(req) {
-            return true
+            return true;
         }
 
         let ns = self.registry.lock().userNS.clone();
-        return creds.HasCapabilityIn(Capability::CAP_IPC_OWNER, &ns)
+        return creds.HasCapabilityIn(Capability::CAP_IPC_OWNER, &ns);
     }
 }
 
@@ -310,7 +327,7 @@ impl Eq for Shm {}
 
 impl Mapping for Shm {
     fn MappedName(&self, _task: &Task) -> String {
-        return format!("SYSV{}", self.lock().key)
+        return format!("SYSV{}", self.lock().key);
     }
 
     fn DeviceID(&self) -> u64 {
@@ -324,13 +341,12 @@ impl Mapping for Shm {
 
 impl Shm {
     pub fn Id(&self) -> ID {
-        return self.lock().id
+        return self.lock().id;
     }
 
     pub fn HostIops(&self) -> HostInodeOp {
         return self.lock().memfdIops.clone();
     }
-
 
     pub fn EffectiveSize(&self) -> u64 {
         return self.lock().effectiveSize;
@@ -342,15 +358,21 @@ impl Shm {
         if !me.pendingDestruction {
             attachCount -= 2; //one more shms, one for keytoshms
         }
-        return attachCount/2; // one for mappable, one for mapping
+        return attachCount / 2; // one for mappable, one for mapping
     }
 
     pub fn IPCStat(&self, task: &Task) -> Result<ShmidDS> {
         let attachCount = self.AttachCount();
         let me = self.lock();
 
-        if !me.checkPermission(task, &PermMask { read: true, ..Default::default() }) {
-            return Err(Error::SysError(SysErr::EACCES))
+        if !me.checkPermission(
+            task,
+            &PermMask {
+                read: true,
+                ..Default::default()
+            },
+        ) {
+            return Err(Error::SysError(SysErr::EACCES));
         }
 
         let mut mode: u16 = 0;
@@ -380,14 +402,14 @@ impl Shm {
             ..Default::default()
         };
 
-        return Ok(ds)
+        return Ok(ds);
     }
 
     pub fn Set(&self, task: &Task, ds: &ShmidDS) -> Result<()> {
         let mut me = self.lock();
 
         if !me.checkOwnership(task) {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         let creds = task.creds.clone();
@@ -396,7 +418,7 @@ impl Shm {
         let uid = userns.MapToKUID(UID(ds.ShmPerm.UID));
         let gid = userns.MapToKGID(GID(ds.ShmPerm.GID));
         if !uid.Ok() || !gid.Ok() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let mode = FileMode(ds.ShmPerm.Mode & 0x1ff);
@@ -406,7 +428,7 @@ impl Shm {
         me.owner.GID = gid;
 
         me.changeTime = task.Now();
-        return Ok(())
+        return Ok(());
     }
 
     pub fn MarkDestroyed(&self) {
@@ -424,7 +446,7 @@ impl Shm {
         };
     }
 
-     pub fn destroy(&self) {
+    pub fn destroy(&self) {
         let registry = self.lock().registry.clone();
         registry.remove(self)
     }
@@ -438,18 +460,21 @@ impl Shm {
         let attachCount = self.AttachCount();
         let me = self.lock();
         if me.pendingDestruction && attachCount == 0 {
-            return Err(Error::SysError(SysErr::EIDRM))
+            return Err(Error::SysError(SysErr::EIDRM));
         }
 
-        if !me.checkPermission(task, &PermMask {
-            read: true,
-            write: !opts.ReadOnly,
-            execute: opts.Execute
-        }) {
+        if !me.checkPermission(
+            task,
+            &PermMask {
+                read: true,
+                write: !opts.ReadOnly,
+                execute: opts.Execute,
+            },
+        ) {
             // "The calling process does not have the required permissions for the
             // requested attach type, and does not have the CAP_IPC_OWNER capability
             // in the user namespace that governs its IPC namespace." - man shmat(2)
-            return Err(Error::SysError(SysErr::EACCES))
+            return Err(Error::SysError(SysErr::EACCES));
         }
 
         let mmapOpts = MMapOpts {
@@ -472,7 +497,7 @@ impl Shm {
             Hint: format!(""),
         };
 
-        return Ok(mmapOpts)
+        return Ok(mmapOpts);
     }
 }
 
@@ -487,7 +512,7 @@ impl MemoryManager {
     pub fn DetachShm(&self, task: &Task, addr: u64) -> Result<()> {
         if addr != Addr(addr).RoundDown().unwrap().0 {
             // "... shmaddr is not aligned on a page boundary." - man shmdt(2)
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let _ml = self.MappingWriteLock();
@@ -507,7 +532,7 @@ impl MemoryManager {
                         break;
                     }
                 }
-                _ => ()
+                _ => (),
             }
             vseg = vseg.NextSeg();
         }
@@ -515,7 +540,7 @@ impl MemoryManager {
         let detached = match detached {
             None => {
                 // There is no shared memory segment attached at addr.
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             }
             Some(shm) => shm,
         };
@@ -525,8 +550,9 @@ impl MemoryManager {
         let end = addr + detached.EffectiveSize();
         while vseg.Ok() && vseg.Range().End() <= end {
             let vma = vseg.Value();
-            if vma.mappable == MMappable::FromShm(detached.clone()) &&
-                vseg.Range().Start() - addr == vma.offset {
+            if vma.mappable == MMappable::FromShm(detached.clone())
+                && vseg.Range().Start() - addr == vma.offset
+            {
                 let r = vseg.Range();
                 mapping.usageAS -= r.Len();
                 if vma.mlockMode != MLockMode::MlockNone {
@@ -545,6 +571,6 @@ impl MemoryManager {
         }
 
         self.TlbShootdown();
-        return Ok(())
+        return Ok(());
     }
 }

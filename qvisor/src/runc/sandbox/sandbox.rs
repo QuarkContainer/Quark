@@ -147,7 +147,13 @@ pub fn SignalProcess(cid: &str, pid: i32, signo: i32, fgProcess: bool) -> Result
     }
 }
 
-pub fn SignalExecProcess(cid: &str, pid: i32, signo: i32, fgProcess: bool, sandboxId: &str) -> Result<()> {
+pub fn SignalExecProcess(
+    cid: &str,
+    pid: i32,
+    signo: i32,
+    fgProcess: bool,
+    sandboxId: &str,
+) -> Result<()> {
     info!("Signal sandbox {}, exec id {}", sandboxId, pid);
 
     let addr = ControlSocketAddr(sandboxId);
@@ -703,10 +709,13 @@ impl Sandbox {
     pub fn DestroyContainer(&mut self, cid: &str) -> Result<()> {
         if self.IsRootContainer(cid) {
             info!("destroying root container by destroying sandbox");
-            return self.Destroy()
+            return self.Destroy();
         }
 
-        info!("destroying subcontainer, cid: {}, sandboxId: {}", cid, &self.ID);
+        info!(
+            "destroying subcontainer, cid: {}, sandboxId: {}",
+            cid, &self.ID
+        );
 
         let client = self.SandboxConnect()?;
         let req = UCallReq::ContainerDestroy(cid.to_string());
@@ -717,7 +726,7 @@ impl Sandbox {
                 if self.IsRunning() {
                     panic!("DestroyContainer get unknow resp {:?}", resp);
                 } else {
-                    return Ok(())
+                    return Ok(());
                 }
             }
         }

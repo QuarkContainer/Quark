@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors 
+// Copyright (c) 2021 Quark Container Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -14,16 +14,16 @@
 use super::super::kernel::waiter::*;
 //use crate::qlib::kernel::socket::hostinet::socket::*;
 
+use super::super::qlib::bytestream::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
-use super::super::task::*;
 use super::super::syscalls::syscalls::*;
-use super::super::qlib::bytestream::*;
+use super::super::task::*;
 
-pub const BLOCK_WRITE : i32 = 1;
-pub const BLOCK_READ : i32 = 2;
+pub const BLOCK_WRITE: i32 = 1;
+pub const BLOCK_READ: i32 = 2;
 
-pub const BUF_SIZE : usize = 1 << 16; // 64K
+pub const BUF_SIZE: usize = 1 << 16; // 64K
 
 // arg0: fd
 // arg1: produce byte count
@@ -37,7 +37,7 @@ pub fn SysSocketProduce(task: &mut Task, args: &SyscallArguments) -> Result<i64>
     let flags = args.arg3 as i32;
 
     if flags & !SocketFlags::SOCK_NONBLOCK != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let block = flags & SocketFlags::SOCK_NONBLOCK == 0;
@@ -50,13 +50,13 @@ pub fn SysSocketProduce(task: &mut Task, args: &SyscallArguments) -> Result<i64>
         Some(uringSocket) => {
             uringSocket.Produce(task, count as usize, &mut iovs)?;
             if iovs.cnt != 0 || !block || iovsAddr == 0 {
-                if iovsAddr !=  0 {
+                if iovsAddr != 0 {
                     task.CopyOutObj(&iovs, iovsAddr)?;
                 }
-                
-                return Ok(iovs.Count() as _)
+
+                return Ok(iovs.Count() as _);
             }
-            
+
             let general = task.blocker.generalEntry.clone();
             uringSocket.EventRegister(task, &general, EVENT_WRITE);
             defer!(uringSocket.EventUnregister(task, &general));
@@ -64,17 +64,17 @@ pub fn SysSocketProduce(task: &mut Task, args: &SyscallArguments) -> Result<i64>
             loop {
                 uringSocket.Produce(task, 0, &mut iovs)?;
                 if iovs.cnt != 0 {
-                    if iovsAddr !=  0 {
+                    if iovsAddr != 0 {
                         task.CopyOutObj(&iovs, iovsAddr)?;
                     }
-                    return Ok(iovs.Count() as _)
+                    return Ok(iovs.Count() as _);
                 }
             }
         }
         None => (),
     }
 
-    return Err(Error::SysError(SysErr::EINVAL))
+    return Err(Error::SysError(SysErr::EINVAL));
 }
 
 // arg0: fd
@@ -88,7 +88,7 @@ pub fn SysSocketConsume(task: &mut Task, args: &SyscallArguments) -> Result<i64>
     let flags = args.arg3 as i32;
 
     if flags & !SocketFlags::SOCK_NONBLOCK != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let block = flags & SocketFlags::SOCK_NONBLOCK == 0;
@@ -103,10 +103,10 @@ pub fn SysSocketConsume(task: &mut Task, args: &SyscallArguments) -> Result<i64>
             if iovs.cnt != 0 || !block || iovsAddr == 0 {
                 if iovsAddr != 0 {
                     task.CopyOutObj(&iovs, iovsAddr)?;
-                }               
-                return Ok(iovs.Count() as _)
+                }
+                return Ok(iovs.Count() as _);
             }
-            
+
             let general = task.blocker.generalEntry.clone();
             uringSocket.EventRegister(task, &general, EVENT_WRITE);
             defer!(uringSocket.EventUnregister(task, &general));
@@ -116,13 +116,13 @@ pub fn SysSocketConsume(task: &mut Task, args: &SyscallArguments) -> Result<i64>
                 if iovs.cnt != 0 {
                     if iovsAddr != 0 {
                         task.CopyOutObj(&iovs, iovsAddr)?;
-                    } 
-                    return Ok(iovs.Count() as _)
+                    }
+                    return Ok(iovs.Count() as _);
                 }
             }
         }
         None => (),
     }
 
-    return Err(Error::SysError(SysErr::EINVAL))
+    return Err(Error::SysError(SysErr::EINVAL));
 }

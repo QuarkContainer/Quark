@@ -126,7 +126,7 @@ impl TaskSchedInfoInternal {
 
         return self.SysTicks;
     }
-}   
+}
 
 #[derive(Clone, Default, Debug)]
 pub struct TaskSchedInfo(Arc<QMutex<TaskSchedInfoInternal>>);

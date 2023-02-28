@@ -13,18 +13,18 @@
 // limitations under the License.
 
 use super::super::fs::attr::*;
-use super::super::fs::inotify::*;
 use super::super::fs::file::*;
+use super::super::fs::inotify::*;
 use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
+use super::super::qlib::addr::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::mem::block::*;
-use super::super::qlib::addr::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
-use qlib::mem::seq::BlockSeq;
 use kernel::pipe::pipe::Pipe;
+use qlib::mem::seq::BlockSeq;
 
 // Splice moves data to this file, directly from another.
 //
@@ -92,7 +92,7 @@ pub fn Splice(task: &Task, dst: &File, src: &File, opts: &mut SpliceOpts) -> Res
         // Enforce file limits.
         let (limit, ok) = dst.checkLimit(task, opts.DstStart);
         if ok && limit == 0 {
-            return Err(Error::ErrExceedsFileSizeLimit)
+            return Err(Error::ErrExceedsFileSizeLimit);
         } else if ok && limit < opts.DstStart {
             opts.Length = limit; // Cap the write.
         }
@@ -133,9 +133,9 @@ pub fn Splice(task: &Task, dst: &File, src: &File, opts: &mut SpliceOpts) -> Res
                         let readLen = match ReadAt(task, src, &mut iovs, srcStart + copyLen) {
                             Err(e) => {
                                 if copyLen > 0 {
-                                    return Ok(copyLen)
+                                    return Ok(copyLen);
                                 }
-                                return Err(e)
+                                return Err(e);
                             }
                             Ok(n) => {
                                 if n == 0 {
@@ -149,9 +149,9 @@ pub fn Splice(task: &Task, dst: &File, src: &File, opts: &mut SpliceOpts) -> Res
                         match WriteAt(task, dst, &iovs, dstStart + copyLen) {
                             Err(e) => {
                                 if copyLen > 0 {
-                                    return Ok(copyLen)
+                                    return Ok(copyLen);
                                 }
-                                return Err(e)
+                                return Err(e);
                             }
                             Ok(n) => {
                                 copyLen += n;
@@ -216,7 +216,7 @@ pub fn RepWriteAt(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<
 pub fn WriteAt(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
     let wouldBlock = f.WouldBlock();
     if !wouldBlock {
-        return RepWriteAt(task, f, srcs,  offset)
+        return RepWriteAt(task, f, srcs, offset);
     }
 
     let general = task.blocker.generalEntry.clone();
@@ -264,9 +264,7 @@ pub fn WriteAt(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64
 pub fn ReadAt(task: &Task, f: &File, dsts: &mut [IoVec], offset: i64) -> Result<i64> {
     let wouldBlock = f.WouldBlock();
     if !wouldBlock {
-       return f
-           .FileOp
-           .ReadAt(task, f, &mut dsts[..], offset, false);
+        return f.FileOp.ReadAt(task, f, &mut dsts[..], offset, false);
     }
 
     let general = task.blocker.generalEntry.clone();
@@ -274,16 +272,12 @@ pub fn ReadAt(task: &Task, f: &File, dsts: &mut [IoVec], offset: i64) -> Result<
     defer!(f.EventUnregister(task, &general));
 
     loop {
-        match f
-            .FileOp
-            .ReadAt(task, f, &mut dsts[..], offset, false) {
+        match f.FileOp.ReadAt(task, f, &mut dsts[..], offset, false) {
             Err(Error::SysError(SysErr::EWOULDBLOCK)) => (),
             Err(e) => {
                 return Err(e);
             }
-            Ok(n) => {
-                return Ok(n)
-            }
+            Ok(n) => return Ok(n),
         }
 
         match task.blocker.BlockWithMonoTimer(true, None) {
@@ -301,7 +295,7 @@ pub fn ReadAt(task: &Task, f: &File, dsts: &mut [IoVec], offset: i64) -> Result<
     }
 }
 
-pub const MAX_RW_COUNT : i64 = ((i32::MAX as u64) & !(PAGE_SIZE - 1)) as i64;
+pub const MAX_RW_COUNT: i64 = ((i32::MAX as u64) & !(PAGE_SIZE - 1)) as i64;
 
 // doSplice implements a blocking splice operation.
 pub fn DoSplice(
@@ -315,12 +309,13 @@ pub fn DoSplice(
         || opts.SrcStart < 0
         || opts.DstStart < 0
         || i64::MAX - opts.SrcStart < opts.Length
-        || i64::MAX - opts.DstStart < opts.Length {
-        return Err(Error::SysError(SysErr::EINVAL))
+        || i64::MAX - opts.DstStart < opts.Length
+    {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if opts.Length == 0 {
-        return Ok(0)
+        return Ok(0);
     }
 
     if opts.Length > MAX_RW_COUNT {
@@ -365,13 +360,16 @@ pub fn DoSplice(
                     // On Linux, inotify behavior is not very consistent with splice(2). We try
                     // our best to emulate Linux for very basic calls to splice, where for some
                     // reason, events are generated for output files, but not input files.
-                    srcFile.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
-                    dstFile.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::InodeEvent);
+                    srcFile
+                        .Dirent
+                        .InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
+                    dstFile
+                        .Dirent
+                        .InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::InodeEvent);
                 }
-                return Ok(n)
-            },
+                return Ok(n);
+            }
         }
-
 
         // Was anything registered? If no, everything is non-blocking.
         if !inW && !outW {
@@ -417,7 +415,8 @@ pub fn SysSplice(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     // N.B. This is a rather simplistic heuristic that avoids some
     // poor edge case behavior since the exact semantics here are
     // underspecified and vary between versions of Linux itself.
-    let nonBlocking = src.Flags().NonBlocking || dst.Flags().NonBlocking || (flags & SPLICE_F_NONBLOCK) != 0;
+    let nonBlocking =
+        src.Flags().NonBlocking || dst.Flags().NonBlocking || (flags & SPLICE_F_NONBLOCK) != 0;
 
     // Construct our options.
     //
@@ -498,7 +497,7 @@ pub fn SysTee(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let flags = args.arg3 as i32;
 
     if count == 0 {
-        return Ok(0)
+        return Ok(0);
     }
 
     let count = if count > MAX_RW_COUNT {
@@ -586,31 +585,36 @@ pub fn SysTee(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         // On Linux, inotify behavior is not very consistent with splice(2). We try
         // our best to emulate Linux for very basic calls to splice, where for some
         // reason, events are generated for output files, but not input files.
-        src.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
-        dst.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::InodeEvent);
+        src.Dirent
+            .InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
+        dst.Dirent
+            .InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::InodeEvent);
     }
-    return Ok(count)
+    return Ok(count);
 }
 
-pub fn ReadWithoutConsume(task: &Task, f: &File, p: &Pipe, bs: BlockSeq, blocking: bool) -> Result<i64> {
+pub fn ReadWithoutConsume(
+    task: &Task,
+    f: &File,
+    p: &Pipe,
+    bs: BlockSeq,
+    blocking: bool,
+) -> Result<i64> {
     let general = task.blocker.generalEntry.clone();
     f.EventRegister(task, &general, EVENT_READ);
     defer!(f.EventUnregister(task, &general));
 
     loop {
-        match p
-            .ReadWithoutConsume(task, bs) {
+        match p.ReadWithoutConsume(task, bs) {
             Err(Error::SysError(SysErr::EAGAIN)) => {
                 if !blocking {
-                    return Err(Error::SysError(SysErr::EAGAIN))
+                    return Err(Error::SysError(SysErr::EAGAIN));
                 }
-            },
+            }
             Err(e) => {
                 return Err(e);
             }
-            Ok(n) => {
-                return Ok(n as i64)
-            }
+            Ok(n) => return Ok(n as i64),
         }
 
         match task.blocker.BlockWithMonoTimer(true, None) {
@@ -634,15 +638,13 @@ pub fn WritePipe(task: &Task, f: &File, srcs: &[IoVec], blocking: bool) -> Resul
         match f.Writev(task, srcs) {
             Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                 if !blocking {
-                    return Err(Error::SysError(SysErr::EAGAIN))
+                    return Err(Error::SysError(SysErr::EAGAIN));
                 }
-            },
+            }
             Err(e) => {
                 return Err(e);
             }
-            Ok(n) => {
-                return Ok(n)
-            }
+            Ok(n) => return Ok(n),
         }
 
         match task.blocker.BlockWithMonoTimer(true, None) {

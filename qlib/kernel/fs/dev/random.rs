@@ -43,7 +43,6 @@ use super::super::fsutil::inode::*;
 use super::super::inode::*;
 use super::super::mount::*;
 
-
 #[derive(Clone)]
 pub struct RandomDevice(pub Arc<QRwLock<InodeSimpleAttributesInternal>>);
 

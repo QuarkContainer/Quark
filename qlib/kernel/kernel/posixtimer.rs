@@ -141,7 +141,7 @@ impl Drop for IntervalTimer {
                     t.Destroy();
                 }
             }
-        } 
+        }
     }
 }
 

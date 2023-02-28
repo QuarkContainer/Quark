@@ -1,15 +1,15 @@
 use alloc::collections::BTreeMap;
 use alloc::slice;
 use alloc::sync::Arc;
+use core::sync::atomic::AtomicU32;
 use spin::Mutex;
 use std::{mem, ptr};
-use core::sync::atomic::AtomicU32;
 
+use super::qlib::idallocator::IdAllocator;
 use super::qlib::linux_def::*;
 use super::qlib::rdma_share::*;
 use super::qlib::rdma_svc_cli::*;
 use super::qlib::unix_socket::UnixSocket;
-use super::qlib::idallocator::IdAllocator;
 use super::vmspace::VMSpace;
 
 impl Drop for RDMASvcClient {
@@ -119,7 +119,7 @@ impl RDMASvcClient {
                 //"The default values are 32768 and 60999 respectively."
                 tcpPortAllocator: Mutex::new(IdAllocator::New(32768, 28232)), // 60999 - 32768 + 1 = 28231 + 1 = 28232
                 udpPortAllocator: Mutex::new(IdAllocator::New(32768, 28232)), // 60999 - 32768 + 1 = 28231 + 1 = 28232
-                // timestamp: Mutex::new(Vec::with_capacity(16)),
+                                                                              // timestamp: Mutex::new(Vec::with_capacity(16)),
             }),
         }
     }
@@ -144,7 +144,12 @@ impl RDMASvcClient {
     //     rdmaSvcCli
     // }
 
-    pub fn initialize(cliSock: i32, localShareAddr: u64, globalShareAddr: u64, podId:[u8; 64]) -> Self {
+    pub fn initialize(
+        cliSock: i32,
+        localShareAddr: u64,
+        globalShareAddr: u64,
+        podId: [u8; 64],
+    ) -> Self {
         // let cli_sock = UnixSocket::NewClient(path).unwrap();
         let cli_sock = UnixSocket { fd: cliSock };
 

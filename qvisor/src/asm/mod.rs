@@ -23,34 +23,38 @@ pub fn HyperCall(_type_: u16, _para1: u64) {}
 #[inline]
 pub fn CurrentCr3() -> u64 {
     let cr3: u64;
-    unsafe { 
+    unsafe {
         asm!(
             "mov {0} cr3",
             out(reg) cr3
-        ) 
+        )
     };
     return cr3;
 }
 
 #[inline(always)]
 pub fn mfence() {
-    unsafe { asm!("mfence" ) }
+    unsafe { asm!("mfence") }
 }
 
 #[inline(always)]
 pub fn sfence() {
     unsafe {
-        asm!("
+        asm!(
+            "
         sfence
-    ")
+    "
+        )
     }
 }
 
 #[inline(always)]
 pub fn lfence() {
     unsafe {
-        asm!("
+        asm!(
+            "
         lfence
-    ")
+    "
+        )
     }
 }

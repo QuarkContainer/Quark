@@ -132,7 +132,7 @@ impl MemAllocator {
         ZeroPage(addr);
         return self.lock().Free(addr, 1);
     }
-    
+
     //baseAddr: is the base memory address
     //ord: the memory size is 2^ord pages
     //memory layout: the Buddy Allocator's memory is also allocated by itself.

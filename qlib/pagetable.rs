@@ -14,8 +14,10 @@
 
 use alloc::alloc::{alloc, dealloc, Layout};
 use alloc::collections::BTreeSet;
-use alloc::vec::Vec;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::hint::spin_loop;
+use core::sync::atomic::fence;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
@@ -25,17 +27,15 @@ use x86_64::structures::paging::PageTable;
 use x86_64::structures::paging::PageTableFlags;
 use x86_64::PhysAddr;
 use x86_64::VirtAddr;
-use core::sync::atomic::fence;
-use core::hint::spin_loop;
 
-use crate::kernel_def::Invlpg;
-use crate::qlib::kernel::PAGE_MGR;
 use super::super::asm::*;
 use super::addr::*;
 use super::common::{Allocator, Error, Result};
 use super::kernel::Kernel::HostSpace;
 use super::linux_def::*;
 use super::mutex::*;
+use crate::kernel_def::Invlpg;
+use crate::qlib::kernel::PAGE_MGR;
 
 #[derive(Default)]
 pub struct PageTables {
@@ -267,7 +267,7 @@ impl PageTables {
 
             // try to swapin page if it is swapout
             self.HandlingSwapInPage(addr, pteEntry);
-             
+
             return Ok(pteEntry);
         }
     }
@@ -681,19 +681,18 @@ impl PageTables {
         return start;
     }
 
-    pub fn UnusedEntryCount(tbl: * const PageTable) -> usize {
+    pub fn UnusedEntryCount(tbl: *const PageTable) -> usize {
         let mut count = 0;
         unsafe {
             for idx in 0..MemoryDef::ENTRY_COUNT as usize {
-                let entry: &PageTableEntry =
-                                    &(*tbl)[PageTableIndex::new(idx as u16)];
+                let entry: &PageTableEntry = &(*tbl)[PageTableIndex::new(idx as u16)];
                 if entry.is_unused() {
                     count += 1;
                 }
             }
 
             return count;
-        } 
+        }
     }
 
     pub fn Unmap(&self, start: u64, end: u64, pagePool: &Allocator) -> Result<()> {
@@ -766,7 +765,8 @@ impl PageTables {
                             p1Idx += 1;
                         }
 
-                        if clearPTEEntries + unusedPTEEntryCount == MemoryDef::ENTRY_COUNT as usize {
+                        if clearPTEEntries + unusedPTEEntryCount == MemoryDef::ENTRY_COUNT as usize
+                        {
                             let currAddr = pmdEntry.addr().as_u64();
                             let refCnt = pagePool.Deref(currAddr)?;
                             if refCnt == 0 {
@@ -833,17 +833,24 @@ impl PageTables {
         self.GetAllPagetablePagesWithRange(
             Addr(MemoryDef::PAGE_SIZE),
             Addr(MemoryDef::PHY_LOWER_ADDR),
-            pages)?;
-        
+            pages,
+        )?;
+
         self.GetAllPagetablePagesWithRange(
             Addr(MemoryDef::PHY_UPPER_ADDR),
             Addr(MemoryDef::LOWER_TOP),
-            pages)?;
+            pages,
+        )?;
 
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn GetAllPagetablePagesWithRange(&self, start: Addr, end: Addr, pages: &mut BTreeSet<u64>) -> Result<()> {
+    pub fn GetAllPagetablePagesWithRange(
+        &self,
+        start: Addr,
+        end: Addr,
+        pages: &mut BTreeSet<u64>,
+    ) -> Result<()> {
         //let mut curAddr = start;
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
         unsafe {
@@ -894,7 +901,7 @@ impl PageTables {
 
                     while Self::ToVirtualAddr(p4Idx, p3Idx, p2Idx, p1Idx).0 < end.0 {
                         let pmdEntry = &mut (*pmdTbl)[p2Idx];
-                        
+
                         if pmdEntry.is_unused() {
                             if p2Idx == PageTableIndex::new(MemoryDef::ENTRY_COUNT - 1) {
                                 p2Idx = PageTableIndex::new(0);
@@ -910,7 +917,6 @@ impl PageTables {
                             // add l4 pagetable page address
                             pages.insert(pmdEntry.addr().as_u64());
                         }
-
 
                         if p2Idx == PageTableIndex::new(MemoryDef::ENTRY_COUNT - 1) {
                             p2Idx = PageTableIndex::new(0);
@@ -1089,7 +1095,13 @@ impl PageTables {
         }
     }
 
-    pub fn SwapOutPages(&self, start: u64, len: u64, pages: &mut BTreeSet<u64>, updatePageEntry: bool) -> Result<()> {
+    pub fn SwapOutPages(
+        &self,
+        start: u64,
+        len: u64,
+        pages: &mut BTreeSet<u64>,
+        updatePageEntry: bool,
+    ) -> Result<()> {
         let end = start + len;
 
         //self.Unmap(MemoryDef::PAGE_SIZE, MemoryDef::PHY_LOWER_ADDR, &*PAGE_MGR)?;
@@ -1098,7 +1110,7 @@ impl PageTables {
         self.Traverse(
             Addr(MemoryDef::PAGE_SIZE),
             Addr(MemoryDef::PHY_LOWER_ADDR),
-            |entry: &mut PageTableEntry , _virtualAddr| {
+            |entry: &mut PageTableEntry, _virtualAddr| {
                 let phyAddr = entry.addr().as_u64();
                 if start <= phyAddr && phyAddr < end {
                     let mut flags = entry.flags();
@@ -1110,10 +1122,10 @@ impl PageTables {
                         flags |= PageTableFlags::BIT_9;
                         entry.set_flags(flags);
                     }
-                    
+
                     if needInsert {
                         pages.insert(phyAddr);
-                    }                   
+                    }
                 }
             },
             false,
@@ -1134,10 +1146,10 @@ impl PageTables {
                         flags |= PageTableFlags::BIT_9;
                         entry.set_flags(flags);
                     }
-                    
+
                     if needInsert {
                         pages.insert(phyAddr);
-                    }                   
+                    }
                 }
             },
             false,
@@ -1158,7 +1170,7 @@ impl PageTables {
             let pudTbl: *mut PageTable;
 
             if pgdEntry.is_unused() {
-                return Ok(0)
+                return Ok(0);
             } else {
                 pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
             }
@@ -1167,7 +1179,7 @@ impl PageTables {
             let pmdTbl: *mut PageTable;
 
             if pudEntry.is_unused() {
-                return Ok(0)
+                return Ok(0);
             } else {
                 pmdTbl = pudEntry.addr().as_u64() as *mut PageTable;
             }
@@ -1176,7 +1188,7 @@ impl PageTables {
             let pteTbl: *mut PageTable;
 
             if pmdEntry.is_unused() {
-                return Ok(0)
+                return Ok(0);
             } else {
                 pteTbl = pmdEntry.addr().as_u64() as *mut PageTable;
             }
@@ -1184,7 +1196,7 @@ impl PageTables {
             let pteEntry = &mut (*pteTbl)[p1Idx];
 
             if pteEntry.is_unused() {
-                return Ok(0)
+                return Ok(0);
             }
 
             /*let mut flags = pteEntry.flags();
@@ -1199,7 +1211,7 @@ impl PageTables {
 
             // the page might be swapping in by another vcpu
             let addr = pteEntry.addr().as_u64();
-            return Ok(addr)
+            return Ok(addr);
         }
     }
 
@@ -1214,9 +1226,9 @@ impl PageTables {
 
                 let mut flags = pteEntry.flags();
 
-                // the page has been swaped in 
+                // the page has been swaped in
                 if flags & PageTableFlags::BIT_9 != PageTableFlags::BIT_9 {
-                    return
+                    return;
                 }
 
                 // is there another thread doing swapin?
@@ -1247,13 +1259,13 @@ impl PageTables {
 
                     // wait bit9 is cleared
                     if flags & PageTableFlags::BIT_9 != PageTableFlags::BIT_9 {
-                        return
+                        return;
                     }
-                    
+
                     spin_loop();
                 }
             }
-        } 
+        }
     }
 
     pub fn MProtect(

@@ -73,12 +73,11 @@ impl MappingOfRange {
         }
         self.MappingSpace
             .Upgrade()
-            .MFree(&Range::New(start, end-start))
+            .MFree(&Range::New(start, end - start))
             .unwrap();
 
         error!("truncate file and unmap filemap, todo: TLBshootdown")
         //self.TlbShootdown();
-
     }
 }
 

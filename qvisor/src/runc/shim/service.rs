@@ -21,26 +21,23 @@ use super::super::container::status::Status;
 use super::shim_task::*;
 
 use containerd_shim::api::*;
-use containerd_shim::protos::protobuf::{Message, SingularPtrField};
 use containerd_shim::monitor::{monitor_subscribe, Subject, Subscription, Topic};
+use containerd_shim::protos::protobuf::{Message, SingularPtrField};
 use containerd_shim::protos::ttrpc::context::Context;
 use containerd_shim::publisher::RemotePublisher;
 use containerd_shim::spawn;
 use containerd_shim::util::*;
 use containerd_shim::Config;
+use containerd_shim::Error;
 use containerd_shim::ExitSignal;
 use containerd_shim::Result;
 use containerd_shim::Shim;
-use containerd_shim::Error;
 use containerd_shim::StartOpts;
 
 const CRI_SANDBOX_ID: &str = "io.kubernetes.cri.sandbox-id";
 const CONTAINERD_RUNC_V2_GROUP: &str = "io.containerd.runc.v2.group";
 
-const GROUP_LABELS: [&str; 2] = [
-    CONTAINERD_RUNC_V2_GROUP,
-    CRI_SANDBOX_ID,
-];
+const GROUP_LABELS: [&str; 2] = [CONTAINERD_RUNC_V2_GROUP, CRI_SANDBOX_ID];
 
 // Implementation for shim service, see https://github.com/containerd/containerd/blob/main/runtime/v2/README.md
 pub struct Service {
@@ -102,7 +99,12 @@ impl Shim for Service {
         let mut container_root_dir = std::env::current_dir().unwrap();
         if self.id != sandbox_id {
             // cri put all containers' meta.json file in sandbox bundle directory, have to get sandbox bundle dir
-            container_root_dir = std::env::current_dir().unwrap().parent().unwrap().join(&sandbox_id).join(&self.namespace);
+            container_root_dir = std::env::current_dir()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .join(&sandbox_id)
+                .join(&self.namespace);
         } else {
             let wait_dur = time::Duration::from_millis(100);
             thread::sleep(wait_dur);
@@ -110,19 +112,25 @@ impl Shim for Service {
         }
 
         let mut container = Container::Load(&container_root_dir.to_str().unwrap(), &self.id)
-            .or_else( |e| {
+            .or_else(|e| {
                 error!("failed to load container{:?}", &e);
-                return Err(Error::NotFoundError(self.id.to_string()));}
-            ).unwrap();
+                return Err(Error::NotFoundError(self.id.to_string()));
+            })
+            .unwrap();
 
         if container.Status != Status::Created && container.Status != Status::Stopped {
-            return Err(Error::FailedPreconditionError( "cannot delete container that is not stopped".to_string()));
+            return Err(Error::FailedPreconditionError(
+                "cannot delete container that is not stopped".to_string(),
+            ));
         }
 
-        container.Destroy().or_else(|_e| {
-            error!("failed to destroy container{:?}", &_e);
-            return Err(Error::Other("destroy shim failed".to_string()))
-        }).ok();
+        container
+            .Destroy()
+            .or_else(|_e| {
+                error!("failed to destroy container{:?}", &_e);
+                return Err(Error::Other("destroy shim failed".to_string()));
+            })
+            .ok();
 
         let mut resp = DeleteResponse::new();
         // sigkill

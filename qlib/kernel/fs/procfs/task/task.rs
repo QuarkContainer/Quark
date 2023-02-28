@@ -122,7 +122,8 @@ impl ProcNode {
             data: TaskDirNode {
                 pidns: None,
                 thread: thread.clone(),
-            }.into(),
+            }
+            .into(),
         };
 
         return NewProcInode(

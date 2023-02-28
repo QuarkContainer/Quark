@@ -236,7 +236,14 @@ impl Filesystem for WhitelistFileSystem {
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }
-        let inode = Inode::NewHostInode(task, &Arc::new(QMutex::new(msrc)), fd, &fstat, writable, false)?;
+        let inode = Inode::NewHostInode(
+            task,
+            &Arc::new(QMutex::new(msrc)),
+            fd,
+            &fstat,
+            writable,
+            false,
+        )?;
 
         return Ok(inode);
     }

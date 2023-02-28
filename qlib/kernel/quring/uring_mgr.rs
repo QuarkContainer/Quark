@@ -17,8 +17,8 @@ use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
-use super::super::super::common::*;
 use super::super::super::bytestream::*;
+use super::super::super::common::*;
 use super::super::super::object_ref::*;
 pub use super::super::super::uring::cqueue;
 pub use super::super::super::uring::cqueue::CompletionQueue;
@@ -93,12 +93,7 @@ impl IoUring {
         return self.SubmitAndWait(0);
     }
 
-    pub fn Enter(
-        &self,
-        to_submit: u32,
-        min_complete: u32,
-        flags: u32,
-    ) -> Result<usize> {
+    pub fn Enter(&self, to_submit: u32, min_complete: u32, flags: u32) -> Result<usize> {
         let ret = HostSpace::IoUringEnter(to_submit, min_complete, flags);
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
@@ -376,7 +371,7 @@ impl QUring {
         buf: SocketBuff,
         count: usize,
         ops: &UringSocketOperations,
-        iovs: &mut SocketBufIovs
+        iovs: &mut SocketBufIovs,
     ) -> Result<()> {
         let writeBuf = buf.Produce(task, count, iovs)?;
         if let Some((addr, len)) = writeBuf {
@@ -413,7 +408,7 @@ impl QUring {
         queue: Queue,
         buf: SocketBuff,
         count: usize,
-        iovs: &mut SocketBufIovs
+        iovs: &mut SocketBufIovs,
     ) -> Result<()> {
         let trigger = buf.Consume(task, count, iovs)?;
 
@@ -633,7 +628,6 @@ impl QUring {
         let entry = call.SEntry();
         let entry = entry.user_data(call.Ptr());
 
-
         self.UringPush(entry);
     }
 
@@ -662,9 +656,7 @@ impl QUring {
             }
         }
 
-        self.IOUring()
-            .Submit()
-            .expect("QUringIntern::submit fail");
+        self.IOUring().Submit().expect("QUringIntern::submit fail");
         return;
     }
 
@@ -707,9 +699,7 @@ impl QUring {
             }
         }
 
-        self.IOUring()
-            .Submit()
-            .expect("QUringIntern::submit fail");
+        self.IOUring().Submit().expect("QUringIntern::submit fail");
         return;
     }
 }

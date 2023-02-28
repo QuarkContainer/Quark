@@ -146,7 +146,7 @@ pub fn ZeroPage(pageStart: u64) {
             arr[i] = 0
         }
     }
-}   
+}
 
 // Error represents an error in the netstack error space. Using a special type
 // ensures that errors outside of this space are not accidentally introduced.

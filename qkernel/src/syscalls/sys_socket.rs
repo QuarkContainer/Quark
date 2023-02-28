@@ -631,7 +631,7 @@ pub fn SysRecvMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     if vlen < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let mut vlen = vlen as u32;
@@ -740,9 +740,10 @@ pub fn SysRecvFrom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         nameLen = task.CopyInObj(nameLenPtr)?;
     }
 
-    if (namePtr == 0 || nameLen == 0) && 
-        (file.Flags().NonBlocking || flags & MsgType::MSG_DONTWAIT != 0) &&
-        flags & !MsgType::MSG_DONTWAIT == 0 {
+    if (namePtr == 0 || nameLen == 0)
+        && (file.Flags().NonBlocking || flags & MsgType::MSG_DONTWAIT != 0)
+        && flags & !MsgType::MSG_DONTWAIT == 0
+    {
         match file.Readv(task, &mut iovs) {
             Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
             Err(e) => {
@@ -792,7 +793,7 @@ pub fn SysRecvFrom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             task.CopyOutObj(&(senderLen as u32), nameLenPtr)?;
         } else {
             // has only type
-            let len : u32 = 0;
+            let len: u32 = 0;
             task.CopyOutObj(&len, nameLenPtr)?;
         }
     }
@@ -851,7 +852,7 @@ pub fn SysSendMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     if vlen < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let mut vlen = vlen as u32;
@@ -923,7 +924,9 @@ pub fn SysSendTo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let iov = IoVec::NewFromAddr(bufPtr, buflen as usize);
     let iovs: [IoVec; 1] = [iov];
 
-    if (namePtr == 0 || nameLen == 0) && (file.Flags().NonBlocking || flags & MsgType::MSG_DONTWAIT != 0 ){
+    if (namePtr == 0 || nameLen == 0)
+        && (file.Flags().NonBlocking || flags & MsgType::MSG_DONTWAIT != 0)
+    {
         match file.Writev(task, &iovs) {
             Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
             Err(e) => {

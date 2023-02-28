@@ -265,7 +265,8 @@ fn RepWritev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     }
 
     if count > 0 {
-        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
+        f.Dirent
+            .InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
     }
     return Ok(count);
 }
@@ -289,7 +290,8 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
             }
             Ok(n) => {
                 if n > 0 {
-                    f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
+                    f.Dirent
+                        .InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
                 }
                 return Ok(n);
             }
@@ -323,9 +325,9 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
                     if count > 0 {
                         break;
                     }
-                    return Err(Error::SysError(SysErr::EWOULDBLOCK))
+                    return Err(Error::SysError(SysErr::EWOULDBLOCK));
                 }
-            },
+            }
             Err(e) => {
                 if count > 0 {
                     break;
@@ -355,8 +357,8 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
                 if count > 0 {
                     break;
                 }
-                return Err(Error::SysError(SysErr::ERESTARTSYS))
-            },
+                return Err(Error::SysError(SysErr::ERESTARTSYS));
+            }
             Err(e) => {
                 if count > 0 {
                     break;
@@ -368,7 +370,8 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     }
 
     if count > 0 {
-        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
+        f.Dirent
+            .InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
     }
     return Ok(count);
 }
@@ -401,7 +404,8 @@ fn RepPwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64>
     }
 
     if count > 0 {
-        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
+        f.Dirent
+            .InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
     }
 
     return Ok(count);
@@ -424,10 +428,11 @@ fn pwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
         }
         Ok(n) => {
             if n > 0 {
-                f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
+                f.Dirent
+                    .InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
             }
-            return Ok(n)
-        },
+            return Ok(n);
+        }
     };
 
     let general = task.blocker.generalEntry.clone();
@@ -443,7 +448,8 @@ fn pwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
             }
             Ok(n) => {
                 if n > 0 {
-                    f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
+                    f.Dirent
+                        .InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
                 }
                 return Ok(n);
             }

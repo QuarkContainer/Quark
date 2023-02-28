@@ -40,7 +40,6 @@ use super::super::host::hostinodeop::*;
 use super::super::inode::*;
 use super::super::mount::*;
 
-
 #[derive(Clone)]
 pub struct ZeroDevice(pub Arc<QRwLock<InodeSimpleAttributesInternal>>);
 

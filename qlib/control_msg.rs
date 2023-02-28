@@ -121,7 +121,7 @@ pub enum Payload {
 
 impl Default for Payload {
     fn default() -> Self {
-        return Self::WaitAll
+        return Self::WaitAll;
     }
 }
 

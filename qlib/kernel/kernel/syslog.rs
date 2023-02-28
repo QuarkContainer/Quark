@@ -23,7 +23,10 @@ pub struct SysLog {}
 
 impl SysLog {
     pub fn Log(&self) -> Vec<u8> {
-        let str = format!("{} \n {}\n", "qukernel starting ...", "quark syslog pending ...");
+        let str = format!(
+            "{} \n {}\n",
+            "qukernel starting ...", "quark syslog pending ..."
+        );
         return str.into_bytes();
     }
 }

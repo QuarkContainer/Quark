@@ -97,7 +97,7 @@ impl<T> BufChan<T> {
             return Ok(());
         }
 
-        return Err(Error::SysError(SysErr::EAGAIN))
+        return Err(Error::SysError(SysErr::EAGAIN));
     }
 
     //unblock write, return true if write successfully. otherwise false.

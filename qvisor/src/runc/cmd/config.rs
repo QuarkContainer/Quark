@@ -67,7 +67,7 @@ impl Default for GlobalConfig {
             DebugLog: String::default(),
             FileAccess: FileAccessType::default(),
             Network: NetworkType::default(),
-            SystemdCgroup: false
+            SystemdCgroup: false,
         };
     }
 }

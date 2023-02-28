@@ -28,16 +28,16 @@ use super::super::super::super::linux_def::*;
 use super::super::super::super::mem::areaset::*;
 use super::super::super::super::range::*;
 use super::super::super::fd::*;
-use super::super::super::task::*;
 use super::super::super::guestfdnotifier::*;
 use super::super::super::kernel::time::*;
-pub use super::super::super::memmgr::vma::MMappable;
 use super::super::super::kernel::waiter::qlock::*;
 use super::super::super::kernel::waiter::queue::*;
 use super::super::super::memmgr::mapping_set::*;
 use super::super::super::memmgr::mm::*;
+pub use super::super::super::memmgr::vma::MMappable;
 use super::super::super::memmgr::*;
 use super::super::super::socket::unix::transport::unix::*;
+use super::super::super::task::*;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::IOURING;
 use super::super::super::SHARESPACE;
@@ -243,7 +243,7 @@ impl HostInodeOpIntern {
         wouldBlock: bool,
         fstat: &LibcStat,
         writeable: bool,
-        isMemfd: bool
+        isMemfd: bool,
     ) -> Self {
         let mut ret = Self {
             mops: mops.clone(),
@@ -257,7 +257,7 @@ impl HostInodeOpIntern {
             size: fstat.st_size,
             bufWriteLock: QAsyncLock::default(),
             hasMappable: false,
-            isMemfd: isMemfd
+            isMemfd: isMemfd,
         };
 
         if ret.CanMap() {
@@ -332,7 +332,7 @@ impl HostInodeOpIntern {
     pub fn MapFilePage(&mut self, task: &Task, fileOffset: u64) -> Result<u64> {
         let filesize = self.size as u64;
         if filesize <= fileOffset {
-            return Err(Error::FileMapError)
+            return Err(Error::FileMapError);
         }
 
         let chunkStart = fileOffset & !HUGE_PAGE_MASK;
@@ -492,10 +492,10 @@ impl HostInodeOp {
         wouldBlock: bool,
         fstat: &LibcStat,
         writeable: bool,
-        isMemfd: bool
+        isMemfd: bool,
     ) -> Self {
         let intern = Arc::new(QMutex::new(HostInodeOpIntern::New(
-            mops, fd, wouldBlock, fstat, writeable, isMemfd
+            mops, fd, wouldBlock, fstat, writeable, isMemfd,
         )));
 
         let ret = Self(intern);
@@ -529,7 +529,7 @@ impl HostInodeOp {
             false,
             &fstat,
             true,
-            true
+            true,
         )));
 
         let ret = Self(intern);
@@ -734,7 +734,7 @@ impl HostInodeOp {
 
         let size = IoVec::NumBytes(srcs);
         if size == 0 {
-            return Ok(0)
+            return Ok(0);
         }
 
         let size = if size >= MemoryDef::HUGE_PAGE_SIZE as usize {
@@ -845,7 +845,7 @@ impl HostInodeOp {
         syncType: SyncType,
     ) -> Result<()> {
         if self.lock().isMemfd {
-            return Ok(())
+            return Ok(());
         }
 
         let fd = self.HostFd();
@@ -1141,7 +1141,15 @@ impl InodeOperations for HostInodeOp {
         newname: &str,
         replacement: bool,
     ) -> Result<()> {
-        return Rename(task, dir, oldParent, oldname, newParent, newname, replacement);
+        return Rename(
+            task,
+            dir,
+            oldParent,
+            oldname,
+            newParent,
+            newname,
+            replacement,
+        );
     }
 
     fn Bind(
@@ -1183,24 +1191,24 @@ impl InodeOperations for HostInodeOp {
         let mops = self.lock().mops.clone();
         let fd = self.HostFd();
 
-        return UnstableAttr(fd, task, &mops)
+        return UnstableAttr(fd, task, &mops);
     }
 
     //fn StableAttr(&self) -> &StableAttr;
     fn Getxattr(&self, _dir: &Inode, name: &str, _size: usize) -> Result<Vec<u8>> {
-        return Getxattr(self.HostFd(), name)
+        return Getxattr(self.HostFd(), name);
     }
 
     fn Setxattr(&self, _dir: &mut Inode, name: &str, value: &[u8], flags: u32) -> Result<()> {
-        return Setxattr(self.HostFd(), name, value, flags)
+        return Setxattr(self.HostFd(), name, value, flags);
     }
 
     fn Listxattr(&self, _dir: &Inode, _size: usize) -> Result<Vec<String>> {
-        return Listxattr(self.HostFd())
+        return Listxattr(self.HostFd());
     }
 
     fn Removexattr(&self, _dir: &Inode, name: &str) -> Result<()> {
-        return Removexattr(self.HostFd(), name)
+        return Removexattr(self.HostFd(), name);
     }
 
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
@@ -1228,7 +1236,7 @@ impl InodeOperations for HostInodeOp {
     fn Truncate(&self, task: &Task, _dir: &mut Inode, size: i64) -> Result<()> {
         let uattr = self.UnstableAttr(task)?;
         let oldSize = uattr.Size;
-        assert!(oldSize==self.lock().size);
+        assert!(oldSize == self.lock().size);
         if size == oldSize {
             return Ok(());
         }
@@ -1300,7 +1308,7 @@ impl InodeOperations for HostInodeOp {
     }
 
     fn StatFS(&self, _task: &Task) -> Result<FsInfo> {
-        return StatFS(self.HostFd())
+        return StatFS(self.HostFd());
     }
 
     fn Mappable(&self) -> Result<MMappable> {

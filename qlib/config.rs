@@ -85,7 +85,7 @@ impl Default for Config {
             DisableCgroup: true,
             CopyDataWithPf: false,
             TlbShootdownWait: false,
-            Sandboxed: false
+            Sandboxed: false,
         };
     }
 }

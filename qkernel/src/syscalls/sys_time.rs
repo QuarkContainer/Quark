@@ -238,7 +238,13 @@ pub fn SysClockNanosleep(task: &mut Task, args: &SyscallArguments) -> Result<i64
     return NansleepUntil(task, clock, end, rem, flags & TIMER_ABSTIME == 0);
 }
 
-pub fn NansleepUntil(task: &mut Task, clock: Clock, end: i64, rem: u64, needRestartBlock: bool) -> Result<i64> {
+pub fn NansleepUntil(
+    task: &mut Task,
+    clock: Clock,
+    end: i64,
+    rem: u64,
+    needRestartBlock: bool,
+) -> Result<i64> {
     let timer = task.blocker.GetTimerWithClock(&clock);
 
     let now = clock.Now();

@@ -17,10 +17,10 @@ mod idt;
 
 use super::asm::*;
 use super::qlib::addr::*;
+use super::qlib::backtracer;
 use super::qlib::common::*;
 use super::qlib::kernel::TSC;
 use super::qlib::linux_def::*;
-use super::qlib::backtracer;
 use super::qlib::singleton::*;
 use super::qlib::vcpu_mgr::*;
 use super::task::*;
@@ -530,7 +530,13 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
             //error!("InstallPage 1, range is {:x?}, address is {:x}, vma.growsDown is {}",
             //    &range, pageAddr, vma.growsDown);
             //let startTime = TSC.Rdtsc();
-            let addr = currTask.mm.pagetable.write().pt.SwapInPage(Addr(pageAddr)).unwrap();
+            let addr = currTask
+                .mm
+                .pagetable
+                .write()
+                .pt
+                .SwapInPage(Addr(pageAddr))
+                .unwrap();
             //let endtime = TSC.Rdtsc();
             if addr > 0 {
                 //use crate::qlib::kernel::Tsc;
@@ -636,26 +642,26 @@ pub fn HandleFault(
             print!("the map 3 is {}", &map);
             panic!();
         }
-    
+
         //task.SaveFp();
-    
+
         let mut info = SignalInfo {
             Signo: signal, //Signal::SIGBUS,
             ..Default::default()
         };
-    
+
         let sigfault = info.SigFault();
         sigfault.addr = cr2;
         //let read = errorCode & (1<<1) == 0;
         let write = errorCode & (1 << 1) != 0;
         let execute = errorCode & (1 << 4) != 0;
-    
+
         if !write && !execute {
             info.Code = 1; // SEGV_MAPERR.
         } else {
             info.Code = 2; // SEGV_ACCERR.
         }
-    
+
         let thread = task.Thread();
         // Synchronous signal. Send it to ourselves. Assume the signal is
         // legitimate and force it (work around the signal being ignored or
@@ -667,7 +673,7 @@ pub fn HandleFault(
             .expect("PageFaultHandler send signal fail");
         MainRun(task, TaskRunState::RunApp);
         //task.mm.VcpuEnter();
-        
+
         task.RestoreFp();
         CPULocal::Myself().SetMode(VcpuMode::User);
         task.mm.HandleTlbShootdown();
@@ -705,7 +711,8 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
     let currTask = Task::Current();
     //currTask.mm.VcpuLeave();
 
-    if ptRegs.cs & 0x3 == 0 { // kernel mode
+    if ptRegs.cs & 0x3 == 0 {
+        // kernel mode
         error!("VirtualizationHandler kernel ...");
         //CPULocal::Myself().SetMode(VcpuMode::User);
         currTask.mm.HandleTlbShootdown();
@@ -720,8 +727,8 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
 
     if CPULocal::InterruptByTlbShootdown(mask) {
         // no need special operation
-    } 
-    
+    }
+
     if CPULocal::InterruptByThreadTimeout(mask) {
         /*if SHARESPACE.config.read().KernelPagetable {
             Task::SetKernelPageTable();
@@ -750,7 +757,7 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
 
     CPULocal::SetKernelStack(currTask.GetKernelSp());
     //currTask.mm.VcpuEnter();
-    
+
     CPULocal::Myself().SetMode(VcpuMode::User);
     currTask.mm.HandleTlbShootdown();
 }

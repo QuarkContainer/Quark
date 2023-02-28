@@ -101,7 +101,7 @@ impl BufferIntern {
 impl Buffer {
     pub fn Count(&self) -> usize {
         let b = self.borrow();
-        return b.write-b.read;
+        return b.write - b.read;
     }
 }
 

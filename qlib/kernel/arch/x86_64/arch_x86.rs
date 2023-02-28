@@ -138,17 +138,17 @@ impl X86fpstate {
     // to the size of the XSAVE legacy area (512 bytes) plus the size of the
     // XSAVE header (64 bytes). Equivalently, minXstateBytes is GDB's
     // X86_XSTATE_SSE_SIZE.
-    pub const MIN_XSTATE_BYTES : usize = 512 + 64;
+    pub const MIN_XSTATE_BYTES: usize = 512 + 64;
 
     // userXstateXCR0Offset is the offset in bytes of the USER_XSTATE_XCR0_WORD
     // field in Linux's struct user_xstateregs, which is the type manipulated
     // by ptrace(PTRACE_GET/SETREGSET, NT_X86_XSTATE). Equivalently,
     // userXstateXCR0Offset is GDB's I386_LINUX_XSAVE_XCR0_OFFSET.
-    pub const USER_XSTATE_XCR0_OFFSET : usize = 464;
+    pub const USER_XSTATE_XCR0_OFFSET: usize = 464;
 
     // xstateBVOffset is the offset in bytes of the XSTATE_BV field in an x86
     // XSAVE area.
-    pub const XSTATE_BVOFFSET : usize = 512;
+    pub const XSTATE_BVOFFSET: usize = 512;
 
     // xsaveHeaderZeroedOffset and xsaveHeaderZeroedBytes indicate parts of the
     // XSAVE header that we coerce to zero: "Bytes 15:8 of the XSAVE header is
@@ -159,17 +159,17 @@ impl X86fpstate {
     // uses the compacted format when doing XSAVE and doesn't even define the
     // compaction extensions to XSAVE as a CPU feature, so for simplicity we
     // assume no one is using them.
-    pub const XSAVE_HEADER_ZEROED_OFFSET : usize = 512 + 8;
-    pub const XSAVE_HEADER_ZEROED_BYTES : usize = 64 - 8;
+    pub const XSAVE_HEADER_ZEROED_OFFSET: usize = 512 + 8;
+    pub const XSAVE_HEADER_ZEROED_BYTES: usize = 64 - 8;
 
     // mxcsrOffset is the offset in bytes of the MXCSR field from the start of
     // the FXSAVE area. (Intel SDM Vol. 1, Table 10-2 "Format of an FXSAVE
     // Area")
-    pub const MXCSR_OFFSET : usize = 24;
+    pub const MXCSR_OFFSET: usize = 24;
 
     // mxcsrMaskOffset is the offset in bytes of the MXCSR_MASK field from the
     // start of the FXSAVE area.
-    pub const MXCSR_MASK_OFFSET : usize = 28;
+    pub const MXCSR_MASK_OFFSET: usize = 28;
 
     fn New() -> Self {
         let (size, _align) = HostFeatureSet().ExtendedStateSize();
@@ -190,21 +190,18 @@ impl X86fpstate {
 
         if self.Size() >= Self::MIN_XSTATE_BYTES {
             // Users can't enable *more* XCR0 bits than what we, and the CPU, support.
-            let xstateBVAddr = &self.data[Self::XSTATE_BVOFFSET] as * const _ as u64;
-            let mut xstateBV : u64 = unsafe {
-                *(xstateBVAddr as * const u64)
-            };
+            let xstateBVAddr = &self.data[Self::XSTATE_BVOFFSET] as *const _ as u64;
+            let mut xstateBV: u64 = unsafe { *(xstateBVAddr as *const u64) };
 
             xstateBV &= HostFeatureSet().ValidXCR0Mask();
             unsafe {
-                *(xstateBVAddr as * mut u64) = xstateBV;
+                *(xstateBVAddr as *mut u64) = xstateBV;
             };
 
-            let addr = &self.data[Self::XSAVE_HEADER_ZEROED_OFFSET] as * const _ as u64;
+            let addr = &self.data[Self::XSAVE_HEADER_ZEROED_OFFSET] as *const _ as u64;
             let ptr = addr as *mut u8;
-            let slice = unsafe {
-                core::slice::from_raw_parts_mut(ptr, Self::XSAVE_HEADER_ZEROED_BYTES)
-            };
+            let slice =
+                unsafe { core::slice::from_raw_parts_mut(ptr, Self::XSAVE_HEADER_ZEROED_BYTES) };
 
             for i in 0..Self::XSAVE_HEADER_ZEROED_BYTES {
                 slice[i] = 0;
@@ -213,18 +210,14 @@ impl X86fpstate {
     }
 
     pub fn mxcsrMask(&self) -> u32 {
-        let mxcsrAddr = &self.data[Self::MXCSR_MASK_OFFSET] as * const _ as u64;
-        let mxcsrMask : u32 = unsafe {
-            *(mxcsrAddr as * const u32)
-        };
+        let mxcsrAddr = &self.data[Self::MXCSR_MASK_OFFSET] as *const _ as u64;
+        let mxcsrMask: u32 = unsafe { *(mxcsrAddr as *const u32) };
         return mxcsrMask;
     }
 
     pub fn SanitizeMXCSR(&self) {
-        let mxcsrAddr = &self.data[Self::MXCSR_OFFSET] as * const _ as u64;
-        let mxcsr : u32 = unsafe {
-            *(mxcsrAddr as * const u32)
-        };
+        let mxcsrAddr = &self.data[Self::MXCSR_OFFSET] as *const _ as u64;
+        let mxcsr: u32 = unsafe { *(mxcsrAddr as *const u32) };
 
         let mut mxcsrMask = FP_STATE.mxcsrMask();
         if mxcsrMask == 0 {
@@ -237,7 +230,7 @@ impl X86fpstate {
 
         let mxcsr = mxcsr & mxcsrMask;
         unsafe {
-            *(mxcsrAddr as * mut u32) = mxcsr;
+            *(mxcsrAddr as *mut u32) = mxcsr;
         };
     }
 
@@ -246,13 +239,13 @@ impl X86fpstate {
     }
 
     pub fn Size(&self) -> usize {
-        return self.size.load(Ordering::SeqCst)
+        return self.size.load(Ordering::SeqCst);
     }
 
     pub fn Slice(&self) -> &'static mut [u8] {
-        let ptr = &self.data[0] as * const _ as u64 as *mut u8;
+        let ptr = &self.data[0] as *const _ as u64 as *mut u8;
         let buf = unsafe { core::slice::from_raw_parts_mut(ptr, self.Size()) };
-        return buf
+        return buf;
     }
 
     pub const fn Init() -> Self {

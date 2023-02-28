@@ -73,9 +73,9 @@ struct LinkedList<T: Clone> {
     pub count: u64,
 }
 
-impl <T: Clone> Drop for LinkedList<T> {
+impl<T: Clone> Drop for LinkedList<T> {
     fn drop(&mut self) {
-        loop  {
+        loop {
             if self.PopBack().is_none() {
                 break;
             }

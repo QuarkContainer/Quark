@@ -14,7 +14,7 @@
 
 use alloc::sync::Arc;
 use core::ops::Deref;
-use core::sync::atomic::{ AtomicBool, AtomicU32, AtomicU64, Ordering };
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 
 use super::common::*;
 use super::kernel::kernel::waiter::Queue;
@@ -531,9 +531,9 @@ pub struct Endpoint {
 
 impl Endpoint {
     pub fn Egress() -> Endpoint {
-        Endpoint { 
+        Endpoint {
             ipAddr: 16842752, // u32::from(Ipv4Addr::from_str("0.0.1.1").unwrap()).to_be()
-            port: 58433, // 16868u16.to_be()
+            port: 58433,      // 16868u16.to_be()
         }
     }
 }

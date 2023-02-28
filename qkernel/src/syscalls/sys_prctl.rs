@@ -14,12 +14,12 @@
 
 use super::super::loader::loader::*;
 use super::super::memmgr::metadata::*;
-use super::super::threadmgr::pid_namespace::*;
 use super::super::qlib::auth::cap_set::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
+use super::super::threadmgr::pid_namespace::*;
 use super::sys_seccomp::*;
 
 // PR_* flags, from <linux/pcrtl.h> for prctl(2).
@@ -358,7 +358,7 @@ pub fn SysPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             // because it already acts as a subreaper in that case.
             let isInitTid = thread.PIDNamespace().IDOfTask(&thread) == INIT_TID;
             if args.arg1 != 0 && isInitTid {
-                return Ok(0)
+                return Ok(0);
             }
 
             return Err(Error::SysError(SysErr::EINVAL));

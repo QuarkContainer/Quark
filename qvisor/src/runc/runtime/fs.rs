@@ -13,15 +13,15 @@
 // limitations under the License.
 
 use nix::mount::MsFlags;
-use std::fs::create_dir_all;
 use std::fs;
-use std::{thread, time};
+use std::fs::create_dir_all;
 use std::path::Path;
+use std::{thread, time};
 
-use super::super::container::mounts::*;
 use super::super::super::namespace::Util;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::path::{IsAbs, Join};
+use super::super::container::mounts::*;
 use super::super::oci::Spec;
 use super::sandbox_process::*;
 
@@ -56,19 +56,22 @@ impl FsImageMounter {
         let wait_dur = time::Duration::from_millis(500);
         let ret = loop {
             retry_cnt += 1;
-        info!("unmount destination: {}", dest);
+            info!("unmount destination: {}", dest);
             let ret = Util::Umount2(&dest, 0);
             if ret < 0 {
                 if ret != -16 || retry_cnt > 5 {
-                  break ret
+                    break ret;
                 }
                 thread::sleep(wait_dur);
-                continue
+                continue;
             }
-            break ret
+            break ret;
         };
         if ret < 0 {
-            warn!("MountContainerFs: unmount container fs {} fail, error is {}", dest, ret);
+            warn!(
+                "MountContainerFs: unmount container fs {} fail, error is {}",
+                dest, ret
+            );
         }
     }
 
@@ -138,7 +141,7 @@ impl FsImageMounter {
                 MountFrom(m, &containerFsRootTarget, flags, &data, &linux.mount_label)?;
             }
         }
-        
+
         return Ok(());
     }
 
@@ -166,15 +169,21 @@ impl FsImageMounter {
         if Path::new(&dest).exists() {
             self.umountRetry(&dest);
         }
-       
+
         if Path::new(&containerFsRootTarget).exists() {
             self.umountRetry(&containerFsRootTarget);
 
-            info!("deleting container root directory...{}", containerFsRootTarget);
+            info!(
+                "deleting container root directory...{}",
+                containerFsRootTarget
+            );
             let res = fs::remove_dir_all(&containerFsRootTarget);
             match res {
                 Err(e) => {
-                    warn!("failed to deleting container root directory...{}, error: {}", containerFsRootTarget, e);
+                    warn!(
+                        "failed to deleting container root directory...{}, error: {}",
+                        containerFsRootTarget, e
+                    );
                 }
                 Ok(_) => (),
             }
@@ -187,7 +196,11 @@ impl FsImageMounter {
             let res = fs::remove_dir_all(&self.sandboxRoot());
             match res {
                 Err(e) => {
-                    warn!("failed to deleting sandbox root directory...{}, error: {}", self.sandboxRoot(), e);
+                    warn!(
+                        "failed to deleting sandbox root directory...{}, error: {}",
+                        self.sandboxRoot(),
+                        e
+                    );
                 }
                 Ok(_) => (),
             }

@@ -17,8 +17,8 @@ use alloc::sync::Arc;
 
 use super::super::fs::host::hostinodeop::*;
 use super::super::memmgr::mm::*;
-use super::super::memmgr::vma::*;
 use super::super::memmgr::syscalls::*;
+use super::super::memmgr::vma::*;
 use super::super::memmgr::*;
 use super::super::qlib::addr::*;
 use super::super::qlib::common::*;

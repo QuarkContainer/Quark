@@ -88,7 +88,9 @@ impl ReadLinkNodeTrait for FdNode {
 
         let fops = file.FileOp.clone();
         let fopsType = fops.FopsType();
-        if fopsType == FileOpsType::SocketOperations || fopsType == FileOpsType::UnixSocketOperations {
+        if fopsType == FileOpsType::SocketOperations
+            || fopsType == FileOpsType::UnixSocketOperations
+        {
             return Err(Error::SysError(SysErr::ENXIO));
         }
 
@@ -203,7 +205,9 @@ pub fn NewFdDirFile(IsInfoFile: bool, thread: &Thread) -> DynamicDirFileOperatio
         thread: thread.clone(),
     };
 
-    return DynamicDirFileOperations { node: fdDirFile.into() };
+    return DynamicDirFileOperations {
+        node: fdDirFile.into(),
+    };
 }
 
 #[derive(Clone)]
@@ -300,7 +304,8 @@ pub fn NewFdDir(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -
         ),
         data: FdDirNode {
             thread: thread.clone(),
-        }.into(),
+        }
+        .into(),
     };
 
     return NewProcInode(
@@ -322,7 +327,8 @@ pub fn NewFdInfoDir(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>
         ),
         data: FdInfoDirNode {
             thread: thread.clone(),
-        }.into(),
+        }
+        .into(),
     };
 
     return NewProcInode(
