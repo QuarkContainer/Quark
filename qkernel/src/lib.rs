@@ -51,6 +51,7 @@ extern crate serde_derive;
 extern crate spin;
 extern crate x86_64;
 extern crate xmas_elf;
+extern crate log;
 
 use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
@@ -217,6 +218,7 @@ extern "C" {
 pub fn Init() {
     self::fs::Init();
     self::socket::Init();
+    print::init().unwrap();
 }
 
 #[no_mangle]
