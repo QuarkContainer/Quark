@@ -18,7 +18,7 @@
   "RDMAPort"      : 1,
   "PerSandboxLog" : false,
   "ReserveCpuCount": 1,
-  "ShimMode"      : true,
+  "ShimMode"      : false,
   "EnableInotify" : true,
   "ReaddirCache"  : true,
   "HiberODirect"  : true,
