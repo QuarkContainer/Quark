@@ -220,6 +220,7 @@ extern "C" {
 pub fn Init() {
     self::fs::Init();
     self::socket::Init();
+    print::init().unwrap();
 }
 
 #[no_mangle]
