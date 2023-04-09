@@ -51,6 +51,7 @@ extern crate serde_derive;
 extern crate spin;
 extern crate x86_64;
 extern crate xmas_elf;
+extern crate log;
 
 use core::{mem, ptr};
 use core::panic::PanicInfo;
