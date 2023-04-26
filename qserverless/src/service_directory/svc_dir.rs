@@ -12,22 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
 use lazy_static::lazy_static;
-use tokio::sync::RwLock as TRwLock;
+use std::collections::BTreeMap;
+use std::ops::Deref;
 use std::sync::Arc;
-use std::ops::{Deref};
+use tokio::sync::RwLock as TRwLock;
 
 use crate::{cache::Cacher, etcd_store::EtcdStore};
 use qobjs::common::*;
 
 lazy_static! {
-    pub static ref CACHE_OBJ_TYPES : Vec<&'static str> = vec![
-        "pod",
-        "podset",
-    ];
-
     pub static ref SVC_DIR: SvcDir = SvcDir::default();
+    pub static ref CACHE_OBJ_TYPES: Vec<&'static str> = vec!["pod", "podset",];
 }
 
 #[derive(Debug, Default)]
@@ -64,6 +60,6 @@ impl SvcDirInner {
             self.map.insert(t.to_string(), c);
         }
 
-        return Ok(())
-    } 
+        return Ok(());
+    }
 }

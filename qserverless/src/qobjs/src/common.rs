@@ -19,6 +19,8 @@ use tokio::task::JoinError;
 use tonic::Status as TonicStatus;
 use serde_json::Error as SerdeJsonError;
 use std::string::FromUtf8Error;
+use std::str::Utf8Error;
+use std::num::ParseIntError;
 
 use crate::types::WatchEvent;
 
@@ -50,6 +52,7 @@ pub struct UpdateRevNotMatchErr {
 
 #[derive(Debug)]
 pub enum Error {
+    NotExist,
     ContextCancel,
     EtcdError(EtcdError),
     CommonError(String),
@@ -64,11 +67,21 @@ pub enum Error {
     TonicTransportErr(tonic::transport::Error),
     SerdeJsonError(SerdeJsonError),
     MpscSendErrWatchEvent(tokio::sync::mpsc::error::SendError<WatchEvent>),
+    Utf8Error(Utf8Error),
     FromUtf8Error(FromUtf8Error),
     JoinError(JoinError),
+    ReqWestErr(reqwest::Error),
+    StdIOErr(std::io::Error),
+    AcquireError(tokio::sync::AcquireError),
+    ParseIntError(ParseIntError),
+    RegexError(regex::Error),
     TokioChannFull,
     TokioChannClose,
     Timeout,
+
+    // ErrRequeue may be returned by a PopProcessFunc to safely requeue
+    // the current item. The value of Err will be returned from Pop.
+    ErrRequeue
 }
 
 unsafe impl core::marker::Send for Error {}
@@ -100,6 +113,42 @@ impl Error {
             expectRv: expectRv,
             actualRv: actualRv
         })
+    }
+}
+
+impl From<regex::Error> for Error {
+    fn from(item: regex::Error) -> Self {
+        return Self::RegexError(item)
+    }
+}
+
+impl From<ParseIntError> for Error {
+    fn from(item: ParseIntError) -> Self {
+        return Self::ParseIntError(item)
+    }
+}
+
+impl From<tokio::sync::AcquireError> for Error {
+    fn from(item: tokio::sync::AcquireError) -> Self {
+        return Self::AcquireError(item)
+    }
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(item: reqwest::Error) -> Self {
+        return Self::ReqWestErr(item)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(item: std::io::Error) -> Self {
+        return Self::StdIOErr(item)
+    }
+}
+
+impl From<Utf8Error> for Error {
+    fn from(item: Utf8Error) -> Self {
+        return Self::Utf8Error(item)
     }
 }
 

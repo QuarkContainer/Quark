@@ -16,5 +16,4 @@ extern crate alloc;
 //extern crate fornax_openapi;
 
 mod service_directory;
-mod service_broker;
-//mod fornax_informer;
+mod node_mgr;

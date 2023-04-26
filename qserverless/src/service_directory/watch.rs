@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
 use etcd_client::Event;
 use etcd_client::GetOptions;
 use etcd_client::WatchOptions;
 use etcd_client::WatchResponse;
 use etcd_client::WatchStream;
-use tokio::sync::mpsc;
-use tokio::sync::Notify;
 use std::sync::atomic::AtomicI64;
+use std::sync::Arc;
+use tokio::sync::mpsc;
 use tokio::sync::Mutex as TMutex;
+use tokio::sync::Notify;
 
 use crate::etcd_client::EtcdClient;
-use qobjs::selection_predicate::SelectionPredicate;
 use qobjs::common::*;
+use qobjs::selection_predicate::SelectionPredicate;
 use qobjs::service_directory::*;
 use qobjs::types::*;
 
@@ -47,7 +47,7 @@ impl WatchReader {
 pub struct Watcher {
     pub client: EtcdClient,
     pub resultSender: mpsc::Sender<WatchEvent>,
-    pub closeNotify:  Arc<tokio::sync::Notify>,
+    pub closeNotify: Arc<tokio::sync::Notify>,
 
     pub key: String,
     pub initialRev: AtomicI64,
@@ -60,13 +60,18 @@ pub struct Watcher {
 impl Watcher {
     pub const RESULT_CHANNEL_SIZE: usize = 300;
 
-    pub fn New(client: &EtcdClient, key: &str, rev: i64, pred: SelectionPredicate) -> (Self, WatchReader) {
+    pub fn New(
+        client: &EtcdClient,
+        key: &str,
+        rev: i64,
+        pred: SelectionPredicate,
+    ) -> (Self, WatchReader) {
         let (resultSender, resultRecv) = mpsc::channel(Self::RESULT_CHANNEL_SIZE);
         let reader = WatchReader {
             resultRecv: TMutex::new(resultRecv),
             closeNotify: Arc::new(Notify::new()),
         };
-        
+
         let watcher = Self {
             client: client.clone(),
             resultSender: resultSender,
@@ -80,9 +85,8 @@ impl Watcher {
             stream: None,
         };
 
-        return (watcher, reader)
+        return (watcher, reader);
     }
-
 
     pub async fn Processing(&mut self) -> Result<()> {
         let ret = self.ProcessingInner().await;
@@ -96,20 +100,22 @@ impl Watcher {
             if initialRev == 0 {
                 let ret = self.Sync().await;
                 match ret {
-                    Err(e) => self.SendErr(format!("failed to sync with latest state: {:?}", e)).await.unwrap(),
+                    Err(e) => self
+                        .SendErr(format!("failed to sync with latest state: {:?}", e))
+                        .await
+                        .unwrap(),
                     Ok(()) => (),
                 }
             }
-               
+
             let initialRev = self.initialRev.load(std::sync::atomic::Ordering::Relaxed);
             let options = WatchOptions::new()
-                        .with_start_revision(initialRev + 1)
-                        .with_prev_key()
-                        .with_prefix()
-                        ;
-    
+                .with_start_revision(initialRev + 1)
+                .with_prev_key()
+                .with_prefix();
+
             let key: &str = &self.key;
-            let (watcher,stream) = self.client.lock().await.watch(key, Some(options)).await?;
+            let (watcher, stream) = self.client.lock().await.watch(key, Some(options)).await?;
             self.watcher = Some(watcher);
             self.stream = Some(Arc::new(TMutex::new(stream)));
         }
@@ -117,60 +123,56 @@ impl Watcher {
         while let Some(resp) = self.WatchNext().await? {
             for e in resp.events() {
                 match self.ParseEvent(e) {
-                    Err(e) => {
-                        self.SendErr(format!("{:?}", e)).await?
-                    },
-                    
-                    Ok(event) => {
-                        match event {
-                            None => (),
-                            Some(event) => {
-                                self.SendEvent(event).await?;
-                            }
+                    Err(e) => self.SendErr(format!("{:?}", e)).await?,
+
+                    Ok(event) => match event {
+                        None => (),
+                        Some(event) => {
+                            self.SendEvent(event).await?;
                         }
-                    }
+                    },
                 }
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub async fn WatchNext(&self) -> Result<Option<WatchResponse>> {
         let stream = self.stream.clone().unwrap();
         let mut stream = stream.lock().await;
 
-        tokio::select! { 
+        tokio::select! {
             ret = stream.message() => return Ok(ret?),
             _ = self.closeNotify.notified() => return Err(Error::ContextCancel),
         }
     }
 
     pub fn IsCreateEvent(e: &Event) -> bool {
-        return e.event_type() == etcd_client::EventType::Put 
-            && e.kv().is_some() 
-            && e.kv().unwrap().create_revision() == e.kv().unwrap().mod_revision()
+        return e.event_type() == etcd_client::EventType::Put
+            && e.kv().is_some()
+            && e.kv().unwrap().create_revision() == e.kv().unwrap().mod_revision();
     }
 
     pub fn ParseEvent(&self, e: &Event) -> Result<Option<WatchEvent>> {
         let kv = e.kv().unwrap();
 
-
         if Self::IsCreateEvent(e) && e.prev_kv().is_some() {
             let kv = e.kv().unwrap();
             // If the previous value is nil, error. One example of how this is possible is if the previous value has been compacted already.
-		    return Err(Error::CommonError(format!("etcd event received with PrevKv=nil (key={}, modRevision={}, type={:?})", 
-                                String::from_utf8(kv.key().to_vec())?, kv.mod_revision(), e.event_type())))
-
+            return Err(Error::CommonError(format!(
+                "etcd event received with PrevKv=nil (key={}, modRevision={}, type={:?})",
+                String::from_utf8(kv.key().to_vec())?,
+                kv.mod_revision(),
+                e.event_type()
+            )));
         }
 
         let curObj: Option<DataObject> = if e.event_type() == etcd_client::EventType::Delete {
             None
         } else {
             let obj = Object::Decode(kv.value())?;
-            let inner : DataObjInner = obj.into();
-            inner.SetRevision(kv.mod_revision());
-            Some(inner.into())
+            Some(DataObject::NewFromObject(&obj, kv.mod_revision()))
         };
 
         let oldObj: Option<DataObject> = match e.prev_kv() {
@@ -178,9 +180,7 @@ impl Watcher {
             Some(pkv) => {
                 if e.event_type() == etcd_client::EventType::Delete || !self.AcceptAll() {
                     let obj = Object::Decode(pkv.value())?;
-                    let inner : DataObjInner = obj.into();
-                    inner.SetRevision(kv.mod_revision());
-                    Some(inner.into())
+                    Some(DataObject::NewFromObject(&obj, kv.mod_revision()))
                 } else {
                     None
                 }
@@ -198,7 +198,7 @@ impl Watcher {
                     return Ok(Some(WatchEvent {
                         type_: EventType::Deleted,
                         obj: obj,
-                    }))
+                    }));
                 }
             }
         } else if Self::IsCreateEvent(e) {
@@ -212,7 +212,7 @@ impl Watcher {
                     return Ok(Some(WatchEvent {
                         type_: EventType::Added,
                         obj: obj,
-                    }))
+                    }));
                 }
             }
         } else {
@@ -220,14 +220,14 @@ impl Watcher {
                 return Ok(Some(WatchEvent {
                     type_: EventType::Modified,
                     obj: curObj.unwrap(),
-                }))
+                }));
             }
 
             let curObjPasses = match &curObj {
                 None => false,
                 Some(o) => self.Filter(o),
             };
-            
+
             let oldObjPasses = match &oldObj {
                 None => false,
                 Some(o) => self.Filter(o),
@@ -237,17 +237,17 @@ impl Watcher {
                 return Ok(Some(WatchEvent {
                     type_: EventType::Modified,
                     obj: curObj.unwrap(),
-                }))
+                }));
             } else if curObjPasses && !oldObjPasses {
                 return Ok(Some(WatchEvent {
                     type_: EventType::Added,
                     obj: curObj.unwrap(),
-                }))
+                }));
             } else if !curObjPasses && oldObjPasses {
                 return Ok(Some(WatchEvent {
                     type_: EventType::Deleted,
                     obj: oldObj.unwrap(),
-                }))
+                }));
             }
         }
 
@@ -276,7 +276,7 @@ impl Watcher {
         };
 
         self.SendEvent(errEvent).await?;
-        return Ok(())
+        return Ok(());
     }
 
     pub async fn SendEvent(&self, event: WatchEvent) -> Result<()> {
@@ -293,13 +293,12 @@ impl Watcher {
         let getResp = self.client.lock().await.get(key, Some(options)).await?;
 
         let initalRev = getResp.header().unwrap().revision();
-        self.initialRev.store(initalRev, std::sync::atomic::Ordering::SeqCst);
+        self.initialRev
+            .store(initalRev, std::sync::atomic::Ordering::SeqCst);
 
         for kv in getResp.kvs() {
             let obj = Object::Decode(kv.value())?;
-            let inner : DataObjInner = obj.into();
-            inner.SetRevision(kv.mod_revision());
-            let obj = inner.into();
+            let obj = DataObject::NewFromObject(&obj, kv.mod_revision());
 
             if self.internalPred.Match(&obj)? {
                 let event = WatchEvent {
@@ -310,23 +309,23 @@ impl Watcher {
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use qobjs::types::*;
-    use crate::etcd_store::*;
     use super::*;
+    use crate::etcd_store::*;
+    use qobjs::types::*;
 
     pub async fn TestCheckResultFunc(
-        r: &WatchReader, 
-        expectEventType: EventType, 
-        check: impl Fn(&DataObject) -> Result<()>
+        r: &WatchReader,
+        expectEventType: EventType,
+        check: impl Fn(&DataObject) -> Result<()>,
     ) {
-        use tokio::time::sleep;
         use std::time::Duration;
+        use tokio::time::sleep;
 
         tokio::select! {
             event = r.GetNextEvent() => {
@@ -345,22 +344,28 @@ mod tests {
     }
 
     pub async fn TestCheckResult(
-        r: &WatchReader, 
-        expectEventType: EventType, 
-        expectObj: &DataObject) {
-
-        TestCheckResultFunc(r, expectEventType, |obj|{
-            assert!(obj == expectObj, "actual {:#?} expected {:#?}", obj, expectObj);
-            return Ok(())
-        }).await;
+        r: &WatchReader,
+        expectEventType: EventType,
+        expectObj: &DataObject,
+    ) {
+        TestCheckResultFunc(r, expectEventType, |obj| {
+            assert!(
+                obj == expectObj,
+                "actual {:#?} expected {:#?}",
+                obj,
+                expectObj
+            );
+            return Ok(());
+        })
+        .await;
     }
 
     pub async fn TestCheckQTypeResult(
-        r: &WatchReader, 
-        expectEventType: EventType, 
-        expectObj: &DataObject) {
-            
-            return TestCheckResult(r, expectEventType, &expectObj).await;
+        r: &WatchReader,
+        expectEventType: EventType,
+        expectObj: &DataObject,
+    ) {
+        return TestCheckResult(r, expectEventType, &expectObj).await;
     }
 
     pub struct TestWatchStruct {
@@ -378,7 +383,7 @@ mod tests {
         let basePod = DataObject::NewPod("", "foo", "", "").unwrap();
         let basePodAssigned = DataObject::NewPod("", "foo", "bar", "").unwrap();
 
-        struct Test <'a> {
+        struct Test<'a> {
             name: &'a str,
             namespace: &'a str,
             pred: SelectionPredicate,
@@ -465,9 +470,7 @@ mod tests {
             let key = watchKey.clone() + "/foo";
 
             let (mut w, r) = store.Watch(&watchKey, 0, tt.pred).unwrap();
-            let t = tokio::spawn(async move {
-                w.Processing().await
-            });
+            let t = tokio::spawn(async move { w.Processing().await });
 
             let mut prevObj = DataObject::NewPod("", "", "", "")?;
             for watchTest in tt.watchTests {
@@ -477,8 +480,7 @@ mod tests {
                 let newVersion = dataObj.Revision();
                 if watchTest.expectEvent {
                     let expectObj = if watchTest.watchType == EventType::Deleted {
-                        let expectObj = prevObj.DeepCopy();
-                        expectObj.SetRevision(newVersion);
+                        let expectObj = prevObj.CopyWithRev(newVersion);
                         expectObj
                     } else {
                         dataObj.DeepCopy()
@@ -487,23 +489,24 @@ mod tests {
                     TestCheckQTypeResult(&r, watchTest.watchType, &expectObj).await;
                 }
                 prevObj = dataObj;
-             }
+            }
 
-             r.Close();
-             let res = t.await.unwrap();
-             println!("{:?}", &res);
-             //res.unwrap();
+            r.Close();
+            let res = t.await.unwrap();
+            println!("{:?}", &res);
+            //res.unwrap();
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     //#[test]
     pub fn TestWatchSync() {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
-            .build().unwrap();
-        
+            .build()
+            .unwrap();
+
         rt.block_on(TestWatch()).unwrap();
     }
 }

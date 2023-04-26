@@ -18,6 +18,7 @@ pub struct Kv {
     #[prost(string, tag = "2")]
     pub val: ::prost::alloc::string::String,
 }
+/// use for Etcd storage, no revision
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Object {
@@ -32,7 +33,25 @@ pub struct Object {
     #[prost(message, repeated, tag = "6")]
     pub annotations: ::prost::alloc::vec::Vec<Kv>,
     #[prost(string, tag = "7")]
-    pub val: ::prost::alloc::string::String,
+    pub data: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Obj {
+    #[prost(string, tag = "1")]
+    pub kind: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(int64, tag = "4")]
+    pub revision: i64,
+    #[prost(message, repeated, tag = "5")]
+    pub labels: ::prost::alloc::vec::Vec<Kv>,
+    #[prost(message, repeated, tag = "6")]
+    pub annotations: ::prost::alloc::vec::Vec<Kv>,
+    #[prost(string, tag = "7")]
+    pub data: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -47,6 +66,130 @@ pub struct PutRequestMessage {
 pub struct PutResponseMessage {
     #[prost(int64, tag = "1")]
     pub revision: i64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ResponseHeader {
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub server_id: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateRequestMessage {
+    #[prost(string, tag = "1")]
+    pub obj_type: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub obj: ::core::option::Option<Obj>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateResponseMessage {
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+    #[prost(int64, tag = "2")]
+    pub revision: i64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetRequestMessage {
+    #[prost(string, tag = "1")]
+    pub obj_type: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(int64, tag = "4")]
+    pub revision: i64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetResponseMessage {
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub obj: ::core::option::Option<Obj>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeleteRequestMessage {
+    #[prost(string, tag = "1")]
+    pub obj_type: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub name: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeleteResponseMessage {
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+    #[prost(int64, tag = "2")]
+    pub revision: i64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpdateRequestMessage {
+    #[prost(string, tag = "1")]
+    pub obj_type: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub obj: ::core::option::Option<Obj>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpdateResponseMessage {
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+    #[prost(int64, tag = "2")]
+    pub revision: i64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListRequestMessage {
+    #[prost(string, tag = "1")]
+    pub obj_type: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub revision: i64,
+    #[prost(string, tag = "4")]
+    pub label_selector: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub field_selector: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListResponseMessage {
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+    #[prost(int64, tag = "2")]
+    pub revision: i64,
+    #[prost(message, repeated, tag = "3")]
+    pub objs: ::prost::alloc::vec::Vec<Obj>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WatchRequestMessage {
+    #[prost(string, tag = "1")]
+    pub obj_type: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub revision: i64,
+    #[prost(string, tag = "4")]
+    pub label_selector: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub field_selector: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WEvent {
+    #[prost(int64, tag = "2")]
+    pub event_type: i64,
+    #[prost(message, optional, tag = "3")]
+    pub obj: ::core::option::Option<Obj>,
 }
 /// Generated client implementations.
 pub mod service_directory_service_client {
@@ -158,6 +301,123 @@ pub mod service_directory_service_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
+        pub async fn create(
+            &mut self,
+            request: impl tonic::IntoRequest<super::CreateRequestMessage>,
+        ) -> Result<tonic::Response<super::CreateResponseMessage>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/service_directory.ServiceDirectoryService/Create",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn get(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetRequestMessage>,
+        ) -> Result<tonic::Response<super::GetResponseMessage>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/service_directory.ServiceDirectoryService/Get",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn delete(
+            &mut self,
+            request: impl tonic::IntoRequest<super::DeleteRequestMessage>,
+        ) -> Result<tonic::Response<super::DeleteResponseMessage>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/service_directory.ServiceDirectoryService/Delete",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn update(
+            &mut self,
+            request: impl tonic::IntoRequest<super::UpdateRequestMessage>,
+        ) -> Result<tonic::Response<super::UpdateResponseMessage>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/service_directory.ServiceDirectoryService/Update",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn list(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ListRequestMessage>,
+        ) -> Result<tonic::Response<super::ListResponseMessage>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/service_directory.ServiceDirectoryService/List",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn watch(
+            &mut self,
+            request: impl tonic::IntoRequest<super::WatchRequestMessage>,
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::WEvent>>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/service_directory.ServiceDirectoryService/Watch",
+            );
+            self.inner.server_streaming(request.into_request(), path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -176,6 +436,36 @@ pub mod service_directory_service_server {
             &self,
             request: tonic::Request<super::PutRequestMessage>,
         ) -> Result<tonic::Response<super::PutResponseMessage>, tonic::Status>;
+        async fn create(
+            &self,
+            request: tonic::Request<super::CreateRequestMessage>,
+        ) -> Result<tonic::Response<super::CreateResponseMessage>, tonic::Status>;
+        async fn get(
+            &self,
+            request: tonic::Request<super::GetRequestMessage>,
+        ) -> Result<tonic::Response<super::GetResponseMessage>, tonic::Status>;
+        async fn delete(
+            &self,
+            request: tonic::Request<super::DeleteRequestMessage>,
+        ) -> Result<tonic::Response<super::DeleteResponseMessage>, tonic::Status>;
+        async fn update(
+            &self,
+            request: tonic::Request<super::UpdateRequestMessage>,
+        ) -> Result<tonic::Response<super::UpdateResponseMessage>, tonic::Status>;
+        async fn list(
+            &self,
+            request: tonic::Request<super::ListRequestMessage>,
+        ) -> Result<tonic::Response<super::ListResponseMessage>, tonic::Status>;
+        /// Server streaming response type for the Watch method.
+        type WatchStream: futures_core::Stream<
+                Item = Result<super::WEvent, tonic::Status>,
+            >
+            + Send
+            + 'static;
+        async fn watch(
+            &self,
+            request: tonic::Request<super::WatchRequestMessage>,
+        ) -> Result<tonic::Response<Self::WatchStream>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct ServiceDirectoryServiceServer<T: ServiceDirectoryService> {
@@ -309,6 +599,235 @@ pub mod service_directory_service_server {
                                 send_compression_encodings,
                             );
                         let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/service_directory.ServiceDirectoryService/Create" => {
+                    #[allow(non_camel_case_types)]
+                    struct CreateSvc<T: ServiceDirectoryService>(pub Arc<T>);
+                    impl<
+                        T: ServiceDirectoryService,
+                    > tonic::server::UnaryService<super::CreateRequestMessage>
+                    for CreateSvc<T> {
+                        type Response = super::CreateResponseMessage;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::CreateRequestMessage>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).create(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = CreateSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/service_directory.ServiceDirectoryService/Get" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetSvc<T: ServiceDirectoryService>(pub Arc<T>);
+                    impl<
+                        T: ServiceDirectoryService,
+                    > tonic::server::UnaryService<super::GetRequestMessage>
+                    for GetSvc<T> {
+                        type Response = super::GetResponseMessage;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetRequestMessage>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).get(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = GetSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/service_directory.ServiceDirectoryService/Delete" => {
+                    #[allow(non_camel_case_types)]
+                    struct DeleteSvc<T: ServiceDirectoryService>(pub Arc<T>);
+                    impl<
+                        T: ServiceDirectoryService,
+                    > tonic::server::UnaryService<super::DeleteRequestMessage>
+                    for DeleteSvc<T> {
+                        type Response = super::DeleteResponseMessage;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::DeleteRequestMessage>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).delete(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = DeleteSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/service_directory.ServiceDirectoryService/Update" => {
+                    #[allow(non_camel_case_types)]
+                    struct UpdateSvc<T: ServiceDirectoryService>(pub Arc<T>);
+                    impl<
+                        T: ServiceDirectoryService,
+                    > tonic::server::UnaryService<super::UpdateRequestMessage>
+                    for UpdateSvc<T> {
+                        type Response = super::UpdateResponseMessage;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::UpdateRequestMessage>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).update(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = UpdateSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/service_directory.ServiceDirectoryService/List" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListSvc<T: ServiceDirectoryService>(pub Arc<T>);
+                    impl<
+                        T: ServiceDirectoryService,
+                    > tonic::server::UnaryService<super::ListRequestMessage>
+                    for ListSvc<T> {
+                        type Response = super::ListResponseMessage;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ListRequestMessage>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).list(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = ListSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/service_directory.ServiceDirectoryService/Watch" => {
+                    #[allow(non_camel_case_types)]
+                    struct WatchSvc<T: ServiceDirectoryService>(pub Arc<T>);
+                    impl<
+                        T: ServiceDirectoryService,
+                    > tonic::server::ServerStreamingService<super::WatchRequestMessage>
+                    for WatchSvc<T> {
+                        type Response = super::WEvent;
+                        type ResponseStream = T::WatchStream;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::ResponseStream>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::WatchRequestMessage>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).watch(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = WatchSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.server_streaming(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)

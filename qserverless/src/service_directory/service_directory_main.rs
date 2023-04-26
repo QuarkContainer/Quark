@@ -24,18 +24,18 @@ extern crate simple_logging;
 #[macro_use]
 extern crate scopeguard;
 
-pub mod etcd_store;
-pub mod watch;
-pub mod etcd_client;
 pub mod cache;
-pub mod svc_dir;
+pub mod etcd_client;
+pub mod etcd_store;
 pub mod grpc_srv;
+pub mod svc_dir;
+pub mod watch;
 
-use qobjs::selection_predicate::ListOption;
-use qobjs::common::Result as QResult;
 use crate::grpc_srv::*;
+use qobjs::common::Result as QResult;
+use qobjs::selection_predicate::ListOption;
 
-pub const KEY_PREFIX : &str = "Quark";
+pub const KEY_PREFIX: &str = "Quark";
 
 #[tokio::main]
 async fn main() -> QResult<()> {
@@ -45,4 +45,3 @@ async fn main() -> QResult<()> {
     gRpcServer().await?;
     Ok(())
 }
-

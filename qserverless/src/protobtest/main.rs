@@ -26,11 +26,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let request = tonic::Request::new(PutRequestMessage {
         object_type: "test".into(),
-        obj: Some(Object{
+        obj: Some(Object {
             kind: "test_kind".into(),
             namespace: "test_namespace".into(),
             name: "test_name".into(),
-            labels: Vec::new(), 
+            labels: Vec::new(),
             annotations: Vec::new(),
             val: "test".into(),
         }),
@@ -41,5 +41,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
-

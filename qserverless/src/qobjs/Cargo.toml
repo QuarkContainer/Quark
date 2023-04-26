@@ -17,12 +17,19 @@ futures-util = { version = "0.3", default-features = false, features = [
 	"io", # for futures_util::StreamExt::into_async_read
 ] }
 regex = "1.7.1"
-serde = "1.0"
-serde_json = "1.0"
-serde_derive = "1.0"
+serde_derive = "1.0.152"
+serde = { version = "1.0.115", features = ["derive"] }
+serde_json = "1.0.57"
 simple-logging = "2.0.2"
 log = "0.4.17"
 scopeguard = { version = "^1.1.0", default-features = false }
+spin = "0.9.5"
+reqwest = { version = "0.11", features = ["blocking", "json"] }
+k8s-openapi = { version = "0.18.0", features = ["v1_26"] }
+gethostname = "0.4.2"
+local-ip-address = "0.5.1"
+hostname = "^0.3"
+chrono = "0.4.24"
 
 [build-dependencies]
 tonic-build = "0.8"

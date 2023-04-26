@@ -14,12 +14,31 @@
 
 #![allow(dead_code)]
 #![allow(non_snake_case)]
+#![allow(non_upper_case_globals)]
+
+#[macro_use]
+extern crate log;
+extern crate simple_logging;
 
 pub mod types;
 pub mod common;
 pub mod selector;
 pub mod selection_predicate;
 pub mod validation;
+pub mod cacher_client;
+//pub mod fifo;
+pub mod store;
+//pub mod delta_fifo;
+pub mod informer;
+pub mod informer_factory;
+//pub mod core_types;
+pub mod runtime_types;
+pub mod k8s_util;
+
+// workaround to address the pb generated structure serde_json issue
+pub mod pb_gen;
+
+pub mod config;
 
 pub mod service_directory {
     include!("pb_gen/service_directory.rs");

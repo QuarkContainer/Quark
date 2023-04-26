@@ -1,0 +1,9 @@
+target/
+build/
+test/c/*
+!test/c/*.c
+.vscode/
+*.log
+test/go/*
+test/go/*.go
+.idea/

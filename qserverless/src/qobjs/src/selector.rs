@@ -20,6 +20,7 @@ use std::cmp::Ordering;
 use std::cmp::Ord;
 use std::sync::Arc;
 use core::ops::Deref;
+use serde::{Deserialize, Serialize};
 
 use super::service_directory::*;
 use crate::common::*;
@@ -27,7 +28,7 @@ use crate::types::DeepCopy;
 
 use super::validation::*;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum SelectionOp {
     None,           // ""
     DoesNotExist,   // "!"
@@ -65,7 +66,7 @@ impl SelectionOp {
 }
 
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Selector(pub Vec<Requirement>);
 
 impl Selector {
@@ -200,7 +201,7 @@ fn GetRequirement(key: &str, op: SelectionOp, vals: Vec<String>) -> Requirement 
     return req;
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Requirement {
     pub key: String,
     pub op: SelectionOp,

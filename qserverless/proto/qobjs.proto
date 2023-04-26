@@ -21,6 +21,12 @@ service ServiceDirectoryService {
   // Test
   rpc TestPing (TestRequestMessage) returns (TestResponseMessage) {}
   rpc Put (PutRequestMessage) returns (PutResponseMessage) {}
+  rpc Create (CreateRequestMessage) returns (CreateResponseMessage) {}
+  rpc Get (GetRequestMessage) returns (GetResponseMessage) {}
+  rpc Delete (DeleteRequestMessage) returns (DeleteResponseMessage) {}
+  rpc Update (UpdateRequestMessage) returns (UpdateResponseMessage) {}
+  rpc List (ListRequestMessage) returns (ListResponseMessage) {}
+  rpc Watch (WatchRequestMessage) returns (stream WEvent) {}
 }
 
 message TestRequestMessage {
@@ -36,6 +42,7 @@ message KV {
     string val = 2;
 } 
 
+// use for Etcd storage, no revision 
 message Object {
     string kind = 1;
     string namespace = 2;
@@ -43,7 +50,19 @@ message Object {
     repeated KV labels = 5;
     repeated KV annotations = 6;
 
-    string val = 7;
+    string data = 7;
+}
+
+
+message Obj {
+    string kind = 1;
+    string namespace = 2;
+    string name = 3;
+    int64 revision = 4;
+    repeated KV labels = 5;
+    repeated KV annotations = 6;
+    
+    string data = 7;
 }
 
 message PutRequestMessage {
@@ -53,4 +72,80 @@ message PutRequestMessage {
 
 message PutResponseMessage {
     int64 revision = 1;
+}
+
+message ResponseHeader {
+    string error = 1;
+    uint64 server_id = 2;
+}
+
+message CreateRequestMessage {
+    string obj_type = 1;
+    Obj obj = 2;
+}
+
+message CreateResponseMessage {
+    string error = 1;
+    int64 revision = 2;
+}
+
+message GetRequestMessage {
+    string obj_type = 1;
+    string namespace = 2;
+    string name = 3;
+    int64 revision = 4;
+}
+
+message GetResponseMessage {
+    string error = 1;
+    Obj obj = 2;
+}
+
+message DeleteRequestMessage {
+    string obj_type = 1;
+    string namespace = 2;
+    string name = 3;
+}
+
+message DeleteResponseMessage {
+    string error = 1;
+    int64 revision = 2;
+}
+
+message UpdateRequestMessage {
+    string obj_type = 1;
+    Obj obj = 2;
+}
+
+message UpdateResponseMessage {
+    string error = 1;
+    int64 revision = 2;
+}
+
+
+message ListRequestMessage {
+    string obj_type = 1;
+    string namespace = 2;
+    int64 revision = 3;
+    string label_selector = 4;
+    string field_selector = 5;
+}
+
+message ListResponseMessage {
+    string error = 1;
+    int64 revision = 2;
+    repeated Obj objs = 3;
+}
+
+message WatchRequestMessage {
+    string obj_type = 1;
+    string namespace = 2;
+    int64 revision = 3;
+    string label_selector = 4;
+    string field_selector = 5;
+}
+
+message WEvent {
+    int64 event_type = 2;
+    Obj obj = 3;
 }

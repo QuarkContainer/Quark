@@ -13,10 +13,8 @@
 // limitations under the License.
 
 use serde_derive::{Deserialize, Serialize};  
-use std::sync::atomic::AtomicI64;
 use std::{sync::Arc, collections::BTreeMap};
-use std::ops::{Deref, DerefMut};
-use std::sync::atomic::Ordering;
+use std::ops::{Deref};
 
 use prost::Message;
 
@@ -58,20 +56,24 @@ impl Default for EventType {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeltaEvent {
+    pub type_: EventType,
+    pub inInitialList: bool,
+
+    pub obj: DataObject,
+    pub oldObj: Option<DataObject>,
+}
+
 #[derive(Debug)]
 pub struct WatchEvent {
     pub type_: EventType,
 
-    // Object is:
-	//  * If Type is Added or Modified: the new state of the object.
-	//  * If Type is Deleted: the state of the object immediately before deletion.
-	//  * If Type is Error:
     pub obj: DataObject,
 }
 
-
 #[derive(Debug, Default)]
-pub struct MetaDataInner {
+pub struct DataObjectInner {
     pub kind: String,
     pub namespace: String,
     pub name: String,
@@ -79,28 +81,53 @@ pub struct MetaDataInner {
     pub annotations: Labels,
     
     // revision number set by etcd
-    pub reversion: AtomicI64,
+    pub reversion: i64,
+
+    pub data: String,
 }
 
-impl DeepCopy for MetaDataInner {
-    fn DeepCopy(&self) -> Self {
-        return self.Copy();
-    }
-}
-
-impl PartialEq for MetaDataInner {
+impl PartialEq for DataObjectInner {
     fn eq(&self, other: &Self) -> bool {
         self.kind == other.kind &&
         self.namespace == other.namespace &&
         self.lables == other.lables &&
         self.annotations == other.annotations &&
-        self.reversion.load(Ordering::Relaxed) == other.reversion.load(Ordering::Relaxed)
+        self.reversion == other.reversion &&
+        self.data == other.data
     }
 }
-impl Eq for MetaDataInner {}
+impl Eq for DataObjectInner {}
 
-impl MetaDataInner {
-    pub fn New(item: &Object) -> Self {
+impl DataObjectInner {
+    pub fn CopyWithRev(&self, reversion: i64) -> Self {
+        return Self {
+            kind: self.kind.clone(),
+            namespace: self.namespace.clone(),
+            name: self.name.clone(),
+            lables: self.lables.Copy(),
+            annotations: self.annotations.Copy(),
+            reversion: reversion,
+            data: self.data.clone(),
+        }
+    }
+}
+
+impl DeepCopy for DataObjectInner {
+    fn DeepCopy(&self) -> Self {
+        return Self {
+            kind: self.kind.clone(),
+            namespace: self.namespace.clone(),
+            name: self.name.clone(),
+            lables: self.lables.Copy(),
+            annotations: self.annotations.Copy(),
+            reversion:self.reversion,
+            data: self.data.clone(),
+        }
+    }
+}
+
+impl From<&Object> for DataObjectInner {
+    fn from(item: &Object) -> Self {
         let mut lables = BTreeMap::new();
         for l in &item.labels {
             lables.insert(l.key.clone(), l.val.clone());
@@ -111,96 +138,40 @@ impl MetaDataInner {
             annotations.insert(l.key.clone(), l.val.clone());
         }
 
-        let inner = MetaDataInner {
+        let inner = DataObjectInner {
             kind: item.kind.clone(),
             namespace: item.namespace.clone(),
             name: item.name.clone(),
             lables: lables.into(),
             annotations: annotations.into(),
-            reversion: AtomicI64::new(0),
+            reversion: 0,
+            data: item.data.clone(),
         };
 
         return inner;
     }
+}
 
-    pub fn Key(&self) -> String {
-        return format!("{}/{}", &self.namespace, &self.name);
-    }
-
-    pub fn Revision(&self) -> i64 {
-        return self.reversion.load(Ordering::Relaxed);
-    }
-
-    pub fn SetRevision(&self, rev: i64) {
-        return self.reversion.store(rev, Ordering::SeqCst);
-    }
-
-    pub fn Copy(&self) -> Self {
-        return Self {
-            kind: self.kind.clone(),
-            namespace: self.namespace.clone(),
-            name: self.name.clone(),
-            lables: self.lables.Copy(),
-            annotations: self.annotations.Copy(),
-            reversion: AtomicI64::new(self.Revision()),
+impl From<&Obj> for DataObjectInner {
+    fn from(item: &Obj) -> Self {
+        let mut lables = BTreeMap::new();
+        for l in &item.labels {
+            lables.insert(l.key.clone(), l.val.clone());
         }
-    }
 
-    pub fn ToObject(&self) -> Object {
-        let mut obj = Object::default();
-        obj.kind = self.kind.clone();
-        obj.namespace = self.namespace.clone();
-        obj.name = self.name.clone();
-        obj.labels = self.lables.ToVec();
-
-        return obj;
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct DataObjInner {
-    pub metadata: MetaDataInner,
-
-    pub obj: Object,
-}
-
-impl PartialEq for DataObjInner {
-    fn eq(&self, other: &Self) -> bool {
-        return self.metadata == other.metadata && self.obj.val == other.obj.val;
-    }
-}
-impl Eq for DataObjInner {}
-
-impl Deref for DataObjInner {
-    type Target = MetaDataInner;
-
-    fn deref(&self) -> &MetaDataInner {
-        &self.metadata
-    }
-}
-
-impl DeepCopy for DataObjInner {
-    fn DeepCopy(&self) -> Self {
-        return Self {
-            metadata: self.metadata.DeepCopy(),
-            obj: self.obj.clone(),
+        let mut annotations = BTreeMap::new();
+        for l in &item.annotations {
+            annotations.insert(l.key.clone(), l.val.clone());
         }
-    }
-}
 
-impl DerefMut for DataObjInner {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.metadata
-    }
-}
-
-impl From<Object> for DataObjInner {
-    fn from(item: Object) -> Self {
-        let metadata : MetaDataInner = MetaDataInner::New(&item);
-
-        let inner = Self {
-            metadata: metadata,
-            obj: item,
+        let inner = DataObjectInner {
+            kind: item.kind.clone(),
+            namespace: item.namespace.clone(),
+            name: item.name.clone(),
+            lables: lables.into(),
+            annotations: annotations.into(),
+            reversion: item.revision,
+            data: item.data.clone(),
         };
 
         return inner;
@@ -227,7 +198,7 @@ impl DataObjList {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct DataObject(Arc<DataObjInner>);
+pub struct DataObject(Arc<DataObjectInner>);
 
 impl PartialEq for DataObject {
     fn eq(&self, other: &Self) -> bool {
@@ -236,24 +207,22 @@ impl PartialEq for DataObject {
 }
 impl Eq for DataObject {}
 
-impl From<Object> for DataObject {
-    fn from(item: Object) -> Self {
-        let inner = item.into();
-
+impl From<DataObjectInner> for DataObject {
+    fn from(inner: DataObjectInner) -> Self {
         return Self(Arc::new(inner));
     }
 }
 
-impl From<DataObjInner> for DataObject {
-    fn from(inner: DataObjInner) -> Self {
-        return Self(Arc::new(inner));
+impl From<&Obj> for DataObject {
+    fn from(item: &Obj) -> Self {
+        return Self::NewFromObj(item);
     }
 }
 
 impl Deref for DataObject {
-    type Target = Arc<DataObjInner>;
+    type Target = Arc<DataObjectInner>;
 
-    fn deref(&self) -> &Arc<DataObjInner> {
+    fn deref(&self) -> &Arc<DataObjectInner> {
         &self.0
     }
 }
@@ -265,35 +234,107 @@ impl DeepCopy for DataObject {
 }
 
 impl DataObject {
+    pub fn NewFromObj(item: &Obj) -> Self {
+        let mut lables = BTreeMap::new();
+        for l in &item.labels {
+            lables.insert(l.key.clone(), l.val.clone());
+        }
+
+        let mut annotations = BTreeMap::new();
+        for l in &item.annotations {
+            annotations.insert(l.key.clone(), l.val.clone());
+        }
+
+        let inner = DataObjectInner {
+            kind: item.kind.clone(),
+            namespace: item.namespace.clone(),
+            name: item.name.clone(),
+            lables: lables.into(),
+            annotations: annotations.into(),
+            reversion: item.revision,
+            data: item.data.clone(),
+        };
+
+        return inner.into();
+    }
+
+    pub fn CopyWithRev(&self, revision: i64) -> Self {
+        return Self(Arc::new(self.0.CopyWithRev(revision)));
+    }
+
+    pub fn NewFromObject(item: &Object, revision: i64) -> Self {
+        let mut lables = BTreeMap::new();
+        for l in &item.labels {
+            lables.insert(l.key.clone(), l.val.clone());
+        }
+
+        let mut annotations = BTreeMap::new();
+        for l in &item.annotations {
+            annotations.insert(l.key.clone(), l.val.clone());
+        }
+
+        let inner = DataObjectInner {
+            kind: item.kind.clone(),
+            namespace: item.namespace.clone(),
+            name: item.name.clone(),
+            lables: lables.into(),
+            annotations: annotations.into(),
+            reversion: revision,
+            data: item.data.clone(),
+        };
+
+        return inner.into();
+    }
+
     pub fn Namespace(&self) -> String {
-        return self.metadata.namespace.clone();
+        return self.namespace.clone();
     }
 
     pub fn Name(&self) -> String {
-        return self.metadata.name.clone();
+        return self.name.clone();
     }
 
     pub fn Key(&self) -> String {
-        return self.metadata.Key();
+        return format!("{}/{}", &self.namespace, &self.name);
     }
 
-    pub fn Obj(&self) -> Object {
-        return self.obj.clone();
+    pub fn Object(&self) -> Object {
+        return Object {
+            kind: self.kind.clone(),
+            namespace: self.namespace.clone(),
+            name: self.name.clone(),
+            labels: self.lables.ToVec(),
+            annotations: self.annotations.ToVec(),
+            data: self.data.clone(),
+        }
+    }
+
+    pub fn Obj(&self) -> Obj {
+        return Obj {
+            kind: self.kind.clone(),
+            namespace: self.namespace.clone(),
+            name: self.name.clone(),
+            revision: self.Revision(),
+            labels: self.lables.ToVec(),
+            annotations: self.annotations.ToVec(),
+            data: self.data.clone(),
+        }
     }
 
     pub fn Revision(&self) -> i64 {
-        return self.metadata.Revision();
+        return self.reversion;
     }
 
-    pub fn Decode(buf: &[u8]) -> Result<Self> {
-        let obj = Object::decode(buf)?;
-        return Ok(Self(Arc::new(obj.into())))
-    }
+    /*pub fn Decode(buf: &[u8]) -> Result<Self> {
+        let obj = Obj::decode(buf)?;
+        return Ok(Self::NewFromObj(&obj))
+    }*/
 
     pub fn Encode(&self) -> Result<Vec<u8>> {
         let mut buf : Vec<u8> = Vec::new();
-        buf.reserve(self.obj.encoded_len());
-        self.obj.encode(&mut buf)?;
+        let obj = self.Object();
+        buf.reserve(obj.encoded_len());
+        obj.encode(&mut buf)?;
         return Ok(buf)
     }
 
@@ -301,14 +342,20 @@ impl DataObject {
         let lables = self.lables.clone();
         return lables
     }
-
-    pub fn SetRevision(&self, rev: i64) {
-        self.metadata.SetRevision(rev)
-    }
-    
 }
 
 impl Object {
+    pub fn DeepCopy(&self) -> Self {
+        return Object { 
+            kind: self.kind.to_string(), 
+            namespace: self.namespace.to_string(), 
+            name: self.name.to_string(), 
+            labels: self.labels.clone(), 
+            annotations: self.annotations.clone(), 
+            data:self.data.to_string () 
+        }
+    }
+
     pub fn Encode(&self) -> Result<Vec<u8>> {
         let mut buf : Vec<u8> = Vec::new();
         buf.reserve(self.encoded_len());
@@ -322,7 +369,7 @@ impl Object {
     }
 }
 
-
+/********************** it is test type after this **************************** */
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Spec {
@@ -384,16 +431,13 @@ impl DataObject {
             }
         };
 
-        let meta = MetaDataInner {
+        let objInner = DataObjectInner {
             namespace: namespace.to_string(),
             name: name.to_string(),
+            data: serde_json::to_string(&pod)?,
             ..Default::default()
         };
 
-        let mut obj = meta.ToObject();
-        obj.val =serde_json::to_string(&pod)?;
-
-
-        return Ok(obj.into())
+        return Ok(objInner.into())
     }
 }

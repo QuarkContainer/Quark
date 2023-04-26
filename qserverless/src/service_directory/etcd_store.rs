@@ -12,17 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use etcd_client::{Client, Compare, Txn, TxnOp, CompareOp, TxnOpResponse, DeleteOptions, CompactionOptions};
 use etcd_client::GetOptions;
+use etcd_client::{
+    Client, CompactionOptions, Compare, CompareOp, DeleteOptions, Txn, TxnOp, TxnOpResponse,
+};
 
 use crate::etcd_client::EtcdClient;
-use crate::watch::{Watcher, WatchReader};
+use crate::watch::{WatchReader, Watcher};
 use qobjs::common::*;
-use qobjs::service_directory::*;
 use qobjs::selection_predicate::*;
+use qobjs::service_directory::*;
 use qobjs::types::*;
 
-pub const PATH_PREFIX : &str = "/registry";
+pub const PATH_PREFIX: &str = "/registry";
 
 #[derive(Debug)]
 pub struct EtcdStore {
@@ -39,7 +41,7 @@ impl EtcdStore {
             client: EtcdClient::New(client),
             pathPrefix: PATH_PREFIX.to_string(),
             pagingEnable,
-        })
+        });
     }
 
     pub fn Copy(&self) -> Self {
@@ -47,7 +49,7 @@ impl EtcdStore {
             client: self.client.clone(),
             pathPrefix: self.pathPrefix.clone(),
             pagingEnable: self.pagingEnable,
-        }
+        };
     }
 
     pub fn PrepareKey(&self, key: &str) -> Result<String> {
@@ -65,15 +67,14 @@ impl EtcdStore {
 
     pub fn ValidateMinimumResourceVersion(minRevision: i64, actualRevision: i64) -> Result<()> {
         if minRevision == 0 {
-            return Ok(())
+            return Ok(());
         }
 
         if minRevision > actualRevision {
-            return Err(Error::NewMinRevsionErr(minRevision, actualRevision))
+            return Err(Error::NewMinRevsionErr(minRevision, actualRevision));
         }
-        
 
-        return Ok(())
+        return Ok(());
     }
 
     pub async fn Get(&self, key: &str, minRevision: i64) -> Result<Option<DataObject>> {
@@ -82,27 +83,27 @@ impl EtcdStore {
         let kvs = getResp.kvs();
         let actualRev = getResp.header().unwrap().revision();
         Self::ValidateMinimumResourceVersion(minRevision, actualRev)?;
-        
+
         if kvs.len() == 0 {
-            return Ok(None)
+            return Ok(None);
         }
 
         let kv = &kvs[0];
         let val = kv.value();
 
         let obj = Object::Decode(val)?;
-        let inner : DataObjInner = obj.into();
-        inner.SetRevision(kv.mod_revision());
-        
-        return Ok(Some(inner.into()))
+
+        let obj = DataObject::NewFromObject(&obj, kv.mod_revision());
+
+        return Ok(Some(obj));
     }
 
-    pub async fn Create(&self, key: &str, obj: &DataObject) -> Result<()> {
+    pub async fn Create(&self, key: &str, obj: &DataObject) -> Result<DataObject> {
         let preparedKey = self.PrepareKey(key)?;
         let keyVec: &str = &preparedKey;
         let txn = Txn::new()
             .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, 0)])
-            .and_then(vec![TxnOp::put(keyVec, obj.obj.Encode()?, None)]);
+            .and_then(vec![TxnOp::put(keyVec, obj.Object().Encode()?, None)]);
 
         let resp = self.client.lock().await.txn(txn).await?;
         if !resp.succeeded() {
@@ -111,8 +112,7 @@ impl EtcdStore {
             match &resp.op_responses()[0] {
                 TxnOpResponse::Put(getresp) => {
                     let actualRev = getresp.header().unwrap().revision();
-                    obj.SetRevision(actualRev);
-                    return Ok(())
+                    return Ok(obj.CopyWithRev(actualRev));
                 }
                 _ => {
                     panic!("create get unexpect response")
@@ -128,25 +128,33 @@ impl EtcdStore {
 
         let mut options = DeleteOptions::new();
         options = options.with_prefix();
-        let resp = self.client.lock().await.delete(keyVec, Some(options)).await?;
+        let resp = self
+            .client
+            .lock()
+            .await
+            .delete(keyVec, Some(options))
+            .await?;
 
         let rv = resp.header().unwrap().revision();
-        return Ok(rv)
+        return Ok(rv);
     }
 
-    pub async fn Delete(&self, key: &str, expectedRev: i64) -> Result<()> {
+    pub async fn Delete(&self, key: &str, expectedRev: i64) -> Result<i64> {
         let preparedKey = self.PrepareKey(key)?;
         let keyVec: &str = &preparedKey;
         let txn = if expectedRev != 0 {
             Txn::new()
-            .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, expectedRev)])
-            .and_then(vec![TxnOp::delete(keyVec, None)])
-            .or_else(vec![TxnOp::get(keyVec, None)])
+                .when(vec![Compare::mod_revision(
+                    keyVec,
+                    CompareOp::Equal,
+                    expectedRev,
+                )])
+                .and_then(vec![TxnOp::delete(keyVec, None)])
+                .or_else(vec![TxnOp::get(keyVec, None)])
         } else {
-            Txn::new()
-            .and_then(vec![TxnOp::delete(keyVec, None)])
+            Txn::new().and_then(vec![TxnOp::delete(keyVec, None)])
         };
-           
+
         let resp = self.client.lock().await.txn(txn).await?;
         if !resp.succeeded() {
             match &resp.op_responses()[0] {
@@ -158,21 +166,38 @@ impl EtcdStore {
                     panic!("Delete get unexpect response")
                 }
             };
+        } else {
+            match &resp.op_responses()[0] {
+                TxnOpResponse::Delete(resp) => {
+                    let actualRev = resp.header().unwrap().revision();
+                    return Ok(actualRev);
+                }
+                _ => {
+                    panic!("Delete get unexpect response")
+                }
+            };
         }
-        return Ok(())
-    } 
+    }
 
-    pub async fn Update(&self, key: &str, expectedRev: i64, obj: &DataObject) -> Result<()> {
+    pub async fn Update(
+        &self,
+        key: &str,
+        expectedRev: i64,
+        obj: &DataObject,
+    ) -> Result<DataObject> {
         let preparedKey = self.PrepareKey(key)?;
         let keyVec: &str = &preparedKey;
         let txn = if expectedRev > 0 {
             Txn::new()
-            .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, expectedRev)])
-            .and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)])
-            .or_else(vec![TxnOp::get(keyVec, None)])
+                .when(vec![Compare::mod_revision(
+                    keyVec,
+                    CompareOp::Equal,
+                    expectedRev,
+                )])
+                .and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)])
+                .or_else(vec![TxnOp::get(keyVec, None)])
         } else {
-            Txn::new()
-            .and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)])
+            Txn::new().and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)])
         };
 
         let resp = self.client.lock().await.txn(txn).await?;
@@ -190,8 +215,7 @@ impl EtcdStore {
             match &resp.op_responses()[0] {
                 TxnOpResponse::Put(getresp) => {
                     let actualRev = getresp.header().unwrap().revision();
-                    obj.SetRevision(actualRev);
-                    return Ok(())
+                    return Ok(obj.CopyWithRev(actualRev));
                 }
                 _ => {
                     panic!("Delete get unexpect response")
@@ -215,13 +239,13 @@ impl EtcdStore {
         for i in (0..prefix.len()).rev() {
             if end[i] < 0xff {
                 end[i] += 1;
-                let _ = end.split_off(i+1);
+                let _ = end.split_off(i + 1);
                 return end;
             }
         }
 
         // next prefix does not exist (e.g., 0xffff);
-	    // default to WithFromKey policy
+        // default to WithFromKey policy
         return vec![0];
     }
 
@@ -253,17 +277,17 @@ impl EtcdStore {
         let mut withRev = 0;
         let continueKey;
         if self.pagingEnable && pred.HasContinue() {
-            //let (tk, trv) = pred.Continue(&keyPrefix)?; 
-            
-            (continueKey, continueRv) = pred.Continue(&keyPrefix)?; 
+            //let (tk, trv) = pred.Continue(&keyPrefix)?;
+
+            (continueKey, continueRv) = pred.Continue(&keyPrefix)?;
 
             let rangeEnd = Self::GetPrefixRangeEnd(&keyPrefix);
             getOption.WithRange(rangeEnd);
             preparedKey = continueKey.clone();
-            
+
             // If continueRV > 0, the LIST request needs a specific resource version.
-		    // continueRV==0 is invalid.
-		    // If continueRV < 0, the request is for the latest resource version.
+            // continueRV==0 is invalid.
+            // If continueRV < 0, the request is for the latest resource version.
             if continueRv > 0 {
                 withRev = continueRv.clone();
                 returnedRV = continueRv;
@@ -311,7 +335,12 @@ impl EtcdStore {
         loop {
             //println!("key is {}, option is {:?}", &preparedKey, &getOption);
             let option = getOption.ToGetOption();
-            getResp = self.client.lock().await.get(preparedKey.clone(), Some(option)).await?;
+            getResp = self
+                .client
+                .lock()
+                .await
+                .get(preparedKey.clone(), Some(option))
+                .await?;
             let actualRev = getResp.header().unwrap().revision();
             Self::ValidateMinimumResourceVersion(revision, actualRev)?;
 
@@ -319,7 +348,10 @@ impl EtcdStore {
             hasMore = getResp.more();
 
             if getResp.kvs().len() == 0 && hasMore {
-                return Err(Error::CommonError("no results were found, but etcd indicated there were more values remaining".to_owned()));
+                return Err(Error::CommonError(
+                    "no results were found, but etcd indicated there were more values remaining"
+                        .to_owned(),
+                ));
             }
 
             for kv in getResp.kvs() {
@@ -330,9 +362,7 @@ impl EtcdStore {
 
                 lastKey = kv.key().to_vec();
                 let obj = Object::Decode(kv.value())?;
-                let inner : DataObjInner = obj.into();
-                inner.SetRevision(kv.mod_revision());
-                let obj = inner.into();
+                let obj = DataObject::NewFromObject(&obj, kv.mod_revision());
 
                 if pred.Match(&obj)? {
                     v.push(obj)
@@ -358,7 +388,7 @@ impl EtcdStore {
 
             if limit < MAX_LIMIT {
                 // We got incomplete result due to field/label selector dropping the object.
-			    // Double page size to reduce total number of calls to etcd.
+                // Double page size to reduce total number of calls to etcd.
                 limit *= 2;
                 if limit > MAX_LIMIT {
                     limit = MAX_LIMIT;
@@ -372,35 +402,48 @@ impl EtcdStore {
         // we never return a key that the client wouldn't be allowed to see
         if hasMore {
             let newKey = String::from_utf8(lastKey).unwrap();
-            let next = EncodeContinue(&(newKey+ "\x000"), &keyPrefix, returnedRV)?;
+            let next = EncodeContinue(&(newKey + "\x000"), &keyPrefix, returnedRV)?;
             let mut remainingItemCount = -1;
             if pred.Empty() {
                 remainingItemCount = getResp.count() as i64 - pred.limit as i64;
             }
-            
-            return Ok(DataObjList::New(v, returnedRV, Some(next), remainingItemCount));
+
+            return Ok(DataObjList::New(
+                v,
+                returnedRV,
+                Some(next),
+                remainingItemCount,
+            ));
         }
 
         return Ok(DataObjList::New(v, returnedRV, None, -1));
     }
 
-    pub fn Watch(&self, key: &str, rev: i64, pred: SelectionPredicate) -> Result<(Watcher, WatchReader)> {
+    pub fn Watch(
+        &self,
+        key: &str,
+        rev: i64,
+        pred: SelectionPredicate,
+    ) -> Result<(Watcher, WatchReader)> {
         let preparedKey = self.PrepareKey(key)?;
-        return Ok(Watcher::New(&self.client, &preparedKey, rev, pred))
+        return Ok(Watcher::New(&self.client, &preparedKey, rev, pred));
     }
 
     pub async fn Compaction(&self, revision: i64) -> Result<()> {
         let options = CompactionOptions::new().with_physical();
-        self.client.lock().await.compact(revision, Some(options)).await?;
-        return Ok(())
+        self.client
+            .lock()
+            .await
+            .compact(revision, Some(options))
+            .await?;
+        return Ok(());
     }
-    
 }
 
 // maxLimit is a maximum page limit increase used when fetching objects from etcd.
 // This limit is used only for increasing page size by kube-apiserver. If request
 // specifies larger limit initially, it won't be changed.
-pub const MAX_LIMIT : usize = 10000;
+pub const MAX_LIMIT: usize = 10000;
 
 #[derive(Debug, Default)]
 pub struct EtcdOption {
@@ -462,7 +505,7 @@ mod tests {
 
     pub fn ComputePodKey(obj: &DataObject) -> String {
         return format!("/pods/{}/{}", &obj.Namespace(), &obj.Name());
-    }    
+    }
 
     // SeedMultiLevelData creates a set of keys with a multi-level structure, returning a resourceVersion
     // from before any were created along with the full set of objects that were persisted
@@ -491,27 +534,27 @@ mod tests {
         }
 
         let mut tests = [
-        Test {
-            key: ComputePodKey(&barFirst),
-            obj: barFirst,
-        },
-        Test {
-            key: ComputePodKey(&barSecond),
-            obj: barSecond,
-        },
-        Test {
-            key: ComputePodKey(&fooSecond),
-            obj: fooSecond,
-        },
-        Test {
-            key: ComputePodKey(&barfooThird),
-            obj: barfooThird,
-        },
-        Test {
-            key: ComputePodKey(&fooThird),
-            obj: fooThird,
-        },
-    ];
+            Test {
+                key: ComputePodKey(&barFirst),
+                obj: barFirst,
+            },
+            Test {
+                key: ComputePodKey(&barSecond),
+                obj: barSecond,
+            },
+            Test {
+                key: ComputePodKey(&fooSecond),
+                obj: fooSecond,
+            },
+            Test {
+                key: ComputePodKey(&barfooThird),
+                obj: barfooThird,
+            },
+            Test {
+                key: ComputePodKey(&fooThird),
+                obj: fooThird,
+            },
+        ];
 
         let initRv = store.Clear("pods").await?;
 
@@ -524,38 +567,46 @@ mod tests {
             pods.push(t.obj);
         }
 
-        return Ok((initRv, pods))
+        return Ok((initRv, pods));
     }
 
     pub async fn RunTestListWithoutPaging() -> Result<()> {
         let mut store = EtcdStore::New("localhost:2379", true).await?;
 
         let (_, preset) = SeedMultiLevelData(&mut store).await?;
-        
+
         let listOptions = ListOption {
             revision: 0,
             revisionMatch: RevisionMatch::Exact,
-            predicate: SelectionPredicate { limit:2, ..Default::default() },
+            predicate: SelectionPredicate {
+                limit: 2,
+                ..Default::default()
+            },
         };
 
         let list = store.List("/pods/second", &listOptions).await?;
-        assert!(list.continue_.is_some()==false);
+        assert!(list.continue_.is_some() == false);
 
-        assert!(list.objs.len()==2, "objs is {:#?}", list);
+        assert!(list.objs.len() == 2, "objs is {:#?}", list);
         for i in 0..list.objs.len() {
-            assert!(preset[i+1]==list.objs[i], 
-                "expect {:#?}, actual {:#?}", preset[i+1], &list.objs[i]);
+            assert!(
+                preset[i + 1] == list.objs[i],
+                "expect {:#?}, actual {:#?}",
+                preset[i + 1],
+                &list.objs[i]
+            );
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     //#[test]
     pub fn RunTestListWithoutPagingSync() {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
-            .build().unwrap();
-        
+            .build()
+            .unwrap();
+
         rt.block_on(RunTestListWithoutPaging()).unwrap();
     }
 
@@ -571,7 +622,7 @@ mod tests {
         let barFirst = DataObject::NewPod("first", "bar", "", "")?;
         let barSecond = DataObject::NewPod("second", "bar", "", "")?;
         let fooSecond = DataObject::NewPod("second", "foo", "", "")?;
-        
+
         struct Test {
             key: String,
             obj: DataObject,
@@ -608,16 +659,23 @@ mod tests {
         let listOptions = ListOption {
             revision: 0,
             revisionMatch: RevisionMatch::None,
-            predicate: SelectionPredicate { limit:1, ..Default::default() },
+            predicate: SelectionPredicate {
+                limit: 1,
+                ..Default::default()
+            },
         };
 
         let mut list = store.List("/pods", &listOptions).await?;
-        
-        assert!(list.objs.len()==1, "objs is {:#?}", list);
-        assert!(list.continue_.is_some()==true);
+
+        assert!(list.objs.len() == 1, "objs is {:#?}", list);
+        assert!(list.continue_.is_some() == true);
         for i in 0..list.objs.len() {
-            assert!(preset[i]==list.objs[i], 
-                "expect {:#?}, actual {:#?}", preset[i+1], &list.objs[i]);
+            assert!(
+                preset[i] == list.objs[i],
+                "expect {:#?}, actual {:#?}",
+                preset[i + 1],
+                &list.objs[i]
+            );
         }
 
         let continueFromSecondItem = list.continue_.take().unwrap();
@@ -625,8 +683,8 @@ mod tests {
         let listOptions = ListOption {
             revision: 0,
             revisionMatch: RevisionMatch::None,
-            predicate: SelectionPredicate { 
-                limit:0, 
+            predicate: SelectionPredicate {
+                limit: 0,
                 continue_: Some(continueFromSecondItem.clone()),
                 ..Default::default()
             },
@@ -634,17 +692,21 @@ mod tests {
 
         let list = store.List("/pods", &listOptions).await?;
 
-        assert!(list.continue_.is_some()==false, "list is {:#?}", &list);
+        assert!(list.continue_.is_some() == false, "list is {:#?}", &list);
         for i in 0..list.objs.len() {
-            assert!(preset[i+1]==list.objs[i], 
-                "expect {:#?}, actual {:#?}", preset[i+1], &list.objs[i]);
+            assert!(
+                preset[i + 1] == list.objs[i],
+                "expect {:#?}, actual {:#?}",
+                preset[i + 1],
+                &list.objs[i]
+            );
         }
 
         let listOptions = ListOption {
             revision: 0,
             revisionMatch: RevisionMatch::None,
-            predicate: SelectionPredicate { 
-                limit:1, 
+            predicate: SelectionPredicate {
+                limit: 1,
                 continue_: Some(continueFromSecondItem.clone()),
                 ..Default::default()
             },
@@ -652,39 +714,48 @@ mod tests {
 
         let mut list = store.List("/pods", &listOptions).await?;
 
-        assert!(list.continue_.is_some()==true, "list is {:#?}", &list);
+        assert!(list.continue_.is_some() == true, "list is {:#?}", &list);
         for i in 0..list.objs.len() {
-            assert!(preset[i+1]==list.objs[i], 
-                "expect {:#?}, actual {:#?}", preset[i+1], &list.objs[i]);
+            assert!(
+                preset[i + 1] == list.objs[i],
+                "expect {:#?}, actual {:#?}",
+                preset[i + 1],
+                &list.objs[i]
+            );
         }
 
         let listOptions = ListOption {
             revision: 0,
             revisionMatch: RevisionMatch::None,
-            predicate: SelectionPredicate { 
-                limit:1, 
+            predicate: SelectionPredicate {
+                limit: 1,
                 continue_: list.continue_.take(),
                 ..Default::default()
             },
         };
 
         let list = store.List("/pods", &listOptions).await?;
-        assert!(list.continue_.is_some()==false, "list is {:#?}", &list);
+        assert!(list.continue_.is_some() == false, "list is {:#?}", &list);
         for i in 0..list.objs.len() {
-            assert!(preset[i+2]==list.objs[i], 
-                "expect {:#?}, actual {:#?}", preset[i+1], &list.objs[i]);
+            assert!(
+                preset[i + 2] == list.objs[i],
+                "expect {:#?}, actual {:#?}",
+                preset[i + 1],
+                &list.objs[i]
+            );
         }
 
         let _initRv = store.Clear("pods").await?;
-        return Ok(())
+        return Ok(());
     }
 
     //#[test]
     pub fn RunTestListContinuationSync() {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
-            .build().unwrap();
-        
+            .build()
+            .unwrap();
+
         rt.block_on(RunTestListContinuation()).unwrap();
     }
 
@@ -703,31 +774,39 @@ mod tests {
         let listOptions = ListOption {
             revision: 0,
             revisionMatch: RevisionMatch::None,
-            predicate: SelectionPredicate { 
-                limit:1, 
-                field: Selector(vec![  
-                    Requirement::New("metadata.name", SelectionOp::Equals, vec!["pod-999".to_owned()]).unwrap(),         
-                ]),
+            predicate: SelectionPredicate {
+                limit: 1,
+                field: Selector(vec![Requirement::New(
+                    "metadata.name",
+                    SelectionOp::Equals,
+                    vec!["pod-999".to_owned()],
+                )
+                .unwrap()]),
                 continue_: None,
                 ..Default::default()
             },
         };
 
         let list = store.List("/pods", &listOptions).await?;
-        assert!(list.continue_.is_some()==false, "list is {:#?}", &list);
-        assert!(pods[999]==list.objs[0], 
-            "expect {:#?}, actual {:#?}", pods[999], &list.objs[0]);
+        assert!(list.continue_.is_some() == false, "list is {:#?}", &list);
+        assert!(
+            pods[999] == list.objs[0],
+            "expect {:#?}, actual {:#?}",
+            pods[999],
+            &list.objs[0]
+        );
 
         let _initRv = store.Clear("pods").await?;
-        return Ok(())
+        return Ok(());
     }
 
     //#[test]
     pub fn RunTestListPaginationRareObjectSync() {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
-            .build().unwrap();
-        
+            .build()
+            .unwrap();
+
         rt.block_on(RunTestListPaginationRareObject()).unwrap();
     }
 }

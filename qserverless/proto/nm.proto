@@ -1,0 +1,150 @@
+/*
+Copyright 2022.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+package node_mgr_pb;
+
+option go_package = "centaurusinfra.io/fornax-serverless/pkg/fornaxcore/grpc";
+
+import "google/protobuf/empty.proto";
+//import "k8s.io/api/core/v1/generated.proto";
+//import "pkg/apis/core/v1/generated.proto";
+
+service FornaxCoreService {
+  rpc getMessage(NodeIdentifier) returns (stream FornaxCoreMessage);
+  rpc putMessage(FornaxCoreMessage) returns (google.protobuf.Empty);
+}
+
+enum MessageType {
+    UNSPECIFIED = 0;
+    FORNAX_CORE_CONFIGURATION = 100;
+    NODE_CONFIGURATION = 200;
+    NODE_REGISTER = 201;
+    NODE_READY = 202;
+    NODE_STATE = 203;
+    NODE_FULL_SYNC = 204;
+    POD_CREATE = 300;
+    POD_TERMINATE = 301;
+    POD_HIBERNATE = 302;
+    POD_STATE = 303;
+}
+ 
+message FornaxCoreMessage {
+  NodeIdentifier nodeIdentifier = 1;
+  MessageType messageType = 2;
+  oneof MessageBody {
+    FornaxCoreConfiguration fornaxCoreConfiguration = 100;
+    NodeConfiguration nodeConfiguration = 200;
+    NodeRegistry nodeRegistry = 201;
+    NodeReady nodeReady = 202;
+    NodeState nodeState= 203;
+    NodeFullSync nodeFullSync = 204;
+    PodCreate podCreate = 300;
+    PodTerminate podTerminate = 301;
+    PodHibernate podHibernate = 302;
+    PodState podState = 303;
+  }
+}
+
+message FornaxCore {
+  string ip = 1;
+  string identifier = 2;
+}
+
+message FornaxCoreConfiguration {
+  FornaxCore primary = 1;
+  repeated FornaxCore standbys = 2;
+}
+
+message NodeIdentifier {
+  string ip = 1;
+  string identifier = 2;
+}
+
+/* node register with fornax core, wait for a configuration message to initialize it*/
+message NodeRegistry {
+  int64 nodeRevision = 1;
+  //k8s.io.api.core.v1.Node node = 2;
+  string node = 2;
+}
+
+/* fornax core send node configuration to node to initialize using this configuration before tell fornax it's ready*/
+message NodeConfiguration {
+  string clusterDomain = 1;
+  //k8s.io.api.core.v1.Node node = 2;
+  string node = 2;
+  //repeated k8s.io.api.core.v1.Pod daemonPods = 3;
+  //repeated string daemonPods = 3;
+}
+
+/* node report back to fornax core, it's ready for take pod*/
+message NodeReady {
+  int64 nodeRevision = 1;
+  //k8s.io.api.core.v1.Node node = 2;
+  string node = 2;
+  repeated PodState podStates = 3;
+}
+
+/* node report back full state to fornax core*/
+message NodeState {
+  int64 nodeRevision = 1;
+  //k8s.io.api.core.v1.Node node = 2;
+  string node = 2;
+  repeated PodState podStates = 3;
+}
+
+/* fornax core ask node to send its full state if node revision are not same between fornax core and node*/
+message NodeFullSync {}
+
+message PodState {
+  int64 nodeRevision = 1;
+  enum State {
+    Creating = 0;
+    Standby = 10;
+    Activating = 20;
+    Running = 30;
+    Evacuating = 40;
+    Terminating = 50;
+    Terminated = 60;
+  }
+  State state = 2;
+  //k8s.io.api.core.v1.Pod pod = 3;
+  string pod = 3;
+  PodResource resource = 4;
+}
+
+message PodResource {
+  //k8s.io.api.core.v1.ResourceQuotaStatus resourceQuotaStatus = 1;
+  string resourceQuotaStatus = 1;
+  //repeated k8s.io.api.core.v1.AttachedVolume volumes = 2;
+  //repeated k8s.io.api.core.v1.AttachedVolume volumes = 2;
+}
+
+message PodCreate {
+  string podIdentifier = 1;
+  //k8s.io.api.core.v1.Pod pod = 2;
+  string pod = 2;
+  //k8s.io.api.core.v1.ConfigMap configMap = 3;
+  string configMap = 3;
+}
+
+message  PodTerminate {
+  string podIdentifier = 1;
+}
+
+message  PodHibernate {
+  string podIdentifier = 1;
+}

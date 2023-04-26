@@ -12,22 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
-use std::fmt;
 
 use etcd_client::Client;
 use tokio::sync::Mutex as TMutex;
 
 #[derive(Clone)]
 pub struct EtcdClient {
-    pub client: Arc<TMutex<Client>>
+    pub client: Arc<TMutex<Client>>,
 }
 
 impl fmt::Debug for EtcdClient {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("EtcdClient")
-         .finish()
+        f.debug_struct("EtcdClient").finish()
     }
 }
 
@@ -42,7 +41,7 @@ impl Deref for EtcdClient {
 impl EtcdClient {
     pub fn New(client: Client) -> Self {
         return Self {
-            client: Arc::new(TMutex::new(client))
-        }
+            client: Arc::new(TMutex::new(client)),
+        };
     }
 }
