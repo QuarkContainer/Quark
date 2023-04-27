@@ -28,7 +28,6 @@ use qobjs::pb_gen::v1alpha2 as cri;
 use qobjs::runtime_types::*;
 use qobjs::common::*;
 use crate::RUNTIME_MGR;
-use crate::runtime::runtime::*;
 use crate::nm_svc::*;
 
 pub struct PodContainerAgentInner {
@@ -70,8 +69,6 @@ impl PodContainerAgent {
         };
         let agent = Self(Arc::new(inner));
 
-
-
         let agent1 = agent.clone();
         tokio::spawn(async move {
             agent1.Process(rx).await.unwrap();
@@ -106,8 +103,8 @@ impl PodContainerAgent {
         return Ok(())
     }
 
-    pub fn SendChann(&self) -> mpsc::Sender<NodeAgentMsg> {
-        return self.agentChann.clone();
+    pub fn SendMsg(&self, msg: NodeAgentMsg) {
+        self.agentChann.try_send(msg).unwrap();
     } 
 
     pub async fn Process(&self, mut rx: mpsc::Receiver<NodeAgentMsg>) -> Result<()> {
@@ -316,10 +313,10 @@ impl PodContainerAgent {
         let httpGet = handle.http_get.as_ref().unwrap();
         let host = match &httpGet.host {
             None => {
-                if pod.RuntimePod().IPs.len() == 0 {
+                if pod.RuntimePod().as_ref().unwrap().IPs.len() == 0 {
                     return Err(Error::CommonError(format!("failed to find container ip")));
                 }
-                pod.RuntimePod().IPs[0].clone()
+                pod.RuntimePod().as_ref().unwrap().IPs[0].clone()
             }
             Some(h) => h.to_string(),
         };
