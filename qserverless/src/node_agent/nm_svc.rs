@@ -50,6 +50,7 @@ pub enum NodeAgentMsg {
     PodCleanup(PodCleanup),
     PodStatusChange(PodStatusChange),
     PodOOM(PodOOM),
+    HouseKeeping
 }
 
 #[derive(Debug)]

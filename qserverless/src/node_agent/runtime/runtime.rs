@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use tokio::sync::Semaphore;
-use qobjs::pb_gen::v1alpha2::{self as cri};
+//use qobjs::pb_gen::v1alpha2::{self as cri};
 
 use crate::cri::client::*;
 use qobjs::pb_gen::v1alpha2::*;
@@ -30,26 +30,6 @@ pub const ContainerState_CONTAINER_CREATED: ContainerState = 0;
 pub const ContainerState_CONTAINER_RUNNING: ContainerState = 1;
 pub const ContainerState_CONTAINER_EXITED:  ContainerState = 2;
 pub const ContainerState_CONTAINER_UNKNOWN: ContainerState = 3;*/
-
-pub fn ContainerExit(status: &cri::ContainerStatus) -> bool {
-    return status.finished_at != 0 && status.state == ContainerState::ContainerCreated as i32;
-}
-
-pub fn ContainerExitNormal(status: &cri::ContainerStatus) -> bool {
-    return ContainerExit(status) && status.exit_code == 0;
-}
-
-pub fn ContainerExitAbnormal(status: &cri::ContainerStatus) -> bool {
-    return ContainerExit(status) && status.exit_code != 0;
-}
-
-pub fn ContainerStatusUnknown(status: &cri::ContainerStatus) -> bool {
-    return status.state == ContainerState::ContainerUnknown as i32; 
-}
-
-pub fn ContainerRunning(status: &cri::ContainerStatus) -> bool {
-    return status.state == ContainerState::ContainerRunning as i32; 
-}
 
 pub struct RuntimeMgr {
     pub runtimeService: CriClient,
@@ -66,7 +46,7 @@ impl RuntimeMgr {
     }
 
     // GetPodSandbox implements RuntimeService
-    pub async fn GetPodSandbox(&self, podSandboxId: &str) -> Result<PodSandbox> {
+    pub async fn GetPodSandbox(&self, podSandboxId: &str) -> Result<Option<PodSandbox>> {
         info!("get pod sandbox {}", podSandboxId);
 
         let filter = PodSandboxFilter {
@@ -78,10 +58,10 @@ impl RuntimeMgr {
             .await?;
 
         if sandboxes.len() > 0 {
-            return Ok(sandboxes[0].clone())
+            return Ok(Some(sandboxes[0].clone()))
         } 
 
-        panic!("GetPodSandbox fail with empty list");
+        return Ok(None);
     }
 
     // Status implements cri.RuntimeService
@@ -151,7 +131,7 @@ impl RuntimeMgr {
             id: podSandBoxId.clone(),
             IPs: Vec::new(),
             sandboxConfig: sandboxConfig,
-            sandbox: sandboxes[0].clone(),
+            sandbox: Some(sandboxes[0].clone()),
         };
 
         let sandboxStatus = self.GetPodSandboxStatus(&podSandBoxId).await?;
@@ -205,7 +185,7 @@ impl RuntimeMgr {
             let mut pod = RuntimePod {
                 id: v.id.clone(),
                 IPs: Vec::new(),
-                sandbox: v,
+                sandbox: Some(v),
                 sandboxConfig: None,
             };
 
