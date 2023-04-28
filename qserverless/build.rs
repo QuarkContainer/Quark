@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
         .build_server(true)
         .build_client(true)
-        .out_dir("./src/node_mgr/pb_gen")
+        .out_dir("./src/qobjs/src/pb_gen")
         .compile(&[nm_proto_file], &["."])
         .unwrap_or_else(|e| panic!("protobuf compile error: {}", e));
     tonic_build::compile_protos(nm_proto_file)?;

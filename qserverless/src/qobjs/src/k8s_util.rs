@@ -24,6 +24,10 @@ impl K8SUtil {
         return Self::Id(&pod.metadata);
     }
 
+    pub fn NodeId(node: &k8s::Node) -> String {
+        return Self::Id(&node.metadata);
+    }
+
     pub fn Id(meta: &ObjectMeta) -> String {
         return format!("Namespace:{},Name:{},UID:{}", 
             K8SUtil::Namespace(&meta),

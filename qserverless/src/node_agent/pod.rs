@@ -56,6 +56,18 @@ pub const SecurityProfile_Unconfined: i32 = 1;
 // A pre-defined profile on the node should be used.
 pub const SecurityProfile_Localhost: i32 = 2;
 
+pub fn ValidatePodSpec(_pod: &k8s::Pod) -> Result<()> {
+    return Ok(());
+}
+
+pub fn ValidateConfigMap(_configMap: &k8s::ConfigMap) -> Result<()> {
+    return Ok(());
+}
+
+pub fn ValidateSecret(_secret: &k8s::Secret) -> Result<()> {
+    return Ok(());
+}
+
 pub struct PodAgentInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
@@ -190,7 +202,7 @@ impl PodAgent {
                     break;
                 }
                 _ = interval.tick() => {
-                    self.Send(NodeAgentMsg::HouseKeeping).await?;
+                    self.Send(NodeAgentMsg::HouseKeeping)?;
                 }
                 msg = rx.recv() => {
                     if let Some(msg) = msg {
@@ -668,7 +680,7 @@ impl PodAgent {
         return Ok(runtimeContainer);
     }
 
-    pub async fn Send(&self, msg: NodeAgentMsg) -> Result<()> {
+    pub fn Send(&self, msg: NodeAgentMsg) -> Result<()> {
         match self.agentChann.try_send(msg) {
             Ok(()) => return Ok(()),
             Err(_) => {

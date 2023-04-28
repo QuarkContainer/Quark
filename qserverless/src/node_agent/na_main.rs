@@ -31,6 +31,7 @@ pub mod container;
 pub mod node;
 pub mod nm_svc;
 pub mod pod_sandbox;
+pub mod message;
 
 use qobjs::common::Result as QResult;
 use runtime::image_mgr::ImageMgr;
