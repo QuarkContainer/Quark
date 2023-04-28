@@ -23,6 +23,7 @@ use chrono::prelude::*;
                 
 use k8s_openapi::api::core::v1 as k8s;
 
+use crate::common::*;
 use crate::pb_gen::v1alpha2 as cri;
 use crate::k8s_util::*;
 
@@ -149,7 +150,7 @@ pub struct QuarkPodInner {
     pub podState: PodState,
     pub isDaemon: bool,
     pub pod: Arc<RwLock<k8s::Pod>>,
-    pub configMap: k8s::ConfigMap,
+    pub configMap: Option<k8s::ConfigMap>,
     pub runtimePod: Option<Arc<RuntimePod>>,
     pub containers: BTreeMap<String, QuarkContainer>,
     pub lastTransitionTime: SystemTime,
@@ -174,7 +175,7 @@ pub const PodFailed: &str = "Failed";
 pub const PodUnknown: &str = "Unknown";
 
 #[derive(Debug, Clone)]
-pub struct QuarkPod(Arc<Mutex<QuarkPodInner>>);
+pub struct QuarkPod(pub Arc<Mutex<QuarkPodInner>>);
 
 impl Deref for QuarkPod {
     type Target = Arc<Mutex<QuarkPodInner>>;
@@ -305,6 +306,11 @@ impl QuarkPod {
         }
 
         self.Pod().write().unwrap().status = Some(podStatus);
+    }
+
+    pub fn Containers(&self) -> Vec<QuarkContainer> {
+        let containers: Vec<QuarkContainer> = self.lock().unwrap().containers.values().cloned().collect();
+        return containers;
     }
 
     pub fn GetPodConditions(&self) -> Vec<k8s::PodCondition> {
@@ -502,3 +508,32 @@ pub const ConditionTrue    : &str = "True";
 pub const ConditionFalse   : &str = "False";
 pub const ConditionUnknown : &str = "Unknown";
 
+pub fn PodToString(pod: &k8s::Pod) -> Result<String> {
+    let s = serde_json::to_string(pod)?;
+    return Ok(s);
+}
+
+pub fn PodFromString(s: &str) -> Result<k8s::Pod> {
+    let p: k8s::Pod = serde_json::from_str(s)?;
+    return Ok(p);
+}
+
+pub fn ConfigMapToString(o: &k8s::ConfigMap) -> Result<String> {
+    let s = serde_json::to_string(o)?;
+    return Ok(s);
+}
+
+pub fn ConfigMapFromString(s: &str) -> Result<k8s::ConfigMap> {
+    let p: k8s::ConfigMap = serde_json::from_str(s)?;
+    return Ok(p);
+}
+
+pub fn NodeToString(o: &k8s::Node) -> Result<String> {
+    let s = serde_json::to_string(o)?;
+    return Ok(s);
+}
+
+pub fn NodeFromString(s: &str) -> Result<k8s::Node> {
+    let p: k8s::Node = serde_json::from_str(s)?;
+    return Ok(p);
+}

@@ -18,6 +18,7 @@ use std::time::Duration;
 use qobjs::common::*;
 use qobjs::runtime_types::QuarkContainer;
 use qobjs::runtime_types::QuarkPod;
+use qobjs::pb_gen::node_mgr_pb::*;
 
 use crate::container::*;
 use crate::pod::*;
@@ -50,7 +51,8 @@ pub enum NodeAgentMsg {
     PodCleanup(PodCleanup),
     PodStatusChange(PodStatusChange),
     PodOOM(PodOOM),
-    HouseKeeping
+    HouseKeeping,
+    NodeMgrMsg(FornaxCoreMessage)
 }
 
 #[derive(Debug)]
@@ -151,14 +153,14 @@ pub struct NodeAgentSvc {
 }
 
 impl NodeAgentSvc {
-    pub async fn Send(&self, msgType: MsgType, agentId: &str, msg: NodeAgentMsg) -> Result<()> {
+    pub fn Send(&self, msgType: MsgType, agentId: &str, msg: NodeAgentMsg) -> Result<()> {
         match msgType {
-            MsgType::Node => return self.node.Send(msg).await,
+            MsgType::Node => return self.node.Send(msg),
             MsgType::Pod => {
                 match self.pods.get(agentId) {
                     None => return Err(Error::CommonError(format!("NodeAgentSvc::Send can't find pod {}", agentId))),
                     Some(agent) => {
-                        return agent.Send(msg).await;
+                        return agent.Send(msg);
                     }
                 }
             }
@@ -166,7 +168,7 @@ impl NodeAgentSvc {
                 match self.containers.get(agentId) {
                     None => return Err(Error::CommonError(format!("NodeAgentSvc::Send can't find container {}", agentId))),
                     Some(agent) => {
-                        return agent.Send(msg).await;
+                        return agent.Send(msg);
                     }
                 }
             }

@@ -78,7 +78,7 @@ pub enum Error {
     TokioChannFull,
     TokioChannClose,
     Timeout,
-
+    IpNetworkError(ipnetwork::IpNetworkError),
     // ErrRequeue may be returned by a PopProcessFunc to safely requeue
     // the current item. The value of Err will be returned from Pop.
     ErrRequeue
@@ -113,6 +113,12 @@ impl Error {
             expectRv: expectRv,
             actualRv: actualRv
         })
+    }
+}
+
+impl From<ipnetwork::IpNetworkError> for Error {
+    fn from(item: ipnetwork::IpNetworkError) -> Self {
+        return Self::IpNetworkError(item)
     }
 }
 

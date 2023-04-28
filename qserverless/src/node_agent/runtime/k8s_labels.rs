@@ -37,6 +37,17 @@ pub const KUBERNETES_POD_NAMESPACE_LABEL    : &str = "io.kubernetes.pod.namespac
 pub const KUBERNETES_POD_UIDLABEL           : &str = "io.kubernetes.pod.uid";
 pub const KUBERNETES_CONTAINER_NAME_LABEL   : &str = "io.kubernetes.container.name";
 
+pub const LabelFornaxCoreNodeDaemon              : &str = "daemon.fornax-serverless.centaurusinfra.io";
+pub const LabelFornaxCoreApplication             : &str = "application.core.fornax-serverless.centaurusinfra.io";
+pub const AnnotationFornaxCoreNode               : &str = "node.fornax-serverless.centaurusinfra.io";
+pub const AnnotationFornaxCorePod                : &str = "pod.fornax-serverless.centaurusinfra.io";
+pub const AnnotationFornaxCoreCreationUnixMicro  : &str = "create.unixmicro.core.fornax-serverless.centaurusinfra.io";
+pub const AnnotationFornaxCoreSessionService     : &str = "sessionservice.core.fornax-serverless.centaurusinfra.io";
+pub const AnnotationFornaxCoreApplicationSession : &str = "applicationsession.core.fornax-serverless.centaurusinfra.io";
+pub const AnnotationFornaxCoreNodeRevision       : &str = "noderevision.core.fornax-serverless.centaurusinfra.io";
+pub const AnnotationFornaxCoreHibernatePod       : &str = "hibernatepod.core.fornax-serverless.centaurusinfra.io";
+pub const AnnotationFornaxCoreSessionServicePod  : &str = "sessionservicepod.core.fornax-serverless.centaurusinfra.io";
+
 pub struct LabeledPodSandboxInfo {
 	// Labels from v1.Pod
 	pub labels: BTreeMap<String, String>,

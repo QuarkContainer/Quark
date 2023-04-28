@@ -13,3 +13,4 @@
 // limitations under the License.
 
 pub mod v1alpha2;
+pub mod node_mgr_pb;

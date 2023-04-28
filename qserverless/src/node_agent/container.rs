@@ -272,7 +272,7 @@ impl PodContainerAgent {
         return Ok(())
     }
 
-    pub async fn Send(&self, msg: NodeAgentMsg) -> Result<()> {
+    pub fn Send(&self, msg: NodeAgentMsg) -> Result<()> {
         match self.agentChann.try_send(msg) {
             Ok(()) => return Ok(()),
             Err(_) => {

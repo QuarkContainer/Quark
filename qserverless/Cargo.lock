@@ -710,6 +710,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12b6ee2129af8d4fb011108c73d99a1b83a85977f23b82460c0ae2e25bb4b57f"
 
 [[package]]
+name = "ipnetwork"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf466541e9d546596ee94f9f69590f89473455f88372423e0008fc1a7daf100e"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1140,6 +1149,7 @@ dependencies = [
  "futures-util",
  "gethostname",
  "hostname",
+ "ipnetwork",
  "k8s-openapi",
  "lazy_static",
  "local-ip-address",
@@ -1289,6 +1299,7 @@ dependencies = [
  "futures-io",
  "futures-util",
  "hostname",
+ "ipnetwork",
  "k8s-openapi",
  "lazy_static",
  "local-ip-address",
