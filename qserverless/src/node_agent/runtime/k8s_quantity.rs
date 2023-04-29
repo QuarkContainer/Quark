@@ -52,6 +52,15 @@ pub struct QuarkResource {
 }
 
 impl QuarkResource {
+    pub fn ToQuantity(&self) -> BTreeMap<String, Quantity> {
+        let mut ret = BTreeMap::new();
+        ret.insert(ResourceCPU.to_string(), Quantity(format!("{}",self.cpu / 1000)));
+        ret.insert(ResourceMemory.to_string(), Quantity(format!("{}",self.memory)));
+        ret.insert(ResourceStorage.to_string(), Quantity(format!("{}",self.storage)));
+        ret.insert(ResourceEphemeralStorage.to_string(), Quantity(format!("{}",self.ephemeralStorage)));
+        return ret;
+    }
+
     pub fn New(resources: &BTreeMap<String, Quantity>) -> Result<QuarkResource> {
         let cpu = match resources.get(ResourceCPU) {
             None => 0,

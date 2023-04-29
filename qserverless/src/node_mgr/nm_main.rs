@@ -18,18 +18,18 @@
 
 extern crate reqwest;
 
-pub mod cadvisor;
 
 use qobjs::common::Result as QResult;
 
 #[tokio::main]
 async fn main() -> QResult<()> {
+    /*
     //cadvisor::client::Client::Test().await?;
     let client = cadvisor::client::Client::Init();
     //println!("machine is {:#?}", client.MachineInfo().await?);
     //println!("versioninfo is {:#?}", client.VersionInfo().await?);
     println!("versioninfo is {:#?}", client.GetInfo().await?);
-
+*/
     Ok(())
 }
 

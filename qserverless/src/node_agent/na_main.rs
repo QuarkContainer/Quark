@@ -32,6 +32,8 @@ pub mod node;
 pub mod nm_svc;
 pub mod pod_sandbox;
 pub mod message;
+pub mod node_status;
+pub mod cadvisor;
 
 use qobjs::common::Result as QResult;
 use runtime::image_mgr::ImageMgr;
@@ -40,6 +42,8 @@ use qobjs::pb_gen::v1alpha2;
 use crate::cri::client::*;
 use crate::runtime::runtime::RuntimeMgr;
 use crate::runtime::network::*;
+use crate::cadvisor::client as CadvisorClient;
+use crate::cadvisor::provider::CadvisorInfoProvider;
 
 lazy_static! {
     pub static ref RUNTIME_MGR: RuntimeMgr = {
@@ -54,8 +58,18 @@ lazy_static! {
         })
     };
 
+    pub static ref CADVISOR_PROVIDER: CadvisorInfoProvider = {
+        tokio::runtime::Runtime::new().unwrap().block_on( async {
+            CadvisorInfoProvider::New().await.unwrap()
+        })
+    };
+
     pub static ref NETWORK_PROVIDER: LocalNetworkAddressProvider = {
         LocalNetworkAddressProvider::Init()
+    };
+
+    pub static ref CADVISOR_CLI: CadvisorClient::Client = {
+        CadvisorClient::Client::Init()
     };
 }
 
