@@ -23,6 +23,10 @@ use crate::common::*;
 
 //use k8s_openapi::api::core::v1::{self as k8s};
 
+pub const DecimalExponent : &str = "DecimalExponent"; // e.g., 12e6
+pub const BinarySI        : &str = "BinarySI";        // e.g., 12Mi (12 * 2^20)
+pub const DecimalSI       : &str = "DecimalSI";       // e.g., 12M  (12 * 10^6)
+
 pub const CPU                               : &str = "CPU";
 pub const Memory                            : &str = "Memory";
 pub const PID                               : &str = "PID";

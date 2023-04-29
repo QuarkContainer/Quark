@@ -35,6 +35,7 @@ use qobjs::pb_gen::node_mgr_pb::{self as NmMsg};
 
 use crate::message::BuildFornaxcoreGrpcPodState;
 use crate::nm_svc::{NodeAgentMsg, PodCreate};
+use crate::node_status::SetNodeStatus;
 use crate::pod::*;
 use crate::NETWORK_PROVIDER;
 use crate::runtime::k8s_labels::*;
@@ -121,9 +122,76 @@ impl NodeAgent {
         }
     }
 
+    pub async fn NodeHandler(&self, msg: &NodeAgentMsg) -> Result<()> {
+        match msg {
+            NodeAgentMsg::NodeMgrMsg(msg) => {
+                return self.ProcessNodeMgrMsg(msg);
+            }
+            NodeAgentMsg::PodStatusChange(msg) => {
+                let qpod = msg.pod.clone();
+                if qpod.PodState() == PodState::Cleanup {
+                    self.CleanupPodStoreAndAgent(&qpod).await?;
+                }
+                self.SaveAndNotifyPodState(&qpod);
+            }
+            NodeAgentMsg::NodeUpdate => {
+                SetNodeStatus(&self.node).await?;
+                let revision = self.node.revision.load(Ordering::SeqCst);
+                self.Notify(NodeAgentMsg::NodeMgrMsg(
+                BuildFornaxGrpcNodeState(&self.node, revision)?));
+            }
+            _ => {
+                error!("NodeHandler Received unknown message {:?}", msg);
+            }
+        }
+
+        return Ok(())
+    }
+
+    pub fn ProcessNodeMgrMsg(&self, msg: &NmMsg::FornaxCoreMessage) -> Result<()> {
+        let body = msg.message_body.as_ref().unwrap();
+        match body {
+            NmMsg::fornax_core_message::MessageBody::NodeConfiguration(msg) => {
+                return self.OnNodeConfigurationCommand(&msg);
+            }
+            NmMsg::fornax_core_message::MessageBody::NodeFullSync(msg) => {
+                return self.OnNodeFullSyncCommand(&msg);
+            }
+            NmMsg::fornax_core_message::MessageBody::PodCreate(msg) => {
+                return self.OnPodCreateCmd(&msg);
+            }
+            NmMsg::fornax_core_message::MessageBody::PodTerminate(msg) => {
+                return self.OnPodTerminateCommand(&msg);
+            }
+            NmMsg::fornax_core_message::MessageBody::PodState(_) => {
+                self.Notify(NodeAgentMsg::NodeMgrMsg(msg.clone()));
+                return Ok(())
+            }
+            _ => {
+                warn!("FornaxCoreMessage {:?} is not handled by actor", msg);
+                return Ok(())
+            }
+        }
+    }
+
     pub fn Notify(&self, msg: NodeAgentMsg) {
         self.supervisor.try_send(msg).unwrap();
     } 
+
+    pub async fn CleanupPodStoreAndAgent(&self, pod: &QuarkPod) -> Result<()> {
+        info!("Cleanup pod actor and store pod {} state {:?}", pod.PodId(), pod.PodState());
+        let podId = pod.lock().unwrap().id.clone();
+        let agent = self.pods.lock().unwrap().remove(&podId);
+        match agent {
+            Some(pa) => {
+                pa.Stop().await?;
+            }
+            None => ()
+        }
+
+        self.node.pods.lock().unwrap().remove(&podId);
+        return Ok(())
+    }
 
     pub fn OnNodeFullSyncCommand(&self, _msg: &NmMsg::NodeFullSync) -> Result<()> {
         let msg = BuildFornaxGrpcNodeState(&self.node, self.node.revision.load(Ordering::SeqCst))?;

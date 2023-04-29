@@ -23,10 +23,10 @@ use super::types::VersionInfo;
 #[derive(Debug)]
 pub struct NodeCAdvisorInfo {
 	//ContainerInfo []*cadvisorv2.ContainerInfo
-	pub MachineInfo:   MachineInfo,
+	pub machineInfo:   MachineInfo,
 	//RootFsInfo    *cadvisorv2.FsInfo
 	//ImageFsInfo   *cadvisorv2.FsInfo
-	pub VersionInfo:   VersionInfo,
+	pub versionInfo:   VersionInfo,
 }
 
 pub struct Client {
@@ -58,8 +58,8 @@ impl Client
         let mi = self.MachineInfo().await?;
         let version = self.VersionInfo().await?;
         return Ok(NodeCAdvisorInfo {
-            MachineInfo: mi,
-            VersionInfo: version,
+            machineInfo: mi,
+            versionInfo: version,
         })
     }
 }

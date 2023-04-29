@@ -182,6 +182,17 @@ impl PodAgent {
 
     pub const HouseKeepingPeriod : Duration = Duration::from_secs(5);
 
+    pub async fn Stop(&self) -> Result<()> {
+        self.stop.store(true, Ordering::SeqCst);
+        let containers: Vec<_> = self.containers.lock().unwrap().values().cloned().collect();
+        for c in &containers {
+            c.Stop().await;
+        }
+
+        self.closeNotify.notify_waiters();
+        return Ok(())
+    }
+
     pub async fn Start(&self) -> Result<()> {
         info!("Pod actor started {}", self.pod.PodId());
         let rx = self.agentRx.lock().unwrap().take().unwrap();

@@ -12,12 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::types::*;
-
-pub struct NodeCAdvisorInfo {
-	//ContainerInfo []*cadvisorv2.ContainerInfo
-	pub MachineInfo:   MachineInfo,
-	//RootFsInfo    *cadvisorv2.FsInfo
-	//ImageFsInfo   *cadvisorv2.FsInfo
-	pub VersionInfo:   VersionInfo,
-}
+pub mod client;
+pub mod types;
+pub mod provider;
