@@ -15,18 +15,20 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, AtomicI64};
-use std::time::SystemTime;
+use std::time::{SystemTime, Duration};
 use qobjs::config::NodeConfiguration;
 use uuid::Uuid;
 use tokio::sync::{mpsc, Notify};
 use std::sync::Mutex;
 use std::sync::atomic::Ordering;
 use core::ops::Deref;
+use tokio::time;
 
-use chrono::prelude::*;
+use chrono::{prelude::*};
 use k8s_openapi::api::core::v1 as k8s;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, Time};
 use qobjs::k8s_util::K8SUtil;
+use crate::node_status::IsNodeStatusReady;
 
 //use qobjs::runtime_types::QuarkNode;
 use qobjs::runtime_types::*;
@@ -88,6 +90,34 @@ impl NodeAgent {
 
 
 impl NodeAgent {
+    pub fn New(supervisor: mpsc::Sender<NodeAgentMsg>, node: &QuarkNode) -> Result<Self> {
+        let (tx, rx) = mpsc::channel::<NodeAgentMsg>(30);
+        
+        let inner = NodeAgentInner {
+            closeNotify: Arc::new(Notify::new()),
+            stop: AtomicBool::new(false),
+            state: Mutex::new(NodeAgentState::Initializing),
+            node: node.clone(),
+            supervisor: supervisor,
+            agentChann: tx,
+            agentRx: Mutex::new(Some(rx)),
+            pods: Mutex::new(BTreeMap::new()),
+        };
+
+        let agent = NodeAgent(Arc::new(inner));
+        return Ok(agent);
+    }
+
+    pub async fn Start(&self) -> Result<()> {
+        let rx = self.agentRx.lock().unwrap().take().unwrap();
+        let clone = self.clone();
+        tokio::spawn(async move {
+            clone.Process(rx).await.unwrap();
+        });
+        
+        return Ok(())
+    }
+
     pub async fn Stop(&self) {
         self.stop.store(true, Ordering::SeqCst);
         self.closeNotify.notify_one();
@@ -120,6 +150,63 @@ impl NodeAgent {
                 BuildFornaxcoreGrpcPodState(revision, pod).unwrap()
             ));
         }
+    }
+
+    pub async fn Process(&self, mut rx: mpsc::Receiver<NodeAgentMsg>) -> Result<()> {
+        let mut interval = time::interval(Duration::from_secs(5));
+        loop {
+            tokio::select! {
+                _ = self.closeNotify.notified() => {
+                    self.stop.store(false, Ordering::SeqCst);
+                    break;
+                }
+                _ = interval.tick() => {
+                    let state = self.State();
+
+                    if state == NodeAgentState::Registering {
+                        info!("Start node registry node spec {:?}", self.node.node.lock().unwrap());
+                        
+                        let messsageType = NmMsg::MessageType::NodeRegister;
+                        let rev = self.node.revision.load(Ordering::SeqCst);
+                        let nr = NmMsg::NodeRegistry {
+                            node_revision: rev,
+                            node: NodeToString(&*self.node.node.lock().unwrap())?,
+                        };
+
+                        let msg = NmMsg::FornaxCoreMessage {
+                            message_type: messsageType as i32,
+                            message_body: Some(NmMsg::fornax_core_message::MessageBody::NodeRegistry(nr)),
+                            ..Default::default()
+                        };
+
+                        self.Notify(NodeAgentMsg::NodeMgrMsg(msg));
+                    }
+
+                    if self.State() == NodeAgentState::Registered {
+                        continue;
+                    }
+
+                    SetNodeStatus(&self.node).await?;
+                    if IsNodeStatusReady(&self.node) {
+                        info!("Node is ready, tell Fornax core");
+                        let revision = self.IncrNodeRevision();
+                        self.node.node.lock().unwrap().metadata.resource_version = Some(format!("{}", revision));
+                        self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodeRunning));
+                        *self.state.lock().unwrap() = NodeAgentState::Ready;
+                        
+                    }
+                }
+                msg = rx.recv() => {
+                    if let Some(msg) = msg {
+                        self.NodeHandler(&msg).await?;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+        
+        return Ok(())
     }
 
     pub async fn NodeHandler(&self, msg: &NodeAgentMsg) -> Result<()> {
@@ -518,4 +605,13 @@ pub fn ValidateNodeSpec(node: &k8s::Node) -> Result<()> {
     }
 
     return Ok(())
+}
+
+pub async fn Run(nodeConfig: NodeConfiguration) -> Result<mpsc::Receiver<NodeAgentMsg>> {
+    let (tx, rx) = mpsc::channel::<NodeAgentMsg>(30);
+        
+    let quarkNode = QuarkNode::NewQuarkNode(&nodeConfig)?;
+    let nodeAgent = NodeAgent::New(tx, &quarkNode)?;
+    nodeAgent.Start().await?;
+    return Ok(rx);
 }

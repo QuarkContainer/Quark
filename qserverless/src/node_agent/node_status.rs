@@ -71,7 +71,7 @@ pub fn UpdateNodeAddress(node: &mut k8s::Node) -> Result<k8s::NodeCondition> {
     return Ok(condition);
 }
 
-pub async fn UpdateNodeReadyStatus(_node: &k8s::Node) -> Result<k8s::NodeCondition> {
+pub async fn UpdateNodeReadyStatus() -> Result<k8s::NodeCondition> {
     let status = RUNTIME_MGR.GetRuntimeStatus().await?;
     let currentTime = Time(Utc::now());
 
@@ -120,7 +120,7 @@ pub async fn SetNodeStatus(node: &QuarkNode) -> Result<()> {
 
     UpdateNodeCapacity(&node.nodeConfig, &mut *node.node.lock().unwrap())?;
 
-    let condition = UpdateNodeReadyStatus(&mut *node.node.lock().unwrap()).await?;
+    let condition = UpdateNodeReadyStatus().await?;
     conditions.insert(condition.type_.clone(), condition);
 
     // todo: ...
