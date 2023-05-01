@@ -119,8 +119,8 @@ impl PodContainerAgent {
                     if !self.started.load(Ordering::Relaxed) {
                         continue;
                     }
-                    //let name = self.container.lock().unwrap().spec.name.clone();
-                    let status = crate::RUNTIME_MGR.GetContainerStatus(&self.container.ContainerName()).await?;
+                    
+                    let status = crate::RUNTIME_MGR.get().unwrap().GetContainerStatus(&self.container.ContainerName()).await?;
                     self.OnContainerProbeResult(&status).await;
                 }
                 msg = rx.recv() => {
@@ -209,7 +209,7 @@ impl PodContainerAgent {
     pub async fn StartContainer(&self) -> Result<()> {
         info!("Start container pod {} container {}", self.pod.PodId(), self.container.lock().unwrap().spec.name);
         let containerId = self.container.lock().unwrap().runtimeContainer.id.clone();
-        RUNTIME_MGR.StartContainer(&containerId).await?;
+        RUNTIME_MGR.get().unwrap().StartContainer(&containerId).await?;
         self.started.store(true, Ordering::SeqCst);
         return Ok(())
     }
@@ -259,15 +259,15 @@ impl PodContainerAgent {
 
     pub async fn StopRuntimeContainer(&self, dur: Duration) -> Result<()> {
         let containerId = self.container.lock().unwrap().runtimeContainer.id.clone();
-        let status = RUNTIME_MGR.GetContainerStatus(&containerId).await?;
+        let status = RUNTIME_MGR.get().unwrap().GetContainerStatus(&containerId).await?;
 
         self.container.lock().unwrap().containerStatus = Some(status.clone());
         if ContainerExit(&status) {
             return Ok(())
         }
 
-        RUNTIME_MGR.StopContainer(&containerId, dur).await?;
-        let status = RUNTIME_MGR.GetContainerStatus(&containerId).await?;
+        RUNTIME_MGR.get().unwrap().StopContainer(&containerId, dur).await?;
+        let status = RUNTIME_MGR.get().unwrap().GetContainerStatus(&containerId).await?;
         self.container.lock().unwrap().containerStatus = Some(status);
         return Ok(())
     }
@@ -292,7 +292,7 @@ impl PodContainerAgent {
 
     pub async fn RunLifecycleHandler(&self, pod: &QuarkPod, container: &QuarkContainer, handle: &k8s::LifecycleHandler) -> Result<String> {
         if let Some(exec) = &handle.exec {
-            match crate::RUNTIME_MGR.ExecCommand(&container.lock().unwrap().runtimeContainer.id.clone(), exec.command.as_ref().unwrap().to_vec(), 0).await {
+            match crate::RUNTIME_MGR.get().unwrap().ExecCommand(&container.lock().unwrap().runtimeContainer.id.clone(), exec.command.as_ref().unwrap().to_vec(), 0).await {
                 Err(e) => return Err(e),
                 Ok((stdout, _stderr)) => {
                     let stdout = std::str::from_utf8(&stdout)?;

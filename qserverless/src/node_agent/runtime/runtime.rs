@@ -31,6 +31,7 @@ pub const ContainerState_CONTAINER_RUNNING: ContainerState = 1;
 pub const ContainerState_CONTAINER_EXITED:  ContainerState = 2;
 pub const ContainerState_CONTAINER_UNKNOWN: ContainerState = 3;*/
 
+#[derive(Debug)]
 pub struct RuntimeMgr {
     pub runtimeService: CriClient,
     pub concurrency: Semaphore,

@@ -26,6 +26,7 @@ use qobjs::pb_gen::v1alpha2::image_service_client::ImageServiceClient;
 use qobjs::common::Result;
 use qobjs::common::Error;
 
+#[derive(Debug)]
 pub struct CriClient {
     pub channel: Channel,
 }

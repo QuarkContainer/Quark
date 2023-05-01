@@ -296,7 +296,7 @@ impl PodAgent {
         } else if runtimePod.is_none() {
             self.pod.SetPodState(PodState::Terminated);
         } else if runtimePod.is_some() && runtimePod.as_ref().unwrap().sandbox.is_none() {
-            let sandbox = RUNTIME_MGR.GetPodSandbox(&runtimePod.as_ref().unwrap().id).await?;
+            let sandbox = RUNTIME_MGR.get().unwrap().GetPodSandbox(&runtimePod.as_ref().unwrap().id).await?;
             match sandbox {
                 None => self.pod.SetPodState(PodState::Terminated),
                 Some(_ps) => {
@@ -553,7 +553,7 @@ impl PodAgent {
     }
 
     pub async fn RemovePodSandbox(&self, podSandboxId: &str, podSandboxConfig: &cri::PodSandboxConfig) -> Result<()> {
-        RUNTIME_MGR.TerminatePod(podSandboxId, Vec::new()).await?;
+        RUNTIME_MGR.get().unwrap().TerminatePod(podSandboxId, Vec::new()).await?;
         fs::remove_dir_all(&podSandboxConfig.log_directory)?;
         return Ok(())
     }
@@ -578,7 +578,7 @@ impl PodAgent {
         let podsandboxConfig = self.GeneratePodSandboxConfig()?;
         let podIp = self.pod.PodId();
 
-        info!("Make pod log dir for pod {}", &podIp);
+        info!("Make pod log dir for pod {} path is {}", &podIp, &podsandboxConfig.log_directory);
         fs::create_dir_all(&podsandboxConfig.log_directory)?;
         let perms = Permissions::from_mode(0o755);
         fs::set_permissions(&podsandboxConfig.log_directory, perms)?;
@@ -586,7 +586,7 @@ impl PodAgent {
         let runtimehandler = &self.nodeConfig.RuntimeHandler;
         info!("Call runtime to create sandbox pod {} sandboxConfig is {:?}", &podIp, &podsandboxConfig);
 
-        let runtimePod = RUNTIME_MGR.CreateSandbox(Some(podsandboxConfig), runtimehandler).await?;
+        let runtimePod = RUNTIME_MGR.get().unwrap().CreateSandbox(Some(podsandboxConfig), runtimehandler).await?;
 
         return Ok(runtimePod)
     }
@@ -673,7 +673,7 @@ impl PodAgent {
         info!("Pull image for container pod {} container {}", self.pod.PodId(), &containerSpec.name);
         let pod = self.pod.Pod();
         
-        let imageRef = IMAGE_MGR.PullImageForContainer(containerSpec, podSandboxConfig).await?;
+        let imageRef = IMAGE_MGR.get().unwrap().PullImageForContainer(containerSpec, podSandboxConfig).await?;
 
         info!("Create container log dir pod {} container {}", self.pod.PodId(), &containerSpec.name);
         let _logDir = BuildContainerLogsDirectory(&pod.read().unwrap(), &containerSpec.name)?;
@@ -682,7 +682,7 @@ impl PodAgent {
         let containerConfig = self.generateContainerConfig(containerSpec, &imageRef).await?;
 
         info!("Call runtime to create container pod {} container {}", self.pod.PodId(), &containerSpec.name);
-        let runtimeContainer = RUNTIME_MGR.CreateContainer(
+        let runtimeContainer = RUNTIME_MGR.get().unwrap().CreateContainer(
             &self.pod.RuntimePod().as_ref().unwrap().sandbox.as_ref().unwrap().id.clone(), 
             Some(containerConfig), 
             Some(podSandboxConfig.clone()),
@@ -788,7 +788,7 @@ impl PodAgent {
         info!("Terminate container and remove it pod {} container {}", self.pod.PodId(), &container.lock().unwrap().spec.name.clone());
         
         let id = container.lock().unwrap().runtimeContainer.id.clone();
-        RUNTIME_MGR.TerminateContainer(&id).await?;
+        RUNTIME_MGR.get().unwrap().TerminateContainer(&id).await?;
         return Ok(())
     }
 }

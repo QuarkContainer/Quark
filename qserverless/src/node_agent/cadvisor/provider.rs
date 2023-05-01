@@ -28,6 +28,7 @@ use crate::CADVISOR_CLI;
 
 use super::client::*;
 
+#[derive(Debug)]
 pub struct CadvisorInfoProviderInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
@@ -37,8 +38,10 @@ pub struct CadvisorInfoProviderInner {
 	
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CadvisorInfoProvider(Arc<CadvisorInfoProviderInner>);
+
+unsafe impl Send for CadvisorInfoProvider {}
 
 impl Deref for CadvisorInfoProvider {
     type Target = Arc<CadvisorInfoProviderInner>;

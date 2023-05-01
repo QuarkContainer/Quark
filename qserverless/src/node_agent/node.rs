@@ -111,6 +111,7 @@ impl NodeAgent {
     pub async fn Start(&self) -> Result<()> {
         let rx = self.agentRx.lock().unwrap().take().unwrap();
         let clone = self.clone();
+        *self.state.lock().unwrap() = NodeAgentState::Registering;
         tokio::spawn(async move {
             clone.Process(rx).await.unwrap();
         });
@@ -162,7 +163,7 @@ impl NodeAgent {
                 }
                 _ = interval.tick() => {
                     let state = self.State();
-
+                    
                     if state == NodeAgentState::Registering {
                         info!("Start node registry node spec {:?}", self.node.node.lock().unwrap());
                         
@@ -180,9 +181,10 @@ impl NodeAgent {
                         };
 
                         self.Notify(NodeAgentMsg::NodeMgrMsg(msg));
+                        continue;
                     }
 
-                    if self.State() == NodeAgentState::Registered {
+                    if self.State() != NodeAgentState::Registered {
                         continue;
                     }
 
@@ -212,7 +214,7 @@ impl NodeAgent {
     pub async fn NodeHandler(&self, msg: &NodeAgentMsg) -> Result<()> {
         match msg {
             NodeAgentMsg::NodeMgrMsg(msg) => {
-                return self.ProcessNodeMgrMsg(msg);
+                return self.ProcessNodeMgrMsg(msg).await;
             }
             NodeAgentMsg::PodStatusChange(msg) => {
                 let qpod = msg.pod.clone();
@@ -235,17 +237,17 @@ impl NodeAgent {
         return Ok(())
     }
 
-    pub fn ProcessNodeMgrMsg(&self, msg: &NmMsg::FornaxCoreMessage) -> Result<()> {
+    pub async fn ProcessNodeMgrMsg(&self, msg: &NmMsg::FornaxCoreMessage) -> Result<()> {
         let body = msg.message_body.as_ref().unwrap();
         match body {
             NmMsg::fornax_core_message::MessageBody::NodeConfiguration(msg) => {
-                return self.OnNodeConfigurationCommand(&msg);
+                return self.OnNodeConfigurationCommand(&msg).await;
             }
             NmMsg::fornax_core_message::MessageBody::NodeFullSync(msg) => {
                 return self.OnNodeFullSyncCommand(&msg);
             }
             NmMsg::fornax_core_message::MessageBody::PodCreate(msg) => {
-                return self.OnPodCreateCmd(&msg);
+                return self.OnPodCreateCmd(&msg).await;
             }
             NmMsg::fornax_core_message::MessageBody::PodTerminate(msg) => {
                 return self.OnPodTerminateCommand(&msg);
@@ -286,8 +288,8 @@ impl NodeAgent {
         return Ok(())
     }
 
-    pub fn OnNodeConfigurationCommand(&self, msg: &NmMsg::NodeConfiguration) -> Result<()> {
-        if *self.state.lock().unwrap() == NodeAgentState::Registering {
+    pub async fn OnNodeConfigurationCommand(&self, msg: &NmMsg::NodeConfiguration) -> Result<()> {
+        if *self.state.lock().unwrap() != NodeAgentState::Registering {
             return Err(Error::CommonError(format!("node is not in registering state, it does not expect configuration change after registering")));
         }
 
@@ -305,39 +307,21 @@ impl NodeAgent {
 
         *self.state.lock().unwrap() = NodeAgentState::Registered;
 
-        // todo: ....
-        /*
-        	// start go routine to check node status until it is ready
-	go func() {
-		for {
-			// finish if node has initialized
-			if n.state != NodeStateRegistered {
-				break
-			}
-
-			// check node runtime dependencies, send node ready message if node is ready for new pod
-			SetNodeStatus(n.node, n.dependencies)
-			if IsNodeStatusReady(n.node) {
-				klog.InfoS("Node is ready, tell Fornax core")
-				// bump revision to let Fornax core to update node status
-				revision := n.incrementNodeRevision()
-				n.node.V1Node.ResourceVersion = fmt.Sprint(revision)
-				n.node.V1Node.Status.Phase = v1.NodeRunning
-				n.notify(n.fornoxCoreRef, BuildFornaxGrpcNodeReady(n.node, revision))
-				n.state = NodeStateReady
-				// do not periodically report, fornaxcore will send syncup request when it determine resyncup is required
-				// n.startStateReport()
-			} else {
-				time.Sleep(5 * time.Second)
-			}
-		}
-	}()
-         */
+        SetNodeStatus(&self.node).await?;
+        if IsNodeStatusReady(&self.node) {
+            info!("Node is ready, tell Fornax core");
+            let revision = self.IncrNodeRevision();
+            self.node.node.lock().unwrap().metadata.resource_version = Some(format!("{}", revision));
+            self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodeRunning));
+            *self.state.lock().unwrap() = NodeAgentState::Ready;
+            
+        }
+        
 
         return Ok(())
     }
 
-    pub fn OnPodCreateCmd(&self, msg: &NmMsg::PodCreate) -> Result<()> {
+    pub async fn OnPodCreateCmd(&self, msg: &NmMsg::PodCreate) -> Result<()> {
         let pod = PodFromString(&msg.pod)?;
         if self.State() != NodeAgentState::Ready {
             let inner = QuarkPodInner {
@@ -361,7 +345,7 @@ impl NodeAgent {
         let hasPod = self.node.pods.lock().unwrap().get(podId).is_some();
         if !hasPod {
             let podAgent = self.CreatePodAgent(PodState::Creating, &pod, &Some(configMap), false)?;
-            let inner = QuarkPodInner {
+            /*let inner = QuarkPodInner {
                 id: K8SUtil::PodId(&pod),
                 podState: PodState::Cleanup,
                 isDaemon: false,
@@ -371,8 +355,9 @@ impl NodeAgent {
                 containers: BTreeMap::new(),
                 lastTransitionTime: SystemTime::now(),
             };
-            let qpod = QuarkPod(Arc::new(Mutex::new(inner)));
-
+            let qpod = QuarkPod(Arc::new(Mutex::new(inner)));*/
+            podAgent.Start().await?;
+            let qpod = podAgent.pod.clone();
             self.SaveAndNotifyPodState(&qpod);
             podAgent.Send(NodeAgentMsg::PodCreate( PodCreate {
                 pod: qpod,
@@ -411,16 +396,30 @@ impl NodeAgent {
     pub fn BuildAQuarkPod(&self, state: PodState, pod: &k8s::Pod, configMap: &Option<k8s::ConfigMap>, isDaemon: bool) -> Result<QuarkPod> {
         ValidatePodSpec(pod)?;
 
+        let mut pod = pod.clone();
+        if pod.metadata.uid.is_none() {
+            pod.metadata.uid = Some(Uuid::new_v4().to_string());
+        }
+
+        if pod.metadata.annotations.is_none() {
+            pod.metadata.annotations = Some(BTreeMap::new());
+        }
+        
         let inner = QuarkPodInner {
-            id: K8SUtil::PodId(pod),
+            id: K8SUtil::PodId(&pod),
             podState: state,
             isDaemon: isDaemon,
-            pod: Arc::new(RwLock::new(pod.clone())),
+            pod: Arc::new(RwLock::new(pod)),
             configMap: configMap.clone(),
             runtimePod: None,
             containers: BTreeMap::new(),
             lastTransitionTime: SystemTime::now(), 
         };
+
+        let annotationsNone = inner.pod.read().unwrap().metadata.annotations.is_none();
+        if annotationsNone {
+            inner.pod.write().unwrap().metadata.annotations = Some(BTreeMap::new());
+        }
 
         let nodeId = K8SUtil::NodeId(&(*self.node.node.lock().unwrap()));
         inner.pod.write().unwrap().metadata.annotations.as_mut().unwrap().insert(AnnotationFornaxCoreNode.to_string(), nodeId);
@@ -456,6 +455,7 @@ pub fn InitK8sNode() -> Result<k8s::Node> {
     let mut node = k8s::Node {
         metadata: ObjectMeta  {
             name: Some(hostname),
+            annotations: Some(BTreeMap::new()),
             namespace: Some(DefaultFornaxCoreNodeNameSpace.to_string()),
             uid: Some(Uuid::new_v4().to_string()),
             resource_version: Some("0".to_owned()),
@@ -607,11 +607,11 @@ pub fn ValidateNodeSpec(node: &k8s::Node) -> Result<()> {
     return Ok(())
 }
 
-pub async fn Run(nodeConfig: NodeConfiguration) -> Result<mpsc::Receiver<NodeAgentMsg>> {
+pub async fn Run(nodeConfig: NodeConfiguration) -> Result<(mpsc::Receiver<NodeAgentMsg>, NodeAgent)> {
     let (tx, rx) = mpsc::channel::<NodeAgentMsg>(30);
         
     let quarkNode = QuarkNode::NewQuarkNode(&nodeConfig)?;
     let nodeAgent = NodeAgent::New(tx, &quarkNode)?;
     nodeAgent.Start().await?;
-    return Ok(rx);
+    return Ok((rx, nodeAgent));
 }
