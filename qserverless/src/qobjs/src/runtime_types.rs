@@ -215,7 +215,7 @@ impl QuarkPod {
 
     pub fn PodCreated(&self) -> bool {
         let state = self.PodState();
-        return state == PodState::Creating;
+        return state != PodState::Creating || self.RuntimePod().is_some();
     }
 
     pub fn PodInTransitState(&self) -> bool {
@@ -269,7 +269,8 @@ impl QuarkPod {
 
     pub fn SetPodStatus(&self, node: Option<&k8s::Node>) {
         let pod = self.Pod();
-        let mut podStatus = pod.read().unwrap().status.clone().unwrap();
+        
+        let mut podStatus = pod.read().unwrap().status.clone().unwrap_or(k8s::PodStatus::default());
         podStatus.phase = Some(self.ToK8sPhase());
 
         if let Some(node) = node {
@@ -289,15 +290,17 @@ impl QuarkPod {
         }
         podStatus.conditions = Some(self.GetPodConditions());
 
-        if self.RuntimePod().as_ref().unwrap().IPs.len() > 0 {
-            podStatus.pod_ip = Some(self.RuntimePod().as_ref().unwrap().IPs[0].clone());
-            let mut podIps = Vec::new();
-            for v in &self.RuntimePod().as_ref().unwrap().IPs {
-                podIps.push(k8s::PodIP{
-                    ip: Some(v.to_string()),
-                })
+        if self.RuntimePod().is_some() {
+            if self.RuntimePod().as_ref().unwrap().IPs.len() > 0 {
+                podStatus.pod_ip = Some(self.RuntimePod().as_ref().unwrap().IPs[0].clone());
+                let mut podIps = Vec::new();
+                for v in &self.RuntimePod().as_ref().unwrap().IPs {
+                    podIps.push(k8s::PodIP{
+                        ip: Some(v.to_string()),
+                    })
+                }
+                podStatus.pod_ips = Some(podIps);
             }
-            podStatus.pod_ips = Some(podIps);
         }
 
         if podStatus.start_time.is_none() {
@@ -428,6 +431,13 @@ impl QuarkPod {
         conditions.insert(PodScheduled.to_string(), podScheduledCondition);
 
         let pod = self.Pod();
+
+        if pod.read().unwrap().status.is_none() {
+            pod.write().unwrap().status = Some(k8s::PodStatus {
+                conditions: Some(Vec::new()),
+                ..Default::default()
+            });
+        }
 
         for oldCondition in pod.read().unwrap().status.as_ref().unwrap().conditions.as_ref().unwrap() {
             match conditions.get_mut(&oldCondition.type_) {

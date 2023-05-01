@@ -23,6 +23,7 @@ use qobjs::k8s_util::*;
 
 use crate::cri::client::CriClient;
 
+#[derive(Debug)]
 pub struct ImageMgr {
     pub imageRefs: TMutex<BTreeMap<String, cri::Image>>,
     pub imageSvc: CriClient,

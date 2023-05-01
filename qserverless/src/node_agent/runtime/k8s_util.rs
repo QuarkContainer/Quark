@@ -84,7 +84,8 @@ pub fn GetPullSecretsForPod(_pod: &k8s::Pod) -> Vec<k8s::Secret> {
 }
 
 pub fn IsHostNetworkPod(pod: &k8s::Pod) -> bool {
-    return pod.spec.as_ref().unwrap().host_network.clone().unwrap();
+    return pod.spec.as_ref().unwrap().host_network.is_some() && 
+        pod.spec.as_ref().unwrap().host_network.clone().unwrap();
 }
 
 pub fn ContainerLogFileName(containerName: &str, restartCount: i32) -> String {
@@ -192,9 +193,9 @@ pub fn MakePortMappings(container: &k8s::Container) -> Vec<cri::PortMapping> {
     for p in container.ports.as_ref().unwrap() {
         let pm = cri::PortMapping {
             host_ip: p.host_ip.as_deref().unwrap_or("").to_string(),
-            host_port: p.host_port.clone().unwrap_or(0),
+            host_port: p.host_port.clone().unwrap_or(0), 
             container_port: p.container_port,
-            protocol: ToRuntimeProtocol(p.protocol.as_deref().unwrap_or("")),
+            protocol: ToRuntimeProtocol(p.protocol.as_deref().unwrap_or("ProtocolTCP")),
         };
         pms.push(pm);
     }
@@ -207,7 +208,7 @@ pub fn ToRuntimeProtocol(protocol: &str) -> i32 {
         ProtocolTCP => return cri::Protocol::Tcp as i32,
         ProtocolUDP => return cri::Protocol::Udp as i32,
         ProtocolSCTP => return cri::Protocol::Sctp as i32,
-        _ => panic!("")
+        _ => return cri::Protocol::Tcp as i32,
     }
 }
 
@@ -305,8 +306,20 @@ pub fn CalculateSandboxResources(nodeConfig: &NodeConfigurationInner, pod: &k8s:
 }
 
 pub fn ContainerResource(container: &k8s::Container) -> (QuarkResource, QuarkResource) {
-    let req =  QuarkResource::New(container.resources.as_ref().unwrap().requests.as_ref().unwrap()).unwrap();
-    let lim = QuarkResource::New(container.resources.as_ref().unwrap().limits.as_ref().unwrap()).unwrap();
+    if container.resources.is_none() {
+        return (QuarkResource::default(), QuarkResource::default());
+    }
+    let req = if container.resources.as_ref().unwrap().requests.is_none() {
+        QuarkResource::default()
+    } else {
+        QuarkResource::New(container.resources.as_ref().unwrap().requests.as_ref().unwrap()).unwrap()
+    };
+        
+    let lim = if container.resources.as_ref().unwrap().requests.is_none() {
+        QuarkResource::default()
+    } else {
+        QuarkResource::New(container.resources.as_ref().unwrap().limits.as_ref().unwrap()).unwrap()
+    };
     return (req, lim);
 }
 

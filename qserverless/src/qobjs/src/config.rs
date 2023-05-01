@@ -189,6 +189,13 @@ impl Deref for NodeConfiguration {
     }
 }
 
+impl NodeConfiguration {
+    pub fn Default() -> Result<Self> {
+        let inner = NodeConfigurationInner::DefaultNodeConfiguration()?;
+        return Ok(Self(Arc::new(inner)));
+    }
+}
+
 pub fn GetPodsDir(rootPath: &str) -> String {
     return format!("{}/{}", rootPath, DefaultPodsDirName);
 }

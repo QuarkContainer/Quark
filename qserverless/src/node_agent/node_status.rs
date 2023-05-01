@@ -72,7 +72,7 @@ pub fn UpdateNodeAddress(node: &mut k8s::Node) -> Result<k8s::NodeCondition> {
 }
 
 pub async fn UpdateNodeReadyStatus() -> Result<k8s::NodeCondition> {
-    let status = RUNTIME_MGR.GetRuntimeStatus().await?;
+    let status = RUNTIME_MGR.get().unwrap().GetRuntimeStatus().await?;
     let currentTime = Time(Utc::now());
 
 	let mut networkReady = false;
@@ -160,7 +160,7 @@ pub async fn SetNodeStatus(node: &QuarkNode) -> Result<()> {
 }
 
 pub fn UpdateNodeCapacity(nodeConfig: &NodeConfiguration, node: &mut k8s::Node) -> Result<()> {
-    let info = CADVISOR_PROVIDER.CAdvisorInfo();
+    let info = CADVISOR_PROVIDER.get().unwrap().CAdvisorInfo();
     
     let status = node.status.as_mut().unwrap();
     let nodeinfo = status.node_info.as_mut().unwrap();
@@ -173,8 +173,19 @@ pub fn UpdateNodeCapacity(nodeConfig: &NodeConfiguration, node: &mut k8s::Node) 
     nodeinfo.system_uuid = info.machineInfo.SystemUUID.clone();
     nodeinfo.boot_id = info.machineInfo.BootID.clone();
 
+
+    let map = ResourceListFromMachineInfo(&info);
+
+    {
+        let capacity = status.allocatable.as_mut().unwrap();
+        for (rname, rCap) in &map {
+            capacity.insert(rname.to_string(), rCap.clone());
+        }
+    }
+
     let capacity = status.capacity.as_mut().unwrap();
-    for (rname, rCap) in ResourceListFromMachineInfo(&info) {
+    
+    for (rname, rCap) in map {
         capacity.insert(rname, rCap);
     }
 

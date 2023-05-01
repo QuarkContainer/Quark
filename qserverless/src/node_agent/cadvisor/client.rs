@@ -44,7 +44,6 @@ impl Client
     pub async fn MachineInfo(&self) -> Result<MachineInfo> {
         let url = self.baseURL.clone() + "/" + "machine";
         let resp = reqwest::get(url).await?.text().await?;
-        println!("resp is {}", &resp);
         let mi : MachineInfo = serde_json::from_str(&resp)?;
         
         return Ok(mi);
