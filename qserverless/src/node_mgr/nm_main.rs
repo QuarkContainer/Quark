@@ -17,12 +17,24 @@
 #[allow(non_camel_case_types)]
 
 extern crate reqwest;
+#[macro_use]
+extern crate log;
+extern crate simple_logging;
 
-
+use tonic::transport::Server;
 use qobjs::common::Result as QResult;
+use qobjs::pb_gen::node_mgr_pb;
+
+pub mod nm_svc;
+
+use crate::nm_svc::*;
+
 
 #[tokio::main]
 async fn main() -> QResult<()> {
+    use log::LevelFilter;
+    simple_logging::log_to_file("/var/log/quark/service_diretory.log", LevelFilter::Info).unwrap();
+    
     /*
     //cadvisor::client::Client::Test().await?;
     let client = cadvisor::client::Client::Init();
@@ -30,6 +42,10 @@ async fn main() -> QResult<()> {
     //println!("versioninfo is {:#?}", client.VersionInfo().await?);
     println!("versioninfo is {:#?}", client.GetInfo().await?);
 */
+    let inner = NodeMgrSvc::New();
+    let svc = node_mgr_pb::fornax_core_service_server::FornaxCoreServiceServer::new(inner);
+    Server::builder().add_service(svc).serve("127.0.0.1:8888".parse().unwrap()).await?;
+
     Ok(())
 }
 

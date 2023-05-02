@@ -26,6 +26,7 @@ import "google/protobuf/empty.proto";
 service FornaxCoreService {
   rpc getMessage(NodeIdentifier) returns (stream FornaxCoreMessage);
   rpc putMessage(FornaxCoreMessage) returns (google.protobuf.Empty);
+  rpc StreamMsg(stream FornaxCoreMessage) returns (stream FornaxCoreMessage);
 }
 
 enum MessageType {
