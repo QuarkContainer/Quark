@@ -40,7 +40,7 @@ pub mod cadvisor;
 
 use qobjs::common::Result as QResult;
 //use qobjs::config::NodeConfiguration;
-//use qobjs::pb_gen::node_mgr_pb::FornaxCoreMessage;
+//use qobjs::pb_gen::node_mgr_pb::NodeAgentMessage;
 use runtime::image_mgr::ImageMgr;
 
 use qobjs::pb_gen::v1alpha2;
@@ -134,9 +134,8 @@ pub async fn ClientTest() -> QResult<()> {
             ..Default::default()
         })?,
     };
-    na.Send(NodeAgentMsg::NodeMgrMsg(FornaxCoreMessage{
-        message_type: NmMsg::MessageType::NodeConfiguration as i32,
-        message_body: Some(NmMsg::fornax_core_message::MessageBody::NodeConfiguration(nc)),
+    na.Send(NodeAgentMsg::NodeMgrMsg(NodeAgentMessage{
+        message_body: Some(NmMsg::node_agent_message::MessageBody::NodeConfiguration(nc)),
         ..Default::default()
     }))?;
 
@@ -150,9 +149,8 @@ pub async fn ClientTest() -> QResult<()> {
         config_map: serde_json::to_string(&k8s::ConfigMap::default())?,
     };
 
-    na.Send(NodeAgentMsg::NodeMgrMsg(FornaxCoreMessage{
-        message_type: NmMsg::MessageType::PodCreate as i32,
-        message_body: Some(NmMsg::fornax_core_message::MessageBody::PodCreate(pa)),
+    na.Send(NodeAgentMsg::NodeMgrMsg(NodeAgentMessage{
+        message_body: Some(NmMsg::node_agent_message::MessageBody::PodCreate(pa)),
         ..Default::default()
     }))?;
 
@@ -176,11 +174,10 @@ pub async fn NMClientTest() -> QResult<()> {
     //use futures_util::stream;
 
     let msg = nm_svc::NodeFullSync{};
-    let mut client = nm_svc::fornax_core_service_client::FornaxCoreServiceClient::connect("http://127.0.0.1:8888").await?;
-    client.put_message(nm_svc::FornaxCoreMessage {
+    let mut client = nm_svc::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
+    client.put_message(nm_svc::NodeAgentMessage {
         node_identifier: None,
-        message_type: nm_svc::MessageType::NodeReady as i32,
-        message_body: Some(nm_svc::fornax_core_message::MessageBody::NodeFullSync(msg.clone()))
+        message_body: Some(nm_svc::node_agent_message::MessageBody::NodeFullSync(msg.clone()))
     }).await?;
 
     /*let msg: nm_svc::NodeIdentifier = nm_svc::NodeIdentifier {
@@ -202,10 +199,9 @@ pub async fn NMClientTest() -> QResult<()> {
     let mut inbound = response.into_inner();
 
     for _ in 0..5 {
-        tx.send(nm_svc::FornaxCoreMessage {
+        tx.send(nm_svc::NodeAgentMessage {
             node_identifier: None,
-            message_type: nm_svc::MessageType::NodeReady as i32,
-            message_body: Some(nm_svc::fornax_core_message::MessageBody::NodeFullSync(msg.clone()))
+            message_body: Some(nm_svc::node_agent_message::MessageBody::NodeFullSync(msg.clone()))
         }).await.unwrap();
         let msg = inbound.message().await?;
         println!("get msg {:?}", msg);

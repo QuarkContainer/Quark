@@ -13,7 +13,6 @@
 // limitations under the License.
 
 extern crate alloc;
-//extern crate fornax_openapi;
 
 mod service_directory;
 mod node_mgr;

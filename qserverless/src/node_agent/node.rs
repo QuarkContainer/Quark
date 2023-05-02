@@ -35,7 +35,7 @@ use qobjs::runtime_types::*;
 use qobjs::common::*;
 use qobjs::pb_gen::node_mgr_pb::{self as NmMsg};
 
-use crate::message::BuildFornaxcoreGrpcPodState;
+use crate::message::BuildNodeMgrGrpcPodState;
 use crate::nm_svc::{NodeAgentMsg, PodCreate};
 use crate::node_status::SetNodeStatus;
 use crate::pod::*;
@@ -132,7 +132,7 @@ impl NodeAgent {
         let revision = self.node.revision.fetch_add(1, Ordering::SeqCst);
         self.node.node.lock().unwrap().metadata.resource_version = Some(format!("{}", revision));
         self.node.node.lock().unwrap().metadata.annotations.as_mut().unwrap().insert(
-            AnnotationFornaxCoreNodeRevision.to_string(), 
+            AnnotationNodeMgrNodeRevision.to_string(), 
             format!("{}", revision)
         );
         return revision;
@@ -143,12 +143,12 @@ impl NodeAgent {
             let revision = self.IncrNodeRevision();
             pod.Pod().write().unwrap().metadata.resource_version = Some(revision.to_string());
             pod.Pod().write().unwrap().metadata.annotations.as_mut().unwrap().insert(
-                AnnotationFornaxCoreNodeRevision.to_string(), 
+                AnnotationNodeMgrNodeRevision.to_string(), 
                 format!("{}", revision)
             );
             
             self.Notify(NodeAgentMsg::NodeMgrMsg(
-                BuildFornaxcoreGrpcPodState(revision, pod).unwrap()
+                BuildNodeMgrGrpcPodState(revision, pod).unwrap()
             ));
         }
     }
@@ -167,16 +167,14 @@ impl NodeAgent {
                     if state == NodeAgentState::Registering {
                         info!("Start node registry node spec {:?}", self.node.node.lock().unwrap());
                         
-                        let messsageType = NmMsg::MessageType::NodeRegister;
                         let rev = self.node.revision.load(Ordering::SeqCst);
                         let nr = NmMsg::NodeRegistry {
                             node_revision: rev,
                             node: NodeToString(&*self.node.node.lock().unwrap())?,
                         };
 
-                        let msg = NmMsg::FornaxCoreMessage {
-                            message_type: messsageType as i32,
-                            message_body: Some(NmMsg::fornax_core_message::MessageBody::NodeRegistry(nr)),
+                        let msg = NmMsg::NodeAgentMessage {
+                            message_body: Some(NmMsg::node_agent_message::MessageBody::NodeRegistry(nr)),
                             ..Default::default()
                         };
 
@@ -190,7 +188,7 @@ impl NodeAgent {
 
                     SetNodeStatus(&self.node).await?;
                     if IsNodeStatusReady(&self.node) {
-                        info!("Node is ready, tell Fornax core");
+                        info!("Node is ready, tell nodemgr");
                         let revision = self.IncrNodeRevision();
                         self.node.node.lock().unwrap().metadata.resource_version = Some(format!("{}", revision));
                         self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodeRunning));
@@ -227,7 +225,7 @@ impl NodeAgent {
                 SetNodeStatus(&self.node).await?;
                 let revision = self.node.revision.load(Ordering::SeqCst);
                 self.Notify(NodeAgentMsg::NodeMgrMsg(
-                BuildFornaxGrpcNodeState(&self.node, revision)?));
+                BuildNodeAgentNodeState(&self.node, revision)?));
             }
             _ => {
                 error!("NodeHandler Received unknown message {:?}", msg);
@@ -237,27 +235,27 @@ impl NodeAgent {
         return Ok(())
     }
 
-    pub async fn ProcessNodeMgrMsg(&self, msg: &NmMsg::FornaxCoreMessage) -> Result<()> {
+    pub async fn ProcessNodeMgrMsg(&self, msg: &NmMsg::NodeAgentMessage) -> Result<()> {
         let body = msg.message_body.as_ref().unwrap();
         match body {
-            NmMsg::fornax_core_message::MessageBody::NodeConfiguration(msg) => {
+            NmMsg::node_agent_message::MessageBody::NodeConfiguration(msg) => {
                 return self.OnNodeConfigurationCommand(&msg).await;
             }
-            NmMsg::fornax_core_message::MessageBody::NodeFullSync(msg) => {
+            NmMsg::node_agent_message::MessageBody::NodeFullSync(msg) => {
                 return self.OnNodeFullSyncCommand(&msg);
             }
-            NmMsg::fornax_core_message::MessageBody::PodCreate(msg) => {
+            NmMsg::node_agent_message::MessageBody::PodCreate(msg) => {
                 return self.OnPodCreateCmd(&msg).await;
             }
-            NmMsg::fornax_core_message::MessageBody::PodTerminate(msg) => {
+            NmMsg::node_agent_message::MessageBody::PodTerminate(msg) => {
                 return self.OnPodTerminateCommand(&msg);
             }
-            NmMsg::fornax_core_message::MessageBody::PodState(_) => {
+            NmMsg::node_agent_message::MessageBody::PodState(_) => {
                 self.Notify(NodeAgentMsg::NodeMgrMsg(msg.clone()));
                 return Ok(())
             }
             _ => {
-                warn!("FornaxCoreMessage {:?} is not handled by actor", msg);
+                warn!("NodeAgentMessage {:?} is not handled by actor", msg);
                 return Ok(())
             }
         }
@@ -283,7 +281,7 @@ impl NodeAgent {
     }
 
     pub fn OnNodeFullSyncCommand(&self, _msg: &NmMsg::NodeFullSync) -> Result<()> {
-        let msg = BuildFornaxGrpcNodeState(&self.node, self.node.revision.load(Ordering::SeqCst))?;
+        let msg = BuildNodeAgentNodeState(&self.node, self.node.revision.load(Ordering::SeqCst))?;
         self.Notify(NodeAgentMsg::NodeMgrMsg(msg));
         return Ok(())
     }
@@ -294,7 +292,7 @@ impl NodeAgent {
         }
 
         let node = NodeFromString(&msg.node)?;
-        info!("received node spec from fornaxcore: {:?}", &node);
+        info!("received node spec from nodemgr: {:?}", &node);
         ValidateNodeSpec(&node)?;
 
         self.node.node.lock().unwrap().spec = node.spec.clone();
@@ -309,7 +307,7 @@ impl NodeAgent {
 
         SetNodeStatus(&self.node).await?;
         if IsNodeStatusReady(&self.node) {
-            info!("Node is ready, tell Fornax core");
+            info!("Node is ready, tell nodemgr");
             let revision = self.IncrNodeRevision();
             self.node.node.lock().unwrap().metadata.resource_version = Some(format!("{}", revision));
             self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodeRunning));
@@ -372,7 +370,7 @@ impl NodeAgent {
         let podId = &msg.pod_identifier;
         let qpod = self.node.pods.lock().unwrap().get(podId).cloned();
         match qpod {
-            None => return Err(Error::CommonError(format!("Pod: {} does not exist, Fornax core is not in sync", podId))),
+            None => return Err(Error::CommonError(format!("Pod: {} does not exist, nodemgr is not in sync", podId))),
             Some(qpod) => {
                 let mut podAgent = self.pods.lock().unwrap().get(podId).cloned();
                 if qpod.PodInTerminating() && podAgent.is_some() {
@@ -422,7 +420,7 @@ impl NodeAgent {
         }
 
         let nodeId = K8SUtil::NodeId(&(*self.node.node.lock().unwrap()));
-        inner.pod.write().unwrap().metadata.annotations.as_mut().unwrap().insert(AnnotationFornaxCoreNode.to_string(), nodeId);
+        inner.pod.write().unwrap().metadata.annotations.as_mut().unwrap().insert(AnnotationNodeMgrNode.to_string(), nodeId);
 
         let qpod = QuarkPod(Arc::new(Mutex::new(inner)));
         let k8snode = self.node.node.lock().unwrap().clone();
@@ -433,7 +431,7 @@ impl NodeAgent {
 
     pub fn StartPodAgent(&self, qpod: &QuarkPod) -> Result<PodAgent> {
         qpod.Pod().write().unwrap().status.as_mut().unwrap().host_ip = Some(self.node.node.lock().unwrap().status.as_ref().unwrap().addresses.as_ref().unwrap()[0].address.clone());
-        qpod.Pod().write().unwrap().metadata.annotations.as_mut().unwrap().insert(AnnotationFornaxCoreNode.to_string(), K8SUtil::NodeId(&(*self.node.node.lock().unwrap())));
+        qpod.Pod().write().unwrap().metadata.annotations.as_mut().unwrap().insert(AnnotationNodeMgrNode.to_string(), K8SUtil::NodeId(&(*self.node.node.lock().unwrap())));
 
         let podAgent = PodAgent::New(self.agentChann.clone(), qpod, &self.node.nodeConfig);
         let podId = qpod.lock().unwrap().id.clone();
@@ -456,7 +454,7 @@ pub fn InitK8sNode() -> Result<k8s::Node> {
         metadata: ObjectMeta  {
             name: Some(hostname),
             annotations: Some(BTreeMap::new()),
-            namespace: Some(DefaultFornaxCoreNodeNameSpace.to_string()),
+            namespace: Some(DefaultNodeMgrNodeNameSpace.to_string()),
             uid: Some(Uuid::new_v4().to_string()),
             resource_version: Some("0".to_owned()),
             generation: Some(0),

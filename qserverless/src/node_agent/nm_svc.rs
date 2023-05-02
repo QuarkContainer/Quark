@@ -52,7 +52,7 @@ pub enum NodeAgentMsg {
     PodStatusChange(PodStatusChange),
     PodOOM(PodOOM),
     HouseKeeping,
-    NodeMgrMsg(FornaxCoreMessage)
+    NodeMgrMsg(NodeAgentMessage)
 }
 
 #[derive(Debug)]

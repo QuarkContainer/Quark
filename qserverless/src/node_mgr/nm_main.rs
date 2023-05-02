@@ -43,7 +43,7 @@ async fn main() -> QResult<()> {
     println!("versioninfo is {:#?}", client.GetInfo().await?);
 */
     let inner = NodeMgrSvc::New();
-    let svc = node_mgr_pb::fornax_core_service_server::FornaxCoreServiceServer::new(inner);
+    let svc = node_mgr_pb::node_agent_service_server::NodeAgentServiceServer::new(inner);
     Server::builder().add_service(svc).serve("127.0.0.1:8888".parse().unwrap()).await?;
 
     Ok(())
