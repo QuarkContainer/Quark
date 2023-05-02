@@ -3,6 +3,8 @@ rf:
 	cargo build --bin node_mgr
 na:
 	cargo build --bin node_agent
+nm:
+	cargo build --bin node_mgr
 test:
 	cargo run --bin service_directory
 all: rf

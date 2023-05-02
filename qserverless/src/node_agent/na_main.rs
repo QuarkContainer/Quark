@@ -65,6 +65,10 @@ lazy_static! {
 
 #[tokio::main]
 async fn main() -> QResult<()> {
+    return NMClientTest().await;
+}
+
+pub async fn ClientTest() -> QResult<()> {
     use qobjs::pb_gen::node_mgr_pb::{self as NmMsg};
     use log::LevelFilter;
     use nm_svc::*;
@@ -164,3 +168,48 @@ async fn main() -> QResult<()> {
     //return Ok(())
 }
 
+pub async fn NMClientTest() -> QResult<()> {
+    use qobjs::pb_gen::node_mgr_pb as nm_svc;
+    //use tonic::{Response, Status};
+    use tokio::sync::mpsc;
+    //use tonic::Request;
+    //use futures_util::stream;
+
+    let msg = nm_svc::NodeFullSync{};
+    let mut client = nm_svc::fornax_core_service_client::FornaxCoreServiceClient::connect("http://127.0.0.1:8888").await?;
+    client.put_message(nm_svc::FornaxCoreMessage {
+        node_identifier: None,
+        message_type: nm_svc::MessageType::NodeReady as i32,
+        message_body: Some(nm_svc::fornax_core_message::MessageBody::NodeFullSync(msg.clone()))
+    }).await?;
+
+    /*let msg: nm_svc::NodeIdentifier = nm_svc::NodeIdentifier {
+        ip: "127.".to_string(),
+        identifier: "test".to_string(),
+    };
+    
+    let mut stream = client.get_message(msg).await?.into_inner();
+    while let Some(msg) = stream.message().await? {
+        println!("stream get msg {:?}", msg);
+    }*/
+
+
+    let (tx, rx) = mpsc::channel(30);
+
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+    let response = client.stream_msg(stream).await?;
+
+    let mut inbound = response.into_inner();
+
+    for _ in 0..5 {
+        tx.send(nm_svc::FornaxCoreMessage {
+            node_identifier: None,
+            message_type: nm_svc::MessageType::NodeReady as i32,
+            message_body: Some(nm_svc::fornax_core_message::MessageBody::NodeFullSync(msg.clone()))
+        }).await.unwrap();
+        let msg = inbound.message().await?;
+        println!("get msg {:?}", msg);
+    }
+
+    return Ok(())
+}
