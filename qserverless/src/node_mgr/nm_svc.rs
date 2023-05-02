@@ -27,7 +27,7 @@ use qobjs::common::Result;
 
 #[derive(Clone, Debug)]
 pub struct NodeAgentStruct {
-    pub sender: mpsc::Sender<SResult<nm_svc::FornaxCoreMessage, Status>>,
+    pub sender: mpsc::Sender<SResult<nm_svc::NodeAgentMessage, Status>>,
 }
 
 #[derive(Debug)]
@@ -66,13 +66,13 @@ impl NodeMgrSvc {
 pub enum SrvMsg {
     AgentClose(String),
     AgentConnect(String),
-    AgentMsg(Result<nm_svc::FornaxCoreMessage>),
+    AgentMsg(Result<nm_svc::NodeAgentMessage>),
 }
 
 
 #[tonic::async_trait]
-impl nm_svc::fornax_core_service_server::FornaxCoreService for NodeMgrSvc {
-    type getMessageStream = ReceiverStream<SResult<nm_svc::FornaxCoreMessage, Status>>;
+impl nm_svc::node_agent_service_server::NodeAgentService for NodeMgrSvc {
+    type getMessageStream = ReceiverStream<SResult<nm_svc::NodeAgentMessage, Status>>;
 
     async fn get_message(
         &self,
@@ -82,10 +82,9 @@ impl nm_svc::fornax_core_service_server::FornaxCoreService for NodeMgrSvc {
         let (tx, rx) = mpsc::channel(30);
         
         let msg = nm_svc::NodeFullSync{};
-        let msg = nm_svc::FornaxCoreMessage {
+        let msg = nm_svc::NodeAgentMessage {
             node_identifier: None,
-            message_type: nm_svc::MessageType::NodeReady as i32,
-            message_body: Some(nm_svc::fornax_core_message::MessageBody::NodeFullSync(msg))
+            message_body: Some(nm_svc::node_agent_message::MessageBody::NodeFullSync(msg))
         };
     
         tx.send(Ok(msg)).await.unwrap();
@@ -100,17 +99,17 @@ impl nm_svc::fornax_core_service_server::FornaxCoreService for NodeMgrSvc {
 
     async fn put_message(
         &self,
-        request: tonic::Request<nm_svc::FornaxCoreMessage>,
+        request: tonic::Request<nm_svc::NodeAgentMessage>,
     ) -> SResult<tonic::Response<()>, tonic::Status> {
         println!("put_message req {:?}", request);
         return Ok(Response::new(()));
     }
 
-    type StreamMsgStream = ReceiverStream<SResult<nm_svc::FornaxCoreMessage, Status>>;
+    type StreamMsgStream = ReceiverStream<SResult<nm_svc::NodeAgentMessage, Status>>;
 
     async fn stream_msg(
         &self,
-        request: tonic::Request<tonic::Streaming<nm_svc::FornaxCoreMessage>>,
+        request: tonic::Request<tonic::Streaming<nm_svc::NodeAgentMessage>>,
     ) -> SResult<tonic::Response<Self::StreamMsgStream>, tonic::Status> {
         let mut stream = request.into_inner();
         let (tx, rx) = mpsc::channel(30);
@@ -121,7 +120,7 @@ impl nm_svc::fornax_core_service_server::FornaxCoreService for NodeMgrSvc {
                 match &msg {
                     Ok(m) => {
                         match m.message_body.as_ref().unwrap() {
-                            nm_svc::fornax_core_message::MessageBody::NodeRegistry(b) => {
+                            nm_svc::node_agent_message::MessageBody::NodeRegistry(b) => {
                                 nodeId = b.node.clone();
                                 svc.clients.lock().unwrap().insert(nodeId.clone(), NodeAgentStruct {
                                     sender: tx,

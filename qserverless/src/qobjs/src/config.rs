@@ -82,7 +82,7 @@ pub struct NodeConfigurationInner {
 	pub CgroupRoot               : String,
 	pub CgroupDriver             : String,
 	pub DatabaseURL              : String, // /var/lib/nodeagent/db/nodeagent.sqlite
-	pub FornaxCoreUrls           : Vec<String>,
+	pub NodeMgreUrls           : Vec<String>,
 	pub Hostname                 : String,
 	pub MemoryQoS                : bool,
 	pub DisableSwap              : bool,
@@ -129,7 +129,7 @@ impl NodeConfigurationInner {
             CgroupRoot:               DefaultCgroupRoot.to_string(),
             CgroupDriver:             DefaultCgroupDriver.to_string(),
             DatabaseURL:              format!("file:{}/db/{}?cache=shared&mode=rwc", DefaultRootPath, DefaultDBName),
-            FornaxCoreUrls:           Vec::new(),
+            NodeMgreUrls:           Vec::new(),
             Hostname:                 hostname,
             MaxPods:                  DefaultMaxPods,
             MaxContainerPerPod:       DefaultMaxContainerPerPod,

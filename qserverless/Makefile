@@ -1,6 +1,5 @@
-rf: 
-	cargo build --bin service_directory
-	cargo build --bin node_mgr
+All: na nm
+#	cargo build --bin service_directory
 na:
 	cargo build --bin node_agent
 nm:

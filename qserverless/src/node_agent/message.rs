@@ -13,15 +13,15 @@
 // limitations under the License.
 
 use k8s_openapi::api::core::v1 as k8s;
-use qobjs::{pb_gen::node_mgr_pb::{self as NmMsg, fornax_core_message::MessageBody}, runtime_types::{PodToString, QuarkPod, PodState, NodeToString}};
+use qobjs::{pb_gen::node_mgr_pb::{self as NmMsg, node_agent_message::MessageBody}, runtime_types::{PodToString, QuarkPod, PodState, NodeToString}};
 use qobjs::common::*;
 
 use crate::node::QuarkNode;
 
-pub fn BuildFornaxGrpcNodeState(node: &QuarkNode, revision: i64) -> Result<NmMsg::FornaxCoreMessage> {
+pub fn BuildNodeAgentNodeState(node: &QuarkNode, revision: i64) -> Result<NmMsg::NodeAgentMessage> {
     let mut podStates = Vec::new();
     for v in node.pods.lock().unwrap().values() {
-        let s = BuildFornaxcoreGrpcPodState(revision, v)?;
+        let s = BuildNodeMgrGrpcPodState(revision, v)?;
         let body = s.message_body.as_ref().unwrap();
         let state = match body {
             MessageBody::PodState(state) => state.clone(),
@@ -36,18 +36,16 @@ pub fn BuildFornaxGrpcNodeState(node: &QuarkNode, revision: i64) -> Result<NmMsg
         pod_states: podStates,
     };
 
-    let messsageType = NmMsg::MessageType::NodeState;
-    return Ok(NmMsg::FornaxCoreMessage {
-        message_type: messsageType as i32,
-        message_body: Some(NmMsg::fornax_core_message::MessageBody::NodeState(ns)),
+    return Ok(NmMsg::NodeAgentMessage {
+        message_body: Some(NmMsg::node_agent_message::MessageBody::NodeState(ns)),
         ..Default::default()
     })
 }
 
-pub fn BuildFornaxGrpcNodeReady(node: &QuarkNode, revision: i64) -> Result<NmMsg::FornaxCoreMessage> {
+pub fn BuildNodeAgentNodeReady(node: &QuarkNode, revision: i64) -> Result<NmMsg::NodeAgentMessage> {
     let mut podStates = Vec::new();
     for v in node.pods.lock().unwrap().values() {
-        let s = BuildFornaxcoreGrpcPodState(revision, v)?;
+        let s = BuildNodeMgrGrpcPodState(revision, v)?;
         let body = s.message_body.as_ref().unwrap();
         let state = match body {
             MessageBody::PodState(state) => state.clone(),
@@ -62,15 +60,13 @@ pub fn BuildFornaxGrpcNodeReady(node: &QuarkNode, revision: i64) -> Result<NmMsg
         pod_states: podStates,
     };
 
-    let messsageType = NmMsg::MessageType::NodeReady;
-    return Ok(NmMsg::FornaxCoreMessage {
-        message_type: messsageType as i32,
-        message_body: Some(NmMsg::fornax_core_message::MessageBody::NodeReady(ns)),
+    return Ok(NmMsg::NodeAgentMessage {
+        message_body: Some(NmMsg::node_agent_message::MessageBody::NodeReady(ns)),
         ..Default::default()
     })
 }
 
-pub fn BuildFornaxcoreGrpcPodStateForFailedPod(nodeRev: i64, pod: &k8s::Pod) -> Result<NmMsg::FornaxCoreMessage> {
+pub fn BuildNodeMgrPodStateForFailedPod(nodeRev: i64, pod: &k8s::Pod) -> Result<NmMsg::NodeAgentMessage> {
     let state = NmMsg::pod_state::State::Terminated;
 
     let s: NmMsg::PodState = NmMsg::PodState {
@@ -80,31 +76,27 @@ pub fn BuildFornaxcoreGrpcPodStateForFailedPod(nodeRev: i64, pod: &k8s::Pod) -> 
         resource: Some(NmMsg::PodResource::default()),
     };
 
-    let messsageType = NmMsg::MessageType::PodState;
-    return Ok(NmMsg::FornaxCoreMessage {
-        message_type: messsageType as i32,
-        message_body: Some(NmMsg::fornax_core_message::MessageBody::PodState(s)),
+    return Ok(NmMsg::NodeAgentMessage {
+        message_body: Some(NmMsg::node_agent_message::MessageBody::PodState(s)),
         ..Default::default()
     })
 }
 
-pub fn BuildFornaxcoreGrpcPodState(nodeRev: i64, pod: &QuarkPod) -> Result<NmMsg::FornaxCoreMessage> {
+pub fn BuildNodeMgrGrpcPodState(nodeRev: i64, pod: &QuarkPod) -> Result<NmMsg::NodeAgentMessage> {
     let s: NmMsg::PodState = NmMsg::PodState {
         node_revision: nodeRev,
-        state: PodStateToFornaxState(pod) as i32,
+        state: PodStateToNodeAgentState(pod) as i32,
         pod: PodToString(&(*pod.Pod().read().unwrap()))?,
         resource: Some(NmMsg::PodResource::default()),
     };
 
-    let messsageType = NmMsg::MessageType::PodState;
-    return Ok(NmMsg::FornaxCoreMessage {
-        message_type: messsageType as i32,
-        message_body: Some(NmMsg::fornax_core_message::MessageBody::PodState(s)),
+    return Ok(NmMsg::NodeAgentMessage {
+        message_body: Some(NmMsg::node_agent_message::MessageBody::PodState(s)),
         ..Default::default()
     })
 }
 
-pub fn PodStateToFornaxState(pod: &QuarkPod) -> NmMsg::pod_state::State {
+pub fn PodStateToNodeAgentState(pod: &QuarkPod) -> NmMsg::pod_state::State {
     match pod.PodState() {
         PodState::Creating => {
             return NmMsg::pod_state::State::Creating;

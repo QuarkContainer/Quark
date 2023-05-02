@@ -17,37 +17,20 @@ limitations under the License.
 syntax = "proto3";
 package node_mgr_pb;
 
-option go_package = "centaurusinfra.io/fornax-serverless/pkg/fornaxcore/grpc";
-
 import "google/protobuf/empty.proto";
 //import "k8s.io/api/core/v1/generated.proto";
 //import "pkg/apis/core/v1/generated.proto";
 
-service FornaxCoreService {
-  rpc getMessage(NodeIdentifier) returns (stream FornaxCoreMessage);
-  rpc putMessage(FornaxCoreMessage) returns (google.protobuf.Empty);
-  rpc StreamMsg(stream FornaxCoreMessage) returns (stream FornaxCoreMessage);
-}
-
-enum MessageType {
-    UNSPECIFIED = 0;
-    FORNAX_CORE_CONFIGURATION = 100;
-    NODE_CONFIGURATION = 200;
-    NODE_REGISTER = 201;
-    NODE_READY = 202;
-    NODE_STATE = 203;
-    NODE_FULL_SYNC = 204;
-    POD_CREATE = 300;
-    POD_TERMINATE = 301;
-    POD_HIBERNATE = 302;
-    POD_STATE = 303;
+service NodeAgentService {
+  rpc getMessage(NodeIdentifier) returns (stream NodeAgentMessage);
+  rpc putMessage(NodeAgentMessage) returns (google.protobuf.Empty);
+  rpc StreamMsg(stream NodeAgentMessage) returns (stream NodeAgentMessage);
 }
  
-message FornaxCoreMessage {
+message NodeAgentMessage {
   NodeIdentifier nodeIdentifier = 1;
-  MessageType messageType = 2;
   oneof MessageBody {
-    FornaxCoreConfiguration fornaxCoreConfiguration = 100;
+    NodeMgrConfiguration NodeMgrConfiguration = 100;
     NodeConfiguration nodeConfiguration = 200;
     NodeRegistry nodeRegistry = 201;
     NodeReady nodeReady = 202;
@@ -60,14 +43,14 @@ message FornaxCoreMessage {
   }
 }
 
-message FornaxCore {
+message NodeMgr {
   string ip = 1;
   string identifier = 2;
 }
 
-message FornaxCoreConfiguration {
-  FornaxCore primary = 1;
-  repeated FornaxCore standbys = 2;
+message NodeMgrConfiguration {
+  NodeMgr primary = 1;
+  repeated NodeMgr standbys = 2;
 }
 
 message NodeIdentifier {
@@ -75,14 +58,14 @@ message NodeIdentifier {
   string identifier = 2;
 }
 
-/* node register with fornax core, wait for a configuration message to initialize it*/
+/* node register with NodeMgr, wait for a configuration message to initialize it*/
 message NodeRegistry {
   int64 nodeRevision = 1;
   //k8s.io.api.core.v1.Node node = 2;
   string node = 2;
 }
 
-/* fornax core send node configuration to node to initialize using this configuration before tell fornax it's ready*/
+/* NodeMgr send node configuration to node to initialize using this configuration before tell nodeagent it's ready*/
 message NodeConfiguration {
   string clusterDomain = 1;
   //k8s.io.api.core.v1.Node node = 2;
@@ -91,7 +74,7 @@ message NodeConfiguration {
   //repeated string daemonPods = 3;
 }
 
-/* node report back to fornax core, it's ready for take pod*/
+/* node report back to NodeMgr, it's ready for take pod*/
 message NodeReady {
   int64 nodeRevision = 1;
   //k8s.io.api.core.v1.Node node = 2;
@@ -99,7 +82,7 @@ message NodeReady {
   repeated PodState podStates = 3;
 }
 
-/* node report back full state to fornax core*/
+/* node report back full state to NodeMgr*/
 message NodeState {
   int64 nodeRevision = 1;
   //k8s.io.api.core.v1.Node node = 2;
@@ -107,7 +90,7 @@ message NodeState {
   repeated PodState podStates = 3;
 }
 
-/* fornax core ask node to send its full state if node revision are not same between fornax core and node*/
+/* NodeMgr ask node to send its full state if node revision are not same between NodeMgr and node*/
 message NodeFullSync {}
 
 message PodState {

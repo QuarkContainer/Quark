@@ -50,7 +50,7 @@ pub struct RuntimePodStatus {
     pub containerStatus: BTreeMap<String, cri::ContainerStatus>
 }
 
-// ContainerStatus represents the cri status of a container and fornax status.
+// ContainerStatus represents the cri status of a container and nodeagent status.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RuntimeContainerStatus {
     pub status: cri::ContainerStatus,
@@ -136,7 +136,7 @@ pub enum PodState {
     // a state preserved for use to evacuate session
     Evacuating,
     Terminating,
-    // a normal pod exit status when fornax core request to terminate
+    // a normal pod exit status when nodemgr request to terminate
     Terminated,
     // a abnormal pod exit status when pod met unexpected condtion
     Failed,
@@ -488,7 +488,7 @@ pub fn ContainerRunning(status: &cri::ContainerStatus) -> bool {
 }
 
 
-pub const DefaultFornaxCoreNodeNameSpace: &str = "qserverless.quark.io";
+pub const DefaultNodeMgrNodeNameSpace: &str = "qserverless.quark.io";
 pub const DefaultDomainName: &str = "qserverless.quark.io";
 
 // NodePending means the node has been created/added by the system, but not configured.

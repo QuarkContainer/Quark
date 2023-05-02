@@ -23,7 +23,6 @@ futures-util = { version = "0.3", default-features = false, features = [
 	"io", # for futures_util::StreamExt::into_async_read
 ] }
 regex = "1.7.1"
-#fornax-openapi= { path = "../fornax_openapi", features = [ ] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_derive = "1.0"

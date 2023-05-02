@@ -1,23 +1,21 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FornaxCoreMessage {
+pub struct NodeAgentMessage {
     #[prost(message, optional, tag = "1")]
     pub node_identifier: ::core::option::Option<NodeIdentifier>,
-    #[prost(enumeration = "MessageType", tag = "2")]
-    pub message_type: i32,
     #[prost(
-        oneof = "fornax_core_message::MessageBody",
+        oneof = "node_agent_message::MessageBody",
         tags = "100, 200, 201, 202, 203, 204, 300, 301, 302, 303"
     )]
-    pub message_body: ::core::option::Option<fornax_core_message::MessageBody>,
+    pub message_body: ::core::option::Option<node_agent_message::MessageBody>,
 }
-/// Nested message and enum types in `FornaxCoreMessage`.
-pub mod fornax_core_message {
+/// Nested message and enum types in `NodeAgentMessage`.
+pub mod node_agent_message {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum MessageBody {
         #[prost(message, tag = "100")]
-        FornaxCoreConfiguration(super::FornaxCoreConfiguration),
+        NodeMgrConfiguration(super::NodeMgrConfiguration),
         #[prost(message, tag = "200")]
         NodeConfiguration(super::NodeConfiguration),
         #[prost(message, tag = "201")]
@@ -40,7 +38,7 @@ pub mod fornax_core_message {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FornaxCore {
+pub struct NodeMgr {
     #[prost(string, tag = "1")]
     pub ip: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
@@ -48,11 +46,11 @@ pub struct FornaxCore {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FornaxCoreConfiguration {
+pub struct NodeMgrConfiguration {
     #[prost(message, optional, tag = "1")]
-    pub primary: ::core::option::Option<FornaxCore>,
+    pub primary: ::core::option::Option<NodeMgr>,
     #[prost(message, repeated, tag = "2")]
-    pub standbys: ::prost::alloc::vec::Vec<FornaxCore>,
+    pub standbys: ::prost::alloc::vec::Vec<NodeMgr>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -62,7 +60,7 @@ pub struct NodeIdentifier {
     #[prost(string, tag = "2")]
     pub identifier: ::prost::alloc::string::String,
 }
-/// node register with fornax core, wait for a configuration message to initialize it
+/// node register with NodeMgr, wait for a configuration message to initialize it
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeRegistry {
@@ -72,7 +70,7 @@ pub struct NodeRegistry {
     #[prost(string, tag = "2")]
     pub node: ::prost::alloc::string::String,
 }
-/// fornax core send node configuration to node to initialize using this configuration before tell fornax it's ready
+/// NodeMgr send node configuration to node to initialize using this configuration before tell nodeagent it's ready
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeConfiguration {
@@ -85,7 +83,7 @@ pub struct NodeConfiguration {
     #[prost(string, tag = "2")]
     pub node: ::prost::alloc::string::String,
 }
-/// node report back to fornax core, it's ready for take pod
+/// node report back to NodeMgr, it's ready for take pod
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeReady {
@@ -97,7 +95,7 @@ pub struct NodeReady {
     #[prost(message, repeated, tag = "3")]
     pub pod_states: ::prost::alloc::vec::Vec<PodState>,
 }
-/// node report back full state to fornax core
+/// node report back full state to NodeMgr
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeState {
@@ -109,7 +107,7 @@ pub struct NodeState {
     #[prost(message, repeated, tag = "3")]
     pub pod_states: ::prost::alloc::vec::Vec<PodState>,
 }
-/// fornax core ask node to send its full state if node revision are not same between fornax core and node
+/// NodeMgr ask node to send its full state if node revision are not same between NodeMgr and node
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeFullSync {}
@@ -214,69 +212,16 @@ pub struct PodHibernate {
     #[prost(string, tag = "1")]
     pub pod_identifier: ::prost::alloc::string::String,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum MessageType {
-    Unspecified = 0,
-    FornaxCoreConfiguration = 100,
-    NodeConfiguration = 200,
-    NodeRegister = 201,
-    NodeReady = 202,
-    NodeState = 203,
-    NodeFullSync = 204,
-    PodCreate = 300,
-    PodTerminate = 301,
-    PodHibernate = 302,
-    PodState = 303,
-}
-impl MessageType {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            MessageType::Unspecified => "UNSPECIFIED",
-            MessageType::FornaxCoreConfiguration => "FORNAX_CORE_CONFIGURATION",
-            MessageType::NodeConfiguration => "NODE_CONFIGURATION",
-            MessageType::NodeRegister => "NODE_REGISTER",
-            MessageType::NodeReady => "NODE_READY",
-            MessageType::NodeState => "NODE_STATE",
-            MessageType::NodeFullSync => "NODE_FULL_SYNC",
-            MessageType::PodCreate => "POD_CREATE",
-            MessageType::PodTerminate => "POD_TERMINATE",
-            MessageType::PodHibernate => "POD_HIBERNATE",
-            MessageType::PodState => "POD_STATE",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "UNSPECIFIED" => Some(Self::Unspecified),
-            "FORNAX_CORE_CONFIGURATION" => Some(Self::FornaxCoreConfiguration),
-            "NODE_CONFIGURATION" => Some(Self::NodeConfiguration),
-            "NODE_REGISTER" => Some(Self::NodeRegister),
-            "NODE_READY" => Some(Self::NodeReady),
-            "NODE_STATE" => Some(Self::NodeState),
-            "NODE_FULL_SYNC" => Some(Self::NodeFullSync),
-            "POD_CREATE" => Some(Self::PodCreate),
-            "POD_TERMINATE" => Some(Self::PodTerminate),
-            "POD_HIBERNATE" => Some(Self::PodHibernate),
-            "POD_STATE" => Some(Self::PodState),
-            _ => None,
-        }
-    }
-}
 /// Generated client implementations.
-pub mod fornax_core_service_client {
+pub mod node_agent_service_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
     use tonic::codegen::http::Uri;
     #[derive(Debug, Clone)]
-    pub struct FornaxCoreServiceClient<T> {
+    pub struct NodeAgentServiceClient<T> {
         inner: tonic::client::Grpc<T>,
     }
-    impl FornaxCoreServiceClient<tonic::transport::Channel> {
+    impl NodeAgentServiceClient<tonic::transport::Channel> {
         /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
@@ -287,7 +232,7 @@ pub mod fornax_core_service_client {
             Ok(Self::new(conn))
         }
     }
-    impl<T> FornaxCoreServiceClient<T>
+    impl<T> NodeAgentServiceClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::BoxBody>,
         T::Error: Into<StdError>,
@@ -305,7 +250,7 @@ pub mod fornax_core_service_client {
         pub fn with_interceptor<F>(
             inner: T,
             interceptor: F,
-        ) -> FornaxCoreServiceClient<InterceptedService<T, F>>
+        ) -> NodeAgentServiceClient<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
@@ -319,7 +264,7 @@ pub mod fornax_core_service_client {
                 http::Request<tonic::body::BoxBody>,
             >>::Error: Into<StdError> + Send + Sync,
         {
-            FornaxCoreServiceClient::new(InterceptedService::new(inner, interceptor))
+            NodeAgentServiceClient::new(InterceptedService::new(inner, interceptor))
         }
         /// Compress requests with the given encoding.
         ///
@@ -340,7 +285,7 @@ pub mod fornax_core_service_client {
             &mut self,
             request: impl tonic::IntoRequest<super::NodeIdentifier>,
         ) -> Result<
-            tonic::Response<tonic::codec::Streaming<super::FornaxCoreMessage>>,
+            tonic::Response<tonic::codec::Streaming<super::NodeAgentMessage>>,
             tonic::Status,
         > {
             self.inner
@@ -354,13 +299,13 @@ pub mod fornax_core_service_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/node_mgr_pb.FornaxCoreService/getMessage",
+                "/node_mgr_pb.NodeAgentService/getMessage",
             );
             self.inner.server_streaming(request.into_request(), path, codec).await
         }
         pub async fn put_message(
             &mut self,
-            request: impl tonic::IntoRequest<super::FornaxCoreMessage>,
+            request: impl tonic::IntoRequest<super::NodeAgentMessage>,
         ) -> Result<tonic::Response<()>, tonic::Status> {
             self.inner
                 .ready()
@@ -373,15 +318,15 @@ pub mod fornax_core_service_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/node_mgr_pb.FornaxCoreService/putMessage",
+                "/node_mgr_pb.NodeAgentService/putMessage",
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
         pub async fn stream_msg(
             &mut self,
-            request: impl tonic::IntoStreamingRequest<Message = super::FornaxCoreMessage>,
+            request: impl tonic::IntoStreamingRequest<Message = super::NodeAgentMessage>,
         ) -> Result<
-            tonic::Response<tonic::codec::Streaming<super::FornaxCoreMessage>>,
+            tonic::Response<tonic::codec::Streaming<super::NodeAgentMessage>>,
             tonic::Status,
         > {
             self.inner
@@ -395,22 +340,22 @@ pub mod fornax_core_service_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/node_mgr_pb.FornaxCoreService/StreamMsg",
+                "/node_mgr_pb.NodeAgentService/StreamMsg",
             );
             self.inner.streaming(request.into_streaming_request(), path, codec).await
         }
     }
 }
 /// Generated server implementations.
-pub mod fornax_core_service_server {
+pub mod node_agent_service_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
-    /// Generated trait containing gRPC methods that should be implemented for use with FornaxCoreServiceServer.
+    /// Generated trait containing gRPC methods that should be implemented for use with NodeAgentServiceServer.
     #[async_trait]
-    pub trait FornaxCoreService: Send + Sync + 'static {
+    pub trait NodeAgentService: Send + Sync + 'static {
         /// Server streaming response type for the getMessage method.
         type getMessageStream: futures_core::Stream<
-                Item = Result<super::FornaxCoreMessage, tonic::Status>,
+                Item = Result<super::NodeAgentMessage, tonic::Status>,
             >
             + Send
             + 'static;
@@ -420,27 +365,27 @@ pub mod fornax_core_service_server {
         ) -> Result<tonic::Response<Self::getMessageStream>, tonic::Status>;
         async fn put_message(
             &self,
-            request: tonic::Request<super::FornaxCoreMessage>,
+            request: tonic::Request<super::NodeAgentMessage>,
         ) -> Result<tonic::Response<()>, tonic::Status>;
         /// Server streaming response type for the StreamMsg method.
         type StreamMsgStream: futures_core::Stream<
-                Item = Result<super::FornaxCoreMessage, tonic::Status>,
+                Item = Result<super::NodeAgentMessage, tonic::Status>,
             >
             + Send
             + 'static;
         async fn stream_msg(
             &self,
-            request: tonic::Request<tonic::Streaming<super::FornaxCoreMessage>>,
+            request: tonic::Request<tonic::Streaming<super::NodeAgentMessage>>,
         ) -> Result<tonic::Response<Self::StreamMsgStream>, tonic::Status>;
     }
     #[derive(Debug)]
-    pub struct FornaxCoreServiceServer<T: FornaxCoreService> {
+    pub struct NodeAgentServiceServer<T: NodeAgentService> {
         inner: _Inner<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
     }
     struct _Inner<T>(Arc<T>);
-    impl<T: FornaxCoreService> FornaxCoreServiceServer<T> {
+    impl<T: NodeAgentService> NodeAgentServiceServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
@@ -474,9 +419,9 @@ pub mod fornax_core_service_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for FornaxCoreServiceServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for NodeAgentServiceServer<T>
     where
-        T: FornaxCoreService,
+        T: NodeAgentService,
         B: Body + Send + 'static,
         B::Error: Into<StdError> + Send + 'static,
     {
@@ -492,14 +437,14 @@ pub mod fornax_core_service_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
-                "/node_mgr_pb.FornaxCoreService/getMessage" => {
+                "/node_mgr_pb.NodeAgentService/getMessage" => {
                     #[allow(non_camel_case_types)]
-                    struct getMessageSvc<T: FornaxCoreService>(pub Arc<T>);
+                    struct getMessageSvc<T: NodeAgentService>(pub Arc<T>);
                     impl<
-                        T: FornaxCoreService,
+                        T: NodeAgentService,
                     > tonic::server::ServerStreamingService<super::NodeIdentifier>
                     for getMessageSvc<T> {
-                        type Response = super::FornaxCoreMessage;
+                        type Response = super::NodeAgentMessage;
                         type ResponseStream = T::getMessageStream;
                         type Future = BoxFuture<
                             tonic::Response<Self::ResponseStream>,
@@ -531,12 +476,12 @@ pub mod fornax_core_service_server {
                     };
                     Box::pin(fut)
                 }
-                "/node_mgr_pb.FornaxCoreService/putMessage" => {
+                "/node_mgr_pb.NodeAgentService/putMessage" => {
                     #[allow(non_camel_case_types)]
-                    struct putMessageSvc<T: FornaxCoreService>(pub Arc<T>);
+                    struct putMessageSvc<T: NodeAgentService>(pub Arc<T>);
                     impl<
-                        T: FornaxCoreService,
-                    > tonic::server::UnaryService<super::FornaxCoreMessage>
+                        T: NodeAgentService,
+                    > tonic::server::UnaryService<super::NodeAgentMessage>
                     for putMessageSvc<T> {
                         type Response = ();
                         type Future = BoxFuture<
@@ -545,7 +490,7 @@ pub mod fornax_core_service_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::FornaxCoreMessage>,
+                            request: tonic::Request<super::NodeAgentMessage>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move { (*inner).put_message(request).await };
@@ -569,14 +514,14 @@ pub mod fornax_core_service_server {
                     };
                     Box::pin(fut)
                 }
-                "/node_mgr_pb.FornaxCoreService/StreamMsg" => {
+                "/node_mgr_pb.NodeAgentService/StreamMsg" => {
                     #[allow(non_camel_case_types)]
-                    struct StreamMsgSvc<T: FornaxCoreService>(pub Arc<T>);
+                    struct StreamMsgSvc<T: NodeAgentService>(pub Arc<T>);
                     impl<
-                        T: FornaxCoreService,
-                    > tonic::server::StreamingService<super::FornaxCoreMessage>
+                        T: NodeAgentService,
+                    > tonic::server::StreamingService<super::NodeAgentMessage>
                     for StreamMsgSvc<T> {
-                        type Response = super::FornaxCoreMessage;
+                        type Response = super::NodeAgentMessage;
                         type ResponseStream = T::StreamMsgStream;
                         type Future = BoxFuture<
                             tonic::Response<Self::ResponseStream>,
@@ -585,7 +530,7 @@ pub mod fornax_core_service_server {
                         fn call(
                             &mut self,
                             request: tonic::Request<
-                                tonic::Streaming<super::FornaxCoreMessage>,
+                                tonic::Streaming<super::NodeAgentMessage>,
                             >,
                         ) -> Self::Future {
                             let inner = self.0.clone();
@@ -625,7 +570,7 @@ pub mod fornax_core_service_server {
             }
         }
     }
-    impl<T: FornaxCoreService> Clone for FornaxCoreServiceServer<T> {
+    impl<T: NodeAgentService> Clone for NodeAgentServiceServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -635,7 +580,7 @@ pub mod fornax_core_service_server {
             }
         }
     }
-    impl<T: FornaxCoreService> Clone for _Inner<T> {
+    impl<T: NodeAgentService> Clone for _Inner<T> {
         fn clone(&self) -> Self {
             Self(self.0.clone())
         }
@@ -645,8 +590,7 @@ pub mod fornax_core_service_server {
             write!(f, "{:?}", self.0)
         }
     }
-    impl<T: FornaxCoreService> tonic::server::NamedService
-    for FornaxCoreServiceServer<T> {
-        const NAME: &'static str = "node_mgr_pb.FornaxCoreService";
+    impl<T: NodeAgentService> tonic::server::NamedService for NodeAgentServiceServer<T> {
+        const NAME: &'static str = "node_mgr_pb.NodeAgentService";
     }
 }

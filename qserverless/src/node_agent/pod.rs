@@ -591,9 +591,9 @@ impl PodAgent {
         return Ok(runtimePod)
     }
 
-    // generatePodSandboxConfig generates pod sandbox config from fornaxtypes.FornaxPod.
+    // generatePodSandboxConfig generates pod sandbox config .
     pub fn GeneratePodSandboxConfig(&self) -> Result<cri::PodSandboxConfig> {
-        // fornax node will expect fornaxcore populate most of pod spec before send it
+        // nodeagent will expect nodemgr populate most of pod spec before send it
 	    // it will not calulate hostname, all these staff
         let pod = self.pod.Pod();
         let pod = pod.read().unwrap();
