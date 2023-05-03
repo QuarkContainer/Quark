@@ -169,6 +169,7 @@ impl NodeAgent {
                         
                         let rev = self.node.revision.load(Ordering::SeqCst);
                         let nr = NmMsg::NodeRegistry {
+                            identifier: self.node.NodeName(),
                             node_revision: rev,
                             node: NodeToString(&*self.node.node.lock().unwrap())?,
                         };
@@ -541,6 +542,10 @@ impl QuarkNode {
         }
 
         return pods;
+    }
+
+    pub fn NodeName(&self) -> String {
+        return K8SUtil::Id(&self.node.lock().unwrap().metadata);
     }
 
 }

@@ -153,26 +153,29 @@ impl PodAgent {
         info!("Get pod sandbox {}, sandbox {:?}", &podId, &runtimePod);
 
         info!("Start pod init containers pod {}", &podId);
-        let containers = pod.read().unwrap().spec.as_ref().unwrap().init_containers.as_ref().unwrap().to_vec();
-        for c in &containers {
-            let runtimeContainer = self.CreateContainer(
-                runtimePod.sandboxConfig.as_ref().unwrap(), 
-                c, 
-                &pullSecrets
-            ).await?;
-            let inner = QuarkContainerInner {
-                state: RuntimeContainerState::Creating,
-                initContainer: true,
-                spec: c.clone(),
-                runtimeContainer: runtimeContainer,
-                containerStatus: None,
-            };
-            let container = QuarkContainer(Arc::new(Mutex::new(inner)));
-            self.pod.lock().unwrap().containers.insert(c.name.clone(), container.clone());
-            let containerAgent = PodContainerAgent::New(&self.agentChann, &self.pod, &container).await?;
-            self.containers.lock().unwrap().insert(c.name.clone(), containerAgent.clone());
-            containerAgent.Start().await?;
+        if pod.read().unwrap().spec.as_ref().unwrap().init_containers.is_some() {
+            let containers = pod.read().unwrap().spec.as_ref().unwrap().init_containers.as_ref().unwrap().to_vec();
+            for c in &containers {
+                let runtimeContainer = self.CreateContainer(
+                    runtimePod.sandboxConfig.as_ref().unwrap(), 
+                    c, 
+                    &pullSecrets
+                ).await?;
+                let inner = QuarkContainerInner {
+                    state: RuntimeContainerState::Creating,
+                    initContainer: true,
+                    spec: c.clone(),
+                    runtimeContainer: runtimeContainer,
+                    containerStatus: None,
+                };
+                let container = QuarkContainer(Arc::new(Mutex::new(inner)));
+                self.pod.lock().unwrap().containers.insert(c.name.clone(), container.clone());
+                let containerAgent = PodContainerAgent::New(&self.agentChann, &self.pod, &container).await?;
+                self.containers.lock().unwrap().insert(c.name.clone(), containerAgent.clone());
+                containerAgent.Start().await?;
+            }
         }
+
 
         self.pod.lock().unwrap().runtimePod = Some(Arc::new(runtimePod));
         

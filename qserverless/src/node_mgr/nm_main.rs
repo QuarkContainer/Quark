@@ -26,6 +26,9 @@ use qobjs::common::Result as QResult;
 use qobjs::pb_gen::node_mgr_pb;
 
 pub mod nm_svc;
+pub mod node_agent;
+pub mod nodemgr;
+pub mod types;
 
 use crate::nm_svc::*;
 
