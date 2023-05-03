@@ -120,7 +120,8 @@ impl PodContainerAgent {
                         continue;
                     }
                     
-                    let status = crate::RUNTIME_MGR.get().unwrap().GetContainerStatus(&self.container.ContainerName()).await?;
+                    let containerId = self.container.lock().unwrap().runtimeContainer.id.clone();
+                    let status = crate::RUNTIME_MGR.get().unwrap().GetContainerStatus(&containerId).await?;
                     self.OnContainerProbeResult(&status).await;
                 }
                 msg = rx.recv() => {
@@ -158,16 +159,16 @@ impl PodContainerAgent {
 
     pub async fn OnContainerProbeResult(&self, result: &cri::ContainerStatus) {
         self.container.lock().unwrap().containerStatus = Some(result.clone());
-        
+        let result = Some(result.clone());
         let initContainer = self.container.lock().unwrap().initContainer;
-        if ContainerExit(result) && initContainer {
+        if ContainerExit(&result) && initContainer {
             info!("Container exit pod {} container {} exit code {} finished at {:?}", 
-                self.pod.PodId(), self.container.ContainerName(), result.exit_code, result.finished_at);
+                self.pod.PodId(), self.container.ContainerName(), result.as_ref().unwrap().exit_code, result.as_ref().unwrap().finished_at);
             self.OnContainerFailed().await;
         }
 
         let readinessProbe = self.container.lock().unwrap().spec.readiness_probe.is_some();
-        if readinessProbe && ContainerRunning(result) {
+        if readinessProbe && ContainerRunning(&result) {
             if self.container.State() == RuntimeContainerState::Started {
                 self.OnContainerReady().await;
             }
@@ -262,7 +263,7 @@ impl PodContainerAgent {
         let status = RUNTIME_MGR.get().unwrap().GetContainerStatus(&containerId).await?;
 
         self.container.lock().unwrap().containerStatus = Some(status.clone());
-        if ContainerExit(&status) {
+        if ContainerExit(&Some(status.clone())) {
             return Ok(())
         }
 

@@ -37,16 +37,16 @@ pub const KUBERNETES_POD_NAMESPACE_LABEL    : &str = "io.kubernetes.pod.namespac
 pub const KUBERNETES_POD_UIDLABEL           : &str = "io.kubernetes.pod.uid";
 pub const KUBERNETES_CONTAINER_NAME_LABEL   : &str = "io.kubernetes.container.name";
 
-pub const LabelNodeMgrNodeDaemon              : &str = "daemon.qserverless.centaurusinfra.io";
-pub const LabelNodeMgrApplication             : &str = "application.core.qserverless.centaurusinfra.io";
-pub const AnnotationNodeMgrNode               : &str = "node.qserverless.centaurusinfra.io";
-pub const AnnotationNodeMgrPod                : &str = "pod.qserverless.centaurusinfra.io";
-pub const AnnotationNodeMgrCreationUnixMicro  : &str = "create.unixmicro.core.qserverless.centaurusinfra.io";
-pub const AnnotationNodeMgrSessionService     : &str = "sessionservice.core.qserverless.centaurusinfra.io";
-pub const AnnotationNodeMgrApplicationSession : &str = "applicationsession.core.qserverless.centaurusinfra.io";
-pub const AnnotationNodeMgrNodeRevision       : &str = "noderevision.core.qserverless.centaurusinfra.io";
-pub const AnnotationNodeMgrHibernatePod       : &str = "hibernatepod.core.qserverless.centaurusinfra.io";
-pub const AnnotationNodeMgrSessionServicePod  : &str = "sessionservicepod.core.qserverless.centaurusinfra.io";
+pub const LabelNodeMgrNodeDaemon              : &str = "daemon.qserverless.quarksoft.io";
+pub const LabelNodeMgrApplication             : &str = "application.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrNode               : &str = "node.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrPod                : &str = "pod.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrCreationUnixMicro  : &str = "create.unixmicro.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrSessionService     : &str = "sessionservice.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrApplicationSession : &str = "applicationsession.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrNodeRevision       : &str = "noderevision.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrHibernatePod       : &str = "hibernatepod.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrSessionServicePod  : &str = "sessionservicepod.core.qserverless.quarksoft.io";
 
 pub struct LabeledPodSandboxInfo {
 	// Labels from v1.Pod

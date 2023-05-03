@@ -70,7 +70,7 @@ impl ImageMgr {
         for img in images {
             let tags = &img.repo_tags;
             for t in tags {
-                if t.starts_with(&imageWithTag) {
+                if t.ends_with(&imageWithTag) {
                     image = Some(img);
                     break;
                 }
@@ -121,21 +121,36 @@ pub fn ShouldPullImage(container: &k8s::Container, imagePresent: bool) -> bool {
 }
 
 pub fn ApplyDefaultImageTag(link: &str) -> Option<String> {
-    use regex::Regex;
-    let re = Regex::new(r"^(?P<registry>[^/]+)/?(?P<repository>[^:@/]+)(?::(?P<tag>[\w.-]+))?$").unwrap();
-
-    if let Some(captures) = re.captures(link) {
-        let registry = captures.name("registry").map(|m| m.as_str()).unwrap_or("docker.io");
-        let repository = captures.name("repository").map(|m| m.as_str());
-        let tag = captures.name("tag").map(|m| m.as_str()).unwrap_or("latest");
-
-        if let Some(repo) = repository {
-            Some(format!("{}/{}:{}", registry, repo, tag))
-        } else {
-            Some(format!("{}:{}", registry, tag))
-        }
+    let parts: Vec<&str> = link.splitn(2, '/').collect();
+    let registry;
+    let remain;
+    if parts.len() == 1 {
+        registry = None;
+        remain = parts[0];
+    } else if parts.len() == 2 {
+        registry = Some(parts[0]);
+        remain = parts[1];
     } else {
-        None
+        return None;
+    }
+
+    let repository;
+    let tag;
+    let parts: Vec<&str> = remain.splitn(2, ':').collect();
+    if parts.len() == 1 {
+        repository = parts[0];
+        tag = "latest";
+    } else if parts.len() == 2 {
+        repository = parts[0];
+        tag = parts[1];
+    } else {
+        return None;
+    }
+
+    if let Some(registry) = registry {
+        Some(format!("{}/{}:{}", registry, repository, tag))
+    } else {
+        Some(format!("{}:{}", repository, tag))
     }
 }
 

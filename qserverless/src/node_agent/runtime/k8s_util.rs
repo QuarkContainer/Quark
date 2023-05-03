@@ -249,7 +249,7 @@ pub const NamespaceMode_NODE: NamespaceMode = 2;
 pub const NamespaceMode_TARGET: NamespaceMode = 3;
 
 pub fn IpcNamespaceForPod(pod: &k8s::Pod) -> NamespaceMode {
-	if *pod.spec.as_ref().unwrap().host_ipc.as_ref().unwrap() {
+	if *pod.spec.as_ref().unwrap().host_ipc.as_ref().unwrap_or(&false) {
 		return NamespaceMode_NODE
 	}
 	return NamespaceMode_POD
@@ -263,7 +263,7 @@ pub fn NetworkNamespaceForPod(pod: &k8s::Pod) -> NamespaceMode {
 }
 
 pub fn PidNamespaceForPod(pod: &k8s::Pod) -> NamespaceMode {
-	if *pod.spec.as_ref().unwrap().host_pid.as_ref().unwrap() {
+	if *pod.spec.as_ref().unwrap().host_pid.as_ref().unwrap_or(&false) {
 		return NamespaceMode_NODE
 	}
 

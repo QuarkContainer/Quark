@@ -21,16 +21,17 @@ use qobjs::common::*;
 use super::k8s_types::EnvVar;
 
 pub fn MakeEnvironmentVariables(
-    pod: &k8s::Pod, 
+    _pod: &k8s::Pod, 
     container: &k8s::Container, 
     _v1ConfigMaps: &k8s::ConfigMap,  
     _v1Secrets: &[k8s::Secret],
     _podIP: &str,
     _podIPs: &[String]
 ) -> Result<Vec<EnvVar>> {
-    if pod.spec.as_ref().unwrap().enable_service_links.is_none() {
+    // todo: ?
+    /*if pod.spec.as_ref().unwrap().enable_service_links.is_none() {
         return Err(Error::CommonError(format!("nil pod.spec.enableServiceLinks encountered, cannot construct envvars")));
-    }
+    }*/
 
     let mut result : Vec<EnvVar> = Vec::new();
     //let mut configMaps :BTreeMap<String, k8s::ConfigMap> = BTreeMap::new();
