@@ -106,23 +106,28 @@ impl QuarkContainer {
     }
 
     pub fn ContainerExit(&self) -> bool {
-        return ContainerExit(self.lock().unwrap().containerStatus.as_ref().unwrap()); 
+        let status = self.lock().unwrap().containerStatus.clone();
+        return ContainerExit(&status); 
     }
 
     pub fn ContainerExitNormal(&self) -> bool {
-        return ContainerExitNormal(self.lock().unwrap().containerStatus.as_ref().unwrap()); 
+        let status = self.lock().unwrap().containerStatus.clone();
+        return ContainerExitNormal(&status); 
     }
 
     pub fn ContainerExitAbnormal(&self) -> bool {
-        return ContainerExitAbnormal(self.lock().unwrap().containerStatus.as_ref().unwrap()); 
+        let status = self.lock().unwrap().containerStatus.clone();
+        return ContainerExitAbnormal(&status); 
     }
 
     pub fn ContainerStatusUnknown(&self) -> bool {
-        return ContainerStatusUnknown(self.lock().unwrap().containerStatus.as_ref().unwrap()); 
+        let status = self.lock().unwrap().containerStatus.clone();
+        return ContainerStatusUnknown(&status); 
     }
 
     pub fn ContainerRunning(&self) -> bool {
-        return ContainerRunning(self.lock().unwrap().containerStatus.as_ref().unwrap()); 
+        let status = self.lock().unwrap().containerStatus.clone();
+        return ContainerRunning(&status); 
     }
 }
 
@@ -258,7 +263,7 @@ impl QuarkPod {
 
         for v in self.lock().unwrap().containers.values() {
             let status = v.lock().unwrap().containerStatus.clone();
-            if ContainerExitAbnormal(status.as_ref().unwrap()) {
+            if ContainerExitAbnormal(&status) {
                 podPhase = PodFailed.to_string();
                 break;
             }
@@ -354,7 +359,7 @@ impl QuarkPod {
         for v in &containers {
             let c = v.lock().unwrap();
             if c.initContainer {
-                if !ContainerExit(c.containerStatus.as_ref().unwrap()) {
+                if !ContainerExit(&c.containerStatus) {
                     containerReadyCondition.status = ConditionFalse.to_string();
                     containerReadyCondition.message = Some("init container not finished yet".to_string());
                     containerReadyCondition.reason = Some("init container not finished yet".to_string());
@@ -362,14 +367,14 @@ impl QuarkPod {
                     break;
                 }
 
-                if ContainerExitAbnormal(c.containerStatus.as_ref().unwrap()) { 
+                if ContainerExitAbnormal(&c.containerStatus) { 
                     containerReadyCondition.status = ConditionFalse.to_string();
                     containerReadyCondition.message = Some("init container exit abnormally".to_string());
                     containerReadyCondition.reason = Some("init container exit abnormally".to_string());
                     allInitContainerNormal = false;
                     break;
                 }
-                allInitContainerNormal = allInitContainerNormal && ContainerExitNormal(c.containerStatus.as_ref().unwrap());
+                allInitContainerNormal = allInitContainerNormal && ContainerExitNormal(&c.containerStatus);
             }
         }
 
@@ -393,7 +398,7 @@ impl QuarkPod {
         for v in &containers {
             let c = v.lock().unwrap();
             if !c.initContainer {
-                if !ContainerRunning(c.containerStatus.as_ref().unwrap()) {
+                if !ContainerRunning(&c.containerStatus) {
                     containerReadyCondition.status = ConditionFalse.to_string();
                     containerReadyCondition.message = Some("one container is not running".to_string());
                     containerReadyCondition.reason = Some("one container is not running".to_string());
@@ -402,7 +407,7 @@ impl QuarkPod {
                     break;
                 }
 
-                allContainerNormal = allContainerNormal && ContainerRunning(c.containerStatus.as_ref().unwrap());
+                allContainerNormal = allContainerNormal && ContainerRunning(&c.containerStatus);
                 //allContainerReady = allContainerReady && c.state == RuntimeContainerState::Running;
             }
         }
@@ -467,29 +472,41 @@ pub const PodReady: &str = "Ready";
 // PodScheduled represents status of the scheduling process for this pod.
 pub const PodScheduled: &str = "PodScheduled";
 
-pub fn ContainerExit(status: &cri::ContainerStatus) -> bool {
-    return status.finished_at != 0 && status.state == cri::ContainerState::ContainerCreated as i32;
+pub fn ContainerExit(status: &Option<cri::ContainerStatus>) -> bool {
+    if let Some(status) = status {
+        return status.finished_at != 0 && status.state == cri::ContainerState::ContainerCreated as i32;
+    }
+
+    return false;
 }
 
-pub fn ContainerExitNormal(status: &cri::ContainerStatus) -> bool {
-    return ContainerExit(status) && status.exit_code == 0;
+pub fn ContainerExitNormal(status: &Option<cri::ContainerStatus>) -> bool {
+    return ContainerExit(status) && status.as_ref().unwrap().exit_code == 0;
 }
 
-pub fn ContainerExitAbnormal(status: &cri::ContainerStatus) -> bool {
-    return ContainerExit(status) && status.exit_code != 0;
+pub fn ContainerExitAbnormal(status: &Option<cri::ContainerStatus>) -> bool {
+    return ContainerExit(status) && status.as_ref().unwrap().exit_code != 0;
 }
 
-pub fn ContainerStatusUnknown(status: &cri::ContainerStatus) -> bool {
-    return status.state == cri::ContainerState::ContainerUnknown as i32; 
+pub fn ContainerStatusUnknown(status: &Option<cri::ContainerStatus>) -> bool {
+    if let Some(status) = status {
+        return status.state == cri::ContainerState::ContainerUnknown as i32;
+    }
+
+    return false;
 }
 
-pub fn ContainerRunning(status: &cri::ContainerStatus) -> bool {
-    return status.state == cri::ContainerState::ContainerRunning as i32; 
+pub fn ContainerRunning(status: &Option<cri::ContainerStatus>) -> bool {
+    if let Some(status) = status {
+        return status.state == cri::ContainerState::ContainerRunning as i32;
+    }
+
+    return false;
 }
 
 
-pub const DefaultNodeMgrNodeNameSpace: &str = "qserverless.quark.io";
-pub const DefaultDomainName: &str = "qserverless.quark.io";
+pub const DefaultNodeMgrNodeNameSpace: &str = "qserverless.quarksoft.io";
+pub const DefaultDomainName: &str = "qserverless.quarksoft.io";
 
 // NodePending means the node has been created/added by the system, but not configured.
 pub const NodePending : &str = "Pending";

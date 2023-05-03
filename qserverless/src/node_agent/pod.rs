@@ -149,9 +149,10 @@ impl PodAgent {
         info!("Pull pod secret pod {}", &podId);
         let pullSecrets = Vec::new();
         info!("Create pod sandbox {}", &podId);
-        let runtimePod = self.CreatePodSandbox().await?;
+        let runtimePod = Arc::new(self.CreatePodSandbox().await?);
         info!("Get pod sandbox {}, sandbox {:?}", &podId, &runtimePod);
 
+        self.pod.lock().unwrap().runtimePod = Some(runtimePod.clone());
         info!("Start pod init containers pod {}", &podId);
         if pod.read().unwrap().spec.as_ref().unwrap().init_containers.is_some() {
             let containers = pod.read().unwrap().spec.as_ref().unwrap().init_containers.as_ref().unwrap().to_vec();
@@ -176,10 +177,28 @@ impl PodAgent {
             }
         }
 
+        info!("Start pod containers pod {}", &podId);
+        let containers = pod.read().unwrap().spec.as_ref().unwrap().containers.to_vec();
+        for c in &containers {
+            let runtimeContainer = self.CreateContainer(
+                runtimePod.sandboxConfig.as_ref().unwrap(), 
+                c, 
+                &pullSecrets
+            ).await?;
+            let inner = QuarkContainerInner {
+                state: RuntimeContainerState::Creating,
+                initContainer: true,
+                spec: c.clone(),
+                runtimeContainer: runtimeContainer,
+                containerStatus: None,
+            };
+            let container = QuarkContainer(Arc::new(Mutex::new(inner)));
+            self.pod.lock().unwrap().containers.insert(c.name.clone(), container.clone());
+            let containerAgent = PodContainerAgent::New(&self.agentChann, &self.pod, &container).await?;
+            self.containers.lock().unwrap().insert(c.name.clone(), containerAgent.clone());
+            containerAgent.Start().await?;
+        }
 
-        self.pod.lock().unwrap().runtimePod = Some(Arc::new(runtimePod));
-        
-        
         return Ok(())
     }
 
@@ -470,7 +489,7 @@ impl PodAgent {
         for c in &containers {
             let status = c.container.lock().unwrap().containerStatus.clone();
             if let Some(status) = status {
-                if !ContainerExit(&status) && !force {
+                if !ContainerExit(&Some(status)) && !force {
                     if gracefulPeriod.is_zero() {
                         gracefulPeriod = Self::DefaultStopContainerGracePeriod;
                     }
@@ -489,7 +508,7 @@ impl PodAgent {
                         tokio::select! {
                             _ = pollingInterval.tick() => {
                                 let status = c.container.lock().unwrap().containerStatus.clone();
-                                if status.is_none() || ContainerExit(status.as_ref().unwrap()) {
+                                if status.is_none() || ContainerExit(&status) {
                                     break;
                                 }
                             }
@@ -761,8 +780,8 @@ impl PodAgent {
             labels: NewContainerLabels(container, &pod.read().unwrap()),
             annotations: NewContainerAnnotations(container, &pod.read().unwrap(), 0, &BTreeMap::new()),
             log_path: containerLogsPath,
-            stdin: *container.stdin.as_ref().unwrap(),
-            stdin_once: *container.stdin_once.as_ref().unwrap(),
+            stdin: *container.stdin.as_ref().unwrap_or(&false),
+            stdin_once: *container.stdin_once.as_ref().unwrap_or(&false),
             ..Default::default()
         };
 
