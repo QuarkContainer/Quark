@@ -65,7 +65,8 @@ lazy_static! {
 
 #[tokio::main]
 async fn main() -> QResult<()> {
-    return NMClientTest().await;
+    //return NMClientTest().await;
+    return ClientTest().await;
 }
 
 pub async fn ClientTest() -> QResult<()> {
@@ -175,11 +176,7 @@ pub async fn NMClientTest() -> QResult<()> {
 
     let msg = nm_svc::NodeFullSync{};
     let mut client = nm_svc::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
-    client.put_message(nm_svc::NodeAgentMessage {
-        node_identifier: None,
-        message_body: Some(nm_svc::node_agent_message::MessageBody::NodeFullSync(msg.clone()))
-    }).await?;
-
+    
     /*let msg: nm_svc::NodeIdentifier = nm_svc::NodeIdentifier {
         ip: "127.".to_string(),
         identifier: "test".to_string(),

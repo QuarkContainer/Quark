@@ -15,6 +15,7 @@
 use std::{collections::BTreeMap, sync::Mutex};
 
 use futures_util::StreamExt;
+use qobjs::runtime_types::NodeFromString;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Response, Status};
 use tokio::sync::mpsc;
@@ -25,14 +26,11 @@ use std::result::Result as SResult;
 use qobjs::pb_gen::node_mgr_pb::{self as nm_svc};
 use qobjs::common::Result;
 
-#[derive(Clone, Debug)]
-pub struct NodeAgentStruct {
-    pub sender: mpsc::Sender<SResult<nm_svc::NodeAgentMessage, Status>>,
-}
+use crate::node_agent::*;
 
 #[derive(Debug)]
 pub struct NodeMgrSvcInner {
-    pub clients: Mutex<BTreeMap<String, NodeAgentStruct>>,
+    pub clients: Mutex<BTreeMap<String, NodeAgent>>,
     pub agentsChann: mpsc::Sender<SrvMsg>,
     pub processChannel: Option<mpsc::Receiver<SrvMsg>>,
 }
@@ -60,51 +58,37 @@ impl NodeMgrSvc {
 
         return Self(Arc::new(inner));
     }
+
+    pub fn NodeAgent(&self, nodeId: &str) -> Option<NodeAgent> {
+        return self.clients.lock().unwrap().get(nodeId).cloned();
+    }
+ /*
+    pub fn OnNodeAgentConnect(&self, msg: SrvMsg) -> Result<()> {
+        match msg {
+            SrvMsg::AgentConnect((nodeReg, chann)) => {
+                let k8sNode = NodeFromString(&nodeReg.node)?;
+                let nodeId = nodeReg.identifier.clone();
+                let rev = nodeReg.node_revision;
+
+                match self.NodeAgent(nodeId) {
+                    None => 
+                }
+            }
+        }
+    }
+ */
 }
 
 #[derive(Debug)]
 pub enum SrvMsg {
     AgentClose(String),
-    AgentConnect(String),
-    AgentMsg(Result<nm_svc::NodeAgentMessage>),
+    AgentConnect((nm_svc::NodeRegistry, mpsc::Sender<SResult<nm_svc::NodeAgentMessage, Status>>)),
+    AgentMsg((String, Result<nm_svc::NodeAgentMessage>)),
 }
 
 
 #[tonic::async_trait]
 impl nm_svc::node_agent_service_server::NodeAgentService for NodeMgrSvc {
-    type getMessageStream = ReceiverStream<SResult<nm_svc::NodeAgentMessage, Status>>;
-
-    async fn get_message(
-        &self,
-        request: tonic::Request<nm_svc::NodeIdentifier>,
-    ) -> SResult<tonic::Response<Self::getMessageStream>, tonic::Status> {
-        println!("get_message req {:?}", request);
-        let (tx, rx) = mpsc::channel(30);
-        
-        let msg = nm_svc::NodeFullSync{};
-        let msg = nm_svc::NodeAgentMessage {
-            node_identifier: None,
-            message_body: Some(nm_svc::node_agent_message::MessageBody::NodeFullSync(msg))
-        };
-    
-        tx.send(Ok(msg)).await.unwrap();
-
-        let na = NodeAgentStruct {
-            sender: tx,
-        };
-        self.clients.lock().unwrap().insert(request.get_ref().identifier.to_string(), na);
-
-        return Ok(Response::new(ReceiverStream::new(rx)));
-    }
-
-    async fn put_message(
-        &self,
-        request: tonic::Request<nm_svc::NodeAgentMessage>,
-    ) -> SResult<tonic::Response<()>, tonic::Status> {
-        println!("put_message req {:?}", request);
-        return Ok(Response::new(()));
-    }
-
     type StreamMsgStream = ReceiverStream<SResult<nm_svc::NodeAgentMessage, Status>>;
 
     async fn stream_msg(
@@ -122,10 +106,7 @@ impl nm_svc::node_agent_service_server::NodeAgentService for NodeMgrSvc {
                         match m.message_body.as_ref().unwrap() {
                             nm_svc::node_agent_message::MessageBody::NodeRegistry(b) => {
                                 nodeId = b.node.clone();
-                                svc.clients.lock().unwrap().insert(nodeId.clone(), NodeAgentStruct {
-                                    sender: tx,
-                                });
-                                svc.agentsChann.send(SrvMsg::AgentConnect(nodeId.clone())).await.unwrap();
+                                svc.agentsChann.send(SrvMsg::AgentConnect((b.clone(), tx))).await.unwrap();
                             }
                             _ => {
                                 error!("get agent connnection get unexpected initia msg {:?}", msg);
@@ -142,11 +123,12 @@ impl nm_svc::node_agent_service_server::NodeAgentService for NodeMgrSvc {
                 error!("get agent connnection disconected");
                 return;
             }
+
             loop {
                 if let Some(msg) = stream.next().await {
                     match msg {
-                        Ok(m) => svc.agentsChann.send(SrvMsg::AgentMsg(Ok(m))).await.unwrap(),
-                        Err(e) => svc.agentsChann.send(SrvMsg::AgentMsg(Err(e.into()))).await.unwrap(),
+                        Ok(m) => svc.agentsChann.send(SrvMsg::AgentMsg((nodeId.clone(), Ok(m)))).await.unwrap(),
+                        Err(e) => svc.agentsChann.send(SrvMsg::AgentMsg((nodeId.clone(), Err(e.into())))).await.unwrap(),
                     }
                 } else {
                     svc.agentsChann.send(SrvMsg::AgentClose(nodeId)).await.unwrap();

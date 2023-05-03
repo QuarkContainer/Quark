@@ -22,8 +22,6 @@ import "google/protobuf/empty.proto";
 //import "pkg/apis/core/v1/generated.proto";
 
 service NodeAgentService {
-  rpc getMessage(NodeIdentifier) returns (stream NodeAgentMessage);
-  rpc putMessage(NodeAgentMessage) returns (google.protobuf.Empty);
   rpc StreamMsg(stream NodeAgentMessage) returns (stream NodeAgentMessage);
 }
  
@@ -63,6 +61,7 @@ message NodeRegistry {
   int64 nodeRevision = 1;
   //k8s.io.api.core.v1.Node node = 2;
   string node = 2;
+  string identifier = 3;
 }
 
 /* NodeMgr send node configuration to node to initialize using this configuration before tell nodeagent it's ready*/
