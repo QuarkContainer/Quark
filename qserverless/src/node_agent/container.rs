@@ -167,8 +167,8 @@ impl PodContainerAgent {
             self.OnContainerFailed().await;
         }
 
-        let readinessProbe = self.container.lock().unwrap().spec.readiness_probe.is_some();
-        if readinessProbe && ContainerRunning(&result) {
+        let hasReadinessProbe = self.container.lock().unwrap().spec.readiness_probe.is_some();
+        if !hasReadinessProbe && ContainerRunning(&result) {
             if self.container.State() == RuntimeContainerState::Started {
                 self.OnContainerReady().await;
             }
@@ -183,6 +183,37 @@ impl PodContainerAgent {
                 container: self.container.clone(),
             }
         )).await;
+    }
+
+    pub async fn OnContainerStarted(&self) -> Result<()> {
+        if self.container.State() == RuntimeContainerState::Created {
+            self.container.SetState(RuntimeContainerState::Started);
+            self.Notify(NodeAgentMsg::PodContainerStarted(
+                PodContainerStarted {
+                    pod: self.pod.clone(),
+                    container: self.container.clone(),
+                }
+            )).await;
+        }
+
+        if self.InStoppingProcess() {
+            return Ok(())
+        }
+
+        let initContainer = self.container.lock().unwrap().initContainer;
+        if !initContainer {
+            // todo: start liveness and readyness probe
+
+            info!("Run post start lifecycle handler pod {} containerName {}", self.pod.PodId(), self.container.ContainerName());
+            let lifecycle = self.container.lock().unwrap().spec.lifecycle.clone();
+            if let Some(lifecycle) = lifecycle {
+                if let Some(postStart) = lifecycle.post_start {   
+                    self.RunLifecycleHandler(&self.pod, &self.container, &postStart).await?;
+                }
+            }
+        }
+
+        return Ok(())
     }
 
     pub async fn OnContainerReady(&self) {
@@ -211,6 +242,10 @@ impl PodContainerAgent {
         info!("Start container pod {} container {}", self.pod.PodId(), self.container.lock().unwrap().spec.name);
         let containerId = self.container.lock().unwrap().runtimeContainer.id.clone();
         RUNTIME_MGR.get().unwrap().StartContainer(&containerId).await?;
+
+        // todo: starup probe
+        // no startup probe, assume it started, run container post started hook
+        self.OnContainerStarted().await?;
         self.started.store(true, Ordering::SeqCst);
         return Ok(())
     }
@@ -293,7 +328,8 @@ impl PodContainerAgent {
 
     pub async fn RunLifecycleHandler(&self, pod: &QuarkPod, container: &QuarkContainer, handle: &k8s::LifecycleHandler) -> Result<String> {
         if let Some(exec) = &handle.exec {
-            match crate::RUNTIME_MGR.get().unwrap().ExecCommand(&container.lock().unwrap().runtimeContainer.id.clone(), exec.command.as_ref().unwrap().to_vec(), 0).await {
+            let containerid = container.lock().unwrap().runtimeContainer.id.clone();
+            match crate::RUNTIME_MGR.get().unwrap().ExecCommand(&containerid, exec.command.as_ref().unwrap().to_vec(), 0).await {
                 Err(e) => return Err(e),
                 Ok((stdout, _stderr)) => {
                     let stdout = std::str::from_utf8(&stdout)?;

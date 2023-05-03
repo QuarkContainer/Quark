@@ -187,7 +187,7 @@ impl PodAgent {
             ).await?;
             let inner = QuarkContainerInner {
                 state: RuntimeContainerState::Creating,
-                initContainer: true,
+                initContainer: false,
                 spec: c.clone(),
                 runtimeContainer: runtimeContainer,
                 containerStatus: None,
@@ -305,7 +305,7 @@ impl PodAgent {
 
     pub async fn PodHouseKeeping(&self) -> Result<()> {
         let podState = self.pod.PodState();
-        info!("pod Container created pod {} podState {:?}", self.pod.PodId(), &podState);
+        info!("House keeping  pod {} podState {:?}", self.pod.PodId(), &podState);
 
         if podState == PodState::Terminated || podState == PodState::Running {
             return Ok(())
