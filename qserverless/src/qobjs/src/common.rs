@@ -75,6 +75,7 @@ pub enum Error {
     AcquireError(tokio::sync::AcquireError),
     ParseIntError(ParseIntError),
     RegexError(regex::Error),
+    RocksdbError(rocksdb::Error),
     TokioChannFull,
     TokioChannClose,
     Timeout,
@@ -113,6 +114,12 @@ impl Error {
             expectRv: expectRv,
             actualRv: actualRv
         })
+    }
+}
+
+impl From<rocksdb::Error> for Error {
+    fn from(item: rocksdb::Error) -> Self {
+        return Self::RocksdbError(item)
     }
 }
 
