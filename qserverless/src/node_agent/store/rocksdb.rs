@@ -13,10 +13,12 @@
 // limitations under the License.
 
 use core::marker::PhantomData;
+use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
-use rocksdb::{DB, Options, SingleThreaded, SliceTransform};
+use rocksdb::{DB, Options, SingleThreaded, SliceTransform, WriteBatch};
 use rocksdb::DBWithThreadMode;
 
 use qobjs::common::*;
@@ -24,14 +26,21 @@ use qobjs::common::*;
 pub struct RocksStore {
     pub db: Arc<Mutex<DBWithThreadMode<SingleThreaded>>>,
     pub registryPath: String,
+    pub initRev: i64,
 }
 
 pub const NODE_AGENT_STORE_PATH: &str = "/var/run/quark";
+pub const REVISION_KEY: &str = "revision";
+pub const REGISTRY_PATH: &str = "/registry/";
 
 impl RocksStore {
-    // example: registryPath = "/registry/"
-    pub fn New(registryPath: &str) -> Self {
+    pub fn New() -> Result<Self> {
+        let registryPath = REGISTRY_PATH;
         let path = NODE_AGENT_STORE_PATH;
+
+        if !Path::new(path).exists() {
+            fs::create_dir_all(path)?;
+        }
     
         let prefix_extractor = SliceTransform::create_fixed_prefix(3);
     
@@ -41,16 +50,32 @@ impl RocksStore {
 
         let db = DB::open(&opts, path).unwrap();
 
-        return Self {
+        let revisionPath = format!("{}{}", registryPath, REVISION_KEY);
+        let read = db.get(&revisionPath)?;
+        let revision = match read {
+            Some(v) => {
+                assert!(v.len() == 8);
+                unsafe {*(&v[0] as * const u8 as u64 as * const i64)}
+            }
+            None => {
+                let rev : i64 = 0;
+                db.put(&revisionPath, rev.to_ne_bytes())?;
+                0
+            }
+        };
+
+        return Ok(Self {
             db: Arc::new(Mutex::new(db)),
-            registryPath: registryPath.to_string()
-        }
+            registryPath: registryPath.to_string(),
+            initRev: revision,
+        });
     }
 
     // example: objType = "pods"
     pub fn NewObjStore<T: for<'a> Deserialize<'a> + Serialize>(&self, objType: &str ) -> RocksObjStore<T> {
         return RocksObjStore {
             prefix: format!("{}{}/", &self.registryPath, objType),
+            revision: format!("{}{}", &self.registryPath, REVISION_KEY),
             db: self.db.clone(),
             phantom: PhantomData::default(),
         }
@@ -59,21 +84,37 @@ impl RocksStore {
 
 pub struct RocksObjStore<T: for<'a> Deserialize<'a> + Serialize > {
     pub prefix: String,
+    pub revision: String,
     pub db: Arc<Mutex<DBWithThreadMode<SingleThreaded>>>,
     phantom: PhantomData<T>,
 }
 
 impl <T: for<'a> Deserialize<'a> + Serialize> RocksObjStore<T> {
-    pub fn Save(&self, key: &str, obj: &T) -> Result<()> {
+    pub fn Save(&self, revision: i64, key: &str, obj: &T) -> Result<()> {
+        let mut batch = WriteBatch::default();
+        batch.put(self.revision.clone(), revision.to_ne_bytes());
+
         let data =  serde_json::to_string(obj)?;
         let key = format!("{}{}", self.prefix, key);
-        self.db.lock().unwrap().put(key, data)?;
+        batch.put(key, data);
+        self.db.lock().unwrap().write(batch)?;
         return Ok(())
     }
 
-    pub fn Load(self) -> Result<Vec<T>> {
+    pub fn Remove(&self, revision: i64, key: &str) -> Result<()> {
+        let mut batch = WriteBatch::default();
+        batch.put(self.revision.clone(), revision.to_ne_bytes());
+        
+        let key = format!("{}{}", self.prefix, key);
+        batch.delete(key);
+
+        self.db.lock().unwrap().write(batch)?;
+        return Ok(())
+    }
+
+    pub fn Load(&self) -> Result<Vec<T>> {
         let db = self.db.lock().unwrap();
-        let mut iter = db.prefix_iterator(self.prefix);
+        let mut iter = db.prefix_iterator(self.prefix.clone());
         let mut ret = Vec::new();
         loop {
             match iter.next() {
