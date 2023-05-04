@@ -105,7 +105,7 @@ pub fn PodStateToNodeAgentState(pod: &QuarkPod) -> NmMsg::pod_state::State {
             return NmMsg::pod_state::State::Standby;
         }
         PodState::Running => {
-            return NmMsg::pod_state::State::Creating;
+            return NmMsg::pod_state::State::Running;
         }
         PodState::Terminating => {
             return NmMsg::pod_state::State::Terminating;

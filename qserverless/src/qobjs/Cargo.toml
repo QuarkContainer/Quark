@@ -31,6 +31,7 @@ local-ip-address = "0.5.1"
 hostname = "^0.3"
 chrono = "0.4.24"
 ipnetwork = "0.20.0"
+rocksdb = "0.20.1"
 
 [build-dependencies]
 tonic-build = "0.8"

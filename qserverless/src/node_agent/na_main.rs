@@ -37,6 +37,7 @@ pub mod pod_sandbox;
 pub mod message;
 pub mod node_status;
 pub mod cadvisor;
+pub mod store;
 
 use qobjs::common::Result as QResult;
 //use qobjs::config::NodeConfiguration;
