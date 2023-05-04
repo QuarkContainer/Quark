@@ -20,14 +20,14 @@ use std::sync::{Arc, RwLock};
 use core::ops::Deref;
 use std::sync::Mutex;
 use chrono::prelude::*;
-                
+
 use k8s_openapi::api::core::v1 as k8s;
 
 use crate::common::*;
 use crate::pb_gen::v1alpha2 as cri;
 use crate::k8s_util::*;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RuntimePod {
     pub id: String,
     pub IPs: Vec<String>,
@@ -36,7 +36,7 @@ pub struct RuntimePod {
 }
 
 // Pod is a sandbox container and a group of containers.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RuntimeContainer {
     pub id: String,
     pub containerConfig: Option<cri::ContainerConfig>,
@@ -68,7 +68,8 @@ pub enum RuntimeContainerState {
     Started,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct QuarkContainerInner {
     pub state: RuntimeContainerState,
     pub initContainer: bool,
@@ -149,6 +150,18 @@ pub enum PodState {
     Cleanup,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct QuarkPodJson {
+    pub id: String,
+    pub podState: PodState,
+    pub isDaemon: bool,
+    pub pod: k8s::Pod,
+    pub configMap: Option<k8s::ConfigMap>,
+    pub runtimePod: Option<RuntimePod>,
+    pub containers: BTreeMap<String, QuarkContainerInner>,
+    pub lastTransitionTime: SystemTime,
+}
+
 #[derive(Debug)]
 pub struct QuarkPodInner {
     pub id: String,
@@ -191,6 +204,56 @@ impl Deref for QuarkPod {
 }
 
 impl QuarkPod {
+    pub fn ToQuarkPodJson(&self) -> QuarkPodJson {
+        let inner = self.lock().unwrap();
+        let mut map = BTreeMap::new();
+        for (k, v) in &inner.containers {
+            map.insert(k.clone(), v.lock().unwrap().clone());
+        }
+
+        let pod = inner.pod.read().unwrap().clone();
+
+        let runtimePod = match &inner.runtimePod {
+            None => None,
+            Some(p) => Some(p.as_ref().clone())
+        };
+
+        return QuarkPodJson {
+            id: inner.id.clone(),
+            podState: inner.podState,
+            isDaemon: inner.isDaemon,
+            pod: pod,
+            configMap: inner.configMap.clone(),
+            runtimePod: runtimePod,
+            containers: map,
+            lastTransitionTime: inner.lastTransitionTime,
+        }
+    }
+
+    pub fn FromQuarkPodJosn(pod: QuarkPodJson) -> Self {
+        let inner = QuarkPodInner {
+            id: pod.id,
+            podState: pod.podState,
+            isDaemon: pod.isDaemon,
+            pod: Arc::new(RwLock::new(pod.pod)),
+            configMap: pod.configMap,
+            runtimePod: match pod.runtimePod {
+                None => None,
+                Some(p) => Some(Arc::new(p))
+            },
+            containers: {
+                let mut map = BTreeMap::new();
+                for (k, v) in pod.containers {
+                    map.insert(k, QuarkContainer(Arc::new(Mutex::new(v))));
+                }
+                map
+            },
+            lastTransitionTime: pod.lastTransitionTime,
+        };
+
+        return Self(Arc::new(Mutex::new(inner)))
+    }
+
     pub fn Pod(&self) -> Arc<RwLock<k8s::Pod>> {
         return self.lock().unwrap().pod.clone();
     }

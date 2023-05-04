@@ -13,3 +13,4 @@
 // limitations under the License.
 
 pub mod rocksdb;
+pub mod nodeagent_store;
