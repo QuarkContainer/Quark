@@ -35,10 +35,10 @@ use qobjs::runtime_types::*;
 use qobjs::common::*;
 use qobjs::pb_gen::node_mgr_pb::{self as NmMsg};
 
-use crate::message::BuildNodeMgrGrpcPodState;
+
 use crate::nm_svc::{NodeAgentMsg, PodCreate};
 use crate::node_status::SetNodeStatus;
-use crate::pod::*;
+use crate::{pod::*, NODEAGENT_STORE};
 use crate::NETWORK_PROVIDER;
 use crate::runtime::k8s_labels::*;
 use crate::message::*;
@@ -88,7 +88,6 @@ impl NodeAgent {
     }
 }
 
-
 impl NodeAgent {
     pub fn New(supervisor: mpsc::Sender<NodeAgentMsg>, node: &QuarkNode) -> Result<Self> {
         let (tx, rx) = mpsc::channel::<NodeAgentMsg>(30);
@@ -136,21 +135,6 @@ impl NodeAgent {
             format!("{}", revision)
         );
         return revision;
-    }
-
-    pub fn SaveAndNotifyPodState(&self, pod: &QuarkPod) {
-        if pod.PodInTransitState() {
-            let revision = self.IncrNodeRevision();
-            pod.Pod().write().unwrap().metadata.resource_version = Some(revision.to_string());
-            pod.Pod().write().unwrap().metadata.annotations.as_mut().unwrap().insert(
-                AnnotationNodeMgrNodeRevision.to_string(), 
-                format!("{}", revision)
-            );
-            
-            self.Notify(NodeAgentMsg::NodeMgrMsg(
-                BuildNodeMgrGrpcPodState(revision, pod).unwrap()
-            ));
-        }
     }
 
     pub async fn Process(&self, mut rx: mpsc::Receiver<NodeAgentMsg>) -> Result<()> {
@@ -220,7 +204,8 @@ impl NodeAgent {
                 if qpod.PodState() == PodState::Cleanup {
                     self.CleanupPodStoreAndAgent(&qpod).await?;
                 }
-                self.SaveAndNotifyPodState(&qpod);
+
+                NODEAGENT_STORE.get().unwrap().UpdatePod(&qpod)?;
             }
             NodeAgentMsg::NodeUpdate => {
                 SetNodeStatus(&self.node).await?;
@@ -322,6 +307,7 @@ impl NodeAgent {
 
     pub async fn OnPodCreateCmd(&self, msg: &NmMsg::PodCreate) -> Result<()> {
         let pod = PodFromString(&msg.pod)?;
+        let podId =  K8SUtil::PodId(&pod);
         if self.State() != NodeAgentState::Ready {
             let inner = QuarkPodInner {
                 id: K8SUtil::PodId(&pod),
@@ -334,30 +320,39 @@ impl NodeAgent {
                 lastTransitionTime: SystemTime::now(),
             };
             let qpod = QuarkPod(Arc::new(Mutex::new(inner)));
-            self.SaveAndNotifyPodState(&qpod);
+            NODEAGENT_STORE.get().unwrap().CreatePod(&qpod)?;
+            NODEAGENT_STORE.get().unwrap().DeletePod(&podId)?;
             return Err(Error::CommonError("Node is not in ready state to create a new pod".to_string()));
         }
 
-        let podId = &msg.pod_identifier;
+        //let podId = &msg.pod_identifier;
         let configMap = ConfigMapFromString(&msg.config_map)?;
 
-        let hasPod = self.node.pods.lock().unwrap().get(podId).is_some();
+        let hasPod = self.node.pods.lock().unwrap().get(&podId).is_some();
         if !hasPod {
-            let podAgent = self.CreatePodAgent(PodState::Creating, &pod, &Some(configMap), false)?;
-            /*let inner = QuarkPodInner {
-                id: K8SUtil::PodId(&pod),
-                podState: PodState::Cleanup,
-                isDaemon: false,
-                pod: Arc::new(RwLock::new(pod)),
-                configMap: None,
-                runtimePod: None,
-                containers: BTreeMap::new(),
-                lastTransitionTime: SystemTime::now(),
+            let podAgent = match self.CreatePodAgent(PodState::Creating, &pod, &Some(configMap), false) {
+                Ok(a) => a,
+                Err(e) => {
+                    let inner = QuarkPodInner {
+                        id: K8SUtil::PodId(&pod),
+                        podState: PodState::Cleanup,
+                        isDaemon: false,
+                        pod: Arc::new(RwLock::new(pod)),
+                        configMap: None,
+                        runtimePod: None,
+                        containers: BTreeMap::new(),
+                        lastTransitionTime: SystemTime::now(),
+                    };
+                    let qpod = QuarkPod(Arc::new(Mutex::new(inner)));
+                    NODEAGENT_STORE.get().unwrap().CreatePod(&qpod)?;
+                    NODEAGENT_STORE.get().unwrap().DeletePod(&podId)?;
+                    return Err(e);
+                }
             };
-            let qpod = QuarkPod(Arc::new(Mutex::new(inner)));*/
+
             podAgent.Start().await?;
             let qpod = podAgent.pod.clone();
-            self.SaveAndNotifyPodState(&qpod);
+            NODEAGENT_STORE.get().unwrap().CreatePod(&qpod)?;
             podAgent.Send(NodeAgentMsg::PodCreate( PodCreate {
                 pod: qpod,
             }))?;

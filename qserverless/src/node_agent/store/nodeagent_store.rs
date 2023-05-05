@@ -157,7 +157,7 @@ impl RingBuf {
     }
 }
 
-
+#[derive(Debug)]
 pub struct NodeAgentStoreInner {
     pub podStore: RocksObjStore<QuarkPodJson>,
 
@@ -178,7 +178,10 @@ impl NodeAgentStoreInner {
     pub fn New() -> Result<(Self, Vec<QuarkPodJson>)> {
         let store = RocksStore::New()?;
         let podStore: RocksObjStore<QuarkPodJson> = store.NewObjStore("pods");
-        let pods = podStore.Load()?;
+
+        // todo: why does this affect cadvisor?
+        //let pods = podStore.Load()?;
+        let pods: Vec<QuarkPodJson> = Vec::new();
         let mut podCache = BTreeMap::new();
         for p in &pods {
             let key = p.id.clone();
@@ -197,47 +200,56 @@ impl NodeAgentStoreInner {
         }, pods))
     }
 
-    pub fn CreatePod(&mut self, revision: i64, key: &str, obj: &QuarkPod) -> Result<()> {
+    pub fn CreatePod(&mut self, obj: &QuarkPod) -> Result<()> {
+        let key = obj.lock().unwrap().id.clone();
+
+        self.revision += 1;
+        obj.Pod().write().unwrap().metadata.resource_version = Some(self.revision.to_string());
         let jsonObj = obj.ToQuarkPodJson();
         let event = WatchEvent {
             type_: EventType::Added,
-            revision: revision,
+            revision: self.revision,
             obj: NodeAgentEventObj::Pod(jsonObj.pod.clone())
         };
         self.podCache.insert(key.to_string(), jsonObj.pod.clone());
-        self.podStore.Save(revision, key, &jsonObj)?;
+        self.podStore.Save(self.revision, &key, &jsonObj)?;
         self.ProcessEvent(event)?;
-        self.revision = revision;
         return Ok(())
     }
 
-    pub fn UpdatePod(&mut self, revision: i64, key: &str, obj: &QuarkPod) -> Result<()> {
+    pub fn UpdatePod(&mut self, obj: &QuarkPod) -> Result<()> {
+        let key = obj.lock().unwrap().id.clone();
+        self.revision += 1;
+        obj.Pod().write().unwrap().metadata.resource_version = Some(self.revision.to_string());
         let jsonObj = obj.ToQuarkPodJson();
-        let event = WatchEvent {
-            type_: EventType::Modified,
-            revision: revision,
-            obj: NodeAgentEventObj::Pod(jsonObj.pod.clone())
-        };
-        assert!(self.podCache.contains_key(key));
-        self.podCache.insert(key.to_string(), jsonObj.pod.clone());
-        self.podStore.Save(revision, key, &jsonObj)?;
-        self.ProcessEvent(event)?;
-        self.revision = revision;
+        assert!(self.podCache.contains_key(&key));
+        self.podCache.insert(key.clone(), jsonObj.pod.clone());
+        self.podStore.Save(self.revision, &key, &jsonObj)?;
+        if !obj.PodInTerminating() {
+            let event = WatchEvent {
+                type_: EventType::Modified,
+                revision: self.revision,
+                obj: NodeAgentEventObj::Pod(jsonObj.pod.clone())
+            };
+            self.ProcessEvent(event)?;
+        }
+        
         return Ok(())
     }
 
-    pub fn DeletePod(&mut self, revision: i64, key: &str) -> Result<()> {
+    pub fn DeletePod(&mut self, key: &str) -> Result<()> {
         assert!(self.podCache.contains_key(key));
-        let pod = self.podCache.remove(key).unwrap();
+        self.revision += 1;
+        let mut pod = self.podCache.remove(key).unwrap();
+        pod.metadata.resource_version = Some(self.revision.to_string());
         let event = WatchEvent {
             type_: EventType::Deleted,
-            revision: revision,
+            revision: self.revision,
             obj: NodeAgentEventObj::Pod(pod)
         };
 
-        self.podStore.Remove(revision, key)?;
+        self.podStore.Remove(self.revision, key)?;
         self.ProcessEvent(event)?;
-        self.revision = revision;
         return Ok(())
     }
 
@@ -342,8 +354,23 @@ impl NodeAgentStoreInner {
         self.watchers.insert(wid, watcher);
         return Ok(stream);
     }
+
+    pub fn List(&self) -> PodList {
+        let pods : Vec<k8s::Pod> = self.podCache.values().cloned().collect();
+        return PodList { 
+            revision: self.revision, 
+            pods: pods 
+        };
+    }
 }
 
+#[derive(Debug)]
+pub struct PodList {
+    pub revision: i64,
+    pub pods: Vec<k8s::Pod>,
+}
+
+#[derive(Debug)]
 pub struct NodeAgentStore(Arc<Mutex<NodeAgentStoreInner>>);
 
 impl Deref for NodeAgentStore {
@@ -355,16 +382,30 @@ impl Deref for NodeAgentStore {
 }
 
 impl NodeAgentStore {
-    pub fn CreatePod(&self, revision: i64, key: &str, obj: &QuarkPod) -> Result<()> {
-        return self.lock().unwrap().CreatePod(revision, key, obj);
+    pub fn New() -> Result<(Self, Vec<QuarkPodJson>)> {
+        let (inner, pods) = NodeAgentStoreInner::New()?;
+        let store = Self(Arc::new(Mutex::new(inner)));
+        return Ok((store, pods))
     }
 
-    pub fn UpdatePod(&self, revision: i64, key: &str, obj: &QuarkPod) -> Result<()> {
-        return self.lock().unwrap().UpdatePod(revision, key, obj);
+    pub fn CreatePod(&self, obj: &QuarkPod) -> Result<()> {
+        return self.lock().unwrap().CreatePod(obj);
     }
 
-    pub fn DeletePod(&self, revision: i64, key: &str) -> Result<()> {
-        return self.lock().unwrap().DeletePod(revision, key);
+    pub fn UpdatePod(&self, obj: &QuarkPod) -> Result<()> {
+        return self.lock().unwrap().UpdatePod(obj);
+    }
+
+    pub fn DeletePod(&self, key: &str) -> Result<()> {
+        return self.lock().unwrap().DeletePod(key);
+    }
+
+    pub fn List(&self) -> PodList {
+        return self.lock().unwrap().List();
+    }
+
+    pub fn Watch(&self, revision: i64) -> Result<StoreWatchStream> {
+        return self.lock().unwrap().Watch(revision);
     }
 }
 

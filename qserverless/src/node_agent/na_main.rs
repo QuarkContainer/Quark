@@ -45,6 +45,7 @@ use qobjs::common::Result as QResult;
 use runtime::image_mgr::ImageMgr;
 
 use qobjs::pb_gen::v1alpha2;
+use store::nodeagent_store::NodeAgentStore;
 use crate::runtime::runtime::RuntimeMgr;
 use crate::runtime::network::*;
 use crate::cadvisor::client as CadvisorClient;
@@ -53,6 +54,7 @@ use crate::cadvisor::provider::CadvisorInfoProvider;
 pub static RUNTIME_MGR: OnceCell<RuntimeMgr> = OnceCell::new();
 pub static IMAGE_MGR: OnceCell<ImageMgr> = OnceCell::new();
 pub static CADVISOR_PROVIDER: OnceCell<CadvisorInfoProvider> = OnceCell::new();
+pub static NODEAGENT_STORE: OnceCell<NodeAgentStore> = OnceCell::new();
 
 lazy_static! {
     pub static ref NETWORK_PROVIDER: LocalNetworkAddressProvider = {
@@ -106,16 +108,23 @@ pub async fn ClientTest() -> QResult<()> {
     }"#;
 
     simple_logging::log_to_file("/var/log/quark/service_diretory.log", LevelFilter::Info).unwrap();
+    CADVISOR_PROVIDER.set(CadvisorInfoProvider::New().await.unwrap()).unwrap();
     RUNTIME_MGR.set(RuntimeMgr::New(10).await.unwrap()).unwrap();
     IMAGE_MGR.set(ImageMgr::New(v1alpha2::AuthConfig::default()).await.unwrap()).unwrap();
-    CADVISOR_PROVIDER.set(CadvisorInfoProvider::New().await.unwrap()).unwrap();
     
-    //let client = CriClient::Init().await?;
-    //println!("version is {:#?}", client.ListImages(None).await?);
+    let (nodeAgentStore, _) = NodeAgentStore::New()?;
+    NODEAGENT_STORE.set(nodeAgentStore).unwrap();
+
+    //let list = NODEAGENT_STORE.get().unwrap().List();
+    //error!("initial list is {:?}", &list);
+
+    //et mut watchStream = NODEAGENT_STORE.get().unwrap().Watch(list.revision)?;
 
     let config = qobjs::config::NodeConfiguration::Default()?;
 
     let (mut rx, na) = crate::node::Run(config).await?;
+
+    //let rx = &mut watchStream.stream;
 
     println!("main 1");
         

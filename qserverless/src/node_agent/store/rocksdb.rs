@@ -82,6 +82,8 @@ impl RocksStore {
     }
 }
 
+
+#[derive(Debug)]
 pub struct RocksObjStore<T: for<'a> Deserialize<'a> + Serialize > {
     pub prefix: String,
     pub revision: String,

@@ -150,7 +150,7 @@ pub enum PodState {
     Cleanup,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct QuarkPodJson {
     pub id: String,
     pub podState: PodState,
@@ -348,7 +348,7 @@ impl QuarkPod {
         let hasDeleted = self.lock().unwrap().pod.read().unwrap().metadata.deletion_timestamp.is_some();
         if (podStatus.phase.as_ref().unwrap() == PodSucceeded 
             || podStatus.phase.as_ref().unwrap() == PodFailed)
-            &&  hasDeleted {
+            &&  !hasDeleted {
                 let utc: DateTime<Utc> = Utc::now();
                 self.lock().unwrap().pod.write().unwrap().metadata.deletion_timestamp = Some(Time(utc));
         }

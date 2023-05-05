@@ -161,7 +161,7 @@ impl PodContainerAgent {
         self.container.lock().unwrap().containerStatus = Some(result.clone());
         let result = Some(result.clone());
         let initContainer = self.container.lock().unwrap().initContainer;
-        if ContainerExit(&result) && initContainer {
+        if ContainerExit(&result) && !initContainer {
             info!("Container exit pod {} container {} exit code {} finished at {:?}", 
                 self.pod.PodId(), self.container.ContainerName(), result.as_ref().unwrap().exit_code, result.as_ref().unwrap().finished_at);
             self.OnContainerFailed().await;
