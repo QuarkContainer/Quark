@@ -180,8 +180,7 @@ impl NodeAgentStoreInner {
         let podStore: RocksObjStore<QuarkPodJson> = store.NewObjStore("pods");
 
         // todo: why does this affect cadvisor?
-        //let pods = podStore.Load()?;
-        let pods: Vec<QuarkPodJson> = Vec::new();
+        let pods = podStore.Load()?;
         let mut podCache = BTreeMap::new();
         for p in &pods {
             let key = p.id.clone();

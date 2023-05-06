@@ -493,7 +493,7 @@ mod tests {
 
             r.Close();
             let res = t.await.unwrap();
-            println!("{:?}", &res);
+            error!("{:?}", &res);
             //res.unwrap();
         }
 

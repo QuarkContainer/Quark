@@ -23,10 +23,79 @@ import "google/protobuf/empty.proto";
 
 service NodeAgentService {
   rpc StreamMsg(stream NodeAgentMessage) returns (stream NodeAgentMessage);
+  rpc StreamProcess(stream NodeAgentRespMsg) returns (stream NodeAgentReq);
 }
- 
+///////////////////////////////////////////////////////////////////////
+
+message NodeAgentRespMsg {
+  string error = 1;
+  oneof MessageBody {
+    NodeAgentResp nodeAgentResp = 100;
+    NodeAgentStreamMsg nodeAgentStreamMsg = 200;
+  }
+}
+
+message NodeAgentReq {
+  uint64 requestId = 1;
+  oneof MessageBody {
+    NodeConfigReq nodeConfigReq = 100;
+  }
+}
+
+message NodeAgentResp {
+  uint64 requestId = 1;
+  oneof MessageBody {
+    NodeConfigResp nodeConfigResp = 100;
+  }
+}
+
+message NodeConfigReq {
+  string ip = 1;
+  string identifier = 2;
+}
+
+message NodeConfigResp {
+  string ip = 1;
+  string identifier = 2;
+}
+
+message NodeAgentStreamMsg {
+  oneof EventBody {
+    NodeRegister nodeRegister = 100;
+    NodeUpdate nodeUpdate = 200;
+    PodEvent podEvent = 300;
+  }
+}
+
+message NodeRegister {
+  string identifier = 1;
+  uint64 revision = 2;
+  string node = 3; // k8s::Node json
+  string pods = 4; // Vec<k8s::Pod>
+}
+
+message NodeUpdate {
+  uint64 revision = 2;
+  string node = 3; // k8s::Node json
+}
+
+enum EventType {
+  Add = 0;
+  Update = 2;
+  Delete = 3;
+}
+
+message PodEvent {
+  EventType eventType = 1;
+  uint64 revision = 2;
+  string pod = 3; // k8s::Node json
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
 message NodeAgentMessage {
   NodeIdentifier nodeIdentifier = 1;
+  int64 requestId = 2;
   oneof MessageBody {
     NodeMgrConfiguration NodeMgrConfiguration = 100;
     NodeConfiguration nodeConfiguration = 200;

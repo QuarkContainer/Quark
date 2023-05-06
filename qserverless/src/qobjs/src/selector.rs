@@ -371,21 +371,21 @@ impl Requirement {
 
                 let lsValue: i64 = match val.parse() {
                     Err(_) => {
-                        println!("ParseInt failed for value {} in label {:?}", val, ls);
+                        error!("ParseInt failed for value {} in label {:?}", val, ls);
                         return false;
                     }
                     Ok(v) => v,
                 };
 
                 if self.strVals.len() != 1 {
-                    println!("Invalid values count {} of requirement {:?}, for 'Gt', 'Lt' operators, exactly one value is required", self.strVals.len(), self);
+                    error!("Invalid values count {} of requirement {:?}, for 'Gt', 'Lt' operators, exactly one value is required", self.strVals.len(), self);
                     return false;
                 }
 
                 for val in &self.strVals {
                     let rValue : i64 = match val.parse() {
                         Err(_) => {
-                            println!("ParseInt failed for value {} in requirement {:?}, for 'Gt', 'Lt' operators, the value must be an integer", val, self);
+                            error!("ParseInt failed for value {} in requirement {:?}, for 'Gt', 'Lt' operators, the value must be an integer", val, self);
                             return false;
                         }
                         Ok(v) => v

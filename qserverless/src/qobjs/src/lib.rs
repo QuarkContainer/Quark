@@ -35,6 +35,7 @@ pub mod informer_factory;
 //pub mod core_types;
 pub mod runtime_types;
 pub mod k8s_util;
+pub mod qservice;
 
 // workaround to address the pb generated structure serde_json issue
 pub mod pb_gen;

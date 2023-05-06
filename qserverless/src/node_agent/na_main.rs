@@ -38,6 +38,7 @@ pub mod message;
 pub mod node_status;
 pub mod cadvisor;
 pub mod store;
+pub mod nodeagent_server;
 
 use qobjs::common::Result as QResult;
 //use qobjs::config::NodeConfiguration;
@@ -115,10 +116,10 @@ pub async fn ClientTest() -> QResult<()> {
     let (nodeAgentStore, _) = NodeAgentStore::New()?;
     NODEAGENT_STORE.set(nodeAgentStore).unwrap();
 
-    //let list = NODEAGENT_STORE.get().unwrap().List();
-    //error!("initial list is {:?}", &list);
+    let list = NODEAGENT_STORE.get().unwrap().List();
+    error!("initial list is {:?}", &list);
 
-    //et mut watchStream = NODEAGENT_STORE.get().unwrap().Watch(list.revision)?;
+    let _watchStream = NODEAGENT_STORE.get().unwrap().Watch(list.revision)?;
 
     let config = qobjs::config::NodeConfiguration::Default()?;
 
@@ -126,8 +127,8 @@ pub async fn ClientTest() -> QResult<()> {
 
     //let rx = &mut watchStream.stream;
 
-    println!("main 1");
-        
+    error!("main 1");
+
     let _msg = rx.recv().await;
     
     let nc = NmMsg::NodeConfiguration {
@@ -145,6 +146,7 @@ pub async fn ClientTest() -> QResult<()> {
             ..Default::default()
         })?,
     };
+    error!("main 1.1 ");
     na.Send(NodeAgentMsg::NodeMgrMsg(NodeAgentMessage{
         message_body: Some(NmMsg::node_agent_message::MessageBody::NodeConfiguration(nc)),
         ..Default::default()
@@ -166,9 +168,9 @@ pub async fn ClientTest() -> QResult<()> {
     }))?;
 
     let client = crate::cri::client::CriClient::Init().await?;
-    println!("pods is {:#?}", client.ListPodSandbox(None).await?);
+    error!("pods is {:#?}", client.ListPodSandbox(None).await?);
 
-    println!("main 2");
+    error!("main 2");
     loop {
         let msg = rx.recv().await;
         error!("final msg is {:#?}", msg);
@@ -181,8 +183,10 @@ pub async fn NMClientTest() -> QResult<()> {
     use qobjs::pb_gen::node_mgr_pb as nm_svc;
     //use tonic::{Response, Status};
     use tokio::sync::mpsc;
+    use tonic::Streaming;
     //use tonic::Request;
     //use futures_util::stream;
+    use qobjs::pb_gen::node_mgr_pb::NodeAgentMessage;
 
     let msg = nm_svc::NodeFullSync{};
     let mut client = nm_svc::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
@@ -194,7 +198,7 @@ pub async fn NMClientTest() -> QResult<()> {
     
     let mut stream = client.get_message(msg).await?.into_inner();
     while let Some(msg) = stream.message().await? {
-        println!("stream get msg {:?}", msg);
+        error!("stream get msg {:?}", msg);
     }*/
 
 
@@ -203,15 +207,16 @@ pub async fn NMClientTest() -> QResult<()> {
     let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
     let response = client.stream_msg(stream).await?;
 
-    let mut inbound = response.into_inner();
+    let mut inbound: Streaming<NodeAgentMessage> = response.into_inner();
 
     for _ in 0..5 {
         tx.send(nm_svc::NodeAgentMessage {
+            request_id: 0,
             node_identifier: None,
             message_body: Some(nm_svc::node_agent_message::MessageBody::NodeFullSync(msg.clone()))
         }).await.unwrap();
         let msg = inbound.message().await?;
-        println!("get msg {:?}", msg);
+        error!("get msg {:?}", msg);
     }
 
     return Ok(())

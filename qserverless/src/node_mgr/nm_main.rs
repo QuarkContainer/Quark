@@ -41,9 +41,9 @@ async fn main() -> QResult<()> {
     /*
     //cadvisor::client::Client::Test().await?;
     let client = cadvisor::client::Client::Init();
-    //println!("machine is {:#?}", client.MachineInfo().await?);
-    //println!("versioninfo is {:#?}", client.VersionInfo().await?);
-    println!("versioninfo is {:#?}", client.GetInfo().await?);
+    //error!("machine is {:#?}", client.MachineInfo().await?);
+    //error!("versioninfo is {:#?}", client.VersionInfo().await?);
+    error!("versioninfo is {:#?}", client.GetInfo().await?);
 */
     let inner = NodeMgrSvc::New();
     let svc = node_mgr_pb::node_agent_service_server::NodeAgentServiceServer::new(inner);
