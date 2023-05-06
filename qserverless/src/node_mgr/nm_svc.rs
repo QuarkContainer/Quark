@@ -15,7 +15,6 @@
 use std::{collections::BTreeMap, sync::Mutex};
 
 use futures_util::StreamExt;
-use qobjs::runtime_types::NodeFromString;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Response, Status};
 use tokio::sync::mpsc;
@@ -138,5 +137,13 @@ impl nm_svc::node_agent_service_server::NodeAgentService for NodeMgrSvc {
         });
         
         return Ok(Response::new(ReceiverStream::new(rx)));
+    }
+
+    type StreamProcessStream = ReceiverStream<SResult<nm_svc::NodeAgentReq, Status>>;
+    async fn stream_process(
+        &self,
+        _request: tonic::Request<tonic::Streaming<nm_svc::NodeAgentRespMsg>>,
+    ) -> SResult<tonic::Response<Self::StreamProcessStream>, tonic::Status> {
+        unimplemented!()
     }
 }

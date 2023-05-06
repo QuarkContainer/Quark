@@ -43,7 +43,7 @@ impl ServiceDirectoryService for ServiceDirectoryImpl {
         &self,
         request: Request<TestRequestMessage>,
     ) -> Result<Response<TestResponseMessage>, Status> {
-        println!("Request from {:?}", request.remote_addr());
+        error!("Request from {:?}", request.remote_addr());
 
         let response = TestResponseMessage {
             server_name: "Server".to_owned(),
@@ -55,7 +55,7 @@ impl ServiceDirectoryService for ServiceDirectoryImpl {
         &self,
         request: Request<PutRequestMessage>,
     ) -> Result<Response<PutResponseMessage>, Status> {
-        println!("Request from {:?}", request.remote_addr());
+        error!("Request from {:?}", request.remote_addr());
 
         let response = PutResponseMessage { revision: 1 };
         Ok(Response::new(response))
@@ -606,7 +606,7 @@ mod tests {
     async fn InformerTest() -> QResult<()> {
         let mut client = CacherClientInner::New("http://[::1]:50071".into()).await?;
 
-        println!("InformerTest 1");
+        error!("InformerTest 1");
         let factory = InformerFactory::New("http://[::1]:50071", "").await?;
         factory.AddInformer("pod", &ListOption::default()).await?;
         let informer = factory.GetInformer("pod").await?;

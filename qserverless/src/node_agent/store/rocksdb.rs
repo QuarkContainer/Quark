@@ -29,7 +29,7 @@ pub struct RocksStore {
     pub initRev: i64,
 }
 
-pub const NODE_AGENT_STORE_PATH: &str = "/var/run/quark";
+pub const NODE_AGENT_STORE_PATH: &str = "/var/log/quark/data";
 pub const REVISION_KEY: &str = "revision";
 pub const REGISTRY_PATH: &str = "/registry/";
 
@@ -42,7 +42,7 @@ impl RocksStore {
             fs::create_dir_all(path)?;
         }
     
-        let prefix_extractor = SliceTransform::create_fixed_prefix(3);
+        let prefix_extractor = SliceTransform::create_fixed_prefix(100);
     
         let mut opts = Options::default();
         opts.create_if_missing(true);
@@ -63,7 +63,7 @@ impl RocksStore {
                 0
             }
         };
-
+        
         return Ok(Self {
             db: Arc::new(Mutex::new(db)),
             registryPath: registryPath.to_string(),

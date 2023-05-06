@@ -149,7 +149,7 @@ impl NodeAgent {
                     let state = self.State();
                     
                     if state == NodeAgentState::Registering {
-                        info!("Start node registry node spec {:?}", self.node.node.lock().unwrap());
+                        info!("Start node registry node spec {:#?}", self.node.node.lock().unwrap());
                         
                         let rev = self.node.revision.load(Ordering::SeqCst);
                         let nr = NmMsg::NodeRegistry {

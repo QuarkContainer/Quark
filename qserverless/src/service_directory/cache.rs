@@ -309,7 +309,7 @@ impl Cacher {
         let notify = self.read().await.closeNotify.clone();
         notify.notify_waiters();
         let worker = self.write().await.bgWorker.take();
-        //println!("stop 4");
+        //error!("stop 4");
         let objType = self.read().await.objectType.clone();
         defer!(info!("cacher[{}] stop ... ", &objType));
         match worker {

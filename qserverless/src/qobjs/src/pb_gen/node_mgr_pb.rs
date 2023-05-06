@@ -1,8 +1,132 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NodeAgentRespMsg {
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+    #[prost(oneof = "node_agent_resp_msg::MessageBody", tags = "100, 200")]
+    pub message_body: ::core::option::Option<node_agent_resp_msg::MessageBody>,
+}
+/// Nested message and enum types in `NodeAgentRespMsg`.
+pub mod node_agent_resp_msg {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum MessageBody {
+        #[prost(message, tag = "100")]
+        NodeAgentResp(super::NodeAgentResp),
+        #[prost(message, tag = "200")]
+        NodeAgentStreamMsg(super::NodeAgentStreamMsg),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NodeAgentReq {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(oneof = "node_agent_req::MessageBody", tags = "100")]
+    pub message_body: ::core::option::Option<node_agent_req::MessageBody>,
+}
+/// Nested message and enum types in `NodeAgentReq`.
+pub mod node_agent_req {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum MessageBody {
+        #[prost(message, tag = "100")]
+        NodeConfigReq(super::NodeConfigReq),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NodeAgentResp {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(oneof = "node_agent_resp::MessageBody", tags = "100")]
+    pub message_body: ::core::option::Option<node_agent_resp::MessageBody>,
+}
+/// Nested message and enum types in `NodeAgentResp`.
+pub mod node_agent_resp {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum MessageBody {
+        #[prost(message, tag = "100")]
+        NodeConfigResp(super::NodeConfigResp),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NodeConfigReq {
+    #[prost(string, tag = "1")]
+    pub ip: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub identifier: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NodeConfigResp {
+    #[prost(string, tag = "1")]
+    pub ip: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub identifier: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NodeAgentStreamMsg {
+    #[prost(oneof = "node_agent_stream_msg::EventBody", tags = "100, 200, 300")]
+    pub event_body: ::core::option::Option<node_agent_stream_msg::EventBody>,
+}
+/// Nested message and enum types in `NodeAgentStreamMsg`.
+pub mod node_agent_stream_msg {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum EventBody {
+        #[prost(message, tag = "100")]
+        NodeRegister(super::NodeRegister),
+        #[prost(message, tag = "200")]
+        NodeUpdate(super::NodeUpdate),
+        #[prost(message, tag = "300")]
+        PodEvent(super::PodEvent),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NodeRegister {
+    #[prost(string, tag = "1")]
+    pub identifier: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub revision: u64,
+    /// k8s::Node json
+    #[prost(string, tag = "3")]
+    pub node: ::prost::alloc::string::String,
+    /// Vec<k8s::Pod>
+    #[prost(string, tag = "4")]
+    pub pods: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NodeUpdate {
+    #[prost(uint64, tag = "2")]
+    pub revision: u64,
+    /// k8s::Node json
+    #[prost(string, tag = "3")]
+    pub node: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PodEvent {
+    #[prost(enumeration = "EventType", tag = "1")]
+    pub event_type: i32,
+    #[prost(uint64, tag = "2")]
+    pub revision: u64,
+    /// k8s::Node json
+    #[prost(string, tag = "3")]
+    pub pod: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeAgentMessage {
     #[prost(message, optional, tag = "1")]
     pub node_identifier: ::core::option::Option<NodeIdentifier>,
+    #[prost(int64, tag = "2")]
+    pub request_id: i64,
     #[prost(
         oneof = "node_agent_message::MessageBody",
         tags = "100, 200, 201, 202, 203, 204, 300, 301, 302, 303"
@@ -214,6 +338,35 @@ pub struct PodHibernate {
     #[prost(string, tag = "1")]
     pub pod_identifier: ::prost::alloc::string::String,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum EventType {
+    Add = 0,
+    Update = 2,
+    Delete = 3,
+}
+impl EventType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            EventType::Add => "Add",
+            EventType::Update => "Update",
+            EventType::Delete => "Delete",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "Add" => Some(Self::Add),
+            "Update" => Some(Self::Update),
+            "Delete" => Some(Self::Delete),
+            _ => None,
+        }
+    }
+}
 /// Generated client implementations.
 pub mod node_agent_service_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
@@ -305,6 +458,28 @@ pub mod node_agent_service_client {
             );
             self.inner.streaming(request.into_streaming_request(), path, codec).await
         }
+        pub async fn stream_process(
+            &mut self,
+            request: impl tonic::IntoStreamingRequest<Message = super::NodeAgentRespMsg>,
+        ) -> Result<
+            tonic::Response<tonic::codec::Streaming<super::NodeAgentReq>>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/node_mgr_pb.NodeAgentService/StreamProcess",
+            );
+            self.inner.streaming(request.into_streaming_request(), path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -324,6 +499,16 @@ pub mod node_agent_service_server {
             &self,
             request: tonic::Request<tonic::Streaming<super::NodeAgentMessage>>,
         ) -> Result<tonic::Response<Self::StreamMsgStream>, tonic::Status>;
+        /// Server streaming response type for the StreamProcess method.
+        type StreamProcessStream: futures_core::Stream<
+                Item = Result<super::NodeAgentReq, tonic::Status>,
+            >
+            + Send
+            + 'static;
+        async fn stream_process(
+            &self,
+            request: tonic::Request<tonic::Streaming<super::NodeAgentRespMsg>>,
+        ) -> Result<tonic::Response<Self::StreamProcessStream>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct NodeAgentServiceServer<T: NodeAgentService> {
@@ -414,6 +599,49 @@ pub mod node_agent_service_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = StreamMsgSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/node_mgr_pb.NodeAgentService/StreamProcess" => {
+                    #[allow(non_camel_case_types)]
+                    struct StreamProcessSvc<T: NodeAgentService>(pub Arc<T>);
+                    impl<
+                        T: NodeAgentService,
+                    > tonic::server::StreamingService<super::NodeAgentRespMsg>
+                    for StreamProcessSvc<T> {
+                        type Response = super::NodeAgentReq;
+                        type ResponseStream = T::StreamProcessStream;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::ResponseStream>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                tonic::Streaming<super::NodeAgentRespMsg>,
+                            >,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).stream_process(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = StreamProcessSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

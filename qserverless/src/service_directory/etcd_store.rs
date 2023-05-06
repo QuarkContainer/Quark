@@ -333,7 +333,7 @@ impl EtcdStore {
         let mut getResp;
 
         loop {
-            //println!("key is {}, option is {:?}", &preparedKey, &getOption);
+            //error!("key is {}, option is {:?}", &preparedKey, &getOption);
             let option = getOption.ToGetOption();
             getResp = self
                 .client
