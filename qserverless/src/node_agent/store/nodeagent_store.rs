@@ -203,9 +203,9 @@ impl NodeAgentStoreInner {
         })
     }
 
-    pub fn GetNode(&self) -> (k8s::Node, i64) {
+    pub fn GetNode(&self) -> k8s::Node {
         assert!(self.nodeCache.is_some());
-        return (self.nodeCache.as_ref().unwrap().clone(), self.nodeRevision);
+        return self.nodeCache.as_ref().unwrap().clone();
     }
 
     pub fn CreateNode(&mut self, node: &k8s::Node) -> Result<()> {
@@ -414,6 +414,10 @@ impl NodeAgentStore {
         let inner = NodeAgentStoreInner::New()?;
         let store = Self(Arc::new(Mutex::new(inner)));
         return Ok(store)
+    }
+
+    pub fn GetNode(&self) -> k8s::Node {
+        return self.lock().unwrap().GetNode();
     }
 
     pub fn CreateNode(&self, node: &k8s::Node) -> Result<()> {
