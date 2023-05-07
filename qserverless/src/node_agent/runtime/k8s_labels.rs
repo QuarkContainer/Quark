@@ -108,7 +108,7 @@ pub fn NewPodLabels(pod: &k8s::Pod) -> HashMap<String, String> {
     let mut labels = HashMap::new();
     labels.insert(KUBERNETES_POD_NAME_LABEL.to_string(), pod.metadata.name.as_deref().unwrap_or("").to_string());
     labels.insert(KUBERNETES_POD_NAMESPACE_LABEL.to_string(), pod.metadata.namespace.as_deref().unwrap_or("").to_string());
-    labels.insert(KUBERNETES_POD_UIDLABEL.to_string(), pod.metadata.name.as_deref().unwrap_or("").to_string());
+    labels.insert(KUBERNETES_POD_UIDLABEL.to_string(), pod.metadata.uid.as_deref().unwrap_or("").to_string());
 
 	if pod.metadata.labels.is_none() {
 		return labels

@@ -38,7 +38,7 @@ use qobjs::pb_gen::node_mgr_pb::{self as NmMsg};
 
 use crate::nm_svc::{NodeAgentMsg, PodCreate};
 use crate::node_status::SetNodeStatus;
-use crate::{pod::*, NODEAGENT_STORE};
+use crate::{pod::*, NODEAGENT_STORE, RUNTIME_MGR};
 use crate::NETWORK_PROVIDER;
 use crate::runtime::k8s_labels::*;
 use crate::message::*;
@@ -107,10 +107,35 @@ impl NodeAgent {
         return Ok(agent);
     }
 
+    pub async fn CleanPods() -> Result<()> {
+        let pods = RUNTIME_MGR.get().unwrap().GetPods().await?;
+        for p in pods {
+            let pod = p.sandbox.unwrap();
+
+            error!("removing pod {} annotations {:#?}", &pod.id, &pod.annotations);
+            // skip call sandbox which not created by qserverless
+            if !pod.annotations.contains_key(AnnotationNodeMgrNode) {
+                continue;
+            }
+
+            let containers = RUNTIME_MGR.get().unwrap().GetPodContainers(&pod.id).await?;
+            let mut containerIds = Vec::new();
+            for container in containers {
+                containerIds.push(container.id);
+            }
+            RUNTIME_MGR.get().unwrap().TerminatePod(&pod.id, containerIds).await?;        
+        }
+
+        return Ok(())
+    }
+
     pub async fn Start(&self) -> Result<()> {
         let rx = self.agentRx.lock().unwrap().take().unwrap();
         let clone = self.clone();
         *self.state.lock().unwrap() = NodeAgentState::Registering;
+        SetNodeStatus(&self.node).await?;
+        NODEAGENT_STORE.get().unwrap().CreateNode(&*self.node.node.lock().unwrap())?;
+
         tokio::spawn(async move {
             clone.Process(rx).await.unwrap();
         });
@@ -172,6 +197,7 @@ impl NodeAgent {
                     }
 
                     SetNodeStatus(&self.node).await?;
+                    NODEAGENT_STORE.get().unwrap().UpdateNode(&*self.node.node.lock().unwrap())?;
                     if IsNodeStatusReady(&self.node) {
                         info!("Node is ready, tell nodemgr");
                         let revision = self.IncrNodeRevision();
@@ -209,9 +235,10 @@ impl NodeAgent {
             }
             NodeAgentMsg::NodeUpdate => {
                 SetNodeStatus(&self.node).await?;
+                NODEAGENT_STORE.get().unwrap().UpdateNode(&*self.node.node.lock().unwrap())?;
                 let revision = self.node.revision.load(Ordering::SeqCst);
                 self.Notify(NodeAgentMsg::NodeMgrMsg(
-                BuildNodeAgentNodeState(&self.node, revision)?));
+                    BuildNodeAgentNodeState(&self.node, revision)?));
             }
             _ => {
                 error!("NodeHandler Received unknown message {:?}", msg);
@@ -292,6 +319,7 @@ impl NodeAgent {
         *self.state.lock().unwrap() = NodeAgentState::Registered;
 
         SetNodeStatus(&self.node).await?;
+        NODEAGENT_STORE.get().unwrap().UpdateNode(&*self.node.node.lock().unwrap())?;
         if IsNodeStatusReady(&self.node) {
             info!("Node is ready, tell nodemgr");
             let revision = self.IncrNodeRevision();
@@ -496,6 +524,7 @@ pub fn InitK8sNode() -> Result<k8s::Node> {
     return Ok(node)
 }
 
+#[derive(Debug)]
 pub struct QuarkNodeInner {
     pub nodeConfig: NodeConfiguration,
     pub node: Mutex<k8s::Node>,
@@ -503,7 +532,7 @@ pub struct QuarkNodeInner {
     pub pods: Mutex<BTreeMap<String, QuarkPod>>, 
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct QuarkNode(pub Arc<QuarkNodeInner>);
 
 impl Deref for QuarkNode {
@@ -606,6 +635,8 @@ pub fn ValidateNodeSpec(node: &k8s::Node) -> Result<()> {
 }
 
 pub async fn Run(nodeConfig: NodeConfiguration) -> Result<(mpsc::Receiver<NodeAgentMsg>, NodeAgent)> {
+    NodeAgent::CleanPods().await?;
+    
     let (tx, rx) = mpsc::channel::<NodeAgentMsg>(30);
         
     let quarkNode = QuarkNode::NewQuarkNode(&nodeConfig)?;

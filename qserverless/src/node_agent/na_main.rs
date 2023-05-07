@@ -113,7 +113,7 @@ pub async fn ClientTest() -> QResult<()> {
     RUNTIME_MGR.set(RuntimeMgr::New(10).await.unwrap()).unwrap();
     IMAGE_MGR.set(ImageMgr::New(v1alpha2::AuthConfig::default()).await.unwrap()).unwrap();
     
-    let (nodeAgentStore, _) = NodeAgentStore::New()?;
+    let nodeAgentStore= NodeAgentStore::New()?;
     NODEAGENT_STORE.set(nodeAgentStore).unwrap();
 
     let list = NODEAGENT_STORE.get().unwrap().List();
