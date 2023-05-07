@@ -41,7 +41,6 @@ use crate::node_status::SetNodeStatus;
 use crate::{pod::*, NODEAGENT_STORE, RUNTIME_MGR};
 use crate::NETWORK_PROVIDER;
 use crate::runtime::k8s_labels::*;
-use crate::message::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NodeAgentState {
@@ -59,7 +58,6 @@ pub struct NodeAgentInner {
     pub state: Mutex<NodeAgentState>,
 
     pub node: QuarkNode,
-    pub supervisor: mpsc::Sender<NodeAgentMsg>,
     pub agentChann: mpsc::Sender<NodeAgentMsg>,
     pub agentRx: Mutex<Option<mpsc::Receiver<NodeAgentMsg>>>,
     
@@ -89,7 +87,7 @@ impl NodeAgent {
 }
 
 impl NodeAgent {
-    pub fn New(supervisor: mpsc::Sender<NodeAgentMsg>, node: &QuarkNode) -> Result<Self> {
+    pub fn New(node: &QuarkNode) -> Result<Self> {
         let (tx, rx) = mpsc::channel::<NodeAgentMsg>(30);
         
         let inner = NodeAgentInner {
@@ -97,7 +95,6 @@ impl NodeAgent {
             stop: AtomicBool::new(false),
             state: Mutex::new(NodeAgentState::Initializing),
             node: node.clone(),
-            supervisor: supervisor,
             agentChann: tx,
             agentRx: Mutex::new(Some(rx)),
             pods: Mutex::new(BTreeMap::new()),
@@ -107,6 +104,8 @@ impl NodeAgent {
         return Ok(agent);
     }
 
+    // clean up all qserverless created pods, used when nodeagent restarted
+    // work around when the nodeagent persistent store is not ready
     pub async fn CleanPods() -> Result<()> {
         let pods = RUNTIME_MGR.get().unwrap().GetPods().await?;
         for p in pods {
@@ -171,9 +170,9 @@ impl NodeAgent {
                     break;
                 }
                 _ = interval.tick() => {
-                    let state = self.State();
+                    //let state = self.State();
                     
-                    if state == NodeAgentState::Registering {
+                    /*if state == NodeAgentState::Registering {
                         info!("Start node registry node spec {:#?}", self.node.node.lock().unwrap());
                         
                         let rev = self.node.revision.load(Ordering::SeqCst);
@@ -194,7 +193,7 @@ impl NodeAgent {
 
                     if self.State() != NodeAgentState::Registered {
                         continue;
-                    }
+                    }*/
 
                     SetNodeStatus(&self.node).await?;
                     NODEAGENT_STORE.get().unwrap().UpdateNode(&*self.node.node.lock().unwrap())?;
@@ -236,9 +235,6 @@ impl NodeAgent {
             NodeAgentMsg::NodeUpdate => {
                 SetNodeStatus(&self.node).await?;
                 NODEAGENT_STORE.get().unwrap().UpdateNode(&*self.node.node.lock().unwrap())?;
-                let revision = self.node.revision.load(Ordering::SeqCst);
-                self.Notify(NodeAgentMsg::NodeMgrMsg(
-                    BuildNodeAgentNodeState(&self.node, revision)?));
             }
             _ => {
                 error!("NodeHandler Received unknown message {:?}", msg);
@@ -264,7 +260,7 @@ impl NodeAgent {
                 return self.OnPodTerminateCommand(&msg);
             }
             NmMsg::node_agent_message::MessageBody::PodState(_) => {
-                self.Notify(NodeAgentMsg::NodeMgrMsg(msg.clone()));
+                //self.Notify(NodeAgentMsg::NodeMgrMsg(msg.clone()));
                 return Ok(())
             }
             _ => {
@@ -272,10 +268,6 @@ impl NodeAgent {
                 return Ok(())
             }
         }
-    }
-
-    pub fn Notify(&self, msg: NodeAgentMsg) {
-        self.supervisor.try_send(msg).unwrap();
     } 
 
     pub async fn CleanupPodStoreAndAgent(&self, pod: &QuarkPod) -> Result<()> {
@@ -294,17 +286,16 @@ impl NodeAgent {
     }
 
     pub fn OnNodeFullSyncCommand(&self, _msg: &NmMsg::NodeFullSync) -> Result<()> {
-        let msg = BuildNodeAgentNodeState(&self.node, self.node.revision.load(Ordering::SeqCst))?;
-        self.Notify(NodeAgentMsg::NodeMgrMsg(msg));
+        //let msg = BuildNodeAgentNodeState(&self.node, self.node.revision.load(Ordering::SeqCst))?;
+        //self.Notify(NodeAgentMsg::NodeMgrMsg(msg));
         return Ok(())
     }
 
-    pub async fn OnNodeConfigurationCommand(&self, msg: &NmMsg::NodeConfiguration) -> Result<()> {
+    pub async fn NodeConfigure(&self, node: k8s::Node) -> Result<()> {
         if *self.state.lock().unwrap() != NodeAgentState::Registering {
             return Err(Error::CommonError(format!("node is not in registering state, it does not expect configuration change after registering")));
         }
 
-        let node = NodeFromString(&msg.node)?;
         info!("received node spec from nodemgr: {:?}", &node);
         ValidateNodeSpec(&node)?;
 
@@ -328,20 +319,27 @@ impl NodeAgent {
             *self.state.lock().unwrap() = NodeAgentState::Ready;
             
         }
-        
-
+    
         return Ok(())
     }
 
-    pub async fn OnPodCreateCmd(&self, msg: &NmMsg::PodCreate) -> Result<()> {
-        let pod = PodFromString(&msg.pod)?;
+    pub async fn OnNodeConfigurationCommand(&self, msg: &NmMsg::NodeConfiguration) -> Result<()> {
+        if *self.state.lock().unwrap() != NodeAgentState::Registering {
+            return Err(Error::CommonError(format!("node is not in registering state, it does not expect configuration change after registering")));
+        }
+
+        let node = NodeFromString(&msg.node)?;
+        return self.NodeConfigure(node).await;
+    }
+
+     pub async fn CreatePod(&self, pod: &k8s::Pod, configMap: &k8s::ConfigMap) -> Result<()> {
         let podId =  K8SUtil::PodId(&pod);
         if self.State() != NodeAgentState::Ready {
             let inner = QuarkPodInner {
                 id: K8SUtil::PodId(&pod),
                 podState: PodState::Cleanup,
                 isDaemon: false,
-                pod: Arc::new(RwLock::new(pod)),
+                pod: Arc::new(RwLock::new(pod.clone())),
                 configMap: None,
                 runtimePod: None,
                 containers: BTreeMap::new(),
@@ -352,20 +350,17 @@ impl NodeAgent {
             NODEAGENT_STORE.get().unwrap().DeletePod(&podId)?;
             return Err(Error::CommonError("Node is not in ready state to create a new pod".to_string()));
         }
-
-        //let podId = &msg.pod_identifier;
-        let configMap = ConfigMapFromString(&msg.config_map)?;
-
+       
         let hasPod = self.node.pods.lock().unwrap().get(&podId).is_some();
         if !hasPod {
-            let podAgent = match self.CreatePodAgent(PodState::Creating, &pod, &Some(configMap), false) {
+            let podAgent = match self.CreatePodAgent(PodState::Creating, &pod, &Some(configMap.clone()), false) {
                 Ok(a) => a,
                 Err(e) => {
                     let inner = QuarkPodInner {
                         id: K8SUtil::PodId(&pod),
                         podState: PodState::Cleanup,
                         isDaemon: false,
-                        pod: Arc::new(RwLock::new(pod)),
+                        pod: Arc::new(RwLock::new(pod.clone())),
                         configMap: None,
                         runtimePod: None,
                         containers: BTreeMap::new(),
@@ -390,8 +385,14 @@ impl NodeAgent {
         return Ok(())
     }
 
-    pub fn OnPodTerminateCommand(&self, msg: &NmMsg::PodTerminate) -> Result<()> {
-        let podId = &msg.pod_identifier;
+    pub async fn OnPodCreateCmd(&self, msg: &NmMsg::PodCreate) -> Result<()> {
+        let pod = PodFromString(&msg.pod)?;
+        let configMap = ConfigMapFromString(&msg.config_map)?;
+        self.CreatePod(&pod, &configMap).await?;
+        return Ok(())
+    }
+
+    pub fn TerminatePod(&self, podId: &str) -> Result<()> {
         let qpod = self.node.pods.lock().unwrap().get(podId).cloned();
         match qpod {
             None => return Err(Error::CommonError(format!("Pod: {} does not exist, nodemgr is not in sync", podId))),
@@ -402,6 +403,7 @@ impl NodeAgent {
 			        return Ok(())
                 }
 
+                // todo: when will it happen?
                 if podAgent.is_none() {
                     warn!("Pod actor {} already exit, create a new one", podId);
                     podAgent = Some(self.StartPodAgent(&qpod)?);
@@ -413,6 +415,11 @@ impl NodeAgent {
         }
 
         return Ok(())
+    }
+
+    pub fn OnPodTerminateCommand(&self, msg: &NmMsg::PodTerminate) -> Result<()> {
+        let podId = &msg.pod_identifier;
+        return self.TerminatePod(podId);
     }
 
     pub fn BuildAQuarkPod(&self, state: PodState, pod: &k8s::Pod, configMap: &Option<k8s::ConfigMap>, isDaemon: bool) -> Result<QuarkPod> {
@@ -634,13 +641,11 @@ pub fn ValidateNodeSpec(node: &k8s::Node) -> Result<()> {
     return Ok(())
 }
 
-pub async fn Run(nodeConfig: NodeConfiguration) -> Result<(mpsc::Receiver<NodeAgentMsg>, NodeAgent)> {
+pub async fn Run(nodeConfig: NodeConfiguration) -> Result<NodeAgent> {
     NodeAgent::CleanPods().await?;
     
-    let (tx, rx) = mpsc::channel::<NodeAgentMsg>(30);
-        
     let quarkNode = QuarkNode::NewQuarkNode(&nodeConfig)?;
-    let nodeAgent = NodeAgent::New(tx, &quarkNode)?;
+    let nodeAgent = NodeAgent::New(&quarkNode)?;
     nodeAgent.Start().await?;
-    return Ok((rx, nodeAgent));
+    return Ok(nodeAgent);
 }

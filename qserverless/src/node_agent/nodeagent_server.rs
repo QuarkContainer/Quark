@@ -16,17 +16,92 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Mutex;
+use core::ops::Deref;
 
 use qobjs::pb_gen::node_mgr_pb::NodeAgentReq;
+use qobjs::runtime_types::NodeFromString;
 use tokio::sync::Notify;
 use tonic::Streaming;
 use tokio::sync::mpsc;
+use tokio::time;
 
 use qobjs::pb_gen::node_mgr_pb as NmMsg;
 use qobjs::common::*;
 
+use crate::NODEAGENT_STORE;
 use crate::node::NodeAgent;
 
+pub struct NodeAgentServerMgrInner {
+    pub closeNotify: Arc<Notify>,
+    pub stop: AtomicBool,
+
+    pub nodeMgrAddress: Vec<String>,
+}
+
+pub struct NodeAgentServerMgr(Arc<NodeAgentServerMgrInner>);
+
+impl Deref for NodeAgentServerMgr {
+    type Target = Arc<NodeAgentServerMgrInner>;
+
+    fn deref(&self) -> &Arc<NodeAgentServerMgrInner> {
+        &self.0
+    }
+}
+
+impl NodeAgentServerMgr {
+    pub fn New(addresses: Vec<String>) -> Self {
+        let inner = NodeAgentServerMgrInner {
+            closeNotify: Arc::new(Notify::new()),
+            stop: AtomicBool::new(false),
+            nodeMgrAddress: addresses,
+        };
+
+        return Self(Arc::new(inner));
+    }
+
+    pub async fn Process(&self, nodeAgent: &NodeAgent) -> Result<()> {
+        let mut futures = Vec::new();
+        for addr in &self.nodeMgrAddress {
+            futures.push(self.ProcessNodeAgentServer(addr, nodeAgent));
+        }
+
+        futures::future::join_all(futures).await;
+        return Ok(())
+    }
+
+    pub fn Close(&self) {
+        self.stop.store(true, Ordering::SeqCst);
+        self.closeNotify.notify_waiters();
+    }
+
+    pub async fn ProcessNodeAgentServer(&self, addr: &str, nodeAgent: &NodeAgent) {
+        loop {
+            let server = match NodeAgentServer::New(addr, nodeAgent).await {
+                Ok(s) => s,
+                Err(e) => {
+                    error!("ProcessNodeAgentServer::Connect fail with error {:?}", e);
+                    time::sleep(time::Duration::from_secs(5)).await; // retry connect to the nodemgr
+                    continue;
+                }
+            };
+
+            tokio::select! {
+                ret = server.Process(nodeAgent) => {
+                    match ret {
+                        Ok(()) => break,
+                        Err(e) => {
+                            error!("ProcessNodeAgentServer::Process fail with error {:?}", e);
+                            continue;
+                        }
+                    }
+                }
+                _ = self.closeNotify.notified() => {
+                    server.closeNotify.notify_waiters();
+                }
+            }
+        }
+    }
+}
 
 pub struct NodeAgentServer {
     pub closeNotify: Arc<Notify>,
@@ -38,8 +113,8 @@ pub struct NodeAgentServer {
 }
 
 impl NodeAgentServer {
-    pub async fn New(nodeAgent: NodeAgent) -> Result<Self> {
-        let mut client = NmMsg::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
+    pub async fn New(nodeMgrAddr: &str, nodeAgent: &NodeAgent) -> Result<Self> {
+        let mut client = NmMsg::node_agent_service_client::NodeAgentServiceClient::connect(nodeMgrAddr.to_string()).await?;
         let (tx, rx) = mpsc::channel(30);
         let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
         let response = client.stream_process(stream).await?;
@@ -51,13 +126,32 @@ impl NodeAgentServer {
             stop: AtomicBool::new(false),
             rx: Mutex::new(Some(inbound)),
             tx: tx,
-            nodeAgent: nodeAgent,
+            nodeAgent: nodeAgent.clone(),
         };
 
         return Ok(ret);
     }
 
-    pub async fn Process(&self) -> Result<()> {
+    pub async fn Process(&self, nodeAgent: &NodeAgent) -> Result<()> {
+        let node = NODEAGENT_STORE.get().unwrap().GetNode();
+        let list = NODEAGENT_STORE.get().unwrap().List();
+        let mut pods = Vec::new();
+        for pod in list.pods {
+            pods.push(serde_json::to_string(&pod)?);
+        }
+
+        let nodeRegister = NmMsg::NodeRegister {
+            revision: list.revision,
+            node: serde_json::to_string(&node)?,
+            pods: pods,
+        };
+
+        let msg = NmMsg::NodeAgentStreamMsg {
+            event_body: Some(NmMsg::node_agent_stream_msg::EventBody::NodeRegister(nodeRegister))
+        };
+
+        self.SendStreamMessage(msg).await?;
+
         let mut rx = self.rx.lock().unwrap().take().unwrap();
         loop {
             tokio::select! {
@@ -77,29 +171,46 @@ impl NodeAgentServer {
                     };
 
                     let reqId = req.request_id;
-                    let mut resp = self.ReqHandler(req)?;
-                    resp.request_id = reqId;
+                    let resp = match self.ReqHandler(req, nodeAgent).await {
+                        Err(e) => {
+                            NmMsg::NodeAgentResp {
+                                request_id: reqId,
+                                error: format!("{:?}", e),
+                                message_body: None,
+                            }
+                        }
+                        Ok(body) => {
+                            NmMsg::NodeAgentResp {
+                                request_id: reqId,
+                                error: "".to_owned(),
+                                message_body: Some(body),
+                            }
+                        }
+                    };
                     let msg = NmMsg::NodeAgentRespMsg {
-                        error: "".to_string(),
                         message_body: Some(NmMsg::node_agent_resp_msg::MessageBody::NodeAgentResp(resp)),
                     };
             
                     self.tx.send(msg).await.unwrap();
-            
-                    return Ok(())
                 }
             }
         }
         return Ok(())
     }
 
-    pub fn ReqHandler(&self, _req: NmMsg::NodeAgentReq) -> Result<NmMsg::NodeAgentResp> {
-        unimplemented!();
+    pub async fn ReqHandler(&self, req: NmMsg::NodeAgentReq, nodeAgent: &NodeAgent) -> Result<NmMsg::node_agent_resp::MessageBody> {
+        let body: NmMsg::node_agent_req::MessageBody = req.message_body.unwrap();
+        match body {
+            NmMsg::node_agent_req::MessageBody::NodeConfigReq(req) => {
+                let node = NodeFromString(&req.node)?;
+                nodeAgent.NodeConfigure(node).await?;
+                return Ok(NmMsg::node_agent_resp::MessageBody::NodeConfigResp(NmMsg::NodeConfigResp{}));
+            }
+        }
     }
 
     pub async fn SendStreamMessage(&self, msg: NmMsg::NodeAgentStreamMsg) -> Result<()> {
         let msg = NmMsg::NodeAgentRespMsg {
-            error: "".to_string(),
             message_body: Some(NmMsg::node_agent_resp_msg::MessageBody::NodeAgentStreamMsg(msg)),
         };
 

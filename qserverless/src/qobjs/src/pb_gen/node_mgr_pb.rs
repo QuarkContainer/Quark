@@ -1,8 +1,6 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeAgentRespMsg {
-    #[prost(string, tag = "1")]
-    pub error: ::prost::alloc::string::String,
     #[prost(oneof = "node_agent_resp_msg::MessageBody", tags = "100, 200")]
     pub message_body: ::core::option::Option<node_agent_resp_msg::MessageBody>,
 }
@@ -39,6 +37,8 @@ pub mod node_agent_req {
 pub struct NodeAgentResp {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
+    #[prost(string, tag = "2")]
+    pub error: ::prost::alloc::string::String,
     #[prost(oneof = "node_agent_resp::MessageBody", tags = "100")]
     pub message_body: ::core::option::Option<node_agent_resp::MessageBody>,
 }
@@ -55,18 +55,17 @@ pub mod node_agent_resp {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeConfigReq {
     #[prost(string, tag = "1")]
-    pub ip: ::prost::alloc::string::String,
+    pub cluster_domain: ::prost::alloc::string::String,
+    /// k8s.io.api.core.v1.Node node = 2;
+    ///
+    /// repeated k8s.io.api.core.v1.Pod daemonPods = 3;
+    /// repeated string daemonPods = 3;
     #[prost(string, tag = "2")]
-    pub identifier: ::prost::alloc::string::String,
+    pub node: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NodeConfigResp {
-    #[prost(string, tag = "1")]
-    pub ip: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub identifier: ::prost::alloc::string::String,
-}
+pub struct NodeConfigResp {}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeAgentStreamMsg {
@@ -89,16 +88,14 @@ pub mod node_agent_stream_msg {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeRegister {
-    #[prost(string, tag = "1")]
-    pub identifier: ::prost::alloc::string::String,
-    #[prost(uint64, tag = "2")]
-    pub revision: u64,
+    #[prost(int64, tag = "2")]
+    pub revision: i64,
     /// k8s::Node json
     #[prost(string, tag = "3")]
     pub node: ::prost::alloc::string::String,
     /// Vec<k8s::Pod>
-    #[prost(string, tag = "4")]
-    pub pods: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "4")]
+    pub pods: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

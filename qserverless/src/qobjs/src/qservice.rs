@@ -34,7 +34,7 @@ pub struct QServer {
     pub rx: Mutex<Option<Streaming<NmMsg::NodeAgentReq>>>,
     pub tx: mpsc::Sender<NmMsg::NodeAgentRespMsg>,
 }
-
+/*
 impl QServer {
     pub async fn Process(&self) -> Result<()> {
         let mut rx = self.rx.lock().unwrap().take().unwrap();
@@ -87,86 +87,4 @@ impl QServer {
         return Ok(())
     }
 }
-
-pub struct QClient {
-    pub closeNotify: Arc<Notify>,
-    pub stop: AtomicBool,
-
-    pub rx: Mutex<Option<Streaming<NmMsg::NodeAgentRespMsg>>>,
-    pub tx: mpsc::Sender<NmMsg::NodeAgentReq>,
-    pub pendingReqs: Mutex<BTreeMap<u64, oneshot::Sender<NmMsg::NodeAgentResp>>>,
-    pub nextReqId: AtomicU64,
-}
-
-impl QClient {
-    pub async fn Process(&self) -> Result<()> {
-        let mut rx = self.rx.lock().unwrap().take().unwrap();
-        loop {
-            tokio::select! {
-                _ = self.closeNotify.notified() => {
-                    self.stop.store(false, Ordering::SeqCst);
-                    break;
-                }
-                msg = rx.message() => {
-                    match msg {
-                        Err(e) => return Err(Error::CommonError(format!("QClient::Process rx message fail {:?}", e))),
-                        Ok(msg) => {
-                            match msg {
-                                None => break,
-                                Some(msg) => {
-                                    match msg.message_body.unwrap() {
-                                        NmMsg::node_agent_resp_msg::MessageBody::NodeAgentResp(resp) => {
-                                            let reqId = resp.request_id;
-                                            let chann = self.pendingReqs.lock().unwrap().remove(&reqId);
-                                            match chann {
-                                                None => error!("QClient::Process get none exist response {:?}", resp),
-                                                Some(chann) => {
-                                                    match chann.send(resp) {
-                                                        Ok(()) => (),
-                                                        Err(e) => {
-                                                            error!("QClient::Process send messaage fail response {:?}", e);
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        NmMsg::node_agent_resp_msg::MessageBody::NodeAgentStreamMsg(_msg) => {
-
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return Ok(())
-    }
-
-    pub fn ReqId(&self) -> u64 {
-        return self.nextReqId.fetch_add(1, Ordering::Release) + 1;
-    }
-
-    pub async fn Call(&mut self, req: NmMsg::NodeAgentReq) -> Result<NmMsg::NodeAgentResp> {
-        let reqId = self.ReqId();
-        let mut req = req;
-        req.request_id = reqId;
-        let (tx, rx) = oneshot::channel::<NmMsg::NodeAgentResp>();
-
-        self.pendingReqs.lock().unwrap().insert(reqId, tx);
-        match self.tx.send(req).await {
-            Ok(()) => (),
-            Err(e) => {
-                return Err(Error::CommonError(format!("QClient::Call send fail with error {:?}", e)));
-            }
-        }
-        
-        let resp = match rx.await {
-            Ok(r) => r,
-            Err(e) => return Err(Error::CommonError(format!("QClient::Call recv fail with error {:?}", e))),
-        };
-        return Ok(resp);
-    }
-}
+*/

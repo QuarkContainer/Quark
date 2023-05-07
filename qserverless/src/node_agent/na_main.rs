@@ -123,14 +123,12 @@ pub async fn ClientTest() -> QResult<()> {
 
     let config = qobjs::config::NodeConfiguration::Default()?;
 
-    let (mut rx, na) = crate::node::Run(config).await?;
+    let na = crate::node::Run(config).await?;
 
     //let rx = &mut watchStream.stream;
 
     error!("main 1");
 
-    let _msg = rx.recv().await;
-    
     let nc = NmMsg::NodeConfiguration {
         cluster_domain: "".to_string(),
         node: serde_json::to_string(&k8s::Node {
@@ -170,13 +168,7 @@ pub async fn ClientTest() -> QResult<()> {
     let client = crate::cri::client::CriClient::Init().await?;
     error!("pods is {:#?}", client.ListPodSandbox(None).await?);
 
-    error!("main 2");
-    loop {
-        let msg = rx.recv().await;
-        error!("final msg is {:#?}", msg);
-    }
-
-    //return Ok(())
+    return Ok(())
 }
 
 pub async fn NMClientTest() -> QResult<()> {

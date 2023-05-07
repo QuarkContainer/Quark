@@ -29,7 +29,7 @@ use crate::node_agent::*;
 
 #[derive(Debug)]
 pub struct NodeMgrSvcInner {
-    pub clients: Mutex<BTreeMap<String, NodeAgent>>,
+    pub clients: Mutex<BTreeMap<String, QClient>>,
     pub agentsChann: mpsc::Sender<SrvMsg>,
     pub processChannel: Option<mpsc::Receiver<SrvMsg>>,
 }
@@ -58,7 +58,7 @@ impl NodeMgrSvc {
         return Self(Arc::new(inner));
     }
 
-    pub fn NodeAgent(&self, nodeId: &str) -> Option<NodeAgent> {
+    pub fn NodeAgent(&self, nodeId: &str) -> Option<QClient> {
         return self.clients.lock().unwrap().get(nodeId).cloned();
     }
  /*
@@ -142,8 +142,14 @@ impl nm_svc::node_agent_service_server::NodeAgentService for NodeMgrSvc {
     type StreamProcessStream = ReceiverStream<SResult<nm_svc::NodeAgentReq, Status>>;
     async fn stream_process(
         &self,
-        _request: tonic::Request<tonic::Streaming<nm_svc::NodeAgentRespMsg>>,
+        request: tonic::Request<tonic::Streaming<nm_svc::NodeAgentRespMsg>>,
     ) -> SResult<tonic::Response<Self::StreamProcessStream>, tonic::Status> {
-        unimplemented!()
+        let stream = request.into_inner();
+        let (tx, rx) = mpsc::channel(30);
+        let client = QClient::New(self, stream, tx);
+        tokio::spawn(async move {
+            client.Process().await;
+        });
+        return Ok(Response::new(ReceiverStream::new(rx)));
     }
 }
