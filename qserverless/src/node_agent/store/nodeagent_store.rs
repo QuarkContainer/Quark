@@ -23,10 +23,10 @@ use tokio::sync::mpsc::error::TrySendError;
 
 use k8s_openapi::api::core::v1 as k8s;
 
-use qobjs::runtime_types::{QuarkPodJson, QuarkPod};
+use qobjs::runtime_types::QuarkPod;
 use qobjs::common::*;
 
-use super::rocksdb::{RocksObjStore, RocksStore};
+//use super::rocksdb::{RocksObjStore, RocksStore};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EventType {
@@ -159,12 +159,15 @@ impl RingBuf {
 
 #[derive(Debug)]
 pub struct NodeAgentStoreInner {
-    pub podStore: RocksObjStore<QuarkPodJson>,
-
+    //pub podStore: RocksObjStore<QuarkPodJson>,
+    
     pub eventQueue: RingBuf,
 
     pub podCache: BTreeMap<String, k8s::Pod>,
-    pub nodeCache: BTreeMap<String, k8s::Node>,
+
+    pub nodeCache: Option<k8s::Node>,
+    // last node update revision
+    pub nodeRevision: i64,
 
     pub revision: i64,
     pub listRevision: i64,
@@ -175,28 +178,56 @@ pub struct NodeAgentStoreInner {
 }
 
 impl NodeAgentStoreInner {
-    pub fn New() -> Result<(Self, Vec<QuarkPodJson>)> {
-        let store = RocksStore::New()?;
-        let podStore: RocksObjStore<QuarkPodJson> = store.NewObjStore("pods");
+    pub fn New() -> Result<Self> {
+        //let store = RocksStore::New()?;
+        //let podStore: RocksObjStore<QuarkPodJson> = store.NewObjStore("pods");
 
         // todo: why does this affect cadvisor?
-        let pods = podStore.Load()?;
-        let mut podCache = BTreeMap::new();
-        for p in &pods {
+        //let pods = podStore.Load()?;
+        let podCache = BTreeMap::new();
+        /*for p in &pods {
             let key = p.id.clone();
             podCache.insert(key, p.pod.clone());
-        }
+        }*/
 
-        return Ok((Self {
-            podStore: podStore,
+        return Ok(Self {
+            //podStore: podStore,
             eventQueue: RingBuf::New(2000),
             podCache: podCache,
-            nodeCache: BTreeMap::new(),
-            revision: store.initRev,
-            listRevision: store.initRev,
+            nodeRevision: 0, 
+            nodeCache: None,
+            revision: 0,
+            listRevision: 0,
             lastWatcherId: 0,
             watchers: BTreeMap::new(),
-        }, pods))
+        })
+    }
+
+    pub fn GetNode(&self) -> (k8s::Node, i64) {
+        assert!(self.nodeCache.is_some());
+        return (self.nodeCache.as_ref().unwrap().clone(), self.nodeRevision);
+    }
+
+    pub fn CreateNode(&mut self, node: &k8s::Node) -> Result<()> {
+        self.revision += 1;
+        self.nodeRevision = self.revision;
+        assert!(self.nodeCache.is_none());
+        self.nodeCache = Some(node.clone());
+        return Ok(())
+    }
+
+    pub fn UpdateNode(&mut self, node: &k8s::Node) -> Result<()> {
+        assert!(self.nodeCache.is_some());
+        self.revision += 1;
+        let event = WatchEvent {
+            type_: EventType::Modified,
+            revision: self.revision,
+            obj: NodeAgentEventObj::Node(node.clone())
+        };
+
+        self.nodeCache = Some(node.clone());
+        self.ProcessEvent(event)?;
+        return Ok(())
     }
 
     pub fn CreatePod(&mut self, obj: &QuarkPod) -> Result<()> {
@@ -211,7 +242,7 @@ impl NodeAgentStoreInner {
             obj: NodeAgentEventObj::Pod(jsonObj.pod.clone())
         };
         self.podCache.insert(key.to_string(), jsonObj.pod.clone());
-        self.podStore.Save(self.revision, &key, &jsonObj)?;
+        //self.podStore.Save(self.revision, &key, &jsonObj)?;
         self.ProcessEvent(event)?;
         return Ok(())
     }
@@ -223,7 +254,7 @@ impl NodeAgentStoreInner {
         let jsonObj = obj.ToQuarkPodJson();
         assert!(self.podCache.contains_key(&key));
         self.podCache.insert(key.clone(), jsonObj.pod.clone());
-        self.podStore.Save(self.revision, &key, &jsonObj)?;
+        //self.podStore.Save(self.revision, &key, &jsonObj)?;
         if !obj.PodInTerminating() {
             let event = WatchEvent {
                 type_: EventType::Modified,
@@ -247,7 +278,7 @@ impl NodeAgentStoreInner {
             obj: NodeAgentEventObj::Pod(pod)
         };
 
-        self.podStore.Remove(self.revision, key)?;
+        //self.podStore.Remove(self.revision, key)?;
         self.ProcessEvent(event)?;
         return Ok(())
     }
@@ -306,13 +337,11 @@ impl NodeAgentStoreInner {
             });
         }
 
-        for (_, node) in &self.nodeCache {
-            buf.push(WatchEvent {
-                type_: EventType::Added,
-                revision: revision,
-                obj: NodeAgentEventObj::Node(node.clone())
-            });
-        }
+        buf.push(WatchEvent {
+            type_: EventType::Added,
+            revision: revision,
+            obj: NodeAgentEventObj::Node(self.nodeCache.as_ref().unwrap().clone())
+        });
 
         return Ok(buf);
     }
@@ -381,10 +410,18 @@ impl Deref for NodeAgentStore {
 }
 
 impl NodeAgentStore {
-    pub fn New() -> Result<(Self, Vec<QuarkPodJson>)> {
-        let (inner, pods) = NodeAgentStoreInner::New()?;
+    pub fn New() -> Result<Self> {
+        let inner = NodeAgentStoreInner::New()?;
         let store = Self(Arc::new(Mutex::new(inner)));
-        return Ok((store, pods))
+        return Ok(store)
+    }
+
+    pub fn CreateNode(&self, node: &k8s::Node) -> Result<()> {
+        return self.lock().unwrap().CreateNode(node);
+    }
+
+    pub fn UpdateNode(&self, node: &k8s::Node) -> Result<()> {
+        return self.lock().unwrap().UpdateNode(node);
     }
 
     pub fn CreatePod(&self, obj: &QuarkPod) -> Result<()> {
