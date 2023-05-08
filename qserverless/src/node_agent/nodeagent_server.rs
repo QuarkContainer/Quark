@@ -79,12 +79,13 @@ impl NodeAgentServerMgr {
             let server = match NodeAgentServer::New(addr, nodeAgent).await {
                 Ok(s) => s,
                 Err(e) => {
-                    error!("ProcessNodeAgentServer::Connect fail with error {:?}", e);
+                    error!("ProcessNodeAgentServer::Connect {} fail with error {:?}", addr, e);
                     time::sleep(time::Duration::from_secs(5)).await; // retry connect to the nodemgr
                     continue;
                 }
             };
 
+            info!("ProcessNodeAgentServer::Connect {} successfully", addr);
             tokio::select! {
                 ret = server.Process(nodeAgent) => {
                     match ret {
@@ -133,43 +134,40 @@ impl NodeAgentServer {
     }
 
     pub async fn Process(&self, nodeAgent: &NodeAgent) -> Result<()> {
-        let node = NODEAGENT_STORE.get().unwrap().GetNode();
-        let list = NODEAGENT_STORE.get().unwrap().List();
-        let mut pods = Vec::new();
-        for pod in list.pods {
-            pods.push(serde_json::to_string(&pod)?);
-        }
-
-        let nodeRegister = NmMsg::NodeRegister {
-            revision: list.revision,
-            node: serde_json::to_string(&node)?,
-            pods: pods,
-        };
-
-        let msg = NmMsg::NodeAgentStreamMsg {
-            event_body: Some(NmMsg::node_agent_stream_msg::EventBody::NodeRegister(nodeRegister))
-        };
-
-        self.SendStreamMessage(msg).await?;
-
         let mut rx = self.rx.lock().unwrap().take().unwrap();
+
+        let revision = self.NodeInitialization(nodeAgent, &mut rx).await?;
+        let mut watchStream = NODEAGENT_STORE.get().unwrap().Watch(revision)?;
+
         loop {
             tokio::select! {
                 _ = self.closeNotify.notified() => {
                     self.stop.store(false, Ordering::SeqCst);
                     break;
                 }
+                event = watchStream.stream.recv() => {
+                    let event = event.unwrap();
+                    
+                    let eventBody = event.ToGrpcEvent()?;
+                    let msg = NmMsg::NodeAgentRespMsg {
+                        message_body: Some(NmMsg::node_agent_resp_msg::MessageBody::NodeAgentStreamMsg(NmMsg::NodeAgentStreamMsg{
+                            event_body: Some(eventBody)
+                        })),
+                    };
+            
+                    self.tx.send(msg).await.unwrap();
+                }
                 msg = rx.message() => {
                     let msg = match msg {
                         Err(e) => return Err(Error::CommonError(format!("QServer::Process get error {:?}", e))),
                         Ok(m) => m,
                     };
-
+    
                     let req = match msg {
                         None => break,
                         Some(msg) => msg,
                     };
-
+    
                     let reqId = req.request_id;
                     let resp = match self.ReqHandler(req, nodeAgent).await {
                         Err(e) => {
@@ -195,7 +193,65 @@ impl NodeAgentServer {
                 }
             }
         }
+
         return Ok(())
+    }
+
+    pub async fn NodeInitialization(&self, nodeAgent: &NodeAgent, rx: &mut Streaming<NodeAgentReq>) -> Result<i64> {
+        let node = NODEAGENT_STORE.get().unwrap().GetNode();
+        let list = NODEAGENT_STORE.get().unwrap().List();
+        let mut pods = Vec::new();
+        for pod in list.pods {
+            pods.push(serde_json::to_string(&pod)?);
+        }
+
+        let nodeRegister = NmMsg::NodeRegister {
+            revision: list.revision,
+            node: serde_json::to_string(&node)?,
+            pods: pods,
+        };
+
+        let msg = NmMsg::NodeAgentStreamMsg {
+            event_body: Some(NmMsg::node_agent_stream_msg::EventBody::NodeRegister(nodeRegister))
+        };
+
+        self.SendStreamMessage(msg).await?;
+
+        let msg = rx.message().await;
+
+        let msg = match msg {
+            Err(e) => return Err(Error::CommonError(format!("QServer::Process get error {:?}", e))),
+            Ok(m) => m,
+        };
+
+        let req = match msg {
+            None => return Err(Error::CommonError(format!("NodeInitialization fail with server close"))),
+            Some(msg) => msg,
+        };
+
+        let reqId = req.request_id;
+        let resp = match self.ReqHandler(req, nodeAgent).await {
+            Err(e) => {
+                NmMsg::NodeAgentResp {
+                    request_id: reqId,
+                    error: format!("{:?}", e),
+                    message_body: None,
+                }
+            }
+            Ok(body) => {
+                NmMsg::NodeAgentResp {
+                    request_id: reqId,
+                    error: "".to_owned(),
+                    message_body: Some(body),
+                }
+            }
+        };
+        let msg = NmMsg::NodeAgentRespMsg {
+            message_body: Some(NmMsg::node_agent_resp_msg::MessageBody::NodeAgentResp(resp)),
+        };
+
+        self.tx.send(msg).await.unwrap();
+        return Ok(list.revision)
     }
 
     pub async fn ReqHandler(&self, req: NmMsg::NodeAgentReq, nodeAgent: &NodeAgent) -> Result<NmMsg::node_agent_resp::MessageBody> {

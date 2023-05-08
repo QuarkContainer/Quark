@@ -36,7 +36,7 @@ use crate::nm_svc::*;
 #[tokio::main]
 async fn main() -> QResult<()> {
     use log::LevelFilter;
-    simple_logging::log_to_file("/var/log/quark/service_diretory.log", LevelFilter::Info).unwrap();
+    simple_logging::log_to_file("/var/log/quark/nm.log", LevelFilter::Info).unwrap();
     
     /*
     //cadvisor::client::Client::Test().await?;
@@ -47,6 +47,7 @@ async fn main() -> QResult<()> {
 */
     let inner = NodeMgrSvc::New();
     let svc = node_mgr_pb::node_agent_service_server::NodeAgentServiceServer::new(inner);
+    info!("nodemgr start ...");
     Server::builder().add_service(svc).serve("127.0.0.1:8888".parse().unwrap()).await?;
 
     Ok(())

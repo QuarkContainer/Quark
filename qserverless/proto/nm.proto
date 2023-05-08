@@ -75,7 +75,7 @@ message NodeRegister {
 }
 
 message NodeUpdate {
-  uint64 revision = 2;
+  int64 revision = 2;
   string node = 3; // k8s::Node json
 }
 
@@ -87,7 +87,7 @@ enum EventType {
 
 message PodEvent {
   EventType eventType = 1;
-  uint64 revision = 2;
+  int64 revision = 2;
   string pod = 3; // k8s::Node json
 }
 

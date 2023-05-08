@@ -100,8 +100,8 @@ pub struct NodeRegister {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeUpdate {
-    #[prost(uint64, tag = "2")]
-    pub revision: u64,
+    #[prost(int64, tag = "2")]
+    pub revision: i64,
     /// k8s::Node json
     #[prost(string, tag = "3")]
     pub node: ::prost::alloc::string::String,
@@ -111,8 +111,8 @@ pub struct NodeUpdate {
 pub struct PodEvent {
     #[prost(enumeration = "EventType", tag = "1")]
     pub event_type: i32,
-    #[prost(uint64, tag = "2")]
-    pub revision: u64,
+    #[prost(int64, tag = "2")]
+    pub revision: i64,
     /// k8s::Node json
     #[prost(string, tag = "3")]
     pub pod: ::prost::alloc::string::String,

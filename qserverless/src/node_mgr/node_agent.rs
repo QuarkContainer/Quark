@@ -14,6 +14,7 @@
 
 use std::{result::Result as SResult, sync::atomic::AtomicI64};
 use std::sync::Arc;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use qobjs::pb_gen::node_mgr_pb::node_agent_stream_msg::EventBody;
 use tonic::Status;
 use qobjs::pb_gen::node_mgr_pb::{self as nm_svc, NodeRegister};
@@ -174,10 +175,17 @@ impl QClient {
         let event: NmMsg::node_agent_stream_msg::EventBody = msg.event_body.unwrap();
         match event {
             EventBody::NodeRegister(msg) => {
-                return self.OnNodeRegister(msg).await;
+                let clone = self.clone();
+                tokio::spawn(async move {
+                    clone.OnNodeRegister(msg).await.unwrap();
+                });
+        
+                return Ok(())
             }
             _ => {
-                unimplemented!()
+                //error!("ProcessStreamMsg mmsg {:?}", &event);
+                return Ok(());
+                //unimplemented!()
             }
         }
     }
@@ -190,13 +198,26 @@ impl QClient {
         *self.nodeName.lock().unwrap() = name.clone();
         *self.uid.lock().unwrap() = uid.clone();
 
-        self.nodeMgrSvc.clients.lock().unwrap().insert(name, self.clone());
+        self.nodeMgrSvc.clients.lock().unwrap().insert(name.clone(), self.clone());
 
+        let node = k8s::Node {
+            metadata: ObjectMeta {
+                annotations: Some(BTreeMap::new()),
+                ..Default::default()
+            },
+            spec: Some(k8s::NodeSpec {
+                pod_cidr: Some("123.1.2.0/24".to_string()),
+                pod_cidrs: Some(vec!["123.1.2.0/24".to_string()]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+            
         let req = NmMsg::NodeConfigReq {
             cluster_domain: "".to_string(),
-            node: serde_json::to_string(&k8s::Node::default())?,
+            node: serde_json::to_string(&node)?,
         };
-
+        
         match self.Call(NmMsg::node_agent_req::MessageBody::NodeConfigReq(req)).await {
             Err(e) => {
                 // todo: handle the failure
