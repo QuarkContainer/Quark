@@ -198,7 +198,7 @@ impl DataObjList {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct DataObject(Arc<DataObjectInner>);
+pub struct DataObject(pub Arc<DataObjectInner>);
 
 impl PartialEq for DataObject {
     fn eq(&self, other: &Self) -> bool {

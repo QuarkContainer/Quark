@@ -1,5 +1,6 @@
 All: na nm
-#	cargo build --bin service_directory
+sd:
+	cargo build --bin service_directory
 na:
 	cargo build --bin node_agent
 nm:

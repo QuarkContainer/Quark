@@ -29,6 +29,7 @@ pub mod nm_svc;
 pub mod na_client;
 pub mod nodemgr;
 pub mod types;
+pub mod nm_store;
 
 use crate::nm_svc::*;
 
