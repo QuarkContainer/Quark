@@ -25,7 +25,7 @@ use tokio::sync::Notify;
 
 use crate::etcd_client::EtcdClient;
 use qobjs::common::*;
-use qobjs::selection_predicate::SelectionPredicate;
+use qobjs::selection_predicate::*;
 use qobjs::service_directory::*;
 use qobjs::types::*;
 
@@ -43,6 +43,8 @@ impl WatchReader {
         self.closeNotify.notify_one();
     }
 }
+
+
 
 pub struct Watcher {
     pub client: EtcdClient,

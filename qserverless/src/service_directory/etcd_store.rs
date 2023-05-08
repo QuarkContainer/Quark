@@ -20,6 +20,7 @@ use etcd_client::GetOptions;
 use etcd_client::{
     Client, CompactionOptions, Compare, CompareOp, DeleteOptions, Txn, TxnOp, TxnOpResponse,
 };
+use tokio::sync::Notify;
 
 use crate::etcd_client::EtcdClient;
 use crate::watch::{WatchReader, Watcher};
@@ -29,7 +30,7 @@ use qobjs::service_directory::*;
 use qobjs::types::*;
 use qobjs::cacher::*;
 
-pub const PATH_PREFIX: &str = "/registry";
+pub const PATH_PREFIX: &str = "/registry";use std::fmt::Debug;
 
 #[derive(Debug)]
 pub struct EtcdStoreInner {
@@ -158,47 +159,8 @@ impl CacheStore for EtcdStore {
             };
         }
     }
-}
 
-impl EtcdStore {
-    pub async fn New(addr: &str, pagingEnable: bool) -> Result<Self> {
-        let client = Client::connect([addr], None).await?;
-
-        let inner = EtcdStoreInner {
-            client: EtcdClient::New(client),
-            pathPrefix: PATH_PREFIX.to_string(),
-            pagingEnable,
-        };
-
-        return Ok(Self(Arc::new(inner)));
-    }
-
-    pub fn PrepareKey(&self, key: &str) -> Result<String> {
-        let mut key = key;
-        if key == "." || key == "/" {
-            return Err(Error::CommonError(format!("invalid key: {}", key)));
-        }
-
-        if key.starts_with("/") {
-            key = key.get(1..).unwrap();
-        }
-
-        return Ok(format!("{}/{}", self.pathPrefix, key));
-    }
-
-    pub fn ValidateMinimumResourceVersion(minRevision: i64, actualRevision: i64) -> Result<()> {
-        if minRevision == 0 {
-            return Ok(());
-        }
-
-        if minRevision > actualRevision {
-            return Err(Error::NewMinRevsionErr(minRevision, actualRevision));
-        }
-
-        return Ok(());
-    }
-
-    pub async fn Get(&self, key: &str, minRevision: i64) -> Result<Option<DataObject>> {
+    async fn Get(&self, key: &str, minRevision: i64) -> Result<Option<DataObject>> {
         let preparedKey = self.PrepareKey(key)?;
         let getResp = self.client.lock().await.get(preparedKey, None).await?;
         let kvs = getResp.kvs();
@@ -219,51 +181,7 @@ impl EtcdStore {
         return Ok(Some(obj));
     }
 
-
-    pub async fn Clear(&mut self, prefix: &str) -> Result<i64> {
-        let preparedKey = self.PrepareKey(prefix)?;
-
-        let keyVec: &str = &preparedKey;
-
-        let mut options = DeleteOptions::new();
-        options = options.with_prefix();
-        let resp = self
-            .client
-            .lock()
-            .await
-            .delete(keyVec, Some(options))
-            .await?;
-
-        let rv = resp.header().unwrap().revision();
-        return Ok(rv);
-    }
-
-    pub fn GetPrefixRangeEnd(prefix: &str) -> String {
-        let arr: Vec<u8> = prefix.as_bytes().to_vec();
-        let arr = Self::GetPrefix(&arr);
-        return String::from_utf8(arr).unwrap();
-    }
-
-    pub fn GetPrefix(prefix: &[u8]) -> Vec<u8> {
-        let mut end = Vec::with_capacity(prefix.len());
-        for c in prefix {
-            end.push(*c);
-        }
-
-        for i in (0..prefix.len()).rev() {
-            if end[i] < 0xff {
-                end[i] += 1;
-                let _ = end.split_off(i + 1);
-                return end;
-            }
-        }
-
-        // next prefix does not exist (e.g., 0xffff);
-        // default to WithFromKey policy
-        return vec![0];
-    }
-
-    pub async fn List(&self, prefix: &str, opts: &ListOption) -> Result<DataObjList> {
+    async fn List(&self, prefix: &str, opts: &ListOption) -> Result<DataObjList> {
         let mut preparedKey = self.PrepareKey(prefix)?;
 
         let revision = opts.revision;
@@ -431,6 +349,159 @@ impl EtcdStore {
         }
 
         return Ok(DataObjList::New(v, returnedRV, None, -1));
+    }
+
+    async fn Process(&self, cacher: Cacher, rev: i64, prefix: String, ready: Arc<Notify>, notify: Arc<Notify>) -> Result<()> {
+        let list = self
+                .List(
+                    &prefix,
+                    &ListOption {
+                        revision: rev,
+                        ..Default::default()
+                    },
+                )
+                .await?;
+            {
+                let mut inner = cacher.write().await;
+                inner.listRevision = list.revision;
+                inner.revision = list.revision;
+
+                for o in list.objs {
+                    let key = o.Key();
+                    inner.cacheStore.insert(key, o);
+                }
+            }
+
+            ready.notify_one();
+            loop {
+                let (mut w, r) =
+                    self.Watch(&prefix, list.revision, SelectionPredicate::default())?;
+
+                loop {
+                    tokio::select! {
+                        processResult = w.Processing() => {
+                            processResult?;
+                        }
+                        event = r.GetNextEvent() => {
+                            match event {
+                                None => break,
+                                Some(event) => {
+                                    cacher.ProcessEvent(&event).await?;
+                                }
+                            }
+                        }
+                        _ = notify.notified() => {
+                            return Ok(())
+                        }
+                    }
+                }
+
+                let list = self
+                    .List(&prefix, &ListOption::default())
+                    .await?;
+
+                {
+                    let mut inner = cacher.write().await;
+                    // close all watches
+                    inner.watchers.clear();
+                    // clear all cached data
+                    inner.cacheStore.clear();
+                    inner.cache.Reset();
+
+                    inner.listRevision = list.revision;
+                    inner.revision = list.revision;
+
+                    for o in list.objs {
+                        let key = o.Key();
+                        inner.cacheStore.insert(key, o);
+                    }
+
+                    inner.revNotify.notify_waiters();
+                }
+            }
+    }
+}
+
+impl EtcdStore {
+    pub async fn New(addr: &str, pagingEnable: bool) -> Result<Self> {
+        let client = Client::connect([addr], None).await?;
+
+        let inner = EtcdStoreInner {
+            client: EtcdClient::New(client),
+            pathPrefix: PATH_PREFIX.to_string(),
+            pagingEnable,
+        };
+
+        return Ok(Self(Arc::new(inner)));
+    }
+
+    pub fn PrepareKey(&self, key: &str) -> Result<String> {
+        let mut key = key;
+        if key == "." || key == "/" {
+            return Err(Error::CommonError(format!("invalid key: {}", key)));
+        }
+
+        if key.starts_with("/") {
+            key = key.get(1..).unwrap();
+        }
+
+        return Ok(format!("{}/{}", self.pathPrefix, key));
+    }
+
+    pub fn ValidateMinimumResourceVersion(minRevision: i64, actualRevision: i64) -> Result<()> {
+        if minRevision == 0 {
+            return Ok(());
+        }
+
+        if minRevision > actualRevision {
+            return Err(Error::NewMinRevsionErr(minRevision, actualRevision));
+        }
+
+        return Ok(());
+    }
+
+
+    pub async fn Clear(&mut self, prefix: &str) -> Result<i64> {
+        let preparedKey = self.PrepareKey(prefix)?;
+
+        let keyVec: &str = &preparedKey;
+
+        let mut options = DeleteOptions::new();
+        options = options.with_prefix();
+        let resp = self
+            .client
+            .lock()
+            .await
+            .delete(keyVec, Some(options))
+            .await?;
+
+        let rv = resp.header().unwrap().revision();
+        return Ok(rv);
+    }
+
+    pub fn GetPrefixRangeEnd(prefix: &str) -> String {
+        let arr: Vec<u8> = prefix.as_bytes().to_vec();
+        let arr = Self::GetPrefix(&arr);
+        return String::from_utf8(arr).unwrap();
+    }
+
+    pub fn GetPrefix(prefix: &[u8]) -> Vec<u8> {
+        let mut end = Vec::with_capacity(prefix.len());
+        for c in prefix {
+            end.push(*c);
+        }
+
+        for i in (0..prefix.len()).rev() {
+            if end[i] < 0xff {
+                end[i] += 1;
+                let _ = end.split_off(i + 1);
+                return end;
+            }
+        }
+
+        // next prefix does not exist (e.g., 0xffff);
+        // default to WithFromKey policy
+        return vec![0];
     }
 
     pub fn Watch(

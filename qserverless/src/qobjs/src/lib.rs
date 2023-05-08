@@ -38,6 +38,9 @@ pub mod k8s_util;
 pub mod watch;
 pub mod cacher;
 
+#[macro_use]
+extern crate scopeguard;
+
 // workaround to address the pb generated structure serde_json issue
 pub mod pb_gen;
 
