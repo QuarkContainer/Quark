@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{result::Result as SResult, sync::atomic::AtomicI64};
+use std::result::Result as SResult;
 use std::sync::Arc;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use qobjs::pb_gen::node_mgr_pb::node_agent_stream_msg::EventBody;
+use qobjs::pb_gen::nm::node_agent_stream_msg::EventBody;
 use tonic::Status;
-use qobjs::pb_gen::node_mgr_pb::{self as nm_svc, NodeRegister};
+use qobjs::pb_gen::nm::NodeRegister;
 use tokio::sync::mpsc;
 use core::ops::Deref;
 use k8s_openapi::api::core::v1 as k8s;
@@ -32,46 +32,13 @@ use tokio::sync::Notify;
 use tonic::Streaming;
 use tokio::sync::oneshot;
 
-use qobjs::pb_gen::node_mgr_pb as NmMsg;
+use qobjs::pb_gen::nm as NmMsg;
 use qobjs::common::*;
 
 use crate::nm_svc::NodeMgrSvc;
 
-
 #[derive(Debug)]
-pub struct NodeAgentInner {
-    pub sender: mpsc::Sender<SResult<nm_svc::NodeAgentMessage, Status>>,
-    pub revision: AtomicI64,
-}
-
-#[derive(Clone, Debug)]
-pub struct NodeAgent(Arc<NodeAgentInner>);
-
-impl Deref for NodeAgent {
-    type Target = Arc<NodeAgentInner>;
-
-    fn deref(&self) -> &Arc<NodeAgentInner> {
-        &self.0
-    }
-}
-
-impl NodeAgent {
-    //pub fn New()
-
-    pub async fn Send(&self, msg: nm_svc::NodeAgentMessage) -> Result<()>{
-        match self.sender.send(Ok(msg)).await {
-            Ok(()) => return Ok(()),
-            Err(e) => {
-                return Err(Error::CommonError(format!("NodeAgent Send error {:?}", e)));
-            }
-        }
-    }
-
-
-}
-
-#[derive(Debug)]
-pub struct QClientInner {
+pub struct NodeAgentClientInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
 
@@ -86,19 +53,19 @@ pub struct QClientInner {
 }
 
 #[derive(Debug, Clone)]
-pub struct QClient(Arc<QClientInner>);
+pub struct NodeAgentClient(Arc<NodeAgentClientInner>);
 
-impl Deref for QClient {
-    type Target = Arc<QClientInner>;
+impl Deref for NodeAgentClient {
+    type Target = Arc<NodeAgentClientInner>;
 
-    fn deref(&self) -> &Arc<QClientInner> {
+    fn deref(&self) -> &Arc<NodeAgentClientInner> {
         &self.0
     }
 }
 
-impl QClient {
+impl NodeAgentClient {
     pub fn New(svc: &NodeMgrSvc, rx: Streaming<NmMsg::NodeAgentRespMsg>, tx: mpsc::Sender<SResult<NmMsg::NodeAgentReq, Status>>) -> Self {
-        let inner = QClientInner {
+        let inner = NodeAgentClientInner {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
             nodeMgrSvc: svc.clone(),

@@ -18,14 +18,14 @@ use std::sync::atomic::Ordering;
 use std::sync::Mutex;
 use core::ops::Deref;
 
-use qobjs::pb_gen::node_mgr_pb::NodeAgentReq;
+use qobjs::pb_gen::nm::NodeAgentReq;
 use qobjs::runtime_types::NodeFromString;
 use tokio::sync::Notify;
 use tonic::Streaming;
 use tokio::sync::mpsc;
 use tokio::time;
 
-use qobjs::pb_gen::node_mgr_pb as NmMsg;
+use qobjs::pb_gen::nm as NmMsg;
 use qobjs::common::*;
 
 use crate::NODEAGENT_STORE;

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use k8s_openapi::api::core::v1 as k8s;
-use qobjs::{pb_gen::node_mgr_pb::{self as NmMsg, node_agent_message::MessageBody}, runtime_types::{PodToString, QuarkPod, PodState, NodeToString}};
+use qobjs::{pb_gen::nm::{self as NmMsg, node_agent_message::MessageBody}, runtime_types::{PodToString, QuarkPod, PodState, NodeToString}};
 use qobjs::common::*;
 
 use crate::node::QuarkNode;

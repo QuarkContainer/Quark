@@ -40,7 +40,7 @@ pub mod nodeagent_server;
 
 use qobjs::common::Result as QResult;
 //use qobjs::config::NodeConfiguration;
-//use qobjs::pb_gen::node_mgr_pb::NodeAgentMessage;
+//use qobjs::pb_gen::nm::NodeAgentMessage;
 use runtime::image_mgr::ImageMgr;
 
 use qobjs::pb_gen::v1alpha2;
@@ -73,10 +73,10 @@ async fn main() -> QResult<()> {
 }
 
 pub async fn ClientTest() -> QResult<()> {
-    //use qobjs::pb_gen::node_mgr_pb::{self as NmMsg};
+    //use qobjs::pb_gen::nm::{self as NmMsg};
     use log::LevelFilter;
     //use nm_svc::*;
-    //use qobjs::pb_gen::node_mgr_pb::*;
+    //use qobjs::pb_gen::nm::*;
     //use k8s_openapi::api::core::v1 as k8s;
     //use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
     //use serde::{Deserialize, Serialize};
@@ -187,13 +187,13 @@ pub async fn ClientTest() -> QResult<()> {
 }
 
 pub async fn NMClientTest() -> QResult<()> {
-    use qobjs::pb_gen::node_mgr_pb as nm_svc;
+    use qobjs::pb_gen::nm as nm_svc;
     //use tonic::{Response, Status};
     use tokio::sync::mpsc;
     use tonic::Streaming;
     //use tonic::Request;
     //use futures_util::stream;
-    use qobjs::pb_gen::node_mgr_pb::NodeAgentMessage;
+    use qobjs::pb_gen::nm::NodeAgentMessage;
 
     let msg = nm_svc::NodeFullSync{};
     let mut client = nm_svc::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
