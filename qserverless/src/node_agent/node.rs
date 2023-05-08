@@ -28,7 +28,6 @@ use chrono::{prelude::*};
 use k8s_openapi::api::core::v1 as k8s;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, Time};
 use qobjs::k8s_util::K8SUtil;
-use crate::node_status::IsNodeStatusReady;
 
 //use qobjs::runtime_types::QuarkNode;
 use qobjs::runtime_types::*;
@@ -170,41 +169,8 @@ impl NodeAgent {
                     break;
                 }
                 _ = interval.tick() => {
-                    //let state = self.State();
-                    
-                    /*if state == NodeAgentState::Registering {
-                        info!("Start node registry node spec {:#?}", self.node.node.lock().unwrap());
-                        
-                        let rev = self.node.revision.load(Ordering::SeqCst);
-                        let nr = NmMsg::NodeRegistry {
-                            identifier: self.node.NodeName(),
-                            node_revision: rev,
-                            node: NodeToString(&*self.node.node.lock().unwrap())?,
-                        };
-
-                        let msg = NmMsg::NodeAgentMessage {
-                            message_body: Some(NmMsg::node_agent_message::MessageBody::NodeRegistry(nr)),
-                            ..Default::default()
-                        };
-
-                        self.Notify(NodeAgentMsg::NodeMgrMsg(msg));
-                        continue;
-                    }
-
-                    if self.State() != NodeAgentState::Registered {
-                        continue;
-                    }*/
-
                     SetNodeStatus(&self.node).await?;
-                    NODEAGENT_STORE.get().unwrap().UpdateNode(&*self.node.node.lock().unwrap())?;
-                    if IsNodeStatusReady(&self.node) {
-                        info!("Node is ready, tell nodemgr");
-                        let revision = self.IncrNodeRevision();
-                        self.node.node.lock().unwrap().metadata.resource_version = Some(format!("{}", revision));
-                        self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodeRunning));
-                        *self.state.lock().unwrap() = NodeAgentState::Ready;
-                        
-                    }
+                    NODEAGENT_STORE.get().unwrap().UpdateNode(&self.node)?;
                 }
                 msg = rx.recv() => {
                     if let Some(msg) = msg {
@@ -234,7 +200,7 @@ impl NodeAgent {
             }
             NodeAgentMsg::NodeUpdate => {
                 SetNodeStatus(&self.node).await?;
-                NODEAGENT_STORE.get().unwrap().UpdateNode(&*self.node.node.lock().unwrap())?;
+                //NODEAGENT_STORE.get().unwrap().UpdateNode(&*self.node.node.lock().unwrap())?;
             }
             _ => {
                 error!("NodeHandler Received unknown message {:?}", msg);
@@ -310,16 +276,9 @@ impl NodeAgent {
         *self.state.lock().unwrap() = NodeAgentState::Registered;
 
         SetNodeStatus(&self.node).await?;
-        NODEAGENT_STORE.get().unwrap().UpdateNode(&*self.node.node.lock().unwrap())?;
-        if IsNodeStatusReady(&self.node) {
-            info!("Node is ready, tell nodemgr");
-            let revision = self.IncrNodeRevision();
-            self.node.node.lock().unwrap().metadata.resource_version = Some(format!("{}", revision));
-            self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodeRunning));
-            *self.state.lock().unwrap() = NodeAgentState::Ready;
-            
-        }
-    
+        self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodeRunning));
+        NODEAGENT_STORE.get().unwrap().UpdateNode(&self.node)?;
+        
         return Ok(())
     }
 

@@ -22,36 +22,45 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::error::TrySendError;
 
 use k8s_openapi::api::core::v1 as k8s;
-
+use qobjs::pb_gen::node_mgr_pb as NmMsg;
 use qobjs::runtime_types::QuarkPod;
 use qobjs::common::*;
+
+use crate::NODEAGENT_STORE;
+use crate::node::QuarkNode;
 
 //use super::rocksdb::{RocksObjStore, RocksStore};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EventType {
-    None,
+    //None,
     Added,
     Modified,
     Deleted,
-    Error(String),
 }
 
 impl EventType {
     pub fn DeepCopy(&self) -> Self {
         match self {
-            Self::None => return Self::None,
+            //Self::None => return Self::None,
             Self::Added => return Self::Added,
             Self::Modified => return Self::Modified,
             Self::Deleted => return Self::Deleted,
-            Self::Error(str) => return Self::Error(str.to_string()),
+       }
+    }
+
+    pub fn ToGrpcEventType(&self) -> NmMsg::EventType {
+        match self {
+            Self::Added => NmMsg::EventType::Add,
+            Self::Modified => NmMsg::EventType::Update,
+            Self::Deleted => NmMsg::EventType::Delete,
         }
     }
 }
 
 impl Default for EventType {
     fn default() -> Self {
-        return Self::None;
+        return Self::Added;
     }
 }
 #[derive(Debug, Clone)]
@@ -60,6 +69,28 @@ pub struct WatchEvent {
     pub revision: i64,
 
     pub obj: NodeAgentEventObj,
+}
+
+impl WatchEvent {
+    pub fn ToGrpcEvent(&self) -> Result<NmMsg::node_agent_stream_msg::EventBody> {
+        match &self.obj {
+            NodeAgentEventObj::Pod(pod) => {
+                let podEvent = NmMsg::PodEvent {
+                    event_type: self.type_.ToGrpcEventType() as i32,
+                    revision: self.revision,
+                    pod: serde_json::to_string(&pod)?,
+                };
+                return Ok(NmMsg::node_agent_stream_msg::EventBody::PodEvent(podEvent));
+            }
+            NodeAgentEventObj::Node(node) => {
+                let nodeUpdate = NmMsg::NodeUpdate {
+                    revision: self.revision,
+                    node: serde_json::to_string(&node)?,
+                };
+                return Ok(NmMsg::node_agent_stream_msg::EventBody::NodeUpdate(nodeUpdate));
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -216,16 +247,20 @@ impl NodeAgentStoreInner {
         return Ok(())
     }
 
-    pub fn UpdateNode(&mut self, node: &k8s::Node) -> Result<()> {
+    pub fn UpdateNode(&mut self, node: &QuarkNode) -> Result<()> {
         assert!(self.nodeCache.is_some());
         self.revision += 1;
+        node.node.lock().unwrap().metadata.resource_version = Some(format!("{}", self.revision));
+        
+        let k8sNode = node.node.lock().unwrap().clone();
+
         let event = WatchEvent {
             type_: EventType::Modified,
             revision: self.revision,
-            obj: NodeAgentEventObj::Node(node.clone())
+            obj: NodeAgentEventObj::Node(k8sNode.clone())
         };
 
-        self.nodeCache = Some(node.clone());
+        self.nodeCache = Some(k8sNode);
         self.ProcessEvent(event)?;
         return Ok(())
     }
@@ -383,6 +418,10 @@ impl NodeAgentStoreInner {
         return Ok(stream);
     }
 
+    pub fn RemoveWatch(&mut self, watchId: u64) {
+        self.watchers.remove(&watchId);
+    }
+
     pub fn List(&self) -> PodList {
         let pods : Vec<k8s::Pod> = self.podCache.values().cloned().collect();
         return PodList { 
@@ -424,7 +463,7 @@ impl NodeAgentStore {
         return self.lock().unwrap().CreateNode(node);
     }
 
-    pub fn UpdateNode(&self, node: &k8s::Node) -> Result<()> {
+    pub fn UpdateNode(&self, node: &QuarkNode) -> Result<()> {
         return self.lock().unwrap().UpdateNode(node);
     }
 
@@ -446,6 +485,10 @@ impl NodeAgentStore {
 
     pub fn Watch(&self, revision: i64) -> Result<StoreWatchStream> {
         return self.lock().unwrap().Watch(revision);
+    }
+
+    pub fn RemoveWatch(&self, watchId: u64) {
+        return self.lock().unwrap().RemoveWatch(watchId);
     }
 }
 
@@ -483,4 +526,10 @@ impl StoreWatcher {
 pub struct StoreWatchStream {
     pub id: u64,
     pub stream: Receiver<WatchEvent>,
+}
+
+impl Drop for StoreWatchStream {
+    fn drop(&mut self) {
+        NODEAGENT_STORE.get().unwrap().RemoveWatch(self.id);
+    }
 }

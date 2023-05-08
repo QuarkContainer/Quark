@@ -22,8 +22,6 @@
 extern crate log;
 extern crate simple_logging;
 
-use std::collections::BTreeMap;
-
 use lazy_static::lazy_static;
 use once_cell::sync::OnceCell;
 
@@ -47,6 +45,7 @@ use runtime::image_mgr::ImageMgr;
 
 use qobjs::pb_gen::v1alpha2;
 use store::nodeagent_store::NodeAgentStore;
+use crate::nodeagent_server::NodeAgentServerMgr;
 use crate::runtime::runtime::RuntimeMgr;
 use crate::runtime::network::*;
 use crate::cadvisor::client as CadvisorClient;
@@ -74,15 +73,15 @@ async fn main() -> QResult<()> {
 }
 
 pub async fn ClientTest() -> QResult<()> {
-    use qobjs::pb_gen::node_mgr_pb::{self as NmMsg};
+    //use qobjs::pb_gen::node_mgr_pb::{self as NmMsg};
     use log::LevelFilter;
-    use nm_svc::*;
-    use qobjs::pb_gen::node_mgr_pb::*;
-    use k8s_openapi::api::core::v1 as k8s;
-    use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+    //use nm_svc::*;
+    //use qobjs::pb_gen::node_mgr_pb::*;
+    //use k8s_openapi::api::core::v1 as k8s;
+    //use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
     //use serde::{Deserialize, Serialize};
 
-    let podstr = r#"
+    let _podstr = r#"
     {
         "apiVersion":"v1",
         "kind":"Pod",
@@ -108,15 +107,31 @@ pub async fn ClientTest() -> QResult<()> {
         }
     }"#;
 
-    simple_logging::log_to_file("/var/log/quark/service_diretory.log", LevelFilter::Info).unwrap();
+    simple_logging::log_to_file("/var/log/quark/na.log", LevelFilter::Info).unwrap();
     CADVISOR_PROVIDER.set(CadvisorInfoProvider::New().await.unwrap()).unwrap();
     RUNTIME_MGR.set(RuntimeMgr::New(10).await.unwrap()).unwrap();
     IMAGE_MGR.set(ImageMgr::New(v1alpha2::AuthConfig::default()).await.unwrap()).unwrap();
     
+    let client = crate::cri::client::CriClient::Init().await?;
+    error!("pods1 is {:#?}", client.ListPodSandbox(None).await?);
+
     let nodeAgentStore= NodeAgentStore::New()?;
     NODEAGENT_STORE.set(nodeAgentStore).unwrap();
+    error!("pods2 is {:#?}", client.ListPodSandbox(None).await?);
 
-    let list = NODEAGENT_STORE.get().unwrap().List();
+   
+    let config = qobjs::config::NodeConfiguration::Default()?;
+
+    let na = crate::node::Run(config).await?;
+    error!("pods3 is {:#?}", client.ListPodSandbox(None).await?);
+
+   
+    let nodeAgentSrvMgr = NodeAgentServerMgr::New(vec!["http://127.0.0.1:8888".to_owned()]);
+    error!("pods4 is {:#?}", client.ListPodSandbox(None).await?);
+
+    nodeAgentSrvMgr.Process(&na).await.unwrap();
+
+    /*let list = NODEAGENT_STORE.get().unwrap().List();
     error!("initial list is {:?}", &list);
 
     let _watchStream = NODEAGENT_STORE.get().unwrap().Watch(list.revision)?;
@@ -166,7 +181,7 @@ pub async fn ClientTest() -> QResult<()> {
     }))?;
 
     let client = crate::cri::client::CriClient::Init().await?;
-    error!("pods is {:#?}", client.ListPodSandbox(None).await?);
+    error!("pods is {:#?}", client.ListPodSandbox(None).await?);*/
 
     return Ok(())
 }
