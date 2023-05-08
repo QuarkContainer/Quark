@@ -19,10 +19,9 @@ use tokio::sync::{mpsc::channel, mpsc::Receiver, mpsc::Sender};
 
 
 use crate::common::*;
-use crate::selection_predicate::SelectionPredicate;
+use crate::selection_predicate::*;
 use crate::types::*;
 use crate::types::{EventType, WatchEvent};
-
 
 pub struct CacheWatchStream {
     pub id: u64,

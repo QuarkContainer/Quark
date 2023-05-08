@@ -18,7 +18,8 @@ use std::ops::Deref;
 use std::sync::Arc;
 use tokio::sync::RwLock as TRwLock;
 
-use crate::{cache::Cacher, etcd_store::EtcdStore};
+use qobjs::cacher::*;
+use crate::etcd_store::EtcdStore;
 use qobjs::common::*;
 
 lazy_static! {
@@ -56,9 +57,10 @@ impl SvcDirInner {
         let store = EtcdStore::New(addr, true).await?;
         for i in 0..CACHE_OBJ_TYPES.len() {
             let t = CACHE_OBJ_TYPES[i];
-            let c = Cacher::New(&store, t, 0).await?;
+            let c = Cacher::New(Arc::new(store.clone()), t, 0).await?;
             self.map.insert(t.to_string(), c);
         }
+        defer!();
 
         return Ok(());
     }
