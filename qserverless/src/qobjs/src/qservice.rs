@@ -24,7 +24,7 @@ use tonic::Streaming;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
-use crate::pb_gen::node_mgr_pb as NmMsg;
+use crate::pb_gen::nm as NmMsg;
 use crate::common::*;
 
 pub struct QServer {

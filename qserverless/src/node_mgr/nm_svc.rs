@@ -22,14 +22,14 @@ use core::ops::Deref;
 use std::sync::Arc;
 use std::result::Result as SResult;
 
-use qobjs::pb_gen::node_mgr_pb::{self as nm_svc};
+use qobjs::pb_gen::nm::{self as nm_svc};
 use qobjs::common::Result;
 
-use crate::node_agent::*;
+use crate::na_client::*;
 
 #[derive(Debug)]
 pub struct NodeMgrSvcInner {
-    pub clients: Mutex<BTreeMap<String, QClient>>,
+    pub clients: Mutex<BTreeMap<String, NodeAgentClient>>,
     pub agentsChann: mpsc::Sender<SrvMsg>,
     pub processChannel: Option<mpsc::Receiver<SrvMsg>>,
 }
@@ -58,7 +58,7 @@ impl NodeMgrSvc {
         return Self(Arc::new(inner));
     }
 
-    pub fn NodeAgent(&self, nodeId: &str) -> Option<QClient> {
+    pub fn NodeAgent(&self, nodeId: &str) -> Option<NodeAgentClient> {
         return self.clients.lock().unwrap().get(nodeId).cloned();
     }
  /*
@@ -146,7 +146,7 @@ impl nm_svc::node_agent_service_server::NodeAgentService for NodeMgrSvc {
     ) -> SResult<tonic::Response<Self::StreamProcessStream>, tonic::Status> {
         let stream = request.into_inner();
         let (tx, rx) = mpsc::channel(30);
-        let client = QClient::New(self, stream, tx);
+        let client = NodeAgentClient::New(self, stream, tx);
         tokio::spawn(async move {
             client.Process().await;
         });

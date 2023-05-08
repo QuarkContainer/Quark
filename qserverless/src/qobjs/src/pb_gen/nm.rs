@@ -451,7 +451,7 @@ pub mod node_agent_service_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/node_mgr_pb.NodeAgentService/StreamMsg",
+                "/nm.NodeAgentService/StreamMsg",
             );
             self.inner.streaming(request.into_streaming_request(), path, codec).await
         }
@@ -473,7 +473,7 @@ pub mod node_agent_service_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/node_mgr_pb.NodeAgentService/StreamProcess",
+                "/nm.NodeAgentService/StreamProcess",
             );
             self.inner.streaming(request.into_streaming_request(), path, codec).await
         }
@@ -566,7 +566,7 @@ pub mod node_agent_service_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
-                "/node_mgr_pb.NodeAgentService/StreamMsg" => {
+                "/nm.NodeAgentService/StreamMsg" => {
                     #[allow(non_camel_case_types)]
                     struct StreamMsgSvc<T: NodeAgentService>(pub Arc<T>);
                     impl<
@@ -607,7 +607,7 @@ pub mod node_agent_service_server {
                     };
                     Box::pin(fut)
                 }
-                "/node_mgr_pb.NodeAgentService/StreamProcess" => {
+                "/nm.NodeAgentService/StreamProcess" => {
                     #[allow(non_camel_case_types)]
                     struct StreamProcessSvc<T: NodeAgentService>(pub Arc<T>);
                     impl<
@@ -686,6 +686,6 @@ pub mod node_agent_service_server {
         }
     }
     impl<T: NodeAgentService> tonic::server::NamedService for NodeAgentServiceServer<T> {
-        const NAME: &'static str = "node_mgr_pb.NodeAgentService";
+        const NAME: &'static str = "nm.NodeAgentService";
     }
 }

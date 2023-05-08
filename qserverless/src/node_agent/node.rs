@@ -32,7 +32,7 @@ use qobjs::k8s_util::K8SUtil;
 //use qobjs::runtime_types::QuarkNode;
 use qobjs::runtime_types::*;
 use qobjs::common::*;
-use qobjs::pb_gen::node_mgr_pb::{self as NmMsg};
+use qobjs::pb_gen::nm::{self as NmMsg};
 
 
 use crate::nm_svc::{NodeAgentMsg, PodCreate};

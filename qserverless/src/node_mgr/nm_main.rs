@@ -23,10 +23,10 @@ extern crate simple_logging;
 
 use tonic::transport::Server;
 use qobjs::common::Result as QResult;
-use qobjs::pb_gen::node_mgr_pb;
+use qobjs::pb_gen::nm;
 
 pub mod nm_svc;
-pub mod node_agent;
+pub mod na_client;
 pub mod nodemgr;
 pub mod types;
 
@@ -46,7 +46,7 @@ async fn main() -> QResult<()> {
     error!("versioninfo is {:#?}", client.GetInfo().await?);
 */
     let inner = NodeMgrSvc::New();
-    let svc = node_mgr_pb::node_agent_service_server::NodeAgentServiceServer::new(inner);
+    let svc = nm::node_agent_service_server::NodeAgentServiceServer::new(inner);
     info!("nodemgr start ...");
     Server::builder().add_service(svc).serve("127.0.0.1:8888".parse().unwrap()).await?;
 

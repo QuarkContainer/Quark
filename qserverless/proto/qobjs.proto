@@ -53,7 +53,6 @@ message Object {
     string data = 7;
 }
 
-
 message Obj {
     string kind = 1;
     string namespace = 2;
