@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::Arc;
+use core::ops::Deref;
+
+use async_trait::async_trait;
 use etcd_client::GetOptions;
 use etcd_client::{
     Client, CompactionOptions, Compare, CompareOp, DeleteOptions, Txn, TxnOp, TxnOpResponse,
@@ -23,33 +27,150 @@ use qobjs::common::*;
 use qobjs::selection_predicate::*;
 use qobjs::service_directory::*;
 use qobjs::types::*;
+use qobjs::cacher::*;
 
 pub const PATH_PREFIX: &str = "/registry";
 
 #[derive(Debug)]
-pub struct EtcdStore {
+pub struct EtcdStoreInner {
     pub client: EtcdClient,
     pub pathPrefix: String,
     pub pagingEnable: bool,
+}
+
+impl Deref for EtcdStore {
+    type Target = Arc<EtcdStoreInner>;
+
+    fn deref(&self) -> &Arc<EtcdStoreInner> {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct EtcdStore(Arc<EtcdStoreInner>);
+
+#[async_trait]
+impl CacheStore for EtcdStore {
+    async fn Create(&self, key: &str, obj: &DataObject) -> Result<DataObject> {
+        let preparedKey = self.PrepareKey(key)?;
+        let keyVec: &str = &preparedKey;
+        let txn = Txn::new()
+            .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, 0)])
+            .and_then(vec![TxnOp::put(keyVec, obj.Object().Encode()?, None)]);
+
+        let resp = self.client.lock().await.txn(txn).await?;
+        if !resp.succeeded() {
+            return Err(Error::NewNewKeyExistsErr(preparedKey, 0));
+        } else {
+            match &resp.op_responses()[0] {
+                TxnOpResponse::Put(getresp) => {
+                    let actualRev = getresp.header().unwrap().revision();
+                    return Ok(obj.CopyWithRev(actualRev));
+                }
+                _ => {
+                    panic!("create get unexpect response")
+                }
+            };
+        }
+    }
+
+    async fn Update(
+        &self,
+        key: &str,
+        expectedRev: i64,
+        obj: &DataObject,
+    ) -> Result<DataObject> {
+        let preparedKey = self.PrepareKey(key)?;
+        let keyVec: &str = &preparedKey;
+        let txn = if expectedRev > 0 {
+            Txn::new()
+                .when(vec![Compare::mod_revision(
+                    keyVec,
+                    CompareOp::Equal,
+                    expectedRev,
+                )])
+                .and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)])
+                .or_else(vec![TxnOp::get(keyVec, None)])
+        } else {
+            Txn::new().and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)])
+        };
+
+        let resp = self.client.lock().await.txn(txn).await?;
+        if !resp.succeeded() {
+            match &resp.op_responses()[0] {
+                TxnOpResponse::Get(getresp) => {
+                    let actualRev = getresp.header().unwrap().revision();
+                    return Err(Error::NewUpdateRevNotMatchErr(expectedRev, actualRev));
+                }
+                _ => {
+                    panic!("Delete get unexpect response")
+                }
+            };
+        } else {
+            match &resp.op_responses()[0] {
+                TxnOpResponse::Put(getresp) => {
+                    let actualRev = getresp.header().unwrap().revision();
+                    return Ok(obj.CopyWithRev(actualRev));
+                }
+                _ => {
+                    panic!("Delete get unexpect response")
+                }
+            };
+        }
+    }
+
+    async fn Delete(&self, key: &str, expectedRev: i64) -> Result<i64> {
+        let preparedKey = self.PrepareKey(key)?;
+        let keyVec: &str = &preparedKey;
+        let txn = if expectedRev != 0 {
+            Txn::new()
+                .when(vec![Compare::mod_revision(
+                    keyVec,
+                    CompareOp::Equal,
+                    expectedRev,
+                )])
+                .and_then(vec![TxnOp::delete(keyVec, None)])
+                .or_else(vec![TxnOp::get(keyVec, None)])
+        } else {
+            Txn::new().and_then(vec![TxnOp::delete(keyVec, None)])
+        };
+
+        let resp = self.client.lock().await.txn(txn).await?;
+        if !resp.succeeded() {
+            match &resp.op_responses()[0] {
+                TxnOpResponse::Get(getresp) => {
+                    let actualRev = getresp.kvs()[0].mod_revision();
+                    return Err(Error::NewDeleteRevNotMatchErr(expectedRev, actualRev));
+                }
+                _ => {
+                    panic!("Delete get unexpect response")
+                }
+            };
+        } else {
+            match &resp.op_responses()[0] {
+                TxnOpResponse::Delete(resp) => {
+                    let actualRev = resp.header().unwrap().revision();
+                    return Ok(actualRev);
+                }
+                _ => {
+                    panic!("Delete get unexpect response")
+                }
+            };
+        }
+    }
 }
 
 impl EtcdStore {
     pub async fn New(addr: &str, pagingEnable: bool) -> Result<Self> {
         let client = Client::connect([addr], None).await?;
 
-        return Ok(Self {
+        let inner = EtcdStoreInner {
             client: EtcdClient::New(client),
             pathPrefix: PATH_PREFIX.to_string(),
             pagingEnable,
-        });
-    }
-
-    pub fn Copy(&self) -> Self {
-        return Self {
-            client: self.client.clone(),
-            pathPrefix: self.pathPrefix.clone(),
-            pagingEnable: self.pagingEnable,
         };
+
+        return Ok(Self(Arc::new(inner)));
     }
 
     pub fn PrepareKey(&self, key: &str) -> Result<String> {
@@ -98,28 +219,6 @@ impl EtcdStore {
         return Ok(Some(obj));
     }
 
-    pub async fn Create(&self, key: &str, obj: &DataObject) -> Result<DataObject> {
-        let preparedKey = self.PrepareKey(key)?;
-        let keyVec: &str = &preparedKey;
-        let txn = Txn::new()
-            .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, 0)])
-            .and_then(vec![TxnOp::put(keyVec, obj.Object().Encode()?, None)]);
-
-        let resp = self.client.lock().await.txn(txn).await?;
-        if !resp.succeeded() {
-            return Err(Error::NewNewKeyExistsErr(preparedKey, 0));
-        } else {
-            match &resp.op_responses()[0] {
-                TxnOpResponse::Put(getresp) => {
-                    let actualRev = getresp.header().unwrap().revision();
-                    return Ok(obj.CopyWithRev(actualRev));
-                }
-                _ => {
-                    panic!("create get unexpect response")
-                }
-            };
-        }
-    }
 
     pub async fn Clear(&mut self, prefix: &str) -> Result<i64> {
         let preparedKey = self.PrepareKey(prefix)?;
@@ -137,91 +236,6 @@ impl EtcdStore {
 
         let rv = resp.header().unwrap().revision();
         return Ok(rv);
-    }
-
-    pub async fn Delete(&self, key: &str, expectedRev: i64) -> Result<i64> {
-        let preparedKey = self.PrepareKey(key)?;
-        let keyVec: &str = &preparedKey;
-        let txn = if expectedRev != 0 {
-            Txn::new()
-                .when(vec![Compare::mod_revision(
-                    keyVec,
-                    CompareOp::Equal,
-                    expectedRev,
-                )])
-                .and_then(vec![TxnOp::delete(keyVec, None)])
-                .or_else(vec![TxnOp::get(keyVec, None)])
-        } else {
-            Txn::new().and_then(vec![TxnOp::delete(keyVec, None)])
-        };
-
-        let resp = self.client.lock().await.txn(txn).await?;
-        if !resp.succeeded() {
-            match &resp.op_responses()[0] {
-                TxnOpResponse::Get(getresp) => {
-                    let actualRev = getresp.kvs()[0].mod_revision();
-                    return Err(Error::NewDeleteRevNotMatchErr(expectedRev, actualRev));
-                }
-                _ => {
-                    panic!("Delete get unexpect response")
-                }
-            };
-        } else {
-            match &resp.op_responses()[0] {
-                TxnOpResponse::Delete(resp) => {
-                    let actualRev = resp.header().unwrap().revision();
-                    return Ok(actualRev);
-                }
-                _ => {
-                    panic!("Delete get unexpect response")
-                }
-            };
-        }
-    }
-
-    pub async fn Update(
-        &self,
-        key: &str,
-        expectedRev: i64,
-        obj: &DataObject,
-    ) -> Result<DataObject> {
-        let preparedKey = self.PrepareKey(key)?;
-        let keyVec: &str = &preparedKey;
-        let txn = if expectedRev > 0 {
-            Txn::new()
-                .when(vec![Compare::mod_revision(
-                    keyVec,
-                    CompareOp::Equal,
-                    expectedRev,
-                )])
-                .and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)])
-                .or_else(vec![TxnOp::get(keyVec, None)])
-        } else {
-            Txn::new().and_then(vec![TxnOp::put(keyVec, obj.Encode()?, None)])
-        };
-
-        let resp = self.client.lock().await.txn(txn).await?;
-        if !resp.succeeded() {
-            match &resp.op_responses()[0] {
-                TxnOpResponse::Get(getresp) => {
-                    let actualRev = getresp.header().unwrap().revision();
-                    return Err(Error::NewUpdateRevNotMatchErr(expectedRev, actualRev));
-                }
-                _ => {
-                    panic!("Delete get unexpect response")
-                }
-            };
-        } else {
-            match &resp.op_responses()[0] {
-                TxnOpResponse::Put(getresp) => {
-                    let actualRev = getresp.header().unwrap().revision();
-                    return Ok(obj.CopyWithRev(actualRev));
-                }
-                _ => {
-                    panic!("Delete get unexpect response")
-                }
-            };
-        }
     }
 
     pub fn GetPrefixRangeEnd(prefix: &str) -> String {

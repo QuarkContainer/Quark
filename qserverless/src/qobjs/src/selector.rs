@@ -523,6 +523,10 @@ impl DeepCopy for Labels {
 }
 
 impl Labels {
+    pub fn NewFromMap(map: BTreeMap<String, String>) -> Self {
+        return Self(Arc::new(map));
+    }
+
     pub fn Copy(&self) -> Self {
         let mut map = BTreeMap::new();
         for (k, v) in self.as_ref() {

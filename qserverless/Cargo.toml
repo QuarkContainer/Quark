@@ -44,6 +44,7 @@ hostname = "^0.3"
 ipnetwork = "0.20.0"
 once_cell = "1.17.1"
 rocksdb = "0.20.1"
+async-trait = "0.1.68"
 
 [dependencies.lazy_static]
 version = "1.0"
