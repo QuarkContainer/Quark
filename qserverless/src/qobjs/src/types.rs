@@ -23,6 +23,31 @@ use crate::selector::Labels;
 use crate::service_directory::*;
 use crate::selection_predicate::*;
 
+pub const POD_DELETION_GRACE_PERIOD_LABEL           : &str = "io.kubernetes.pod.deletionGracePeriod";
+pub const POD_TERMINATION_GRACE_PERIOD_LABEL        : &str = "io.kubernetes.pod.terminationGracePeriod";
+
+pub const CONTAINER_HASH_LABEL                      : &str = "io.kubernetes.container.hash";
+pub const CONTAINER_RESTART_COUNT_LABEL             : &str = "io.kubernetes.container.restartCount";
+pub const CONTAINER_TERMINATION_MESSAGE_PATH_LABEL  : &str = "io.kubernetes.container.terminationMessagePath";
+pub const CONTAINER_TERMINATION_MESSAGE_POLICY_LABEL: &str = "io.kubernetes.container.terminationMessagePolicy";
+pub const CONTAINER_PRE_STOP_HANDLER_LABEL          : &str = "io.kubernetes.container.preStopHandler";
+pub const CONTAINER_PORTS_LABEL                     : &str = "io.kubernetes.container.ports";
+
+pub const KUBERNETES_POD_NAME_LABEL         : &str = "io.kubernetes.pod.name";
+pub const KUBERNETES_POD_NAMESPACE_LABEL    : &str = "io.kubernetes.pod.namespace";
+pub const KUBERNETES_POD_UIDLABEL           : &str = "io.kubernetes.pod.uid";
+pub const KUBERNETES_CONTAINER_NAME_LABEL   : &str = "io.kubernetes.container.name";
+
+pub const LabelNodeMgrNodeDaemon              : &str = "daemon.qserverless.quarksoft.io";
+pub const LabelNodeMgrApplication             : &str = "application.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrNode               : &str = "node.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrPod                : &str = "pod.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrCreationUnixMicro  : &str = "create.unixmicro.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrSessionService     : &str = "sessionservice.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrApplicationSession : &str = "applicationsession.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrNodeRevision       : &str = "noderevision.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrHibernatePod       : &str = "hibernatepod.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrSessionServicePod  : &str = "sessionservicepod.core.qserverless.quarksoft.io";
 
 pub trait DeepCopy {
     fn DeepCopy(&self) -> Self;

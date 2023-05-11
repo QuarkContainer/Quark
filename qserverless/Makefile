@@ -1,4 +1,4 @@
-All: na nm
+All: na nm sd
 sd:
 	cargo build --bin service_directory
 na:
