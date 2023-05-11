@@ -33,13 +33,12 @@ use qobjs::k8s_util::K8SUtil;
 use qobjs::runtime_types::*;
 use qobjs::common::*;
 use qobjs::pb_gen::nm::{self as NmMsg};
-
+use qobjs::types::*;
 
 use crate::nm_svc::{NodeAgentMsg, PodCreate};
 use crate::node_status::SetNodeStatus;
 use crate::{pod::*, NODEAGENT_STORE, RUNTIME_MGR};
 use crate::NETWORK_PROVIDER;
-use crate::runtime::k8s_labels::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NodeAgentState {

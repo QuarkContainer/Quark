@@ -52,6 +52,8 @@ pub struct NodeAgentClientInner {
     pub nextReqId: AtomicU64,
 }
 
+
+// represent a NodeAgent Connection
 #[derive(Debug, Clone)]
 pub struct NodeAgentClient(Arc<NodeAgentClientInner>);
 

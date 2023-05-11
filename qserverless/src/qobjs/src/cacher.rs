@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::time::{Duration, Instant};
@@ -240,6 +241,14 @@ impl Cacher {
             }
         }
     }
+
+    pub fn Contains(&self, key: &str) -> bool {
+        return self.read().unwrap().GetByKey(key).is_some();
+    }
+
+    pub fn Refresh(&self, objs: &[DataObject]) -> Result<()> {
+        return self.write().unwrap().Refresh(objs);
+    }
 }
 
 pub const DEFAULT_CACHE_COUNT: usize = 2000;
@@ -290,6 +299,44 @@ impl CacherInner {
 
     pub fn StoreKey(&self, key: &str) -> String {
         return self.objectType.clone() + "/" + key;
+    }
+
+    pub fn Refresh(&mut self, objs: &[DataObject]) -> Result<()> {
+        let mut set = BTreeSet::new();
+
+        let mut events = Vec::new();
+        for obj in objs {
+            set.insert(obj.Key());
+            if self.cacheStore.contains_key(&obj.Key()) {
+                let event = WatchEvent {
+                    type_: EventType::Modified,
+                    obj: obj.clone(),
+                };
+                events.push(event);
+            } else {
+                let event = WatchEvent {
+                    type_: EventType::Added,
+                    obj: obj.clone(),
+                };
+                events.push(event);
+            }
+        }
+
+        for (key, obj)  in &self.cacheStore {
+            if !set.contains(key) {
+                let event = WatchEvent {
+                    type_: EventType::Deleted,
+                    obj: obj.clone(),
+                };
+                events.push(event);
+            }
+        }
+
+        for event in &events {
+            self.ProcessEvent(event)?;
+        }        
+
+        return Ok(())
     }
 
     pub fn ProcessEvent(&mut self, event: &WatchEvent) -> Result<()> {
