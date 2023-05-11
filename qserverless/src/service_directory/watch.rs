@@ -1,3 +1,4 @@
+
 // Copyright (c) 2021 Quark Container Authors / 2014 The Kubernetes Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -319,7 +320,8 @@ impl Watcher {
 mod tests {
     use super::*;
     use crate::etcd_store::*;
-    use qobjs::types::*;
+    //use qobjs::types::*;
+    use qobjs::cacher::*;
 
     pub async fn TestCheckResultFunc(
         r: &WatchReader,

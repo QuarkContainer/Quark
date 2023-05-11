@@ -338,7 +338,7 @@ impl ServiceDirectoryService for ServiceDirectoryImpl {
                 continue_: None,
             };
 
-            match cacher.Watch(&req.namespace, req.revision, predicate).await {
+            match cacher.Watch(&req.namespace, req.revision, predicate) {
                 Err(e) => {
                     tx.send(Err(Status::invalid_argument(&format!("Fail: {:?}", e))))
                         .await

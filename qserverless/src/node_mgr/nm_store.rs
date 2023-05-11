@@ -19,10 +19,11 @@ use core::ops::Deref;
 use k8s_openapi::{api::core::v1 as k8s, apimachinery::pkg::apis::meta::v1::ObjectMeta};
 use qobjs::{types::*, selector::Labels};
 use qobjs::common::*;
+use qobjs::cacher::*;
 
 pub struct NodeMgrCacheInner {
-    pub nodes: BTreeMap<String, DataObject>,
-    pub pods: BTreeMap<String, DataObject>,
+    pub nodes: Cacher,
+    pub pods: Cacher,
     pub nodePods: BTreeMap<String, BTreeSet<String>>,
 }
 
@@ -83,12 +84,12 @@ impl NodeMgrCache {
         return Ok(dataObj)
     }
 
-    pub fn AddPod(&self, pod: &k8s::Pod) -> Result<()> {
+    /*pub fn AddPod(&self, pod: &k8s::Pod) -> Result<()> {
         let obj = Self::PodToDataObject(pod)?;
         let mut inner = self.write().unwrap();
         inner.pods.insert(obj.Key(), obj);
         return Ok(())
-    }
+    }*/
 
     //pub fn 
 }

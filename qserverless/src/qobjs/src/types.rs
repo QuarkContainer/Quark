@@ -298,6 +298,10 @@ impl DataObject {
         return format!("{}/{}", &self.namespace, &self.name);
     }
 
+    pub fn StoreKey(&self) -> String {
+        return format!("{}/{}/{}", &self.kind, &self.namespace, &self.name);
+    }
+
     pub fn Object(&self) -> Object {
         return Object {
             kind: self.kind.clone(),

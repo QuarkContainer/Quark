@@ -51,9 +51,10 @@ impl Deref for EtcdStore {
 pub struct EtcdStore(Arc<EtcdStoreInner>);
 
 #[async_trait]
-impl CacheStore for EtcdStore {
-    async fn Create(&self, key: &str, obj: &DataObject) -> Result<DataObject> {
-        let preparedKey = self.PrepareKey(key)?;
+impl BackendStore for EtcdStore {
+    async fn Create(&self, obj: &DataObject) -> Result<DataObject> {
+        let key = obj.StoreKey();
+        let preparedKey = self.PrepareKey(&key)?;
         let keyVec: &str = &preparedKey;
         let txn = Txn::new()
             .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, 0)])
@@ -77,11 +78,11 @@ impl CacheStore for EtcdStore {
 
     async fn Update(
         &self,
-        key: &str,
         expectedRev: i64,
         obj: &DataObject,
     ) -> Result<DataObject> {
-        let preparedKey = self.PrepareKey(key)?;
+        let key = obj.StoreKey();
+        let preparedKey = self.PrepareKey(&key)?;
         let keyVec: &str = &preparedKey;
         let txn = if expectedRev > 0 {
             Txn::new()
@@ -351,6 +352,30 @@ impl CacheStore for EtcdStore {
         return Ok(DataObjList::New(v, returnedRV, None, -1));
     }
 
+    fn Register(&self, cacher: Cacher, rev: i64, prefix: String, ready: Arc<Notify>, notify: Arc<Notify>) -> Result<()> {
+        let storeClone = self.clone();
+        let _future = tokio::spawn(async move{
+            storeClone.Process(cacher, rev, prefix, ready, notify).await
+        });
+
+        return Ok(())
+    }
+}
+
+impl EtcdStore {
+    pub async fn New(addr: &str, pagingEnable: bool) -> Result<Self> {
+        let client = Client::connect([addr], None).await?;
+
+        let inner = EtcdStoreInner {
+            client: EtcdClient::New(client),
+            pathPrefix: PATH_PREFIX.to_string(),
+            pagingEnable,
+        };
+
+        return Ok(Self(Arc::new(inner)));
+    }
+
+
     async fn Process(&self, cacher: Cacher, rev: i64, prefix: String, ready: Arc<Notify>, notify: Arc<Notify>) -> Result<()> {
         let list = self
                 .List(
@@ -362,7 +387,7 @@ impl CacheStore for EtcdStore {
                 )
                 .await?;
             {
-                let mut inner = cacher.write().await;
+                let mut inner = cacher.write().unwrap();
                 inner.listRevision = list.revision;
                 inner.revision = list.revision;
 
@@ -386,7 +411,7 @@ impl CacheStore for EtcdStore {
                             match event {
                                 None => break,
                                 Some(event) => {
-                                    cacher.ProcessEvent(&event).await?;
+                                    cacher.ProcessEvent(&event)?;
                                 }
                             }
                         }
@@ -401,7 +426,7 @@ impl CacheStore for EtcdStore {
                     .await?;
 
                 {
-                    let mut inner = cacher.write().await;
+                    let mut inner = cacher.write().unwrap();
                     // close all watches
                     inner.watchers.clear();
                     // clear all cached data
@@ -420,20 +445,7 @@ impl CacheStore for EtcdStore {
                 }
             }
     }
-}
 
-impl EtcdStore {
-    pub async fn New(addr: &str, pagingEnable: bool) -> Result<Self> {
-        let client = Client::connect([addr], None).await?;
-
-        let inner = EtcdStoreInner {
-            client: EtcdClient::New(client),
-            pathPrefix: PATH_PREFIX.to_string(),
-            pagingEnable,
-        };
-
-        return Ok(Self(Arc::new(inner)));
-    }
 
     pub fn PrepareKey(&self, key: &str) -> Result<String> {
         let mut key = key;
