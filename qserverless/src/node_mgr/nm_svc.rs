@@ -27,6 +27,9 @@ use qobjs::pb_gen::nm as nm_svc;
 use qobjs::pb_gen::node_mgr as NodeMgr;
 use qobjs::service_directory as sd;
 use qobjs::common::Result;
+use qobjs::selection_predicate::*;
+use qobjs::selector::*;
+use qobjs::types::*;
 
 use crate::na_client::*;
 
@@ -232,17 +235,171 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
 
     async fn list(
         &self,
-        _request: Request<sd::ListRequestMessage>,
+        request: Request<sd::ListRequestMessage>,
     ) -> SResult<Response<sd::ListResponseMessage>, Status> {
-        unimplemented!()
+        let req = request.get_ref();
+        let cacher = match crate::NM_CACHE.get().unwrap().GetCacher(&req.obj_type) {
+            None => {
+                return Ok(Response::new(sd::ListResponseMessage {
+                    error: format!("doesn't support obj type {}", &req.obj_type),
+                    revision: 0,
+                    objs: Vec::new(),
+                }))
+            }
+            Some(c) => c,
+        };
+
+        let labelSelector = match Selector::Parse(&req.label_selector) {
+            Err(e) => {
+                return Ok(Response::new(sd::ListResponseMessage {
+                    error: format!("Fail: {:?}", e),
+                    ..Default::default()
+                }))
+            }
+            Ok(s) => s,
+        };
+        let fieldSelector = match Selector::Parse(&req.field_selector) {
+            Err(e) => {
+                return Ok(Response::new(sd::ListResponseMessage {
+                    error: format!("Fail: {:?}", e),
+                    ..Default::default()
+                }))
+            }
+            Ok(s) => s,
+        };
+
+        let opts = ListOption {
+            revision: req.revision,
+            revisionMatch: RevisionMatch::Exact,
+            predicate: SelectionPredicate {
+                label: labelSelector,
+                field: fieldSelector,
+                limit: 00,
+                continue_: None,
+            },
+        };
+
+        match cacher.List(&req.namespace, &opts).await {
+            Err(e) => {
+                return Ok(Response::new(sd::ListResponseMessage {
+                    error: format!("Fail: {:?}", e),
+                    ..Default::default()
+                }))
+            }
+            Ok(resp) => {
+                let mut objs = Vec::new();
+                for o in resp.objs {
+                    objs.push(o.Obj());
+                }
+                return Ok(Response::new(sd::ListResponseMessage {
+                    error: "".into(),
+                    revision: resp.revision,
+                    objs: objs,
+                }));
+            }
+        }
     }
 
     type WatchStream = std::pin::Pin<Box<dyn futures::Stream<Item = SResult<sd::WEvent, Status>> + Send>>;
 
     async fn watch(
         &self,
-        _request: Request<sd::WatchRequestMessage>,
+        request: Request<sd::WatchRequestMessage>,
     ) -> SResult<Response<Self::WatchStream>, Status> {
-        unimplemented!()
+        let (tx, rx) = mpsc::channel(200);
+        let stream = ReceiverStream::new(rx);
+
+        tokio::spawn(async move {
+            let req = request.get_ref();
+            let cacher = match crate::NM_CACHE.get().unwrap().GetCacher(&req.obj_type) {
+                None => {
+                    tx.send(Err(Status::invalid_argument(&format!(
+                        "doesn't support obj type {}",
+                        &req.obj_type
+                    ))))
+                    .await
+                    .ok();
+                    return;
+                }
+                Some(c) => c,
+            };
+
+            let labelSelector = match Selector::Parse(&req.label_selector) {
+                Err(e) => {
+                    tx.send(Err(Status::invalid_argument(&format!("Fail: {:?}", e))))
+                        .await
+                        .ok();
+                    
+                    return;
+                }
+                Ok(s) => s,
+            };
+            let fieldSelector = match Selector::Parse(&req.field_selector) {
+                Err(e) => {
+                    tx.send(Err(Status::invalid_argument(&format!("Fail: {:?}", e))))
+                        .await
+                        .ok();
+                    return;
+                }
+                Ok(s) => s,
+            };
+
+            let predicate = SelectionPredicate {
+                label: labelSelector,
+                field: fieldSelector,
+                limit: 00,
+                continue_: None,
+            };
+
+            match cacher.Watch(&req.namespace, req.revision, predicate) {
+                Err(e) => {
+                    tx.send(Err(Status::invalid_argument(&format!("Fail: {:?}", e))))
+                        .await
+                        .ok();
+                    return;
+                }
+                Ok(mut w) => loop {
+                    let event = w.stream.recv().await;
+                    match event {
+                        None => return,
+                        Some(event) => {
+                            let eventType = match event.type_ {
+                                EventType::None => 0,
+                                EventType::Added => 1,
+                                EventType::Modified => 2,
+                                EventType::Deleted => 3,
+                                EventType::Error(s) => {
+                                    tx.send(Err(Status::invalid_argument(&format!(
+                                        "Fail: {:?}",
+                                        s
+                                    ))))
+                                    .await
+                                    .ok();
+                                    return;
+                                }
+                            };
+                            let we = sd::WEvent {
+                                event_type: eventType,
+                                obj: Some(event.obj.Obj()),
+                            };
+                            match tx.send(Ok(we)).await {
+                                Ok(()) => (),
+                                Err(e) => {
+                                    tx.send(Err(Status::invalid_argument(&format!(
+                                        "Fail: {:?}",
+                                        e
+                                    ))))
+                                    .await
+                                    .ok();
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                },
+            }
+        });
+
+        return Ok(Response::new(Box::pin(stream) as Self::WatchStream));
     }
 }

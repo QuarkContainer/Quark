@@ -186,6 +186,7 @@ pub async fn ClientTest() -> QResult<()> {
     return Ok(())
 }
 
+/*
 pub async fn NMClientTest() -> QResult<()> {
     use qobjs::pb_gen::nm as nm_svc;
     //use tonic::{Response, Status};
@@ -228,3 +229,5 @@ pub async fn NMClientTest() -> QResult<()> {
 
     return Ok(())
 }
+
+ */
