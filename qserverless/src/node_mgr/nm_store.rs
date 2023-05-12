@@ -27,6 +27,52 @@ use qobjs::selection_predicate::*;
 use tokio::sync::Notify;
 
 use crate::na_client::NodeAgentClient;
+
+pub fn MetaToDataObject(kind: &str, meta: &ObjectMeta) -> Result<DataObjectInner> {
+    let mut labels = BTreeMap::new();
+    if let Some(map) = &meta.labels {
+        for (k, v) in map {
+            labels.insert(k.to_string(), v.to_string());
+        }
+    }
+    
+    let mut annotations = BTreeMap::new();
+    if let Some(map) = &meta.annotations {
+        for (k, v) in map {
+            annotations.insert(k.to_string(), v.to_string());
+        }
+    }
+
+    let resource_version = meta.resource_version.as_deref().unwrap_or("0").to_string();
+
+    let revision = resource_version.parse::<i64>()?;
+
+    let inner = DataObjectInner {
+        kind: kind.to_string(),
+        namespace: meta.namespace.as_deref().unwrap_or("").to_string(),
+        name: meta.name.as_deref().unwrap_or("").to_string(),
+        lables: Labels::NewFromMap(labels),
+        annotations: Labels::NewFromMap(annotations),
+        reversion: revision,
+        data: String::new(),
+    };
+
+    return Ok(inner);
+}
+
+pub fn NodeToDataObject(node: &k8s::Node) -> Result<DataObject> {
+    let mut inner = MetaToDataObject("node", &node.metadata)?;
+    inner.data = serde_json::to_string(node)?;
+    let dataObj = DataObject(Arc::new(inner));
+    return Ok(dataObj)
+}
+
+pub fn PodToDataObject(pod: &k8s::Pod) -> Result<DataObject> {
+    let mut inner = MetaToDataObject("pod", &pod.metadata)?;
+    inner.data = serde_json::to_string(pod)?;
+    let dataObj = DataObject(Arc::new(inner));
+    return Ok(dataObj)
+}
 #[derive(Debug)]
 pub struct NodeMgrCacheInner {
     pub nodes: Option<Cacher>,
@@ -39,6 +85,41 @@ pub struct NodeMgrCacheInner {
     pub probationNodes: BTreeMap<SystemTime, String>,
     // from nodekey to probation start time
     pub probationNodesMap: BTreeMap<String, SystemTime>,
+}
+
+impl NodeMgrCacheInner {
+    pub fn RefreshNode(&mut self, node: &k8s::Node, pods: &[k8s::Pod]) -> Result<()> {
+        let mut podObjs = Vec::new();
+        let nodeObj = NodeToDataObject(node)?;
+        let mut set = BTreeSet::new();
+        for pod in pods {
+            /*let node = match pod.metadata.annotations.unwrap().get(AnnotationNodeMgrNode) {
+                None => return Err(Error::CommonError(format!("NodeMgrCache::AddPod can't get node info from node"))),
+                Some(n) => n.to_string(),
+            };*/
+            let obj = PodToDataObject(pod)?;
+            set.insert(obj.Key());
+            podObjs.push(obj);
+        }
+
+        let inner = self;
+        inner.pods.as_ref().unwrap().Refresh(&podObjs)?;
+        inner.nodePods.insert(nodeObj.Key(), set);
+
+        if inner.nodes.as_ref().unwrap().Contains(&nodeObj.Key()) {
+            inner.nodes.as_ref().unwrap().ProcessEvent(&WatchEvent {
+                type_: EventType::Modified,
+                obj: nodeObj,
+            })?;
+        } else {
+            inner.nodes.as_ref().unwrap().ProcessEvent(&WatchEvent {
+                type_: EventType::Added,
+                obj: nodeObj,
+            })?;
+        }
+
+        return Ok(());
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -99,66 +180,38 @@ impl NodeMgrCache {
         return Ok(cache);
     }
 
-    pub fn RegisterNodeAgentClient(&self, nodeKey: &str, naClient: &NodeAgentClient) -> Result<()> {
+    pub fn GetCacher(&self, objType: &str) -> Option<Cacher> {
+        if objType == "pod" {
+            return self.read().unwrap().pods.clone();
+        }
+
+        if objType == "node" {
+            return self.read().unwrap().nodes.clone();
+        }
+
+        return None;
+    }
+
+    pub fn RegisterNodeAgentClient(&self, naClient: &NodeAgentClient, node: &k8s::Node, pods: &[k8s::Pod]) -> Result<()> {
+        let nodeObj = NodeToDataObject(&node)?;
+        let nodeKey = nodeObj.Key();
+
         let mut inner = self.write().unwrap();
-        if let Some(time) = inner.probationNodesMap.remove(nodeKey) {
+        if let Some(time) = inner.probationNodesMap.remove(&nodeKey) {
             inner.probationNodes.remove(&time);
         }
 
-        inner.nodeAgents.insert(nodeKey.to_string(), naClient.clone());
+        inner.nodeAgents.insert(nodeKey, naClient.clone());
+
+        inner.RefreshNode(&node, &pods)?;
 
         return Ok(())
     }
 
-    pub fn MetaToDataObject(kind: &str, meta: &ObjectMeta) -> Result<DataObjectInner> {
-        let mut labels = BTreeMap::new();
-        if let Some(map) = &meta.labels {
-            for (k, v) in map {
-                labels.insert(k.to_string(), v.to_string());
-            }
-        }
-        
-        let mut annotations = BTreeMap::new();
-        if let Some(map) = &meta.annotations {
-            for (k, v) in map {
-                annotations.insert(k.to_string(), v.to_string());
-            }
-        }
-
-        let resource_version = meta.resource_version.as_deref().unwrap_or("0").to_string();
-
-        let revision = resource_version.parse::<i64>()?;
-
-        let inner = DataObjectInner {
-            kind: kind.to_string(),
-            namespace: meta.namespace.as_deref().unwrap_or("").to_string(),
-            name: meta.name.as_deref().unwrap_or("").to_string(),
-            lables: Labels::NewFromMap(labels),
-            annotations: Labels::NewFromMap(annotations),
-            reversion: revision,
-            data: String::new(),
-        };
-
-        return Ok(inner);
-    }
-
-    pub fn PodToDataObject(pod: &k8s::Pod) -> Result<DataObject> {
-        let mut inner = Self::MetaToDataObject("pod", &pod.metadata)?;
-        inner.data = serde_json::to_string(pod)?;
-        let dataObj = DataObject(Arc::new(inner));
-        return Ok(dataObj)
-    }
-
-    pub fn NodeToDataObject(node: &k8s::Node) -> Result<DataObject> {
-        let mut inner = Self::MetaToDataObject("node", &node.metadata)?;
-        inner.data = serde_json::to_string(node)?;
-        let dataObj = DataObject(Arc::new(inner));
-        return Ok(dataObj)
-    }
 
     pub fn ProcessPodEvent(&self, nodeKey: &str, event: &nm::PodEvent) -> Result<()> {
         let k8sPod: k8s::Pod = serde_json::from_str(&event.pod)?;
-        let podObj = Self::PodToDataObject(&k8sPod)?;
+        let podObj = PodToDataObject(&k8sPod)?;
         let mut inner = self.write().unwrap();
 
         if event.event_type == nm::EventType::Add as i32 {
@@ -186,38 +239,15 @@ impl NodeMgrCache {
         return Ok(());
     }
 
-    // will be called when a new node joining
-    pub fn RefreshNode(&self, node:&k8s::Node, pods: &[k8s::Pod]) -> Result<()> {
-        let mut podObjs = Vec::new();
-        let nodeObj = Self::NodeToDataObject(node)?;
-        let mut set = BTreeSet::new();
-        for pod in pods {
-            /*let node = match pod.metadata.annotations.unwrap().get(AnnotationNodeMgrNode) {
-                None => return Err(Error::CommonError(format!("NodeMgrCache::AddPod can't get node info from node"))),
-                Some(n) => n.to_string(),
-            };*/
-            let obj = Self::PodToDataObject(pod)?;
-            set.insert(obj.Key());
-            podObjs.push(obj);
-        }
-
-        let mut inner = self.write().unwrap();
-        inner.pods.as_ref().unwrap().Refresh(&podObjs)?;
-        inner.nodePods.insert(nodeObj.Key(), set);
-
-        if inner.nodes.as_ref().unwrap().Contains(&nodeObj.Key()) {
-            inner.nodes.as_ref().unwrap().ProcessEvent(&WatchEvent {
-                type_: EventType::Modified,
-                obj: nodeObj,
-            })?;
-        } else {
-            inner.nodes.as_ref().unwrap().ProcessEvent(&WatchEvent {
-                type_: EventType::Added,
-                obj: nodeObj,
-            })?;
-        }
-
-        return Ok(());
+    pub fn ProcessNodeUpdate(&self, nodeKey: &str, update: &nm::NodeUpdate) -> Result<()> {
+        assert!(self.read().unwrap().nodes.as_ref().unwrap().Contains(nodeKey));
+        
+        let node: k8s::Node = serde_json::from_str(&update.node)?;
+        let nodeObj: DataObject = NodeToDataObject(&node)?;
+        self.read().unwrap().nodes.as_ref().unwrap().ProcessEvent(&WatchEvent {
+            type_: EventType::Modified,
+            obj: nodeObj,
+        })
     }
 
     pub fn DeleteNode(&self, nodeKey: &str) -> Result<()> {
@@ -237,5 +267,17 @@ impl NodeMgrCache {
         }
 
         return Ok(());
+    }
+
+    pub async fn CreatePod(&self, node: &str, pod: &k8s::Pod, configmap: &k8s::ConfigMap) -> Result<()> {
+        let nodeAgentClient = self.read().unwrap().nodeAgents.get(node).cloned();
+        match nodeAgentClient {
+            None => {
+                return Err(Error::CommonError(format!("There is no node named {}", node)));
+            }
+            Some(client) => {
+                return client.CreatePod(pod, configmap).await;
+            }
+        }
     }
 }

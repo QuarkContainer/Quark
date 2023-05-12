@@ -20,7 +20,7 @@ pub mod node_agent_resp_msg {
 pub struct NodeAgentReq {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
-    #[prost(oneof = "node_agent_req::MessageBody", tags = "100")]
+    #[prost(oneof = "node_agent_req::MessageBody", tags = "100, 200")]
     pub message_body: ::core::option::Option<node_agent_req::MessageBody>,
 }
 /// Nested message and enum types in `NodeAgentReq`.
@@ -30,6 +30,8 @@ pub mod node_agent_req {
     pub enum MessageBody {
         #[prost(message, tag = "100")]
         NodeConfigReq(super::NodeConfigReq),
+        #[prost(message, tag = "200")]
+        CreatePodReq(super::CreatePodReq),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -39,7 +41,7 @@ pub struct NodeAgentResp {
     pub request_id: u64,
     #[prost(string, tag = "2")]
     pub error: ::prost::alloc::string::String,
-    #[prost(oneof = "node_agent_resp::MessageBody", tags = "100")]
+    #[prost(oneof = "node_agent_resp::MessageBody", tags = "100, 200")]
     pub message_body: ::core::option::Option<node_agent_resp::MessageBody>,
 }
 /// Nested message and enum types in `NodeAgentResp`.
@@ -49,6 +51,8 @@ pub mod node_agent_resp {
     pub enum MessageBody {
         #[prost(message, tag = "100")]
         NodeConfigResp(super::NodeConfigResp),
+        #[prost(message, tag = "200")]
+        CreatePodResp(super::CreatePodResp),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -66,6 +70,17 @@ pub struct NodeConfigReq {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeConfigResp {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreatePodReq {
+    #[prost(string, tag = "1")]
+    pub pod: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub config_map: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreatePodResp {}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeAgentStreamMsg {
@@ -433,28 +448,6 @@ pub mod node_agent_service_client {
             self.inner = self.inner.accept_compressed(encoding);
             self
         }
-        pub async fn stream_msg(
-            &mut self,
-            request: impl tonic::IntoStreamingRequest<Message = super::NodeAgentMessage>,
-        ) -> Result<
-            tonic::Response<tonic::codec::Streaming<super::NodeAgentMessage>>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/nm.NodeAgentService/StreamMsg",
-            );
-            self.inner.streaming(request.into_streaming_request(), path, codec).await
-        }
         pub async fn stream_process(
             &mut self,
             request: impl tonic::IntoStreamingRequest<Message = super::NodeAgentRespMsg>,
@@ -486,16 +479,6 @@ pub mod node_agent_service_server {
     /// Generated trait containing gRPC methods that should be implemented for use with NodeAgentServiceServer.
     #[async_trait]
     pub trait NodeAgentService: Send + Sync + 'static {
-        /// Server streaming response type for the StreamMsg method.
-        type StreamMsgStream: futures_core::Stream<
-                Item = Result<super::NodeAgentMessage, tonic::Status>,
-            >
-            + Send
-            + 'static;
-        async fn stream_msg(
-            &self,
-            request: tonic::Request<tonic::Streaming<super::NodeAgentMessage>>,
-        ) -> Result<tonic::Response<Self::StreamMsgStream>, tonic::Status>;
         /// Server streaming response type for the StreamProcess method.
         type StreamProcessStream: futures_core::Stream<
                 Item = Result<super::NodeAgentReq, tonic::Status>,
@@ -566,47 +549,6 @@ pub mod node_agent_service_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
-                "/nm.NodeAgentService/StreamMsg" => {
-                    #[allow(non_camel_case_types)]
-                    struct StreamMsgSvc<T: NodeAgentService>(pub Arc<T>);
-                    impl<
-                        T: NodeAgentService,
-                    > tonic::server::StreamingService<super::NodeAgentMessage>
-                    for StreamMsgSvc<T> {
-                        type Response = super::NodeAgentMessage;
-                        type ResponseStream = T::StreamMsgStream;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<
-                                tonic::Streaming<super::NodeAgentMessage>,
-                            >,
-                        ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move { (*inner).stream_msg(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = StreamMsgSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
-                        let res = grpc.streaming(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
                 "/nm.NodeAgentService/StreamProcess" => {
                     #[allow(non_camel_case_types)]
                     struct StreamProcessSvc<T: NodeAgentService>(pub Arc<T>);

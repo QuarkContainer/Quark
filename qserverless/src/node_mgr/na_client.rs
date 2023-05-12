@@ -14,7 +14,7 @@
 
 use std::result::Result as SResult;
 use std::sync::Arc;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
+
 use qobjs::pb_gen::nm::node_agent_stream_msg::EventBody;
 use tonic::Status;
 use qobjs::pb_gen::nm::NodeRegister;
@@ -35,7 +35,9 @@ use tokio::sync::oneshot;
 use qobjs::pb_gen::nm as NmMsg;
 use qobjs::common::*;
 
+use crate::nm_store::NodeToDataObject;
 use crate::nm_svc::NodeMgrSvc;
+use crate::NM_CACHE;
 
 #[derive(Debug)]
 pub struct NodeAgentClientInner {
@@ -45,6 +47,7 @@ pub struct NodeAgentClientInner {
     pub nodeMgrSvc: NodeMgrSvc,
     pub nodeName: Mutex<String>,
     pub uid: Mutex<String>,
+    pub nodeKey: Mutex<String>,
 
     pub rx: Mutex<Option<Streaming<NmMsg::NodeAgentRespMsg>>>,
     pub tx: mpsc::Sender<SResult<NmMsg::NodeAgentReq, Status>>,
@@ -73,6 +76,7 @@ impl NodeAgentClient {
             nodeMgrSvc: svc.clone(),
             nodeName: Mutex::new(String::new()),
             uid: Mutex::new(String::new()),
+            nodeKey: Mutex::new(String::new()),
             rx: Mutex::new(Some(rx)),
             tx: tx,
             pendingReqs: Mutex::new(BTreeMap::new()),
@@ -151,10 +155,15 @@ impl NodeAgentClient {
         
                 return Ok(())
             }
-            _ => {
-                //error!("ProcessStreamMsg mmsg {:?}", &event);
+            EventBody::PodEvent(event) => {
+                let nodeKey = self.nodeKey.lock().unwrap().clone();
+                NM_CACHE.get().unwrap().ProcessPodEvent(&nodeKey, &event)?;
+                return Ok(())
+            }
+            EventBody::NodeUpdate(event) => {
+                let nodeKey = self.nodeKey.lock().unwrap().clone();
+                NM_CACHE.get().unwrap().ProcessNodeUpdate(&nodeKey, &event)?;
                 return Ok(());
-                //unimplemented!()
             }
         }
     }
@@ -169,23 +178,15 @@ impl NodeAgentClient {
 
         self.nodeMgrSvc.clients.lock().unwrap().insert(name.clone(), self.clone());
 
-        let node = k8s::Node {
-            metadata: ObjectMeta {
-                annotations: Some(BTreeMap::new()),
-                ..Default::default()
-            },
-            spec: Some(k8s::NodeSpec {
-                pod_cidr: Some("123.1.2.0/24".to_string()),
-                pod_cidrs: Some(vec!["123.1.2.0/24".to_string()]),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-            
+        let mut node: k8s::Node = serde_json::from_str(&msg.node)?;
+        node.spec.as_mut().unwrap().pod_cidr = Some("123.1.2.0/24".to_string());
+        node.spec.as_mut().unwrap().pod_cidrs =  Some(vec!["123.1.2.0/24".to_string()]);
+        
         let req = NmMsg::NodeConfigReq {
             cluster_domain: "".to_string(),
             node: serde_json::to_string(&node)?,
         };
+
         
         match self.Call(NmMsg::node_agent_req::MessageBody::NodeConfigReq(req)).await {
             Err(e) => {
@@ -195,11 +196,33 @@ impl NodeAgentClient {
             Ok(_) => (),
         };
 
+        let mut pods = Vec::new();
+
+        for podStr in &msg.pods {
+            let pod: k8s::Pod = serde_json::from_str(&podStr)?;
+            pods.push(pod);
+        }
+
+        let nodeObj = NodeToDataObject(&node)?;
+        *self.nodeKey.lock().unwrap() = nodeObj.Key();
+
+        NM_CACHE.get().unwrap().RegisterNodeAgentClient(self, &node, &pods)?;
+
         return Ok(())
     }
 
     pub fn ReqId(&self) -> u64 {
         return self.nextReqId.fetch_add(1, Ordering::Release) + 1;
+    }
+
+    pub async fn CreatePod(&self, pod: &k8s::Pod, configMap: &k8s::ConfigMap) -> Result<()> {
+        let req = NmMsg::CreatePodReq {
+            pod: serde_json::to_string(pod)?,
+            config_map: serde_json::to_string(configMap)?,
+        };
+
+        self.Call(NmMsg::node_agent_req::MessageBody::CreatePodReq(req)).await?;
+        return Ok(())
     }
 
     pub async fn Call(&self, req: NmMsg::node_agent_req::MessageBody) -> Result<NmMsg::node_agent_resp::MessageBody> {

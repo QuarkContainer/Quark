@@ -64,7 +64,9 @@ pub struct PutRequestMessage {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PutResponseMessage {
-    #[prost(int64, tag = "1")]
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+    #[prost(int64, tag = "2")]
     pub revision: i64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

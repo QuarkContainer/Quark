@@ -22,7 +22,6 @@ import "google/protobuf/empty.proto";
 //import "pkg/apis/core/v1/generated.proto";
 
 service NodeAgentService {
-  rpc StreamMsg(stream NodeAgentMessage) returns (stream NodeAgentMessage);
   rpc StreamProcess(stream NodeAgentRespMsg) returns (stream NodeAgentReq);
 }
 ///////////////////////////////////////////////////////////////////////
@@ -38,6 +37,7 @@ message NodeAgentReq {
   uint64 requestId = 1;
   oneof MessageBody {
     NodeConfigReq nodeConfigReq = 100;
+    CreatePodReq createPodReq = 200;
   }
 }
 
@@ -46,6 +46,7 @@ message NodeAgentResp {
   string error = 2;
   oneof MessageBody {
     NodeConfigResp nodeConfigResp = 100;
+    CreatePodResp createPodResp = 200;
   }
 }
 
@@ -58,6 +59,14 @@ message NodeConfigReq {
 }
 
 message NodeConfigResp {
+}
+
+message CreatePodReq {
+  string pod = 1;
+  string configMap = 2;
+}
+
+message CreatePodResp {
 }
 
 message NodeAgentStreamMsg {

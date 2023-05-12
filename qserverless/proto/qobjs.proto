@@ -70,7 +70,8 @@ message PutRequestMessage {
 }
 
 message PutResponseMessage {
-    int64 revision = 1;
+    string error = 1;
+    int64 revision = 2;
 }
 
 message ResponseHeader {
