@@ -40,7 +40,6 @@ pub struct NodeMgrSvcInner {
     pub processChannel: Option<mpsc::Receiver<SrvMsg>>,
 }
 
-
 // NodeMgrSvc direct connect to NodeAgent
 #[derive(Debug, Clone)]
 pub struct NodeMgrSvc(Arc<NodeMgrSvcInner>);
