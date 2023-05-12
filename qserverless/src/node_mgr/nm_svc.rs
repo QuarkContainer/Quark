@@ -14,15 +14,18 @@
 
 use std::{collections::BTreeMap, sync::Mutex};
 
-use futures_util::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
-use tonic::{Response, Status};
+use tonic::{Response, Status, Request};
 use tokio::sync::mpsc;
 use core::ops::Deref;
 use std::sync::Arc;
 use std::result::Result as SResult;
 
-use qobjs::pb_gen::nm::{self as nm_svc};
+use k8s_openapi::api::core::v1 as k8s;
+
+use qobjs::pb_gen::nm as nm_svc;
+use qobjs::pb_gen::node_mgr as NodeMgr;
+use qobjs::service_directory as sd;
 use qobjs::common::Result;
 
 use crate::na_client::*;
@@ -63,21 +66,6 @@ impl NodeMgrSvc {
     pub fn NodeAgent(&self, nodeId: &str) -> Option<NodeAgentClient> {
         return self.clients.lock().unwrap().get(nodeId).cloned();
     }
- /*
-    pub fn OnNodeAgentConnect(&self, msg: SrvMsg) -> Result<()> {
-        match msg {
-            SrvMsg::AgentConnect((nodeReg, chann)) => {
-                let k8sNode = NodeFromString(&nodeReg.node)?;
-                let nodeId = nodeReg.identifier.clone();
-                let rev = nodeReg.node_revision;
-
-                match self.NodeAgent(nodeId) {
-                    None => 
-                }
-            }
-        }
-    }
- */
 }
 
 #[derive(Debug)]
@@ -87,60 +75,8 @@ pub enum SrvMsg {
     AgentMsg((String, Result<nm_svc::NodeAgentMessage>)),
 }
 
-
 #[tonic::async_trait]
 impl nm_svc::node_agent_service_server::NodeAgentService for NodeMgrSvc {
-    type StreamMsgStream = ReceiverStream<SResult<nm_svc::NodeAgentMessage, Status>>;
-
-    async fn stream_msg(
-        &self,
-        request: tonic::Request<tonic::Streaming<nm_svc::NodeAgentMessage>>,
-    ) -> SResult<tonic::Response<Self::StreamMsgStream>, tonic::Status> {
-        let mut stream = request.into_inner();
-        let (tx, rx) = mpsc::channel(30);
-        let svc = self.clone();
-        tokio::spawn(async move {
-            let nodeId;
-            if let Some(msg) = stream.next().await {
-                match &msg {
-                    Ok(m) => {
-                        match m.message_body.as_ref().unwrap() {
-                            nm_svc::node_agent_message::MessageBody::NodeRegistry(b) => {
-                                nodeId = b.node.clone();
-                                svc.agentsChann.send(SrvMsg::AgentConnect((b.clone(), tx))).await.unwrap();
-                            }
-                            _ => {
-                                error!("get agent connnection get unexpected initia msg {:?}", msg);
-                                return;
-                            }
-                        }
-                    }
-                    Err(e)  => {
-                        error!("get agent connnection error {:?}", e);
-                        return;
-                    }
-                }
-            } else {
-                error!("get agent connnection disconected");
-                return;
-            }
-
-            loop {
-                if let Some(msg) = stream.next().await {
-                    match msg {
-                        Ok(m) => svc.agentsChann.send(SrvMsg::AgentMsg((nodeId.clone(), Ok(m)))).await.unwrap(),
-                        Err(e) => svc.agentsChann.send(SrvMsg::AgentMsg((nodeId.clone(), Err(e.into())))).await.unwrap(),
-                    }
-                } else {
-                    svc.agentsChann.send(SrvMsg::AgentClose(nodeId)).await.unwrap();
-                    break;
-                }
-            }
-        });
-        
-        return Ok(Response::new(ReceiverStream::new(rx)));
-    }
-
     type StreamProcessStream = ReceiverStream<SResult<nm_svc::NodeAgentReq, Status>>;
     async fn stream_process(
         &self,
@@ -153,5 +89,160 @@ impl nm_svc::node_agent_service_server::NodeAgentService for NodeMgrSvc {
             client.Process().await;
         });
         return Ok(Response::new(ReceiverStream::new(rx)));
+    }
+}
+
+#[tonic::async_trait]
+impl NodeMgr::node_mgr_service_server::NodeMgrService for NodeMgrSvc {
+    async fn create_pod(
+        &self,
+        request: tonic::Request<NodeMgr::CreatePodReq>,
+    ) -> SResult<tonic::Response<NodeMgr::CreatePodResp>, tonic::Status> {
+        let req = request.get_ref();
+        let pod: k8s::Pod = match serde_json::from_str(&req.pod) {
+            Err(_e) => {
+                return Ok(Response::new(NodeMgr::CreatePodResp {
+                    error: format!("pod json is not valid {}", &req.pod),
+                }))
+            }
+            Ok(p) => p,
+        };
+
+        let configmap: k8s::ConfigMap = match serde_json::from_str(&req.config_map) {
+            Err(_e) => {
+                return Ok(Response::new(NodeMgr::CreatePodResp {
+                    error: format!("config_map json is not valid {}", &req.config_map),
+                }))
+            }
+            Ok(p) => p,
+        };
+
+        match crate::NM_CACHE.get().unwrap().CreatePod(&req.node, &pod, &configmap).await {
+            Err(e) => {
+                return Ok(Response::new(NodeMgr::CreatePodResp {
+                    error: format!("create pod fail with error {:?}", e),
+                }))
+            }
+            Ok(()) =>  {
+                return Ok(Response::new(NodeMgr::CreatePodResp {
+                    error: String::new(),
+                }))
+            }
+        }
+    }
+}
+
+#[tonic::async_trait]
+impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSvc {
+    // This is to verify the grpc server is working.
+    // 1. go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
+    // 2. Launch the grpc server
+    // 3. grpcurl -plaintext -proto resilience_function/proto/service_directory.proto -d '{"client_name": "a client"}' [::]:50071 service_directory.ServiceDirectoryService/TestPing
+    async fn test_ping(
+        &self,
+        request: Request<sd::TestRequestMessage>,
+    ) -> SResult<Response<sd::TestResponseMessage>, Status> {
+        error!("Request from {:?}", request.remote_addr());
+
+        let response = sd::TestResponseMessage {
+            server_name: "Server".to_owned(),
+        };
+        Ok(Response::new(response))
+    }
+
+    async fn put(
+        &self,
+        _request: Request<sd::PutRequestMessage>,
+    ) -> SResult<Response<sd::PutResponseMessage>, Status> {
+        let response = sd::PutResponseMessage {
+            error: "NodeMgr doesn't support Put".to_owned(),
+            ..Default::default()
+        };
+        Ok(Response::new(response))
+    }
+
+    async fn create(
+        &self,
+        _request: Request<sd::CreateRequestMessage>,
+    ) -> SResult<Response<sd::CreateResponseMessage>, Status> {
+        let response = sd::CreateResponseMessage {
+            error: "NodeMgr doesn't support create".to_owned(),
+            ..Default::default()
+        };
+        Ok(Response::new(response))
+    }
+
+    async fn get(
+        &self,
+        request: Request<sd::GetRequestMessage>,
+    ) -> SResult<Response<sd::GetResponseMessage>, Status> {
+        //info!("get Request {:#?}", &request);
+
+        let req = request.get_ref();
+        let cacher = match crate::NM_CACHE.get().unwrap().GetCacher(&req.obj_type) {
+            None => {
+                return Ok(Response::new(sd::GetResponseMessage {
+                    error: format!("doesn't support obj type {}", &req.obj_type),
+                    obj: None,
+                }))
+            }
+            Some(c) => c,
+        };
+
+        match cacher.Get(&req.namespace, &req.name, req.revision).await {
+            Err(e) => {
+                return Ok(Response::new(sd::GetResponseMessage {
+                    error: format!("Fail: {:?}", e),
+                    obj: None,
+                }))
+            }
+            Ok(o) => {
+                return Ok(Response::new(sd::GetResponseMessage {
+                    error: "".into(),
+                    obj: match o {
+                        None => None,
+                        Some(o) => Some(o.Obj()),
+                    },
+                }))
+            }
+        }
+    }
+
+    async fn delete(
+        &self,
+        _request: Request<sd::DeleteRequestMessage>,
+    ) -> SResult<Response<sd::DeleteResponseMessage>, Status> {
+        let response = sd::DeleteResponseMessage {
+            error: "NodeMgr doesn't support delete".to_owned(),
+            ..Default::default()
+        };
+        Ok(Response::new(response))
+    }
+
+    async fn update(
+        &self,
+        _request: Request<sd::UpdateRequestMessage>,
+    ) -> SResult<Response<sd::UpdateResponseMessage>, Status> {
+        let response = sd::UpdateResponseMessage {
+            error: "NodeMgr doesn't support update".to_owned(),
+            ..Default::default()
+        };
+        Ok(Response::new(response))
+    }
+
+    async fn list(
+        &self,
+        _request: Request<sd::ListRequestMessage>,
+    ) -> SResult<Response<sd::ListResponseMessage>, Status> {
+        unimplemented!()
+    }
+
+    type WatchStream = std::pin::Pin<Box<dyn futures::Stream<Item = SResult<sd::WEvent, Status>> + Send>>;
+
+    async fn watch(
+        &self,
+        _request: Request<sd::WatchRequestMessage>,
+    ) -> SResult<Response<Self::WatchStream>, Status> {
+        unimplemented!()
     }
 }

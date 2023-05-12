@@ -17,3 +17,16 @@ limitations under the License.
 syntax = "proto3";
 package node_mgr;
 
+service NodeMgrService {
+    rpc CreatePod (CreatePodReq) returns (CreatePodResp) {}
+}
+
+message CreatePodReq {
+  string node = 1;
+  string pod = 2;
+  string configMap = 3;
+}
+
+message CreatePodResp {
+    string error = 2;
+}

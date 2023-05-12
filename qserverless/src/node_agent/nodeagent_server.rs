@@ -19,7 +19,9 @@ use std::sync::Mutex;
 use core::ops::Deref;
 
 use qobjs::pb_gen::nm::NodeAgentReq;
+use qobjs::runtime_types::ConfigMapFromString;
 use qobjs::runtime_types::NodeFromString;
+use qobjs::runtime_types::PodFromString;
 use tokio::sync::Notify;
 use tonic::Streaming;
 use tokio::sync::mpsc;
@@ -261,6 +263,12 @@ impl NodeAgentServer {
                 let node = NodeFromString(&req.node)?;
                 nodeAgent.NodeConfigure(node).await?;
                 return Ok(NmMsg::node_agent_resp::MessageBody::NodeConfigResp(NmMsg::NodeConfigResp{}));
+            }
+            NmMsg::node_agent_req::MessageBody::CreatePodReq(req) => {
+                let pod = PodFromString(&req.pod)?;
+                let configMap = ConfigMapFromString(&req.config_map)?;
+                nodeAgent.CreatePod(&pod, &configMap).await?;
+                return Ok(NmMsg::node_agent_resp::MessageBody::CreatePodResp(NmMsg::CreatePodResp{}));
             }
         }
     }

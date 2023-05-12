@@ -57,7 +57,10 @@ impl ServiceDirectoryService for ServiceDirectoryImpl {
     ) -> Result<Response<PutResponseMessage>, Status> {
         error!("Request from {:?}", request.remote_addr());
 
-        let response = PutResponseMessage { revision: 1 };
+        let response = PutResponseMessage { 
+            error: String::new(),
+            revision: 1 
+        };
         Ok(Response::new(response))
     }
 
