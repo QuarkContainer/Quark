@@ -32,11 +32,11 @@ use qobjs::k8s_util::K8SUtil;
 //use qobjs::runtime_types::QuarkNode;
 use qobjs::runtime_types::*;
 use qobjs::common::*;
-use qobjs::pb_gen::nm::{self as NmMsg};
+use qobjs::nm::{self as NmMsg};
 use qobjs::types::*;
 
 use crate::nm_svc::{NodeAgentMsg, PodCreate};
-use crate::node_status::SetNodeStatus;
+use crate::node_status::{SetNodeStatus, IsNodeStatusReady};
 use crate::{pod::*, NODEAGENT_STORE, RUNTIME_MGR};
 use crate::NETWORK_PROVIDER;
 
@@ -109,7 +109,7 @@ impl NodeAgent {
         for p in pods {
             let pod = p.sandbox.unwrap();
 
-            error!("removing pod {} annotations {:#?}", &pod.id, &pod.annotations);
+            info!("removing pod {} annotations {:#?}", &pod.id, &pod.annotations);
             // skip call sandbox which not created by qserverless
             if !pod.annotations.contains_key(AnnotationNodeMgrNode) {
                 continue;
@@ -168,8 +168,18 @@ impl NodeAgent {
                     break;
                 }
                 _ = interval.tick() => {
-                    SetNodeStatus(&self.node).await?;
-                    NODEAGENT_STORE.get().unwrap().UpdateNode(&self.node)?;
+                    if self.State() == NodeAgentState::Registered {
+                        if IsNodeStatusReady(&self.node) {
+                            info!("Node is ready");
+                            *self.state.lock().unwrap() = NodeAgentState::Ready;
+                            SetNodeStatus(&self.node).await?;
+                            self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodeRunning));
+                            NODEAGENT_STORE.get().unwrap().UpdateNode(&self.node)?;
+                        }
+                    } else {
+                        SetNodeStatus(&self.node).await?;
+                        NODEAGENT_STORE.get().unwrap().UpdateNode(&self.node)?;
+                    }
                 }
                 msg = rx.recv() => {
                     if let Some(msg) = msg {
@@ -257,25 +267,26 @@ impl NodeAgent {
     }
 
     pub async fn NodeConfigure(&self, node: k8s::Node) -> Result<()> {
-        if *self.state.lock().unwrap() != NodeAgentState::Registering {
-            return Err(Error::CommonError(format!("node is not in registering state, it does not expect configuration change after registering")));
-        }
+        if *self.state.lock().unwrap() == NodeAgentState::Registering {
+            //return Err(Error::CommonError(format!("node is not in registering state, it does not expect configuration change after registering")));
+         
 
-        info!("received node spec from nodemgr: {:?}", &node);
-        ValidateNodeSpec(&node)?;
+            info!("received node spec from nodemgr: {:?}", &node);
+            ValidateNodeSpec(&node)?;
 
-        self.node.node.lock().unwrap().spec = node.spec.clone();
-        if NodeSpecPodCidrChanged(&*self.node.node.lock().unwrap(), &node) {
-            if self.node.pods.lock().unwrap().len() > 0 {
-                return Err(Error::CommonError(format!("change pod cidr when node has pods is not allowed, should not happen")));
+            self.node.node.lock().unwrap().spec = node.spec.clone();
+            if NodeSpecPodCidrChanged(&*self.node.node.lock().unwrap(), &node) {
+                if self.node.pods.lock().unwrap().len() > 0 {
+                    return Err(Error::CommonError(format!("change pod cidr when node has pods is not allowed, should not happen")));
+                }
+                // TODO, set up pod cidr
             }
-            // TODO, set up pod cidr
+
+            *self.state.lock().unwrap() = NodeAgentState::Registered;
+            SetNodeStatus(&self.node).await?;
+            self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodePending));
         }
 
-        *self.state.lock().unwrap() = NodeAgentState::Registered;
-
-        SetNodeStatus(&self.node).await?;
-        self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodeRunning));
         NODEAGENT_STORE.get().unwrap().UpdateNode(&self.node)?;
         
         return Ok(())

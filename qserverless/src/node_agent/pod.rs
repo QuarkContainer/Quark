@@ -33,7 +33,7 @@ use chrono::prelude::*;
 use qobjs::runtime_types::{QuarkPod, QuarkContainer};
 use qobjs::common::*;
 use qobjs::k8s_util::*;
-use qobjs::pb_gen::v1alpha2::{self as cri};
+use qobjs::v1alpha2::{self as cri};
 use qobjs::runtime_types::RuntimeContainer;
 use qobjs::config::*;
 use qobjs::runtime_types::*;

@@ -22,7 +22,7 @@ use std::sync::Arc;
 use core::ops::Deref;
 use serde::{Deserialize, Serialize};
 
-use super::service_directory::*;
+use crate::service_directory::*;
 use crate::common::*;
 use crate::types::DeepCopy;
 

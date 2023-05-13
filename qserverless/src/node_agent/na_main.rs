@@ -40,10 +40,10 @@ pub mod nodeagent_server;
 
 use qobjs::common::Result as QResult;
 //use qobjs::config::NodeConfiguration;
-//use qobjs::pb_gen::nm::NodeAgentMessage;
+//use qobjs::nm::NodeAgentMessage;
 use runtime::image_mgr::ImageMgr;
 
-use qobjs::pb_gen::v1alpha2;
+use qobjs::v1alpha2;
 use store::nodeagent_store::NodeAgentStore;
 use crate::nodeagent_server::NodeAgentServerMgr;
 use crate::runtime::runtime::RuntimeMgr;
@@ -73,10 +73,10 @@ async fn main() -> QResult<()> {
 }
 
 pub async fn ClientTest() -> QResult<()> {
-    //use qobjs::pb_gen::nm::{self as NmMsg};
+    //use qobjs::nm::{self as NmMsg};
     use log::LevelFilter;
     //use nm_svc::*;
-    //use qobjs::pb_gen::nm::*;
+    //use qobjs::nm::*;
     //use k8s_openapi::api::core::v1 as k8s;
     //use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
     //use serde::{Deserialize, Serialize};
@@ -112,23 +112,19 @@ pub async fn ClientTest() -> QResult<()> {
     RUNTIME_MGR.set(RuntimeMgr::New(10).await.unwrap()).unwrap();
     IMAGE_MGR.set(ImageMgr::New(v1alpha2::AuthConfig::default()).await.unwrap()).unwrap();
     
-    let client = crate::cri::client::CriClient::Init().await?;
-    error!("pods1 is {:#?}", client.ListPodSandbox(None).await?);
-
+    //let client = crate::cri::client::CriClient::Init().await?;
+    
     let nodeAgentStore= NodeAgentStore::New()?;
     NODEAGENT_STORE.set(nodeAgentStore).unwrap();
-    error!("pods2 is {:#?}", client.ListPodSandbox(None).await?);
-
+    
    
     let config = qobjs::config::NodeConfiguration::Default()?;
 
     let na = crate::node::Run(config).await?;
-    error!("pods3 is {:#?}", client.ListPodSandbox(None).await?);
-
+    
    
     let nodeAgentSrvMgr = NodeAgentServerMgr::New(vec!["http://127.0.0.1:8888".to_owned()]);
-    error!("pods4 is {:#?}", client.ListPodSandbox(None).await?);
-
+    
     nodeAgentSrvMgr.Process(&na).await.unwrap();
 
     /*let list = NODEAGENT_STORE.get().unwrap().List();
@@ -188,13 +184,13 @@ pub async fn ClientTest() -> QResult<()> {
 
 /*
 pub async fn NMClientTest() -> QResult<()> {
-    use qobjs::pb_gen::nm as nm_svc;
+    use qobjs::nm as nm_svc;
     //use tonic::{Response, Status};
     use tokio::sync::mpsc;
     use tonic::Streaming;
     //use tonic::Request;
     //use futures_util::stream;
-    use qobjs::pb_gen::nm::NodeAgentMessage;
+    use qobjs::nm::NodeAgentMessage;
 
     let msg = nm_svc::NodeFullSync{};
     let mut client = nm_svc::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;

@@ -51,3 +51,15 @@ pub mod service_directory {
     include!("pb_gen/service_directory.rs");
 }
 
+pub mod nm {
+    include!("pb_gen/nm.rs");
+}
+
+pub mod node_mgr {
+    include!("pb_gen/node_mgr.rs");
+}
+
+pub mod v1alpha2 {
+    include!("pb_gen/v1alpha2.rs");
+}
+

@@ -15,9 +15,9 @@
 use std::result::Result as SResult;
 use std::sync::Arc;
 
-use qobjs::pb_gen::nm::node_agent_stream_msg::EventBody;
+use qobjs::nm::node_agent_stream_msg::EventBody;
 use tonic::Status;
-use qobjs::pb_gen::nm::NodeRegister;
+use qobjs::nm::NodeRegister;
 use tokio::sync::mpsc;
 use core::ops::Deref;
 use k8s_openapi::api::core::v1 as k8s;
@@ -32,7 +32,7 @@ use tokio::sync::Notify;
 use tonic::Streaming;
 use tokio::sync::oneshot;
 
-use qobjs::pb_gen::nm as NmMsg;
+use qobjs::nm as NmMsg;
 use qobjs::common::*;
 
 use crate::nm_store::NodeToDataObject;

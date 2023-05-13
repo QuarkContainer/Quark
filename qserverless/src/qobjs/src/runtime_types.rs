@@ -24,7 +24,7 @@ use chrono::prelude::*;
 use k8s_openapi::api::core::v1 as k8s;
 
 use crate::common::*;
-use crate::pb_gen::v1alpha2 as cri;
+use crate::v1alpha2 as cri;
 use crate::k8s_util::*;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

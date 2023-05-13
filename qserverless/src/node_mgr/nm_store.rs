@@ -19,7 +19,7 @@ use std::time::SystemTime;
 use async_trait::async_trait;
 
 use k8s_openapi::{api::core::v1 as k8s, apimachinery::pkg::apis::meta::v1::ObjectMeta};
-use qobjs::pb_gen::nm;
+use qobjs::nm;
 use qobjs::{types::*, selector::Labels};
 use qobjs::common::*;
 use qobjs::cacher::*;
@@ -155,7 +155,10 @@ impl BackendStore for NodeMgrCache {
         unimplemented!();
     }
 
-    fn Register(&self, _cacher: Cacher, _rev: i64, _prefix: String, _ready: Arc<Notify>, _notify: Arc<Notify>) -> Result<()> {
+    fn Register(&self, _cacher: Cacher, _rev: i64, _prefix: String, ready: Arc<Notify>, notify: Arc<Notify>) -> Result<()> {
+        
+        notify.notify_one();
+        ready.notify_one();
         return Ok(())
     }
 }

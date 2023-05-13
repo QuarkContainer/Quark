@@ -394,7 +394,7 @@ impl ServiceDirectoryService for ServiceDirectoryImpl {
     }
 }
 
-type WatchStream = Pin<Box<dyn Stream<Item = Result<WEvent, Status>> + Send>>;
+//type WatchStream = Pin<Box<dyn Stream<Item = Result<WEvent, Status>> + Send>>;
 
 pub async fn gRpcServer() -> QResult<()> {
     let addr = "[::1]:50071".parse().unwrap();

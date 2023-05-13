@@ -18,7 +18,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Mutex;
 use core::ops::Deref;
 
-use qobjs::pb_gen::nm::NodeAgentReq;
+use qobjs::nm::NodeAgentReq;
 use qobjs::runtime_types::ConfigMapFromString;
 use qobjs::runtime_types::NodeFromString;
 use qobjs::runtime_types::PodFromString;
@@ -27,7 +27,7 @@ use tonic::Streaming;
 use tokio::sync::mpsc;
 use tokio::time;
 
-use qobjs::pb_gen::nm as NmMsg;
+use qobjs::nm as NmMsg;
 use qobjs::common::*;
 
 use crate::NODEAGENT_STORE;

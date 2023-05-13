@@ -22,7 +22,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::error::TrySendError;
 
 use k8s_openapi::api::core::v1 as k8s;
-use qobjs::pb_gen::nm as NmMsg;
+use qobjs::nm as NmMsg;
 use qobjs::runtime_types::QuarkPod;
 use qobjs::common::*;
 

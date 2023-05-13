@@ -16,10 +16,10 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use tokio::sync::Semaphore;
-//use qobjs::pb_gen::v1alpha2::{self as cri};
+//use qobjs::v1alpha2::{self as cri};
 
 use crate::cri::client::*;
-use qobjs::pb_gen::v1alpha2::*;
+use qobjs::v1alpha2::*;
 use qobjs::runtime_types::*;
 use qobjs::common::Result;
 use qobjs::common::Error;
@@ -33,7 +33,7 @@ pub const ContainerState_CONTAINER_UNKNOWN: ContainerState = 3;*/
 
 #[derive(Debug)]
 pub struct RuntimeMgr {
-    pub runtimeService: CriClient,
+pub runtimeService: CriClient,
     pub concurrency: Semaphore,
 }
 
