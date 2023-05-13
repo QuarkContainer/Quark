@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 use tokio::sync::Mutex as TMutex;
 
 //use qobjs::core_types::{Container, PullPolicy};
-use k8s_openapi::api::core::v1 as k8s;
+use qobjs::k8s;
 use qobjs::v1alpha2::{self as cri};
 use qobjs::common::*;
 use qobjs::k8s_util::*;

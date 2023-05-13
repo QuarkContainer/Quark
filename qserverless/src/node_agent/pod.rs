@@ -21,7 +21,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use core::ops::Deref;
 //use qobjs::core_types;
-use k8s_openapi::api::core::v1 as k8s;
+use qobjs::k8s;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 use tokio::sync::{mpsc, Notify};
 use std::sync::Arc;

@@ -14,8 +14,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
-use k8s_openapi::api::core::v1 as k8s;
+use crate::ObjectMeta;
+use crate::k8s;
 
 pub struct K8SUtil {}
 

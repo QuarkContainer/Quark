@@ -21,7 +21,7 @@ use core::ops::Deref;
 use std::sync::Arc;
 use std::result::Result as SResult;
 
-use k8s_openapi::api::core::v1 as k8s;
+use qobjs::k8s;
 
 use qobjs::nm as nm_svc;
 use qobjs::node_mgr as NodeMgr;
@@ -444,6 +444,28 @@ mod tests {
     async fn NMTestBody() {
         let cacheClient = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
 
+        println!("nodelist is {:?}", cacheClient.List("node", "", &ListOption::default()).await.unwrap());
+
+        let mut nodeWs = cacheClient
+            .Watch("node", "", &ListOption::default())
+            .await.unwrap();
+
+        let mut podWs = cacheClient
+            .Watch("pod", "", &ListOption::default())
+            .await.unwrap();
+
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    event = nodeWs.Next() => println!("node event is {:#?}", event),
+                    event = podWs.Next() => println!("pod event is {:#?}", event),
+                }
+            }
+        });
+
+        //println!("node event is {:?}", nodeWs.Next().await.unwrap());
+        
+        //println!("pod event is {:#?}", podWs.Next().await.unwrap());
         let list = cacheClient.List("pod", "default", &ListOption::default()).await.unwrap();
         println!("list1 is {:?}", list);
 
@@ -481,6 +503,8 @@ mod tests {
 
         let list = cacheClient.List("pod", "default", &ListOption::default()).await.unwrap();
         println!("list2 is {:?}", list);
+
+        std::thread::sleep(std::time::Duration::from_secs(1));
 
         assert!(false);
         

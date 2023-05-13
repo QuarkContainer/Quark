@@ -77,7 +77,7 @@ pub async fn ClientTest() -> QResult<()> {
     use log::LevelFilter;
     //use nm_svc::*;
     //use qobjs::nm::*;
-    //use k8s_openapi::api::core::v1 as k8s;
+    //use qobjs::k8s;
     //use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
     //use serde::{Deserialize, Serialize};
 

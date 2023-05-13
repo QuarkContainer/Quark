@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//use tonic::{transport::Server, Request, Response, Status};
-use service_directory::service_directory_service_client::ServiceDirectoryServiceClient;
-use service_directory::*;
+#![allow(dead_code)]
+#![allow(non_snake_case)]
+#[allow(non_camel_case_types)]
+
+use qobjs::cacher_client::CacherClient;
+use qobjs::selection_predicate::*;
+use qobjs::k8s;
 
 pub mod service_directory {
     tonic::include_proto!("service_directory"); // The string specified here must match the proto package name
@@ -22,22 +26,29 @@ pub mod service_directory {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = ServiceDirectoryServiceClient::connect("http://[::1]:50071").await?;
+    let cacheClient = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
 
-    let request = tonic::Request::new(PutRequestMessage {
-        object_type: "test".into(),
-        obj: Some(Object {
-            kind: "test_kind".into(),
-            namespace: "test_namespace".into(),
-            name: "test_name".into(),
-            labels: Vec::new(),
-            annotations: Vec::new(),
-            val: "test".into(),
-        }),
-    });
-    let response = client.put(request).await?;
+    println!("nodelist is {:?}", cacheClient.List("node", "", &ListOption::default()).await.unwrap());
 
-    error!("RESPONSE={:?}", response);
+    let mut nodeWs = cacheClient
+        .Watch("node", "", &ListOption::default())
+        .await.unwrap();
 
-    Ok(())
+    let mut podWs = cacheClient
+        .Watch("pod", "", &ListOption::default())
+        .await.unwrap();
+
+    loop {
+        tokio::select! {
+            //event = nodeWs.Next() => println!("node event is {:#?}", event),
+            event = podWs.Next() => {
+                let event = event.unwrap().unwrap();
+                let podStr = &event.obj.data;
+                let pod : k8s::Pod = serde_json::from_str(podStr)?;
+                println!("pod event is {:?}/{:#?}", event.type_, pod.status)
+            }
+        }
+    }
+
+    //return Ok(());
 }

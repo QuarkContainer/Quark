@@ -14,7 +14,7 @@
 
 use std::net::IpAddr;
 use local_ip_address::list_afinet_netifas;
-use k8s_openapi::api::core::v1 as k8s;
+use qobjs::k8s;
 
 // NodeHostName identifies a name of the node. Although every node can be assumed
 // to have a NodeAddress of this type, its exact syntax and semantics are not
