@@ -101,10 +101,11 @@ impl Cacher {
         });*/
 
         storeClone.Register(watch, rev, prefixClone, readyClone, notify)?;
-
+    
         //ret.0.write().unwrap().bgWorker = Some(future);
 
         ready.notified().await;
+        
         return Ok(ret);
     }
 

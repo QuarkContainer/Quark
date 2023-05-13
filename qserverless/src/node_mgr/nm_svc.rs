@@ -23,8 +23,8 @@ use std::result::Result as SResult;
 
 use k8s_openapi::api::core::v1 as k8s;
 
-use qobjs::pb_gen::nm as nm_svc;
-use qobjs::pb_gen::node_mgr as NodeMgr;
+use qobjs::nm as nm_svc;
+use qobjs::node_mgr as NodeMgr;
 use qobjs::service_directory as sd;
 use qobjs::common::Result;
 use qobjs::selection_predicate::*;
@@ -401,4 +401,94 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
 
         return Ok(Response::new(Box::pin(stream) as Self::WatchStream));
     }
+}
+
+
+pub async fn GrpcService() -> Result<()> {
+    use tonic::transport::Server;
+    use qobjs::service_directory::service_directory_service_server::ServiceDirectoryServiceServer;
+
+    let svc = NodeMgrSvc::New();
+
+    let sdFuture = Server::builder()
+        .add_service(ServiceDirectoryServiceServer::new(svc.clone()))
+        .serve("127.0.0.1:8890".parse().unwrap());
+
+    let nodeAgentSvc = qobjs::nm::node_agent_service_server::NodeAgentServiceServer::new(svc.clone());
+    let naFuture = Server::builder()
+        .add_service(nodeAgentSvc)
+        .serve("127.0.0.1:8888".parse().unwrap());
+
+    let nodeMgrSvc: NodeMgr::node_mgr_service_server::NodeMgrServiceServer<NodeMgrSvc> = NodeMgr::node_mgr_service_server::NodeMgrServiceServer::new(svc.clone());
+    let nmFuture = Server::builder()
+        .add_service(nodeMgrSvc)
+        .serve("127.0.0.1:8889".parse().unwrap());
+
+    info!("nodemgr start ...");
+    tokio::select! {
+        _ = sdFuture => {}
+        _ = naFuture => {}
+        _ = nmFuture => {}
+    }
+
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use qobjs::{nm_client::*, cacher_client::CacherClient};
+
+    #[actix_rt::test]
+    async fn NMTestBody() {
+        let cacheClient = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
+
+        let list = cacheClient.List("pod", "default", &ListOption::default()).await.unwrap();
+        println!("list1 is {:?}", list);
+
+        let client = NodeMgrClient::New("http://127.0.0.1:8889".into()).await.unwrap();
+        let podstr = r#"
+        {
+            "apiVersion":"v1",
+            "kind":"Pod",
+            "metadata":{
+                "name":"nginx",
+                "namespace": "default"
+            },
+            "spec":{
+                "hostNetwork": true,
+                "containers":[
+                    {
+                        "name":"nginx",
+                        "image":"nginx:alpine",
+                        "ports":[
+                            {
+                                "containerPort": 80,
+                                "hostIP": "192.168.0.22",
+                                "hostPort": 88
+                            }
+                        ]
+                    }
+                ]
+            }
+        }"#;
+
+        let pod : k8s::Pod = serde_json::from_str(podstr).unwrap();
+        let configMap = k8s::ConfigMap::default();
+
+        client.CreatePod("qserverless.quarksoft.io/brad-desktop", &pod, &configMap).await.unwrap();
+
+        let list = cacheClient.List("pod", "default", &ListOption::default()).await.unwrap();
+        println!("list2 is {:?}", list);
+
+        assert!(false);
+        
+        /*let ws = cacheClient
+            .Watch("pod", "default", &ListOption::default())
+            .await.unwrap();*/
+
+
+    }
+
 }

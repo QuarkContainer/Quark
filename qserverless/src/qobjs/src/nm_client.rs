@@ -18,8 +18,8 @@ use tonic::transport::Channel;
 use tokio::sync::Mutex as TMutex;
 use k8s_openapi::api::core::v1 as k8s;
 
-use crate::pb_gen::node_mgr::node_mgr_service_client::NodeMgrServiceClient;
-use crate::pb_gen::node_mgr as NodeMgr;
+use crate::node_mgr::node_mgr_service_client::NodeMgrServiceClient;
+use crate::node_mgr as NodeMgr;
 use crate::common::*;
 
 #[derive(Debug, Clone)]

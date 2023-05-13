@@ -19,9 +19,9 @@ use tokio::net::UnixStream;
 use tonic::transport::{Endpoint, Uri, Channel};
 use tower::service_fn;
 
-use qobjs::pb_gen::v1alpha2::*;
-use qobjs::pb_gen::v1alpha2::runtime_service_client::RuntimeServiceClient;
-use qobjs::pb_gen::v1alpha2::image_service_client::ImageServiceClient;
+use qobjs::v1alpha2::*;
+use qobjs::v1alpha2::runtime_service_client::RuntimeServiceClient;
+use qobjs::v1alpha2::image_service_client::ImageServiceClient;
 
 use qobjs::common::Result;
 use qobjs::common::Error;

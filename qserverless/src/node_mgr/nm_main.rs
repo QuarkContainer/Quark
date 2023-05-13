@@ -24,9 +24,7 @@ extern crate simple_logging;
 use once_cell::sync::OnceCell;
 
 use nm_store::NodeMgrCache;
-use tonic::transport::Server;
 use qobjs::common::Result as QResult;
-use qobjs::pb_gen::nm;
 
 pub mod nm_svc;
 pub mod na_client;
@@ -38,24 +36,15 @@ use crate::nm_svc::*;
 
 pub static NM_CACHE : OnceCell<NodeMgrCache> = OnceCell::new();
 
+
 #[tokio::main]
 async fn main() -> QResult<()> {
     use log::LevelFilter;
     simple_logging::log_to_file("/var/log/quark/nm.log", LevelFilter::Info).unwrap();
     
     NM_CACHE.set(NodeMgrCache::New().await.unwrap()).unwrap();
-    
-    /*
-    //cadvisor::client::Client::Test().await?;
-    let client = cadvisor::client::Client::Init();
-    //error!("machine is {:#?}", client.MachineInfo().await?);
-    //error!("versioninfo is {:#?}", client.VersionInfo().await?);
-    error!("versioninfo is {:#?}", client.GetInfo().await?);
-*/
-    let inner = NodeMgrSvc::New();
-    let svc = nm::node_agent_service_server::NodeAgentServiceServer::new(inner);
-    info!("nodemgr start ...");
-    Server::builder().add_service(svc).serve("127.0.0.1:8888".parse().unwrap()).await?;
+
+    GrpcService().await.unwrap();
 
     Ok(())
 }

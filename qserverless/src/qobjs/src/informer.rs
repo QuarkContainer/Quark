@@ -103,7 +103,7 @@ impl Informer {
     pub async fn Process(&self, notify: Arc<Notify>) -> Result<()> {
 
         let mut inner = self.write().await;
-        let mut client = inner.client.clone();
+        let client = inner.client.clone();
         let store = inner.store.clone();
         
         let objType = inner.objType.clone();

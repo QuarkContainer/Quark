@@ -56,22 +56,22 @@ impl CacherClient {
         return inner.Get(objType, namespace, name, revision).await;
     }
 
-    pub async fn Delete(&mut self, objType: &str, namespace: &str, name: &str) -> Result<i64> {
+    pub async fn Delete(&self, objType: &str, namespace: &str, name: &str) -> Result<i64> {
         let mut inner = self.lock().await;
         return inner.Delete(objType, namespace, name).await;
     }
 
-    pub async fn Update(&mut self, objType: &str, obj: &DataObject) -> Result<i64> {
+    pub async fn Update(&self, objType: &str, obj: &DataObject) -> Result<i64> {
         let mut inner = self.lock().await;
         return inner.Update(objType, obj).await;
     }
 
-    pub async fn List(&mut self, objType: &str, namespace: &str, opts: &ListOption) -> Result<DataObjList> {
+    pub async fn List(&self, objType: &str, namespace: &str, opts: &ListOption) -> Result<DataObjList> {
         let mut inner = self.lock().await;
         return inner.List(objType, namespace, opts).await;
     }
 
-    pub async fn Watch(&mut self, objType: &str, namespace: &str, opts: &ListOption) -> Result<WatchStream> {
+    pub async fn Watch(&self, objType: &str, namespace: &str, opts: &ListOption) -> Result<WatchStream> {
         let mut inner = self.lock().await;
         return inner.Watch(objType, namespace, opts).await;
     }

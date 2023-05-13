@@ -15,7 +15,7 @@
 use std::collections::{HashMap};
 
 use k8s_openapi::api::core::v1 as k8s;
-use qobjs::pb_gen::v1alpha2::{self as cri};
+use qobjs::v1alpha2::{self as cri};
 
 use crate::runtime::k8s_util::*;
 
