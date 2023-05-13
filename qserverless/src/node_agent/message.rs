@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use k8s_openapi::api::core::v1 as k8s;
+use qobjs::k8s;
 use qobjs::{pb_gen::nm::{self as NmMsg, node_agent_message::MessageBody}, runtime_types::{PodToString, QuarkPod, PodState, NodeToString}};
 use qobjs::common::*;
 

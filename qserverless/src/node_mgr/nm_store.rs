@@ -178,6 +178,10 @@ impl NodeMgrCache {
         let nodesCache = Cacher::New(Arc::new(cache.clone()), "node", 0).await?;
         let podsCache = Cacher::New(Arc::new(cache.clone()), "pod", 0).await?;
 
+        // init the listRevision as there won't be initial list operation for the nodecache and podcache
+        nodesCache.write().unwrap().listRevision = 1;
+        podsCache.write().unwrap().listRevision = 1;
+
         cache.write().unwrap().nodes = Some(nodesCache);
         cache.write().unwrap().pods = Some(podsCache);
         return Ok(cache);

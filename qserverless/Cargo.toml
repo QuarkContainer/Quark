@@ -76,7 +76,6 @@ path = "src/node_mgr/nm_main.rs"
 name = "node_agent"
 path = "src/node_agent/na_main.rs"
 
-
 [[bin]]
 name = "test"
 path = "src/protobtest/main.rs"

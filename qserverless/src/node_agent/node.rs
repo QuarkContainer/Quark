@@ -25,7 +25,7 @@ use core::ops::Deref;
 use tokio::time;
 
 use chrono::{prelude::*};
-use k8s_openapi::api::core::v1 as k8s;
+use qobjs::k8s;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, Time};
 use qobjs::k8s_util::K8SUtil;
 

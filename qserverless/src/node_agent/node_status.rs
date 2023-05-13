@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use chrono::prelude::*;
-use k8s_openapi::api::core::v1 as k8s;
+use qobjs::k8s;
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 

@@ -20,7 +20,7 @@ use tonic::Status;
 use qobjs::nm::NodeRegister;
 use tokio::sync::mpsc;
 use core::ops::Deref;
-use k8s_openapi::api::core::v1 as k8s;
+use qobjs::k8s;
 
 use std::collections::BTreeMap;
 use std::sync::atomic::AtomicBool;

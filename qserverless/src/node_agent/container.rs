@@ -23,7 +23,7 @@ use core::ops::Deref;
 use core::time::Duration;
 
 //use qobjs::core_types::LifecycleHandler;
-use k8s_openapi::api::core::v1 as k8s;
+use qobjs::k8s;
 use qobjs::v1alpha2 as cri;
 use qobjs::runtime_types::*;
 use qobjs::common::*;

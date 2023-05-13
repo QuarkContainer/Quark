@@ -21,7 +21,7 @@ use core::ops::Deref;
 use std::sync::Mutex;
 use chrono::prelude::*;
 
-use k8s_openapi::api::core::v1 as k8s;
+use crate::k8s;
 
 use crate::common::*;
 use crate::v1alpha2 as cri;
