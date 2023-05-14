@@ -20,7 +20,7 @@ pub mod node_agent_resp_msg {
 pub struct NodeAgentReq {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
-    #[prost(oneof = "node_agent_req::MessageBody", tags = "100, 200")]
+    #[prost(oneof = "node_agent_req::MessageBody", tags = "100, 200, 300")]
     pub message_body: ::core::option::Option<node_agent_req::MessageBody>,
 }
 /// Nested message and enum types in `NodeAgentReq`.
@@ -32,6 +32,8 @@ pub mod node_agent_req {
         NodeConfigReq(super::NodeConfigReq),
         #[prost(message, tag = "200")]
         CreatePodReq(super::CreatePodReq),
+        #[prost(message, tag = "300")]
+        TerminatePodReq(super::TerminatePodReq),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -41,7 +43,7 @@ pub struct NodeAgentResp {
     pub request_id: u64,
     #[prost(string, tag = "2")]
     pub error: ::prost::alloc::string::String,
-    #[prost(oneof = "node_agent_resp::MessageBody", tags = "100, 200")]
+    #[prost(oneof = "node_agent_resp::MessageBody", tags = "100, 200, 300")]
     pub message_body: ::core::option::Option<node_agent_resp::MessageBody>,
 }
 /// Nested message and enum types in `NodeAgentResp`.
@@ -53,6 +55,8 @@ pub mod node_agent_resp {
         NodeConfigResp(super::NodeConfigResp),
         #[prost(message, tag = "200")]
         CreatePodResp(super::CreatePodResp),
+        #[prost(message, tag = "300")]
+        TerminatePodResp(super::TerminatePodResp),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -81,6 +85,15 @@ pub struct CreatePodReq {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreatePodResp {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TerminatePodReq {
+    #[prost(string, tag = "1")]
+    pub pod_id: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TerminatePodResp {}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeAgentStreamMsg {

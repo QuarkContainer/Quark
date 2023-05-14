@@ -132,6 +132,25 @@ impl NodeMgr::node_mgr_service_server::NodeMgrService for NodeMgrSvc {
             }
         }
     }
+
+    async fn terminate_pod(
+        &self,
+        request: tonic::Request<NodeMgr::TermniatePodReq>,
+    ) -> SResult<tonic::Response<NodeMgr::TermniatePodResp>, tonic::Status> {
+        let req = request.get_ref();
+        match crate::NM_CACHE.get().unwrap().TerminatePod(&req.pod_id).await {
+            Err(e) => {
+                return Ok(Response::new(NodeMgr::TermniatePodResp {
+                    error: format!("create pod fail with error {:?}", e),
+                }))
+            }
+            Ok(()) =>  {
+                return Ok(Response::new(NodeMgr::TermniatePodResp {
+                    error: String::new(),
+                }))
+            }
+        }
+    }
 }
 
 #[tonic::async_trait]
@@ -444,7 +463,7 @@ mod tests {
     async fn NMTestBody() {
         let cacheClient = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
 
-        println!("nodelist is {:?}", cacheClient.List("node", "", &ListOption::default()).await.unwrap());
+        /*println!("nodelist is {:?}", cacheClient.List("node", "", &ListOption::default()).await.unwrap());
 
         let mut nodeWs = cacheClient
             .Watch("node", "", &ListOption::default())
@@ -461,7 +480,7 @@ mod tests {
                     event = podWs.Next() => println!("pod event is {:#?}", event),
                 }
             }
-        });
+        });*/
 
         //println!("node event is {:?}", nodeWs.Next().await.unwrap());
         
@@ -501,10 +520,16 @@ mod tests {
 
         client.CreatePod("qserverless.quarksoft.io/brad-desktop", &pod, &configMap).await.unwrap();
 
+        std::thread::sleep(std::time::Duration::from_secs(5));
+
         let list = cacheClient.List("pod", "default", &ListOption::default()).await.unwrap();
         println!("list2 is {:?}", list);
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        let list = cacheClient.List("pod", "default", &ListOption::default()).await.unwrap();
+        println!("list3 is {:?}", list);
+        let pod = &list.objs[0];
 
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        client.TerminatePod(&pod.Key()).await.unwrap();
 
         assert!(false);
         

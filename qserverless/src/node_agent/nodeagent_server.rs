@@ -267,8 +267,13 @@ impl NodeAgentServer {
             NmMsg::node_agent_req::MessageBody::CreatePodReq(req) => {
                 let pod = PodFromString(&req.pod)?;
                 let configMap = ConfigMapFromString(&req.config_map)?;
-                nodeAgent.CreatePod(&pod, &configMap).await?;
+                nodeAgent.CreatePod(&pod, &configMap)?;
                 return Ok(NmMsg::node_agent_resp::MessageBody::CreatePodResp(NmMsg::CreatePodResp{}));
+            }
+            NmMsg::node_agent_req::MessageBody::TerminatePodReq(req) => {
+                let podId = &req.pod_id;
+                nodeAgent.TerminatePod(podId)?;
+                return Ok(NmMsg::node_agent_resp::MessageBody::TerminatePodResp(NmMsg::TerminatePodResp{}));
             }
         }
     }

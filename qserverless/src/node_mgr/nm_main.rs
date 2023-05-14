@@ -39,9 +39,7 @@ pub static NM_CACHE : OnceCell<NodeMgrCache> = OnceCell::new();
 
 #[tokio::main]
 async fn main() -> QResult<()> {
-    use log::LevelFilter;
-    simple_logging::log_to_file("/var/log/quark/nm.log", LevelFilter::Info).unwrap();
-    
+    log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
     NM_CACHE.set(NodeMgrCache::New().await.unwrap()).unwrap();
 
     GrpcService().await.unwrap();

@@ -78,6 +78,11 @@ impl PodContainerAgent {
         return Ok(agent);
     }
 
+    pub fn Close(&self) -> Result<()> {
+        self.closeNotify.notify_one();
+        return Ok(())
+    }
+
     pub async fn Start(&self) -> Result<()> {
         let hasStatus: bool = self.container.lock().unwrap().containerStatus.is_some();
 
@@ -108,7 +113,7 @@ impl PodContainerAgent {
     } 
 
     pub async fn Process(&self, mut rx: mpsc::Receiver<NodeAgentMsg>) -> Result<()> {
-        let mut interval = time::interval(time::Duration::from_secs(5));
+        let mut interval = time::interval(time::Duration::from_secs(2));
         loop {
             tokio::select! {
                 _ = self.closeNotify.notified() => {
@@ -234,7 +239,7 @@ impl PodContainerAgent {
         return state == RuntimeContainerState::Stopping 
             || state == RuntimeContainerState::Stopped
             || state == RuntimeContainerState::Terminated
-            || state == RuntimeContainerState::Terminating;
+            || state == RuntimeContainerState::Terminating
      
     }
 

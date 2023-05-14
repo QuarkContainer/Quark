@@ -276,6 +276,10 @@ impl NodeAgentStoreInner {
             revision: self.revision,
             obj: NodeAgentEventObj::Pod(jsonObj.pod.clone())
         };
+
+        if self.podCache.contains_key(&key) {
+            return Err(Error::CommonError(format!("The pod {} exists", &key)));
+        }
         self.podCache.insert(key.to_string(), jsonObj.pod.clone());
         //self.podStore.Save(self.revision, &key, &jsonObj)?;
         self.ProcessEvent(event)?;
@@ -302,15 +306,17 @@ impl NodeAgentStoreInner {
         return Ok(())
     }
 
-    pub fn DeletePod(&mut self, key: &str) -> Result<()> {
-        assert!(self.podCache.contains_key(key));
+    pub fn DeletePod(&mut self, obj: &QuarkPod) -> Result<()> {
+        let key = obj.PodId();
+        assert!(self.podCache.contains_key(&key));
         self.revision += 1;
-        let mut pod = self.podCache.remove(key).unwrap();
-        pod.metadata.resource_version = Some(self.revision.to_string());
+        let _ = self.podCache.remove(&key).unwrap();
+        obj.Pod().write().unwrap().metadata.resource_version = Some(self.revision.to_string());
+        let jsonObj = obj.ToQuarkPodJson();
         let event = WatchEvent {
             type_: EventType::Deleted,
             revision: self.revision,
-            obj: NodeAgentEventObj::Pod(pod)
+            obj: NodeAgentEventObj::Pod(jsonObj.pod.clone())
         };
 
         //self.podStore.Remove(self.revision, key)?;
@@ -395,6 +401,7 @@ impl NodeAgentStoreInner {
         for idx in removeWatches {
             self.watchers.remove(&idx);
         }
+
         self.eventQueue.Push(event);
 
         return Ok(())
@@ -475,8 +482,8 @@ impl NodeAgentStore {
         return self.lock().unwrap().UpdatePod(obj);
     }
 
-    pub fn DeletePod(&self, key: &str) -> Result<()> {
-        return self.lock().unwrap().DeletePod(key);
+    pub fn DeletePod(&self, obj: &QuarkPod) -> Result<()> {
+        return self.lock().unwrap().DeletePod(obj);
     }
 
     pub fn List(&self) -> PodList {

@@ -203,9 +203,13 @@ impl NodeAgent {
                 let qpod = msg.pod.clone();
                 if qpod.PodState() == PodState::Cleanup {
                     self.CleanupPodStoreAndAgent(&qpod).await?;
+                    NODEAGENT_STORE.get().unwrap().DeletePod(&qpod)?;
+                    qpod.SetPodState(PodState::Deleted);
+                } else if qpod.PodState() != PodState::Deleted {
+                    NODEAGENT_STORE.get().unwrap().UpdatePod(&qpod)?;
                 }
 
-                NODEAGENT_STORE.get().unwrap().UpdatePod(&qpod)?;
+                
             }
             NodeAgentMsg::NodeUpdate => {
                 SetNodeStatus(&self.node).await?;
@@ -301,7 +305,7 @@ impl NodeAgent {
         return self.NodeConfigure(node).await;
     }
 
-     pub async fn CreatePod(&self, pod: &k8s::Pod, configMap: &k8s::ConfigMap) -> Result<()> {
+     pub fn CreatePod(&self, pod: &k8s::Pod, configMap: &k8s::ConfigMap) -> Result<()> {
         let podId =  K8SUtil::PodId(&pod);
         if self.State() != NodeAgentState::Ready {
             let inner = QuarkPodInner {
@@ -316,7 +320,7 @@ impl NodeAgent {
             };
             let qpod = QuarkPod(Arc::new(Mutex::new(inner)));
             NODEAGENT_STORE.get().unwrap().CreatePod(&qpod)?;
-            NODEAGENT_STORE.get().unwrap().DeletePod(&podId)?;
+            NODEAGENT_STORE.get().unwrap().DeletePod(&qpod)?;
             return Err(Error::CommonError("Node is not in ready state to create a new pod".to_string()));
         }
        
@@ -337,12 +341,12 @@ impl NodeAgent {
                     };
                     let qpod = QuarkPod(Arc::new(Mutex::new(inner)));
                     NODEAGENT_STORE.get().unwrap().CreatePod(&qpod)?;
-                    NODEAGENT_STORE.get().unwrap().DeletePod(&podId)?;
+                    NODEAGENT_STORE.get().unwrap().DeletePod(&qpod)?;
                     return Err(e);
                 }
             };
 
-            podAgent.Start().await?;
+            podAgent.Start()?;
             let qpod = podAgent.pod.clone();
             NODEAGENT_STORE.get().unwrap().CreatePod(&qpod)?;
             podAgent.Send(NodeAgentMsg::PodCreate( PodCreate {
@@ -357,7 +361,7 @@ impl NodeAgent {
     pub async fn OnPodCreateCmd(&self, msg: &NmMsg::PodCreate) -> Result<()> {
         let pod = PodFromString(&msg.pod)?;
         let configMap = ConfigMapFromString(&msg.config_map)?;
-        self.CreatePod(&pod, &configMap).await?;
+        self.CreatePod(&pod, &configMap)?;
         return Ok(())
     }
 

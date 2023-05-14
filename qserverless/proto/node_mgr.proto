@@ -18,7 +18,8 @@ syntax = "proto3";
 package node_mgr;
 
 service NodeMgrService {
-    rpc CreatePod (CreatePodReq) returns (CreatePodResp) {}
+    rpc CreatePod (CreatePodReq) returns (CreatePodResp);
+    rpc TerminatePod (TermniatePodReq) returns (TermniatePodResp);
 }
 
 message CreatePodReq {
@@ -28,5 +29,13 @@ message CreatePodReq {
 }
 
 message CreatePodResp {
+    string error = 2;
+}
+
+message TermniatePodReq {
+  string podId = 1;
+}
+
+message TermniatePodResp {
     string error = 2;
 }

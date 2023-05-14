@@ -158,10 +158,18 @@ impl NodeAgentClient {
             EventBody::PodEvent(event) => {
                 let nodeKey = self.nodeKey.lock().unwrap().clone();
                 NM_CACHE.get().unwrap().ProcessPodEvent(&nodeKey, &event)?;
+                if nodeKey.len() == 0 {
+                    // workaround for registering process race condition
+                    return Ok(());
+                }
                 return Ok(())
             }
             EventBody::NodeUpdate(event) => {
                 let nodeKey = self.nodeKey.lock().unwrap().clone();
+                if nodeKey.len() == 0 {
+                    // workaround for registering process race condition
+                    return Ok(());
+                }
                 NM_CACHE.get().unwrap().ProcessNodeUpdate(&nodeKey, &event)?;
                 return Ok(());
             }
@@ -222,6 +230,15 @@ impl NodeAgentClient {
         };
 
         self.Call(NmMsg::node_agent_req::MessageBody::CreatePodReq(req)).await?;
+        return Ok(())
+    }
+
+    pub async fn TerminatePod(&self, podId: &str) -> Result<()> {
+        let req = NmMsg::TerminatePodReq {
+            pod_id: podId.to_string(),
+        };
+
+        self.Call(NmMsg::node_agent_req::MessageBody::TerminatePodReq(req)).await?;
         return Ok(())
     }
 

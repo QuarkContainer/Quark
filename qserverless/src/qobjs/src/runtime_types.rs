@@ -148,6 +148,8 @@ pub enum PodState {
     Failed,
     // pod artifacts are cleaned, eg. pod dir, cgroup// pod artifacts are cleaned, eg. pod dir, cgroup
     Cleanup,
+    //
+    Deleted,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -340,7 +342,6 @@ impl QuarkPod {
         
         let mut podStatus = pod.read().unwrap().status.clone().unwrap_or(k8s::PodStatus::default());
         podStatus.phase = Some(self.ToK8sPhase());
-
         if let Some(node) = node {
             podStatus.host_ip = Some(node.status.as_ref().unwrap().addresses.as_ref().unwrap()[0].address.clone());
         }   
