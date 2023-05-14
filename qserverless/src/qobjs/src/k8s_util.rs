@@ -29,10 +29,9 @@ impl K8SUtil {
     }
 
     pub fn Id(meta: &ObjectMeta) -> String {
-        return format!("Namespace:{},Name:{},UID:{}", 
+        return format!("{}/{}", 
             K8SUtil::Namespace(&meta),
-            K8SUtil::Name(&meta),
-            K8SUtil::Uid(&meta));
+            K8SUtil::Name(&meta));
     }
 
     pub fn Namespace(meta: &ObjectMeta) -> String {

@@ -215,7 +215,7 @@ impl PodAgent {
         return Ok(())
     }
 
-    pub async fn Start(&self) -> Result<()> {
+    pub fn Start(&self) -> Result<()> {
         info!("Pod actor started {}", self.pod.PodId());
         let rx = self.agentRx.lock().unwrap().take().unwrap();
         let clone = self.clone();
@@ -276,7 +276,8 @@ impl PodAgent {
                 self.OnPodContainerFailed(msg).await
             }
             NodeAgentMsg::HouseKeeping => {
-                self.PodHouseKeeping().await
+                //self.PodHouseKeeping().await
+                Ok(())
             }
 
             _ => Ok(())
@@ -290,9 +291,8 @@ impl PodAgent {
             }
         }
         
-        if oldPodState != self.pod.PodState() || self.pod.PodState() == PodState::Cleanup {
-            info!("PodState changed pod {} old state {:?} new state {:?}", 
-                self.pod.PodId(), oldPodState, self.pod.PodState());
+        if self.pod.PodState() != PodState::Deleted  
+            && (oldPodState != self.pod.PodState() || self.pod.PodState() == PodState::Cleanup) {
             self.Notify(NodeAgentMsg::PodStatusChange(
                 PodStatusChange {
                     pod: self.pod.clone(),
@@ -401,10 +401,10 @@ impl PodAgent {
 
     pub async fn HandlePodContainerExit(&self, _pod: &QuarkPod, container: &QuarkContainer) -> Result<()> {
         let containerName = container.ContainerName();
-        if let Some(_container) = self.containers.lock().unwrap().remove(&containerName) {
-            //self.Stop() //why?...
+        let removed = self.containers.lock().unwrap().remove(&containerName);
+        if let Some(container) = removed {
+            container.Close()?;
         }
-
         if container.InitContainer() {
             if container.ContainerExitNormal() {
                 // init container is expected to run to end
@@ -459,7 +459,7 @@ impl PodAgent {
             pod.write().unwrap().metadata.deletion_timestamp = Some(Time(utc));
         }
 
-        if self.pod.PodState() == PodState::Terminating {
+        if self.pod.PodState() == PodState::Terminated || self.pod.PodState() == PodState::Cleanup {
             return Ok(())
         }
 

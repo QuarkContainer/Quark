@@ -74,7 +74,7 @@ async fn main() -> QResult<()> {
 
 pub async fn ClientTest() -> QResult<()> {
     //use qobjs::nm::{self as NmMsg};
-    use log::LevelFilter;
+    //use log::LevelFilter;
     //use nm_svc::*;
     //use qobjs::nm::*;
     //use qobjs::k8s;
@@ -107,7 +107,8 @@ pub async fn ClientTest() -> QResult<()> {
         }
     }"#;
 
-    simple_logging::log_to_file("/var/log/quark/na.log", LevelFilter::Info).unwrap();
+    log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
+    
     CADVISOR_PROVIDER.set(CadvisorInfoProvider::New().await.unwrap()).unwrap();
     RUNTIME_MGR.set(RuntimeMgr::New(10).await.unwrap()).unwrap();
     IMAGE_MGR.set(ImageMgr::New(v1alpha2::AuthConfig::default()).await.unwrap()).unwrap();

@@ -38,6 +38,7 @@ message NodeAgentReq {
   oneof MessageBody {
     NodeConfigReq nodeConfigReq = 100;
     CreatePodReq createPodReq = 200;
+    TerminatePodReq terminatePodReq = 300;
   }
 }
 
@@ -47,6 +48,7 @@ message NodeAgentResp {
   oneof MessageBody {
     NodeConfigResp nodeConfigResp = 100;
     CreatePodResp createPodResp = 200;
+    TerminatePodResp terminatePodResp = 300;
   }
 }
 
@@ -67,6 +69,13 @@ message CreatePodReq {
 }
 
 message CreatePodResp {
+}
+
+message TerminatePodReq {
+  string podId = 1;
+}
+
+message TerminatePodResp {
 }
 
 message NodeAgentStreamMsg {

@@ -54,4 +54,19 @@ impl NodeMgrClient {
 
         return Err(Error::CommonError(resp.error.clone()));
     }
+
+    pub async fn TerminatePod(&self, podId: &str) -> Result<()> {
+        let req = NodeMgr::TermniatePodReq {
+            pod_id: podId.to_string(),
+        };
+
+        let mut client = self.client.lock().await;
+        let resp = client.terminate_pod(req).await?;
+        let resp = resp.get_ref();
+        if resp.error.len() == 0 {
+            return Ok(())
+        }
+
+        return Err(Error::CommonError(resp.error.clone()));
+    }
 }

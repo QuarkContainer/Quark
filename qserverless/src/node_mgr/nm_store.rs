@@ -247,7 +247,7 @@ impl NodeMgrCache {
     }
 
     pub fn ProcessNodeUpdate(&self, nodeKey: &str, update: &nm::NodeUpdate) -> Result<()> {
-        assert!(self.read().unwrap().nodes.as_ref().unwrap().Contains(nodeKey));
+        assert!(self.read().unwrap().nodes.as_ref().unwrap().Contains(nodeKey), "nodekey is {}", nodeKey);
         
         let node: k8s::Node = serde_json::from_str(&update.node)?;
         let nodeObj: DataObject = NodeToDataObject(&node)?;
@@ -284,6 +284,32 @@ impl NodeMgrCache {
             }
             Some(client) => {
                 return client.CreatePod(pod, configmap).await;
+            }
+        }
+    }
+
+    pub async fn TerminatePod(&self, podId: &str) -> Result<()> {
+        let pod = self.read().unwrap().pods.as_ref().unwrap().GetObject(podId).clone();
+        match pod {
+            None => {
+                return Err(Error::CommonError(format!("There is pod named {}", podId)));
+            }
+            Some(pod) => {
+                let pod : k8s::Pod = serde_json::from_str(&pod.data)?;
+                let node = match pod.metadata.annotations.as_ref().unwrap().get(AnnotationNodeMgrNode) {
+                    None => return Err(Error::CommonError(format!("pod is not assigned {}", podId))),
+                    Some(node) => node.to_string(),
+                };
+
+                let nodeAgentClient = self.read().unwrap().nodeAgents.get(&node).cloned();
+                match nodeAgentClient {
+                    None => {
+                        return Err(Error::CommonError(format!("There is no node named {}", node)));
+                    }
+                    Some(client) => {
+                        return client.TerminatePod(podId).await;
+                    }
+                }
             }
         }
     }
