@@ -18,9 +18,7 @@ syntax = "proto3";
 package service_directory;
 
 service ServiceDirectoryService {
-  // Test
-  rpc TestPing (TestRequestMessage) returns (TestResponseMessage) {}
-  rpc Put (PutRequestMessage) returns (PutResponseMessage) {}
+  rpc Version (VersionRequestMessage) returns (VersionResponseMessage) {}
   rpc Create (CreateRequestMessage) returns (CreateResponseMessage) {}
   rpc Get (GetRequestMessage) returns (GetResponseMessage) {}
   rpc Delete (DeleteRequestMessage) returns (DeleteResponseMessage) {}
@@ -29,12 +27,12 @@ service ServiceDirectoryService {
   rpc Watch (WatchRequestMessage) returns (stream WEvent) {}
 }
 
-message TestRequestMessage {
-    string client_name = 1;
+message VersionRequestMessage {
 }
 
-message TestResponseMessage {
-    string server_name = 1;
+
+message VersionResponseMessage {
+    string version = 1;
 }
 
 message KV {

@@ -31,6 +31,7 @@ use qobjs::selection_predicate::*;
 use qobjs::selector::*;
 use qobjs::types::*;
 
+use crate::VERSION;
 use crate::na_client::*;
 use crate::etcd::etcd_svc::EtcdSvc;
 use crate::SVC_DIR;
@@ -159,24 +160,14 @@ impl NodeMgr::node_mgr_service_server::NodeMgrService for NodeMgrSvc {
 
 #[tonic::async_trait]
 impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSvc {
-    // This is to verify the grpc server is working.
-    // 1. go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
-    // 2. Launch the grpc server
-    // 3. grpcurl -plaintext -proto resilience_function/proto/service_directory.proto -d '{"client_name": "a client"}' [::]:50071 service_directory.ServiceDirectoryService/TestPing
-    async fn test_ping(
+    async fn version(
         &self,
-        request: Request<sd::TestRequestMessage>,
-    ) -> SResult<Response<sd::TestResponseMessage>, Status> {
-        return self.etcdSvc.test_ping(request).await;
-    }
+        request: Request<sd::VersionRequestMessage>,
+    ) -> SResult<Response<sd::VersionResponseMessage>, Status> {
+        error!("Request from {:?}", request.remote_addr());
 
-    async fn put(
-        &self,
-        _request: Request<sd::PutRequestMessage>,
-    ) -> SResult<Response<sd::PutResponseMessage>, Status> {
-        let response = sd::PutResponseMessage {
-            error: "NodeMgr doesn't support Put".to_owned(),
-            ..Default::default()
+        let response = sd::VersionResponseMessage {
+            version: VERSION.to_string(),
         };
         Ok(Response::new(response))
     }

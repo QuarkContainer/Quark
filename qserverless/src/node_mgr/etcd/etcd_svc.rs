@@ -41,35 +41,6 @@ use crate::SVC_DIR;
 pub struct EtcdSvc {}
 
 impl EtcdSvc {
-    // This is to verify the grpc server is working.
-    // 1. go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
-    // 2. Launch the grpc server
-    // 3. grpcurl -plaintext -proto resilience_function/proto/service_directory.proto -d '{"client_name": "a client"}' [::]:50071 service_directory.ServiceDirectoryService/TestPing
-    pub async fn test_ping(
-        &self,
-        request: Request<TestRequestMessage>,
-    ) -> Result<Response<TestResponseMessage>, Status> {
-        error!("Request from {:?}", request.remote_addr());
-
-        let response = TestResponseMessage {
-            server_name: "Server".to_owned(),
-        };
-        Ok(Response::new(response))
-    }
-
-    pub async fn put(
-        &self,
-        request: Request<PutRequestMessage>,
-    ) -> Result<Response<PutResponseMessage>, Status> {
-        error!("Request from {:?}", request.remote_addr());
-
-        let response = PutResponseMessage { 
-            error: String::new(),
-            revision: 1 
-        };
-        Ok(Response::new(response))
-    }
-
     pub async fn create(
         &self,
         request: Request<CreateRequestMessage>,
