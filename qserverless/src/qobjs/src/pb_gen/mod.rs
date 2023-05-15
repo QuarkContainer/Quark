@@ -14,5 +14,4 @@
 
 pub mod v1alpha2;
 pub mod nm;
-pub mod node_mgr;
 pub mod qmeta;

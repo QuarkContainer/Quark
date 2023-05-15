@@ -37,7 +37,6 @@ pub mod runtime_types;
 pub mod k8s_util;
 pub mod watch;
 pub mod cacher;
-pub mod nm_client;
 
 #[macro_use]
 extern crate scopeguard;
@@ -53,10 +52,6 @@ pub mod qmeta {
 
 pub mod nm {
     include!("pb_gen/nm.rs");
-}
-
-pub mod node_mgr {
-    include!("pb_gen/node_mgr.rs");
 }
 
 pub mod v1alpha2 {
