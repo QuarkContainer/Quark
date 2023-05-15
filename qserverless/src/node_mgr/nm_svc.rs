@@ -32,12 +32,15 @@ use qobjs::selector::*;
 use qobjs::types::*;
 
 use crate::na_client::*;
+use crate::etcd::etcd_svc::EtcdSvc;
+use crate::SVC_DIR;
 
 #[derive(Debug)]
 pub struct NodeMgrSvcInner {
     pub clients: Mutex<BTreeMap<String, NodeAgentClient>>,
     pub agentsChann: mpsc::Sender<SrvMsg>,
     pub processChannel: Option<mpsc::Receiver<SrvMsg>>,
+    pub etcdSvc: EtcdSvc,
 }
 
 // NodeMgrSvc direct connect to NodeAgent
@@ -60,6 +63,7 @@ impl NodeMgrSvc {
             clients: Mutex::new(BTreeMap::new()),
             agentsChann: tx,
             processChannel: Some(rx),
+            etcdSvc: EtcdSvc::default(),
         };
 
         return Self(Arc::new(inner));
@@ -163,12 +167,7 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
         &self,
         request: Request<sd::TestRequestMessage>,
     ) -> SResult<Response<sd::TestResponseMessage>, Status> {
-        error!("Request from {:?}", request.remote_addr());
-
-        let response = sd::TestResponseMessage {
-            server_name: "Server".to_owned(),
-        };
-        Ok(Response::new(response))
+        return self.etcdSvc.test_ping(request).await;
     }
 
     async fn put(
@@ -188,7 +187,7 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
     ) -> SResult<Response<sd::CreateResponseMessage>, Status> {
         let req = request.get_ref();
         let objType = &req.obj_type;
-        if objType == "pod" {
+        if objType == QUARK_POD ||  objType == QUARK_NODE {
             match &req.obj {
                 None => {
                     let response = sd::CreateResponseMessage {
@@ -242,11 +241,7 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
             }
         }
 
-        let response = sd::CreateResponseMessage {
-            error: format!("NodeMgr doesn't support create obj type {}", objType),
-            ..Default::default()
-        };
-        Ok(Response::new(response))
+        return self.etcdSvc.create(request).await;
     }
 
     async fn get(
@@ -254,33 +249,38 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
         request: Request<sd::GetRequestMessage>,
     ) -> SResult<Response<sd::GetResponseMessage>, Status> {
         let req = request.get_ref();
-        let cacher = match crate::NM_CACHE.get().unwrap().GetCacher(&req.obj_type) {
-            None => {
-                return Ok(Response::new(sd::GetResponseMessage {
-                    error: format!("doesn't support obj type {}", &req.obj_type),
-                    obj: None,
-                }))
-            }
-            Some(c) => c,
-        };
+        let objType = &req.obj_type;
+        if objType == QUARK_POD ||  objType == QUARK_NODE {
+            let cacher = match crate::NM_CACHE.get().unwrap().GetCacher(&req.obj_type) {
+                None => {
+                    return Ok(Response::new(sd::GetResponseMessage {
+                        error: format!("doesn't support obj type {}", &req.obj_type),
+                        obj: None,
+                    }))
+                }
+                Some(c) => c,
+            };
 
-        match cacher.Get(&req.namespace, &req.name, req.revision).await {
-            Err(e) => {
-                return Ok(Response::new(sd::GetResponseMessage {
-                    error: format!("Fail: {:?}", e),
-                    obj: None,
-                }))
-            }
-            Ok(o) => {
-                return Ok(Response::new(sd::GetResponseMessage {
-                    error: "".into(),
-                    obj: match o {
-                        None => None,
-                        Some(o) => Some(o.Obj()),
-                    },
-                }))
+            match cacher.Get(&req.namespace, &req.name, req.revision).await {
+                Err(e) => {
+                    return Ok(Response::new(sd::GetResponseMessage {
+                        error: format!("Fail: {:?}", e),
+                        obj: None,
+                    }))
+                }
+                Ok(o) => {
+                    return Ok(Response::new(sd::GetResponseMessage {
+                        error: "".into(),
+                        obj: match o {
+                            None => None,
+                            Some(o) => Some(o.Obj()),
+                        },
+                    }))
+                }
             }
         }
+        
+        return self.etcdSvc.get(request).await;
     }
 
     async fn delete(
@@ -289,7 +289,7 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
     ) -> SResult<Response<sd::DeleteResponseMessage>, Status> {
         let req = request.get_ref();
         let objType = &req.obj_type;
-        if objType == "pod" {
+        if objType == QUARK_POD ||  objType == QUARK_NODE {
             let podId = format!("{}/{}", &req.namespace, &req.name);
             match crate::NM_CACHE.get().unwrap().TerminatePod(&podId).await {
                 Err(e) => {
@@ -307,22 +307,24 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
             }
         }
 
-        let response = sd::DeleteResponseMessage {
-            error: "NodeMgr doesn't support delete".to_owned(),
-            ..Default::default()
-        };
-        Ok(Response::new(response))
+        return self.etcdSvc.delete(request).await;
     }
 
     async fn update(
         &self,
-        _request: Request<sd::UpdateRequestMessage>,
+        request: Request<sd::UpdateRequestMessage>,
     ) -> SResult<Response<sd::UpdateResponseMessage>, Status> {
-        let response = sd::UpdateResponseMessage {
-            error: "NodeMgr doesn't support update".to_owned(),
-            ..Default::default()
-        };
-        Ok(Response::new(response))
+        let req = request.get_ref();
+        let objType = &req.obj_type;
+        if objType == QUARK_POD ||  objType == QUARK_NODE {
+            let response = sd::UpdateResponseMessage {
+                error: "NodeMgr doesn't support update pod".to_owned(),
+                ..Default::default()
+            };
+            return Ok(Response::new(response));
+        }
+
+        return self.etcdSvc.update(request).await;
     }
 
     async fn list(
@@ -330,66 +332,71 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
         request: Request<sd::ListRequestMessage>,
     ) -> SResult<Response<sd::ListResponseMessage>, Status> {
         let req = request.get_ref();
-        let cacher = match crate::NM_CACHE.get().unwrap().GetCacher(&req.obj_type) {
-            None => {
-                return Ok(Response::new(sd::ListResponseMessage {
-                    error: format!("doesn't support obj type {}", &req.obj_type),
-                    revision: 0,
-                    objs: Vec::new(),
-                }))
-            }
-            Some(c) => c,
-        };
-
-        let labelSelector = match Selector::Parse(&req.label_selector) {
-            Err(e) => {
-                return Ok(Response::new(sd::ListResponseMessage {
-                    error: format!("Fail: {:?}", e),
-                    ..Default::default()
-                }))
-            }
-            Ok(s) => s,
-        };
-        let fieldSelector = match Selector::Parse(&req.field_selector) {
-            Err(e) => {
-                return Ok(Response::new(sd::ListResponseMessage {
-                    error: format!("Fail: {:?}", e),
-                    ..Default::default()
-                }))
-            }
-            Ok(s) => s,
-        };
-
-        let opts = ListOption {
-            revision: req.revision,
-            revisionMatch: RevisionMatch::Exact,
-            predicate: SelectionPredicate {
-                label: labelSelector,
-                field: fieldSelector,
-                limit: 00,
-                continue_: None,
-            },
-        };
-
-        match cacher.List(&req.namespace, &opts).await {
-            Err(e) => {
-                return Ok(Response::new(sd::ListResponseMessage {
-                    error: format!("Fail: {:?}", e),
-                    ..Default::default()
-                }))
-            }
-            Ok(resp) => {
-                let mut objs = Vec::new();
-                for o in resp.objs {
-                    objs.push(o.Obj());
+        let objType = &req.obj_type;
+            if objType == QUARK_POD ||  objType == QUARK_NODE {
+            let cacher = match crate::NM_CACHE.get().unwrap().GetCacher(&req.obj_type) {
+                None => {
+                    return Ok(Response::new(sd::ListResponseMessage {
+                        error: format!("doesn't support obj type {}", &req.obj_type),
+                        revision: 0,
+                        objs: Vec::new(),
+                    }))
                 }
-                return Ok(Response::new(sd::ListResponseMessage {
-                    error: "".into(),
-                    revision: resp.revision,
-                    objs: objs,
-                }));
+                Some(c) => c,
+            };
+
+            let labelSelector = match Selector::Parse(&req.label_selector) {
+                Err(e) => {
+                    return Ok(Response::new(sd::ListResponseMessage {
+                        error: format!("Fail: {:?}", e),
+                        ..Default::default()
+                    }))
+                }
+                Ok(s) => s,
+            };
+            let fieldSelector = match Selector::Parse(&req.field_selector) {
+                Err(e) => {
+                    return Ok(Response::new(sd::ListResponseMessage {
+                        error: format!("Fail: {:?}", e),
+                        ..Default::default()
+                    }))
+                }
+                Ok(s) => s,
+            };
+
+            let opts = ListOption {
+                revision: req.revision,
+                revisionMatch: RevisionMatch::Exact,
+                predicate: SelectionPredicate {
+                    label: labelSelector,
+                    field: fieldSelector,
+                    limit: 00,
+                    continue_: None,
+                },
+            };
+
+            match cacher.List(&req.namespace, &opts).await {
+                Err(e) => {
+                    return Ok(Response::new(sd::ListResponseMessage {
+                        error: format!("Fail: {:?}", e),
+                        ..Default::default()
+                    }))
+                }
+                Ok(resp) => {
+                    let mut objs = Vec::new();
+                    for o in resp.objs {
+                        objs.push(o.Obj());
+                    }
+                    return Ok(Response::new(sd::ListResponseMessage {
+                        error: "".into(),
+                        revision: resp.revision,
+                        objs: objs,
+                    }));
+                }
             }
         }
+
+        return self.etcdSvc.list(request).await;
     }
 
     type WatchStream = std::pin::Pin<Box<dyn futures::Stream<Item = SResult<sd::WEvent, Status>> + Send>>;
@@ -400,21 +407,38 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
     ) -> SResult<Response<Self::WatchStream>, Status> {
         let (tx, rx) = mpsc::channel(200);
         let stream = ReceiverStream::new(rx);
-
+        
         tokio::spawn(async move {
             let req = request.get_ref();
-            let cacher = match crate::NM_CACHE.get().unwrap().GetCacher(&req.obj_type) {
-                None => {
-                    tx.send(Err(Status::invalid_argument(&format!(
-                        "doesn't support obj type {}",
-                        &req.obj_type
-                    ))))
-                    .await
-                    .ok();
-                    return;
+            let objType = &req.obj_type;
+            let cacher = if objType == QUARK_POD ||  objType == QUARK_NODE {
+                match crate::NM_CACHE.get().unwrap().GetCacher(&req.obj_type) {
+                    None => {
+                        tx.send(Err(Status::invalid_argument(&format!(
+                            "doesn't support obj type {}",
+                            &req.obj_type
+                        ))))
+                        .await
+                        .ok();
+                        return;
+                    }
+                    Some(c) => c,
                 }
-                Some(c) => c,
-            };
+            } else {
+                match SVC_DIR.GetCacher(&req.obj_type).await {
+                    None => {
+                        tx.send(Err(Status::invalid_argument(&format!(
+                            "doesn't support obj type {}",
+                            &req.obj_type
+                        ))))
+                        .await
+                        .ok();
+                        return;
+                    }
+                    Some(c) => c,
+                }
+            }
+            ;
 
             let labelSelector = match Selector::Parse(&req.label_selector) {
                 Err(e) => {
@@ -538,7 +562,7 @@ mod tests {
     async fn NMTestBody() {
         let cacheClient = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
 
-        let list = cacheClient.List("pod", "default", &ListOption::default()).await.unwrap();
+        let list = cacheClient.List(QUARK_POD, "default", &ListOption::default()).await.unwrap();
         println!("list1 is {:?}", list);
 
         //let client = NodeMgrClient::New("http://127.0.0.1:8889".into()).await.unwrap();
@@ -573,36 +597,146 @@ mod tests {
         annotations.insert(AnnotationNodeMgrNode.to_string(), "qserverless.quarksoft.io/brad-desktop".to_string());
         pod.metadata.annotations = Some(annotations);
         let podStr = serde_json::to_string(&pod).unwrap();
-        let dataObj = DataObject::NewFromK8sObj("pod", &pod.metadata, podStr);
+        let dataObj = DataObject::NewFromK8sObj(QUARK_POD, &pod.metadata, podStr);
 
-        cacheClient.Create("pod", dataObj.Obj()).await.unwrap();
-
-        //let client = NodeMgrClient::New("http://127.0.0.1:8889".into()).await.unwrap();
-        
-        //let configMap = k8s::ConfigMap::default();
-
-        //client.CreatePod("qserverless.quarksoft.io/brad-desktop", &pod, &configMap).await.unwrap();
+        cacheClient.Create(QUARK_POD, dataObj.Obj()).await.unwrap();
 
         std::thread::sleep(std::time::Duration::from_secs(5));
 
-        let list = cacheClient.List("pod", "default", &ListOption::default()).await.unwrap();
+        let list = cacheClient.List(QUARK_POD, "default", &ListOption::default()).await.unwrap();
         println!("list2 is {:?}", list);
         std::thread::sleep(std::time::Duration::from_secs(5));
-        let list = cacheClient.List("pod", "default", &ListOption::default()).await.unwrap();
+        let list = cacheClient.List(QUARK_POD, "default", &ListOption::default()).await.unwrap();
         println!("list3 is {:?}", list);
-        //let pod = &list.objs[0];
 
-        //client.TerminatePod(&pod.Key()).await.unwrap();
-        cacheClient.Delete("pod", &dataObj.Namespace(), &dataObj.Name()).await.unwrap();
-        let list = cacheClient.List("pod", "default", &ListOption::default()).await.unwrap();
+        cacheClient.Delete(QUARK_POD, &dataObj.Namespace(), &dataObj.Name()).await.unwrap();
+        let list = cacheClient.List(QUARK_POD, "default", &ListOption::default()).await.unwrap();
         println!("list4 is {:?}", list);
         assert!(false);
+    
+    }
+
+    #[actix_rt::test]
+    async fn EtcdList() {
+        let client = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
+        println!("list is {:#?}", client.List("pod", "", &ListOption::default()).await.unwrap());
+        assert!(false);
+    }
+
+    #[actix_rt::test]
+    async fn EtcdTest() {
+        let client = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
         
-        /*let ws = cacheClient
-            .Watch("pod", "default", &ListOption::default())
-            .await.unwrap();*/
+        let obj = DataObject::NewPod("namespace1", "name1").unwrap();
+        let rev = client.Create("pod", obj.Obj()).await.unwrap();
+        let obj = obj.CopyWithRev(rev);
 
+        let mut ws = client
+            .Watch("pod", "namespace1", &ListOption::default())
+            .await.unwrap();
+        let event = ws.Next().await.unwrap();
+        assert!(event.is_some());
+        let event = event.unwrap();
+        assert!(event.type_ == EventType::Added);
+        assert!(event.obj == obj);
 
+        let objx = DataObject::NewPod("namespace1", "name2").unwrap();
+        let rev = client.Create("pod", objx.Obj()).await.unwrap();
+        let objx = objx.CopyWithRev(rev);
+
+        let event = ws.Next().await.unwrap();
+        assert!(event.is_some());
+        let event = event.unwrap();
+        assert!(event.type_ == EventType::Added);
+        assert!(event.obj == objx);
+
+        let obj1 = client.Get("pod", "namespace1", "name1", 0).await.unwrap();
+        assert!(obj1.is_some());
+        let obj1 = obj1.unwrap();
+        assert!(
+            obj.clone() == obj1,
+            "expect is {:#?}, actual is {:#?}",
+            obj,
+            obj1
+        );
+
+        let objs = client.List("pod", "", &ListOption::default()).await.unwrap();
+        assert!(objs.objs.len() == 2);
+        assert!(
+            obj.clone() == objs.objs[0],
+            "expect is {:#?}, actual is {:#?}",
+            obj,
+            objs.objs[0]
+        );
+        assert!(
+            objx.clone() == objs.objs[1],
+            "expect is {:#?}, actual is {:#?}",
+            objx,
+            objs.objs[1]
+        );
+
+        let objs = client
+            .List("pod", "namespace1", &ListOption::default())
+            .await.unwrap();
+        assert!(objs.objs.len() == 2, "list is {:?}", &objs);
+        assert!(
+            obj.clone() == objs.objs[0],
+            "expect is {:#?}, actual is {:#?}",
+            obj,
+            objs.objs[0]
+        );
+        assert!(
+            objx.clone() == objs.objs[1],
+            "expect is {:#?}, actual is {:#?}",
+            objx,
+            objs.objs[1]
+        );
+
+        let obj2 = DataObject::NewPod("namespace1", "name1").unwrap();
+        let rev = client.Update("pod", &obj2).await.unwrap();
+        let obj2 = obj2.CopyWithRev(rev);
+
+        let event = ws.Next().await.unwrap();
+        assert!(event.is_some());
+        let event = event.unwrap();
+        assert!(event.type_ == EventType::Modified, "event is {:#?}", event);
+        assert!(
+            event.obj == obj2,
+            "event is {:#?}, expect is {:#?}",
+            event,
+            obj2
+        );
+
+        let obj3 = client.Get("pod", "namespace1", "name1", 0).await.unwrap();
+        assert!(obj3.is_some());
+        let obj3 = obj3.unwrap();
+        assert!(obj2 == obj3);
+
+        let rev = client.Delete("pod", "namespace1", "name1").await.unwrap();
+        let obj2 = obj2.CopyWithRev(rev);
+
+        let event = ws.Next().await.unwrap();
+        assert!(event.is_some());
+        let event = event.unwrap();
+        assert!(event.type_ == EventType::Deleted, "event is {:#?}", event);
+        assert!(
+            event.obj == obj2,
+            "event is {:#?}, expect is {:#?}",
+            event,
+            obj2
+        );
+
+        let obj4 = client.Get("pod", "namespace1", "name1", 0).await.unwrap();
+        assert!(obj4.is_none());
+
+        let objs = client.List("pod", "", &ListOption::default()).await.unwrap();
+        assert!(objs.objs.len() == 1);
+        assert!(
+            objx.clone() == objs.objs[0],
+            "expect is {:#?}, actual is {:#?}",
+            objx,
+            objs.objs[1]
+        );
     }
 
 }

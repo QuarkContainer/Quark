@@ -61,14 +61,14 @@ pub fn MetaToDataObject(kind: &str, meta: &ObjectMeta) -> Result<DataObjectInner
 }
 
 pub fn NodeToDataObject(node: &k8s::Node) -> Result<DataObject> {
-    let mut inner = MetaToDataObject("node", &node.metadata)?;
+    let mut inner = MetaToDataObject(QUARK_NODE, &node.metadata)?;
     inner.data = serde_json::to_string(node)?;
     let dataObj = DataObject(Arc::new(inner));
     return Ok(dataObj)
 }
 
 pub fn PodToDataObject(pod: &k8s::Pod) -> Result<DataObject> {
-    let mut inner = MetaToDataObject("pod", &pod.metadata)?;
+    let mut inner = MetaToDataObject(QUARK_POD, &pod.metadata)?;
     inner.data = serde_json::to_string(pod)?;
     let dataObj = DataObject(Arc::new(inner));
     return Ok(dataObj)
@@ -171,8 +171,8 @@ impl NodeMgrCache {
         };
 
         let cache = Self(Arc::new(RwLock::new(inner)));
-        let nodesCache = Cacher::New(Arc::new(cache.clone()), "node", 0).await?;
-        let podsCache = Cacher::New(Arc::new(cache.clone()), "pod", 0).await?;
+        let nodesCache = Cacher::New(Arc::new(cache.clone()), QUARK_NODE, 0).await?;
+        let podsCache = Cacher::New(Arc::new(cache.clone()), QUARK_POD, 0).await?;
 
         // init the listRevision as there won't be initial list operation for the nodecache and podcache
         nodesCache.write().unwrap().listRevision = 1;
@@ -184,11 +184,11 @@ impl NodeMgrCache {
     }
 
     pub fn GetCacher(&self, objType: &str) -> Option<Cacher> {
-        if objType == "pod" {
+        if objType == QUARK_POD {
             return self.read().unwrap().pods.clone();
         }
 
-        if objType == "node" {
+        if objType == QUARK_NODE {
             return self.read().unwrap().nodes.clone();
         }
 

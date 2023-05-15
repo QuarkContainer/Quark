@@ -84,7 +84,7 @@ pub async fn ClientTest() -> QResult<()> {
     let _podstr = r#"
     {
         "apiVersion":"v1",
-        "kind":"Pod",
+        "kind":QUARK_POD,
         "metadata":{
             "name":"nginx",
             "namespace": "default"

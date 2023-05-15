@@ -116,7 +116,7 @@ impl PodAgent {
         info!("Create Pod Cgroup pod {}", &podId);
         /*
         // Create Cgroups for the pod and apply resource parameters
-        klog.InfoS("Create Pod Cgroup", "pod", types.UniquePodName(a.pod))
+        klog.InfoS("Create Pod Cgroup", QUARK_POD, types.UniquePodName(a.pod))
         pcm := a.dependencies.QosManager
         if pcm.IsPodCgroupExist(pod) {
             // daemon pod can be recreated, allow cgroup exist for daemon pod cgroup
@@ -127,7 +127,7 @@ impl PodAgent {
         } else {
             err := pcm.CreatePodCgroup(pod)
             if err != nil {
-                klog.ErrorS(err, "Failed to create pod cgroup ", "pod", types.UniquePodName(a.pod))
+                klog.ErrorS(err, "Failed to create pod cgroup ", QUARK_POD, types.UniquePodName(a.pod))
                 return err
             }
             // call update qos to make sure cgroup manager internal state update to date
@@ -140,9 +140,9 @@ impl PodAgent {
         MakePodLogDir(&self.nodeConfig.RootPath, &pod.read().unwrap())?;
         /*
         // TODO, Try to attach and mount volumes into pod, mounted vol will be mounted into container later, do not support volume for now
-        klog.InfoS("Prepare pod volumes", "pod", types.UniquePodName(a.pod))
+        klog.InfoS("Prepare pod volumes", QUARK_POD, types.UniquePodName(a.pod))
         if err := a.dependencies.VolumeManager.WaitForAttachAndMount(pod); err != nil {
-            klog.ErrorS(err, "Unable to attach or mount volumes for pod; skipping pod", "pod", types.UniquePodName(a.pod))
+            klog.ErrorS(err, "Unable to attach or mount volumes for pod; skipping pod", QUARK_POD, types.UniquePodName(a.pod))
             return err
         }
          */
@@ -539,9 +539,9 @@ impl PodAgent {
         
         /*
         	// TODO, Try to unmount volumes into pod, mounted vol will be detached by volumemanager if volume not required anymore
-            klog.InfoS("Unmount Pod volume", "pod", types.UniquePodName(a.pod))
+            klog.InfoS("Unmount Pod volume", QUARK_POD, types.UniquePodName(a.pod))
             if err := a.dependencies.VolumeManager.UnmountPodVolume(pod); err != nil {
-                klog.ErrorS(err, "Unable to unmount volumes for pod", "pod", types.UniquePodName(a.pod))
+                klog.ErrorS(err, "Unable to unmount volumes for pod", QUARK_POD, types.UniquePodName(a.pod))
                 return err
 	        }
          */
@@ -556,7 +556,7 @@ impl PodAgent {
             
         /*
         	// remove cgroups for the pod and apply resource parameters
-            klog.InfoS("Remove Pod Cgroup", "pod", types.UniquePodName(a.pod))
+            klog.InfoS("Remove Pod Cgroup", QUARK_POD, types.UniquePodName(a.pod))
             pcm := a.dependencies.QosManager
             if pcm.IsPodCgroupExist(pod) {
                 err := pcm.DeletePodCgroup(pod)

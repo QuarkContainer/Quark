@@ -28,14 +28,14 @@ pub mod service_directory {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cacheClient = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
 
-    println!("nodelist is {:?}", cacheClient.List("node", "", &ListOption::default()).await.unwrap());
+    println!("nodelist is {:?}", cacheClient.List(QUARK_NODE, "", &ListOption::default()).await.unwrap());
 
     let mut nodeWs = cacheClient
-        .Watch("node", "", &ListOption::default())
+        .Watch(QUARK_NODE, "", &ListOption::default())
         .await.unwrap();
 
     let mut podWs = cacheClient
-        .Watch("pod", "", &ListOption::default())
+        .Watch(QUARK_POD, "", &ListOption::default())
         .await.unwrap();
 
     loop {

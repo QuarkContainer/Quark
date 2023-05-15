@@ -22,6 +22,7 @@ extern crate log;
 extern crate simple_logging;
 
 use once_cell::sync::OnceCell;
+use lazy_static::lazy_static;
 
 use nm_store::NodeMgrCache;
 use qobjs::common::Result as QResult;
@@ -31,17 +32,23 @@ pub mod na_client;
 pub mod nodemgr;
 pub mod types;
 pub mod nm_store;
+pub mod etcd;
 
 use crate::nm_svc::*;
+use crate::etcd::svc_dir::*;
 
 pub static NM_CACHE : OnceCell<NodeMgrCache> = OnceCell::new();
 
+lazy_static! {
+    pub static ref SVC_DIR: SvcDir = SvcDir::default();
+    pub static ref CACHE_OBJ_TYPES: Vec<&'static str> = vec!["pod", "podset",];
+}
 
 #[tokio::main]
 async fn main() -> QResult<()> {
     log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
     NM_CACHE.set(NodeMgrCache::New().await.unwrap()).unwrap();
-
+    SVC_DIR.write().await.Init("localhost:2379").await?;
     GrpcService().await.unwrap();
 
     Ok(())

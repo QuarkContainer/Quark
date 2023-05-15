@@ -433,7 +433,7 @@ mod tests {
     async fn gRPCTest() -> QResult<()> {
         let mut client = CacherClientInner::New("http://[::1]:50071".into()).await?;
 
-        let obj = DataObject::NewPod("namespace1", "name1", "", "")?;
+        let obj = DataObject::NewPod("namespace1", "name1")?;
         let rev = client.Create("pod", obj.Obj()).await?;
         let obj = obj.CopyWithRev(rev);
 
@@ -446,7 +446,7 @@ mod tests {
         assert!(event.type_ == EventType::Added);
         assert!(event.obj == obj);
 
-        let objx = DataObject::NewPod("namespace1", "name2", "", "")?;
+        let objx = DataObject::NewPod("namespace1", "name2")?;
         let rev = client.Create("pod", objx.Obj()).await?;
         let objx = objx.CopyWithRev(rev);
 
@@ -482,7 +482,7 @@ mod tests {
         );
 
         let objs = client
-            .List("pod", "namespace1", &ListOption::default())
+            .List(QUARK_POD, "namespace1", &ListOption::default())
             .await?;
         assert!(objs.objs.len() == 2);
         assert!(
@@ -498,8 +498,8 @@ mod tests {
             objs.objs[1]
         );
 
-        let obj2 = DataObject::NewPod("namespace1", "name1", "xxx", "")?;
-        let rev = client.Update("pod", &obj2).await?;
+        let obj2 = DataObject::NewPod("namespace1", "name1")?;
+        let rev = client.Update(QUARK_POD, &obj2).await?;
         let obj2 = obj2.CopyWithRev(rev);
 
         let event = ws.Next().await?;
@@ -513,12 +513,12 @@ mod tests {
             obj2
         );
 
-        let obj3 = client.Get("pod", "namespace1", "name1", 0).await?;
+        let obj3 = client.Get(QUARK_POD, "namespace1", "name1", 0).await?;
         assert!(obj3.is_some());
         let obj3 = obj3.unwrap();
         assert!(obj2 == obj3);
 
-        let rev = client.Delete("pod", "namespace1", "name1").await.unwrap();
+        let rev = client.Delete(QUARK_POD, "namespace1", "name1").await.unwrap();
         let obj2 = obj2.CopyWithRev(rev);
 
         let event = ws.Next().await?;
@@ -532,10 +532,10 @@ mod tests {
             obj2
         );
 
-        let obj4 = client.Get("pod", "namespace1", "name1", 0).await?;
+        let obj4 = client.Get(QUARK_POD, "namespace1", "name1", 0).await?;
         assert!(obj4.is_none());
 
-        let objs = client.List("pod", "", &ListOption::default()).await?;
+        let objs = client.List(QUARK_POD, "", &ListOption::default()).await?;
         assert!(objs.objs.len() == 1);
         assert!(
             objx.clone() == objs.objs[0],
@@ -549,7 +549,7 @@ mod tests {
 
     async fn gRPCSrvTest() -> QResult<()> {
         let mut store = EtcdStore::New("localhost:2379", true).await?;
-        let _initRv = store.Clear("pod").await?;
+        let _initRv = store.Clear(QUARK_POD).await?;
         tokio::spawn(async move {
             // Process each socket concurrently.
             gRpcServer().await.unwrap();
@@ -611,13 +611,13 @@ mod tests {
 
         error!("InformerTest 1");
         let factory = InformerFactory::New("http://[::1]:50071", "").await?;
-        factory.AddInformer("pod", &ListOption::default()).await?;
-        let informer = factory.GetInformer("pod").await?;
+        factory.AddInformer(QUARK_POD, &ListOption::default()).await?;
+        let informer = factory.GetInformer(QUARK_POD).await?;
         let handler1 = Arc::new(InformerHandler::New());
         let _id1 = informer.AddEventHandler(handler1.clone()).await?;
 
         let obj = DataObject::NewPod("namespace1", "name1", "", "")?;
-        let rev = client.Create("pod", obj.Obj()).await?;
+        let rev = client.Create(QUARK_POD, obj.Obj()).await?;
         let obj = obj.CopyWithRev(rev);
 
         let handler2 = Arc::new(InformerHandler::New());
@@ -653,7 +653,7 @@ mod tests {
         );
 
         let objx = DataObject::NewPod("namespace1", "name2", "", "")?;
-        let rev = client.Create("pod", objx.Obj()).await?;
+        let rev = client.Create(QUARK_POD, objx.Obj()).await?;
         let objx = objx.CopyWithRev(rev);
 
         let event = handler1.Pop().await.unwrap();
@@ -687,7 +687,7 @@ mod tests {
         informer.RemoveEventHandler(id2).await;
 
         let obj2 = DataObject::NewPod("namespace1", "name1", "xxx", "")?;
-        let rev = client.Update("pod", &obj2).await?;
+        let rev = client.Update(QUARK_POD, &obj2).await?;
         let obj2 = obj2.CopyWithRev(rev);
 
         let event = handler1.Pop().await.unwrap();
@@ -709,7 +709,7 @@ mod tests {
             _ => panic!("handler2 get data after disable"),
         };
 
-        let rev = client.Delete("pod", "namespace1", "name1").await.unwrap();
+        let rev = client.Delete(QUARK_POD, "namespace1", "name1").await.unwrap();
         let obj2 = obj2.CopyWithRev(rev);
 
         let event = handler1.Pop().await.unwrap();
@@ -733,7 +733,7 @@ mod tests {
 
     async fn gRPCSrvTest1() -> QResult<()> {
         let mut store = EtcdStore::New("localhost:2379", true).await?;
-        let _initRv = store.Clear("pod").await?;
+        let _initRv = store.Clear(QUARK_POD).await?;
         tokio::spawn(async move {
             // Process each socket concurrently.
             gRpcServer().await.unwrap();
