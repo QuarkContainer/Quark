@@ -26,7 +26,7 @@ use crate::etcd::etcd_client::EtcdClient;
 use crate::etcd::watch::{WatchReader, Watcher};
 use qobjs::common::*;
 use qobjs::selection_predicate::*;
-use qobjs::service_directory::*;
+use qobjs::qmeta::*;
 use qobjs::types::*;
 use qobjs::cacher::*;
 

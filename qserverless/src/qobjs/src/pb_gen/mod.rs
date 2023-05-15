@@ -15,4 +15,4 @@
 pub mod v1alpha2;
 pub mod nm;
 pub mod node_mgr;
-pub mod service_directory;
+pub mod qmeta;

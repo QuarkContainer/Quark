@@ -20,7 +20,7 @@ use prost::Message;
 
 use crate::common::*;
 use crate::selector::Labels;
-use crate::service_directory::*;
+use crate::qmeta::*;
 use crate::selection_predicate::*;
 use crate::ObjectMeta;
 use crate::k8s;

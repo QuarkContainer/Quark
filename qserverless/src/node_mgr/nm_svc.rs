@@ -25,11 +25,11 @@ use qobjs::k8s;
 
 use qobjs::nm as nm_svc;
 use qobjs::node_mgr as NodeMgr;
-use qobjs::service_directory as sd;
 use qobjs::common::Result;
 use qobjs::selection_predicate::*;
 use qobjs::selector::*;
 use qobjs::types::*;
+use qobjs::qmeta as qmeta;
 
 use crate::VERSION;
 use crate::na_client::*;
@@ -159,14 +159,14 @@ impl NodeMgr::node_mgr_service_server::NodeMgrService for NodeMgrSvc {
 }
 
 #[tonic::async_trait]
-impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSvc {
+impl qmeta::q_meta_service_server::QMetaService for NodeMgrSvc {
     async fn version(
         &self,
-        request: Request<sd::VersionRequestMessage>,
-    ) -> SResult<Response<sd::VersionResponseMessage>, Status> {
+        request: Request<qmeta::VersionRequestMessage>,
+    ) -> SResult<Response<qmeta::VersionResponseMessage>, Status> {
         error!("Request from {:?}", request.remote_addr());
 
-        let response = sd::VersionResponseMessage {
+        let response = qmeta::VersionResponseMessage {
             version: VERSION.to_string(),
         };
         Ok(Response::new(response))
@@ -174,14 +174,14 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
 
     async fn create(
         &self,
-        request: Request<sd::CreateRequestMessage>,
-    ) -> SResult<Response<sd::CreateResponseMessage>, Status> {
+        request: Request<qmeta::CreateRequestMessage>,
+    ) -> SResult<Response<qmeta::CreateResponseMessage>, Status> {
         let req = request.get_ref();
         let objType = &req.obj_type;
         if objType == QUARK_POD ||  objType == QUARK_NODE {
             match &req.obj {
                 None => {
-                    let response = sd::CreateResponseMessage {
+                    let response = qmeta::CreateResponseMessage {
                         error: "NodeMgr get pod create request with zero size obj".to_owned(),
                         ..Default::default()
                     };
@@ -191,7 +191,7 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
                     let pod: k8s::Pod = match serde_json::from_str(&obj.data) {
                         Ok(pod) => pod, 
                         Err(e) => {
-                            let response = sd::CreateResponseMessage {
+                            let response = qmeta::CreateResponseMessage {
                                 error: format!("NodeMgr get pod create request with pod json deserilize error {:?}", e),
                                 ..Default::default()
                             };
@@ -199,7 +199,7 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
                         }
                     };
                     if pod.metadata.annotations.is_none() {
-                        let response = sd::CreateResponseMessage {
+                        let response = qmeta::CreateResponseMessage {
                             error: format!("NodeMgr get pod create request with pod with annotations"),
                             ..Default::default()
                         };
@@ -207,7 +207,7 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
                     }
                     let node = match pod.metadata.annotations.as_ref().unwrap().get(AnnotationNodeMgrNode) {
                         None => {
-                            return Ok(Response::new(sd::CreateResponseMessage {
+                            return Ok(Response::new(qmeta::CreateResponseMessage {
                                 error: format!("create pod fail with error empty {} annotation", AnnotationNodeMgrNode),
                                 ..Default::default()
                             }))
@@ -216,13 +216,13 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
                     };
                     match crate::NM_CACHE.get().unwrap().CreatePod(node, &pod, &k8s::ConfigMap::default()).await {
                         Err(e) => {
-                            return Ok(Response::new(sd::CreateResponseMessage {
+                            return Ok(Response::new(qmeta::CreateResponseMessage {
                                 error: format!("create pod fail with error {:?}", e),
                                 ..Default::default()
                             }))
                         }
                         Ok(()) =>  {
-                            return Ok(Response::new(sd::CreateResponseMessage {
+                            return Ok(Response::new(qmeta::CreateResponseMessage {
                                 error: String::new(),
                                 ..Default::default()
                             }))
@@ -237,14 +237,14 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
 
     async fn get(
         &self,
-        request: Request<sd::GetRequestMessage>,
-    ) -> SResult<Response<sd::GetResponseMessage>, Status> {
+        request: Request<qmeta::GetRequestMessage>,
+    ) -> SResult<Response<qmeta::GetResponseMessage>, Status> {
         let req = request.get_ref();
         let objType = &req.obj_type;
         if objType == QUARK_POD ||  objType == QUARK_NODE {
             let cacher = match crate::NM_CACHE.get().unwrap().GetCacher(&req.obj_type) {
                 None => {
-                    return Ok(Response::new(sd::GetResponseMessage {
+                    return Ok(Response::new(qmeta::GetResponseMessage {
                         error: format!("doesn't support obj type {}", &req.obj_type),
                         obj: None,
                     }))
@@ -254,13 +254,13 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
 
             match cacher.Get(&req.namespace, &req.name, req.revision).await {
                 Err(e) => {
-                    return Ok(Response::new(sd::GetResponseMessage {
+                    return Ok(Response::new(qmeta::GetResponseMessage {
                         error: format!("Fail: {:?}", e),
                         obj: None,
                     }))
                 }
                 Ok(o) => {
-                    return Ok(Response::new(sd::GetResponseMessage {
+                    return Ok(Response::new(qmeta::GetResponseMessage {
                         error: "".into(),
                         obj: match o {
                             None => None,
@@ -276,21 +276,21 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
 
     async fn delete(
         &self,
-        request: Request<sd::DeleteRequestMessage>,
-    ) -> SResult<Response<sd::DeleteResponseMessage>, Status> {
+        request: Request<qmeta::DeleteRequestMessage>,
+    ) -> SResult<Response<qmeta::DeleteResponseMessage>, Status> {
         let req = request.get_ref();
         let objType = &req.obj_type;
         if objType == QUARK_POD ||  objType == QUARK_NODE {
             let podId = format!("{}/{}", &req.namespace, &req.name);
             match crate::NM_CACHE.get().unwrap().TerminatePod(&podId).await {
                 Err(e) => {
-                    return Ok(Response::new(sd::DeleteResponseMessage {
+                    return Ok(Response::new(qmeta::DeleteResponseMessage {
                         error: format!("create pod fail with error {:?}", e),
                         ..Default::default()
                     }));
                 }
                 Ok(()) =>  {
-                    return Ok(Response::new(sd::DeleteResponseMessage {
+                    return Ok(Response::new(qmeta::DeleteResponseMessage {
                         error: String::new(),
                         ..Default::default()
                     }));
@@ -303,12 +303,12 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
 
     async fn update(
         &self,
-        request: Request<sd::UpdateRequestMessage>,
-    ) -> SResult<Response<sd::UpdateResponseMessage>, Status> {
+        request: Request<qmeta::UpdateRequestMessage>,
+    ) -> SResult<Response<qmeta::UpdateResponseMessage>, Status> {
         let req = request.get_ref();
         let objType = &req.obj_type;
         if objType == QUARK_POD ||  objType == QUARK_NODE {
-            let response = sd::UpdateResponseMessage {
+            let response = qmeta::UpdateResponseMessage {
                 error: "NodeMgr doesn't support update pod".to_owned(),
                 ..Default::default()
             };
@@ -320,14 +320,14 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
 
     async fn list(
         &self,
-        request: Request<sd::ListRequestMessage>,
-    ) -> SResult<Response<sd::ListResponseMessage>, Status> {
+        request: Request<qmeta::ListRequestMessage>,
+    ) -> SResult<Response<qmeta::ListResponseMessage>, Status> {
         let req = request.get_ref();
         let objType = &req.obj_type;
             if objType == QUARK_POD ||  objType == QUARK_NODE {
             let cacher = match crate::NM_CACHE.get().unwrap().GetCacher(&req.obj_type) {
                 None => {
-                    return Ok(Response::new(sd::ListResponseMessage {
+                    return Ok(Response::new(qmeta::ListResponseMessage {
                         error: format!("doesn't support obj type {}", &req.obj_type),
                         revision: 0,
                         objs: Vec::new(),
@@ -338,7 +338,7 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
 
             let labelSelector = match Selector::Parse(&req.label_selector) {
                 Err(e) => {
-                    return Ok(Response::new(sd::ListResponseMessage {
+                    return Ok(Response::new(qmeta::ListResponseMessage {
                         error: format!("Fail: {:?}", e),
                         ..Default::default()
                     }))
@@ -347,7 +347,7 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
             };
             let fieldSelector = match Selector::Parse(&req.field_selector) {
                 Err(e) => {
-                    return Ok(Response::new(sd::ListResponseMessage {
+                    return Ok(Response::new(qmeta::ListResponseMessage {
                         error: format!("Fail: {:?}", e),
                         ..Default::default()
                     }))
@@ -368,7 +368,7 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
 
             match cacher.List(&req.namespace, &opts).await {
                 Err(e) => {
-                    return Ok(Response::new(sd::ListResponseMessage {
+                    return Ok(Response::new(qmeta::ListResponseMessage {
                         error: format!("Fail: {:?}", e),
                         ..Default::default()
                     }))
@@ -378,7 +378,7 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
                     for o in resp.objs {
                         objs.push(o.Obj());
                     }
-                    return Ok(Response::new(sd::ListResponseMessage {
+                    return Ok(Response::new(qmeta::ListResponseMessage {
                         error: "".into(),
                         revision: resp.revision,
                         objs: objs,
@@ -390,11 +390,11 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
         return self.etcdSvc.list(request).await;
     }
 
-    type WatchStream = std::pin::Pin<Box<dyn futures::Stream<Item = SResult<sd::WEvent, Status>> + Send>>;
+    type WatchStream = std::pin::Pin<Box<dyn futures::Stream<Item = SResult<qmeta::WEvent, Status>> + Send>>;
 
     async fn watch(
         &self,
-        request: Request<sd::WatchRequestMessage>,
+        request: Request<qmeta::WatchRequestMessage>,
     ) -> SResult<Response<Self::WatchStream>, Status> {
         let (tx, rx) = mpsc::channel(200);
         let stream = ReceiverStream::new(rx);
@@ -486,7 +486,7 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
                                 }
                             };
                             
-                            let we = sd::WEvent {
+                            let we = qmeta::WEvent {
                                 event_type: eventType,
                                 obj: Some(event.obj.Obj()),
                             };
@@ -515,12 +515,12 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
 
 pub async fn GrpcService() -> Result<()> {
     use tonic::transport::Server;
-    use qobjs::service_directory::service_directory_service_server::ServiceDirectoryServiceServer;
+    use qobjs::qmeta::q_meta_service_server::QMetaServiceServer;
 
     let svc = NodeMgrSvc::New();
 
     let sdFuture = Server::builder()
-        .add_service(ServiceDirectoryServiceServer::new(svc.clone()))
+        .add_service(QMetaServiceServer::new(svc.clone()))
         .serve("127.0.0.1:8890".parse().unwrap());
 
     let nodeAgentSvc = qobjs::nm::node_agent_service_server::NodeAgentServiceServer::new(svc.clone());

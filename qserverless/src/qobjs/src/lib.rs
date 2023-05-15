@@ -47,8 +47,8 @@ pub mod pb_gen;
 
 pub mod config;
 
-pub mod service_directory {
-    include!("pb_gen/service_directory.rs");
+pub mod qmeta {
+    include!("pb_gen/qmeta.rs");
 }
 
 pub mod nm {

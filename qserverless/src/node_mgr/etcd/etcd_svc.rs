@@ -33,7 +33,7 @@ use qobjs::selection_predicate::{ListOption, SelectionPredicate};
 use qobjs::selector::Selector;
 use qobjs::types::DataObject;
 
-use qobjs::service_directory::*;
+use qobjs::qmeta::*;
 
 use crate::SVC_DIR;
 
