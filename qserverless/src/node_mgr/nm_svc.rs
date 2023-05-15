@@ -532,38 +532,16 @@ pub async fn GrpcService() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use qobjs::{nm_client::*, cacher_client::CacherClient};
+    use qobjs::cacher_client::CacherClient;
 
     #[actix_rt::test]
     async fn NMTestBody() {
         let cacheClient = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
 
-        /*println!("nodelist is {:?}", cacheClient.List("node", "", &ListOption::default()).await.unwrap());
-
-        let mut nodeWs = cacheClient
-            .Watch("node", "", &ListOption::default())
-            .await.unwrap();
-
-        let mut podWs = cacheClient
-            .Watch("pod", "", &ListOption::default())
-            .await.unwrap();
-
-        tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    event = nodeWs.Next() => println!("node event is {:#?}", event),
-                    event = podWs.Next() => println!("pod event is {:#?}", event),
-                }
-            }
-        });*/
-
-        //println!("node event is {:?}", nodeWs.Next().await.unwrap());
-        
-        //println!("pod event is {:#?}", podWs.Next().await.unwrap());
         let list = cacheClient.List("pod", "default", &ListOption::default()).await.unwrap();
         println!("list1 is {:?}", list);
 
-        let client = NodeMgrClient::New("http://127.0.0.1:8889".into()).await.unwrap();
+        //let client = NodeMgrClient::New("http://127.0.0.1:8889".into()).await.unwrap();
         let podstr = r#"
         {
             "apiVersion":"v1",
@@ -590,10 +568,20 @@ mod tests {
             }
         }"#;
 
-        let pod : k8s::Pod = serde_json::from_str(podstr).unwrap();
-        let configMap = k8s::ConfigMap::default();
+        let mut pod : k8s::Pod = serde_json::from_str(podstr).unwrap();
+        let mut annotations = BTreeMap::new();
+        annotations.insert(AnnotationNodeMgrNode.to_string(), "qserverless.quarksoft.io/brad-desktop".to_string());
+        pod.metadata.annotations = Some(annotations);
+        let podStr = serde_json::to_string(&pod).unwrap();
+        let dataObj = DataObject::NewFromK8sObj("pod", &pod.metadata, podStr);
 
-        client.CreatePod("qserverless.quarksoft.io/brad-desktop", &pod, &configMap).await.unwrap();
+        cacheClient.Create("pod", dataObj.Obj()).await.unwrap();
+
+        //let client = NodeMgrClient::New("http://127.0.0.1:8889".into()).await.unwrap();
+        
+        //let configMap = k8s::ConfigMap::default();
+
+        //client.CreatePod("qserverless.quarksoft.io/brad-desktop", &pod, &configMap).await.unwrap();
 
         std::thread::sleep(std::time::Duration::from_secs(5));
 
@@ -602,10 +590,12 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_secs(5));
         let list = cacheClient.List("pod", "default", &ListOption::default()).await.unwrap();
         println!("list3 is {:?}", list);
-        let pod = &list.objs[0];
+        //let pod = &list.objs[0];
 
-        client.TerminatePod(&pod.Key()).await.unwrap();
-
+        //client.TerminatePod(&pod.Key()).await.unwrap();
+        cacheClient.Delete("pod", &dataObj.Namespace(), &dataObj.Name()).await.unwrap();
+        let list = cacheClient.List("pod", "default", &ListOption::default()).await.unwrap();
+        println!("list4 is {:?}", list);
         assert!(false);
         
         /*let ws = cacheClient
