@@ -93,10 +93,6 @@ impl NodeMgrCacheInner {
         let nodeObj = NodeToDataObject(node)?;
         let mut set = BTreeSet::new();
         for pod in pods {
-            /*let node = match pod.metadata.annotations.unwrap().get(AnnotationNodeMgrNode) {
-                None => return Err(Error::CommonError(format!("NodeMgrCache::AddPod can't get node info from node"))),
-                Some(n) => n.to_string(),
-            };*/
             let obj = PodToDataObject(pod)?;
             set.insert(obj.Key());
             podObjs.push(obj);

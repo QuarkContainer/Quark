@@ -184,10 +184,66 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
 
     async fn create(
         &self,
-        _request: Request<sd::CreateRequestMessage>,
+        request: Request<sd::CreateRequestMessage>,
     ) -> SResult<Response<sd::CreateResponseMessage>, Status> {
+        let req = request.get_ref();
+        let objType = &req.obj_type;
+        if objType == "pod" {
+            match &req.obj {
+                None => {
+                    let response = sd::CreateResponseMessage {
+                        error: "NodeMgr get pod create request with zero size obj".to_owned(),
+                        ..Default::default()
+                    };
+                    return Ok(Response::new(response));
+                }
+                Some(obj) => {
+                    let pod: k8s::Pod = match serde_json::from_str(&obj.data) {
+                        Ok(pod) => pod, 
+                        Err(e) => {
+                            let response = sd::CreateResponseMessage {
+                                error: format!("NodeMgr get pod create request with pod json deserilize error {:?}", e),
+                                ..Default::default()
+                            };
+                            return Ok(Response::new(response));
+                        }
+                    };
+                    if pod.metadata.annotations.is_none() {
+                        let response = sd::CreateResponseMessage {
+                            error: format!("NodeMgr get pod create request with pod with annotations"),
+                            ..Default::default()
+                        };
+                        return Ok(Response::new(response));
+                    }
+                    let node = match pod.metadata.annotations.as_ref().unwrap().get(AnnotationNodeMgrNode) {
+                        None => {
+                            return Ok(Response::new(sd::CreateResponseMessage {
+                                error: format!("create pod fail with error empty {} annotation", AnnotationNodeMgrNode),
+                                ..Default::default()
+                            }))
+                        },
+                        Some(s) => s,
+                    };
+                    match crate::NM_CACHE.get().unwrap().CreatePod(node, &pod, &k8s::ConfigMap::default()).await {
+                        Err(e) => {
+                            return Ok(Response::new(sd::CreateResponseMessage {
+                                error: format!("create pod fail with error {:?}", e),
+                                ..Default::default()
+                            }))
+                        }
+                        Ok(()) =>  {
+                            return Ok(Response::new(sd::CreateResponseMessage {
+                                error: String::new(),
+                                ..Default::default()
+                            }))
+                        }
+                    }
+                }
+            }
+        }
+
         let response = sd::CreateResponseMessage {
-            error: "NodeMgr doesn't support create".to_owned(),
+            error: format!("NodeMgr doesn't support create obj type {}", objType),
             ..Default::default()
         };
         Ok(Response::new(response))
@@ -197,8 +253,6 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
         &self,
         request: Request<sd::GetRequestMessage>,
     ) -> SResult<Response<sd::GetResponseMessage>, Status> {
-        //info!("get Request {:#?}", &request);
-
         let req = request.get_ref();
         let cacher = match crate::NM_CACHE.get().unwrap().GetCacher(&req.obj_type) {
             None => {
@@ -231,8 +285,28 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
 
     async fn delete(
         &self,
-        _request: Request<sd::DeleteRequestMessage>,
+        request: Request<sd::DeleteRequestMessage>,
     ) -> SResult<Response<sd::DeleteResponseMessage>, Status> {
+        let req = request.get_ref();
+        let objType = &req.obj_type;
+        if objType == "pod" {
+            let podId = format!("{}/{}", &req.namespace, &req.name);
+            match crate::NM_CACHE.get().unwrap().TerminatePod(&podId).await {
+                Err(e) => {
+                    return Ok(Response::new(sd::DeleteResponseMessage {
+                        error: format!("create pod fail with error {:?}", e),
+                        ..Default::default()
+                    }));
+                }
+                Ok(()) =>  {
+                    return Ok(Response::new(sd::DeleteResponseMessage {
+                        error: String::new(),
+                        ..Default::default()
+                    }));
+                }
+            }
+        }
+
         let response = sd::DeleteResponseMessage {
             error: "NodeMgr doesn't support delete".to_owned(),
             ..Default::default()
