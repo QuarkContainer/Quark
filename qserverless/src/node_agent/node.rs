@@ -423,8 +423,8 @@ impl NodeAgent {
             inner.pod.write().unwrap().metadata.annotations = Some(BTreeMap::new());
         }
 
-        let nodeId = K8SUtil::NodeId(&(*self.node.node.lock().unwrap()));
-        inner.pod.write().unwrap().metadata.annotations.as_mut().unwrap().insert(AnnotationNodeMgrNode.to_string(), nodeId);
+        //let nodeId = K8SUtil::NodeId(&(*self.node.node.lock().unwrap()));
+        //inner.pod.write().unwrap().metadata.annotations.as_mut().unwrap().insert(AnnotationNodeMgrNode.to_string(), nodeId);
 
         let qpod = QuarkPod(Arc::new(Mutex::new(inner)));
         let k8snode = self.node.node.lock().unwrap().clone();

@@ -308,19 +308,24 @@ impl CacherInner {
         let mut events = Vec::new();
         for obj in objs {
             set.insert(obj.Key());
-            if self.cacheStore.contains_key(&obj.Key()) {
-                let event = WatchEvent {
-                    type_: EventType::Modified,
-                    obj: obj.clone(),
-                };
-                events.push(event);
-            } else {
-                let event = WatchEvent {
-                    type_: EventType::Added,
-                    obj: obj.clone(),
-                };
-                events.push(event);
-            }
+            match self.cacheStore.get(&obj.Key()) {
+                Some(oldObj) => {
+                    if oldObj.reversion != obj.reversion {
+                        let event = WatchEvent {
+                            type_: EventType::Modified,
+                            obj: obj.clone(),
+                        };
+                        events.push(event);
+                    }
+                }
+                None => {
+                    let event = WatchEvent {
+                        type_: EventType::Added,
+                        obj: obj.clone(),
+                    };
+                    events.push(event);
+                }
+            } 
         }
 
         for (key, obj)  in &self.cacheStore {
