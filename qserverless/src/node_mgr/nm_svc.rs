@@ -396,6 +396,7 @@ impl sd::service_directory_service_server::ServiceDirectoryService for NodeMgrSv
                                     return;
                                 }
                             };
+                            
                             let we = sd::WEvent {
                                 event_type: eventType,
                                 obj: Some(event.obj.Obj()),

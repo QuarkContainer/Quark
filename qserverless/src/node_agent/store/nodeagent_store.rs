@@ -313,14 +313,27 @@ impl NodeAgentStoreInner {
         let _ = self.podCache.remove(&key).unwrap();
         obj.Pod().write().unwrap().metadata.resource_version = Some(self.revision.to_string());
         let jsonObj = obj.ToQuarkPodJson();
+        // update the pod status phase with Modifed event first
         let event = WatchEvent {
-            type_: EventType::Deleted,
+            type_: EventType::Modified,
             revision: self.revision,
             obj: NodeAgentEventObj::Pod(jsonObj.pod.clone())
         };
 
         //self.podStore.Remove(self.revision, key)?;
         self.ProcessEvent(event)?;
+
+        // delete it after update the phase
+        self.revision += 1;
+        obj.Pod().write().unwrap().metadata.resource_version = Some(self.revision.to_string());
+        let jsonObj = obj.ToQuarkPodJson();
+        let event = WatchEvent {
+            type_: EventType::Deleted,
+            revision: self.revision,
+            obj: NodeAgentEventObj::Pod(jsonObj.pod.clone())
+        };
+        self.ProcessEvent(event)?;
+
         return Ok(())
     }
 
