@@ -22,6 +22,7 @@ use crate::common::*;
 use crate::selector::Labels;
 use crate::service_directory::*;
 use crate::selection_predicate::*;
+use crate::ObjectMeta;
 
 pub const POD_DELETION_GRACE_PERIOD_LABEL           : &str = "io.kubernetes.pod.deletionGracePeriod";
 pub const POD_TERMINATION_GRACE_PERIOD_LABEL        : &str = "io.kubernetes.pod.terminationGracePeriod";
@@ -259,6 +260,40 @@ impl DeepCopy for DataObject {
 }
 
 impl DataObject {
+    pub fn NewFromK8sObj(kind: &str, meta: &ObjectMeta, data: String) -> Self {
+        let mut annotations = BTreeMap::new();
+        match &meta.annotations {
+            None => (),
+            Some(labels) => {
+                for (k, v) in labels {
+                    annotations.insert(k.to_string(), v.to_string());
+                }
+            }
+        }
+
+        let mut labels = BTreeMap::new();
+        match &meta.labels {
+            None => (),
+            Some(l) => {
+                for (k, v) in l {
+                    labels.insert(k.to_string(), v.to_string());
+                }
+            }
+        }
+
+        let inner = DataObjectInner {
+            kind: kind.to_string(),
+            namespace: meta.namespace.as_deref().unwrap_or("").to_string(),
+            name: meta.name.as_deref().unwrap_or("").to_string(),
+            annotations: annotations.into(),
+            lables: labels.into(),
+            reversion: meta.resource_version.as_deref().unwrap_or("0").parse::<i64>().unwrap_or(0),
+            data: data,
+        };
+
+        return Self(Arc::new(inner));
+    }
+
     pub fn NewFromObj(item: &Obj) -> Self {
         let mut lables = BTreeMap::new();
         for l in &item.labels {
