@@ -24,7 +24,6 @@ use std::result::Result as SResult;
 use qobjs::k8s;
 
 use qobjs::nm as nm_svc;
-use qobjs::node_mgr as NodeMgr;
 use qobjs::common::Result;
 use qobjs::selection_predicate::*;
 use qobjs::selector::*;
@@ -96,65 +95,6 @@ impl nm_svc::node_agent_service_server::NodeAgentService for NodeMgrSvc {
             client.Process().await;
         });
         return Ok(Response::new(ReceiverStream::new(rx)));
-    }
-}
-
-#[tonic::async_trait]
-impl NodeMgr::node_mgr_service_server::NodeMgrService for NodeMgrSvc {
-    async fn create_pod(
-        &self,
-        request: tonic::Request<NodeMgr::CreatePodReq>,
-    ) -> SResult<tonic::Response<NodeMgr::CreatePodResp>, tonic::Status> {
-        let req = request.get_ref();
-        let pod: k8s::Pod = match serde_json::from_str(&req.pod) {
-            Err(_e) => {
-                return Ok(Response::new(NodeMgr::CreatePodResp {
-                    error: format!("pod json is not valid {}", &req.pod),
-                }))
-            }
-            Ok(p) => p,
-        };
-
-        let configmap: k8s::ConfigMap = match serde_json::from_str(&req.config_map) {
-            Err(_e) => {
-                return Ok(Response::new(NodeMgr::CreatePodResp {
-                    error: format!("config_map json is not valid {}", &req.config_map),
-                }))
-            }
-            Ok(p) => p,
-        };
-
-        match crate::NM_CACHE.get().unwrap().CreatePod(&req.node, &pod, &configmap).await {
-            Err(e) => {
-                return Ok(Response::new(NodeMgr::CreatePodResp {
-                    error: format!("create pod fail with error {:?}", e),
-                }))
-            }
-            Ok(()) =>  {
-                return Ok(Response::new(NodeMgr::CreatePodResp {
-                    error: String::new(),
-                }))
-            }
-        }
-    }
-
-    async fn terminate_pod(
-        &self,
-        request: tonic::Request<NodeMgr::TermniatePodReq>,
-    ) -> SResult<tonic::Response<NodeMgr::TermniatePodResp>, tonic::Status> {
-        let req = request.get_ref();
-        match crate::NM_CACHE.get().unwrap().TerminatePod(&req.pod_id).await {
-            Err(e) => {
-                return Ok(Response::new(NodeMgr::TermniatePodResp {
-                    error: format!("create pod fail with error {:?}", e),
-                }))
-            }
-            Ok(()) =>  {
-                return Ok(Response::new(NodeMgr::TermniatePodResp {
-                    error: String::new(),
-                }))
-            }
-        }
     }
 }
 
@@ -519,7 +459,7 @@ pub async fn GrpcService() -> Result<()> {
 
     let svc = NodeMgrSvc::New();
 
-    let sdFuture = Server::builder()
+    let qmetaFuture = Server::builder()
         .add_service(QMetaServiceServer::new(svc.clone()))
         .serve("127.0.0.1:8890".parse().unwrap());
 
@@ -528,16 +468,10 @@ pub async fn GrpcService() -> Result<()> {
         .add_service(nodeAgentSvc)
         .serve("127.0.0.1:8888".parse().unwrap());
 
-    let nodeMgrSvc: NodeMgr::node_mgr_service_server::NodeMgrServiceServer<NodeMgrSvc> = NodeMgr::node_mgr_service_server::NodeMgrServiceServer::new(svc.clone());
-    let nmFuture = Server::builder()
-        .add_service(nodeMgrSvc)
-        .serve("127.0.0.1:8889".parse().unwrap());
-
     info!("nodemgr start ...");
     tokio::select! {
-        _ = sdFuture => {}
+        _ = qmetaFuture => {}
         _ = naFuture => {}
-        _ = nmFuture => {}
     }
 
     Ok(())

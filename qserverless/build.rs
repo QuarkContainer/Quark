@@ -31,15 +31,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|e| panic!("protobuf compile error: {}", e));
     tonic_build::compile_protos(nm_proto_file)?;
 
-    let node_mgr_proto_file = "./proto/node_mgr.proto";
-    tonic_build::configure()
-        .build_server(true)
-        .build_client(true)
-        .out_dir("./src/qobjs/src/pb_gen")
-        .compile(&[node_mgr_proto_file], &["."])
-        .unwrap_or_else(|e| panic!("protobuf compile error: {}", e));
-    tonic_build::compile_protos(node_mgr_proto_file)?;
-
     let v1_proto_file = "./proto/v1.proto";
     tonic_build::configure()
     .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
