@@ -557,6 +557,8 @@ pub async fn GrpcService() -> Result<()> {
 mod tests {
     use super::*;
     use qobjs::cacher_client::CacherClient;
+    use qobjs::informer_factory::InformerFactory;
+    use qobjs::informer::*;
 
     #[actix_rt::test]
     async fn NMTestBody() {
@@ -739,4 +741,170 @@ mod tests {
         );
     }
 
+    use qobjs::store::ThreadSafeStore;
+    use tokio::sync::mpsc::unbounded_channel;
+    use tokio::sync::mpsc::UnboundedReceiver;
+    use tokio::sync::mpsc::UnboundedSender;
+    use tokio::sync::Mutex as TMutex;
+    use std::time::Duration;
+    use qobjs::common::*;
+
+    #[derive(Debug)]
+    pub struct InformerHandler {
+        pub tx: UnboundedSender<DeltaEvent>,
+        pub rx: TMutex<UnboundedReceiver<DeltaEvent>>,
+    }
+
+    impl EventHandler for InformerHandler {
+        fn handle(&self, _store: &ThreadSafeStore, event: &DeltaEvent) {
+            self.tx.send(event.clone()).ok();
+        }
+    }
+
+    impl InformerHandler {
+        pub fn New() -> Self {
+            let (tx, rx) = unbounded_channel();
+            return Self {
+                tx: tx,
+                rx: TMutex::new(rx),
+            };
+        }
+
+        pub async fn Read(&self) -> Option<DeltaEvent> {
+            return self.rx.lock().await.recv().await;
+        }
+
+        pub async fn Pop(&self) -> Result<Option<DeltaEvent>> {
+            tokio::select! {
+                d = self.Read() => return Ok(d),
+                _ = tokio::time::sleep(Duration::from_secs(1)) => {
+                    return Err(Error::Timeout);
+                }
+            }
+        }
+    }
+
+    #[actix_rt::test]
+    async fn InformerTest() {
+        let client = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
+        
+        error!("InformerTest 1");
+        let factory = InformerFactory::New("http://127.0.0.1:8890", "").await.unwrap();
+        factory.AddInformer("pod", &ListOption::default()).await.unwrap();
+        let informer = factory.GetInformer("pod").await.unwrap();
+        let handler1 = Arc::new(InformerHandler::New());
+        let _id1 = informer.AddEventHandler(handler1.clone()).await.unwrap();
+
+        let obj = DataObject::NewPod("namespace1", "name1").unwrap();
+        let rev = client.Create("pod", obj.Obj()).await.unwrap();
+        let obj = obj.CopyWithRev(rev);
+
+        let handler2 = Arc::new(InformerHandler::New());
+        let id2 = informer.AddEventHandler(handler2.clone()).await.unwrap();
+
+        let store = informer.read().await.store.clone();
+        let event = handler1.Pop().await.unwrap();
+        assert!(
+            event
+                == Some(DeltaEvent {
+                    type_: EventType::Added,
+                    inInitialList: false,
+                    obj: obj.clone(),
+                    oldObj: None,
+                }),
+            "event is {:?}/{:?}",
+            event,
+            &store
+        );
+
+        let event = handler2.Pop().await.unwrap();
+        assert!(
+            event
+                == Some(DeltaEvent {
+                    type_: EventType::Added,
+                    inInitialList: true,
+                    obj: obj.clone(),
+                    oldObj: None,
+                }),
+            "event is {:#?}/{:?}",
+            event,
+            &store
+        );
+
+        let objx = DataObject::NewPod("namespace1", "name2").unwrap();
+        let rev = client.Create("pod", objx.Obj()).await.unwrap();
+        let objx = objx.CopyWithRev(rev);
+
+        let event = handler1.Pop().await.unwrap();
+        assert!(
+            event
+                == Some(DeltaEvent {
+                    type_: EventType::Added,
+                    inInitialList: false,
+                    obj: objx.clone(),
+                    oldObj: None,
+                }),
+            "event is {:?}/{:?}",
+            event,
+            &store
+        );
+
+        let event = handler2.Pop().await.unwrap();
+        assert!(
+            event
+                == Some(DeltaEvent {
+                    type_: EventType::Added,
+                    inInitialList: false,
+                    obj: objx.clone(),
+                    oldObj: None,
+                }),
+            "event is {:?}/{:?}",
+            event,
+            &store
+        );
+
+        informer.RemoveEventHandler(id2).await;
+
+        let obj2 = DataObject::NewPod("namespace1", "name1").unwrap();
+        let rev = client.Update("pod", &obj2).await.unwrap();
+        let obj2 = obj2.CopyWithRev(rev);
+
+        let event = handler1.Pop().await.unwrap();
+        assert!(
+            event
+                == Some(DeltaEvent {
+                    type_: EventType::Modified,
+                    inInitialList: false,
+                    obj: obj2.clone(),
+                    oldObj: Some(obj.clone()),
+                }),
+            "event is {:?}/{:?}",
+            event,
+            &store
+        );
+
+        match handler2.Pop().await {
+            Err(Error::Timeout) => (),
+            _ => panic!("handler2 get data after disable"),
+        };
+
+        let rev = client.Delete("pod", "namespace1", "name1").await.unwrap();
+        let obj2 = obj2.CopyWithRev(rev);
+
+        let event = handler1.Pop().await.unwrap();
+        assert!(
+            event
+                == Some(DeltaEvent {
+                    type_: EventType::Deleted,
+                    inInitialList: false,
+                    obj: obj2.clone(),
+                    oldObj: None,
+                }),
+            "event is {:#?}/{:#?}",
+            event,
+            &store
+        );
+
+        factory.Close().await.unwrap();
+    }
 }
