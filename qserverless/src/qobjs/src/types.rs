@@ -23,6 +23,10 @@ use crate::selector::Labels;
 use crate::service_directory::*;
 use crate::selection_predicate::*;
 use crate::ObjectMeta;
+use crate::k8s;
+
+pub const QUARK_POD : &str = "qpod";
+pub const QUARK_NODE : &str = "qnode";
 
 pub const POD_DELETION_GRACE_PERIOD_LABEL           : &str = "io.kubernetes.pod.deletionGracePeriod";
 pub const POD_TERMINATION_GRACE_PERIOD_LABEL        : &str = "io.kubernetes.pod.terminationGracePeriod";
@@ -487,22 +491,16 @@ impl DeepCopy for Podset {
 }
 
 impl DataObject {
-    pub fn NewPod(namespace: &str, name: &str, nodeName: &str, hostName: &str) -> Result<Self> {
-        let pod = Pod {
-            spec: Spec {
-                nodename: nodeName.to_string(),
-                hostname: hostName.to_string(),
-            }
-        };
+    pub fn NewPod(namespace: &str, name: &str) -> Result<Self> {
+        let mut pod = k8s::Pod::default();
+        pod.metadata.namespace = Some(namespace.to_string());
+        pod.metadata.name = Some(name.to_string());
+        
 
-        let objInner = DataObjectInner {
-            namespace: namespace.to_string(),
-            name: name.to_string(),
-            data: serde_json::to_string(&pod)?,
-            ..Default::default()
-        };
+        let podStr = serde_json::to_string(&pod)?;
+        let obj = DataObject::NewFromK8sObj("pod", &pod.metadata, podStr);
 
-        return Ok(objInner.into())
+        return Ok(obj)
     }
 }
 

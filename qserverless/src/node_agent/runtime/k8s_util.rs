@@ -73,7 +73,7 @@ pub fn GetPullSecretsForPod(_pod: &k8s::Pod) -> Vec<k8s::Secret> {
 	//  }
 	//  secret, err := secretManager.GetSecret(pod.Namespace, secretRef.Name)
 	//  if err != nil {
-	//    klog.InfoS("Unable to retrieve pull secret, the image pull may not succeed.", "pod", klog.KObj(pod), "secret", klog.KObj(secret), "err", err)
+	//    klog.InfoS("Unable to retrieve pull secret, the image pull may not succeed.", QUARK_POD, klog.KObj(pod), "secret", klog.KObj(secret), "err", err)
 	//    continue
 	//  }
 	//
