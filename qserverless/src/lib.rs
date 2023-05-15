@@ -14,5 +14,4 @@
 
 extern crate alloc;
 
-mod service_directory;
 mod node_mgr;

@@ -1,14 +1,11 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TestRequestMessage {
-    #[prost(string, tag = "1")]
-    pub client_name: ::prost::alloc::string::String,
-}
+pub struct VersionRequestMessage {}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TestResponseMessage {
+pub struct VersionResponseMessage {
     #[prost(string, tag = "1")]
-    pub server_name: ::prost::alloc::string::String,
+    pub version: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -264,11 +261,10 @@ pub mod service_directory_service_client {
             self.inner = self.inner.accept_compressed(encoding);
             self
         }
-        /// Test
-        pub async fn test_ping(
+        pub async fn version(
             &mut self,
-            request: impl tonic::IntoRequest<super::TestRequestMessage>,
-        ) -> Result<tonic::Response<super::TestResponseMessage>, tonic::Status> {
+            request: impl tonic::IntoRequest<super::VersionRequestMessage>,
+        ) -> Result<tonic::Response<super::VersionResponseMessage>, tonic::Status> {
             self.inner
                 .ready()
                 .await
@@ -280,26 +276,7 @@ pub mod service_directory_service_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/service_directory.ServiceDirectoryService/TestPing",
-            );
-            self.inner.unary(request.into_request(), path, codec).await
-        }
-        pub async fn put(
-            &mut self,
-            request: impl tonic::IntoRequest<super::PutRequestMessage>,
-        ) -> Result<tonic::Response<super::PutResponseMessage>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/service_directory.ServiceDirectoryService/Put",
+                "/service_directory.ServiceDirectoryService/Version",
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
@@ -429,15 +406,10 @@ pub mod service_directory_service_server {
     /// Generated trait containing gRPC methods that should be implemented for use with ServiceDirectoryServiceServer.
     #[async_trait]
     pub trait ServiceDirectoryService: Send + Sync + 'static {
-        /// Test
-        async fn test_ping(
+        async fn version(
             &self,
-            request: tonic::Request<super::TestRequestMessage>,
-        ) -> Result<tonic::Response<super::TestResponseMessage>, tonic::Status>;
-        async fn put(
-            &self,
-            request: tonic::Request<super::PutRequestMessage>,
-        ) -> Result<tonic::Response<super::PutResponseMessage>, tonic::Status>;
+            request: tonic::Request<super::VersionRequestMessage>,
+        ) -> Result<tonic::Response<super::VersionResponseMessage>, tonic::Status>;
         async fn create(
             &self,
             request: tonic::Request<super::CreateRequestMessage>,
@@ -529,24 +501,24 @@ pub mod service_directory_service_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
-                "/service_directory.ServiceDirectoryService/TestPing" => {
+                "/service_directory.ServiceDirectoryService/Version" => {
                     #[allow(non_camel_case_types)]
-                    struct TestPingSvc<T: ServiceDirectoryService>(pub Arc<T>);
+                    struct VersionSvc<T: ServiceDirectoryService>(pub Arc<T>);
                     impl<
                         T: ServiceDirectoryService,
-                    > tonic::server::UnaryService<super::TestRequestMessage>
-                    for TestPingSvc<T> {
-                        type Response = super::TestResponseMessage;
+                    > tonic::server::UnaryService<super::VersionRequestMessage>
+                    for VersionSvc<T> {
+                        type Response = super::VersionResponseMessage;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::TestRequestMessage>,
+                            request: tonic::Request<super::VersionRequestMessage>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move { (*inner).test_ping(request).await };
+                            let fut = async move { (*inner).version(request).await };
                             Box::pin(fut)
                         }
                     }
@@ -555,45 +527,7 @@ pub mod service_directory_service_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
-                        let method = TestPingSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/service_directory.ServiceDirectoryService/Put" => {
-                    #[allow(non_camel_case_types)]
-                    struct PutSvc<T: ServiceDirectoryService>(pub Arc<T>);
-                    impl<
-                        T: ServiceDirectoryService,
-                    > tonic::server::UnaryService<super::PutRequestMessage>
-                    for PutSvc<T> {
-                        type Response = super::PutResponseMessage;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::PutRequestMessage>,
-                        ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move { (*inner).put(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = PutSvc(inner);
+                        let method = VersionSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

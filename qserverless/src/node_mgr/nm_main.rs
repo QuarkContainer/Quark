@@ -38,6 +38,7 @@ use crate::nm_svc::*;
 use crate::etcd::svc_dir::*;
 
 pub static NM_CACHE : OnceCell<NodeMgrCache> = OnceCell::new();
+pub const VERSION: &str = "0.1";
 
 lazy_static! {
     pub static ref SVC_DIR: SvcDir = SvcDir::default();
