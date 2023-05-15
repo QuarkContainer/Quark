@@ -15,9 +15,9 @@ limitations under the License.
 */
 
 syntax = "proto3";
-package service_directory;
+package qmeta;
 
-service ServiceDirectoryService {
+service QMetaService {
   rpc Version (VersionRequestMessage) returns (VersionResponseMessage) {}
   rpc Create (CreateRequestMessage) returns (CreateResponseMessage) {}
   rpc Get (GetRequestMessage) returns (GetResponseMessage) {}

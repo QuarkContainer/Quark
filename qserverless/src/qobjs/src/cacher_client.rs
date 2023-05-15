@@ -21,8 +21,8 @@ use tonic::transport::Channel;
 use tonic::Request;
 
 use crate::selection_predicate::ListOption;
-use crate::service_directory::service_directory_service_client::ServiceDirectoryServiceClient;
-use crate::service_directory::*;
+use crate::qmeta::q_meta_service_client::QMetaServiceClient;
+use crate::qmeta::*;
 use crate::common::*;
 use crate::types::DataObjList;
 use crate::types::DataObject;
@@ -79,12 +79,12 @@ impl CacherClient {
 
 #[derive(Debug)]
 pub struct CacherClientInner {
-    pub client: ServiceDirectoryServiceClient<Channel>,
+    pub client: QMetaServiceClient<Channel>,
 }
 
 impl CacherClientInner {
     pub async fn New(addr: String) -> Result<Self> {
-        let client = ServiceDirectoryServiceClient::connect(addr).await?;
+        let client = QMetaServiceClient::connect(addr).await?;
         return Ok(Self {
             client: client,
         })

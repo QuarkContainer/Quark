@@ -191,15 +191,15 @@ pub struct WEvent {
     pub obj: ::core::option::Option<Obj>,
 }
 /// Generated client implementations.
-pub mod service_directory_service_client {
+pub mod q_meta_service_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
     use tonic::codegen::http::Uri;
     #[derive(Debug, Clone)]
-    pub struct ServiceDirectoryServiceClient<T> {
+    pub struct QMetaServiceClient<T> {
         inner: tonic::client::Grpc<T>,
     }
-    impl ServiceDirectoryServiceClient<tonic::transport::Channel> {
+    impl QMetaServiceClient<tonic::transport::Channel> {
         /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
@@ -210,7 +210,7 @@ pub mod service_directory_service_client {
             Ok(Self::new(conn))
         }
     }
-    impl<T> ServiceDirectoryServiceClient<T>
+    impl<T> QMetaServiceClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::BoxBody>,
         T::Error: Into<StdError>,
@@ -228,7 +228,7 @@ pub mod service_directory_service_client {
         pub fn with_interceptor<F>(
             inner: T,
             interceptor: F,
-        ) -> ServiceDirectoryServiceClient<InterceptedService<T, F>>
+        ) -> QMetaServiceClient<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
@@ -242,9 +242,7 @@ pub mod service_directory_service_client {
                 http::Request<tonic::body::BoxBody>,
             >>::Error: Into<StdError> + Send + Sync,
         {
-            ServiceDirectoryServiceClient::new(
-                InterceptedService::new(inner, interceptor),
-            )
+            QMetaServiceClient::new(InterceptedService::new(inner, interceptor))
         }
         /// Compress requests with the given encoding.
         ///
@@ -276,7 +274,7 @@ pub mod service_directory_service_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/service_directory.ServiceDirectoryService/Version",
+                "/qmeta.QMetaService/Version",
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
@@ -295,7 +293,7 @@ pub mod service_directory_service_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/service_directory.ServiceDirectoryService/Create",
+                "/qmeta.QMetaService/Create",
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
@@ -313,9 +311,7 @@ pub mod service_directory_service_client {
                     )
                 })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/service_directory.ServiceDirectoryService/Get",
-            );
+            let path = http::uri::PathAndQuery::from_static("/qmeta.QMetaService/Get");
             self.inner.unary(request.into_request(), path, codec).await
         }
         pub async fn delete(
@@ -333,7 +329,7 @@ pub mod service_directory_service_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/service_directory.ServiceDirectoryService/Delete",
+                "/qmeta.QMetaService/Delete",
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
@@ -352,7 +348,7 @@ pub mod service_directory_service_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/service_directory.ServiceDirectoryService/Update",
+                "/qmeta.QMetaService/Update",
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
@@ -370,9 +366,7 @@ pub mod service_directory_service_client {
                     )
                 })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/service_directory.ServiceDirectoryService/List",
-            );
+            let path = http::uri::PathAndQuery::from_static("/qmeta.QMetaService/List");
             self.inner.unary(request.into_request(), path, codec).await
         }
         pub async fn watch(
@@ -392,20 +386,18 @@ pub mod service_directory_service_client {
                     )
                 })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/service_directory.ServiceDirectoryService/Watch",
-            );
+            let path = http::uri::PathAndQuery::from_static("/qmeta.QMetaService/Watch");
             self.inner.server_streaming(request.into_request(), path, codec).await
         }
     }
 }
 /// Generated server implementations.
-pub mod service_directory_service_server {
+pub mod q_meta_service_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
-    /// Generated trait containing gRPC methods that should be implemented for use with ServiceDirectoryServiceServer.
+    /// Generated trait containing gRPC methods that should be implemented for use with QMetaServiceServer.
     #[async_trait]
-    pub trait ServiceDirectoryService: Send + Sync + 'static {
+    pub trait QMetaService: Send + Sync + 'static {
         async fn version(
             &self,
             request: tonic::Request<super::VersionRequestMessage>,
@@ -442,13 +434,13 @@ pub mod service_directory_service_server {
         ) -> Result<tonic::Response<Self::WatchStream>, tonic::Status>;
     }
     #[derive(Debug)]
-    pub struct ServiceDirectoryServiceServer<T: ServiceDirectoryService> {
+    pub struct QMetaServiceServer<T: QMetaService> {
         inner: _Inner<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
     }
     struct _Inner<T>(Arc<T>);
-    impl<T: ServiceDirectoryService> ServiceDirectoryServiceServer<T> {
+    impl<T: QMetaService> QMetaServiceServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
@@ -482,10 +474,9 @@ pub mod service_directory_service_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>>
-    for ServiceDirectoryServiceServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for QMetaServiceServer<T>
     where
-        T: ServiceDirectoryService,
+        T: QMetaService,
         B: Body + Send + 'static,
         B::Error: Into<StdError> + Send + 'static,
     {
@@ -501,11 +492,11 @@ pub mod service_directory_service_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
-                "/service_directory.ServiceDirectoryService/Version" => {
+                "/qmeta.QMetaService/Version" => {
                     #[allow(non_camel_case_types)]
-                    struct VersionSvc<T: ServiceDirectoryService>(pub Arc<T>);
+                    struct VersionSvc<T: QMetaService>(pub Arc<T>);
                     impl<
-                        T: ServiceDirectoryService,
+                        T: QMetaService,
                     > tonic::server::UnaryService<super::VersionRequestMessage>
                     for VersionSvc<T> {
                         type Response = super::VersionResponseMessage;
@@ -539,11 +530,11 @@ pub mod service_directory_service_server {
                     };
                     Box::pin(fut)
                 }
-                "/service_directory.ServiceDirectoryService/Create" => {
+                "/qmeta.QMetaService/Create" => {
                     #[allow(non_camel_case_types)]
-                    struct CreateSvc<T: ServiceDirectoryService>(pub Arc<T>);
+                    struct CreateSvc<T: QMetaService>(pub Arc<T>);
                     impl<
-                        T: ServiceDirectoryService,
+                        T: QMetaService,
                     > tonic::server::UnaryService<super::CreateRequestMessage>
                     for CreateSvc<T> {
                         type Response = super::CreateResponseMessage;
@@ -577,11 +568,11 @@ pub mod service_directory_service_server {
                     };
                     Box::pin(fut)
                 }
-                "/service_directory.ServiceDirectoryService/Get" => {
+                "/qmeta.QMetaService/Get" => {
                     #[allow(non_camel_case_types)]
-                    struct GetSvc<T: ServiceDirectoryService>(pub Arc<T>);
+                    struct GetSvc<T: QMetaService>(pub Arc<T>);
                     impl<
-                        T: ServiceDirectoryService,
+                        T: QMetaService,
                     > tonic::server::UnaryService<super::GetRequestMessage>
                     for GetSvc<T> {
                         type Response = super::GetResponseMessage;
@@ -615,11 +606,11 @@ pub mod service_directory_service_server {
                     };
                     Box::pin(fut)
                 }
-                "/service_directory.ServiceDirectoryService/Delete" => {
+                "/qmeta.QMetaService/Delete" => {
                     #[allow(non_camel_case_types)]
-                    struct DeleteSvc<T: ServiceDirectoryService>(pub Arc<T>);
+                    struct DeleteSvc<T: QMetaService>(pub Arc<T>);
                     impl<
-                        T: ServiceDirectoryService,
+                        T: QMetaService,
                     > tonic::server::UnaryService<super::DeleteRequestMessage>
                     for DeleteSvc<T> {
                         type Response = super::DeleteResponseMessage;
@@ -653,11 +644,11 @@ pub mod service_directory_service_server {
                     };
                     Box::pin(fut)
                 }
-                "/service_directory.ServiceDirectoryService/Update" => {
+                "/qmeta.QMetaService/Update" => {
                     #[allow(non_camel_case_types)]
-                    struct UpdateSvc<T: ServiceDirectoryService>(pub Arc<T>);
+                    struct UpdateSvc<T: QMetaService>(pub Arc<T>);
                     impl<
-                        T: ServiceDirectoryService,
+                        T: QMetaService,
                     > tonic::server::UnaryService<super::UpdateRequestMessage>
                     for UpdateSvc<T> {
                         type Response = super::UpdateResponseMessage;
@@ -691,11 +682,11 @@ pub mod service_directory_service_server {
                     };
                     Box::pin(fut)
                 }
-                "/service_directory.ServiceDirectoryService/List" => {
+                "/qmeta.QMetaService/List" => {
                     #[allow(non_camel_case_types)]
-                    struct ListSvc<T: ServiceDirectoryService>(pub Arc<T>);
+                    struct ListSvc<T: QMetaService>(pub Arc<T>);
                     impl<
-                        T: ServiceDirectoryService,
+                        T: QMetaService,
                     > tonic::server::UnaryService<super::ListRequestMessage>
                     for ListSvc<T> {
                         type Response = super::ListResponseMessage;
@@ -729,11 +720,11 @@ pub mod service_directory_service_server {
                     };
                     Box::pin(fut)
                 }
-                "/service_directory.ServiceDirectoryService/Watch" => {
+                "/qmeta.QMetaService/Watch" => {
                     #[allow(non_camel_case_types)]
-                    struct WatchSvc<T: ServiceDirectoryService>(pub Arc<T>);
+                    struct WatchSvc<T: QMetaService>(pub Arc<T>);
                     impl<
-                        T: ServiceDirectoryService,
+                        T: QMetaService,
                     > tonic::server::ServerStreamingService<super::WatchRequestMessage>
                     for WatchSvc<T> {
                         type Response = super::WEvent;
@@ -783,7 +774,7 @@ pub mod service_directory_service_server {
             }
         }
     }
-    impl<T: ServiceDirectoryService> Clone for ServiceDirectoryServiceServer<T> {
+    impl<T: QMetaService> Clone for QMetaServiceServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -793,7 +784,7 @@ pub mod service_directory_service_server {
             }
         }
     }
-    impl<T: ServiceDirectoryService> Clone for _Inner<T> {
+    impl<T: QMetaService> Clone for _Inner<T> {
         fn clone(&self) -> Self {
             Self(self.0.clone())
         }
@@ -803,8 +794,7 @@ pub mod service_directory_service_server {
             write!(f, "{:?}", self.0)
         }
     }
-    impl<T: ServiceDirectoryService> tonic::server::NamedService
-    for ServiceDirectoryServiceServer<T> {
-        const NAME: &'static str = "service_directory.ServiceDirectoryService";
+    impl<T: QMetaService> tonic::server::NamedService for QMetaServiceServer<T> {
+        const NAME: &'static str = "qmeta.QMetaService";
     }
 }
