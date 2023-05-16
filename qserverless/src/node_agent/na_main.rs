@@ -32,7 +32,7 @@ pub mod container;
 pub mod node;
 pub mod nm_svc;
 pub mod pod_sandbox;
-pub mod message;
+//pub mod message;
 pub mod node_status;
 pub mod cadvisor;
 pub mod store;

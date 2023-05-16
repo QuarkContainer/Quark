@@ -38,8 +38,6 @@ use crate::SVC_DIR;
 #[derive(Debug)]
 pub struct NodeMgrSvcInner {
     pub clients: Mutex<BTreeMap<String, NodeAgentClient>>,
-    pub agentsChann: mpsc::Sender<SrvMsg>,
-    pub processChannel: Option<mpsc::Receiver<SrvMsg>>,
     pub etcdSvc: EtcdSvc,
 }
 
@@ -57,12 +55,8 @@ impl Deref for NodeMgrSvc {
 
 impl NodeMgrSvc {
     pub fn New() -> Self {
-        let (tx, rx) = mpsc::channel(30);
-
         let inner = NodeMgrSvcInner {
             clients: Mutex::new(BTreeMap::new()),
-            agentsChann: tx,
-            processChannel: Some(rx),
             etcdSvc: EtcdSvc::default(),
         };
 
@@ -72,13 +66,6 @@ impl NodeMgrSvc {
     pub fn NodeAgent(&self, nodeId: &str) -> Option<NodeAgentClient> {
         return self.clients.lock().unwrap().get(nodeId).cloned();
     }
-}
-
-#[derive(Debug)]
-pub enum SrvMsg {
-    AgentClose(String),
-    AgentConnect((nm_svc::NodeRegistry, mpsc::Sender<SResult<nm_svc::NodeAgentMessage, Status>>)),
-    AgentMsg((String, Result<nm_svc::NodeAgentMessage>)),
 }
 
 #[tonic::async_trait]
@@ -486,7 +473,7 @@ mod tests {
     use qobjs::informer::*;
 
     #[actix_rt::test]
-    async fn NMTestBody() {
+    async fn NMTest() {
         let cacheClient = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
 
         let list = cacheClient.List(QUARK_POD, "default", &ListOption::default()).await.unwrap();
