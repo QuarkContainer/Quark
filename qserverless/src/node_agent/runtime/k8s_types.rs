@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 
 //use qobjs::k8s;
-use qobjs::v1alpha2::{self as cri};
+use qobjs::crictl;
 
 pub struct ImageSpec {
     // ID of the image.
@@ -68,7 +68,7 @@ pub struct Mount {
 	// Whether the mount needs SELinux relabeling
 	pub SELinuxRelabel: bool,
 	// Requested propagation mode
-	pub Propagation: cri::MountPropagation,
+	pub Propagation: crictl::MountPropagation,
 }
 
 // Protocol defines network protocols supported for things like container ports.

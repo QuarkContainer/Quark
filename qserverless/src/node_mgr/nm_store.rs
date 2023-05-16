@@ -18,7 +18,8 @@ use core::ops::Deref;
 use std::time::SystemTime;
 use async_trait::async_trait;
 
-use k8s_openapi::{api::core::v1 as k8s, apimachinery::pkg::apis::meta::v1::ObjectMeta};
+use qobjs::k8s;
+use qobjs::ObjectMeta;
 use qobjs::nm;
 use qobjs::{types::*, selector::Labels};
 use qobjs::common::*;

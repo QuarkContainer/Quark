@@ -24,7 +24,7 @@ use chrono::prelude::*;
 use crate::k8s;
 
 use crate::common::*;
-use crate::v1alpha2 as cri;
+use crate::crictl as cri;
 use crate::k8s_util::*;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

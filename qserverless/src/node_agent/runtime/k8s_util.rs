@@ -19,9 +19,8 @@ use std::os::unix::fs::PermissionsExt;
 use rand::prelude::*;
 use std::fs::Permissions;
 
-use k8s_openapi::api::core::v1::{self as k8s};
-
-use qobjs::v1alpha2::{self as cri};
+use qobjs::k8s;
+use qobjs::crictl;
 use qobjs::common::*;
 
 use qobjs::config::*;
@@ -184,14 +183,14 @@ pub const ProtocolUDP: &str = "UDP";
 // ProtocolSCTP is the SCTP protocol.
 pub const ProtocolSCTP: &str = "SCTP";
 
-pub fn MakePortMappings(container: &k8s::Container) -> Vec<cri::PortMapping> {
+pub fn MakePortMappings(container: &k8s::Container) -> Vec<crictl::PortMapping> {
     let mut pms = Vec::new();
     if container.ports.is_none() {
         return pms;
     }
 
     for p in container.ports.as_ref().unwrap() {
-        let pm = cri::PortMapping {
+        let pm = crictl::PortMapping {
             host_ip: p.host_ip.as_deref().unwrap_or("").to_string(),
             host_port: p.host_port.clone().unwrap_or(0), 
             container_port: p.container_port,
@@ -205,17 +204,17 @@ pub fn MakePortMappings(container: &k8s::Container) -> Vec<cri::PortMapping> {
 
 pub fn ToRuntimeProtocol(protocol: &str) -> i32 {
     match protocol {
-        ProtocolTCP => return cri::Protocol::Tcp as i32,
-        ProtocolUDP => return cri::Protocol::Udp as i32,
-        ProtocolSCTP => return cri::Protocol::Sctp as i32,
-        _ => return cri::Protocol::Tcp as i32,
+        ProtocolTCP => return crictl::Protocol::Tcp as i32,
+        ProtocolUDP => return crictl::Protocol::Udp as i32,
+        ProtocolSCTP => return crictl::Protocol::Sctp as i32,
+        _ => return crictl::Protocol::Tcp as i32,
     }
 }
 
 // namespacesForPod returns the criv1.NamespaceOption for a given pod.
 // An empty or nil pod can be used to get the namespace defaults for v1.Pod.
-pub fn NamespacesForPod(pod: &k8s::Pod) -> cri::NamespaceOption {
-	return cri::NamespaceOption {
+pub fn NamespacesForPod(pod: &k8s::Pod) -> crictl::NamespaceOption {
+	return crictl::NamespaceOption {
 		ipc:     IpcNamespaceForPod(pod),
 		network: NetworkNamespaceForPod(pod),
 		pid:     PidNamespaceForPod(pod),
@@ -276,8 +275,8 @@ pub fn PidNamespaceForPod(pod: &k8s::Pod) -> NamespaceMode {
 	return NamespaceMode_CONTAINER
 }
 
-pub fn ConvertOverheadToLinuxResources(nodeConfig: &NodeConfigurationInner, pod: &k8s::Pod) -> cri::LinuxContainerResources {
-    let resource = cri::LinuxContainerResources::default();
+pub fn ConvertOverheadToLinuxResources(nodeConfig: &NodeConfigurationInner, pod: &k8s::Pod) -> crictl::LinuxContainerResources {
+    let resource = crictl::LinuxContainerResources::default();
     
     let spec = pod.spec.as_ref().unwrap();
     if let Some(overhead) = &spec.overhead {
@@ -289,7 +288,7 @@ pub fn ConvertOverheadToLinuxResources(nodeConfig: &NodeConfigurationInner, pod:
     return resource;
 }
 
-pub fn ApplySandboxResources(nodeConfig: &NodeConfigurationInner, pod: &k8s::Pod, psc: &mut cri::PodSandboxConfig) -> Result<()> {
+pub fn ApplySandboxResources(nodeConfig: &NodeConfigurationInner, pod: &k8s::Pod, psc: &mut crictl::PodSandboxConfig) -> Result<()> {
     if psc.linux.is_none() {
         return Ok(());
     }
@@ -300,7 +299,7 @@ pub fn ApplySandboxResources(nodeConfig: &NodeConfigurationInner, pod: &k8s::Pod
     return Ok(())
 }
 
-pub fn CalculateSandboxResources(nodeConfig: &NodeConfigurationInner, pod: &k8s::Pod) -> cri::LinuxContainerResources {
+pub fn CalculateSandboxResources(nodeConfig: &NodeConfigurationInner, pod: &k8s::Pod) -> crictl::LinuxContainerResources {
     let (req, lim) = PodRequestsAndLimitsWithoutOverhead(pod);
     return calculateLinuxResources(nodeConfig, req.cpu, lim.cpu, lim.memory);
 }
@@ -336,8 +335,8 @@ pub fn PodRequestsAndLimitsWithoutOverhead(pod: &k8s::Pod) -> (QuarkResource, Qu
     return (reqs, limits)
 }
 
-pub fn calculateLinuxResources(nodeConfig: &NodeConfigurationInner, cpureq: i64, cpulimit: i64, memlimit: i64) -> cri::LinuxContainerResources {
-    let mut resources = cri::LinuxContainerResources::default();
+pub fn calculateLinuxResources(nodeConfig: &NodeConfigurationInner, cpureq: i64, cpulimit: i64, memlimit: i64) -> crictl::LinuxContainerResources {
+    let mut resources = crictl::LinuxContainerResources::default();
 
     let cpushare;
     if cpureq == 0 && !cpulimit != 0 {
@@ -434,9 +433,9 @@ pub fn generateLinuxContainerConfig(
     uid: Option<i64>, 
     username: &str, 
     enforceMemoryQoS: bool
-) -> cri::LinuxContainerConfig {
-    let mut lc = cri::LinuxContainerConfig {
-        resources: Some(cri::LinuxContainerResources::default()),
+) -> crictl::LinuxContainerConfig {
+    let mut lc = crictl::LinuxContainerConfig {
+        resources: Some(crictl::LinuxContainerResources::default()),
         security_context: Some(DetermineEffectiveSecurityContext(pod, container, uid, username, nodeConfig.SeccompDefault, &nodeConfig.SeccompProfileRoot)),
     };
 
@@ -487,11 +486,11 @@ pub fn generateLinuxContainerConfig(
     return lc
 } 
 
-pub fn MakeDevice(opts: &RunContainerOptions) -> Vec<cri::Device> {
+pub fn MakeDevice(opts: &RunContainerOptions) -> Vec<crictl::Device> {
     let mut devices = Vec::with_capacity(opts.devices.len());
 
     for dev in &opts.devices {
-        devices.push(cri::Device {
+        devices.push(crictl::Device {
             host_path: dev.pathOnHost.clone(),
             container_path: dev.pathInContainer.clone(),
             permissions: dev.permissions.clone(),
@@ -502,11 +501,11 @@ pub fn MakeDevice(opts: &RunContainerOptions) -> Vec<cri::Device> {
 }
 
 
-pub fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container) -> Vec<cri::Mount> {
+pub fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container) -> Vec<crictl::Mount> {
     let mut volumeMounts = Vec::new();
 
     for v in &opts.mounts {
-        let mount = cri::Mount {
+        let mount = crictl::Mount {
             host_path: v.hostPath.clone(),
             container_path: v.containerPath.clone(),
             readonly: v.readOnly,
@@ -533,7 +532,7 @@ pub fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container) -> Vec
         let containerLogPath = containerLogPath;
         let terminationMessagePath = container.termination_message_path.clone();
         let selinuxRelabel = false; //selinux.GetEnabled()
-        volumeMounts.push(cri::Mount {
+        volumeMounts.push(crictl::Mount {
             host_path: containerLogPath,
             container_path: terminationMessagePath.as_deref().unwrap_or("").to_string(),
             selinux_relabel: selinuxRelabel,

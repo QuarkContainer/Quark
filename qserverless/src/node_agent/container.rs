@@ -24,7 +24,7 @@ use core::time::Duration;
 
 //use qobjs::core_types::LifecycleHandler;
 use qobjs::k8s;
-use qobjs::v1alpha2 as cri;
+use qobjs::crictl;
 use qobjs::runtime_types::*;
 use qobjs::common::*;
 use crate::RUNTIME_MGR;
@@ -162,7 +162,7 @@ impl PodContainerAgent {
         return self.container.ContainerName();
     }
 
-    pub async fn OnContainerProbeResult(&self, result: &cri::ContainerStatus) {
+    pub async fn OnContainerProbeResult(&self, result: &crictl::ContainerStatus) {
         self.container.lock().unwrap().containerStatus = Some(result.clone());
         let result = Some(result.clone());
         let initContainer = self.container.lock().unwrap().initContainer;
