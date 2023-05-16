@@ -54,7 +54,7 @@ pub mod nm {
     include!("pb_gen/nm.rs");
 }
 
-pub mod v1alpha2 {
+pub mod crictl {
     include!("pb_gen/v1alpha2.rs");
 }
 

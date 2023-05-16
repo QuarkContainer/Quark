@@ -19,7 +19,7 @@ use tokio::sync::Semaphore;
 //use qobjs::v1alpha2::{self as cri};
 
 use crate::cri::client::*;
-use qobjs::v1alpha2::*;
+use qobjs::crictl::*;
 use qobjs::runtime_types::*;
 use qobjs::common::Result;
 use qobjs::common::Error;

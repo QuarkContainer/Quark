@@ -33,7 +33,7 @@ use chrono::prelude::*;
 use qobjs::runtime_types::{QuarkPod, QuarkContainer};
 use qobjs::common::*;
 use qobjs::k8s_util::*;
-use qobjs::v1alpha2::{self as cri};
+use qobjs::crictl;
 use qobjs::runtime_types::RuntimeContainer;
 use qobjs::config::*;
 use qobjs::runtime_types::*;
@@ -574,7 +574,7 @@ impl PodAgent {
         return Ok(())
     }
 
-    pub async fn RemovePodSandbox(&self, podSandboxId: &str, podSandboxConfig: &cri::PodSandboxConfig) -> Result<()> {
+    pub async fn RemovePodSandbox(&self, podSandboxId: &str, podSandboxConfig: &crictl::PodSandboxConfig) -> Result<()> {
         RUNTIME_MGR.get().unwrap().TerminatePod(podSandboxId, Vec::new()).await?;
         fs::remove_dir_all(&podSandboxConfig.log_directory)?;
         return Ok(())
@@ -614,15 +614,15 @@ impl PodAgent {
     }
 
     // generatePodSandboxConfig generates pod sandbox config .
-    pub fn GeneratePodSandboxConfig(&self) -> Result<cri::PodSandboxConfig> {
+    pub fn GeneratePodSandboxConfig(&self) -> Result<crictl::PodSandboxConfig> {
         // nodeagent will expect nodemgr populate most of pod spec before send it
 	    // it will not calulate hostname, all these staff
         let pod = self.pod.Pod();
         let pod = pod.read().unwrap();
         
         let podUID = pod.metadata.uid.as_deref().unwrap_or("").to_string();
-        let mut podSandboxConfig = cri::PodSandboxConfig {
-            metadata: Some(cri::PodSandboxMetadata {
+        let mut podSandboxConfig = crictl::PodSandboxConfig {
+            metadata: Some(crictl::PodSandboxMetadata {
                 name: pod.metadata.name.as_deref().unwrap_or("").to_string(),
                 namespace: pod.metadata.namespace.as_deref().unwrap_or("").to_string(),
                 uid: podUID,
@@ -635,7 +635,7 @@ impl PodAgent {
 
         let spec = pod.spec.as_ref().unwrap();
 
-        podSandboxConfig.dns_config = Some(cri::DnsConfig::default());
+        podSandboxConfig.dns_config = Some(crictl::DnsConfig::default());
         if !IsHostNetworkPod(&pod) && spec.hostname.is_some() {
             podSandboxConfig.hostname = spec.hostname.as_deref().unwrap_or("").to_string();
         }
@@ -666,14 +666,14 @@ impl PodAgent {
         return Ok(podSandboxConfig)
     }
 
-    pub fn GeneratePodSandboxLinuxConfig(&self) -> Result<cri::LinuxPodSandboxConfig> {
+    pub fn GeneratePodSandboxLinuxConfig(&self) -> Result<crictl::LinuxPodSandboxConfig> {
         let pod = self.pod.Pod();
         let pod = pod.read().unwrap();
-        let mut lpsc = cri::LinuxPodSandboxConfig {
+        let mut lpsc = crictl::LinuxPodSandboxConfig {
             cgroup_parent: "".to_owned(),
-            security_context: Some(cri::LinuxSandboxSecurityContext {
+            security_context: Some(crictl::LinuxSandboxSecurityContext {
                 privileged: HasPrivilegedContainer(pod.spec.as_ref().unwrap()),
-                seccomp: Some(cri::SecurityProfile {
+                seccomp: Some(crictl::SecurityProfile {
                     profile_type: SecurityProfile_RuntimeDefault,
                     ..Default::default()
                 }),
@@ -688,7 +688,7 @@ impl PodAgent {
 
     pub async fn CreateContainer(
         &self, 
-        podSandboxConfig: &cri::PodSandboxConfig,
+        podSandboxConfig: &crictl::PodSandboxConfig,
         containerSpec: &k8s::Container,
         _pullSecrets: &Vec<k8s::Secret>,
     ) -> Result<RuntimeContainer> {
@@ -722,7 +722,7 @@ impl PodAgent {
         }
     }
 
-    pub async fn generateContainerConfig(&self, container: &k8s::Container, imageRef: &cri::Image) -> Result<cri::ContainerConfig> {
+    pub async fn generateContainerConfig(&self, container: &k8s::Container, imageRef: &crictl::Image) -> Result<crictl::ContainerConfig> {
         let pod = self.pod.Pod();
         BuildContainerLogsDirectory(&pod.read().unwrap(), &container.name)?;
 
@@ -765,12 +765,12 @@ impl PodAgent {
             }
         }
         
-        let mut config = cri::ContainerConfig {
-            metadata: Some(cri::ContainerMetadata {
+        let mut config = crictl::ContainerConfig {
+            metadata: Some(crictl::ContainerMetadata {
                 name: container.name.clone(),
                 ..Default::default()
             }),
-            image: Some(cri::ImageSpec {
+            image: Some(crictl::ImageSpec {
                 image: imageRef.id.clone(),
                 ..Default::default()
             }),
@@ -795,7 +795,7 @@ impl PodAgent {
 
         let mut criEnvs = Vec::with_capacity(envs.len());
         for env in &envs {
-            criEnvs.push(cri::KeyValue {
+            criEnvs.push(crictl::KeyValue {
                 key: env.name.clone(),
                 value: env.value.clone(),
             })

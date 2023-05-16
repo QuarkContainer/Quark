@@ -43,7 +43,7 @@ use qobjs::common::Result as QResult;
 //use qobjs::nm::NodeAgentMessage;
 use runtime::image_mgr::ImageMgr;
 
-use qobjs::v1alpha2;
+use qobjs::crictl;
 use store::nodeagent_store::NodeAgentStore;
 use crate::nodeagent_server::NodeAgentServerMgr;
 use crate::runtime::runtime::RuntimeMgr;
@@ -111,7 +111,7 @@ pub async fn ClientTest() -> QResult<()> {
     
     CADVISOR_PROVIDER.set(CadvisorInfoProvider::New().await.unwrap()).unwrap();
     RUNTIME_MGR.set(RuntimeMgr::New(10).await.unwrap()).unwrap();
-    IMAGE_MGR.set(ImageMgr::New(v1alpha2::AuthConfig::default()).await.unwrap()).unwrap();
+    IMAGE_MGR.set(ImageMgr::New(crictl::AuthConfig::default()).await.unwrap()).unwrap();
     
     //let client = crate::cri::client::CriClient::Init().await?;
     

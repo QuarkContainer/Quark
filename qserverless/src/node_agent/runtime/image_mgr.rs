@@ -17,7 +17,7 @@ use tokio::sync::Mutex as TMutex;
 
 //use qobjs::core_types::{Container, PullPolicy};
 use qobjs::k8s;
-use qobjs::v1alpha2::{self as cri};
+use qobjs::crictl;
 use qobjs::common::*;
 use qobjs::k8s_util::*;
 
@@ -25,13 +25,13 @@ use crate::cri::client::CriClient;
 
 #[derive(Debug)]
 pub struct ImageMgr {
-    pub imageRefs: TMutex<BTreeMap<String, cri::Image>>,
+    pub imageRefs: TMutex<BTreeMap<String, crictl::Image>>,
     pub imageSvc: CriClient,
-    pub authConfig: cri::AuthConfig,
+    pub authConfig: crictl::AuthConfig,
 }
 
 impl ImageMgr {
-    pub async fn New(authConfig: cri::AuthConfig) -> Result<Self> {
+    pub async fn New(authConfig: crictl::AuthConfig) -> Result<Self> {
         let imageService = CriClient::Init().await?;
         return Ok(Self {
             imageRefs: TMutex::new(BTreeMap::new()),
@@ -40,7 +40,7 @@ impl ImageMgr {
         })
     }
 
-    pub async fn PullImageForContainer(&self, container: &k8s::Container, podSandboxConfig: &cri::PodSandboxConfig) -> Result<cri::Image> {
+    pub async fn PullImageForContainer(&self, container: &k8s::Container, podSandboxConfig: &crictl::PodSandboxConfig) -> Result<crictl::Image> {
         let imageWithTag = match ApplyDefaultImageTag(container.image.as_deref().unwrap_or("")) {
             None => {
                 return Err(Error::CommonError(format!("Failed to apply default image tag {}", container.image.as_deref().unwrap_or(""))));
@@ -56,12 +56,12 @@ impl ImageMgr {
             None => (),
         }
 
-        let imageSpec = cri::ImageSpec {
+        let imageSpec = crictl::ImageSpec {
             image: imageWithTag.clone(),
             ..Default::default()
         };
 
-        let filter = cri::ImageFilter {
+        let filter = crictl::ImageFilter {
             image: Some(imageSpec.clone()),
         };
 

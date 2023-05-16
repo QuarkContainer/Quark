@@ -15,12 +15,12 @@
 use std::collections::{HashMap};
 
 use qobjs::k8s;
-use qobjs::v1alpha2::{self as cri};
+use qobjs::crictl;
 
 use crate::runtime::k8s_util::*;
 
 // determinePodSandboxIP determines the IP addresses of the given pod sandbox.
-pub fn DeterminePodSandboxIPs(podNamespace: &str, podName: &str, podSandbox: &cri::PodSandboxStatus) -> Vec<String> {
+pub fn DeterminePodSandboxIPs(podNamespace: &str, podName: &str, podSandbox: &crictl::PodSandboxStatus) -> Vec<String> {
     let mut podIps = Vec::new();
     match &podSandbox.network {
         None => {
@@ -42,7 +42,7 @@ pub fn DeterminePodSandboxIPs(podNamespace: &str, podName: &str, podSandbox: &cr
     return podIps;
 }
 
-pub fn AddPodSecurityContext(pod: &k8s::Pod, lpsc: &mut cri::LinuxPodSandboxConfig) {
+pub fn AddPodSecurityContext(pod: &k8s::Pod, lpsc: &mut crictl::LinuxPodSandboxConfig) {
     let spec = pod.spec.as_ref().unwrap();
     
     let mut sysctls = HashMap::new();
@@ -57,13 +57,13 @@ pub fn AddPodSecurityContext(pod: &k8s::Pod, lpsc: &mut cri::LinuxPodSandboxConf
         lpsc.sysctls = sysctls;
 
         if let Some(run_as_user) = sc.run_as_user {
-            lpsc.security_context.as_mut().unwrap().run_as_user = Some(cri::Int64Value {
+            lpsc.security_context.as_mut().unwrap().run_as_user = Some(crictl::Int64Value {
                 value: run_as_user,
             });
         }
 
         if let Some(run_as_group) = sc.run_as_group {
-            lpsc.security_context.as_mut().unwrap().run_as_group = Some(cri::Int64Value {
+            lpsc.security_context.as_mut().unwrap().run_as_group = Some(crictl::Int64Value {
                 value: run_as_group,
             });
         }
@@ -81,7 +81,7 @@ pub fn AddPodSecurityContext(pod: &k8s::Pod, lpsc: &mut cri::LinuxPodSandboxConf
         }
 
         if let Some(opts) = &sc.se_linux_options {
-            lpsc.security_context.as_mut().unwrap().selinux_options = Some(cri::SeLinuxOption {
+            lpsc.security_context.as_mut().unwrap().selinux_options = Some(crictl::SeLinuxOption {
                 user: opts.user.as_deref().unwrap_or("").to_string(),
                 role: opts.role.as_deref().unwrap_or("").to_string(),
                 r#type: opts.type_.as_deref().unwrap_or("").to_string(),
