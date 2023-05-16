@@ -18,7 +18,6 @@ use std::time::Duration;
 use qobjs::common::*;
 use qobjs::runtime_types::QuarkContainer;
 use qobjs::runtime_types::QuarkPod;
-use qobjs::nm::*;
 
 use crate::container::*;
 use crate::pod::*;
@@ -52,7 +51,6 @@ pub enum NodeAgentMsg {
     PodStatusChange(PodStatusChange),
     PodOOM(PodOOM),
     HouseKeeping,
-    NodeMgrMsg(NodeAgentMessage)
 }
 
 #[derive(Debug)]

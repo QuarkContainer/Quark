@@ -32,7 +32,6 @@ use qobjs::k8s_util::K8SUtil;
 //use qobjs::runtime_types::QuarkNode;
 use qobjs::runtime_types::*;
 use qobjs::common::*;
-use qobjs::nm::{self as NmMsg};
 use qobjs::types::*;
 
 use crate::nm_svc::{NodeAgentMsg, PodCreate};
@@ -196,9 +195,6 @@ impl NodeAgent {
 
     pub async fn NodeHandler(&self, msg: &NodeAgentMsg) -> Result<()> {
         match msg {
-            NodeAgentMsg::NodeMgrMsg(msg) => {
-                return self.ProcessNodeMgrMsg(msg).await;
-            }
             NodeAgentMsg::PodStatusChange(msg) => {
                 let qpod = msg.pod.clone();
                 if qpod.PodState() == PodState::Cleanup {
@@ -223,32 +219,6 @@ impl NodeAgent {
         return Ok(())
     }
 
-    pub async fn ProcessNodeMgrMsg(&self, msg: &NmMsg::NodeAgentMessage) -> Result<()> {
-        let body = msg.message_body.as_ref().unwrap();
-        match body {
-            NmMsg::node_agent_message::MessageBody::NodeConfiguration(msg) => {
-                return self.OnNodeConfigurationCommand(&msg).await;
-            }
-            NmMsg::node_agent_message::MessageBody::NodeFullSync(msg) => {
-                return self.OnNodeFullSyncCommand(&msg);
-            }
-            NmMsg::node_agent_message::MessageBody::PodCreate(msg) => {
-                return self.OnPodCreateCmd(&msg).await;
-            }
-            NmMsg::node_agent_message::MessageBody::PodTerminate(msg) => {
-                return self.OnPodTerminateCommand(&msg);
-            }
-            NmMsg::node_agent_message::MessageBody::PodState(_) => {
-                //self.Notify(NodeAgentMsg::NodeMgrMsg(msg.clone()));
-                return Ok(())
-            }
-            _ => {
-                warn!("NodeAgentMessage {:?} is not handled by actor", msg);
-                return Ok(())
-            }
-        }
-    } 
-
     pub async fn CleanupPodStoreAndAgent(&self, pod: &QuarkPod) -> Result<()> {
         info!("Cleanup pod actor and store pod {} state {:?}", pod.PodId(), pod.PodState());
         let podId = pod.lock().unwrap().id.clone();
@@ -261,12 +231,6 @@ impl NodeAgent {
         }
 
         self.node.pods.lock().unwrap().remove(&podId);
-        return Ok(())
-    }
-
-    pub fn OnNodeFullSyncCommand(&self, _msg: &NmMsg::NodeFullSync) -> Result<()> {
-        //let msg = BuildNodeAgentNodeState(&self.node, self.node.revision.load(Ordering::SeqCst))?;
-        //self.Notify(NodeAgentMsg::NodeMgrMsg(msg));
         return Ok(())
     }
 
@@ -294,15 +258,6 @@ impl NodeAgent {
         NODEAGENT_STORE.get().unwrap().UpdateNode(&self.node)?;
         
         return Ok(())
-    }
-
-    pub async fn OnNodeConfigurationCommand(&self, msg: &NmMsg::NodeConfiguration) -> Result<()> {
-        if *self.state.lock().unwrap() != NodeAgentState::Registering {
-            return Err(Error::CommonError(format!("node is not in registering state, it does not expect configuration change after registering")));
-        }
-
-        let node = NodeFromString(&msg.node)?;
-        return self.NodeConfigure(node).await;
     }
 
      pub fn CreatePod(&self, pod: &k8s::Pod, configMap: &k8s::ConfigMap) -> Result<()> {
@@ -358,13 +313,6 @@ impl NodeAgent {
         return Ok(())
     }
 
-    pub async fn OnPodCreateCmd(&self, msg: &NmMsg::PodCreate) -> Result<()> {
-        let pod = PodFromString(&msg.pod)?;
-        let configMap = ConfigMapFromString(&msg.config_map)?;
-        self.CreatePod(&pod, &configMap)?;
-        return Ok(())
-    }
-
     pub fn TerminatePod(&self, podId: &str) -> Result<()> {
         let qpod = self.node.pods.lock().unwrap().get(podId).cloned();
         match qpod {
@@ -388,11 +336,6 @@ impl NodeAgent {
         }
 
         return Ok(())
-    }
-
-    pub fn OnPodTerminateCommand(&self, msg: &NmMsg::PodTerminate) -> Result<()> {
-        let podId = &msg.pod_identifier;
-        return self.TerminatePod(podId);
     }
 
     pub fn BuildAQuarkPod(&self, state: PodState, pod: &k8s::Pod, configMap: &Option<k8s::ConfigMap>, isDaemon: bool) -> Result<QuarkPod> {
