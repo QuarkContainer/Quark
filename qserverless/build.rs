@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|e| panic!("protobuf compile error: {}", e));
     tonic_build::compile_protos(nm_proto_file)?;
 
-    let v1_proto_file = "./proto/v1.proto";
+    /*let v1_proto_file = "./proto/v1.proto";
     tonic_build::configure()
     .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
     //.build_server(true)
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .out_dir("./src/qobjs/src/pb_gen")
     .compile(&[v1_proto_file], &["."])
     .unwrap_or_else(|e| panic!("protobuf compile error: {}", e));
-    tonic_build::compile_protos(v1_proto_file)?;
+    tonic_build::compile_protos(v1_proto_file)?;*/
 
     let v1alpha2_proto_file = "./proto/v1alpha2.proto";
     tonic_build::configure()
