@@ -37,6 +37,7 @@ pub mod node_status;
 pub mod cadvisor;
 pub mod store;
 pub mod nodeagent_server;
+pub mod func_agent;
 
 use qobjs::common::Result as QResult;
 //use qobjs::config::NodeConfiguration;

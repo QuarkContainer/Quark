@@ -51,5 +51,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .unwrap_or_else(|e| panic!("protobuf compile error: {}", e));
     tonic_build::compile_protos(v1alpha2_proto_file)?;
 
+    let func_proto_file = "./proto/func.proto";
+    tonic_build::configure()
+    .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
+    .build_server(true)
+    .build_client(true)
+    .out_dir("./src/qobjs/src/pb_gen")
+    .compile(&[func_proto_file], &["."])
+    .unwrap_or_else(|e| panic!("protobuf compile error: {}", e));
+    tonic_build::compile_protos(func_proto_file)?;
+
     Ok(())
 }

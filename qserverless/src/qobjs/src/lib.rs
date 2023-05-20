@@ -58,5 +58,9 @@ pub mod crictl {
     include!("pb_gen/v1alpha2.rs");
 }
 
+pub mod func {
+    include!("pb_gen/func.rs");
+}
+
 pub use k8s_openapi::api::core::v1 as k8s;
 pub use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta as ObjectMeta;

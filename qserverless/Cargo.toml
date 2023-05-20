@@ -66,16 +66,20 @@ features = [
 tonic-build = "0.8"
 
 [[bin]]
-name = "service_directory"
-path = "src/service_directory/service_directory_main.rs"
-
-[[bin]]
 name = "node_mgr"
 path = "src/node_mgr/nm_main.rs"
 
 [[bin]]
 name = "node_agent"
 path = "src/node_agent/na_main.rs"
+
+[[bin]]
+name = "func_inst"
+path = "src/func_instance/main.rs"
+
+[[bin]]
+name = "func_svc"
+path = "src/func_svc/main.rs"
 
 [[bin]]
 name = "test"

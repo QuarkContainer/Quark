@@ -12,7 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod v1alpha2;
-pub mod nm;
-pub mod qmeta;
-pub mod func;
+
+#![allow(dead_code)]
+#![allow(non_snake_case)]
+#![allow(non_camel_case_types)]
+#![allow(non_upper_case_globals)]
+
+pub mod func_svc;
+pub mod func_conn;
+pub mod func_context;
+pub mod task_queue;
+pub mod scheduler;
+
+fn main() {
+    println!("Hello, world!");
+}

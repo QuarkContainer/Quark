@@ -78,6 +78,7 @@ pub enum Error {
     RocksdbError(rocksdb::Error),
     TokioChannFull,
     TokioChannClose,
+
     Timeout,
     IpNetworkError(ipnetwork::IpNetworkError),
     // ErrRequeue may be returned by a PopProcessFunc to safely requeue

@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2014 The Kubernetes Authors
+// Copyright (c) 2021 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod v1alpha2;
-pub mod nm;
-pub mod qmeta;
-pub mod func;
+pub mod funcinst;
+pub mod funcinst_mgr;
+pub mod func_call;
+pub mod funcsvc_agent;
