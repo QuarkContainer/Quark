@@ -11,3 +11,91 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+syntax = "proto3";
+package func;
+
+service FuncAgentService {
+  rpc StreamProcess(stream FuncAgentMsg) returns (stream FuncAgentMsg);
+}
+
+message FuncAgentMsg {
+  uint64 msgId = 1;
+  oneof EventBody {
+    FuncInstanceRegisterReq FuncInstanceRegisterReq = 100;
+    FuncInstanceRegisterResp FuncInstanceRegisterResp = 200;
+    FuncAgentCallReq FuncAgentCallReq = 300;
+    FuncAgentCallResp FuncAgentCallResp = 400;
+  }
+}
+
+message FuncInstanceRegisterReq {
+  string instanceId = 1;
+}
+
+message FuncInstanceRegisterResp {
+    string error = 1;
+}
+
+message FuncAgentCallReq {
+  string funcName = 1;
+  string parameters = 2;
+}
+
+message FuncAgentCallResp {
+    string error = 1;
+    string resp = 2;
+}
+
+service FuncSvcService {
+  rpc StreamProcess(stream FuncSvcMsg) returns (stream FuncSvcMsg);
+}
+
+message FuncSvcMsg {
+  uint64 msgId = 1;
+  oneof EventBody {
+    FuncAgentRegisterReq FuncAgentRegisterReq = 100;
+    FuncAgentRegisterResp FuncAgentRegisterResp = 200;
+    FuncInstanceConnReq FuncInstanceConnReq = 300;
+    FuncInstanceConnResp FuncInstanceConnResp = 400;
+    FuncInstanceDisconnReq FuncInstanceDisconnReq = 500;
+    FuncInstanceDisconnResp FuncInstanceDisconnResp = 600;
+    FuncSvcCallReq FuncSvcCallReq = 700;
+    FuncSvcCallResp FuncSvcCallResp = 800;
+  }
+}
+
+message FuncAgentRegisterReq {
+  string nodeId = 1;
+}
+
+message FuncAgentRegisterResp {
+    string error = 1;
+}
+
+message FuncInstanceConnReq {
+  string nodeId = 1;
+}
+
+message FuncInstanceConnResp {
+    string error = 1;
+}
+
+message FuncInstanceDisconnReq {
+  string podId = 1;
+}
+
+message FuncInstanceDisconnResp {
+    string error = 1;
+}
+
+message FuncSvcCallReq {
+  string podId = 1;
+  string funcName = 2;
+  string parameters = 3;
+}
+
+message FuncSvcCallResp {
+    string error = 1;
+    string resp = 2;
+}

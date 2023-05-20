@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod v1alpha2;
-pub mod nm;
-pub mod qmeta;
-pub mod func;
+fn main() {
+    println!("Hello, world!");
+}
