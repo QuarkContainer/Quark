@@ -41,13 +41,35 @@ pub struct PackageInner  {
 
     // total waiting tasks
     pub waitingQueue: PackageTaskQueue,
-    pub pods: Vec<FuncPod>,
+    pub keepalivePods: BTreeMap<SystemTime, FuncPod>,
 }
 
 impl PackageInner {
+    pub fn PopPod(&mut self) -> Option<FuncPod> {
+        let mut iter = self.keepalivePods.iter().rev();
+        let (time, pod) = match iter.next() {
+            None => return None,
+            Some((time, pod)) => (*time, pod.clone()),
+        };
+
+        drop(iter);
+
+        self.keepalivePods.remove(&time);
+        return Some(pod);
+    }
+
+    pub fn RemoveKeepalivePod(&mut self, pod: &FuncPod) {
+        self.keepalivePods.remove(&pod.IdleTime());
+    }
+
+    pub fn PushPod(&mut self, pod: &FuncPod) {
+        let time = *pod.lastIdleTime.lock().unwrap();
+        self.keepalivePods.insert(time, pod.clone());
+    }
+
     // when there is a new task, return task which needs creating new pod
     pub fn OnNewTask(&mut self, task: &TaskItem) -> Result<Option<TaskItem>> {
-        match self.pods.pop() {
+        match self.PopPod() {
             Some(pod) => {
                 assert!(self.waitingQueue.waitingTask == 0);
                 pod.RunTask(task)?;
@@ -61,32 +83,34 @@ impl PackageInner {
         }
     }
 
-    // when a new Pod is created, return 
-    pub fn OnCreatedPod(&mut self, pod: &FuncPod) -> Result<()> {
+    // when a new Pod is created, return whether the pod has been keepalived
+    pub fn OnCreatedPod(&mut self, pod: &FuncPod) -> Result<bool> {
         match self.waitingQueue.Pop() {
             None => {
-                self.pods.push(pod.clone());
-                return Ok(())
+                pod.SetIdle();
+                self.PushPod(pod);
+                return Ok(true)
             }
             Some(t) => {
                 pod.RunTask(&t)?;
                 self.runningPodCnt += 1;
-                return Ok(())
+                return Ok(false)
             }
         }
     }
 
     // when a pod finish processing last task, return the task which needs removed from global task Queue
-    pub fn OnFreePod(&mut self, pod: &FuncPod) -> Result<Option<TaskItem>> {
+    pub fn OnFreePod(&mut self, pod: &FuncPod) -> Result<(bool, Option<TaskItem>)> {
         match self.waitingQueue.Pop() {
             None => {
-                self.pods.push(pod.clone());
-                return Ok(None)
+                pod.SetIdle();
+                self.PushPod(pod);
+                return Ok((true, None))
             }
             Some(t) => {
                 pod.RunTask(&t)?;
                 let removeTask = self.waitingQueue.GetWaitingTask(self.creatingPodCnt);
-                return Ok(removeTask);
+                return Ok((false, removeTask));
             }
         }
     }
@@ -140,17 +164,38 @@ pub struct Func {
     pub name: String,
 }
 
-#[derive(Debug, Clone)]
-pub struct FuncPod {
+#[derive(Debug)]
+pub struct FuncPodInner {
     pub id: String,
     pub packageId: PackageId,
     pub node: RunNode,
-    pub lastSchedueTime: SystemTime,
+    pub lastIdleTime: Mutex<SystemTime>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FuncPod(Arc<FuncPodInner>);
+
+impl Deref for FuncPod {
+    type Target = Arc<FuncPodInner>;
+
+    fn deref(&self) -> &Arc<FuncPodInner> {
+        &self.0
+    }
 }
 
 impl FuncPod {
     pub fn RunTask(&self, _task: &TaskItem) -> Result<()> {
         unimplemented!();
+    }
+
+    pub fn SetIdle(&self) -> SystemTime {
+        let curr = SystemTime::now();
+        *self.lastIdleTime.lock().unwrap() = curr;
+        return curr;
+    }
+
+    pub fn IdleTime(&self) -> SystemTime {
+        return *self.lastIdleTime.lock().unwrap();
     }
 }
 
@@ -181,7 +226,7 @@ pub struct FuncSvcInner {
     pub funcInstances: BTreeMap<u64, Func>,
 
     // assume there is no duplicate schedule time
-    pub lastSchedulePod: BTreeMap<SystemTime, FuncPod>,
+    pub keepalivePods: BTreeMap<SystemTime, FuncPod>,
 
     // from packageId to Pods
     pub idlePods: BTreeMap<PackageId, Vec<FuncPod>>,
@@ -232,45 +277,19 @@ impl FuncSvcInner {
             None => return Ok(()),
             Some(t) => {
                 self.waitResourceQueue.Enq(&t);
-                return Ok(());
             }
         }
+
+        return self.TryCreatePod();
     }
 
-    // try schedule a task in waiting queue, if find a waiting task and success, return true, otherwise false
-    /*pub fn TryScheduleTask(&self) -> Result<bool> {
-        let task = match self.taskQueues.Peek() {
-            None => return Ok(false),
-            Some(t) => t,
-        };
-
-        let packageId = task.PackageId();
-        let package = self.GetPackage(&packageId)?;
-
-        // if it is batch task and the system are in Evicting state, enque task.
-        if task.priority >= START_BATCHTASK_PRI && self.NeedEvictTask(&package.ReqResource()) { // it is a batch task
-            return Ok(false);
-        }
-
-        if self.freeResource.Fullfil(&package.ReqResource()) {
-            self.freeResource = self.freeResource - package.ReqResource();
-            // try to get a idle pod of the package
-            match package.PopPod() {
-                None => (),
-                Some(p) => {
-                    // if there is free pod, that means there is no active task waiting, just run the new one
-                    p.RunTask(&task)?;
-                    return Ok(true)
-                }
-            };
-
-
-        }
-        
-    }*/
-
     pub fn NeedKillPod(&self, package: &Package) -> bool {
-        return package.TopPriority() > self.waitResourceQueue.TopPriority();
+        let pri = package.TopPriority();
+        if pri > START_BATCHTASK_PRI
+            && self.NeedEvictTask(&package.ReqResource()) {
+                return true;
+            }
+        return package.TopPriority() > self.waitResourceQueue.TopPriority() ;
     }
 
     pub fn GetPackage(&self, packageId: &PackageId) -> Result<Package> {
@@ -288,8 +307,18 @@ impl FuncSvcInner {
             self.EvicatePod(pod, &package.ReqResource())?;
             return Ok(());
         }
+        let (keepalive, task) = package.lock().unwrap().OnFreePod(pod)?;
+        match task {
+            None => (),
+            Some(t) => {
+                self.waitResourceQueue.Remove(&t);
+            }
+        }
 
-        package.lock().unwrap().OnFreePod(pod)?;
+        if keepalive {
+            self.PushKeepalivePod(pod)?;
+        }
+
         return Ok(());
     }
 
@@ -302,14 +331,44 @@ impl FuncSvcInner {
             return Ok(());
         }
 
-        package.lock().unwrap().OnCreatedPod(pod)?;
+        let keepalive = package.lock().unwrap().OnCreatedPod(pod)?;
+
+        if keepalive {
+            self.PushKeepalivePod(pod)?;
+        }
         return Ok(());
     }
 
-    pub fn EnqTask(&mut self, _task: &TaskItem) -> Result<()> {
+    pub fn PushKeepalivePod(&mut self, pod: &FuncPod) -> Result<()> {
+        let time = pod.IdleTime();
+        self.keepalivePods.insert(time, pod.clone());
+        return Ok(())
+    }
 
+    pub fn CleanKeepalivePod(&mut self) -> Result<()> {
+        let mut removePods = Vec::new();
+        let mut resource = self.FreeingResource();
+        if resource.mem * 100 / self.totalResource.mem > KEEP_BATCHTASK_THRESHOLD {
+            return Ok(());
+        }
 
-        unimplemented!();
+        for (_time, pod) in &self.keepalivePods {
+            let package = self.GetPackage(&pod.packageId)?;
+            removePods.push((pod.clone(), package.ReqResource()));
+            resource = resource + package.ReqResource();
+            package.lock().unwrap().RemoveKeepalivePod(pod);
+            if resource.mem * 100 / self.totalResource.mem > KEEP_BATCHTASK_THRESHOLD {
+                break;
+            }
+        }
+
+        for (p, resource) in removePods {
+            self.keepalivePods.remove(&p.IdleTime());
+            self.EvicatePod(&p, &resource)?;
+            
+        }
+
+        return Ok(())
     }
 
     pub fn TryCreatePod(&mut self) -> Result<()> {
@@ -318,11 +377,17 @@ impl FuncSvcInner {
                 None => return Ok(()),
                 Some(t) => t,
             };
+
             if !self.freeResource.Fullfil(&task.ReqResource()) {
                 return Ok(()); // no enough resource
             }
 
             let package = self.GetPackage(&task.PackageId())?;
+            if task.priority >= START_BATCHTASK_PRI && self.NeedEvictTask(&package.ReqResource()) {
+                // only batch task left and the memory usage has exceed the threshold
+                return Ok(())
+            }
+
             self.CreatePod(&package)?;
             self.waitResourceQueue.Remove(&task);
         }
