@@ -14,9 +14,9 @@ pub mod func_agent_msg {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum EventBody {
         #[prost(message, tag = "100")]
-        FuncInstanceRegisterReq(super::FuncInstanceRegisterReq),
+        FuncPodRegisterReq(super::FuncPodRegisterReq),
         #[prost(message, tag = "200")]
-        FuncInstanceRegisterResp(super::FuncInstanceRegisterResp),
+        FuncPodRegisterResp(super::FuncPodRegisterResp),
         #[prost(message, tag = "300")]
         FuncAgentCallReq(super::FuncAgentCallReq),
         #[prost(message, tag = "400")]
@@ -26,14 +26,14 @@ pub mod func_agent_msg {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FuncInstanceRegisterReq {
+pub struct FuncPodRegisterReq {
     #[prost(string, tag = "1")]
     pub instance_id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FuncInstanceRegisterResp {
+pub struct FuncPodRegisterResp {
     #[prost(string, tag = "1")]
     pub error: ::prost::alloc::string::String,
 }
@@ -78,13 +78,13 @@ pub mod func_svc_msg {
         #[prost(message, tag = "200")]
         FuncAgentRegisterResp(super::FuncAgentRegisterResp),
         #[prost(message, tag = "300")]
-        FuncInstanceConnReq(super::FuncInstanceConnReq),
+        FuncPodConnReq(super::FuncPodConnReq),
         #[prost(message, tag = "400")]
-        FuncInstanceConnResp(super::FuncInstanceConnResp),
+        FuncPodConnResp(super::FuncPodConnResp),
         #[prost(message, tag = "500")]
-        FuncInstanceDisconnReq(super::FuncInstanceDisconnReq),
+        FuncPodDisconnReq(super::FuncPodDisconnReq),
         #[prost(message, tag = "600")]
-        FuncInstanceDisconnResp(super::FuncInstanceDisconnResp),
+        FuncPodDisconnResp(super::FuncPodDisconnResp),
         #[prost(message, tag = "700")]
         FuncSvcCallReq(super::FuncSvcCallReq),
         #[prost(message, tag = "800")]
@@ -97,6 +97,12 @@ pub mod func_svc_msg {
 pub struct FuncAgentRegisterReq {
     #[prost(string, tag = "1")]
     pub node_id: ::prost::alloc::string::String,
+    /// func calls waiting for response
+    #[prost(message, repeated, tag = "2")]
+    pub func_calls: ::prost::alloc::vec::Vec<FuncSvcCallReq>,
+    /// func pods running on the node
+    #[prost(message, repeated, tag = "3")]
+    pub func_pods: ::prost::alloc::vec::Vec<FuncPodStatus>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -108,28 +114,28 @@ pub struct FuncAgentRegisterResp {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FuncInstanceConnReq {
+pub struct FuncPodConnReq {
     #[prost(string, tag = "1")]
     pub node_id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FuncInstanceConnResp {
+pub struct FuncPodConnResp {
     #[prost(string, tag = "1")]
     pub error: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FuncInstanceDisconnReq {
+pub struct FuncPodDisconnReq {
     #[prost(string, tag = "1")]
     pub pod_id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FuncInstanceDisconnResp {
+pub struct FuncPodDisconnResp {
     #[prost(string, tag = "1")]
     pub error: ::prost::alloc::string::String,
 }
@@ -138,11 +144,18 @@ pub struct FuncInstanceDisconnResp {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncSvcCallReq {
     #[prost(string, tag = "1")]
-    pub pod_id: ::prost::alloc::string::String,
+    pub func_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub func_name: ::prost::alloc::string::String,
+    pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
+    pub package: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub func_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
     pub parameters: ::prost::alloc::string::String,
+    /// when funcCall is process by a funcPod, this is the NodeId
+    #[prost(string, tag = "6")]
+    pub callee_node_id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -152,6 +165,53 @@ pub struct FuncSvcCallResp {
     pub error: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub resp: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FuncPodStatus {
+    #[prost(string, tag = "1")]
+    pub pod_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub package_id: ::prost::alloc::string::String,
+    #[prost(enumeration = "FuncPodState", tag = "3")]
+    pub state: i32,
+    /// when pod is running, the funccall id
+    #[prost(string, tag = "4")]
+    pub func_call_id: ::prost::alloc::string::String,
+    ///   when pod is running, the funccall caller id
+    #[prost(string, tag = "5")]
+    pub func_caller_node_id: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum FuncPodState {
+    Creating = 0,
+    Keepalive = 2,
+    Running = 3,
+}
+impl FuncPodState {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            FuncPodState::Creating => "Creating",
+            FuncPodState::Keepalive => "Keepalive",
+            FuncPodState::Running => "Running",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "Creating" => Some(Self::Creating),
+            "Keepalive" => Some(Self::Keepalive),
+            "Running" => Some(Self::Running),
+            _ => None,
+        }
+    }
 }
 /// Generated client implementations.
 pub mod func_agent_service_client {

@@ -20,6 +20,7 @@ use std::collections::btree_map::Iter;
 
 use crate::func_context::*;
 use crate::scheduler::Resource;
+use crate::package::*;
 
 #[derive(Debug, Clone)]
 pub struct TaskItemInner {
@@ -36,8 +37,8 @@ impl TaskItem {
         return self.context.ReqResource();
     }
 
-    pub fn PackageId(&self) -> PackageId {
-        return self.context.lock().unwrap().packageId.clone();
+    pub fn Package(&self) -> Package {
+        return self.context.lock().unwrap().package.clone();
     }
 }
 

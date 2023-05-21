@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2014 The Kubernetes Authors
+// Copyright (c) 2021 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,30 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub enum FuncSvcMsg {
 
-#![allow(dead_code)]
-#![allow(non_snake_case)]
-#![allow(non_camel_case_types)]
-#![allow(non_upper_case_globals)]
+}
 
-#[macro_use]
-extern crate scopeguard;
+pub struct FuncCallMsg {
 
-#[macro_use]
-extern crate log;
+}
 
-pub mod func_svc;
-pub mod func_conn;
-pub mod func_context;
-pub mod task_queue;
-pub mod scheduler;
-pub mod func_pod;
-pub mod package;
-pub mod func_node;
-pub mod message;
-
-fn main() {
-    log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
-    
-    println!("Hello, world!");
+pub struct FuncAgentRegister {
+    pub id: String,
 }

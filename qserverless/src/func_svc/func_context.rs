@@ -16,36 +16,7 @@ use core::ops::Deref;
 use std::{sync::{Arc, Mutex, Weak}, time::SystemTime};
 
 use crate::scheduler::Resource;
-
-#[derive(Debug, Clone)]
-pub struct PackageId {
-    pub namespace: String,
-    pub packageName: String,
-}
-
-impl Ord for PackageId {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        if self.namespace == other.namespace {
-            return other.packageName.cmp(&self.packageName);
-        }
-
-        return other.namespace.cmp(&other.namespace);
-    }
-}
-
-impl PartialOrd for PackageId {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl PartialEq for PackageId {
-    fn eq(&self, other: &Self) -> bool {
-        return self.namespace == other.namespace && self.packageName == other.packageName;
-    }
-}
-
-impl Eq for PackageId {}
+use crate::package::*;
 
 #[derive(Debug, Clone)]
 pub struct FuncId {
@@ -101,7 +72,7 @@ pub struct FuncCallContextInner {
     pub calleeId: u64,
 
     pub namespace: String,
-    pub packageId: PackageId,
+    pub package: Package,
     pub funcName: String,
     pub parameters: String,
     pub priority: i32,
