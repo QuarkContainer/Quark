@@ -53,13 +53,13 @@ pub enum FuncCallState {
     // FuncSvc get func request and put in pending queue
     Scheduling,
     // FuncSvc scheduled the Func to one FuncAgent
-    Scheduled(String),
+    Scheduled(String), // the content is callee NodeId
     // Callee FuncAgent complete the request and return result to caller
-    Complete(String),
+    Complete(String), // the content is the funcCall result
 }
 
 #[derive(Debug)]
-pub struct FuncCallContextInner {
+pub struct FuncCallInner {
     pub id: FuncCallId,
     pub package: Package,
     pub callerNode: FuncNode,
@@ -72,19 +72,19 @@ pub struct FuncCallContextInner {
 }
 
 #[derive(Debug, Clone)]
-pub struct FuncCallContext(pub Arc<Mutex<FuncCallContextInner>>);
+pub struct FuncCall(pub Arc<Mutex<FuncCallInner>>);
 
-impl Deref for FuncCallContext {
-    type Target = Arc<Mutex<FuncCallContextInner>>;
+impl Deref for FuncCall {
+    type Target = Arc<Mutex<FuncCallInner>>;
 
-    fn deref(&self) -> &Arc<Mutex<FuncCallContextInner>> {
+    fn deref(&self) -> &Arc<Mutex<FuncCallInner>> {
         &self.0
     }
 }
 
-impl FuncCallContext {
-    pub fn Downgrade(&self) -> FuncCallContextWeak {
-        return FuncCallContextWeak(Arc::downgrade(&self.0));
+impl FuncCall {
+    pub fn Downgrade(&self) -> FuncCallWeak {
+        return FuncCallWeak(Arc::downgrade(&self.0));
     }
 
     pub fn ReqResource(&self) -> Resource {
@@ -97,29 +97,29 @@ impl FuncCallContext {
 }
 
 #[derive(Debug, Clone)]
-pub struct FuncCallContextWeak(pub Weak<Mutex<FuncCallContextInner>>);
+pub struct FuncCallWeak(pub Weak<Mutex<FuncCallInner>>);
 
-impl Deref for FuncCallContextWeak {
-    type Target = Weak<Mutex<FuncCallContextInner>>;
+impl Deref for FuncCallWeak {
+    type Target = Weak<Mutex<FuncCallInner>>;
 
-    fn deref(&self) -> &Weak<Mutex<FuncCallContextInner>> {
+    fn deref(&self) -> &Weak<Mutex<FuncCallInner>> {
         &self.0
     }
 }
 
-impl FuncCallContextWeak {
-    pub fn Upgrade(&self) -> Option<FuncCallContext> {
+impl FuncCallWeak {
+    pub fn Upgrade(&self) -> Option<FuncCall> {
         match self.0.upgrade() {
             None => None,
             Some(d) => {
-                return Some(FuncCallContext(d));
+                return Some(FuncCall(d));
             }
         }
     }
 }
 
 pub struct FuncCallMgr {
-    pub funcCalls: Mutex<BTreeMap<FuncCallId, FuncCallContext>>,
+    pub funcCalls: Mutex<BTreeMap<FuncCallId, FuncCall>>,
 }
 
 impl FuncCallMgr {
@@ -129,11 +129,11 @@ impl FuncCallMgr {
         }
     }
 
-    pub fn Add(&self, funcCall: &FuncCallContext) {
+    pub fn Add(&self, funcCall: &FuncCall) {
         self.funcCalls.lock().unwrap().insert(funcCall.Id(), funcCall.clone());
     }
 
-    pub fn Get(&self, id: &FuncCallId) -> Option<FuncCallContext> {
+    pub fn Get(&self, id: &FuncCallId) -> Option<FuncCall> {
         return self.funcCalls.lock().unwrap().get(id).cloned();
     }
 }
