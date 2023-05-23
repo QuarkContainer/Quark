@@ -18,7 +18,7 @@ use std::collections::{BTreeMap, VecDeque};
 use core::ops::Deref;
 use std::collections::btree_map::Iter;
 
-use crate::func_context::*;
+use crate::func_call::*;
 use crate::scheduler::Resource;
 use crate::package::*;
 
@@ -26,7 +26,7 @@ use crate::package::*;
 pub struct TaskItemInner {
     pub priority: usize,
     pub createTime: SystemTime,
-    pub context: FuncCallContext,
+    pub context: FuncCall,
 }
 
 #[derive(Debug, Clone)]
@@ -162,21 +162,6 @@ impl TaskQueues {
 
     pub fn HasTask(&self) -> bool {
         return self.existingMask > 0;
-    }
-
-    // get the task priority after skip first N tasks
-    // it is used to look for the first priority with N creating Pod in package
-    pub fn PriAfterNTask(&self, n: usize) -> usize {
-        let pri = self.TopPriority();
-        let mut n = n;
-        for i in pri..self.queues.len() {
-            if n < self.queues[i].queue.len() {
-                return i;
-            }
-            n -= self.queues[i].queue.len();
-        }
-
-        return self.queues.len();
     }
 
     pub fn Iter<'a>(&self) -> TaskQueuesIter {

@@ -12,12 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub enum FuncSvcMsg {
+use crate::func_pod::FuncPod;
+use crate::func_call::FuncCall;
+
+pub enum FuncNodeMsg {
 
 }
 
 pub struct FuncCallMsg {
-
+    pub nodeId: String,
+    pub pod: FuncPod,
+    pub funcCall: FuncCall,
 }
 
 pub struct FuncAgentRegister {

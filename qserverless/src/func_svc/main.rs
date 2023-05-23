@@ -24,14 +24,14 @@ extern crate scopeguard;
 #[macro_use]
 extern crate log;
 
-use func_context::FuncCallMgr;
+use func_call::FuncCallMgr;
 use func_node::FuncNodeMgr;
 use func_pod::FuncPodMgr;
 use lazy_static::lazy_static;
 
 pub mod func_svc;
 pub mod func_conn;
-pub mod func_context;
+pub mod func_call;
 pub mod task_queue;
 pub mod scheduler;
 pub mod func_pod;

@@ -14,7 +14,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::func_context::*;
+use crate::func_call::*;
 use crate::scheduler::*;
 
 pub struct Node {
@@ -37,7 +37,7 @@ pub struct FuncConnInner {
     pub agentUid: String, 
 
     // func instance id to funcCall
-    pub funcCalls: BTreeMap<u64, FuncCallContext>,
+    pub funcCalls: BTreeMap<u64, FuncCall>,
     
 
     

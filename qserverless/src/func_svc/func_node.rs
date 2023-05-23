@@ -19,6 +19,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
 use core::ops::Deref;
+use tokio::sync::Mutex as TMutex;
 use tonic::Streaming;
 use tokio::sync::mpsc;
 use std::result::Result as SResult;
@@ -33,10 +34,10 @@ use tokio::sync::Notify;
 use crate::FUNC_CALL_MGR;
 use crate::FUNC_NODE_MGR;
 use crate::PACKAGE_MGR;
-use crate::func_context::FuncCallContext;
-use crate::func_context::FuncCallContextInner;
-use crate::func_context::FuncCallId;
-use crate::func_context::FuncCallState;
+use crate::func_call::FuncCall;
+use crate::func_call::FuncCallInner;
+use crate::func_call::FuncCallId;
+use crate::func_call::FuncCallState;
 use crate::func_pod::*;
 use crate::package::Package;
 use crate::package::PackageId;
@@ -129,6 +130,138 @@ impl FuncNode {
         }
     }
 
+    // this will be called in 2 situations
+    // 1. When the nodeagent reconnect to the FuncService, todo: need to handle this scenario
+    // 2. When the Master FuncService die, the nodeagent sent FuncAgentRegisterReq to another FuncService
+    pub fn OnNodeRegiste(&self, regReq: func::FuncAgentRegisterReq) -> Result<()> {    
+        let mut inner = self.lock().unwrap();
+        for funccall in regReq.func_calls {
+            let packageId = PackageId {
+                namespace: funccall.namespace.clone(),
+                packageName: funccall.package_name.clone(),
+            };
+            let funcCallId = FuncCallId {
+                packageId: packageId.clone(),
+                funcName: funccall.func_name.clone(),
+            };
+
+            let package = match PACKAGE_MGR.Get(&packageId) {
+                None => {
+                    error!("StartProcess get invalid package {:?}", packageId);
+                    continue;
+                }
+                Some(p) => p,
+            };
+
+            let state = if funccall.callee_node_id.len() == 0 {
+                inner.PengingProcessingCallerFuncCalls.insert(funcCallId.clone());
+                FuncCallState::Scheduling
+            } else {
+                match FUNC_NODE_MGR.Get(&funccall.callee_node_id) {
+                    None => {
+                        error!("StartProcess get invalid node name  {:?}", &funccall.callee_node_id);
+                        FuncCallState::Scheduling
+                    }
+                    Some(node) => {
+                        if node.CheckFuncCallProcessor(&funcCallId) {
+                            FuncCallState::Scheduled(funccall.callee_node_id.clone())
+                        } else {
+                            FuncCallState::Scheduling
+                        }
+                    }
+                }
+            };
+
+            let _funcall = match FUNC_CALL_MGR.Get(&funcCallId) {
+                None => {
+                    let funcCallContextInner = FuncCallInner {
+                        id: funcCallId.clone(),
+                        package: package.clone(),
+                        callerNode: self.clone(),
+                        state: state,
+                        parameters: funccall.parameters.clone(),
+                        priority: funccall.priority,
+                        // todo: covert from funccall.createtime
+                        createTime: SystemTime::now(),
+                    };
+    
+                    let funcall = FuncCall(Arc::new(Mutex::new(funcCallContextInner)));
+                    FUNC_CALL_MGR.Add(&funcall);
+                    funcall
+                }
+                Some(funccall) => {
+                    funccall.lock().unwrap().state = state;
+                    funccall
+                }
+            };
+
+            // todo: if the funcall is in scheduling state, schedule it
+        }
+        
+        for podStatus in regReq.func_pods {
+            let packageId = PackageId {
+                namespace: podStatus.namespace.clone(),
+                packageName: podStatus.package_name.clone(),
+            };
+            let package = match PACKAGE_MGR.Get(&packageId) {
+                None => {
+                    error!("StartProcess get invalid package {:?}", packageId);
+                    continue;
+                }
+                Some(p) => p,
+            };
+            let state = match podStatus.state {
+                n if func::FuncPodState::Creating as i32 == n => FuncPodState::Creating(SystemTime::now()),
+                n if func::FuncPodState::Keepalive as i32 == n => FuncPodState::Keepalive(SystemTime::now()),
+                n if func::FuncPodState::Running as i32 == n => {
+                    let node = match FUNC_NODE_MGR.Get(&podStatus.func_caller_node_id) {
+                        None => {
+                            error!("StartProcess get invalid node name  {:?}", &podStatus.func_caller_node_id);
+                            continue;
+                        }
+                        Some(n) => n,
+                    };
+
+                    let funcCallId = FuncCallId {
+                        packageId: packageId.clone(),
+                        funcName: podStatus.func_name.clone(),
+                    };
+                    
+                    node.ConfirmFuncCallPrococessing(&funcCallId);
+                    FuncPodState::Running(funcCallId)
+                }
+                _ => panic!("get unexpected podStatus.state {}", podStatus.state)
+            };
+
+            let funcPodId = FuncPodId {
+                packageId: packageId.clone(),
+                podName: podStatus.pod_name.clone()
+            };
+
+            let pod : k8s::Pod = serde_json::from_str(&podStatus.pod)?;
+            match inner.FuncPods.get(&funcPodId) {
+                None => {
+                    let podInner = FuncPodInner {
+                        podName: podStatus.pod_name.clone(),
+                        package: package,
+                        node: self.clone(),
+                        state: Mutex::new(state),
+                        pod: Mutex::new(pod),
+                    };
+                    let funcPod = FuncPod(Arc::new(podInner));
+                    inner.FuncPods.insert(funcPodId, funcPod);
+
+                }
+                Some(funcPod) => {
+                    *funcPod.state.lock().unwrap() = state;
+                    *funcPod.pod.lock().unwrap() = pod;
+                }
+            }
+        }
+        
+        return Ok(())
+    }
+
     pub async fn StartProcess(&self, regReq: func::FuncAgentRegisterReq, rx: Streaming<func::FuncSvcMsg>, tx: mpsc::Sender<SResult<func::FuncSvcMsg, Status>>) -> Result<()> {
         let state = self.State();
         match state {
@@ -145,133 +278,11 @@ impl FuncNode {
         self.SetState(FuncNodeState::Running(tx));
 
         {
-            let _l = FUNC_NODE_MGR.initlock.lock().unwrap();
-            let mut inner = self.lock().unwrap();
-            for funccall in regReq.func_calls {
-                let packageId = PackageId {
-                    namespace: funccall.namespace.clone(),
-                    packageName: funccall.package_name.clone(),
-                };
-                let funcCallId = FuncCallId {
-                    packageId: packageId.clone(),
-                    funcName: funccall.func_name.clone(),
-                };
-
-                let package = match PACKAGE_MGR.Get(&packageId) {
-                    None => {
-                        error!("StartProcess get invalid package {:?}", packageId);
-                        continue;
-                    }
-                    Some(p) => p,
-                };
-
-                let state = if funccall.callee_node_id.len() == 0 {
-                    inner.PengingProcessingCallerFuncCalls.insert(funcCallId.clone());
-                    FuncCallState::Scheduling
-                } else {
-                    match FUNC_NODE_MGR.Get(&funccall.callee_node_id) {
-                        None => {
-                            error!("StartProcess get invalid node name  {:?}", &funccall.callee_node_id);
-                            FuncCallState::Scheduling
-                        }
-                        Some(node) => {
-                            if node.CheckFuncCallProcessor(&funcCallId) {
-                                FuncCallState::Scheduled(funccall.callee_node_id.clone())
-                            } else {
-                                FuncCallState::Scheduling
-                            }
-                        }
-                    }
-                };
-
-                let _funcall = match FUNC_CALL_MGR.Get(&funcCallId) {
-                    None => {
-                        let funcCallContextInner = FuncCallContextInner {
-                            id: funcCallId.clone(),
-                            package: package.clone(),
-                            callerNode: self.clone(),
-                            state: state,
-                            parameters: funccall.parameters.clone(),
-                            priority: funccall.priority,
-                            // todo: covert from funccall.createtime
-                            createTime: SystemTime::now(),
-                        };
-        
-                        let funcall = FuncCallContext(Arc::new(Mutex::new(funcCallContextInner)));
-                        FUNC_CALL_MGR.Add(&funcall);
-                        funcall
-                    }
-                    Some(funccall) => {
-                        funccall.lock().unwrap().state = state;
-                        funccall
-                    }
-                };
-
-                // todo: if the funcall is in scheduling state, schedule it
-            }
-            
-            for podStatus in regReq.func_pods {
-                let packageId = PackageId {
-                    namespace: podStatus.namespace.clone(),
-                    packageName: podStatus.package_name.clone(),
-                };
-                let package = match PACKAGE_MGR.Get(&packageId) {
-                    None => {
-                        error!("StartProcess get invalid package {:?}", packageId);
-                        continue;
-                    }
-                    Some(p) => p,
-                };
-                let state = match podStatus.state {
-                    n if func::FuncPodState::Creating as i32 == n => FuncPodState::Creating(SystemTime::now()),
-                    n if func::FuncPodState::Keepalive as i32 == n => FuncPodState::Keepalive(SystemTime::now()),
-                    n if func::FuncPodState::Running as i32 == n => {
-                        let node = match FUNC_NODE_MGR.Get(&podStatus.func_caller_node_id) {
-                            None => {
-                                error!("StartProcess get invalid node name  {:?}", &podStatus.func_caller_node_id);
-                                continue;
-                            }
-                            Some(n) => n,
-                        };
-
-                        let funcCallId = FuncCallId {
-                            packageId: packageId.clone(),
-                            funcName: podStatus.func_name.clone(),
-                        };
-                        
-                        node.ConfirmFuncCallPrococessing(&funcCallId);
-                        FuncPodState::Running(funcCallId)
-                    }
-                    _ => panic!("get unexpected podStatus.state {}", podStatus.state)
-                };
-
-                let funcPodId = FuncPodId {
-                    packageId: packageId.clone(),
-                    podName: podStatus.pod_name.clone()
-                };
-
-                let pod : k8s::Pod = serde_json::from_str(&podStatus.pod)?;
-                match inner.FuncPods.get(&funcPodId) {
-                    None => {
-                        let podInner = FuncPodInner {
-                            podName: podStatus.pod_name.clone(),
-                            package: package,
-                            node: self.clone(),
-                            state: Mutex::new(state),
-                            pod: Mutex::new(pod),
-                        };
-                        let funcPod = FuncPod(Arc::new(podInner));
-                        inner.FuncPods.insert(funcPodId, funcPod);
-
-                    }
-                    Some(funcPod) => {
-                        *funcPod.state.lock().unwrap() = state;
-                        *funcPod.pod.lock().unwrap() = pod;
-                    }
-                }
-            }
+            // OnNodeRegiste needs to access another node, 
+            // to avoid deadlock, use global mutex to serialize the process 
+            let _l = FUNC_NODE_MGR.initlock.lock().await;                
+            self.OnNodeRegiste(regReq)?;
         }
-
 
         loop {
             tokio::select! {
@@ -346,14 +357,14 @@ pub struct NodeAgentConnection {
 }
 
 pub struct FuncNodeMgr {
-    pub initlock: Mutex<()>, // used for node register process to avoid deadlock
+    pub initlock: TMutex<()>, // used for node register process to avoid deadlock
     pub nodes: Mutex<BTreeMap<String, FuncNode>>,
 }
 
 impl FuncNodeMgr {
     pub fn New() -> Self {
         return Self {
-            initlock: Mutex::new(()),
+            initlock: TMutex::new(()),
             nodes: Mutex::new(BTreeMap::new()),
         }
     }
