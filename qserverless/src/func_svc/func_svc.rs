@@ -46,7 +46,7 @@ pub struct FuncSvcInner {
     
     pub nodes: BTreeMap<String, FuncNode>,
     pub packages: BTreeMap<PackageId, Package>,
-    pub pods: BTreeMap<FuncId, FuncPod>,
+    pub pods: BTreeMap<FuncCallId, FuncPod>,
     pub funcInstances: BTreeMap<u64, Func>,
 
     // assume there is no duplicate schedule time

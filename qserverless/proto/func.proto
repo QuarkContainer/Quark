@@ -92,12 +92,14 @@ message FuncPodDisconnResp {
 }
 
 message FuncSvcCallReq {
-  string funcId = 1;
-  string namespace = 2;
-  string package = 3;
-  string funcName = 4;
-  string parameters = 5;
-  string calleeNodeId = 6; // when funcCall is process by a funcPod, this is the NodeId
+  string namespace = 1;
+  string packageName = 2;
+  string funcName = 3;
+  string parameters = 4;
+  int32 priority = 5;
+  Timestamp createtime = 6;
+
+  string calleeNodeId = 7; // when funcCall is process by a funcPod, this is the NodeId
 }
 
 message FuncSvcCallResp {
@@ -112,10 +114,24 @@ enum FuncPodState {
 }
 
 message FuncPodStatus {
-    string podId = 1;
-    string packageId = 2;
-    FuncPodState state = 3;
-    string funcCallId = 4;        // when pod is running, the funccall id
-    string funcCallerNodeId = 5; //  when pod is running, the funccall caller id
+    string namespace = 1;
+    string packageName = 2;
+    string podName = 3;
+    FuncPodState state = 4;
+    string funcName = 5;        // when pod is running, the funccall id
+    string funcCallerNodeId = 6; //  when pod is running, the funccall caller id
+    string pod = 7; // k8s::pod
 }
 
+message Timestamp {
+  // Represents seconds of UTC time since Unix epoch
+  // 1970-01-01T00:00:00Z. Must be from 0001-01-01T00:00:00Z to
+  // 9999-12-31T23:59:59Z inclusive.
+  int64 seconds = 1;
+
+  // Non-negative fractions of a second at nanosecond resolution. Negative
+  // second values with fractions must still have non-negative nanos values
+  // that count forward in time. Must be from 0 to 999,999,999
+  // inclusive.
+  int32 nanos = 2;
+}

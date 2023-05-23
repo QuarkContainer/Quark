@@ -144,17 +144,19 @@ pub struct FuncPodDisconnResp {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncSvcCallReq {
     #[prost(string, tag = "1")]
-    pub func_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
     pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub package_name: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub package: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
     pub func_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag = "4")]
     pub parameters: ::prost::alloc::string::String,
+    #[prost(int32, tag = "5")]
+    pub priority: i32,
+    #[prost(message, optional, tag = "6")]
+    pub createtime: ::core::option::Option<Timestamp>,
     /// when funcCall is process by a funcPod, this is the NodeId
-    #[prost(string, tag = "6")]
+    #[prost(string, tag = "7")]
     pub callee_node_id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -171,17 +173,38 @@ pub struct FuncSvcCallResp {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncPodStatus {
     #[prost(string, tag = "1")]
-    pub pod_id: ::prost::alloc::string::String,
+    pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub package_id: ::prost::alloc::string::String,
-    #[prost(enumeration = "FuncPodState", tag = "3")]
+    pub package_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub pod_name: ::prost::alloc::string::String,
+    #[prost(enumeration = "FuncPodState", tag = "4")]
     pub state: i32,
     /// when pod is running, the funccall id
-    #[prost(string, tag = "4")]
-    pub func_call_id: ::prost::alloc::string::String,
-    ///   when pod is running, the funccall caller id
     #[prost(string, tag = "5")]
+    pub func_name: ::prost::alloc::string::String,
+    ///   when pod is running, the funccall caller id
+    #[prost(string, tag = "6")]
     pub func_caller_node_id: ::prost::alloc::string::String,
+    /// k8s::pod
+    #[prost(string, tag = "7")]
+    pub pod: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Timestamp {
+    /// Represents seconds of UTC time since Unix epoch
+    /// 1970-01-01T00:00:00Z. Must be from 0001-01-01T00:00:00Z to
+    /// 9999-12-31T23:59:59Z inclusive.
+    #[prost(int64, tag = "1")]
+    pub seconds: i64,
+    /// Non-negative fractions of a second at nanosecond resolution. Negative
+    /// second values with fractions must still have non-negative nanos values
+    /// that count forward in time. Must be from 0 to 999,999,999
+    /// inclusive.
+    #[prost(int32, tag = "2")]
+    pub nanos: i32,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
