@@ -69,8 +69,8 @@ lazy_static! {
 
 #[tokio::main]
 async fn main() -> QResult<()> {
-    //return NMClientTest().await;
-    return ClientTest().await;
+    return FsClientTest().await;
+    //return ClientTest().await;
 }
 
 pub async fn ClientTest() -> QResult<()> {
@@ -182,6 +182,25 @@ pub async fn ClientTest() -> QResult<()> {
     error!("pods is {:#?}", client.ListPodSandbox(None).await?);*/
 
     return Ok(())
+}
+
+
+pub async fn FsClientTest() -> QResult<()> {
+    use qobjs::func;
+    use tokio::sync::mpsc;
+    
+    let mut client = func::func_svc_service_client::FuncSvcServiceClient::connect("http://127.0.0.1:8891").await?;
+
+    let (tx, rx) = mpsc::channel(30);
+    tx.try_send(func::FuncSvcMsg {
+        msg_id: 123,
+        ..Default::default()
+    }).unwrap();
+
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+    let _response = client.stream_process(stream).await?;
+
+    return Ok(());
 }
 
 /*

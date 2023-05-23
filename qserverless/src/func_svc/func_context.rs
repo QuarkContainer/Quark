@@ -13,18 +13,18 @@
 // limitations under the License.
 
 use core::ops::Deref;
-use std::{sync::{Arc, Mutex, Weak}, time::SystemTime};
+use std::{sync::{Arc, Mutex, Weak}, time::SystemTime, collections::BTreeMap};
 
-use crate::scheduler::Resource;
+use crate::{scheduler::Resource, func_node::FuncNode};
 use crate::package::*;
 
 #[derive(Debug, Clone)]
-pub struct FuncId {
+pub struct FuncCallId {
     pub packageId: PackageId,
     pub funcName: String,
 }
 
-impl Ord for FuncId {
+impl Ord for FuncCallId {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         if self.packageId == other.packageId {
             return other.funcName.cmp(&self.funcName);
@@ -34,51 +34,41 @@ impl Ord for FuncId {
     }
 }
 
-impl PartialOrd for FuncId {
+impl PartialOrd for FuncCallId {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl PartialEq for FuncId {
+impl PartialEq for FuncCallId {
     fn eq(&self, other: &Self) -> bool {
         return self.packageId == other.packageId && self.funcName == other.funcName;
     }
 }
 
-impl Eq for FuncId {}
+impl Eq for FuncCallId {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FuncCallState {
     // FuncSvc get func request and put in pending queue
     Scheduling,
     // FuncSvc scheduled the Func to one FuncAgent
-    Scheduled,
+    Scheduled(String),
     // Callee FuncAgent complete the request and return result to caller
-    Complete,
-    // After FuncSvc recovery, FuncSvc get caller state at first 
-    // and waitinig for caller confirmation
-    PendingCaller
-
+    Complete(String),
 }
 
 #[derive(Debug)]
 pub struct FuncCallContextInner {
-    pub id: u64,
-    pub callerId: u64,
-    pub callerAgentId: u64,
+    pub id: FuncCallId,
+    pub package: Package,
+    pub callerNode: FuncNode,
 
     pub state: FuncCallState,
-    pub calleeId: u64,
 
-    pub namespace: String,
-    pub package: Package,
-    pub funcName: String,
     pub parameters: String,
     pub priority: i32,
     pub createTime: SystemTime,
-
-    pub reqResource: Resource,
 }
 
 #[derive(Debug, Clone)]
@@ -98,7 +88,11 @@ impl FuncCallContext {
     }
 
     pub fn ReqResource(&self) -> Resource {
-        return self.lock().unwrap().reqResource;
+        return self.lock().unwrap().package.ReqResource();
+    }
+
+    pub fn Id(&self) -> FuncCallId {
+        return self.lock().unwrap().id.clone();
     }
 }
 
@@ -121,5 +115,25 @@ impl FuncCallContextWeak {
                 return Some(FuncCallContext(d));
             }
         }
+    }
+}
+
+pub struct FuncCallMgr {
+    pub funcCalls: Mutex<BTreeMap<FuncCallId, FuncCallContext>>,
+}
+
+impl FuncCallMgr {
+    pub fn New() -> Self {
+        return Self {
+            funcCalls: Mutex::new(BTreeMap::new()),
+        }
+    }
+
+    pub fn Add(&self, funcCall: &FuncCallContext) {
+        self.funcCalls.lock().unwrap().insert(funcCall.Id(), funcCall.clone());
+    }
+
+    pub fn Get(&self, id: &FuncCallId) -> Option<FuncCallContext> {
+        return self.funcCalls.lock().unwrap().get(id).cloned();
     }
 }

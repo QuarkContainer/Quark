@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::sync::Mutex;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -29,14 +30,20 @@ use qobjs::common::*;
 use qobjs::func;
 use tokio::sync::Notify;
 
+use crate::FUNC_CALL_MGR;
+use crate::FUNC_NODE_MGR;
+use crate::PACKAGE_MGR;
 use crate::func_context::FuncCallContext;
+use crate::func_context::FuncCallContextInner;
+use crate::func_context::FuncCallId;
+use crate::func_context::FuncCallState;
 use crate::func_pod::*;
 use crate::package::Package;
+use crate::package::PackageId;
 
 #[derive(Debug, Clone)]
 pub enum FuncNodeState {
     WaitingConn, // master node waiting for nodeagent connection
-    Connected, // get the connection
     Running(mpsc::Sender<SResult<func::FuncSvcMsg, Status>>), // get the registration message
 }
 
@@ -47,11 +54,20 @@ pub struct FuncNodeInner {
 
     pub name: String,
     pub state: FuncNodeState,
-    pub conn: Option<NodeAgentConnection>,
-    pub FuncPods: BTreeMap<String, FuncPod>,
-    pub CallerFuncCalls: BTreeMap<String, FuncCallContext>,
-    pub CalleeFuncCalls: BTreeMap<String, String>,
+    pub FuncPods: BTreeMap<FuncPodId, FuncPod>,
+    pub ProcessingCallerFuncCalls: BTreeSet<FuncCallId>, 
+    pub PengingProcessingCallerFuncCalls: BTreeSet<FuncCallId>, 
+    // when node start up, funcalls which assumed processing by other nodes
+    pub CheckingProcessingCallerFuncCalls: BTreeSet<FuncCallId>, 
+    
+    pub ProcessingCalleeFuncCalls: BTreeSet<FuncCallId>,
+    pub CheckingCalleeFuncCalls: BTreeSet<FuncCallId>,
+
     pub tx: Option<mpsc::Sender<SResult<func::FuncSvcMsg, Status>>>,
+}
+
+impl FuncNodeInner {
+
 }
 
 #[derive(Debug, Clone)]
@@ -82,13 +98,43 @@ impl FuncNode {
         self.lock().unwrap().state = state;
     }
 
-    pub async fn StartProess(&self, rx: Streaming<func::FuncSvcMsg>, tx: mpsc::Sender<SResult<func::FuncSvcMsg, Status>>) -> Result<()> {
+    // check whether the node is processing the func call
+    // return: true: yes or possible(the node is in the waiting state and need confirm)
+    // false: No
+    pub fn CheckFuncCallProcessor(&self, funcCallId: &FuncCallId) -> bool {
+        let mut inner = self.lock().unwrap();
+        match &inner.state {
+            FuncNodeState::WaitingConn => {
+                inner.CheckingCalleeFuncCalls.insert(funcCallId.clone());
+                return true;
+            }
+            FuncNodeState::Running(_) => {
+                return inner.ProcessingCalleeFuncCalls.contains(funcCallId);
+            }
+        }
+    }
+
+    pub fn ConfirmFuncCallPrococessing(&self, funcCallId: &FuncCallId) {
+        let mut inner = self.lock().unwrap();
+        match &inner.state {
+            FuncNodeState::WaitingConn => {
+                inner.PengingProcessingCallerFuncCalls.insert(funcCallId.clone());
+            }
+            FuncNodeState::Running(_) => {
+                if inner.PengingProcessingCallerFuncCalls.remove(funcCallId) {
+                    // confirm the funcall  is processing by another node
+                    inner.ProcessingCalleeFuncCalls.insert(funcCallId.clone());
+                }
+            }
+        }
+    }
+
+    pub async fn StartProcess(&self, regReq: func::FuncAgentRegisterReq, rx: Streaming<func::FuncSvcMsg>, tx: mpsc::Sender<SResult<func::FuncSvcMsg, Status>>) -> Result<()> {
         let state = self.State();
         match state {
             FuncNodeState::WaitingConn => (),
             _ => {
                 self.Close();
-                self.SetState(FuncNodeState::Connected);
             }
         }
         
@@ -96,29 +142,136 @@ impl FuncNode {
         let mut rx = rx;
         let closeNotify = self.lock().unwrap().closeNotify.clone();
 
-        tokio::select! {
-            _ = closeNotify.notified() => {
-                return Ok(());
-            }
-            msg = rx.message() => {
-                let msg : func::FuncSvcMsg = msg?.unwrap();
-                let body = match msg.event_body {
-                    None => return Ok(()),
-                    Some(b) => b,
+        self.SetState(FuncNodeState::Running(tx));
+
+        {
+            let _l = FUNC_NODE_MGR.initlock.lock().unwrap();
+            let mut inner = self.lock().unwrap();
+            for funccall in regReq.func_calls {
+                let packageId = PackageId {
+                    namespace: funccall.namespace.clone(),
+                    packageName: funccall.package_name.clone(),
                 };
-                match body {
-                    func::func_svc_msg::EventBody::FuncAgentRegisterReq(_req) => {
-                        // processing
-                        self.SetState(FuncNodeState::Running(tx));
+                let funcCallId = FuncCallId {
+                    packageId: packageId.clone(),
+                    funcName: funccall.func_name.clone(),
+                };
+
+                let package = match PACKAGE_MGR.Get(&packageId) {
+                    None => {
+                        error!("StartProcess get invalid package {:?}", packageId);
+                        continue;
                     }
-                    _ => {
-                        error!("didn't get FuncAgentRegisterReq message instead {:?}", body);
-                            
-                        return Err(Error::CommonError(format!("didn't get FuncAgentRegisterReq message instead {:?}", body)));
+                    Some(p) => p,
+                };
+
+                let state = if funccall.callee_node_id.len() == 0 {
+                    inner.PengingProcessingCallerFuncCalls.insert(funcCallId.clone());
+                    FuncCallState::Scheduling
+                } else {
+                    match FUNC_NODE_MGR.Get(&funccall.callee_node_id) {
+                        None => {
+                            error!("StartProcess get invalid node name  {:?}", &funccall.callee_node_id);
+                            FuncCallState::Scheduling
+                        }
+                        Some(node) => {
+                            if node.CheckFuncCallProcessor(&funcCallId) {
+                                FuncCallState::Scheduled(funccall.callee_node_id.clone())
+                            } else {
+                                FuncCallState::Scheduling
+                            }
+                        }
+                    }
+                };
+
+                let _funcall = match FUNC_CALL_MGR.Get(&funcCallId) {
+                    None => {
+                        let funcCallContextInner = FuncCallContextInner {
+                            id: funcCallId.clone(),
+                            package: package.clone(),
+                            callerNode: self.clone(),
+                            state: state,
+                            parameters: funccall.parameters.clone(),
+                            priority: funccall.priority,
+                            // todo: covert from funccall.createtime
+                            createTime: SystemTime::now(),
+                        };
+        
+                        let funcall = FuncCallContext(Arc::new(Mutex::new(funcCallContextInner)));
+                        FUNC_CALL_MGR.Add(&funcall);
+                        funcall
+                    }
+                    Some(funccall) => {
+                        funccall.lock().unwrap().state = state;
+                        funccall
+                    }
+                };
+
+                // todo: if the funcall is in scheduling state, schedule it
+            }
+            
+            for podStatus in regReq.func_pods {
+                let packageId = PackageId {
+                    namespace: podStatus.namespace.clone(),
+                    packageName: podStatus.package_name.clone(),
+                };
+                let package = match PACKAGE_MGR.Get(&packageId) {
+                    None => {
+                        error!("StartProcess get invalid package {:?}", packageId);
+                        continue;
+                    }
+                    Some(p) => p,
+                };
+                let state = match podStatus.state {
+                    n if func::FuncPodState::Creating as i32 == n => FuncPodState::Creating(SystemTime::now()),
+                    n if func::FuncPodState::Keepalive as i32 == n => FuncPodState::Keepalive(SystemTime::now()),
+                    n if func::FuncPodState::Running as i32 == n => {
+                        let node = match FUNC_NODE_MGR.Get(&podStatus.func_caller_node_id) {
+                            None => {
+                                error!("StartProcess get invalid node name  {:?}", &podStatus.func_caller_node_id);
+                                continue;
+                            }
+                            Some(n) => n,
+                        };
+
+                        let funcCallId = FuncCallId {
+                            packageId: packageId.clone(),
+                            funcName: podStatus.func_name.clone(),
+                        };
+                        
+                        node.ConfirmFuncCallPrococessing(&funcCallId);
+                        FuncPodState::Running(funcCallId)
+                    }
+                    _ => panic!("get unexpected podStatus.state {}", podStatus.state)
+                };
+
+                let funcPodId = FuncPodId {
+                    packageId: packageId.clone(),
+                    podName: podStatus.pod_name.clone()
+                };
+
+                let pod : k8s::Pod = serde_json::from_str(&podStatus.pod)?;
+                match inner.FuncPods.get(&funcPodId) {
+                    None => {
+                        let podInner = FuncPodInner {
+                            podName: podStatus.pod_name.clone(),
+                            package: package,
+                            node: self.clone(),
+                            state: Mutex::new(state),
+                            pod: Mutex::new(pod),
+                        };
+                        let funcPod = FuncPod(Arc::new(podInner));
+                        inner.FuncPods.insert(funcPodId, funcPod);
+
+                    }
+                    Some(funcPod) => {
+                        *funcPod.state.lock().unwrap() = state;
+                        *funcPod.pod.lock().unwrap() = pod;
                     }
                 }
             }
         }
+
 
         loop {
             tokio::select! {
@@ -133,6 +286,11 @@ impl FuncNode {
                         Some(b) => b,
                     };
                     match body {
+                        /*
+                        func::func_svc_msg::EventBody::FuncAgentRegisterReq(req) => {
+                        // processing
+                        self.SetState(FuncNodeState::Running(tx));
+                        } */
                         _ => {
                             error!("didn't get FuncAgentRegisterReq message instead {:?}", body);
                             return Err(Error::CommonError(format!("didn't get FuncAgentRegisterReq message instead {:?}", body)));
@@ -148,7 +306,7 @@ impl FuncNode {
     pub fn NewFuncPod(&self, package: &Package) -> Result<FuncPod> {
         let uid = uuid::Uuid::new_v4().to_string();
         let inner = FuncPodInner {
-            id: uid.clone(),
+            podName: uid.clone(),
             package: package.clone(),
             node: self.clone(),
             state: Mutex::new(FuncPodState::Creating(SystemTime::now())),
@@ -167,7 +325,12 @@ impl FuncNode {
         let pod = FuncPod(Arc::new(inner));
         self.CreatePod(&pod)?;
 
-        self.lock().unwrap().FuncPods.insert(uid, pod.clone());
+        let funcPodId = FuncPodId {
+            packageId: package.PackageId(),
+            podName: uid,
+        };
+
+        self.lock().unwrap().FuncPods.insert(funcPodId, pod.clone());
 
         return Ok(pod);
     }
@@ -183,5 +346,19 @@ pub struct NodeAgentConnection {
 }
 
 pub struct FuncNodeMgr {
-    pub nodes: BTreeMap<String, FuncNode>,
+    pub initlock: Mutex<()>, // used for node register process to avoid deadlock
+    pub nodes: Mutex<BTreeMap<String, FuncNode>>,
+}
+
+impl FuncNodeMgr {
+    pub fn New() -> Self {
+        return Self {
+            initlock: Mutex::new(()),
+            nodes: Mutex::new(BTreeMap::new()),
+        }
+    }
+
+    pub fn Get(&self, nodeName: &str) -> Option<FuncNode> {
+        return self.nodes.lock().unwrap().get(nodeName).cloned();
+    }
 }

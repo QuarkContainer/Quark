@@ -31,6 +31,20 @@ pub struct PackageId {
     pub packageName: String,
 }
 
+impl PackageId {
+    pub fn New(packetIdStr: &str) -> Result<Self> {
+        let strs : Vec<&str> = packetIdStr.splitn(2, "/").collect();
+        if strs.len() != 2 {
+            return Err(Error::CommonError(format!("invalid PackageId str {:?}", packetIdStr)));
+        }
+
+        return Ok(Self {
+            namespace: strs[0].to_string(),
+            packageName: strs[1].to_string(),
+        })
+    }
+}
+
 impl Ord for PackageId {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         if self.namespace == other.namespace {
@@ -164,6 +178,14 @@ impl Deref for Package {
 }
 
 impl Package {
+    pub fn PackageId(&self) -> PackageId {
+        let inner = self.lock().unwrap();
+        return PackageId { 
+            namespace: inner.namespace.clone(), 
+            packageName: inner.name.clone()
+        }
+    }
+
     pub fn Name(&self) -> String {
         return self.lock().unwrap().name.clone();
     }
@@ -199,4 +221,20 @@ impl Package {
     }*/
 
    
+}
+
+pub struct PackageMgr {
+    pub packages: Mutex<BTreeMap<PackageId, Package>>,
+}
+
+impl PackageMgr {
+    pub fn New() -> Self {
+        return Self {
+            packages: Mutex::new(BTreeMap::new()),
+        }
+    }
+
+    pub fn Get(&self, packageId: &PackageId) -> Option<Package> {
+        return self.packages.lock().unwrap().get(packageId).cloned();
+    }
 }

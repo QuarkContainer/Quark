@@ -24,6 +24,11 @@ extern crate scopeguard;
 #[macro_use]
 extern crate log;
 
+use func_context::FuncCallMgr;
+use func_node::FuncNodeMgr;
+use func_pod::FuncPodMgr;
+use lazy_static::lazy_static;
+
 pub mod func_svc;
 pub mod func_conn;
 pub mod func_context;
@@ -33,9 +38,32 @@ pub mod func_pod;
 pub mod package;
 pub mod func_node;
 pub mod message;
+pub mod grpc_svc;
 
-fn main() {
+use package::PackageMgr;
+use qobjs::common::*;
+
+lazy_static! {
+    pub static ref PACKAGE_MGR: PackageMgr = {
+        PackageMgr::New()
+    };
+
+    pub static ref FUNC_POD_MGR: FuncPodMgr = {
+        FuncPodMgr::New()
+    };
+
+    pub static ref FUNC_NODE_MGR: FuncNodeMgr = {
+        FuncNodeMgr::New()
+    };
+
+    pub static ref FUNC_CALL_MGR: FuncCallMgr = {
+        FuncCallMgr::New()
+    };
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
     log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
-    
-    println!("Hello, world!");
+    grpc_svc::GrpcService().await.unwrap();
+    Ok(())
 }
