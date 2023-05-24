@@ -14,6 +14,6 @@
 
 pub mod funcpod;
 pub mod funcpod_mgr;
-pub mod funcsvc_agent;
 pub mod func_agent;
 pub mod funcagent_msg;
+pub mod funcsvc_client;
