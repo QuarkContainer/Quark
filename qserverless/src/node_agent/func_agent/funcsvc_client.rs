@@ -34,7 +34,6 @@ pub struct FuncSvcClient {
     pub stream: Arc<Mutex<Option<tonic::Streaming<func::FuncSvcMsg>>>>,
 }
 
-
 impl FuncSvcClient {
     pub async fn New(svcAddr: &str, registerReq: func::FuncAgentRegisterReq) -> Result<Self> {
         let mut client = {
@@ -53,7 +52,6 @@ impl FuncSvcClient {
 
         let (tx, rx) = mpsc::channel(0);
         tx.try_send(func::FuncSvcMsg {
-            msg_id: 123,
             event_body: Some(func::func_svc_msg::EventBody::FuncAgentRegisterReq(registerReq)),
         }).unwrap();
 
@@ -117,6 +115,13 @@ impl FuncSvcClientMgr {
         });
 
         return ret;
+    }
+
+    pub fn Send(&self, msg: func::FuncSvcMsg) -> Result<()> {
+        match self.agentChann.try_send(msg) {
+            Err(_) => return Err(Error::MpscSendFail),
+            Ok(()) => return Ok(())
+        }
     }
 
     pub async fn ProcessExternalMsg(&self, _msg: func::FuncSvcMsg) -> Result<()> {

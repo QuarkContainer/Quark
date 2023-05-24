@@ -22,6 +22,8 @@
 extern crate log;
 extern crate simple_logging;
 
+use func_agent::func_agent::FuncAgent;
+use func_agent::funcsvc_client::FuncSvcClientMgr;
 use lazy_static::lazy_static;
 use once_cell::sync::OnceCell;
 
@@ -56,6 +58,8 @@ pub static RUNTIME_MGR: OnceCell<RuntimeMgr> = OnceCell::new();
 pub static IMAGE_MGR: OnceCell<ImageMgr> = OnceCell::new();
 pub static CADVISOR_PROVIDER: OnceCell<CadvisorInfoProvider> = OnceCell::new();
 pub static NODEAGENT_STORE: OnceCell<NodeAgentStore> = OnceCell::new();
+pub static FUNC_SVC_CLIENT: OnceCell<FuncSvcClientMgr> = OnceCell::new();
+
 
 lazy_static! {
     pub static ref NETWORK_PROVIDER: LocalNetworkAddressProvider = {
@@ -64,6 +68,10 @@ lazy_static! {
 
     pub static ref CADVISOR_CLI: CadvisorClient::Client = {
         CadvisorClient::Client::Init()
+    };
+
+    pub static ref FUNC_AGENT: FuncAgent = {
+        FuncAgent::default()
     };
 }
 
@@ -186,19 +194,8 @@ pub async fn ClientTest() -> QResult<()> {
 
 
 pub async fn FsClientTest() -> QResult<()> {
-    use qobjs::func;
-    use tokio::sync::mpsc;
+    FUNC_SVC_CLIENT.set(FuncSvcClientMgr::New("http://127.0.0.1:8891")).unwrap();
     
-    let mut client = func::func_svc_service_client::FuncSvcServiceClient::connect("http://127.0.0.1:8891").await?;
-
-    let (tx, rx) = mpsc::channel(30);
-    tx.try_send(func::FuncSvcMsg {
-        msg_id: 123,
-        ..Default::default()
-    }).unwrap();
-
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
-    let _response = client.stream_process(stream).await?;
 
     return Ok(());
 }

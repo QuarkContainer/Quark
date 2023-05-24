@@ -13,34 +13,59 @@
 // limitations under the License.
 
 use std::collections::BTreeMap;
-use std::sync::{Mutex};
+use std::sync::{Mutex, Arc};
 use std::result::Result as SResult;
+use std::time::SystemTime;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Response, Status};
 use tokio::sync::{oneshot, mpsc};
+use core::ops::Deref;
 
 use qobjs::{common::*, func::{self, func_agent_msg::EventBody}};
 
+use crate::FUNC_SVC_CLIENT;
+
 use super::funcpod::FuncPod;
-use super::funcpod_mgr::FuncInstMgr;
+use super::funcpod_mgr::FuncPodMgr;
 
 #[derive(Debug)]
-pub struct FuncCall {
+pub struct FuncCallInner {
     pub id: String,
-    pub funcInstanceId: String,
+    pub callerFuncPodId: String,
+    pub calleeFuncPodId: String,
     pub namespace: String,
     pub package: String,
     pub funcName: String,
+    pub priority: usize,
     pub parameters: String,
 }
 
+
+#[derive(Debug, Clone)]
+pub struct FuncCall(Arc<FuncCallInner>);
+
+impl Deref for FuncCall {
+    type Target = Arc<FuncCallInner>;
+
+    fn deref(&self) -> &Arc<FuncCallInner> {
+        &self.0
+    }
+}
+
+#[derive(Debug)]
 pub struct FuncCallContext {
     pub respChann: oneshot::Sender<Result<String>>,
 }
 
+#[derive(Debug, Default)]
 pub struct FuncAgent {
+    pub nodeId: String,
     pub callContexts: Mutex<BTreeMap<String, FuncCallContext>>,
-    pub funcInstMgr: FuncInstMgr,
+    pub funcPodMgr: FuncPodMgr,
+    // func instance id to funcCall
+    pub callerCalls: Mutex<BTreeMap<String, FuncCall>>,
+    // func instance id to funcCall
+    pub calleeCalls: Mutex<BTreeMap<String, FuncCall>>,
 }
 
 impl FuncAgent {
@@ -73,8 +98,70 @@ impl FuncAgent {
     -> Result<()> {
         let instanceId = registerMsg.instance_id.clone();
         let instance = FuncPod::New(registerMsg, stream, agentTx)?;
-        self.funcInstMgr.AddInstance(&instanceId, &instance)?;
+        self.funcPodMgr.AddPod(&instanceId, &instance)?;
         return Ok(());
+    }
+
+    pub fn OnFuncAgentCallReq(&self, callerId: &str, req: func::FuncAgentCallReq) -> Result<()> {
+        let inner = FuncCallInner {
+            id: req.id.clone(),
+            callerFuncPodId: callerId.to_string(),
+            calleeFuncPodId: String::new(), // not assigned,
+            namespace: req.namespace.clone(),
+            package: req.package.clone(),
+            funcName: req.func_name.clone(),
+            parameters: req.parameters.clone(), 
+            priority: req.priority as usize,
+        };
+
+        let funcCall = FuncCall(Arc::new(inner));
+        self.callerCalls.lock().unwrap().insert(req.id.clone(), funcCall);
+
+        let createTime = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
+        let req = func::FuncSvcCallReq {
+            id: req.id.clone(),
+            namespace: req.namespace.to_string(),
+            package_name: req.package.to_string(),
+            func_name: req.func_name.clone(),
+            parameters: req.parameters.clone(), 
+            priority: req.priority,
+            createtime: Some(func::Timestamp {
+                top:  (createTime >> 64) as u64,
+                bottom: createTime as u64,
+            }),
+            callee_node_id: self.nodeId.clone(),
+            calller_pod_id: callerId.to_string(),
+            caller_node_id: String::new(),
+            callee_pod_id: String::new(),
+        };
+
+        FUNC_SVC_CLIENT.get().unwrap().Send(func::FuncSvcMsg {
+            event_body: Some(func::func_svc_msg::EventBody::FuncSvcCallReq(req))
+        })?;
+
+        return Ok(())
+    }
+
+    pub fn OnFuncSvcCallReq(&self, _req: func::FuncSvcCallReq) -> Result<()> {
+        unimplemented!();
+    }
+
+    pub async fn OnFuncAgentMsg(&self, callerId: &str, msg: func::FuncAgentMsg) -> Result<()> {
+        let body = match msg.event_body {
+            None => return Err(Error::EINVAL),
+            Some(b) => b,
+        };
+
+        match body {
+            EventBody::FuncAgentCallReq(msg) => {
+                self.OnFuncAgentCallReq(callerId, msg)?;
+            }
+            _ => {
+
+            }
+        };
+
+        return Ok(())
     }
 }
 
@@ -105,33 +192,5 @@ impl func::func_agent_service_server::FuncAgentService for FuncAgent {
         let (tx, rx) = mpsc::channel(30);
         self.OnNewConnection(&registerMsg, stream, tx).unwrap();
         return Ok(Response::new(ReceiverStream::new(rx)));
-    }
-    
-    async fn func_call(
-        &self,
-        request: tonic::Request<func::FuncAgentCallReq>,
-    ) -> SResult<tonic::Response<func::FuncAgentCallResp>, tonic::Status> {
-        let req = request.into_inner();
-        let funcCall = FuncCall {
-            id: uuid::Uuid::new_v4().to_string(),
-            funcInstanceId: String::new(),
-            namespace: req.namespace.clone(),
-            package: req.package.clone(),
-            funcName: req.func_name.clone(),
-            parameters: req.parameters.clone(),
-        };
-        
-        let resp = match self.FuncCall(&funcCall).await {
-            Err(e) => func::FuncAgentCallResp {
-                error: format!("{:?}", e),
-                resp: String::new(),
-            } ,
-            Ok(resp) => func::FuncAgentCallResp {
-                error: String::new(),
-                resp: resp,
-            }
-        };
-
-        return Ok(Response::new(resp));
     }
 }

@@ -17,7 +17,6 @@ package func;
 
 service FuncAgentService {
   rpc StreamProcess(stream FuncAgentMsg) returns (stream FuncAgentMsg);
-  rpc FuncCall(FuncAgentCallReq) returns (FuncAgentCallResp);
 }
 
 message FuncAgentMsg {
@@ -39,15 +38,18 @@ message FuncPodRegisterResp {
 }
 
 message FuncAgentCallReq {
-  string namespace = 1;
-  string package = 2;
-  string funcName = 3;
-  string parameters = 4;
+  string id = 1;
+  string namespace = 2;
+  string package = 3;
+  string funcName = 4;
+  string parameters = 5;
+  uint64 priority = 6;
 }
 
 message FuncAgentCallResp {
-    string error = 1;
-    string resp = 2;
+  string id = 1;
+  string error = 2;
+  string resp = 3;
 }
 
 service FuncSvcService {
@@ -55,7 +57,6 @@ service FuncSvcService {
 }
 
 message FuncSvcMsg {
-  uint64 msgId = 1;
   oneof EventBody {
     FuncAgentRegisterReq FuncAgentRegisterReq = 100;
     FuncAgentRegisterResp FuncAgentRegisterResp = 200;
@@ -95,14 +96,20 @@ message FuncPodDisconnResp {
 }
 
 message FuncSvcCallReq {
-  string namespace = 1;
-  string packageName = 2;
-  string funcName = 3;
-  string parameters = 4;
-  int32 priority = 5;
-  Timestamp createtime = 6;
+  string id = 1;
+  string namespace = 2;
+  string packageName = 3;
+  string funcName = 4;
+  string parameters = 5;
+  uint64 priority = 6;
+  Timestamp createtime = 7;
 
-  string calleeNodeId = 7; // when funcCall is process by a funcPod, this is the NodeId
+  string callerNodeId = 8;
+  string calllerPodId = 9; 
+
+  string calleeNodeId = 10; // when funcCall is process by a funcPod, this is the NodeId
+  string calleePodId = 11;
+
 }
 
 message FuncSvcCallResp {
@@ -127,14 +134,6 @@ message FuncPodStatus {
 }
 
 message Timestamp {
-  // Represents seconds of UTC time since Unix epoch
-  // 1970-01-01T00:00:00Z. Must be from 0001-01-01T00:00:00Z to
-  // 9999-12-31T23:59:59Z inclusive.
-  int64 seconds = 1;
-
-  // Non-negative fractions of a second at nanosecond resolution. Negative
-  // second values with fractions must still have non-negative nanos values
-  // that count forward in time. Must be from 0 to 999,999,999
-  // inclusive.
-  int32 nanos = 2;
+  uint64 top = 1;
+  uint64 bottom = 2;
 }
