@@ -78,6 +78,7 @@ pub enum Error {
     RocksdbError(rocksdb::Error),
     TokioChannFull,
     TokioChannClose,
+    MpscSendFail,
 
     Timeout,
     IpNetworkError(ipnetwork::IpNetworkError),
