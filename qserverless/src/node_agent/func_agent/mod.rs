@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod funcinst;
-pub mod funcinst_mgr;
-pub mod func_call;
+pub mod funcpod;
+pub mod funcpod_mgr;
 pub mod funcsvc_agent;
+pub mod func_agent;
+pub mod funcagent_msg;

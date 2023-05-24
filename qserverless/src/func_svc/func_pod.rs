@@ -21,15 +21,22 @@ use core::ops::Deref;
 use qobjs::common::*;
 use qobjs::k8s;
 
+use crate::func_call::FuncCall;
 use crate::func_call::FuncCallId;
 use crate::package::*;
 use crate::func_node::*;
-use crate::task_queue::TaskItem;
 
 #[derive(Debug, Clone)]
 pub struct FuncPodId {
     pub packageId: PackageId,
     pub podName: String,
+    pub nodeName: String,
+}
+
+impl ToString for FuncPodId {
+    fn to_string(&self) -> String {
+        return format!("{}/{}@{}", &self.packageId.to_string(), &self.podName, &self.nodeName);
+    }
 }
 
 impl Ord for FuncPodId {
@@ -84,7 +91,7 @@ impl Deref for FuncPod {
 }
 
 impl FuncPod {
-    pub fn RunTask(&self, _task: &TaskItem) -> Result<()> {
+    pub fn RunTask(&self, _task: &FuncCall) -> Result<()> {
         unimplemented!();
     }
 

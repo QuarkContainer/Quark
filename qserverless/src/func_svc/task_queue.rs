@@ -12,81 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
 use std::time::SystemTime;
 use std::collections::{BTreeMap, VecDeque};
-use core::ops::Deref;
 use std::collections::btree_map::Iter;
 
 use crate::func_call::*;
 use crate::scheduler::Resource;
-use crate::package::*;
-
-#[derive(Debug, Clone)]
-pub struct TaskItemInner {
-    pub priority: usize,
-    pub createTime: SystemTime,
-    pub context: FuncCall,
-}
-
-#[derive(Debug, Clone)]
-pub struct TaskItem(Arc<TaskItemInner>);
-
-impl TaskItem {
-    pub fn ReqResource(&self) -> Resource {
-        return self.context.ReqResource();
-    }
-
-    pub fn Package(&self) -> Package {
-        return self.context.lock().unwrap().package.clone();
-    }
-}
-
-impl Deref for TaskItem {
-    type Target = Arc<TaskItemInner>;
-
-    fn deref(&self) -> &Arc<TaskItemInner> {
-        &self.0
-    }
-}
-
-impl Ord for TaskItem {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        if self.priority == other.priority {
-            return other.createTime.cmp(&self.createTime);
-        }
-
-        return other.priority.cmp(&other.priority);
-    }
-}
-
-impl PartialOrd for TaskItem {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl PartialEq for TaskItem {
-    fn eq(&self, other: &Self) -> bool {
-        return self.priority == other.priority && self.createTime == other.createTime;
-    }
-}
-
-impl Eq for TaskItem {}
 
 #[derive(Debug)]
 pub struct TaskQueue {
-    pub queue: BTreeMap<SystemTime, TaskItem>,
+    pub queue: BTreeMap<SystemTime, FuncCall>,
     pub reqResource: Resource,
 }
 
 impl TaskQueue {
-    pub fn Enq(&mut self, task: &TaskItem) {
+    pub fn Enq(&mut self, task: &FuncCall) {
         self.reqResource = self.reqResource + task.ReqResource();
         self.queue.insert(task.createTime, task.clone());
     }
 
-    pub fn Peek(&self) -> Option<TaskItem> {
+    pub fn Peek(&self) -> Option<FuncCall> {
         match self.queue.iter().next() {
             None => return None,
             Some((_, item)) => {
@@ -96,7 +41,7 @@ impl TaskQueue {
     }
 
     // return left count of the queue
-    pub fn Remove(&mut self, task: &TaskItem) -> usize {
+    pub fn Remove(&mut self, task: &FuncCall) -> usize {
         self.queue.remove(&task.createTime);
         self.reqResource = self.reqResource - task.ReqResource();
         return self.queue.len();
@@ -118,14 +63,14 @@ pub struct TaskQueues {
 }
 
 impl TaskQueues {
-    pub fn Enq(&mut self, task: &TaskItem) {
-        let pri = task.priority;
+    pub fn Enq(&mut self, task: &FuncCall) {
+        let pri = task.Priority();
         assert!(pri < PRIORITY_COUNT);
         self.queues[pri].Enq(task);
         self.existingMask |= 1 << pri;
     }
 
-    pub fn Peek(&self) -> Option<TaskItem> {
+    pub fn Peek(&self) -> Option<FuncCall> {
         let highestPriIdx = self.existingMask.trailing_zeros() as usize;
         if highestPriIdx > self.queues.len() {{
             return None;
@@ -133,8 +78,8 @@ impl TaskQueues {
         return self.queues[highestPriIdx].Peek();
     }
 
-    pub fn Remove(&mut self, task: &TaskItem) {
-        let pri = task.priority;
+    pub fn Remove(&mut self, task: &FuncCall) {
+        let pri = task.Priority();
         assert!(pri < PRIORITY_COUNT);
         let count = self.queues[pri].Remove(task);
         if count == 0 {
@@ -185,11 +130,11 @@ impl TaskQueues {
 pub struct TaskQueuesIter <'a>{
     pub queues: &'a TaskQueues,
     pub nextPri: usize,
-    pub currentIter: Option<Iter<'a, SystemTime, TaskItem>>
+    pub currentIter: Option<Iter<'a, SystemTime, FuncCall>>
 }
 
 impl <'a> Iterator for TaskQueuesIter <'a> {
-    type Item = TaskItem;
+    type Item = FuncCall;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut iter = match self.currentIter.take() {
@@ -226,13 +171,13 @@ impl <'a> Iterator for TaskQueuesIter <'a> {
 #[derive(Debug)]
 pub struct PackageTaskQueue {
     pub waitingTask: usize,
-    pub waitingQueue: [VecDeque<TaskItem>; PRIORITY_COUNT],
+    pub waitingQueue: [VecDeque<FuncCall>; PRIORITY_COUNT],
     pub existingMask: u64,
 }
 
 impl PackageTaskQueue {
     // get the Nth task in the waitingQueue 
-    pub fn GetWaitingTask(&self, n: usize) -> Option<TaskItem> {
+    pub fn GetWaitingTask(&self, n: usize) -> Option<FuncCall> {
         if n > self.waitingTask {
             return None;
         }
@@ -258,7 +203,7 @@ impl PackageTaskQueue {
         return self.existingMask.trailing_zeros() as usize;
     }
 
-    pub fn Pop(&mut self) -> Option<TaskItem> {
+    pub fn Pop(&mut self) -> Option<FuncCall> {
         if self.waitingTask > 0 {
             return None;
         }
@@ -273,9 +218,9 @@ impl PackageTaskQueue {
         return Some(task);
     }
 
-    pub fn Push(&mut self, task: &TaskItem) {
+    pub fn Push(&mut self, task: &FuncCall) {
         self.waitingTask += 1;
-        let pri = task.priority;
+        let pri = task.Priority();
         self.waitingQueue[pri].push_back(task.clone());
         self.existingMask |= 1 << pri;
     }

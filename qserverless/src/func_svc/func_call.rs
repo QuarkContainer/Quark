@@ -64,7 +64,7 @@ pub struct FuncCallInner {
     pub package: Package,
     pub callerNode: FuncNode,
 
-    pub state: FuncCallState,
+    pub state: Mutex<FuncCallState>,
 
     pub parameters: String,
     pub priority: i32,
@@ -72,12 +72,12 @@ pub struct FuncCallInner {
 }
 
 #[derive(Debug, Clone)]
-pub struct FuncCall(pub Arc<Mutex<FuncCallInner>>);
+pub struct FuncCall(pub Arc<FuncCallInner>);
 
 impl Deref for FuncCall {
-    type Target = Arc<Mutex<FuncCallInner>>;
+    type Target = Arc<FuncCallInner>;
 
-    fn deref(&self) -> &Arc<Mutex<FuncCallInner>> {
+    fn deref(&self) -> &Arc<FuncCallInner> {
         &self.0
     }
 }
@@ -88,21 +88,29 @@ impl FuncCall {
     }
 
     pub fn ReqResource(&self) -> Resource {
-        return self.lock().unwrap().package.ReqResource();
+        return self.package.ReqResource();
     }
 
     pub fn Id(&self) -> FuncCallId {
-        return self.lock().unwrap().id.clone();
+        return self.id.clone();
+    }
+
+    pub fn Priority(&self) -> usize {
+        return self.priority as usize;
+    }
+
+    pub fn Package(&self) -> Package {
+        return self.package.clone();
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct FuncCallWeak(pub Weak<Mutex<FuncCallInner>>);
+pub struct FuncCallWeak(pub Weak<FuncCallInner>);
 
 impl Deref for FuncCallWeak {
-    type Target = Weak<Mutex<FuncCallInner>>;
+    type Target = Weak<FuncCallInner>;
 
-    fn deref(&self) -> &Weak<Mutex<FuncCallInner>> {
+    fn deref(&self) -> &Weak<FuncCallInner> {
         &self.0
     }
 }
