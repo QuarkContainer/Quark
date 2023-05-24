@@ -42,29 +42,33 @@ pub struct FuncPodRegisterResp {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncAgentCallReq {
     #[prost(string, tag = "1")]
-    pub namespace: ::prost::alloc::string::String,
+    pub id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub package: ::prost::alloc::string::String,
+    pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub func_name: ::prost::alloc::string::String,
+    pub package: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
+    pub func_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
     pub parameters: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "6")]
+    pub priority: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncAgentCallResp {
     #[prost(string, tag = "1")]
-    pub error: ::prost::alloc::string::String,
+    pub id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
+    pub error: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
     pub resp: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncSvcMsg {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(
         oneof = "func_svc_msg::EventBody",
         tags = "100, 200, 300, 400, 500, 600, 700, 800"
@@ -148,20 +152,28 @@ pub struct FuncPodDisconnResp {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncSvcCallReq {
     #[prost(string, tag = "1")]
-    pub namespace: ::prost::alloc::string::String,
+    pub id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub package_name: ::prost::alloc::string::String,
+    pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub func_name: ::prost::alloc::string::String,
+    pub package_name: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
+    pub func_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
     pub parameters: ::prost::alloc::string::String,
-    #[prost(int32, tag = "5")]
-    pub priority: i32,
-    #[prost(message, optional, tag = "6")]
+    #[prost(uint64, tag = "6")]
+    pub priority: u64,
+    #[prost(message, optional, tag = "7")]
     pub createtime: ::core::option::Option<Timestamp>,
+    #[prost(string, tag = "8")]
+    pub caller_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub calller_pod_id: ::prost::alloc::string::String,
     /// when funcCall is process by a funcPod, this is the NodeId
-    #[prost(string, tag = "7")]
+    #[prost(string, tag = "10")]
     pub callee_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
+    pub callee_pod_id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -198,17 +210,10 @@ pub struct FuncPodStatus {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Timestamp {
-    /// Represents seconds of UTC time since Unix epoch
-    /// 1970-01-01T00:00:00Z. Must be from 0001-01-01T00:00:00Z to
-    /// 9999-12-31T23:59:59Z inclusive.
-    #[prost(int64, tag = "1")]
-    pub seconds: i64,
-    /// Non-negative fractions of a second at nanosecond resolution. Negative
-    /// second values with fractions must still have non-negative nanos values
-    /// that count forward in time. Must be from 0 to 999,999,999
-    /// inclusive.
-    #[prost(int32, tag = "2")]
-    pub nanos: i32,
+    #[prost(uint64, tag = "1")]
+    pub top: u64,
+    #[prost(uint64, tag = "2")]
+    pub bottom: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -331,25 +336,6 @@ pub mod func_agent_service_client {
             );
             self.inner.streaming(request.into_streaming_request(), path, codec).await
         }
-        pub async fn func_call(
-            &mut self,
-            request: impl tonic::IntoRequest<super::FuncAgentCallReq>,
-        ) -> Result<tonic::Response<super::FuncAgentCallResp>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/func.FuncAgentService/FuncCall",
-            );
-            self.inner.unary(request.into_request(), path, codec).await
-        }
     }
 }
 /// Generated client implementations.
@@ -462,10 +448,6 @@ pub mod func_agent_service_server {
             &self,
             request: tonic::Request<tonic::Streaming<super::FuncAgentMsg>>,
         ) -> Result<tonic::Response<Self::StreamProcessStream>, tonic::Status>;
-        async fn func_call(
-            &self,
-            request: tonic::Request<super::FuncAgentCallReq>,
-        ) -> Result<tonic::Response<super::FuncAgentCallResp>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct FuncAgentServiceServer<T: FuncAgentService> {
@@ -565,44 +547,6 @@ pub mod func_agent_service_server {
                                 send_compression_encodings,
                             );
                         let res = grpc.streaming(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/func.FuncAgentService/FuncCall" => {
-                    #[allow(non_camel_case_types)]
-                    struct FuncCallSvc<T: FuncAgentService>(pub Arc<T>);
-                    impl<
-                        T: FuncAgentService,
-                    > tonic::server::UnaryService<super::FuncAgentCallReq>
-                    for FuncCallSvc<T> {
-                        type Response = super::FuncAgentCallResp;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::FuncAgentCallReq>,
-                        ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move { (*inner).func_call(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = FuncCallSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
-                        let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)

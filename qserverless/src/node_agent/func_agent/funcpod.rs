@@ -20,6 +20,8 @@ use std::result::Result as SResult;
 use qobjs::func;
 use qobjs::common::*;
 
+use crate::FUNC_AGENT;
+
 use super::funcagent_msg::FuncPodMsg;
 
 #[derive(Debug)]
@@ -33,8 +35,9 @@ pub struct FuncPodInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
 
-    pub instanceId: String,
+    pub funcPodId: String,
     pub state: InstanceState,
+    pub priority: usize,
 
     pub agentChann: mpsc::Sender<FuncPodMsg>,
 }
@@ -61,7 +64,8 @@ impl FuncPod {
         let inner = FuncPodInner {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
-            instanceId: instanceId.clone(),
+            funcPodId: instanceId.clone(),
+            priority: 1,
             state: InstanceState::Idle,
             agentChann: tx,
         };
@@ -78,8 +82,8 @@ impl FuncPod {
         unimplemented!();
     }
 
-    pub async fn ProcessExternalMsg(&self, _msg: func::FuncAgentMsg, _tx: &mpsc::Sender<SResult<func::FuncAgentMsg, tonic::Status>>) -> Result<()> {
-        unimplemented!();
+    pub fn Priority(&self) -> usize {
+        return self.priority;
     }
 
     pub async fn Process(
@@ -124,7 +128,8 @@ impl FuncPod {
                             }
                         }
                     };
-                    self.ProcessExternalMsg(msg, &tx).await?;
+                    
+                    FUNC_AGENT.OnFuncAgentMsg(&self.funcPodId, msg).await?;
                 }
             }
         }

@@ -78,7 +78,12 @@ pub enum Error {
     RocksdbError(rocksdb::Error),
     TokioChannFull,
     TokioChannClose,
+
     MpscSendFail,
+
+    EPERM, // Operation not permitted
+    ENOENT, // no such entity
+    EINVAL, // Invalid argument
 
     Timeout,
     IpNetworkError(ipnetwork::IpNetworkError),

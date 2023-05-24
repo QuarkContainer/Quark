@@ -24,37 +24,38 @@ use qobjs::common::*;
 
 use crate::func_agent::funcpod::FuncPod;
 
-use super::func_agent::FuncCall;
-
-
 #[derive(Debug, Default)]
-pub struct FuncInstMgrInner {
+pub struct FuncPodMgrInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
     pub currInstanceId: AtomicU64,
 
-    pub instances: Mutex<BTreeMap<String, FuncPod>>,
-    // func instance id to funcCall
-    pub ingressCall: Mutex<BTreeMap<String, FuncCall>>,
-    // func instance id to funcCall
-    pub egressCall: Mutex<BTreeMap<String, FuncCall>>,
+    pub pods: Mutex<BTreeMap<String, FuncPod>>,
+
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct FuncInstMgr(pub Arc<FuncInstMgrInner>);
+pub struct FuncPodMgr(pub Arc<FuncPodMgrInner>);
 
-impl Deref for FuncInstMgr {
-    type Target = Arc<FuncInstMgrInner>;
+impl Deref for FuncPodMgr {
+    type Target = Arc<FuncPodMgrInner>;
 
-    fn deref(&self) -> &Arc<FuncInstMgrInner> {
+    fn deref(&self) -> &Arc<FuncPodMgrInner> {
         &self.0
     }
 }
 
-impl FuncInstMgr {
-    pub fn AddInstance(&self, id: &str, instance: &FuncPod) -> Result<()> {
-        self.instances.lock().unwrap().insert(id.to_string(), instance.clone());
+impl FuncPodMgr {
+    pub fn AddPod(&self, id: &str, pod: &FuncPod) -> Result<()> {
+        self.pods.lock().unwrap().insert(id.to_string(), pod.clone());
         return Ok(())
+    }
+
+    pub fn GetPod(&self, id: &str) -> Result<FuncPod> {
+        match self.pods.lock().unwrap().get(id) {
+            None => return Err(Error::ENOENT),
+            Some(pod) => return Ok(pod.clone()),
+        }
     }
 }
 
