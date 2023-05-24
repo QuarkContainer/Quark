@@ -85,7 +85,7 @@ impl FuncSvcInner {
     } 
 
     // when recieve a new task 
-    pub fn OnNewTask(&mut self, task: &TaskItem) -> Result<()> {
+    pub fn OnNewTask(&mut self, task: &FuncCall) -> Result<()> {
         let package = task.Package();
         
         let ret = package.lock().unwrap().OnNewTask(task)?;
@@ -200,7 +200,7 @@ impl FuncSvcInner {
             }
 
             let package = task.Package();
-            if task.priority >= START_BATCHTASK_PRI && self.NeedEvictTask(&package.ReqResource()) {
+            if task.Priority() >= START_BATCHTASK_PRI && self.NeedEvictTask(&package.ReqResource()) {
                 // only batch task left and the memory usage has exceed the threshold
                 return Ok(())
             }

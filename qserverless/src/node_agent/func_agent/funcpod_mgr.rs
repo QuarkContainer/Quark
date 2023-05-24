@@ -12,26 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{sync::{Arc, atomic::{AtomicBool, AtomicU64}}, collections::BTreeMap};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicU64;
+use std::sync::Mutex;
+use std::collections::BTreeMap;
 use core::ops::Deref;
 use tokio::sync::Notify;
 
-use crate::func_agent::funcinst::FuncInstance;
-use crate::func_agent::func_call::*;
+use qobjs::common::*;
 
+use crate::func_agent::funcpod::FuncPod;
+
+use super::func_agent::FuncCall;
+
+
+#[derive(Debug, Default)]
 pub struct FuncInstMgrInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
     pub currInstanceId: AtomicU64,
 
-    pub instances: BTreeMap<u64, FuncInstance>,
+    pub instances: Mutex<BTreeMap<String, FuncPod>>,
     // func instance id to funcCall
-    pub ingressCall: BTreeMap<u64, FuncCall>,
+    pub ingressCall: Mutex<BTreeMap<String, FuncCall>>,
     // func instance id to funcCall
-    pub egressCall: BTreeMap<u64, FuncCall>,
+    pub egressCall: Mutex<BTreeMap<String, FuncCall>>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct FuncInstMgr(pub Arc<FuncInstMgrInner>);
 
 impl Deref for FuncInstMgr {
@@ -39,6 +48,13 @@ impl Deref for FuncInstMgr {
 
     fn deref(&self) -> &Arc<FuncInstMgrInner> {
         &self.0
+    }
+}
+
+impl FuncInstMgr {
+    pub fn AddInstance(&self, id: &str, instance: &FuncPod) -> Result<()> {
+        self.instances.lock().unwrap().insert(id.to_string(), instance.clone());
+        return Ok(())
     }
 }
 

@@ -21,6 +21,7 @@ use std::time::SystemTime;
 use qobjs::k8s;
 use qobjs::common::*;
 
+use crate::func_call::FuncCall;
 use crate::task_queue::*;
 use crate::scheduler::*;
 use crate::func_pod::*;
@@ -29,6 +30,12 @@ use crate::func_pod::*;
 pub struct PackageId {
     pub namespace: String,
     pub packageName: String,
+}
+
+impl ToString for PackageId {
+    fn to_string(&self) -> String {
+        return format!("{}/{}", &self.namespace, &self.packageName);
+    }
 }
 
 impl PackageId {
@@ -114,7 +121,7 @@ impl PackageInner {
     }
 
     // when there is a new task, return task which needs creating new pod
-    pub fn OnNewTask(&mut self, task: &TaskItem) -> Result<Option<TaskItem>> {
+    pub fn OnNewTask(&mut self, task: &FuncCall) -> Result<Option<FuncCall>> {
         match self.PopKeepalivePod() {
             Some(pod) => {
                 assert!(self.waitingQueue.waitingTask == 0);
@@ -146,7 +153,7 @@ impl PackageInner {
     }
 
     // when a pod finish processing last task, return the task which needs removed from global task Queue
-    pub fn OnFreePod(&mut self, pod: &FuncPod) -> Result<(bool, Option<TaskItem>)> {
+    pub fn OnFreePod(&mut self, pod: &FuncPod) -> Result<(bool, Option<FuncCall>)> {
         match self.waitingQueue.Pop() {
             None => {
                 pod.SetKeepalive();

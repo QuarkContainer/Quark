@@ -17,6 +17,7 @@ package func;
 
 service FuncAgentService {
   rpc StreamProcess(stream FuncAgentMsg) returns (stream FuncAgentMsg);
+  rpc FuncCall(FuncAgentCallReq) returns (FuncAgentCallResp);
 }
 
 message FuncAgentMsg {
@@ -38,8 +39,10 @@ message FuncPodRegisterResp {
 }
 
 message FuncAgentCallReq {
-  string funcName = 1;
-  string parameters = 2;
+  string namespace = 1;
+  string package = 2;
+  string funcName = 3;
+  string parameters = 4;
 }
 
 message FuncAgentCallResp {

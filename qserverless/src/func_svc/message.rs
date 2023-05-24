@@ -16,11 +16,10 @@ use crate::func_pod::FuncPod;
 use crate::func_call::FuncCall;
 
 pub enum FuncNodeMsg {
-
+    FuncCalleeMsg(FuncCalleeMsg),
 }
 
-pub struct FuncCallMsg {
-    pub nodeId: String,
+pub struct FuncCalleeMsg {
     pub pod: FuncPod,
     pub funcCall: FuncCall,
 }

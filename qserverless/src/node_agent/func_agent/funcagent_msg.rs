@@ -12,11 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub struct FuncCall {
-    pub id: u64,
-    pub funcInstanceId: u64,
-    pub namespace: String,
-    pub package: String,
-    pub funcName: String,
-    pub parameters: String,
+pub enum FuncPodMsg {
+    
 }

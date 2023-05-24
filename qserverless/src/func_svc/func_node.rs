@@ -24,6 +24,7 @@ use tonic::Streaming;
 use tokio::sync::mpsc;
 use std::result::Result as SResult;
 use tonic::Status;
+use tokio::task::JoinHandle;
 
 use qobjs::k8s;
 use qobjs::ObjectMeta;
@@ -39,6 +40,7 @@ use crate::func_call::FuncCallInner;
 use crate::func_call::FuncCallId;
 use crate::func_call::FuncCallState;
 use crate::func_pod::*;
+use crate::message::FuncNodeMsg;
 use crate::package::Package;
 use crate::package::PackageId;
 
@@ -53,7 +55,7 @@ pub struct FuncNodeInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
 
-    pub name: String,
+    pub nodeName: String,
     pub state: FuncNodeState,
     pub FuncPods: BTreeMap<FuncPodId, FuncPod>,
     pub ProcessingCallerFuncCalls: BTreeSet<FuncCallId>, 
@@ -65,6 +67,10 @@ pub struct FuncNodeInner {
     pub CheckingCalleeFuncCalls: BTreeSet<FuncCallId>,
 
     pub tx: Option<mpsc::Sender<SResult<func::FuncSvcMsg, Status>>>,
+    pub internMsgTx: mpsc::Sender<FuncNodeMsg>,
+
+    pub processorHandler: Option<JoinHandle<()>>,
+    pub internMsgRx: Option<mpsc::Receiver<FuncNodeMsg>>,
 }
 
 impl FuncNodeInner {
@@ -178,19 +184,19 @@ impl FuncNode {
                         id: funcCallId.clone(),
                         package: package.clone(),
                         callerNode: self.clone(),
-                        state: state,
+                        state: Mutex::new(state),
                         parameters: funccall.parameters.clone(),
                         priority: funccall.priority,
                         // todo: covert from funccall.createtime
                         createTime: SystemTime::now(),
                     };
     
-                    let funcall = FuncCall(Arc::new(Mutex::new(funcCallContextInner)));
+                    let funcall = FuncCall(Arc::new(funcCallContextInner));
                     FUNC_CALL_MGR.Add(&funcall);
                     funcall
                 }
                 Some(funccall) => {
-                    funccall.lock().unwrap().state = state;
+                    *funccall.state.lock().unwrap() = state;
                     funccall
                 }
             };
@@ -235,7 +241,8 @@ impl FuncNode {
 
             let funcPodId = FuncPodId {
                 packageId: packageId.clone(),
-                podName: podStatus.pod_name.clone()
+                podName: podStatus.pod_name.clone(),
+                nodeName: inner.nodeName.clone(),
             };
 
             let pod : k8s::Pod = serde_json::from_str(&podStatus.pod)?;
@@ -262,7 +269,46 @@ impl FuncNode {
         return Ok(())
     }
 
-    pub async fn StartProcess(&self, regReq: func::FuncAgentRegisterReq, rx: Streaming<func::FuncSvcMsg>, tx: mpsc::Sender<SResult<func::FuncSvcMsg, Status>>) -> Result<()> {
+    pub fn CreateProcessor(&self, regReq: func::FuncAgentRegisterReq, rx: Streaming<func::FuncSvcMsg>, tx: mpsc::Sender<SResult<func::FuncSvcMsg, Status>>) -> Result<()> {
+        let node = self.clone();
+
+        let handler = tokio::spawn(async move {
+            node.StartProcess(regReq, rx, tx).await.unwrap();
+        });
+
+        self.lock().unwrap().processorHandler = Some(handler);
+        return Ok(())
+    }
+
+    pub async fn ProcessInternalMsg(&self, _msg: FuncNodeMsg) -> Result<()> {
+        return Ok(())
+    }
+
+    pub async fn ProcessNodeAgentMsg(&self, msg: func::FuncSvcMsg) -> Result<()> {
+        //let msgId = msg.msg_id;
+        let body = match msg.event_body {
+            None => panic!("ProcessNodeAgentMsg get none eventbody"),
+            Some(b) => b,
+        };
+        match body {
+            /*
+            func::func_svc_msg::EventBody::FuncAgentRegisterReq(req) => {
+            // processing
+            self.SetState(FuncNodeState::Running(tx));
+            } */
+            _ => {
+                error!("didn't get FuncAgentRegisterReq message instead {:?}", body);
+                return Err(Error::CommonError(format!("didn't get FuncAgentRegisterReq message instead {:?}", body)));
+            }
+        }
+    }
+
+    pub async fn StartProcess(
+        &self, 
+        regReq: func::FuncAgentRegisterReq, 
+        rx: Streaming<func::FuncSvcMsg>, 
+        tx: mpsc::Sender<SResult<func::FuncSvcMsg, Status>>
+    ) -> Result<()> {
         let state = self.State();
         match state {
             FuncNodeState::WaitingConn => (),
@@ -270,7 +316,16 @@ impl FuncNode {
                 self.Close();
             }
         }
-        
+
+        let handler = self.lock().unwrap().processorHandler.take();
+        match handler {
+            None => (),
+            Some(handler) => {
+                handler.await?;
+            }
+        };
+
+        let mut internMsgRx = self.lock().unwrap().internMsgRx.take().expect("StartProcess doesn't get internal rx channel");
         defer!(self.SetState(FuncNodeState::WaitingConn));
         let mut rx = rx;
         let closeNotify = self.lock().unwrap().closeNotify.clone();
@@ -289,27 +344,39 @@ impl FuncNode {
                 _ = closeNotify.notified() => {
                     break;
                 }
-                msg = rx.message() => {
-                    let msg : func::FuncSvcMsg = msg?.unwrap();
-                    //let msgId = msg.msg_id;
-                    let body = match msg.event_body {
-                        None => return Ok(()),
-                        Some(b) => b,
-                    };
-                    match body {
-                        /*
-                        func::func_svc_msg::EventBody::FuncAgentRegisterReq(req) => {
-                        // processing
-                        self.SetState(FuncNodeState::Running(tx));
-                        } */
-                        _ => {
-                            error!("didn't get FuncAgentRegisterReq message instead {:?}", body);
-                            return Err(Error::CommonError(format!("didn't get FuncAgentRegisterReq message instead {:?}", body)));
+                interalMsg = internMsgRx.recv() => {
+                    match interalMsg {
+                        None => {
+                            panic!("FuncNode::StartProcess expect None internal message");
+                        }
+                        Some(msg) => {
+                            self.ProcessInternalMsg(msg).await?;
                         }
                     }
+                    
+                }
+                msg = rx.message() => {
+                    let msg : func::FuncSvcMsg = match msg {
+                        Err(e) => {
+                            error!("FuncNode get error message {:?}", e);
+                            break;
+                        }
+                        Ok(m) => {
+                            match m {
+                                None => {
+                                    error!("FuncNode get None message");
+                                    break;
+                                }
+                                Some(m) => m,
+                            }
+                        }
+                    };
+                    self.ProcessNodeAgentMsg(msg).await?;
                 }
             }
         }
+
+        self.lock().unwrap().internMsgRx = Some(internMsgRx);
 
         return Ok(())
     }
@@ -339,11 +406,16 @@ impl FuncNode {
         let funcPodId = FuncPodId {
             packageId: package.PackageId(),
             podName: uid,
+            nodeName: self.NodeName(),
         };
 
         self.lock().unwrap().FuncPods.insert(funcPodId, pod.clone());
 
         return Ok(pod);
+    }
+
+    pub fn NodeName(&self) -> String {
+        return self.lock().unwrap().nodeName.clone();
     }
 
     pub fn CreatePod(&self, _pod: &FuncPod) -> Result<()> {
