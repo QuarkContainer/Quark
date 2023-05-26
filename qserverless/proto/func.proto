@@ -20,7 +20,6 @@ service FuncAgentService {
 }
 
 message FuncAgentMsg {
-  uint64 msgId = 1;
   oneof EventBody {
     FuncPodRegisterReq FuncPodRegisterReq = 100;
     FuncPodRegisterResp FuncPodRegisterResp = 200;
@@ -30,7 +29,9 @@ message FuncAgentMsg {
 }
 
 message FuncPodRegisterReq {
-  string instanceId = 1;
+  string funcPodId = 1;
+  string namespace = 2;
+  string packageName = 3;
 }
 
 message FuncPodRegisterResp {
@@ -40,7 +41,7 @@ message FuncPodRegisterResp {
 message FuncAgentCallReq {
   string id = 1;
   string namespace = 2;
-  string package = 3;
+  string packageName = 3;
   string funcName = 4;
   string parameters = 5;
   uint64 priority = 6;
@@ -71,8 +72,9 @@ message FuncSvcMsg {
 
 message FuncAgentRegisterReq {
   string nodeId = 1;
-  repeated FuncSvcCallReq funcCalls = 2; // func calls waiting for response
-  repeated FuncPodStatus funcPods = 3; // func pods running on the node
+  repeated FuncSvcCallReq callerCalls = 2; // func calls from the node
+  repeated FuncSvcCallReq calleeCalls = 3; // func calls processing in the node
+  repeated FuncPodStatus funcPods = 4; // func pods running on the node
 }
 
 message FuncAgentRegisterResp {
@@ -88,7 +90,7 @@ message FuncPodConnResp {
 }
 
 message FuncPodDisconnReq {
-  string podId = 1;
+  string funcPodId = 1;
 }
 
 message FuncPodDisconnResp {
@@ -118,22 +120,19 @@ message FuncSvcCallResp {
 }
 
 enum FuncPodState {
-  Creating = 0;
-  Keepalive = 2;
-  Running = 3;
+  Idle = 0;
+  Running = 1;
 }
 
 message FuncPodStatus {
-    string namespace = 1;
-    string packageName = 2;
-    string podName = 3;
+    string funcPodId = 1;
+    string namespace = 2;
+    string packageName = 3;
     FuncPodState state = 4;
-    string funcName = 5;        // when pod is running, the funccall id
-    string funcCallerNodeId = 6; //  when pod is running, the funccall caller id
-    string pod = 7; // k8s::pod
+    string funcCallId = 5; // when the pod is running the funcCallId
 }
 
 message Timestamp {
-  uint64 top = 1;
-  uint64 bottom = 2;
+  uint64 seconds = 1;
+  uint32 nanos = 2;
 }

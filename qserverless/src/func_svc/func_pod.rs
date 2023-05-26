@@ -19,10 +19,8 @@ use std::time::SystemTime;
 use core::ops::Deref;
 
 use qobjs::common::*;
-use qobjs::k8s;
 
 use crate::func_call::FuncCall;
-use crate::func_call::FuncCallId;
 use crate::package::*;
 use crate::func_node::*;
 
@@ -65,9 +63,8 @@ impl Eq for FuncPodId {}
 
 #[derive(Debug)]
 pub enum FuncPodState {
-    Creating(SystemTime),
-    Keepalive(SystemTime), // IdleTime
-    Running(FuncCallId), 
+    Idle(SystemTime), // IdleTime
+    Running(String), 
 }
 
 #[derive(Debug)]
@@ -76,7 +73,6 @@ pub struct FuncPodInner {
     pub package: Package,
     pub node: FuncNode,
     pub state: Mutex<FuncPodState>,
-    pub pod: Mutex<k8s::Pod>,
 }
 
 #[derive(Debug, Clone)]
@@ -97,14 +93,14 @@ impl FuncPod {
 
     pub fn SetKeepalive(&self) -> SystemTime {
         let curr: SystemTime = SystemTime::now();
-        *self.state.lock().unwrap() = FuncPodState::Keepalive(curr);
+        *self.state.lock().unwrap() = FuncPodState::Idle(curr);
         return curr;
     }
 
     pub fn KeepaliveTime(&self) -> Result<SystemTime> {
         let state = self.state.lock().unwrap();
         match *state {
-            FuncPodState::Keepalive(curr) => return Ok(curr),
+            FuncPodState::Idle(curr) => return Ok(curr),
             _ => return Err(Error::CommonError(format!("IdleTime invalid func pod state {:?}", state))),
         }
     }

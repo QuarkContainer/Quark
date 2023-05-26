@@ -2,8 +2,6 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncAgentMsg {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(oneof = "func_agent_msg::EventBody", tags = "100, 200, 300, 400")]
     pub event_body: ::core::option::Option<func_agent_msg::EventBody>,
 }
@@ -28,7 +26,11 @@ pub mod func_agent_msg {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncPodRegisterReq {
     #[prost(string, tag = "1")]
-    pub instance_id: ::prost::alloc::string::String,
+    pub func_pod_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub package_name: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -46,7 +48,7 @@ pub struct FuncAgentCallReq {
     #[prost(string, tag = "2")]
     pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub package: ::prost::alloc::string::String,
+    pub package_name: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub func_name: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
@@ -105,11 +107,14 @@ pub mod func_svc_msg {
 pub struct FuncAgentRegisterReq {
     #[prost(string, tag = "1")]
     pub node_id: ::prost::alloc::string::String,
-    /// func calls waiting for response
+    /// func calls from the node
     #[prost(message, repeated, tag = "2")]
-    pub func_calls: ::prost::alloc::vec::Vec<FuncSvcCallReq>,
-    /// func pods running on the node
+    pub caller_calls: ::prost::alloc::vec::Vec<FuncSvcCallReq>,
+    /// func calls processing in the node
     #[prost(message, repeated, tag = "3")]
+    pub callee_calls: ::prost::alloc::vec::Vec<FuncSvcCallReq>,
+    /// func pods running on the node
+    #[prost(message, repeated, tag = "4")]
     pub func_pods: ::prost::alloc::vec::Vec<FuncPodStatus>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -138,7 +143,7 @@ pub struct FuncPodConnResp {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncPodDisconnReq {
     #[prost(string, tag = "1")]
-    pub pod_id: ::prost::alloc::string::String,
+    pub func_pod_id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -189,39 +194,32 @@ pub struct FuncSvcCallResp {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncPodStatus {
     #[prost(string, tag = "1")]
-    pub namespace: ::prost::alloc::string::String,
+    pub func_pod_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub package_name: ::prost::alloc::string::String,
+    pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub pod_name: ::prost::alloc::string::String,
+    pub package_name: ::prost::alloc::string::String,
     #[prost(enumeration = "FuncPodState", tag = "4")]
     pub state: i32,
-    /// when pod is running, the funccall id
+    /// when the pod is running the funcCallId
     #[prost(string, tag = "5")]
-    pub func_name: ::prost::alloc::string::String,
-    ///   when pod is running, the funccall caller id
-    #[prost(string, tag = "6")]
-    pub func_caller_node_id: ::prost::alloc::string::String,
-    /// k8s::pod
-    #[prost(string, tag = "7")]
-    pub pod: ::prost::alloc::string::String,
+    pub func_call_id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Timestamp {
     #[prost(uint64, tag = "1")]
-    pub top: u64,
-    #[prost(uint64, tag = "2")]
-    pub bottom: u64,
+    pub seconds: u64,
+    #[prost(uint32, tag = "2")]
+    pub nanos: u32,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum FuncPodState {
-    Creating = 0,
-    Keepalive = 2,
-    Running = 3,
+    Idle = 0,
+    Running = 1,
 }
 impl FuncPodState {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -230,16 +228,14 @@ impl FuncPodState {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            FuncPodState::Creating => "Creating",
-            FuncPodState::Keepalive => "Keepalive",
+            FuncPodState::Idle => "Idle",
             FuncPodState::Running => "Running",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
-            "Creating" => Some(Self::Creating),
-            "Keepalive" => Some(Self::Keepalive),
+            "Idle" => Some(Self::Idle),
             "Running" => Some(Self::Running),
             _ => None,
         }

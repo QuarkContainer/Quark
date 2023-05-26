@@ -19,6 +19,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
 use core::ops::Deref;
+use qobjs::utility::SystemTimeProto;
 use tokio::sync::Mutex as TMutex;
 use tonic::Streaming;
 use tokio::sync::mpsc;
@@ -26,8 +27,6 @@ use std::result::Result as SResult;
 use tonic::Status;
 use tokio::task::JoinHandle;
 
-use qobjs::k8s;
-use qobjs::ObjectMeta;
 use qobjs::common::*;
 use qobjs::func;
 use tokio::sync::Notify;
@@ -37,7 +36,6 @@ use crate::FUNC_NODE_MGR;
 use crate::PACKAGE_MGR;
 use crate::func_call::FuncCall;
 use crate::func_call::FuncCallInner;
-use crate::func_call::FuncCallId;
 use crate::func_call::FuncCallState;
 use crate::func_pod::*;
 use crate::message::FuncNodeMsg;
@@ -57,14 +55,9 @@ pub struct FuncNodeInner {
 
     pub nodeName: String,
     pub state: FuncNodeState,
-    pub FuncPods: BTreeMap<FuncPodId, FuncPod>,
-    pub ProcessingCallerFuncCalls: BTreeSet<FuncCallId>, 
-    pub PengingProcessingCallerFuncCalls: BTreeSet<FuncCallId>, 
-    // when node start up, funcalls which assumed processing by other nodes
-    pub CheckingProcessingCallerFuncCalls: BTreeSet<FuncCallId>, 
-    
-    pub ProcessingCalleeFuncCalls: BTreeSet<FuncCallId>,
-    pub CheckingCalleeFuncCalls: BTreeSet<FuncCallId>,
+    pub funcPods: BTreeMap<String, FuncPod>,
+    pub callerFuncCalls: BTreeSet<String>, 
+    pub calleeFuncCalls: BTreeSet<String>, 
 
     pub tx: Option<mpsc::Sender<SResult<func::FuncSvcMsg, Status>>>,
     pub internMsgTx: mpsc::Sender<FuncNodeMsg>,
@@ -96,6 +89,13 @@ impl FuncNode {
         return self.lock().unwrap().state.clone();
     }
 
+    pub fn IsRunning(&self) -> bool {
+        match self.State() {
+            FuncNodeState::WaitingConn => return false,
+            _ => return true
+        };
+    }
+
     pub fn Close(&self) {
         let notify = self.lock().unwrap().closeNotify.clone();
         notify.notify_waiters();
@@ -105,35 +105,14 @@ impl FuncNode {
         self.lock().unwrap().state = state;
     }
 
-    // check whether the node is processing the func call
-    // return: true: yes or possible(the node is in the waiting state and need confirm)
-    // false: No
-    pub fn CheckFuncCallProcessor(&self, funcCallId: &FuncCallId) -> bool {
-        let mut inner = self.lock().unwrap();
-        match &inner.state {
-            FuncNodeState::WaitingConn => {
-                inner.CheckingCalleeFuncCalls.insert(funcCallId.clone());
-                return true;
-            }
-            FuncNodeState::Running(_) => {
-                return inner.ProcessingCalleeFuncCalls.contains(funcCallId);
-            }
-        }
+    pub fn HasCallerFuncCall(&self, funcCallId: &str) -> bool {
+        let inner = self.lock().unwrap();
+        return inner.callerFuncCalls.contains(funcCallId);
     }
 
-    pub fn ConfirmFuncCallPrococessing(&self, funcCallId: &FuncCallId) {
-        let mut inner = self.lock().unwrap();
-        match &inner.state {
-            FuncNodeState::WaitingConn => {
-                inner.PengingProcessingCallerFuncCalls.insert(funcCallId.clone());
-            }
-            FuncNodeState::Running(_) => {
-                if inner.PengingProcessingCallerFuncCalls.remove(funcCallId) {
-                    // confirm the funcall  is processing by another node
-                    inner.ProcessingCalleeFuncCalls.insert(funcCallId.clone());
-                }
-            }
-        }
+    pub fn HasCalleeFuncCall(&self, funcCallId: &str) -> bool {
+        let inner = self.lock().unwrap();
+        return inner.calleeFuncCalls.contains(funcCallId);
     }
 
     // this will be called in 2 situations
@@ -141,15 +120,12 @@ impl FuncNode {
     // 2. When the Master FuncService die, the nodeagent sent FuncAgentRegisterReq to another FuncService
     pub fn OnNodeRegiste(&self, regReq: func::FuncAgentRegisterReq) -> Result<()> {    
         let mut inner = self.lock().unwrap();
-        for funccall in regReq.func_calls {
+        for funccall in regReq.callee_calls {
             let packageId = PackageId {
                 namespace: funccall.namespace.clone(),
                 packageName: funccall.package_name.clone(),
             };
-            let funcCallId = FuncCallId {
-                packageId: packageId.clone(),
-                funcName: funccall.func_name.clone(),
-            };
+            let funcCallId = funccall.func_name.clone();
 
             let package = match PACKAGE_MGR.Get(&packageId) {
                 None => {
@@ -159,49 +135,58 @@ impl FuncNode {
                 Some(p) => p,
             };
 
-            let state = if funccall.callee_node_id.len() == 0 {
-                inner.PengingProcessingCallerFuncCalls.insert(funcCallId.clone());
-                FuncCallState::Scheduling
-            } else {
-                match FUNC_NODE_MGR.Get(&funccall.callee_node_id) {
-                    None => {
-                        error!("StartProcess get invalid node name  {:?}", &funccall.callee_node_id);
-                        FuncCallState::Scheduling
-                    }
-                    Some(node) => {
-                        if node.CheckFuncCallProcessor(&funcCallId) {
-                            FuncCallState::Scheduled(funccall.callee_node_id.clone())
-                        } else {
-                            FuncCallState::Scheduling
-                        }
-                    }
-                }
+            let funcCallInner = FuncCallInner {
+                id: funcCallId.clone(),
+                package: package.clone(),
+
+                callerNodeId: funccall.caller_node_id.clone(),
+                callerFuncPodId: funccall.calller_pod_id.clone(),
+                calleeNodeId: Mutex::new(funccall.caller_node_id.clone()),
+                calleeFuncPodId: Mutex::new(funccall.calller_pod_id.clone()),
+                state: Mutex::new(FuncCallState::Cancelling),
+                parameters: funccall.parameters.clone(),
+                priority: funccall.priority as usize,
+                createTime: SystemTimeProto::FromTimestamp(funccall.createtime.as_ref().unwrap()).ToSystemTime(),
             };
 
-            let _funcall = match FUNC_CALL_MGR.Get(&funcCallId) {
+            let funcCall = FuncCall(Arc::new(funcCallInner));
+            
+            FUNC_CALL_MGR.lock().unwrap().RegisteCallee(&funcCall)?;
+        }
+
+        for funccall in regReq.caller_calls {
+            let packageId = PackageId {
+                namespace: funccall.namespace.clone(),
+                packageName: funccall.package_name.clone(),
+            };
+            let funcCallId = funccall.func_name.clone();
+
+            let package = match PACKAGE_MGR.Get(&packageId) {
                 None => {
-                    let funcCallContextInner = FuncCallInner {
-                        id: funcCallId.clone(),
-                        package: package.clone(),
-                        callerNode: self.clone(),
-                        state: Mutex::new(state),
-                        parameters: funccall.parameters.clone(),
-                        priority: funccall.priority,
-                        // todo: covert from funccall.createtime
-                        createTime: SystemTime::now(),
-                    };
-    
-                    let funcall = FuncCall(Arc::new(funcCallContextInner));
-                    FUNC_CALL_MGR.Add(&funcall);
-                    funcall
+                    error!("StartProcess get invalid package {:?}", packageId);
+                    continue;
                 }
-                Some(funccall) => {
-                    *funccall.state.lock().unwrap() = state;
-                    funccall
-                }
+                Some(p) => p,
             };
 
-            // todo: if the funcall is in scheduling state, schedule it
+            let funcCallInner = FuncCallInner {
+                id: funcCallId.clone(),
+                package: package.clone(),
+
+                callerNodeId: funccall.caller_node_id.clone(),
+                callerFuncPodId: funccall.calller_pod_id.clone(),
+                calleeNodeId: Mutex::new(funccall.caller_node_id.clone()),
+                calleeFuncPodId: Mutex::new(funccall.calller_pod_id.clone()),
+                state: Mutex::new(FuncCallState::Cancelling),
+                parameters: funccall.parameters.clone(),
+                priority: funccall.priority as usize,
+                createTime: SystemTimeProto::FromTimestamp(funccall.createtime.as_ref().unwrap()).ToSystemTime(),
+            };
+
+            let funcCall = FuncCall(Arc::new(funcCallInner));
+            
+            // todo: handle the situation when the result is ready
+            let _ret = FUNC_CALL_MGR.lock().unwrap().RegisteCaller(&funcCall)?;
         }
         
         for podStatus in regReq.func_pods {
@@ -217,51 +202,29 @@ impl FuncNode {
                 Some(p) => p,
             };
             let state = match podStatus.state {
-                n if func::FuncPodState::Creating as i32 == n => FuncPodState::Creating(SystemTime::now()),
-                n if func::FuncPodState::Keepalive as i32 == n => FuncPodState::Keepalive(SystemTime::now()),
+                n if func::FuncPodState::Idle as i32 == n => FuncPodState::Idle(SystemTime::now()),
                 n if func::FuncPodState::Running as i32 == n => {
-                    let node = match FUNC_NODE_MGR.Get(&podStatus.func_caller_node_id) {
-                        None => {
-                            error!("StartProcess get invalid node name  {:?}", &podStatus.func_caller_node_id);
-                            continue;
-                        }
-                        Some(n) => n,
-                    };
-
-                    let funcCallId = FuncCallId {
-                        packageId: packageId.clone(),
-                        funcName: podStatus.func_name.clone(),
-                    };
-                    
-                    node.ConfirmFuncCallPrococessing(&funcCallId);
-                    FuncPodState::Running(funcCallId)
+                    FuncPodState::Running(podStatus.func_call_id.clone())
                 }
                 _ => panic!("get unexpected podStatus.state {}", podStatus.state)
             };
 
-            let funcPodId = FuncPodId {
-                packageId: packageId.clone(),
-                podName: podStatus.pod_name.clone(),
-                nodeName: inner.nodeName.clone(),
-            };
+            let funcPodId = podStatus.func_pod_id.clone();
 
-            let pod : k8s::Pod = serde_json::from_str(&podStatus.pod)?;
-            match inner.FuncPods.get(&funcPodId) {
+            match inner.funcPods.get(&funcPodId) {
                 None => {
                     let podInner = FuncPodInner {
-                        podName: podStatus.pod_name.clone(),
+                        podName: podStatus.func_pod_id.clone(),
                         package: package,
                         node: self.clone(),
                         state: Mutex::new(state),
-                        pod: Mutex::new(pod),
                     };
                     let funcPod = FuncPod(Arc::new(podInner));
-                    inner.FuncPods.insert(funcPodId, funcPod);
+                    inner.funcPods.insert(funcPodId, funcPod);
 
                 }
                 Some(funcPod) => {
                     *funcPod.state.lock().unwrap() = state;
-                    *funcPod.pod.lock().unwrap() = pod;
                 }
             }
         }
@@ -387,29 +350,13 @@ impl FuncNode {
             podName: uid.clone(),
             package: package.clone(),
             node: self.clone(),
-            state: Mutex::new(FuncPodState::Creating(SystemTime::now())),
-            pod: Mutex::new(k8s::Pod {
-                metadata: ObjectMeta { 
-                    namespace: Some(package.Namespace()),
-                    name: Some(package.Name()),
-                    uid: Some(uid.clone()),
-                    ..Default::default()
-                },
-                spec: Some(package.Spec()),
-                ..Default::default()
-            })
+            state: Mutex::new(FuncPodState::Idle(SystemTime::now())),
         };
 
         let pod = FuncPod(Arc::new(inner));
-        self.CreatePod(&pod)?;
+        self.AddPod(&pod)?;
 
-        let funcPodId = FuncPodId {
-            packageId: package.PackageId(),
-            podName: uid,
-            nodeName: self.NodeName(),
-        };
-
-        self.lock().unwrap().FuncPods.insert(funcPodId, pod.clone());
+        self.lock().unwrap().funcPods.insert(uid, pod.clone());
 
         return Ok(pod);
     }
@@ -418,7 +365,7 @@ impl FuncNode {
         return self.lock().unwrap().nodeName.clone();
     }
 
-    pub fn CreatePod(&self, _pod: &FuncPod) -> Result<()> {
+    pub fn AddPod(&self, _pod: &FuncPod) -> Result<()> {
         unimplemented!();
     }
 }

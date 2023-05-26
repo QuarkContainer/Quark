@@ -22,12 +22,11 @@ use qobjs::common::*;
 
 use crate::FUNC_AGENT;
 
-use super::funcagent_msg::FuncPodMsg;
 
 #[derive(Debug)]
-pub enum InstanceState {
+pub enum funcPodId {
     Idle,
-    Running(u64), // handling FuncCallId
+    Running(String), // handling FuncCallId
 }
 
 #[derive(Debug)]
@@ -36,10 +35,11 @@ pub struct FuncPodInner {
     pub stop: AtomicBool,
 
     pub funcPodId: String,
-    pub state: InstanceState,
-    pub priority: usize,
+    pub namespace: String,
+    pub packageName: String,
+    pub state: funcPodId,
 
-    pub agentChann: mpsc::Sender<FuncPodMsg>,
+    pub agentChann: mpsc::Sender<SResult<func::FuncAgentMsg, tonic::Status>>,
 }
 
 #[derive(Debug, Clone)]
@@ -59,58 +59,43 @@ impl FuncPod {
         stream: tonic::Streaming<func::FuncAgentMsg>,
         agentTx: mpsc::Sender<SResult<func::FuncAgentMsg, tonic::Status>>) 
     -> Result<Self> {
-        let (tx, rx) = mpsc::channel(30);
-        let instanceId = registerMsg.instance_id.clone();
+        let funcPodId = registerMsg.func_pod_id.clone();
         let inner = FuncPodInner {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
-            funcPodId: instanceId.clone(),
-            priority: 1,
-            state: InstanceState::Idle,
-            agentChann: tx,
+            funcPodId: funcPodId.clone(),
+            namespace: registerMsg.namespace.to_string(),
+            packageName: registerMsg.package_name.to_string(),
+            state: funcPodId::Idle,
+            agentChann: agentTx,
         };
         let instance = FuncPod(Arc::new(inner));
         let clone = instance.clone();
         tokio::spawn(async move {
-            clone.Process(stream, agentTx, rx).await.unwrap();
+            clone.Process(stream).await.unwrap();
         });
 
         return Ok(instance);
     }
 
-    pub async fn ProcessInternalMsg(&self, _msg: FuncPodMsg, _tx: &mpsc::Sender<SResult<func::FuncAgentMsg, tonic::Status>>) -> Result<()> {
-        unimplemented!();
-    }
-
-    pub fn Priority(&self) -> usize {
-        return self.priority;
+    pub fn Send(&self, msg: func::FuncAgentMsg) -> Result<()> {
+        match self.agentChann.try_send(Ok(msg)) {
+            Ok(()) => return Ok(()),
+            Err(_) => return Err(Error::MpscSendFail),
+        }
     }
 
     pub async fn Process(
         &self, 
-        stream: tonic::Streaming<func::FuncAgentMsg>,
-        tx: mpsc::Sender<SResult<func::FuncAgentMsg, tonic::Status>>,
-        agentrx: mpsc::Receiver<FuncPodMsg>
+        stream: tonic::Streaming<func::FuncAgentMsg>
     ) -> Result<()> {
         let closeNotify = self.closeNotify.clone();
         let mut stream = stream;
-        let mut agentrx = agentrx;
 
         loop {
             tokio::select! {
                 _ = closeNotify.notified() => {
                     break;
-                }
-                interalMsg = agentrx.recv() => {
-                    match interalMsg {
-                        None => {
-                            panic!("FuncPod::StartProcess expect Pod internal message");
-                        }
-                        Some(msg) => {
-                            self.ProcessInternalMsg(msg, &tx).await?;
-                        }
-                    }
-                    
                 }
                 msg = stream.message() => {
                     let msg : func::FuncAgentMsg = match msg {

@@ -25,6 +25,8 @@ use qobjs::func::FuncSvcMsg;
 use tokio::sync::Notify;
 use tokio::sync::mpsc;
 
+use crate::FUNC_AGENT;
+
 #[derive(Debug, Clone)]
 pub struct FuncSvcClient {
     //pub closeNotify: Arc<Notify>,
@@ -124,10 +126,6 @@ impl FuncSvcClientMgr {
         }
     }
 
-    pub async fn ProcessExternalMsg(&self, _msg: func::FuncSvcMsg) -> Result<()> {
-        unimplemented!();
-    }
-
     pub async fn Process(&self, rx: mpsc::Receiver<FuncSvcMsg>) -> Result<()> {
         let mut client = FuncSvcClient::New(&self.svcAddr, func::FuncAgentRegisterReq::default()).await?;
         let mut currentMsg;
@@ -173,7 +171,8 @@ impl FuncSvcClientMgr {
                             }
                         }
                     };
-                    self.ProcessExternalMsg(msg).await?;
+
+                    FUNC_AGENT.OneFuncSvcMgr(msg).await?;
                 }
 
             }
