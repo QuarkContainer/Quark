@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use futures::future::LocalBoxFuture;
 
-pub type QServerlessFn = Box<dyn Fn(String) -> LocalBoxFuture<'static, Result<String, String>>>;
-
-
+pub type QSResult = Result<String, String>;
+#[async_trait::async_trait]
+pub trait QSFunc: Send + Sync {
+    async fn func(&self, parameters: String) -> QSResult;
+}
