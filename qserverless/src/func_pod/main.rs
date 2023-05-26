@@ -17,17 +17,42 @@
 #![allow(non_camel_case_types)]
 #![allow(non_upper_case_globals)]
 
+#[macro_use]
+extern crate log;
 
 pub mod func_def;
 pub mod func_mgr;
+pub mod funcagent_client;
+pub mod funcall_mgr;
+
+use funcagent_client::FuncAgentClient;
+use once_cell::sync::OnceCell;
+
+use qobjs::common::*;
 
 use crate::func_mgr::FuncMgr;
 
+lazy_static::lazy_static! {
+    pub static ref FUNC_MGR: FuncMgr = {
+        FuncMgr::Init()
+    };
+}
+
+pub static FUNC_AGENT_CLIENT: OnceCell<FuncAgentClient> = OnceCell::new();
+
+
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
+    log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
+    
+    FUNC_AGENT_CLIENT.set(FuncAgentClient::Init("http://27.0.0.1:1234").await?).unwrap();
+
+
     let mgr = FuncMgr::Init();
     println!("{:?}", mgr.Call("add", "gtest").await);
     println!("{:?}", mgr.Call("sub", "gtest").await);
     println!("{:?}", mgr.Call("sub1", "gtest").await);
     println!("Hello, world!");
+    
+    return Ok(());
 }

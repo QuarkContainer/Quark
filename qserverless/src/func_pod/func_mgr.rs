@@ -12,45 +12,83 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::Arc;
 use std::collections::BTreeMap;
-use futures::future::FutureExt; 
+
+use qobjs::func;
 
 use crate::func_def::*;
 
-
 #[derive(Default)]
 pub struct FuncMgr {
-    pub funcs: BTreeMap<String, QServerlessFn>,
+    pub funcPodId: String,
+    pub namespace: String,
+    pub packageName: String,
+    pub funcs: Arc<BTreeMap<String, Arc<dyn QSFunc>>>,
 }
+
+unsafe impl Send for FuncMgr{}
+unsafe impl Sync for FuncMgr{}
 
 impl FuncMgr {
+    pub fn FuncPodId(&self) -> String {
+        return self.funcPodId.clone();
+    }
+
+    pub fn RegisteMsg(&self) -> func::FuncPodRegisterReq {
+        return func::FuncPodRegisterReq {
+            func_pod_id: self.funcPodId.clone(),
+            namespace: self.namespace.clone(),
+            package_name: self.packageName.clone(),
+        }
+    }
+    
     pub fn Init() -> Self {
-        let mut map = Self::default();
+        let mut funcs: BTreeMap<String, Arc<dyn QSFunc>> = BTreeMap::new();
+        let mut mgr = Self::default();
 
-        map.AddFunc("add", Box::new(|a| add(a).boxed()));
-        map.AddFunc("sub", Box::new(|a| sub(a).boxed()));
+        mgr.funcPodId = uuid::Uuid::new_v4().to_string();
+        mgr.namespace = "test_ns".to_owned();
+        mgr.packageName = "test_package".to_owned();
 
-        return map;
+        funcs.insert("add".to_string(), Arc::new(Add{}));
+        funcs.insert("sub".to_string(), Arc::new(Sub{}));
+
+        return FuncMgr {
+            funcPodId: uuid::Uuid::new_v4().to_string(),
+            namespace: "test_ns".to_owned(),
+            packageName: "test_package".to_owned(),
+            funcs: Arc::new(funcs),
+        };
     }
 
-    pub fn AddFunc(&mut self, name: &str, f: QServerlessFn) {
-        self.funcs.insert(name.to_string(), f);
-    }
-
-    pub async fn Call(&self, name: &str, parameters: &str) -> Result<String, String> {
+    pub async fn Call(&self, name: &str, parameters: &str) -> QSResult {
         let f = match self.funcs.get(name) {
             None => return Err(format!("There is no func named {}", name)),
-            Some(f) => f,
+            Some(f) => f.clone(),
         };
 
-        return f(parameters.to_string()).await;
+        return f.func(parameters.to_string()).await;
     }
 }
 
-async fn add(_parameters: String) -> Result<String, String> {
-    Ok("add".to_string())
+#[derive(Debug)]
+pub struct Add {}
+
+#[async_trait::async_trait]
+impl QSFunc for Add {
+    async fn func(&self, _parameters: String) -> Result<String, String> {
+        Ok("add".to_string())
+    }
 }
 
-async fn sub(_parameters: String) -> Result<String, String> {
-    Err("sub".to_string())
+#[derive(Debug)]
+pub struct Sub {}
+
+#[async_trait::async_trait]
+impl QSFunc for Sub {
+    async fn func(&self, _parameters: String) -> Result<String, String> {
+        Err("sub".to_string())
+    }
+    
 }
