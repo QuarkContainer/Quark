@@ -16,6 +16,7 @@ use std::collections::BTreeMap;
 use std::sync::{Mutex, Arc};
 use std::result::Result as SResult;
 use std::time::SystemTime;
+use qobjs::utility::SystemTimeProto;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Response, Status};
 use tokio::sync::{oneshot, mpsc};
@@ -31,13 +32,16 @@ use super::funcpod_mgr::FuncPodMgr;
 #[derive(Debug)]
 pub struct FuncCallInner {
     pub id: String,
+    pub callerNodeId: String,
     pub callerFuncPodId: String,
+    pub calleeNodeId: String,
     pub calleeFuncPodId: String,
     pub namespace: String,
     pub package: String,
     pub funcName: String,
     pub priority: usize,
     pub parameters: String,
+    pub createTime: SystemTime,
 }
 
 
@@ -96,39 +100,40 @@ impl FuncAgent {
         stream: tonic::Streaming<func::FuncAgentMsg>,
         agentTx: mpsc::Sender<SResult<func::FuncAgentMsg, Status>>) 
     -> Result<()> {
-        let instanceId = registerMsg.instance_id.clone();
+        let funcPodId = registerMsg.func_pod_id.clone();
         let instance = FuncPod::New(registerMsg, stream, agentTx)?;
-        self.funcPodMgr.AddPod(&instanceId, &instance)?;
+        self.funcPodMgr.AddPod(&funcPodId, &instance)?;
         return Ok(());
     }
 
     pub fn OnFuncAgentCallReq(&self, callerId: &str, req: func::FuncAgentCallReq) -> Result<()> {
+        let createTime = SystemTime::now();
         let inner = FuncCallInner {
             id: req.id.clone(),
+            calleeNodeId: self.nodeId.clone(),
             callerFuncPodId: callerId.to_string(),
+            callerNodeId: String::new(),
             calleeFuncPodId: String::new(), // not assigned,
             namespace: req.namespace.clone(),
-            package: req.package.clone(),
+            package: req.package_name.clone(),
             funcName: req.func_name.clone(),
             parameters: req.parameters.clone(), 
             priority: req.priority as usize,
+            createTime: createTime,
         };
 
         let funcCall = FuncCall(Arc::new(inner));
         self.callerCalls.lock().unwrap().insert(req.id.clone(), funcCall);
 
-        let createTime = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos();
+        let protoTime = SystemTimeProto::FromSystemTime(createTime);
         let req = func::FuncSvcCallReq {
             id: req.id.clone(),
             namespace: req.namespace.to_string(),
-            package_name: req.package.to_string(),
+            package_name: req.package_name.to_string(),
             func_name: req.func_name.clone(),
             parameters: req.parameters.clone(), 
             priority: req.priority,
-            createtime: Some(func::Timestamp {
-                top:  (createTime >> 64) as u64,
-                bottom: createTime as u64,
-            }),
+            createtime: Some(protoTime.ToTimeStamp()),
             callee_node_id: self.nodeId.clone(),
             calller_pod_id: callerId.to_string(),
             caller_node_id: String::new(),
@@ -142,8 +147,61 @@ impl FuncAgent {
         return Ok(())
     }
 
-    pub fn OnFuncSvcCallReq(&self, _req: func::FuncSvcCallReq) -> Result<()> {
-        unimplemented!();
+    pub fn OnFuncSvcCallReq(&self, req: func::FuncSvcCallReq) -> Result<()> {
+        let funcPod = self.funcPodMgr.GetPod(&req.callee_pod_id)?;
+
+        let createTimeProto = SystemTimeProto::FromTimestamp(req.createtime.as_ref().unwrap());
+
+        let inner = FuncCallInner {
+            id: req.id.clone(),
+            callerNodeId: req.caller_node_id.clone(),
+            callerFuncPodId: req.callee_pod_id.clone(),
+            calleeNodeId: req.callee_node_id.clone(),
+            calleeFuncPodId: String::new(), // not assigned,
+            namespace: req.namespace.clone(),
+            package: req.package_name.clone(),
+            funcName: req.func_name.clone(),
+            parameters: req.parameters.clone(), 
+            priority: req.priority as usize,
+            createTime: createTimeProto.ToSystemTime(),
+        }; 
+
+        let funcCall = FuncCall(Arc::new(inner));
+        self.calleeCalls.lock().unwrap().insert(req.id.clone(), funcCall);
+
+        let req = func::FuncAgentCallReq {
+            id: req.id.clone(),
+            namespace: req.namespace.clone(),
+            package_name: req.package_name.clone(),
+            func_name: req.func_name.clone(),
+            parameters: req.parameters.clone(),
+            priority: req.priority,
+        };
+
+        funcPod.Send(func::FuncAgentMsg {
+            event_body: Some(func::func_agent_msg::EventBody::FuncAgentCallReq(req))
+        })?;
+
+        return Ok(())
+        
+    }
+
+    pub async fn OneFuncSvcMgr(&self, msg: func::FuncSvcMsg) -> Result<()> {
+        let body = match msg.event_body {
+            None => return Err(Error::EINVAL),
+            Some(b) => b,
+        };
+
+        match body {
+            func::func_svc_msg::EventBody::FuncSvcCallReq(msg) => {
+                self.OnFuncSvcCallReq(msg)?;
+            }
+            _ => {
+
+            }
+        };
+
+        return Ok(())    
     }
 
     pub async fn OnFuncAgentMsg(&self, callerId: &str, msg: func::FuncAgentMsg) -> Result<()> {

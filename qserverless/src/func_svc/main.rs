@@ -57,7 +57,7 @@ lazy_static! {
     };
 
     pub static ref FUNC_CALL_MGR: FuncCallMgr = {
-        FuncCallMgr::New()
+        FuncCallMgr::default()
     };
 }
 

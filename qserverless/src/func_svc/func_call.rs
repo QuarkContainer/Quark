@@ -13,9 +13,13 @@
 // limitations under the License.
 
 use core::ops::Deref;
-use std::{sync::{Arc, Mutex, Weak}, time::SystemTime, collections::BTreeMap};
+use std::sync::{Arc, Mutex, Weak}; 
+use std::time::SystemTime;
+use std::collections::BTreeMap;
 
-use crate::{scheduler::Resource, func_node::FuncNode};
+use qobjs::common::*;
+
+use crate::scheduler::Resource;
 use crate::package::*;
 
 #[derive(Debug, Clone)]
@@ -48,26 +52,50 @@ impl PartialEq for FuncCallId {
 
 impl Eq for FuncCallId {}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FuncCallResult {
+    Err(String),
+    Ok(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FuncCallState {
     // FuncSvc get func request and put in pending queue
     Scheduling,
     // FuncSvc scheduled the Func to one FuncAgent
-    Scheduled(String), // the content is callee NodeId
-    // Callee FuncAgent complete the request and return result to caller
-    Complete(String), // the content is the funcCall result
+    Scheduled, // the content is callee NodeId
+    // there is callee, but caller is not online
+    PendingCaller(SystemTime),
+    // there is Caller, but callee is not online
+    PendingCallee(SystemTime), // the content is callee NodeId
+    // there is callee and result is done, waiting for caller
+    PendingCallerWithResult((SystemTime, FuncCallResult)),
+    //
+    Cancelling,
+}
+
+impl FuncCallState {
+    pub fn IsCancelling(&self) -> bool {
+        match self {
+            FuncCallState::Cancelling => return true,
+            _ => return false,
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct FuncCallInner {
-    pub id: FuncCallId,
+    pub id: String,
     pub package: Package,
-    pub callerNode: FuncNode,
-
+    
+    pub callerNodeId: String,
+    pub callerFuncPodId: String,
+    pub calleeNodeId: Mutex<String>,
+    pub calleeFuncPodId: Mutex<String>,
     pub state: Mutex<FuncCallState>,
 
     pub parameters: String,
-    pub priority: i32,
+    pub priority: usize,
     pub createTime: SystemTime,
 }
 
@@ -91,10 +119,6 @@ impl FuncCall {
         return self.package.ReqResource();
     }
 
-    pub fn Id(&self) -> FuncCallId {
-        return self.id.clone();
-    }
-
     pub fn Priority(&self) -> usize {
         return self.priority as usize;
     }
@@ -102,6 +126,16 @@ impl FuncCall {
     pub fn Package(&self) -> Package {
         return self.package.clone();
     }
+
+    pub fn SetState(&self, state: FuncCallState) {
+        *self.state.lock().unwrap() = state;
+    }
+
+    pub fn Match(&self, _other: &FuncCall) -> bool {
+        // todo:
+        return true;
+    }
+
 }
 
 #[derive(Debug, Clone)]
@@ -126,22 +160,104 @@ impl FuncCallWeak {
     }
 }
 
-pub struct FuncCallMgr {
-    pub funcCalls: Mutex<BTreeMap<FuncCallId, FuncCall>>,
+#[derive(Debug, Default)]
+pub struct FuncCallMgrInner {
+    pub funcCalls: BTreeMap<String, FuncCall>,
+    // the function callee has finished with result, but the caller is not online
+    pub pendingResultFuncCalls: BTreeMap<SystemTime, String>,
+    // the function is running by some callee, but the caller is not online
+    pub pendingCallerFuncCalls: BTreeMap<SystemTime, String>,
+    // the function apppears in caller and shows running, but callee node is not online
+    pub pendingCalleeFuncCalls: BTreeMap<SystemTime, String>,
 }
 
-impl FuncCallMgr {
-    pub fn New() -> Self {
-        return Self {
-            funcCalls: Mutex::new(BTreeMap::new()),
+impl FuncCallMgrInner {
+    pub fn RegisteCallee(&mut self, funcCall: &FuncCall) -> Result<()> {
+        let now = SystemTime::now();
+        match self.funcCalls.get(&funcCall.id) {
+            None => {
+                funcCall.SetState(FuncCallState::PendingCaller(now));
+                self.pendingCallerFuncCalls.insert(now, funcCall.id.clone());
+                self.funcCalls.insert(funcCall.id.clone(), funcCall.clone());
+                return Ok(())
+            }
+            Some(curr) => {
+                if !curr.Match(funcCall) {
+                    error!("find unmatched func call...");
+                    return Ok(())
+                }
+                {
+                    let mut statlock = curr.state.lock().unwrap();
+                    match *statlock {
+                        FuncCallState::PendingCallee(time) => {
+                            if *curr.calleeFuncPodId.lock().unwrap() != *funcCall.calleeFuncPodId.lock().unwrap() {
+                                return Ok(())
+                            }
+                            self.pendingCalleeFuncCalls.remove(&time);
+                        }
+                        _ => {
+                            // the func has no callee before, just drop it silently
+                            return Ok(())
+                        }
+                    }
+                    *statlock = FuncCallState::Scheduled;
+                }
+                
+            }
         }
+
+        return Ok(())
     }
 
-    pub fn Add(&self, funcCall: &FuncCall) {
-        self.funcCalls.lock().unwrap().insert(funcCall.Id(), funcCall.clone());
-    }
+    pub fn RegisteCaller(&mut self, funcCall: &FuncCall) -> Result<Option<FuncCallResult>> {
+        let now = SystemTime::now();
+        match self.funcCalls.get(&funcCall.id) {
+            None => {
+                funcCall.SetState(FuncCallState::PendingCallee(now));
+                self.pendingCalleeFuncCalls.insert(now, funcCall.id.clone());
+                self.funcCalls.insert(funcCall.id.clone(), funcCall.clone());
+                return Ok(None)
+            }
+            Some(curr) => {
+                if !curr.Match(funcCall) {
+                    error!("find unmatched func call...");
+                    return Ok(None)
+                }
+                {
+                    let mut statlock = curr.state.lock().unwrap();
+                    match &*statlock {
+                        FuncCallState::PendingCaller(time) => {
+                            if *curr.callerFuncPodId != *funcCall.callerFuncPodId {
+                                return Ok(None)
+                            }
+                            self.pendingCallerFuncCalls.remove(&time);
+                        }
+                        FuncCallState::PendingCallerWithResult((time, result)) => {
+                            self.pendingResultFuncCalls.remove(&time);
+                            return Ok(Some(result.clone()));
+                        }
+                        _ => {
+                            // the func has no callee before, just drop it silently
+                            return Ok(None)
+                        }
+                    }
+                    *statlock = FuncCallState::Scheduled;
+                }
+                
+            }
+        }
 
-    pub fn Get(&self, id: &FuncCallId) -> Option<FuncCall> {
-        return self.funcCalls.lock().unwrap().get(id).cloned();
+        return Ok(None)
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct FuncCallMgr(Arc<Mutex<FuncCallMgrInner>>);
+
+impl Deref for FuncCallMgr {
+    type Target = Arc<Mutex<FuncCallMgrInner>>;
+
+    fn deref(&self) -> &Arc<Mutex<FuncCallMgrInner>> {
+        &self.0
     }
 }

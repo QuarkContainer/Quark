@@ -1,10 +1,10 @@
-All: na nm fi fs
+All: na nm fp fs
 na:
 	cargo build --bin node_agent
 nm:
 	cargo build --bin node_mgr
-fi:
-	cargo build --bin func_inst
+fp:
+	cargo build --bin func_pod
 fs:
 	cargo build --bin func_svc
 test:

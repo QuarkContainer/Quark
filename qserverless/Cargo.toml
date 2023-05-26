@@ -74,8 +74,8 @@ name = "node_agent"
 path = "src/node_agent/na_main.rs"
 
 [[bin]]
-name = "func_inst"
-path = "src/func_instance/main.rs"
+name = "func_pod"
+path = "src/func_pod/main.rs"
 
 [[bin]]
 name = "func_svc"
