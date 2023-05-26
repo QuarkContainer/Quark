@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2014 The Kubernetes Authors
+// Copyright (c) 2021 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,22 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(dead_code)]
-#![allow(non_snake_case)]
-#![allow(non_camel_case_types)]
-#![allow(non_upper_case_globals)]
+use futures::future::LocalBoxFuture;
+
+pub type QServerlessFn = Box<dyn Fn(String) -> LocalBoxFuture<'static, Result<String, String>>>;
 
 
-pub mod func_def;
-pub mod func_mgr;
-
-use crate::func_mgr::FuncMgr;
-
-#[tokio::main]
-async fn main() {
-    let mgr = FuncMgr::Init();
-    println!("{:?}", mgr.Call("add", "gtest").await);
-    println!("{:?}", mgr.Call("sub", "gtest").await);
-    println!("{:?}", mgr.Call("sub1", "gtest").await);
-    println!("Hello, world!");
-}
