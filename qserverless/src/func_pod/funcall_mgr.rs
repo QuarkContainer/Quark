@@ -18,6 +18,7 @@ use std::sync::Mutex;
 
 use core::ops::Deref;
 
+use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
 use qobjs::func;
@@ -49,13 +50,18 @@ impl Deref for FuncCall {
 pub struct FuncCallMgr {
     pub callerCalls: Mutex<BTreeMap<String, oneshot::Sender<QSResult>>>,
     pub funcMgr: Arc<FuncMgr>,
+    pub reqSender: mpsc::Sender<func::FuncAgentCallReq>,
+    pub reqRecv: Mutex<Option<mpsc::Receiver<func::FuncAgentCallReq>>>,
 }
 
 impl FuncCallMgr {
     pub fn Init() -> Self {
+        let (tx, rx) = mpsc::channel(30);
         return Self {
             callerCalls: Mutex::new(BTreeMap::new()),
             funcMgr: Arc::new(FuncMgr::Init()),
+            reqSender: tx,
+            reqRecv: Mutex::new(Some(rx)),
         }
     }
     
@@ -100,9 +106,19 @@ impl FuncCallMgr {
         return Ok(())
     }
 
-    pub fn LocalCall(&self, call: func::FuncAgentCallReq) {
+    pub async fn Process(&self) -> Result<()> {
+        let mut rx = match self.reqRecv.lock().unwrap().take() {
+            None => return Err(Error::CommonError("FuncCallMgr process can't run twice".to_owned())),
+            Some(rx) => rx,
+        };
+
         let funcMgr = self.funcMgr.clone();
-        tokio::spawn(async move {
+        loop {
+            let call = match rx.recv().await {
+                None => break,
+                Some(req) => req,
+            };
+
             let id = call.id.clone();
             let res = funcMgr.Call(&call.func_name, &call.parameters).await;
             let resp = match res {
@@ -127,6 +143,15 @@ impl FuncCallMgr {
             };
 
             FUNC_AGENT_CLIENT.get().unwrap().Send(msg);
-        });
+        }
+        
+        return Ok(())
+    }
+
+    pub fn LocalCall(&self, call: func::FuncAgentCallReq) -> Result<()>{
+        match self.reqSender.try_send(call) {
+            Ok(()) => return Ok(()),
+            Err(_e) => return Err(Error::MpscSendFail),
+        }
     }
 }

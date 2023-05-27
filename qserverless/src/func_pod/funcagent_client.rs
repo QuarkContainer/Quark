@@ -23,7 +23,7 @@ use qobjs::func;
 use qobjs::func::FuncAgentMsg;
 use qobjs::common::*;
 
-use crate::FUNC_MGR;
+use crate::FUNC_CALL_MGR;
 
 #[derive(Debug)]
 pub struct FuncAgentClientInner {
@@ -62,7 +62,7 @@ impl FuncAgentClient {
 
         let (tx, rx) = mpsc::channel(0);
         tx.try_send(func::FuncAgentMsg {
-            event_body: Some(func::func_agent_msg::EventBody::FuncPodRegisterReq(FUNC_MGR.RegisteMsg())),
+            event_body: Some(func::func_agent_msg::EventBody::FuncPodRegisterReq(FUNC_CALL_MGR.funcMgr.RegisteMsg())),
         }).unwrap();
 
         let stream = tokio_stream::wrappers::ReceiverStream::new(rx);

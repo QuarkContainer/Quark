@@ -38,6 +38,7 @@ pub mod k8s_util;
 pub mod watch;
 pub mod cacher;
 pub mod utility;
+pub mod func_client;
 
 #[macro_use]
 extern crate scopeguard;

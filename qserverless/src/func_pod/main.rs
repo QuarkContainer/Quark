@@ -30,29 +30,22 @@ use once_cell::sync::OnceCell;
 
 use qobjs::common::*;
 
-use crate::func_mgr::FuncMgr;
+use crate::funcall_mgr::*;
 
 lazy_static::lazy_static! {
-    pub static ref FUNC_MGR: FuncMgr = {
-        FuncMgr::Init()
+    pub static ref FUNC_CALL_MGR: FuncCallMgr = {
+        FuncCallMgr::Init()
     };
 }
 
 pub static FUNC_AGENT_CLIENT: OnceCell<FuncAgentClient> = OnceCell::new();
-
 
 #[tokio::main]
 async fn main() -> Result<()> {
     log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
     
     FUNC_AGENT_CLIENT.set(FuncAgentClient::Init("http://27.0.0.1:1234").await?).unwrap();
-
-
-    let mgr = FuncMgr::Init();
-    println!("{:?}", mgr.Call("add", "gtest").await);
-    println!("{:?}", mgr.Call("sub", "gtest").await);
-    println!("{:?}", mgr.Call("sub1", "gtest").await);
-    println!("Hello, world!");
+    FUNC_CALL_MGR.Process().await?;
     
     return Ok(());
 }
