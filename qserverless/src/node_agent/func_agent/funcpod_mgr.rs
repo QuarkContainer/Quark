@@ -21,6 +21,7 @@ use core::ops::Deref;
 use tokio::sync::Notify;
 
 use qobjs::common::*;
+use qobjs::func;
 
 use crate::func_agent::funcpod::FuncPod;
 
@@ -51,11 +52,17 @@ impl FuncPodMgr {
         return Ok(())
     }
 
-    pub fn GetPod(&self, id: &str) -> Result<FuncPod> {
-        match self.pods.lock().unwrap().get(id) {
+    pub fn GetPod(&self, funcPodId: &str) -> Result<FuncPod> {
+        match self.pods.lock().unwrap().get(funcPodId) {
             None => return Err(Error::ENOENT),
             Some(pod) => return Ok(pod.clone()),
         }
+    }
+
+    pub fn SendTo(&self, funcPodId: &str, msg: func::FuncAgentMsg) -> Result<()> {
+        let pod = self.GetPod(funcPodId)?;
+        pod.Send(msg)?;
+        return Ok(())
     }
 }
 

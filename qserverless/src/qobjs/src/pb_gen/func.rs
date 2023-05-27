@@ -185,9 +185,20 @@ pub struct FuncSvcCallReq {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncSvcCallResp {
     #[prost(string, tag = "1")]
-    pub error: ::prost::alloc::string::String,
+    pub id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
+    pub error: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
     pub resp: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub caller_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub calller_pod_id: ::prost::alloc::string::String,
+    /// when funcCall is process by a funcPod, this is the NodeId
+    #[prost(string, tag = "10")]
+    pub callee_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
+    pub callee_pod_id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -332,6 +343,25 @@ pub mod func_agent_service_client {
             );
             self.inner.streaming(request.into_streaming_request(), path, codec).await
         }
+        pub async fn func_call(
+            &mut self,
+            request: impl tonic::IntoRequest<super::FuncAgentCallReq>,
+        ) -> Result<tonic::Response<super::FuncAgentCallResp>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/func.FuncAgentService/FuncCall",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
     }
 }
 /// Generated client implementations.
@@ -444,6 +474,10 @@ pub mod func_agent_service_server {
             &self,
             request: tonic::Request<tonic::Streaming<super::FuncAgentMsg>>,
         ) -> Result<tonic::Response<Self::StreamProcessStream>, tonic::Status>;
+        async fn func_call(
+            &self,
+            request: tonic::Request<super::FuncAgentCallReq>,
+        ) -> Result<tonic::Response<super::FuncAgentCallResp>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct FuncAgentServiceServer<T: FuncAgentService> {
@@ -543,6 +577,44 @@ pub mod func_agent_service_server {
                                 send_compression_encodings,
                             );
                         let res = grpc.streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/func.FuncAgentService/FuncCall" => {
+                    #[allow(non_camel_case_types)]
+                    struct FuncCallSvc<T: FuncAgentService>(pub Arc<T>);
+                    impl<
+                        T: FuncAgentService,
+                    > tonic::server::UnaryService<super::FuncAgentCallReq>
+                    for FuncCallSvc<T> {
+                        type Response = super::FuncAgentCallResp;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::FuncAgentCallReq>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).func_call(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = FuncCallSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
                         Ok(res)
                     };
                     Box::pin(fut)
