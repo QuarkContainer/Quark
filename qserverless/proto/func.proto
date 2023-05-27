@@ -17,6 +17,7 @@ package func;
 
 service FuncAgentService {
   rpc StreamProcess(stream FuncAgentMsg) returns (stream FuncAgentMsg);
+  rpc FuncCall(FuncAgentCallReq) returns (FuncAgentCallResp);
 }
 
 message FuncAgentMsg {
@@ -115,8 +116,15 @@ message FuncSvcCallReq {
 }
 
 message FuncSvcCallResp {
-    string error = 1;
-    string resp = 2;
+  string id = 1;
+  string error = 2;
+  string resp = 3;
+  
+  string callerNodeId = 8;
+  string calllerPodId = 9; 
+
+  string calleeNodeId = 10; // when funcCall is process by a funcPod, this is the NodeId
+  string calleePodId = 11;
 }
 
 enum FuncPodState {

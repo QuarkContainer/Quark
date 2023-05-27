@@ -58,7 +58,7 @@ impl Deref for FuncCall {
 
 #[derive(Debug)]
 pub struct FuncCallContext {
-    pub respChann: oneshot::Sender<Result<String>>,
+    pub respChann: oneshot::Sender<SResult<String, String>>,
 }
 
 #[derive(Debug, Default)]
@@ -73,9 +73,9 @@ pub struct FuncAgent {
 }
 
 impl FuncAgent {
-    pub fn CallResponse(&self, callId: &str, response: Result<String>) -> Result<()> {
-        match self.callContexts.lock().unwrap().remove(callId) {
-            None => return Err(Error::CommonError(format!("get unepxecet callid {}", callId))),
+    pub fn CallResponse(&self, funcCallId: &str, response: SResult<String, String>) -> Result<()> {
+        match self.callContexts.lock().unwrap().remove(funcCallId) {
+            None => return Err(Error::CommonError(format!("get unepxecet callid {}", funcCallId))),
             Some(context) => {
                 context.respChann.send(response).expect("CallResponse fail...");
             }
@@ -84,11 +84,21 @@ impl FuncAgent {
         return Ok(())
     }
 
-    pub async fn FuncCall(&self, funcCall: &FuncCall) -> Result<String> {
+    pub async fn FuncCall(&self, funcCallReq: func::FuncAgentCallReq) -> SResult<String, String> {
         let (tx, rx) = oneshot::channel();
-        self.callContexts.lock().unwrap().insert(funcCall.id.clone(), FuncCallContext {
+        let id = funcCallReq.id.clone();
+        self.callContexts.lock().unwrap().insert(id.clone(), FuncCallContext {
             respChann: tx,
         });
+
+        // if callerId is "", it is from grpc call directly
+        match self.OnFuncAgentCallReq("", funcCallReq) {
+            Ok(()) => (),
+            Err(e) => {
+                self.callContexts.lock().unwrap().remove(&id);
+                return Err(format!("{:?}", e));
+            }
+        }
 
         let ret = rx.await.expect("get unepxecet oneshot result");
         return ret;
@@ -106,12 +116,12 @@ impl FuncAgent {
         return Ok(());
     }
 
-    pub fn OnFuncAgentCallReq(&self, callerId: &str, req: func::FuncAgentCallReq) -> Result<()> {
+    pub fn OnFuncAgentCallReq(&self, callerFuncPodId: &str, req: func::FuncAgentCallReq) -> Result<()> {
         let createTime = SystemTime::now();
         let inner = FuncCallInner {
             id: req.id.clone(),
             calleeNodeId: self.nodeId.clone(),
-            callerFuncPodId: callerId.to_string(),
+            callerFuncPodId: callerFuncPodId.to_string(),
             callerNodeId: String::new(),
             calleeFuncPodId: String::new(), // not assigned,
             namespace: req.namespace.clone(),
@@ -134,9 +144,9 @@ impl FuncAgent {
             parameters: req.parameters.clone(), 
             priority: req.priority,
             createtime: Some(protoTime.ToTimeStamp()),
-            callee_node_id: self.nodeId.clone(),
-            calller_pod_id: callerId.to_string(),
-            caller_node_id: String::new(),
+            caller_node_id: self.nodeId.clone(),
+            calller_pod_id: callerFuncPodId.to_string(),
+            callee_node_id: String::new(),
             callee_pod_id: String::new(),
         };
 
@@ -184,6 +194,31 @@ impl FuncAgent {
 
         return Ok(())
         
+    }
+
+    pub fn OnFuncSvcCallResp(&self, resp: func::FuncSvcCallResp) -> Result<()> {
+        let id = resp.id.clone();
+        let callerPodId = resp.callee_pod_id.clone();
+        
+        if callerPodId.len() == 0 { // it is from grpc gateway direct call
+            let resp = if resp.error.len() == 0 {
+                Ok(resp.resp)
+            } else {
+                Err(resp.error)
+            };
+            self.CallResponse(&id, resp)?;
+        } else {
+            let resp = func::FuncAgentCallResp {
+                id: id,
+                resp: resp.resp,
+                error: resp.error,
+            };
+            self.funcPodMgr.SendTo(&callerPodId, func::FuncAgentMsg {
+                event_body: Some(func::func_agent_msg::EventBody::FuncAgentCallResp(resp)),
+            })?;
+        }
+        
+        return Ok(())
     }
 
     pub async fn OneFuncSvcMgr(&self, msg: func::FuncSvcMsg) -> Result<()> {
@@ -250,5 +285,28 @@ impl func::func_agent_service_server::FuncAgentService for FuncAgent {
         let (tx, rx) = mpsc::channel(30);
         self.OnNewConnection(&registerMsg, stream, tx).unwrap();
         return Ok(Response::new(ReceiverStream::new(rx)));
+    }
+
+    async fn func_call(
+        &self,
+        request: tonic::Request<func::FuncAgentCallReq>,
+    ) -> SResult<tonic::Response<func::FuncAgentCallResp>, tonic::Status> {
+        let req = request.into_inner();
+        let id = req.id.clone();
+        let res = self.FuncCall(req).await;
+        let resp = match res {
+            Ok(response) => func::FuncAgentCallResp {
+                id: id,
+                resp: response,
+                error: String::new(),
+            },
+            Err(err) => func::FuncAgentCallResp {
+                id: id,
+                resp: String::new(),
+                error: err,
+            }
+        };
+        
+        return Ok(Response::new(resp));
     }
 }
