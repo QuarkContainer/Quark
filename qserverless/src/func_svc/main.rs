@@ -27,6 +27,7 @@ extern crate log;
 use func_call::FuncCallMgr;
 use func_node::FuncNodeMgr;
 use func_pod::FuncPodMgr;
+use func_svc::FuncSvc;
 use lazy_static::lazy_static;
 
 pub mod func_svc;
@@ -58,6 +59,10 @@ lazy_static! {
 
     pub static ref FUNC_CALL_MGR: FuncCallMgr = {
         FuncCallMgr::default()
+    };
+
+    pub static ref FUNC_SVC_MGR: FuncSvc = {
+        FuncSvc::default()
     };
 }
 

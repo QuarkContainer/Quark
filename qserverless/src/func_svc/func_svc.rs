@@ -15,9 +15,12 @@
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::time::SystemTime;
+use std::result::Result as SResult;
 use core::ops::Deref;
+use tokio::sync::mpsc;
 
 use qobjs::common::*;
+use qobjs::func;
 
 use crate::scheduler::Resource;
 use crate::task_queue::*;
@@ -41,6 +44,7 @@ pub struct FuncInstance {
     pub runningPod: Option<FuncPod>,
 }
 
+#[derive(Debug, Default)]
 pub struct FuncSvcInner {
     pub queue: TaskQueue,
     
@@ -63,6 +67,7 @@ pub struct FuncSvcInner {
     pub totalResource: Resource,
 }
 
+#[derive(Debug, Default)]
 pub struct FuncSvc(Mutex<FuncSvcInner>);
 
 impl Deref for FuncSvc {
@@ -74,6 +79,22 @@ impl Deref for FuncSvc {
 }
 
 impl FuncSvcInner {
+    pub fn OnAgentRegister(
+        &self, 
+        req: func::FuncAgentRegisterReq,
+        stream: tonic::Streaming<func::FuncSvcMsg>,
+        tx: mpsc::Sender<SResult<func::FuncSvcMsg, tonic::Status>>
+    ) -> Result<()> {
+        let agentId = req.node_id.clone();
+        let node = match self.nodes.get(&agentId) {
+            None => return Err(Error::CommonError(format!("OnAgentRegiste not recognize agent {}", agentId))),
+            Some(n) => n.clone()
+        };
+
+        node.CreateProcessor(req, stream, tx)?;
+        return Ok(())
+    }
+
     // when a pod exiting process finish, free the occupied resources and schedule creating new pod
     pub fn OnPodExit(&mut self, pod: &FuncPod) -> Result<()> {
         let package = pod.package.clone();
@@ -85,10 +106,10 @@ impl FuncSvcInner {
     } 
 
     // when recieve a new task 
-    pub fn OnNewTask(&mut self, task: &FuncCall) -> Result<()> {
-        let package = task.Package();
+    pub fn OnNewFuncCall(&mut self, funcCall: &FuncCall) -> Result<()> {
+        let package = funcCall.Package();
         
-        let ret = package.lock().unwrap().OnNewTask(task)?;
+        let ret = package.lock().unwrap().OnNewFuncCall(funcCall)?;
         match ret {
             None => return Ok(()),
             Some(t) => {

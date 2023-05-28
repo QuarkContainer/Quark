@@ -23,6 +23,7 @@ use qobjs::common::*;
 use crate::func_call::FuncCall;
 use crate::package::*;
 use crate::func_node::*;
+use crate::message::FuncNodeMsg;
 
 #[derive(Debug, Clone)]
 pub struct FuncPodId {
@@ -64,7 +65,7 @@ impl Eq for FuncPodId {}
 #[derive(Debug)]
 pub enum FuncPodState {
     Idle(SystemTime), // IdleTime
-    Running(String), 
+    Running(String), // the funcId
 }
 
 #[derive(Debug)]
@@ -87,8 +88,12 @@ impl Deref for FuncPod {
 }
 
 impl FuncPod {
-    pub fn RunTask(&self, _task: &FuncCall) -> Result<()> {
-        unimplemented!();
+    pub fn ScheduleFuncCall(&self, funcCall: &FuncCall) -> Result<()> {
+        self.node.Send(FuncNodeMsg::FuncCall(funcCall.clone()))?;
+
+        *self.state.lock().unwrap() = FuncPodState::Running(funcCall.id.clone());
+
+        return Ok(())
     }
 
     pub fn SetKeepalive(&self) -> SystemTime {
@@ -114,6 +119,13 @@ impl FuncPodMgr {
     pub fn New() -> Self {
         return Self {
             pods: Mutex::new(BTreeMap::new()),
+        }
+    }
+
+    pub fn Get(&self, podName: &str) -> Result<FuncPod> {
+        match self.pods.lock().unwrap().get(podName) {
+            None => return Err(Error::ENOENT),
+            Some(p) => return Ok(p.clone()),
         }
     }
 }
