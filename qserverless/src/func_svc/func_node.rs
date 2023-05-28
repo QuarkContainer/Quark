@@ -33,6 +33,8 @@ use tokio::sync::Notify;
 
 use crate::FUNC_CALL_MGR;
 use crate::FUNC_NODE_MGR;
+use crate::FUNC_POD_MGR;
+use crate::FUNC_SVC_MGR;
 use crate::PACKAGE_MGR;
 use crate::func_call::FuncCall;
 use crate::func_call::FuncCallInner;
@@ -45,7 +47,7 @@ use crate::package::PackageId;
 #[derive(Debug, Clone)]
 pub enum FuncNodeState {
     WaitingConn, // master node waiting for nodeagent connection
-    Running(mpsc::Sender<SResult<func::FuncSvcMsg, Status>>), // get the registration message
+    Running, // get the registration message
 }
 
 #[derive(Debug)]
@@ -59,15 +61,11 @@ pub struct FuncNodeInner {
     pub callerFuncCalls: BTreeSet<String>, 
     pub calleeFuncCalls: BTreeSet<String>, 
 
-    pub tx: Option<mpsc::Sender<SResult<func::FuncSvcMsg, Status>>>,
+    pub tx: mpsc::Sender<FuncNodeMsg>,
     pub internMsgTx: mpsc::Sender<FuncNodeMsg>,
 
     pub processorHandler: Option<JoinHandle<()>>,
     pub internMsgRx: Option<mpsc::Receiver<FuncNodeMsg>>,
-}
-
-impl FuncNodeInner {
-
 }
 
 #[derive(Debug, Clone)]
@@ -81,9 +79,14 @@ impl Deref for FuncNode {
     }
 }
 
-
 impl FuncNode {
     //pub fn New(name: &str) -> Result<()> {}
+    pub fn Send(&self, msg: FuncNodeMsg) -> Result<()> {
+        match self.lock().unwrap().tx.try_send(msg) {
+            Ok(()) => return Ok(()),
+            Err(_) => return Err(Error::MpscSendFail),
+        }
+    }
 
     pub fn State(&self) -> FuncNodeState {
         return self.lock().unwrap().state.clone();
@@ -118,7 +121,7 @@ impl FuncNode {
     // this will be called in 2 situations
     // 1. When the nodeagent reconnect to the FuncService, todo: need to handle this scenario
     // 2. When the Master FuncService die, the nodeagent sent FuncAgentRegisterReq to another FuncService
-    pub fn OnNodeRegiste(&self, regReq: func::FuncAgentRegisterReq) -> Result<()> {    
+    pub fn OnNodeRegister(&self, regReq: func::FuncAgentRegisterReq) -> Result<()> {    
         let mut inner = self.lock().unwrap();
         for funccall in regReq.callee_calls {
             let packageId = PackageId {
@@ -128,16 +131,17 @@ impl FuncNode {
             let funcCallId = funccall.func_name.clone();
 
             let package = match PACKAGE_MGR.Get(&packageId) {
-                None => {
+                Err(_) => {
                     error!("StartProcess get invalid package {:?}", packageId);
                     continue;
                 }
-                Some(p) => p,
+                Ok(p) => p,
             };
 
             let funcCallInner = FuncCallInner {
                 id: funcCallId.clone(),
                 package: package.clone(),
+                funcName: funccall.func_name.clone(),
 
                 callerNodeId: funccall.caller_node_id.clone(),
                 callerFuncPodId: funccall.calller_pod_id.clone(),
@@ -162,16 +166,17 @@ impl FuncNode {
             let funcCallId = funccall.func_name.clone();
 
             let package = match PACKAGE_MGR.Get(&packageId) {
-                None => {
+                Err(_) => {
                     error!("StartProcess get invalid package {:?}", packageId);
                     continue;
                 }
-                Some(p) => p,
+                Ok(p) => p,
             };
 
             let funcCallInner = FuncCallInner {
                 id: funcCallId.clone(),
                 package: package.clone(),
+                funcName: funccall.func_name.clone(),
 
                 callerNodeId: funccall.caller_node_id.clone(),
                 callerFuncPodId: funccall.calller_pod_id.clone(),
@@ -195,11 +200,11 @@ impl FuncNode {
                 packageName: podStatus.package_name.clone(),
             };
             let package = match PACKAGE_MGR.Get(&packageId) {
-                None => {
+                Err(_) => {
                     error!("StartProcess get invalid package {:?}", packageId);
                     continue;
                 }
-                Some(p) => p,
+                Ok(p) => p,
             };
             let state = match podStatus.state {
                 n if func::FuncPodState::Idle as i32 == n => FuncPodState::Idle(SystemTime::now()),
@@ -243,7 +248,39 @@ impl FuncNode {
         return Ok(())
     }
 
-    pub async fn ProcessInternalMsg(&self, _msg: FuncNodeMsg) -> Result<()> {
+    pub fn OnFuncSvcCallReq(&self, req: func::FuncSvcCallReq) -> Result<()> {
+        let packageId = PackageId {
+            namespace: req.namespace.clone(),
+            packageName: req.package_name.clone(),
+        };
+        let inner = FuncCallInner {
+            id: req.id.clone(),
+            package: PACKAGE_MGR.Get(&packageId)?,
+            funcName: req.func_name.clone(),
+            callerNodeId: req.caller_node_id.clone(),
+            callerFuncPodId: req.callee_pod_id.clone(),
+            calleeNodeId: Mutex::new(req.callee_node_id.clone()),
+            calleeFuncPodId: Mutex::new(req.callee_pod_id.clone()),
+            state: Mutex::new(FuncCallState::Scheduling),
+            parameters: req.parameters.clone(),
+            priority: req.priority as usize,
+            createTime: SystemTimeProto::FromTimestamp(&req.createtime.as_ref().unwrap()).ToSystemTime(),
+        };
+
+        let funcCall = FuncCall(Arc::new(inner));
+        self.lock().unwrap().callerFuncCalls.insert(req.id.clone());
+        FUNC_SVC_MGR.lock().unwrap().OnNewFuncCall(&funcCall)?;
+
+        return Ok(())
+    }
+
+    pub fn OnFuncSvcCallResp(&self, resp: func::FuncSvcCallResp) -> Result<()> {
+        self.lock().unwrap().calleeFuncCalls.remove(&resp.id);
+        let callerNode = FUNC_NODE_MGR.Get(&resp.caller_node_id)?;
+        let pod = FUNC_POD_MGR.Get(&resp.calller_pod_id)?;
+        *pod.state.lock().unwrap() = FuncPodState::Idle(SystemTime::now());
+        callerNode.Send(FuncNodeMsg::FuncCallResp(resp))?;
+        FUNC_SVC_MGR.lock().unwrap().OnFreePod(&pod)?;
         return Ok(())
     }
 
@@ -254,14 +291,62 @@ impl FuncNode {
             Some(b) => b,
         };
         match body {
-            /*
-            func::func_svc_msg::EventBody::FuncAgentRegisterReq(req) => {
-            // processing
-            self.SetState(FuncNodeState::Running(tx));
-            } */
+            func::func_svc_msg::EventBody::FuncSvcCallReq(req) => {
+                return self.OnFuncSvcCallReq(req);
+            } 
+            //func::func_svc_msg::EventBody::FuncSvcCallReq(req) => {
+            //}
             _ => {
                 error!("didn't get FuncAgentRegisterReq message instead {:?}", body);
                 return Err(Error::CommonError(format!("didn't get FuncAgentRegisterReq message instead {:?}", body)));
+            }
+        }
+    }
+
+    pub fn OnFuncCall(&self, call: FuncCall, tx: &mpsc::Sender<SResult<func::FuncSvcMsg, Status>>) -> Result<()> {
+        let req = func::FuncSvcCallReq {
+            id: call.id.clone(),
+            namespace: call.package.Namespace(),
+            package_name: call.package.Name(),
+            func_name: call.funcName.clone(),
+            parameters: call.parameters.clone(),
+            priority: call.priority as u64,
+            createtime: Some(SystemTimeProto::FromSystemTime(call.createTime).ToTimeStamp()),
+            caller_node_id: call.callerNodeId.clone(),
+            calller_pod_id: call.callerFuncPodId.clone(),
+            callee_node_id: call.calleeNodeId.lock().unwrap().clone(),
+            callee_pod_id: call.calleeFuncPodId.lock().unwrap().clone(),
+        };
+
+        self.SendToNodeAgent(func::FuncSvcMsg {
+            event_body: Some(func::func_svc_msg::EventBody::FuncSvcCallReq(req))
+        }, tx);
+
+        self.lock().unwrap().calleeFuncCalls.insert(call.id.clone());
+
+        return Ok(())
+    }
+
+    pub fn OnNodeMsg(&self, msg: FuncNodeMsg, tx: &mpsc::Sender<SResult<func::FuncSvcMsg, Status>>) -> Result<()> {
+        match msg {
+            FuncNodeMsg::FuncCall(funcCall) => {
+                return self.OnFuncCall(funcCall, tx);
+            }
+            FuncNodeMsg::FuncCallResp(resp) => {
+                self.SendToNodeAgent(func::FuncSvcMsg {
+                    event_body: Some(func::func_svc_msg::EventBody::FuncSvcCallResp(resp))
+                }, tx);
+                return Ok(())
+            }
+        }
+    }
+
+    pub fn SendToNodeAgent(&self, msg: func::FuncSvcMsg, tx: &mpsc::Sender<SResult<func::FuncSvcMsg, Status>>) {
+        match tx.try_send(Ok(msg)) {
+            Ok(()) => (),
+            Err(_) => {
+                error!("FuncNode send message fail, disconnecting...");
+                return;
             }
         }
     }
@@ -293,13 +378,13 @@ impl FuncNode {
         let mut rx = rx;
         let closeNotify = self.lock().unwrap().closeNotify.clone();
 
-        self.SetState(FuncNodeState::Running(tx));
+        self.SetState(FuncNodeState::Running);
 
         {
             // OnNodeRegiste needs to access another node, 
             // to avoid deadlock, use global mutex to serialize the process 
             let _l = FUNC_NODE_MGR.initlock.lock().await;                
-            self.OnNodeRegiste(regReq)?;
+            self.OnNodeRegister(regReq)?;
         }
 
         loop {
@@ -313,7 +398,7 @@ impl FuncNode {
                             panic!("FuncNode::StartProcess expect None internal message");
                         }
                         Some(msg) => {
-                            self.ProcessInternalMsg(msg).await?;
+                            self.OnNodeMsg(msg, &tx)?;
                         }
                     }
                     
@@ -388,7 +473,10 @@ impl FuncNodeMgr {
         }
     }
 
-    pub fn Get(&self, nodeName: &str) -> Option<FuncNode> {
-        return self.nodes.lock().unwrap().get(nodeName).cloned();
+    pub fn Get(&self, nodeName: &str) -> Result<FuncNode> {
+        match self.nodes.lock().unwrap().get(nodeName) {
+            None => return Err(Error::ENOENT),
+            Some(n) => Ok(n.clone()),
+        }
     }
 }

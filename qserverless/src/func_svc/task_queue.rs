@@ -19,7 +19,8 @@ use std::collections::btree_map::Iter;
 use crate::func_call::*;
 use crate::scheduler::Resource;
 
-#[derive(Debug)]
+
+#[derive(Debug, Default)]
 pub struct TaskQueue {
     pub queue: BTreeMap<SystemTime, FuncCall>,
     pub reqResource: Resource,
@@ -56,7 +57,8 @@ pub const PRIORITY_COUNT: usize = 10;
 pub const START_BATCHTASK_PRI: usize = 5;
 pub const KEEP_BATCHTASK_THRESHOLD: u64 = 10; // free memory < 10% total memory 
 
-#[derive(Debug)]
+
+#[derive(Debug, Default)]
 pub struct TaskQueues {
     pub queues: [TaskQueue; PRIORITY_COUNT],
     pub existingMask: u64,

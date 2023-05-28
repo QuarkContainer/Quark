@@ -14,16 +14,19 @@
 
 use std::result::Result as SResult;
 
+use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
 use qobjs::func;
 use qobjs::common::*;
 
+use crate::func_svc::FuncSvc;
+
 #[derive(Debug, Clone)]
 pub struct FuncGrpcSvc {}
 
 #[tonic::async_trait]
-impl func::func_svc_service_server::FuncSvcService for FuncGrpcSvc {
+impl func::func_svc_service_server::FuncSvcService for FuncSvc {
     type StreamProcessStream = ReceiverStream<SResult<func::FuncSvcMsg, tonic::Status>>;
     
     async fn stream_process(
@@ -32,8 +35,25 @@ impl func::func_svc_service_server::FuncSvcService for FuncGrpcSvc {
     ) -> SResult<tonic::Response<Self::StreamProcessStream>, tonic::Status> {
         let mut stream = request.into_inner();
         let v = stream.message().await.unwrap().unwrap();
-        println!("FuncSvcService message {:?}", v);
-        unimplemented!();
+
+        let registeMsg = match v.event_body {
+            None => {
+                error!("empty event_body");
+                return Err(tonic::Status::aborted("empty event_body"));
+            }
+            Some(body) => {
+                match body {
+                    func::func_svc_msg::EventBody::FuncAgentRegisterReq(req) => req,
+                    x => {
+                        return Err(tonic::Status::aborted(format!("expect FuncAgentRegisterReq but get {:?}", x)));
+                    }
+                }
+            }
+        };
+
+        let (tx, rx) = mpsc::channel(30);
+        self.lock().unwrap().OnAgentRegister(registeMsg, stream, tx)?;
+        return Ok(tonic::Response::new(ReceiverStream::new(rx)));
     }
 }
 
@@ -41,15 +61,15 @@ pub async fn GrpcService() -> Result<()> {
     use tonic::transport::Server;
     use qobjs::func::func_svc_service_server::FuncSvcServiceServer;
 
-    let svc = FuncGrpcSvc{};
+    let svc = FuncSvc::default();
 
-    let qmetaFuture = Server::builder()
-        .add_service(FuncSvcServiceServer::new(svc.clone()))
+    let funcSvcFuture = Server::builder()
+        .add_service(FuncSvcServiceServer::new(svc))
         .serve("127.0.0.1:8891".parse().unwrap());
 
-    info!("nodemgr start ...");
+    info!("func service start ...");
     tokio::select! {
-        _ = qmetaFuture => {}
+        _ = funcSvcFuture => {}
     }
 
     Ok(())

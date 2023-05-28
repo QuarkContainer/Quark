@@ -121,16 +121,16 @@ impl PackageInner {
     }
 
     // when there is a new task, return task which needs creating new pod
-    pub fn OnNewTask(&mut self, task: &FuncCall) -> Result<Option<FuncCall>> {
+    pub fn OnNewFuncCall(&mut self, funcCall: &FuncCall) -> Result<Option<FuncCall>> {
         match self.PopKeepalivePod() {
             Some(pod) => {
                 assert!(self.waitingQueue.waitingTask == 0);
-                pod.RunTask(task)?;
+                pod.ScheduleFuncCall(funcCall)?;
                 self.runningPodCnt += 1;
                 return Ok(None)
             }
             None => {
-                self.waitingQueue.Push(task);
+                self.waitingQueue.Push(funcCall);
                 return Ok(self.waitingQueue.GetWaitingTask(self.creatingPodCnt));
             }
         }
@@ -145,7 +145,7 @@ impl PackageInner {
                 return Ok(true)
             }
             Some(t) => {
-                pod.RunTask(&t)?;
+                pod.ScheduleFuncCall(&t)?;
                 self.runningPodCnt += 1;
                 return Ok(false)
             }
@@ -161,7 +161,7 @@ impl PackageInner {
                 return Ok((true, None))
             }
             Some(t) => {
-                pod.RunTask(&t)?;
+                pod.ScheduleFuncCall(&t)?;
                 let removeTask = self.waitingQueue.GetWaitingTask(self.creatingPodCnt);
                 return Ok((false, removeTask));
             }
@@ -241,7 +241,10 @@ impl PackageMgr {
         }
     }
 
-    pub fn Get(&self, packageId: &PackageId) -> Option<Package> {
-        return self.packages.lock().unwrap().get(packageId).cloned();
+    pub fn Get(&self, packageId: &PackageId) -> Result<Package> {
+        match self.packages.lock().unwrap().get(packageId) {
+            None => return Err(Error::ENOENT),
+            Some(p) => Ok(p.clone()),
+        }
     }
 }

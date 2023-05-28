@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use qobjs::func;
+
 use crate::func_pod::FuncPod;
 use crate::func_call::FuncCall;
 
 pub enum FuncNodeMsg {
-    FuncCalleeMsg(FuncCalleeMsg),
+    FuncCall(FuncCall),
+    FuncCallResp(func::FuncSvcCallResp)
 }
 
 pub struct FuncCalleeMsg {

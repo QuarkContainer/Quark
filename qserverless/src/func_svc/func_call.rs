@@ -67,7 +67,7 @@ pub enum FuncCallState {
     // there is callee, but caller is not online
     PendingCaller(SystemTime),
     // there is Caller, but callee is not online
-    PendingCallee(SystemTime), // the content is callee NodeId
+    PendingCallee(SystemTime), 
     // there is callee and result is done, waiting for caller
     PendingCallerWithResult((SystemTime, FuncCallResult)),
     //
@@ -87,6 +87,7 @@ impl FuncCallState {
 pub struct FuncCallInner {
     pub id: String,
     pub package: Package,
+    pub funcName: String,
     
     pub callerNodeId: String,
     pub callerFuncPodId: String,
