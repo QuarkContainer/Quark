@@ -22,7 +22,7 @@
 extern crate log;
 extern crate simple_logging;
 
-use func_agent::func_agent::FuncAgent;
+use func_agent::func_agent::{FuncAgent, FuncAgentGrpcService};
 use func_agent::funcsvc_client::FuncSvcClientMgr;
 use lazy_static::lazy_static;
 use once_cell::sync::OnceCell;
@@ -60,7 +60,6 @@ pub static CADVISOR_PROVIDER: OnceCell<CadvisorInfoProvider> = OnceCell::new();
 pub static NODEAGENT_STORE: OnceCell<NodeAgentStore> = OnceCell::new();
 pub static FUNC_SVC_CLIENT: OnceCell<FuncSvcClientMgr> = OnceCell::new();
 
-
 lazy_static! {
     pub static ref NETWORK_PROVIDER: LocalNetworkAddressProvider = {
         LocalNetworkAddressProvider::Init()
@@ -71,7 +70,7 @@ lazy_static! {
     };
 
     pub static ref FUNC_AGENT: FuncAgent = {
-        FuncAgent::default()
+        FuncAgent::New("node1")
     };
 }
 
@@ -195,8 +194,7 @@ pub async fn ClientTest() -> QResult<()> {
 
 pub async fn FsClientTest() -> QResult<()> {
     FUNC_SVC_CLIENT.set(FuncSvcClientMgr::New("http://127.0.0.1:8891")).unwrap();
-    
-
+    FuncAgentGrpcService().await?;
     return Ok(());
 }
 

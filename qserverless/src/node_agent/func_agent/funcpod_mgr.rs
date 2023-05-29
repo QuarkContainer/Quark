@@ -64,5 +64,15 @@ impl FuncPodMgr {
         pod.Send(msg)?;
         return Ok(())
     }
+
+    pub fn ToGrpcType(&self) -> Vec<func::FuncPodStatus> {
+        let pods = self.pods.lock().unwrap();
+        let mut ret = Vec::new();
+        for (_, p) in pods.iter() {
+            ret.push(p.ToGrpcType())
+        };
+
+        return ret;
+    }
 }
 

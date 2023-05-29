@@ -22,11 +22,11 @@ use tokio::sync::mpsc;
 use qobjs::common::*;
 use qobjs::func;
 
+use crate::FUNC_NODE_MGR;
 use crate::scheduler::Resource;
 use crate::task_queue::*;
 use crate::func_call::*;
 use crate::func_pod::*;
-use crate::func_node::*;
 use crate::package::*;
 
 #[derive(Debug)]
@@ -48,7 +48,6 @@ pub struct FuncInstance {
 pub struct FuncSvcInner {
     pub queue: TaskQueue,
     
-    pub nodes: BTreeMap<String, FuncNode>,
     pub packages: BTreeMap<PackageId, Package>,
     pub pods: BTreeMap<FuncCallId, FuncPod>,
     pub funcInstances: BTreeMap<u64, Func>,
@@ -79,16 +78,16 @@ impl Deref for FuncSvc {
 }
 
 impl FuncSvcInner {
-    pub fn OnAgentRegister(
+    pub fn OnNodeRegister(
         &self, 
         req: func::FuncAgentRegisterReq,
         stream: tonic::Streaming<func::FuncSvcMsg>,
         tx: mpsc::Sender<SResult<func::FuncSvcMsg, tonic::Status>>
     ) -> Result<()> {
-        let agentId = req.node_id.clone();
-        let node = match self.nodes.get(&agentId) {
-            None => return Err(Error::CommonError(format!("OnAgentRegiste not recognize agent {}", agentId))),
-            Some(n) => n.clone()
+        let nodeId = req.node_id.clone();
+        let node = match FUNC_NODE_MGR.Get(&nodeId) {
+            Err(_) => return Err(Error::CommonError(format!("OnAgentRegiste not recognize agent {}", nodeId))),
+            Ok(n) => n.clone()
         };
 
         node.CreateProcessor(req, stream, tx)?;

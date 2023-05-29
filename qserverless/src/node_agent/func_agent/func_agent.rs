@@ -16,6 +16,7 @@ use std::collections::BTreeMap;
 use std::sync::{Mutex, Arc};
 use std::result::Result as SResult;
 use std::time::SystemTime;
+use qobjs::func::func_agent_service_server::FuncAgentServiceServer;
 use qobjs::utility::SystemTimeProto;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Response, Status};
@@ -24,7 +25,7 @@ use core::ops::Deref;
 
 use qobjs::{common::*, func::{self, func_agent_msg::EventBody}};
 
-use crate::FUNC_SVC_CLIENT;
+use crate::{FUNC_SVC_CLIENT, FUNC_AGENT};
 
 use super::funcpod::FuncPod;
 use super::funcpod_mgr::FuncPodMgr;
@@ -32,18 +33,36 @@ use super::funcpod_mgr::FuncPodMgr;
 #[derive(Debug)]
 pub struct FuncCallInner {
     pub id: String,
-    pub callerNodeId: String,
-    pub callerFuncPodId: String,
-    pub calleeNodeId: String,
-    pub calleeFuncPodId: String,
     pub namespace: String,
-    pub package: String,
+    pub packageName: String,
     pub funcName: String,
     pub priority: usize,
     pub parameters: String,
     pub createTime: SystemTime,
+
+    pub callerNodeId: String,
+    pub callerFuncPodId: String,
+    pub calleeNodeId: String,
+    pub calleeFuncPodId: String,
 }
 
+impl FuncCallInner {
+    pub fn ToGrpcType(&self) -> func::FuncSvcCallReq {
+        return func::FuncSvcCallReq {
+            id: self.id.clone(),
+            namespace: self.namespace.clone(),
+            package_name: self.packageName.clone(),
+            func_name: self.funcName.clone(),
+            priority: self.priority as u64,
+            parameters: self.parameters.clone(),
+            createtime: Some(SystemTimeProto::FromSystemTime(self.createTime).ToTimeStamp()),
+            caller_node_id: self.callerNodeId.clone(),
+            calller_pod_id: self.callerFuncPodId.clone(),
+            callee_node_id: self.calleeNodeId.clone(),
+            callee_pod_id: self.calleeFuncPodId.clone(),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct FuncCall(Arc<FuncCallInner>);
@@ -62,7 +81,7 @@ pub struct FuncCallContext {
 }
 
 #[derive(Debug, Default)]
-pub struct FuncAgent {
+pub struct FuncAgentInner {
     pub nodeId: String,
     pub callContexts: Mutex<BTreeMap<String, FuncCallContext>>,
     pub funcPodMgr: FuncPodMgr,
@@ -72,7 +91,27 @@ pub struct FuncAgent {
     pub calleeCalls: Mutex<BTreeMap<String, FuncCall>>,
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct FuncAgent(Arc<FuncAgentInner>);
+
+impl Deref for FuncAgent {
+    type Target = Arc<FuncAgentInner>;
+
+    fn deref(&self) -> &Arc<FuncAgentInner> {
+        &self.0
+    }
+}
+
 impl FuncAgent {
+    pub fn New(nodeId: &str) -> Self {
+        let inner = FuncAgentInner {
+            nodeId: nodeId.to_string(),
+            ..Default::default()
+        };
+
+        return Self(Arc::new(inner))
+    }
+
     pub fn CallResponse(&self, funcCallId: &str, response: SResult<String, String>) -> Result<()> {
         match self.callContexts.lock().unwrap().remove(funcCallId) {
             None => return Err(Error::CommonError(format!("get unepxecet callid {}", funcCallId))),
@@ -82,6 +121,23 @@ impl FuncAgent {
         };
 
         return Ok(())
+    }
+
+    pub fn ToGrpcType(&self) -> func::FuncAgentRegisterReq {
+        let mut callerCalls = Vec::new();
+        let mut calleeCalls = Vec::new();
+        for (_, call) in self.callerCalls.lock().unwrap().iter() {
+            callerCalls.push(call.ToGrpcType());
+        }
+        for (_, call) in self.calleeCalls.lock().unwrap().iter() {
+            calleeCalls.push(call.ToGrpcType());
+        }
+        return func::FuncAgentRegisterReq {
+            node_id: self.nodeId.clone(),
+            caller_calls: callerCalls,
+            callee_calls: calleeCalls,
+            func_pods: self.funcPodMgr.ToGrpcType(),
+        }
     }
 
     pub async fn FuncCall(&self, funcCallReq: func::FuncAgentCallReq) -> SResult<String, String> {
@@ -125,7 +181,7 @@ impl FuncAgent {
             callerNodeId: String::new(),
             calleeFuncPodId: String::new(), // not assigned,
             namespace: req.namespace.clone(),
-            package: req.package_name.clone(),
+            packageName: req.package_name.clone(),
             funcName: req.func_name.clone(),
             parameters: req.parameters.clone(), 
             priority: req.priority as usize,
@@ -169,7 +225,7 @@ impl FuncAgent {
             calleeNodeId: req.callee_node_id.clone(),
             calleeFuncPodId: String::new(), // not assigned,
             namespace: req.namespace.clone(),
-            package: req.package_name.clone(),
+            packageName: req.package_name.clone(),
             funcName: req.func_name.clone(),
             parameters: req.parameters.clone(), 
             priority: req.priority as usize,
@@ -309,4 +365,19 @@ impl func::func_agent_service_server::FuncAgentService for FuncAgent {
         
         return Ok(Response::new(resp));
     }
+}
+
+pub async fn FuncAgentGrpcService() -> Result<()> {
+    use tonic::transport::Server;
+    //let svc = FuncAgent::default();
+    let funcSvcFuture = Server::builder()
+        .add_service(FuncAgentServiceServer::new(FUNC_AGENT.clone()))
+        .serve("127.0.0.1:8892".parse().unwrap());
+
+    info!("func service start ...");
+    tokio::select! {
+        _ = funcSvcFuture => {}
+    }
+
+    Ok(())
 }

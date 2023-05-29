@@ -61,11 +61,10 @@ pub struct FuncNodeInner {
     pub callerFuncCalls: BTreeSet<String>, 
     pub calleeFuncCalls: BTreeSet<String>, 
 
-    pub tx: mpsc::Sender<FuncNodeMsg>,
     pub internMsgTx: mpsc::Sender<FuncNodeMsg>,
+    pub internMsgRx: Option<mpsc::Receiver<FuncNodeMsg>>,
 
     pub processorHandler: Option<JoinHandle<()>>,
-    pub internMsgRx: Option<mpsc::Receiver<FuncNodeMsg>>,
 }
 
 #[derive(Debug, Clone)]
@@ -80,9 +79,27 @@ impl Deref for FuncNode {
 }
 
 impl FuncNode {
+    pub fn New(nodeName: &str) -> Self {
+        let (tx, rx) = mpsc::channel(30);
+        let inner = FuncNodeInner {
+            closeNotify: Arc::new(Notify::new()),
+            stop: AtomicBool::new(false),
+            nodeName: nodeName.to_string(),
+            state: FuncNodeState::WaitingConn,
+            funcPods: BTreeMap::new(),
+            callerFuncCalls: BTreeSet::new(),
+            calleeFuncCalls: BTreeSet::new(),
+            internMsgTx: tx,
+            internMsgRx: Some(rx),
+            processorHandler: None,
+        };
+
+        return Self(Arc::new(Mutex::new(inner)));
+    }
+
     //pub fn New(name: &str) -> Result<()> {}
     pub fn Send(&self, msg: FuncNodeMsg) -> Result<()> {
-        match self.lock().unwrap().tx.try_send(msg) {
+        match self.lock().unwrap().internMsgTx.try_send(msg) {
             Ok(()) => return Ok(()),
             Err(_) => return Err(Error::MpscSendFail),
         }
@@ -467,10 +484,15 @@ pub struct FuncNodeMgr {
 
 impl FuncNodeMgr {
     pub fn New() -> Self {
-        return Self {
+        let ret = Self {
             initlock: TMutex::new(()),
             nodes: Mutex::new(BTreeMap::new()),
-        }
+        };
+
+        let nodeName = "node1";
+        ret.nodes.lock().unwrap().insert(nodeName.to_string(), FuncNode::New(nodeName));
+
+        return ret;
     }
 
     pub fn Get(&self, nodeName: &str) -> Result<FuncNode> {

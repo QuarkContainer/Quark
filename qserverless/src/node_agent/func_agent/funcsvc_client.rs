@@ -52,7 +52,7 @@ impl FuncSvcClient {
             client
         };
 
-        let (tx, rx) = mpsc::channel(0);
+        let (tx, rx) = mpsc::channel(30);
         tx.try_send(func::FuncSvcMsg {
             event_body: Some(func::func_svc_msg::EventBody::FuncAgentRegisterReq(registerReq)),
         }).unwrap();
@@ -112,7 +112,7 @@ impl FuncSvcClientMgr {
 
         let ret = Self(Arc::new(inner));
         let clone = ret.clone();
-        tokio::spawn(async move {
+        let _future = tokio::spawn(async move {
             clone.Process(rx).await.unwrap();
         });
 
@@ -127,7 +127,8 @@ impl FuncSvcClientMgr {
     }
 
     pub async fn Process(&self, rx: mpsc::Receiver<FuncSvcMsg>) -> Result<()> {
-        let mut client = FuncSvcClient::New(&self.svcAddr, func::FuncAgentRegisterReq::default()).await?;
+        let registerMsg = FUNC_AGENT.ToGrpcType();
+        let mut client = FuncSvcClient::New(&self.svcAddr, registerMsg).await?;
         let mut currentMsg;
         let mut stream = client.stream.lock().unwrap().take().unwrap();
         let mut rx = rx;
