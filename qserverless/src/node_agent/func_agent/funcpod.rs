@@ -24,9 +24,25 @@ use crate::FUNC_AGENT;
 
 
 #[derive(Debug)]
-pub enum funcPodId {
+pub enum funcPodState {
     Idle,
     Running(String), // handling FuncCallId
+}
+
+impl funcPodState {
+    pub fn State(&self) -> func::FuncPodState {
+        match self {
+            Self::Idle => func::FuncPodState::Idle,
+            Self::Running(_) => func::FuncPodState::Running,
+        }
+    }
+
+    pub fn FuncCallId(&self) -> String {
+        match self {
+            Self::Idle => String::new(),
+            Self::Running(id) => id.clone(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -37,7 +53,7 @@ pub struct FuncPodInner {
     pub funcPodId: String,
     pub namespace: String,
     pub packageName: String,
-    pub state: funcPodId,
+    pub state: funcPodState,
 
     pub agentChann: mpsc::Sender<SResult<func::FuncAgentMsg, tonic::Status>>,
 }
@@ -66,7 +82,7 @@ impl FuncPod {
             funcPodId: funcPodId.clone(),
             namespace: registerMsg.namespace.to_string(),
             packageName: registerMsg.package_name.to_string(),
-            state: funcPodId::Idle,
+            state: funcPodState::Idle,
             agentChann: agentTx,
         };
         let instance = FuncPod(Arc::new(inner));
@@ -76,6 +92,16 @@ impl FuncPod {
         });
 
         return Ok(instance);
+    }
+
+    pub fn ToGrpcType(&self) -> func::FuncPodStatus {
+        return func::FuncPodStatus {
+            func_pod_id: self.funcPodId.clone(),
+            namespace: self.namespace.clone(),
+            package_name: self.packageName.clone(),
+            state: self.state.State() as i32,
+            func_call_id: self.state.FuncCallId(),
+        }
     }
 
     pub fn Send(&self, msg: func::FuncAgentMsg) -> Result<()> {

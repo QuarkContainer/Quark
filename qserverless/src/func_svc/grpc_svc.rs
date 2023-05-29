@@ -19,6 +19,7 @@ use tokio_stream::wrappers::ReceiverStream;
 
 use qobjs::func;
 use qobjs::common::*;
+use tonic::Status;
 
 use crate::func_svc::FuncSvc;
 
@@ -52,7 +53,12 @@ impl func::func_svc_service_server::FuncSvcService for FuncSvc {
         };
 
         let (tx, rx) = mpsc::channel(30);
-        self.lock().unwrap().OnAgentRegister(registeMsg, stream, tx)?;
+        match self.lock().unwrap().OnNodeRegister(registeMsg, stream, tx) {
+            Ok(_) => (),
+            Err(e) => {
+                return Err(Status::aborted(format!("get error {:?}", e)));
+            }
+        }
         return Ok(tonic::Response::new(ReceiverStream::new(rx)));
     }
 }
