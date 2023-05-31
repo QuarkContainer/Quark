@@ -66,6 +66,22 @@ pub struct FuncSvcInner {
     pub totalResource: Resource,
 }
 
+impl FuncSvcInner {
+    pub fn New() -> Self {
+        return Self {
+            totalResource: Resource { 
+                mem: 1024 * 1014 * 1014, 
+                cpu: 100 * 1024, 
+            },
+            freeResource: Resource { 
+                mem: 1024 * 1014 * 1014, 
+                cpu: 100 * 1024, 
+            },
+            ..Default::default()
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct FuncSvc(Mutex<FuncSvcInner>);
 
@@ -77,8 +93,13 @@ impl Deref for FuncSvc {
     }
 }
 
-impl FuncSvcInner {
-    pub fn OnNodeRegister(
+impl FuncSvc {
+    pub fn New() -> Self {
+        let inner = FuncSvcInner::New();
+        return Self(Mutex::new(inner));
+    }
+
+    pub async fn OnNodeRegister(
         &self, 
         req: func::FuncAgentRegisterReq,
         stream: tonic::Streaming<func::FuncSvcMsg>,
@@ -90,10 +111,11 @@ impl FuncSvcInner {
             Ok(n) => n.clone()
         };
 
-        node.CreateProcessor(req, stream, tx)?;
+        node.CreateProcessor(req, stream, tx).await?;
         return Ok(())
     }
-
+}
+impl FuncSvcInner {
     // when a pod exiting process finish, free the occupied resources and schedule creating new pod
     pub fn OnPodExit(&mut self, pod: &FuncPod) -> Result<()> {
         let package = pod.package.clone();
@@ -104,7 +126,7 @@ impl FuncSvcInner {
         return self.TryCreatePod();
     } 
 
-    // when recieve a new task 
+    // when recieve a new func call 
     pub fn OnNewFuncCall(&mut self, funcCall: &FuncCall) -> Result<()> {
         let package = funcCall.Package();
         
@@ -122,11 +144,13 @@ impl FuncSvcInner {
 
     pub fn NeedEvictPod(&self, package: &Package) -> bool {
         let pri = package.TopPriority();
+        // if it has batch task, if the system free resource is less than threshold, evict it
         if pri > START_BATCHTASK_PRI
             && self.NeedEvictTask(&package.ReqResource()) {
                 return true;
             }
-        return package.TopPriority() > self.waitResourceQueue.TopPriority() ;
+        // it if it has interactive task, compare it with global waiting task, 
+        return pri > self.waitResourceQueue.TopPriority() ;
     }
 
     pub fn GetPackage(&self, packageId: &PackageId) -> Result<Package> {

@@ -17,9 +17,11 @@ use qobjs::func;
 use crate::func_pod::FuncPod;
 use crate::func_call::FuncCall;
 
+#[derive(Debug)]
 pub enum FuncNodeMsg {
     FuncCall(FuncCall),
-    FuncCallResp(func::FuncSvcCallResp)
+    FuncCallResp(func::FuncSvcCallResp),
+    FuncPodConnResp(func::FuncPodConnResp),
 }
 
 pub struct FuncCalleeMsg {

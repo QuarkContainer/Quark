@@ -46,7 +46,10 @@ impl FuncSvcClient {
                         client = c;
                         break;
                     }
-                    Err(_) => ()
+                    Err(e) => {
+                        error!("can't connect to funcsvc {}, {:?}", svcAddr, e);
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    }
                 }
             }
             client
@@ -165,7 +168,7 @@ impl FuncSvcClientMgr {
                         Ok(m) => {
                             match m {
                                 None => {
-                                    error!("FuncNode get None message");
+                                    error!("FuncSvcClientMgr get None message");
                                     break;
                                 }
                                 Some(m) => m,
@@ -173,7 +176,7 @@ impl FuncSvcClientMgr {
                         }
                     };
 
-                    FUNC_AGENT.OneFuncSvcMgr(msg).await?;
+                    FUNC_AGENT.OneFuncSvcMsg(msg).await?;
                 }
 
             }

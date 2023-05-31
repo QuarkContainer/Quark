@@ -18,7 +18,6 @@ use std::sync::Arc;
 use core::ops::Deref;
 use std::time::SystemTime;
 
-use qobjs::k8s;
 use qobjs::common::*;
 
 use crate::func_call::FuncCall;
@@ -76,12 +75,10 @@ impl PartialEq for PackageId {
 
 impl Eq for PackageId {}
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PackageInner  {
     pub namespace: String,
-    pub name: String,
-
-    pub spec: k8s::PodSpec,
+    pub packageName: String,
 
     pub reqResource: Resource,
 
@@ -96,6 +93,18 @@ pub struct PackageInner  {
 }
 
 impl PackageInner {
+    pub fn New(namespace: &str, packageName: &str) -> Self {
+        return Self {
+            namespace: namespace.to_string(),
+            packageName: packageName.to_string(),
+            reqResource: Resource {
+                mem: 1024 * 1024,
+                cpu: 1000,
+            },
+            ..Default::default()
+        };
+    }
+
     pub fn PopKeepalivePod(&mut self) -> Option<FuncPod> {
         let mut iter = self.keepalivePods.iter().rev();
         let (time, pod) = match iter.next() {
@@ -185,24 +194,25 @@ impl Deref for Package {
 }
 
 impl Package {
+    pub fn New(namespace: &str, packageName: &str) -> Self {
+        let inner = PackageInner::New(namespace, packageName);
+        return Self(Arc::new(Mutex::new(inner)));
+    }
+
     pub fn PackageId(&self) -> PackageId {
         let inner = self.lock().unwrap();
         return PackageId { 
             namespace: inner.namespace.clone(), 
-            packageName: inner.name.clone()
+            packageName: inner.packageName.clone()
         }
     }
 
     pub fn Name(&self) -> String {
-        return self.lock().unwrap().name.clone();
+        return self.lock().unwrap().packageName.clone();
     }
 
     pub fn Namespace(&self) -> String {
         return self.lock().unwrap().namespace.clone();
-    }
-
-    pub fn Spec(&self) -> k8s::PodSpec {
-        return self.lock().unwrap().spec.clone();
     }
 
     pub fn ReqResource(&self) -> Resource {
@@ -236,9 +246,25 @@ pub struct PackageMgr {
 
 impl PackageMgr {
     pub fn New() -> Self {
-        return Self {
+        let ret = Self {
             packages: Mutex::new(BTreeMap::new()),
-        }
+        };
+
+        let namespace = "ns";
+        let packageName = "package1";
+
+        ret.AddPackage(namespace, packageName);
+
+        return ret;
+    }
+
+    pub fn AddPackage(&self, namespace: &str, packageName: &str) {
+        let packageId = PackageId {
+            namespace: namespace.to_string(),
+            packageName: packageName.to_string(),
+        };
+
+        self.packages.lock().unwrap().insert(packageId, Package::New(namespace, packageName));
     }
 
     pub fn Get(&self, packageId: &PackageId) -> Result<Package> {

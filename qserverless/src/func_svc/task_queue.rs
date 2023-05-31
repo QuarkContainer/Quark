@@ -170,7 +170,7 @@ impl <'a> Iterator for TaskQueuesIter <'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PackageTaskQueue {
     pub waitingTask: usize,
     pub waitingQueue: [VecDeque<FuncCall>; PRIORITY_COUNT],
@@ -206,7 +206,7 @@ impl PackageTaskQueue {
     }
 
     pub fn Pop(&mut self) -> Option<FuncCall> {
-        if self.waitingTask > 0 {
+        if self.waitingTask == 0 {
             return None;
         }
 
