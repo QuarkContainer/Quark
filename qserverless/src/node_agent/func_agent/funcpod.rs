@@ -132,7 +132,7 @@ impl FuncPod {
                         Ok(m) => {
                             match m {
                                 None => {
-                                    error!("FuncNode get None message");
+                                    error!("FuncPod get None message");
                                     break;
                                 }
                                 Some(m) => m,

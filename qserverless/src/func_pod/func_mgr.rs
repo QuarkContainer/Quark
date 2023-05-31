@@ -17,9 +17,9 @@ use std::collections::BTreeMap;
 
 use qobjs::func;
 
-use crate::func_def::*;
+use crate::{func_def::*, FUNC_CALL_MGR};
 
-#[derive(Default)]
+//#[derive(Default)]
 pub struct FuncMgr {
     pub funcPodId: String,
     pub namespace: String,
@@ -27,15 +27,12 @@ pub struct FuncMgr {
     pub funcs: Arc<BTreeMap<String, Arc<dyn QSFunc>>>,
 }
 
-unsafe impl Send for FuncMgr{}
-unsafe impl Sync for FuncMgr{}
-
 impl FuncMgr {
     pub fn FuncPodId(&self) -> String {
         return self.funcPodId.clone();
     }
 
-    pub fn RegisteMsg(&self) -> func::FuncPodRegisterReq {
+    pub fn RegisterMsg(&self) -> func::FuncPodRegisterReq {
         return func::FuncPodRegisterReq {
             func_pod_id: self.funcPodId.clone(),
             namespace: self.namespace.clone(),
@@ -45,26 +42,22 @@ impl FuncMgr {
     
     pub fn Init() -> Self {
         let mut funcs: BTreeMap<String, Arc<dyn QSFunc>> = BTreeMap::new();
-        let mut mgr = Self::default();
-
-        mgr.funcPodId = uuid::Uuid::new_v4().to_string();
-        mgr.namespace = "test_ns".to_owned();
-        mgr.packageName = "test_package".to_owned();
+        
 
         funcs.insert("add".to_string(), Arc::new(Add{}));
         funcs.insert("sub".to_string(), Arc::new(Sub{}));
 
-        return FuncMgr {
+        return Self {
             funcPodId: uuid::Uuid::new_v4().to_string(),
-            namespace: "test_ns".to_owned(),
-            packageName: "test_package".to_owned(),
+            namespace: "ns1".to_owned(),
+            packageName: "package1".to_owned(),
             funcs: Arc::new(funcs),
-        };
+        }
     }
 
     pub async fn Call(&self, name: &str, parameters: &str) -> QSResult {
         let f = match self.funcs.get(name) {
-            None => return Err(format!("There is no func named {}", name)),
+            None => return Err(format!("There is no func named {} has names {:?}", name, self.funcs.keys())),
             Some(f) => f.clone(),
         };
 
@@ -78,7 +71,14 @@ pub struct Add {}
 #[async_trait::async_trait]
 impl QSFunc for Add {
     async fn func(&self, _parameters: String) -> Result<String, String> {
-        Ok("add".to_string())
+        let ret = FUNC_CALL_MGR.RemoteCall(
+            "ns1".to_string(), 
+            "package1".to_string(), 
+            "sub".to_string(), 
+            String::new(), 
+            1
+        ).await;
+        Ok(format!("add with sub result {:?}", ret))
     }
 }
 

@@ -76,6 +76,8 @@ lazy_static! {
 
 #[tokio::main]
 async fn main() -> QResult<()> {
+    log4rs::init_file("na_logging_config.yaml", Default::default()).unwrap();
+    
     return FsClientTest().await;
     //return ClientTest().await;
 }
@@ -115,8 +117,6 @@ pub async fn ClientTest() -> QResult<()> {
         }
     }"#;
 
-    log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
-    
     CADVISOR_PROVIDER.set(CadvisorInfoProvider::New().await.unwrap()).unwrap();
     RUNTIME_MGR.set(RuntimeMgr::New(10).await.unwrap()).unwrap();
     IMAGE_MGR.set(ImageMgr::New(crictl::AuthConfig::default()).await.unwrap()).unwrap();
@@ -243,3 +243,24 @@ pub async fn NMClientTest() -> QResult<()> {
 }
 
  */
+
+#[cfg(test)]
+mod tests {
+    use qobjs::func_client::FuncClient;
+
+    //use super::*;
+
+    #[actix_rt::test]
+    async fn TestDirectFuncCall() {
+        log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
+        error!("TestDirectFuncCall 1");
+        let mut client = FuncClient::Init("http://127.0.0.1:8892").await.unwrap();
+        error!("TestDirectFuncCall 2");
+        //let ret = client.Call("ns1", "package1", "sub", "", 1).await;
+        //error!("ret is {:?}", ret);
+        let ret = client.Call("ns1", "package1", "add", "", 1).await;
+        error!("ret is {:?}", ret);
+        assert!(ret.is_ok());
+        assert!(false);
+    }
+}

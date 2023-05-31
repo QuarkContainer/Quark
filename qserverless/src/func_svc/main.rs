@@ -62,13 +62,13 @@ lazy_static! {
     };
 
     pub static ref FUNC_SVC_MGR: FuncSvc = {
-        FuncSvc::default()
+        FuncSvc::New()
     };
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
+    log4rs::init_file("fs_logging_config.yaml", Default::default()).unwrap();
     grpc_svc::GrpcService().await.unwrap();
     Ok(())
 }

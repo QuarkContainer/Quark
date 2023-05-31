@@ -89,10 +89,10 @@ impl Deref for FuncPod {
 
 impl FuncPod {
     pub fn ScheduleFuncCall(&self, funcCall: &FuncCall) -> Result<()> {
-        self.node.Send(FuncNodeMsg::FuncCall(funcCall.clone()))?;
-
         *self.state.lock().unwrap() = FuncPodState::Running(funcCall.id.clone());
-
+        *funcCall.calleeNodeId.lock().unwrap() = self.node.NodeName();
+        *funcCall.calleeFuncPodId.lock().unwrap() = self.podName.clone();
+        self.node.Send(FuncNodeMsg::FuncCall(funcCall.clone()))?;
         return Ok(())
     }
 
@@ -127,5 +127,9 @@ impl FuncPodMgr {
             None => return Err(Error::ENOENT),
             Some(p) => return Ok(p.clone()),
         }
+    }
+
+    pub fn Add(&self, funcPod: &FuncPod) {
+        self.pods.lock().unwrap().insert(funcPod.podName.clone(), funcPod.clone());
     }
 }

@@ -24,13 +24,15 @@ use qobjs::func::FuncAgentMsg;
 use qobjs::common::*;
 
 use crate::FUNC_CALL_MGR;
+use crate::func_def::QSResult;
 
 #[derive(Debug)]
 pub struct FuncAgentClientInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
 
-    pub agentChann: mpsc::Sender<FuncAgentMsg>,}
+    pub agentChann: mpsc::Sender<FuncAgentMsg>
+}
 
 #[derive(Debug, Clone)]
 pub struct FuncAgentClient(Arc<FuncAgentClientInner>);
@@ -54,15 +56,19 @@ impl FuncAgentClient {
                         client = c;
                         break;
                     }
-                    Err(_) => ()
+                    Err(e) => {
+                        error!("can't connect to funcagent {}, {:?}", agentAddr, e);
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    }
                 }
             }
             client
         };
-
-        let (tx, rx) = mpsc::channel(0);
+                        
+        let (tx, rx) = mpsc::channel(30);
+        let regMsg = FUNC_CALL_MGR.funcMgr.RegisterMsg();
         tx.try_send(func::FuncAgentMsg {
-            event_body: Some(func::func_agent_msg::EventBody::FuncPodRegisterReq(FUNC_CALL_MGR.funcMgr.RegisteMsg())),
+            event_body: Some(func::func_agent_msg::EventBody::FuncPodRegisterReq(regMsg)),
         }).unwrap();
 
         let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
@@ -89,8 +95,24 @@ impl FuncAgentClient {
         self.agentChann.try_send(msg).unwrap();
     }
 
-    pub async fn OnFuncAgentMsg(&self, _msg: func::FuncAgentMsg) -> Result<()> {
-        unimplemented!();
+    pub async fn OnFuncAgentMsg(&self, msg: func::FuncAgentMsg) -> Result<()> {
+        let body = msg.event_body.unwrap();
+        match body {
+            func::func_agent_msg::EventBody::FuncAgentCallReq(call) => {
+                FUNC_CALL_MGR.LocalCall(call)?;
+                return Ok(())
+            }
+            func::func_agent_msg::EventBody::FuncAgentCallResp(resp) => {
+                let res = if resp.error.len() == 0 {
+                    QSResult::Ok(resp.resp)
+                } else {
+                    QSResult::Ok(resp.error)
+                };
+                FUNC_CALL_MGR.CallResponse(&resp.id, res)?;
+                return Ok(())
+            }
+            _ => unimplemented!("OnFuncAgentMsg ..."),
+         }
     }
 
     pub async fn Process(&self, stream: tonic::Streaming<FuncAgentMsg>) -> Result<()> {
@@ -111,7 +133,7 @@ impl FuncAgentClient {
                         Ok(m) => {
                             match m {
                                 None => {
-                                    error!("FuncNode get None message");
+                                    error!("FuncAgentClient get None message");
                                     break;
                                 }
                                 Some(m) => m,

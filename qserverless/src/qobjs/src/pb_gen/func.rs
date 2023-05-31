@@ -128,14 +128,20 @@ pub struct FuncAgentRegisterResp {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncPodConnReq {
-    #[prost(string, tag = "1")]
-    pub node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub func_pod_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub package_name: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncPodConnResp {
     #[prost(string, tag = "1")]
+    pub func_pod_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
     pub error: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -173,7 +179,7 @@ pub struct FuncSvcCallReq {
     #[prost(string, tag = "8")]
     pub caller_node_id: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
-    pub calller_pod_id: ::prost::alloc::string::String,
+    pub caller_pod_id: ::prost::alloc::string::String,
     /// when funcCall is process by a funcPod, this is the NodeId
     #[prost(string, tag = "10")]
     pub callee_node_id: ::prost::alloc::string::String,
@@ -193,7 +199,7 @@ pub struct FuncSvcCallResp {
     #[prost(string, tag = "8")]
     pub caller_node_id: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
-    pub calller_pod_id: ::prost::alloc::string::String,
+    pub caller_pod_id: ::prost::alloc::string::String,
     /// when funcCall is process by a funcPod, this is the NodeId
     #[prost(string, tag = "10")]
     pub callee_node_id: ::prost::alloc::string::String,

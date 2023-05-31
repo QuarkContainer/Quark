@@ -33,7 +33,10 @@ impl FuncClient {
                         client = c;
                         break;
                     }
-                    Err(_) => ()
+                    Err(e) => {
+                        error!("can't connect to funcsvc {}, {:?}", agentAddr, e);
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    }
                 }
             }
             client

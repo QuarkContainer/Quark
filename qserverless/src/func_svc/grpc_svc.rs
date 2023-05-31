@@ -53,7 +53,7 @@ impl func::func_svc_service_server::FuncSvcService for FuncSvc {
         };
 
         let (tx, rx) = mpsc::channel(30);
-        match self.lock().unwrap().OnNodeRegister(registeMsg, stream, tx) {
+        match self.OnNodeRegister(registeMsg, stream, tx).await {
             Ok(_) => (),
             Err(e) => {
                 return Err(Status::aborted(format!("get error {:?}", e)));

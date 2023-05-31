@@ -83,11 +83,14 @@ message FuncAgentRegisterResp {
 }
 
 message FuncPodConnReq {
-  string nodeId = 1;
+  string funcPodId = 2;
+  string namespace = 3;
+  string packageName = 4;
 }
 
 message FuncPodConnResp {
-    string error = 1;
+  string funcPodId = 1;
+  string error = 2;
 }
 
 message FuncPodDisconnReq {
@@ -108,7 +111,7 @@ message FuncSvcCallReq {
   Timestamp createtime = 7;
 
   string callerNodeId = 8;
-  string calllerPodId = 9; 
+  string callerPodId = 9; 
 
   string calleeNodeId = 10; // when funcCall is process by a funcPod, this is the NodeId
   string calleePodId = 11;
@@ -121,7 +124,7 @@ message FuncSvcCallResp {
   string resp = 3;
   
   string callerNodeId = 8;
-  string calllerPodId = 9; 
+  string callerPodId = 9; 
 
   string calleeNodeId = 10; // when funcCall is process by a funcPod, this is the NodeId
   string calleePodId = 11;
