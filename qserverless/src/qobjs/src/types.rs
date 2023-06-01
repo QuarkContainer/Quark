@@ -24,6 +24,7 @@ use crate::qmeta::*;
 use crate::selection_predicate::*;
 use crate::ObjectMeta;
 use crate::k8s;
+use crate::system_types::{FuncPackage, FuncPackageSpec};
 
 pub const QUARK_POD : &str = "qpod";
 pub const QUARK_NODE : &str = "qnode";
@@ -501,6 +502,40 @@ impl DataObject {
         let obj = DataObject::NewFromK8sObj("pod", &pod.metadata, podStr);
 
         return Ok(obj)
+    }
+
+    pub fn NewFuncPackage(namespace: &str, name: &str) -> Result<Self> {
+        let podSpecStr = r#"
+        {
+            "hostNetwork": true,
+            "containers":[
+                {
+                    "name":"nginx",
+                    "image":"nginx:alpine",
+                    "ports":[
+                        {
+                            "containerPort": 80,
+                            "hostIP": "192.168.0.22",
+                            "hostPort": 88
+                        }
+                    ]
+                }
+            ]
+        }"#;
+        let podSpec: k8s::PodSpec = serde_json::from_str(podSpecStr)?;
+        let package = FuncPackage {
+            metadata: ObjectMeta { 
+                namespace: Some(namespace.to_string()),
+                name: Some(name.to_string()),
+                ..Default::default()
+            },
+            spec: FuncPackageSpec {
+                template: podSpec
+            },
+        };
+        let packageStr = serde_json::to_string(&package)?;
+        let obj = DataObject::NewFromK8sObj("package", &package.metadata, packageStr);
+        return Ok(obj);
     }
 }
 

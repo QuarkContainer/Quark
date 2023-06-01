@@ -129,8 +129,8 @@ impl FuncAgent {
         }
     }
 
+    // when funcagent get response from funcsvc for direct call
     pub fn CallResponse(&self, funcCallId: &str, response: SResult<String, String>) -> Result<()> {
-        error!("FuncAgent CallResponse 1");
         match self.callContexts.lock().unwrap().remove(funcCallId) {
             None => return Err(Error::CommonError(format!("get unepxecet callid {}", funcCallId))),
             Some(context) => {
@@ -186,6 +186,7 @@ impl FuncAgent {
         return Ok(());
     }
 
+    // get funcagentcallreq from funcpod
     pub fn OnFuncAgentCallReq(&self, callerFuncPodId: &str, req: func::FuncAgentCallReq) -> Result<()> {
         let createTime = SystemTime::now();
         let inner = FuncCallInner {
@@ -227,6 +228,7 @@ impl FuncAgent {
         return Ok(())
     }
 
+     // get funcagentcallresp from funcpod
     pub fn OnFuncAgentCallResp(&self, calleeFuncPodId: &str, resp: func::FuncAgentCallResp) -> Result<()> {
         let call = match self.callerCalls.lock().unwrap().remove(&resp.id) {
             None => {
@@ -253,6 +255,7 @@ impl FuncAgent {
         return Ok(())
     }
 
+    // get funcCall msg from func_svc, forward it to the target funcpod
     pub fn OnFuncSvcCallReq(&self, req: func::FuncSvcCallReq) -> Result<()> {
         let funcPod = self.funcPodMgr.GetPod(&req.callee_pod_id)?;
 
@@ -292,6 +295,7 @@ impl FuncAgent {
         
     }
 
+    // when the func_agent get callresponse from funcSvc
     pub fn OnFuncSvcCallResp(&self, resp: func::FuncSvcCallResp) -> Result<()> {
         let id = resp.id.clone();
         let callerPodId = resp.caller_pod_id.clone();
@@ -309,6 +313,7 @@ impl FuncAgent {
                 resp: resp.resp,
                 error: resp.error,
             };
+            // send response to the caller pod
             self.funcPodMgr.SendTo(&callerPodId, func::FuncAgentMsg {
                 event_body: Some(func::func_agent_msg::EventBody::FuncAgentCallResp(resp)),
             })?;
@@ -317,6 +322,7 @@ impl FuncAgent {
         return Ok(())
     }
 
+    // get msg from func_svc
     pub async fn OneFuncSvcMsg(&self, msg: func::FuncSvcMsg) -> Result<()> {
         let body = match msg.event_body {
             None => return Err(Error::EINVAL),
@@ -338,7 +344,8 @@ impl FuncAgent {
         return Ok(())    
     }
 
-    pub async fn OnFuncAgentMsg(&self, callerId: &str, msg: func::FuncAgentMsg) -> Result<()> {
+    // let message from funcPod
+    pub async fn OnFuncPodMsg(&self, funcPodId: &str, msg: func::FuncAgentMsg) -> Result<()> {
         let body = match msg.event_body {
             None => return Err(Error::EINVAL),
             Some(b) => b,
@@ -346,13 +353,13 @@ impl FuncAgent {
 
         match body {
             EventBody::FuncAgentCallReq(msg) => {
-                self.OnFuncAgentCallReq(callerId, msg)?;
+                self.OnFuncAgentCallReq(funcPodId, msg)?;
             }
             EventBody::FuncAgentCallResp(msg) => {
-                self.OnFuncAgentCallResp(callerId, msg)?;
+                self.OnFuncAgentCallResp(funcPodId, msg)?;
             }
-            _ => {
-
+            m => {
+                error!("get unexpected msg {:?}", m);
             }
         };
 

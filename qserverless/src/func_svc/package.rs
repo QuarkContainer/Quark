@@ -19,6 +19,10 @@ use core::ops::Deref;
 use std::time::SystemTime;
 
 use qobjs::common::*;
+use qobjs::informer::EventHandler;
+use qobjs::store::ThreadSafeStore;
+use qobjs::system_types::FuncPackage;
+use qobjs::types::*;
 
 use crate::func_call::FuncCall;
 use crate::task_queue::*;
@@ -79,6 +83,7 @@ impl Eq for PackageId {}
 pub struct PackageInner  {
     pub namespace: String,
     pub packageName: String,
+    pub version: String,
 
     pub reqResource: Resource,
 
@@ -90,6 +95,7 @@ pub struct PackageInner  {
     // total waiting tasks
     pub waitingQueue: PackageTaskQueue,
     pub keepalivePods: BTreeMap<SystemTime, FuncPod>,
+    pub funcPackage: FuncPackage,
 }
 
 impl PackageInner {
@@ -97,12 +103,21 @@ impl PackageInner {
         return Self {
             namespace: namespace.to_string(),
             packageName: packageName.to_string(),
-            reqResource: Resource {
-                mem: 1024 * 1024,
-                cpu: 1000,
-            },
+            reqResource: Resource::default(),
             ..Default::default()
         };
+    }
+
+    pub fn NewFromFuncPackage(fp: FuncPackage) -> Self {
+        return Self {
+            namespace: fp.metadata.namespace.as_deref().unwrap_or("").to_string(),
+            packageName: fp.metadata.name.as_deref().unwrap_or("").to_string(),
+            version: fp.metadata.resource_version.as_deref().unwrap_or("").to_string(),
+            // todo: get resource requirement from podspec
+            reqResource: Resource::default(),
+            funcPackage: fp,
+            ..Default::default()
+        }
     }
 
     pub fn PopKeepalivePod(&mut self) -> Option<FuncPod> {
@@ -199,6 +214,11 @@ impl Package {
         return Self(Arc::new(Mutex::new(inner)));
     }
 
+    pub fn NewFromFuncPackage(fp: FuncPackage) -> Self {
+        let inner = PackageInner::NewFromFuncPackage(fp);
+        return Self(Arc::new(Mutex::new(inner)));
+    }
+
     pub fn PackageId(&self) -> PackageId {
         let inner = self.lock().unwrap();
         return PackageId { 
@@ -240,37 +260,65 @@ impl Package {
    
 }
 
+#[derive(Debug, Clone)]
 pub struct PackageMgr {
-    pub packages: Mutex<BTreeMap<PackageId, Package>>,
+    pub packages: Arc<Mutex<BTreeMap<PackageId, Package>>>,
 }
 
 impl PackageMgr {
     pub fn New() -> Self {
         let ret = Self {
-            packages: Mutex::new(BTreeMap::new()),
+            packages: Arc::new(Mutex::new(BTreeMap::new())),
         };
-
-        let namespace = "ns";
-        let packageName = "package1";
-
-        ret.AddPackage(namespace, packageName);
-
+        
         return ret;
     }
 
-    pub fn AddPackage(&self, namespace: &str, packageName: &str) {
+    pub fn Add(&self, package: Package) {
+        let packageId = PackageId {
+            namespace: package.Namespace(),
+            packageName: package.Name(),
+        };
+
+        self.packages.lock().unwrap().insert(packageId, package);
+    }
+
+    pub fn Remove(&self, namespace: &str, packageName: &str) {
         let packageId = PackageId {
             namespace: namespace.to_string(),
             packageName: packageName.to_string(),
         };
 
-        self.packages.lock().unwrap().insert(packageId, Package::New(namespace, packageName));
+        self.packages.lock().unwrap().remove(&packageId);
     }
 
     pub fn Get(&self, packageId: &PackageId) -> Result<Package> {
         match self.packages.lock().unwrap().get(packageId) {
             None => return Err(Error::ENOENT),
             Some(p) => Ok(p.clone()),
+        }
+    }
+}
+
+impl EventHandler for PackageMgr {
+    fn handle(&self, _store: &ThreadSafeStore, event: &DeltaEvent) {
+        let obj = event.obj.clone();
+        let funcPackage : FuncPackage = serde_json::from_str(&obj.data).unwrap();
+        
+        match &event.type_{
+            EventType::Added => {
+                let package = Package::NewFromFuncPackage(funcPackage);
+                self.Add(package);
+            }
+            EventType::Deleted => {
+                self.Remove(
+                    funcPackage.metadata.namespace.as_deref().unwrap_or(""), 
+                    funcPackage.metadata.name.as_deref().unwrap_or("")
+                );
+            }
+            t => {
+                   unimplemented!("PackageMgr::EventHandler doesn't handle {:?}", t);
+            }
         }
     }
 }

@@ -267,6 +267,7 @@ impl FuncNode {
         return Ok(())
     }
 
+    // get funccall req from nodeagent
     pub fn OnFuncSvcCallReq(&self, req: func::FuncSvcCallReq) -> Result<()> {
         let packageId = PackageId {
             namespace: req.namespace.clone(),
@@ -308,21 +309,18 @@ impl FuncNode {
         return Ok(())
     }
 
-
+    // get funccall response from nodeagent
     pub fn OnFuncSvcCallResp(&self, resp: func::FuncSvcCallResp) -> Result<()> {
-        error!("OnFuncSvcCallResp 1");
         self.lock().unwrap().calleeFuncCalls.remove(&resp.id);
-        error!("OnFuncSvcCallResp 1.1 ndoeid is {}", &resp.caller_node_id);
         let callerNode = FUNC_NODE_MGR.Get(&resp.caller_node_id)?;
-        error!("OnFuncSvcCallResp 2 {}", &resp.callee_pod_id);
         let pod = FUNC_POD_MGR.Get(&resp.callee_pod_id)?;
-        error!("OnFuncSvcCallResp 3 {}", &resp.callee_pod_id);
         *pod.state.lock().unwrap() = FuncPodState::Idle(SystemTime::now());
         callerNode.Send(FuncNodeMsg::FuncCallResp(resp))?;
         FUNC_SVC_MGR.lock().unwrap().OnFreePod(&pod)?;
         return Ok(())
     }
 
+    // get new funcpod from nodeagent
     pub fn OnFuncPodConnReq(&self, req: func::FuncPodConnReq) -> Result<()> {
         let packageId = PackageId {
             namespace: req.namespace.clone(),
@@ -360,7 +358,7 @@ impl FuncNode {
         return Ok(())
     }
 
-
+    // get message from nodeagent
     pub async fn ProcessNodeAgentMsg(&self, msg: func::FuncSvcMsg) -> Result<()> {
         let body = match msg.event_body {
             None => panic!("ProcessNodeAgentMsg get none eventbody"),
@@ -383,6 +381,7 @@ impl FuncNode {
         }
     }
 
+    // get funccall req from another func node
     pub fn OnFuncCall(&self, call: FuncCall, tx: &mpsc::Sender<SResult<func::FuncSvcMsg, Status>>) -> Result<()> {
         let req = func::FuncSvcCallReq {
             id: call.id.clone(),
@@ -407,15 +406,24 @@ impl FuncNode {
         return Ok(())
     }
 
+    // get funccall resp from another func node
+    pub fn OnFuncCallResp(&self, resp: func::FuncSvcCallResp, tx: &mpsc::Sender<SResult<func::FuncSvcMsg, Status>>) -> Result<()> {
+        self.lock().unwrap().calleeFuncCalls.remove(&resp.id);
+        self.SendToNodeAgent(func::FuncSvcMsg {
+            event_body: Some(func::func_svc_msg::EventBody::FuncSvcCallResp(resp))
+        }, tx);
+
+        return Ok(())
+    }
+
+    // get message from another funcnode
     pub fn OnNodeMsg(&self, msg: FuncNodeMsg, tx: &mpsc::Sender<SResult<func::FuncSvcMsg, Status>>) -> Result<()> {
         match msg {
             FuncNodeMsg::FuncCall(funcCall) => {
                 return self.OnFuncCall(funcCall, tx);
             }
             FuncNodeMsg::FuncCallResp(resp) => {
-                self.SendToNodeAgent(func::FuncSvcMsg {
-                    event_body: Some(func::func_svc_msg::EventBody::FuncSvcCallResp(resp))
-                }, tx);
+                self.OnFuncCallResp(resp, tx)?;
                 return Ok(())
             }
             FuncNodeMsg::FuncPodConnResp(resp) => {
@@ -427,6 +435,7 @@ impl FuncNode {
         }
     }
 
+    // send funccall resp from the nodeagent
     pub fn SendToNodeAgent(&self, msg: func::FuncSvcMsg, tx: &mpsc::Sender<SResult<func::FuncSvcMsg, Status>>) {
         match tx.try_send(Ok(msg)) {
             Ok(()) => (),

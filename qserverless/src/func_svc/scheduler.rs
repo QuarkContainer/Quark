@@ -15,10 +15,19 @@
 use std::ops::Add;
 use std::ops::Sub;
 
-#[derive(Debug, Clone, Default, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Resource {
     pub mem: u64,
     pub cpu: u64,
+}
+
+impl Default for Resource {
+    fn default() -> Self {
+        return Self {
+            mem: 1024 * 1024,
+            cpu: 1000,
+        }
+    }
 }
 
 impl Add for Resource {
