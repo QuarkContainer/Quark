@@ -42,7 +42,7 @@ pub const VERSION: &str = "0.1";
 
 lazy_static! {
     pub static ref SVC_DIR: SvcDir = SvcDir::default();
-    pub static ref CACHE_OBJ_TYPES: Vec<&'static str> = vec!["pod", "podset",];
+    pub static ref CACHE_OBJ_TYPES: Vec<&'static str> = vec!["pod", "podset", "package"];
 }
 
 #[tokio::main]

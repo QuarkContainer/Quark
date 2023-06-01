@@ -39,6 +39,7 @@ pub mod watch;
 pub mod cacher;
 pub mod utility;
 pub mod func_client;
+pub mod system_types;
 
 #[macro_use]
 extern crate scopeguard;

@@ -140,7 +140,7 @@ impl FuncPod {
                         }
                     };
                     
-                    FUNC_AGENT.OnFuncAgentMsg(&self.funcPodId, msg).await?;
+                    FUNC_AGENT.OnFuncPodMsg(&self.funcPodId, msg).await?;
                 }
             }
         }

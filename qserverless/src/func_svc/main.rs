@@ -42,7 +42,7 @@ pub mod message;
 pub mod grpc_svc;
 
 use package::PackageMgr;
-use qobjs::common::*;
+use qobjs::{common::*, cacher_client::CacherClient, types::DataObject, informer_factory::InformerFactory, selection_predicate::ListOption};
 
 lazy_static! {
     pub static ref PACKAGE_MGR: PackageMgr = {
@@ -68,7 +68,29 @@ lazy_static! {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    use std::sync::Arc;
+
     log4rs::init_file("fs_logging_config.yaml", Default::default()).unwrap();
+
+    error!("init func svc");
+
+    let factory = InformerFactory::New("http://127.0.0.1:8890", "").await.unwrap();
+    factory.AddInformer("package", &ListOption::default()).await.unwrap();
+    let informer = factory.GetInformer("package").await.unwrap();
+    let _id1 = informer.AddEventHandler(Arc::new(PACKAGE_MGR.clone())).await.unwrap();
+
+    use crate::package::PackageId;
+    let packageId = PackageId {
+        namespace: "ns1".to_string(),
+        packageName: "package1".to_string(),
+    };
+
+    if PACKAGE_MGR.Get(&packageId).is_err() {
+        let client = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
+        let obj = DataObject::NewFuncPackage("ns1", "package1").unwrap();
+        client.Create("package", obj.Obj()).await.unwrap();
+    }
+
     grpc_svc::GrpcService().await.unwrap();
     Ok(())
 }

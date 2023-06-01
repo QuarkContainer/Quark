@@ -256,9 +256,8 @@ mod tests {
         error!("TestDirectFuncCall 1");
         let mut client = FuncClient::Init("http://127.0.0.1:8892").await.unwrap();
         error!("TestDirectFuncCall 2");
-        //let ret = client.Call("ns1", "package1", "sub", "", 1).await;
-        //error!("ret is {:?}", ret);
-        let ret = client.Call("ns1", "package1", "add", "", 1).await;
+        let ret = client.Call("ns1", "package1", "sub", "", 1).await;
+        //let ret = client.Call("ns1", "package1", "add", "", 1).await;
         error!("ret is {:?}", ret);
         assert!(ret.is_ok());
         assert!(false);
