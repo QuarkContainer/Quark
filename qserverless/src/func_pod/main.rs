@@ -42,10 +42,14 @@ pub static FUNC_AGENT_CLIENT: OnceCell<FuncAgentClient> = OnceCell::new();
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    println!("test 1");
     log4rs::init_file("fp_logging_config.yaml", Default::default()).unwrap();
-    
+    println!("test 1 dddd");
+    error!("test 1");
     FUNC_AGENT_CLIENT.set(FuncAgentClient::Init("http://127.0.0.1:8892").await?).unwrap();
+    println!("test 2");
     FUNC_CALL_MGR.Process().await?;
+    println!("test 3");
     
     return Ok(());
 }
