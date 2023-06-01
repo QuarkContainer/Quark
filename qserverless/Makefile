@@ -15,6 +15,7 @@ deploy: fp
 	cp ./deployment/fp.Dockerfile ./target/fp/Dockerfile
 	-docker image rm func_pod
 	docker build -t func_pod:latest ./target/fp
+	#docker run --network host -it --name fp --rm func_pod
 test:
 	cargo run --bin test
 all: rf
