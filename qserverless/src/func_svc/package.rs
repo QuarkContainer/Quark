@@ -23,6 +23,7 @@ use qobjs::informer::EventHandler;
 use qobjs::store::ThreadSafeStore;
 use qobjs::system_types::FuncPackage;
 use qobjs::types::*;
+use qobjs::k8s;
 
 use crate::func_call::FuncCall;
 use crate::task_queue::*;
@@ -214,6 +215,11 @@ impl Package {
         return Self(Arc::new(Mutex::new(inner)));
     }
 
+
+    pub fn PodSpec(&self) -> k8s::PodSpec {
+        return self.lock().unwrap().funcPackage.spec.template.clone();
+    }
+
     pub fn NewFromFuncPackage(fp: FuncPackage) -> Self {
         let inner = PackageInner::NewFromFuncPackage(fp);
         return Self(Arc::new(Mutex::new(inner)));
@@ -270,7 +276,7 @@ impl PackageMgr {
         let ret = Self {
             packages: Arc::new(Mutex::new(BTreeMap::new())),
         };
-        
+
         return ret;
     }
 

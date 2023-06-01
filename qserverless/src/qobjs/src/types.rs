@@ -54,6 +54,8 @@ pub const AnnotationNodeMgrApplicationSession : &str = "applicationsession.core.
 pub const AnnotationNodeMgrNodeRevision       : &str = "noderevision.core.qserverless.quarksoft.io";
 pub const AnnotationNodeMgrHibernatePod       : &str = "hibernatepod.core.qserverless.quarksoft.io";
 pub const AnnotationNodeMgrSessionServicePod  : &str = "sessionservicepod.core.qserverless.quarksoft.io";
+pub const AnnotationFuncPodPackageName        : &str = "pacagename.qserverless.quarksoft.io";
+pub const EnvVarNodeMgrPodId                  : &str = "podid.core.qserverless.quarksoft.io";
 
 pub trait DeepCopy {
     fn DeepCopy(&self) -> Self;
@@ -510,15 +512,8 @@ impl DataObject {
             "hostNetwork": true,
             "containers":[
                 {
-                    "name":"nginx",
-                    "image":"nginx:alpine",
-                    "ports":[
-                        {
-                            "containerPort": 80,
-                            "hostIP": "192.168.0.22",
-                            "hostPort": 88
-                        }
-                    ]
+                    "name":"testfp",
+                    "image":"func_pod:latest"
                 }
             ]
         }"#;

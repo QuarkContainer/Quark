@@ -43,6 +43,7 @@ pub mod grpc_svc;
 
 use package::PackageMgr;
 use qobjs::{common::*, cacher_client::CacherClient, types::DataObject, informer_factory::InformerFactory, selection_predicate::ListOption};
+use scheduler::Scheduler;
 
 lazy_static! {
     pub static ref PACKAGE_MGR: PackageMgr = {
@@ -63,6 +64,10 @@ lazy_static! {
 
     pub static ref FUNC_SVC_MGR: FuncSvc = {
         FuncSvc::New()
+    };
+
+    pub static ref SCHEDULER: Scheduler = {
+        Scheduler::New("http://127.0.0.1:8890")
     };
 }
 

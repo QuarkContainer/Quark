@@ -23,6 +23,7 @@ use qobjs::common::*;
 use qobjs::func;
 
 use crate::FUNC_NODE_MGR;
+use crate::SCHEDULER;
 use crate::scheduler::Resource;
 use crate::task_queue::*;
 use crate::func_call::*;
@@ -257,7 +258,11 @@ impl FuncSvcInner {
     pub fn CreatePod(&mut self, package: &Package) -> Result<()> {
         assert!(self.freeResource.Fullfil(&package.ReqResource()));
         self.freeResource = self.freeResource - package.ReqResource();
-        unimplemented!();
+        
+        let podName = uuid::Uuid::new_v4().to_string();
+        SCHEDULER.Schedule(&podName, package)?;
+
+        return Ok(())
     }
 
     pub fn FreeingResource(&self) -> Resource {
