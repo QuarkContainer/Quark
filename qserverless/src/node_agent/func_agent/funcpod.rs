@@ -126,7 +126,12 @@ impl FuncPod {
                 msg = stream.message() => {
                     let msg : func::FuncAgentMsg = match msg {
                         Err(e) => {
-                            error!("FuncNode get error message {:?}", e);
+                            match FUNC_AGENT.OnFuncPodDisconnect(&self.funcPodId) {
+                                Err(e) => {
+                                    error!("FuncPod {} disconnect get error message {:?} ", &self.funcPodId, e);
+                                }
+                                Ok(()) => ()
+                            }
                             break;
                         }
                         Ok(m) => {

@@ -162,7 +162,7 @@ impl FuncSvcClientMgr {
                 msg = stream.message() => {
                     let msg : func::FuncSvcMsg = match msg {
                         Err(e) => {
-                            error!("FuncNode get error message {:?}", e);
+                            error!("FuncSvcClient get error message {:?}", e);
                             break;
                         }
                         Ok(m) => {

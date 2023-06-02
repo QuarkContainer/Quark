@@ -27,7 +27,7 @@ use qobjs::{common::*, func::{self, func_agent_msg::EventBody}};
 
 use crate::{FUNC_SVC_CLIENT, FUNC_AGENT};
 
-use super::funcpod::FuncPod;
+use super::funcpod::{FuncPod, funcPodState};
 use super::funcpod_mgr::FuncPodMgr;
 
 #[derive(Debug)]
@@ -228,7 +228,44 @@ impl FuncAgent {
         return Ok(())
     }
 
-     // get funcagentcallresp from funcpod
+    pub fn OnFuncPodDisconnect(&self, funcPodId: &str) -> Result<()> {
+        let pod = self.funcPodMgr.RemovePod(funcPodId)?;
+        match &pod.state {
+            funcPodState::Idle => (),
+            funcPodState::Running(callid) => {
+                let calleeFuncCall = match self.calleeCalls.lock().unwrap().remove(callid) {
+                    None => panic!("OnFuncPodDisconnect missing callid {}", callid),
+                    Some(c) => c,
+                };
+
+                let resp: func::FuncSvcCallResp = func::FuncSvcCallResp {
+                    id: calleeFuncCall.id.clone(),
+                    error: format!("func pod {} fail", funcPodId),
+                    resp: String::new(),
+                    caller_node_id: calleeFuncCall.callerNodeId.clone(),
+                    caller_pod_id: calleeFuncCall.callerFuncPodId.clone(),
+                    callee_node_id: calleeFuncCall.calleeNodeId.clone(),
+                    callee_pod_id: calleeFuncCall.calleeFuncPodId.clone(),
+                };
+        
+                FUNC_SVC_CLIENT.get().unwrap().Send(func::FuncSvcMsg {
+                    event_body: Some(func::func_svc_msg::EventBody::FuncSvcCallResp(resp))
+                })?;
+            }
+        }
+
+        let req = func::FuncPodDisconnReq {
+            func_pod_id: funcPodId.to_string(),
+        };
+
+        FUNC_SVC_CLIENT.get().unwrap().Send(func::FuncSvcMsg {
+            event_body: Some(func::func_svc_msg::EventBody::FuncPodDisconnReq(req))
+        })?;
+
+        return Ok(())
+    }
+
+    // get funcagentcallresp from funcpod
     pub fn OnFuncAgentCallResp(&self, calleeFuncPodId: &str, resp: func::FuncAgentCallResp) -> Result<()> {
         let call = match self.callerCalls.lock().unwrap().remove(&resp.id) {
             None => {
@@ -331,7 +368,27 @@ impl FuncAgent {
 
         match body {
             func::func_svc_msg::EventBody::FuncSvcCallReq(msg) => {
-                self.OnFuncSvcCallReq(msg)?;
+                match self.OnFuncSvcCallReq(msg.clone()) {
+                    Ok(()) => return Ok(()),
+                    Err(e) => {
+                        // try remove caller caller if it exists
+                        self.callerCalls.lock().unwrap().remove(&msg.id);
+                        
+                        let resp = func::FuncSvcCallResp {
+                            id: msg.id.clone(),
+                            error: format!("funccall {} get error {:?}", msg.id, e),
+                            resp: String::new(),
+                            caller_node_id: msg.caller_node_id.clone(),
+                            caller_pod_id: msg.caller_pod_id.clone(),
+                            callee_node_id: msg.callee_node_id.clone(),
+                            callee_pod_id: msg.callee_pod_id.clone(),
+                        };
+                
+                        FUNC_SVC_CLIENT.get().unwrap().Send(func::FuncSvcMsg {
+                            event_body: Some(func::func_svc_msg::EventBody::FuncSvcCallResp(resp))
+                        })?;
+                    }
+                }
             }
             func::func_svc_msg::EventBody::FuncSvcCallResp(msg) => {
                 self.OnFuncSvcCallResp(msg)?;

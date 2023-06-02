@@ -54,7 +54,14 @@ impl FuncPodMgr {
 
     pub fn GetPod(&self, funcPodId: &str) -> Result<FuncPod> {
         match self.pods.lock().unwrap().get(funcPodId) {
-            None => return Err(Error::ENOENT),
+            None => return Err(Error::ENOENT(format!("FuncPodMgr::GetPod can't find pod {}", funcPodId))),
+            Some(pod) => return Ok(pod.clone()),
+        }
+    }
+
+    pub fn RemovePod(&self, funcPodId: &str) -> Result<FuncPod> {
+        match self.pods.lock().unwrap().remove(funcPodId) {
+            None => return Err(Error::ENOENT(format!("FuncPodMgr::RemovePod can't find pod {}", funcPodId))),
             Some(pod) => return Ok(pod.clone()),
         }
     }

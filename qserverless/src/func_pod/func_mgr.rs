@@ -16,6 +16,7 @@ use std::sync::Arc;
 use std::collections::BTreeMap;
 
 use qobjs::func;
+use qobjs::types::*;
 
 use crate::{func_def::*, FUNC_CALL_MGR};
 
@@ -30,6 +31,18 @@ pub struct FuncMgr {
 impl FuncMgr {
     pub fn FuncPodId(&self) -> String {
         return self.funcPodId.clone();
+    }
+
+    pub fn GetPodIdFromEnvVar() -> String {
+        use std::env;
+        match env::var(EnvVarNodeMgrPodId) {
+            Ok(val) => return val,
+            Err(_e) => {
+                error!("can't get pod id from environment variable {}, generate a random pid id", EnvVarNodeMgrPodId);
+                return uuid::Uuid::new_v4().to_string()
+            }
+
+        };
     }
 
     pub fn RegisterMsg(&self) -> func::FuncPodRegisterReq {
@@ -48,7 +61,7 @@ impl FuncMgr {
         funcs.insert("sub".to_string(), Arc::new(Sub{}));
 
         return Self {
-            funcPodId: uuid::Uuid::new_v4().to_string(),
+            funcPodId: Self::GetPodIdFromEnvVar(),
             namespace: "ns1".to_owned(),
             packageName: "package1".to_owned(),
             funcs: Arc::new(funcs),

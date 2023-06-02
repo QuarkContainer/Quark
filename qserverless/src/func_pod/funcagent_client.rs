@@ -127,7 +127,7 @@ impl FuncAgentClient {
                 msg = stream.message() => {
                     let msg : func::FuncAgentMsg = match msg {
                         Err(e) => {
-                            error!("FuncNode get error message {:?}", e);
+                            error!("FuncAgentClient get error message {:?}", e);
                             break;
                         }
                         Ok(m) => {

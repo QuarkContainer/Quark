@@ -61,7 +61,7 @@ pub enum FuncCallResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FuncCallState {
     // FuncSvc get func request and put in pending queue
-    Scheduling,
+    Scheduling(SystemTime),
     // FuncSvc scheduled the Func to one FuncAgent
     Scheduled, // the content is callee NodeId
     // there is callee, but caller is not online
@@ -78,6 +78,13 @@ impl FuncCallState {
     pub fn IsCancelling(&self) -> bool {
         match self {
             FuncCallState::Cancelling => return true,
+            _ => return false,
+        }
+    }
+
+    pub fn IsScheduling(&self) -> bool {
+        match self {
+            FuncCallState::Scheduling(_) => return true,
             _ => return false,
         }
     }
@@ -172,14 +179,27 @@ pub struct FuncCallMgrInner {
     pub pendingCalleeFuncCalls: BTreeMap<SystemTime, String>,
 }
 
-impl FuncCallMgrInner {
-    pub fn RegisteCallee(&mut self, funcCall: &FuncCall) -> Result<()> {
+#[derive(Debug, Default)]
+pub struct FuncCallMgr(Arc<Mutex<FuncCallMgrInner>>);
+
+impl Deref for FuncCallMgr {
+    type Target = Arc<Mutex<FuncCallMgrInner>>;
+
+    fn deref(&self) -> &Arc<Mutex<FuncCallMgrInner>> {
+        &self.0
+    }
+}
+
+impl FuncCallMgr {
+    // when a node register in func service, register the list of funccall it is working on
+    pub fn RegisteCallee(&self, funcCall: &FuncCall) -> Result<()> {
+        let mut inner = self.lock().unwrap();
         let now = SystemTime::now();
-        match self.funcCalls.get(&funcCall.id) {
+        match inner.funcCalls.get(&funcCall.id).cloned() {
             None => {
                 funcCall.SetState(FuncCallState::PendingCaller(now));
-                self.pendingCallerFuncCalls.insert(now, funcCall.id.clone());
-                self.funcCalls.insert(funcCall.id.clone(), funcCall.clone());
+                inner.pendingCallerFuncCalls.insert(now, funcCall.id.clone());
+                inner.funcCalls.insert(funcCall.id.clone(), funcCall.clone());
                 return Ok(())
             }
             Some(curr) => {
@@ -194,7 +214,7 @@ impl FuncCallMgrInner {
                             if *curr.calleeFuncPodId.lock().unwrap() != *funcCall.calleeFuncPodId.lock().unwrap() {
                                 return Ok(())
                             }
-                            self.pendingCalleeFuncCalls.remove(&time);
+                            inner.pendingCalleeFuncCalls.remove(&time);
                         }
                         _ => {
                             // the func has no callee before, just drop it silently
@@ -210,13 +230,14 @@ impl FuncCallMgrInner {
         return Ok(())
     }
 
-    pub fn RegisteCaller(&mut self, funcCall: &FuncCall) -> Result<Option<FuncCallResult>> {
+    pub fn RegisteCaller(&self, funcCall: &FuncCall) -> Result<Option<FuncCallResult>> {
+        let mut inner = self.lock().unwrap();
         let now = SystemTime::now();
-        match self.funcCalls.get(&funcCall.id) {
+        match inner.funcCalls.get(&funcCall.id).cloned() {
             None => {
                 funcCall.SetState(FuncCallState::PendingCallee(now));
-                self.pendingCalleeFuncCalls.insert(now, funcCall.id.clone());
-                self.funcCalls.insert(funcCall.id.clone(), funcCall.clone());
+                inner.pendingCalleeFuncCalls.insert(now, funcCall.id.clone());
+                inner.funcCalls.insert(funcCall.id.clone(), funcCall.clone());
                 return Ok(None)
             }
             Some(curr) => {
@@ -231,10 +252,10 @@ impl FuncCallMgrInner {
                             if *curr.callerFuncPodId != *funcCall.callerFuncPodId {
                                 return Ok(None)
                             }
-                            self.pendingCallerFuncCalls.remove(&time);
+                            inner.pendingCallerFuncCalls.remove(&time);
                         }
                         FuncCallState::PendingCallerWithResult((time, result)) => {
-                            self.pendingResultFuncCalls.remove(&time);
+                            inner.pendingResultFuncCalls.remove(&time);
                             return Ok(Some(result.clone()));
                         }
                         _ => {
@@ -249,16 +270,5 @@ impl FuncCallMgrInner {
         }
 
         return Ok(None)
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct FuncCallMgr(Arc<Mutex<FuncCallMgrInner>>);
-
-impl Deref for FuncCallMgr {
-    type Target = Arc<Mutex<FuncCallMgrInner>>;
-
-    fn deref(&self) -> &Arc<Mutex<FuncCallMgrInner>> {
-        &self.0
     }
 }
