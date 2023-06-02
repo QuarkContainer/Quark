@@ -424,7 +424,7 @@ pub async fn FuncAgentGrpcService() -> Result<()> {
     use tonic::transport::Server;
     let funcSvcFuture = Server::builder()
         .add_service(FuncAgentServiceServer::new(FUNC_AGENT.clone()))
-        .serve("127.0.0.1:8892".parse().unwrap());
+        .serve("0.0.0.0:8892".parse().unwrap());
 
     info!("func agent start ...");
     tokio::select! {

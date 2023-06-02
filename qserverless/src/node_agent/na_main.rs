@@ -78,8 +78,43 @@ lazy_static! {
 async fn main() -> QResult<()> {
     log4rs::init_file("na_logging_config.yaml", Default::default()).unwrap();
     
-    return FsClientTest().await;
-    //return ClientTest().await;
+    let f1 = FuncAgentSvc();
+    let f2 = NodeAgentSvc();
+    tokio::select! {
+        _ = f1 => (),
+        _ = f2 => (),
+    }
+
+    return Ok(())
+ }
+
+
+pub async fn FuncAgentSvc() -> QResult<()> {
+    FUNC_SVC_CLIENT.set(FuncSvcClientMgr::New("http://127.0.0.1:8891")).unwrap();
+    FuncAgentGrpcService().await?;
+    return Ok(());
+}
+
+pub async fn NodeAgentSvc() -> QResult<()> {
+    CADVISOR_PROVIDER.set(CadvisorInfoProvider::New().await.unwrap()).unwrap();
+    RUNTIME_MGR.set(RuntimeMgr::New(10).await.unwrap()).unwrap();
+    IMAGE_MGR.set(ImageMgr::New(crictl::AuthConfig::default()).await.unwrap()).unwrap();
+    
+    //let client = crate::cri::client::CriClient::Init().await?;
+    
+    let nodeAgentStore= NodeAgentStore::New()?;
+    NODEAGENT_STORE.set(nodeAgentStore).unwrap();
+    
+   
+    let config = qobjs::config::NodeConfiguration::Default()?;
+
+    let na = crate::node::Run(config).await?;
+    
+   
+    let nodeAgentSrvMgr = NodeAgentServerMgr::New(vec!["http://127.0.0.1:8888".to_owned()]);
+    
+    nodeAgentSrvMgr.Process(&na).await.unwrap();
+    return Ok(())
 }
 
 pub async fn ClientTest() -> QResult<()> {
@@ -192,12 +227,6 @@ pub async fn ClientTest() -> QResult<()> {
 }
 
 
-pub async fn FsClientTest() -> QResult<()> {
-    FUNC_SVC_CLIENT.set(FuncSvcClientMgr::New("http://127.0.0.1:8891")).unwrap();
-    FuncAgentGrpcService().await?;
-    return Ok(());
-}
-
 /*
 pub async fn NMClientTest() -> QResult<()> {
     use qobjs::nm as nm_svc;
@@ -254,7 +283,7 @@ mod tests {
     async fn TestDirectFuncCall() {
         log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
         error!("TestDirectFuncCall 1");
-        let mut client = FuncClient::Init("http://127.0.0.1:8892").await.unwrap();
+        let mut client = FuncClient::Init("http://192.168.0.22:8892").await.unwrap();
         error!("TestDirectFuncCall 2");
         //let ret = client.Call("ns1", "package1", "sub", "", 1).await;
         let ret = client.Call("ns1", "package1", "add", "", 1).await;

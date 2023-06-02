@@ -181,12 +181,15 @@ impl PackageInner {
     pub fn OnFreePod(&mut self, pod: &FuncPod) -> Result<(bool, Option<FuncCall>)> {
         match self.waitingQueue.Pop() {
             None => {
+                error!("OnFreePod 1");
                 pod.SetKeepalive();
                 self.PushKeepalivePod(pod)?;
                 return Ok((true, None))
             }
             Some(t) => {
+                error!("OnFreePod 2 call {:#?}", &t);
                 pod.ScheduleFuncCall(&t)?;
+                error!("OnFreePod 3");
                 let removeTask = self.waitingQueue.GetWaitingTask(self.creatingPodCnt);
                 return Ok((false, removeTask));
             }
