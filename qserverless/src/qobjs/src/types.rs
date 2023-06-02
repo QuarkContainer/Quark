@@ -512,8 +512,8 @@ impl DataObject {
             "hostNetwork": true,
             "containers":[
                 {
-                    "name":"testfp",
-                    "image":"func_pod:latest"
+                    "name":"func_pod",
+                    "image":"localhost:5000/func_pod:latest"
                 }
             ]
         }"#;

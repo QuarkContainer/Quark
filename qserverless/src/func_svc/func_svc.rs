@@ -165,10 +165,13 @@ impl FuncSvcInner {
     pub fn OnFreePod(&mut self, pod: &FuncPod) -> Result<()> {
         let package = pod.package.clone();
 
+        error!("OnFreePod 1 new pod ...");
         if self.NeedEvictPod(&package) {
+            error!("OnFreePod 2 new pod ...");
             self.EvictPod(pod, &package.ReqResource())?;
             return Ok(());
         }
+        error!("OnFreePod 3 new pod ...");
         let (keepalive, task) = package.lock().unwrap().OnFreePod(pod)?;
         match task {
             None => (),
