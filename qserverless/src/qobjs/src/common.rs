@@ -82,7 +82,7 @@ pub enum Error {
     MpscSendFail,
 
     EPERM, // Operation not permitted
-    ENOENT, // no such entity
+    ENOENT(String), // no such entity
     EINVAL, // Invalid argument
 
     Timeout,

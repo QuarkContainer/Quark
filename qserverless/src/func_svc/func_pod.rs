@@ -62,10 +62,20 @@ impl PartialEq for FuncPodId {
 
 impl Eq for FuncPodId {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FuncPodState {
     Idle(SystemTime), // IdleTime
-    Running(String), // the funcId
+    Running(String), // the funcCallId
+    Dead,
+}
+
+impl FuncPodState {
+    pub fn IsDead(&self) -> bool {
+        match self {
+            Self::Dead => return true,
+            _ => return false,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -109,6 +119,10 @@ impl FuncPod {
             _ => return Err(Error::CommonError(format!("IdleTime invalid func pod state {:?}", state))),
         }
     }
+
+    pub fn IsDead(&self) -> bool {
+        return self.state.lock().unwrap().IsDead();
+    }
 }
 
 pub struct FuncPodMgr {
@@ -124,7 +138,14 @@ impl FuncPodMgr {
 
     pub fn Get(&self, podName: &str) -> Result<FuncPod> {
         match self.pods.lock().unwrap().get(podName) {
-            None => return Err(Error::ENOENT),
+            None => return Err(Error::ENOENT(format!("FuncPodMgr::Get can't find pod {}", podName))),
+            Some(p) => return Ok(p.clone()),
+        }
+    }
+
+    pub fn Remove(&self, podName: &str) -> Result<FuncPod> {
+        match self.pods.lock().unwrap().remove(podName) {
+            None => return Err(Error::ENOENT(format!("FuncPodMgr::Remove can't find pod {}", podName))),
             Some(p) => return Ok(p.clone()),
         }
     }

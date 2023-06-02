@@ -122,6 +122,19 @@ impl PackageInner {
     }
 
     pub fn PopKeepalivePod(&mut self) -> Option<FuncPod> {
+        loop {
+            match self.PopKeepaliveOnePod() {
+                None => return None,
+                Some(pod) => {
+                    if !pod.IsDead() {
+                        return Some(pod)
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn PopKeepaliveOnePod(&mut self) -> Option<FuncPod> {
         let mut iter = self.keepalivePods.iter().rev();
         let (time, pod) = match iter.next() {
             None => return None,
@@ -181,15 +194,12 @@ impl PackageInner {
     pub fn OnFreePod(&mut self, pod: &FuncPod) -> Result<(bool, Option<FuncCall>)> {
         match self.waitingQueue.Pop() {
             None => {
-                error!("OnFreePod 1");
                 pod.SetKeepalive();
                 self.PushKeepalivePod(pod)?;
                 return Ok((true, None))
             }
             Some(t) => {
-                error!("OnFreePod 2 call {:#?}", &t);
                 pod.ScheduleFuncCall(&t)?;
-                error!("OnFreePod 3");
                 let removeTask = self.waitingQueue.GetWaitingTask(self.creatingPodCnt);
                 return Ok((false, removeTask));
             }
@@ -303,7 +313,7 @@ impl PackageMgr {
 
     pub fn Get(&self, packageId: &PackageId) -> Result<Package> {
         match self.packages.lock().unwrap().get(packageId) {
-            None => return Err(Error::ENOENT),
+            None => return Err(Error::ENOENT(format!("can't find package {:?}", packageId))),
             Some(p) => Ok(p.clone()),
         }
     }

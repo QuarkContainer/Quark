@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 use std::sync::Mutex;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -58,8 +57,8 @@ pub struct FuncNodeInner {
     pub nodeName: String,
     pub state: FuncNodeState,
     pub funcPods: BTreeMap<String, FuncPod>,
-    pub callerFuncCalls: BTreeSet<String>, 
-    pub calleeFuncCalls: BTreeSet<String>, 
+    pub callerFuncCalls: BTreeMap<String, FuncCall>, 
+    pub calleeFuncCalls: BTreeMap<String, FuncCall>, 
 
     pub internMsgTx: mpsc::Sender<FuncNodeMsg>,
     pub internMsgRx: Option<mpsc::Receiver<FuncNodeMsg>>,
@@ -87,8 +86,8 @@ impl FuncNode {
             nodeName: nodeName.to_string(),
             state: FuncNodeState::WaitingConn,
             funcPods: BTreeMap::new(),
-            callerFuncCalls: BTreeSet::new(),
-            calleeFuncCalls: BTreeSet::new(),
+            callerFuncCalls: BTreeMap::new(),
+            calleeFuncCalls: BTreeMap::new(),
             internMsgTx: tx,
             internMsgRx: Some(rx),
             processorHandler: None,
@@ -127,12 +126,12 @@ impl FuncNode {
 
     pub fn HasCallerFuncCall(&self, funcCallId: &str) -> bool {
         let inner = self.lock().unwrap();
-        return inner.callerFuncCalls.contains(funcCallId);
+        return inner.callerFuncCalls.contains_key(funcCallId);
     }
 
     pub fn HasCalleeFuncCall(&self, funcCallId: &str) -> bool {
         let inner = self.lock().unwrap();
-        return inner.calleeFuncCalls.contains(funcCallId);
+        return inner.calleeFuncCalls.contains_key(funcCallId);
     }
 
     // this will be called in 2 situations
@@ -172,7 +171,7 @@ impl FuncNode {
 
             let funcCall = FuncCall(Arc::new(funcCallInner));
             
-            FUNC_CALL_MGR.lock().unwrap().RegisteCallee(&funcCall)?;
+            FUNC_CALL_MGR.RegisteCallee(&funcCall)?;
         }
 
         for funccall in regReq.caller_calls {
@@ -208,7 +207,7 @@ impl FuncNode {
             let funcCall = FuncCall(Arc::new(funcCallInner));
             
             // todo: handle the situation when the result is ready
-            let _ret = FUNC_CALL_MGR.lock().unwrap().RegisteCaller(&funcCall)?;
+            let _ret = FUNC_CALL_MGR.RegisteCaller(&funcCall)?;
         }
         
         for podStatus in regReq.func_pods {
@@ -296,14 +295,14 @@ impl FuncNode {
             callerFuncPodId: req.callee_pod_id.clone(),
             calleeNodeId: Mutex::new(req.callee_node_id.clone()),
             calleeFuncPodId: Mutex::new(req.callee_pod_id.clone()),
-            state: Mutex::new(FuncCallState::Scheduling),
+            state: Mutex::new(FuncCallState::Scheduling(SystemTime::now())),
             parameters: req.parameters.clone(),
             priority: req.priority as usize,
             createTime: SystemTimeProto::FromTimestamp(&req.createtime.as_ref().unwrap()).ToSystemTime(),
         };
 
         let funcCall = FuncCall(Arc::new(inner));
-        self.lock().unwrap().callerFuncCalls.insert(req.id.clone());
+        self.lock().unwrap().callerFuncCalls.insert(req.id.clone(), funcCall.clone());
         FUNC_SVC_MGR.lock().unwrap().OnNewFuncCall(&funcCall)?;
         
         return Ok(())
@@ -311,6 +310,7 @@ impl FuncNode {
 
     // get funccall response from nodeagent
     pub fn OnFuncSvcCallResp(&self, resp: func::FuncSvcCallResp) -> Result<()> {
+        error!("OnFuncSvcCallResp ... {:?}", &resp);
         self.lock().unwrap().calleeFuncCalls.remove(&resp.id);
         let callerNode = FUNC_NODE_MGR.Get(&resp.caller_node_id)?;
         let pod = FUNC_POD_MGR.Get(&resp.callee_pod_id)?;
@@ -326,6 +326,8 @@ impl FuncNode {
             namespace: req.namespace.clone(),
             packageName: req.package_name.clone(),
         };
+        error!("OnFuncPodConnReq {:?} ...", &packageId);
+        
         let package = match PACKAGE_MGR.Get(&packageId) {
             Ok(p) => {
                 let resp = func::FuncPodConnResp {
@@ -358,6 +360,70 @@ impl FuncNode {
         return Ok(())
     }
 
+    pub fn OnNodeDisconnected(&self) -> Result<()> {
+        info!("node {} disconnected", self.NodeName());
+        let funcPodIds : Vec<_> = self.lock().unwrap().funcPods.keys().cloned().collect(); 
+        for funcPodId in funcPodIds {
+            info!("node {} disconnected funcpod {} lost", self.NodeName(), &funcPodId);
+            self.OnFuncPodDisconnReq(&funcPodId)?;
+        }
+
+        {
+            let mut inner = self.lock().unwrap();
+            loop {
+                match inner.callerFuncCalls.pop_first() {
+                    None => break,
+                    Some((_, call)) => {
+                        call.SetState(FuncCallState::Cancelling);
+                    }
+                }
+            }
+        }
+        
+        return Ok(())
+    }
+
+    // when a pod is disconnected
+    pub fn OnFuncPodDisconnReq(&self, funcPodId: &str) -> Result<()> {
+        let funcPod = match self.lock().unwrap().funcPods.remove(funcPodId) {
+            None => {
+                error!("OnFuncPodDisconnReq can't find pod {:?}", funcPodId);
+                return Ok(())
+            }
+            Some(pod) => pod
+        };
+        FUNC_POD_MGR.Remove(funcPodId)?;
+                
+        match funcPod.state.lock().unwrap().clone() {
+            FuncPodState::Idle(_) => (),
+            FuncPodState::Running(callId) => {
+                self.lock().unwrap().calleeFuncCalls.remove(&callId);
+                let funcCall = match self.lock().unwrap().calleeFuncCalls.remove(&callId) {
+                    None => {
+                        return Err(Error::CommonError(format!("OnFuncPodDisconnReq can't find funcall {}", callId)));
+                    }
+                    Some(c) => c
+                };
+                let callerNode = FUNC_NODE_MGR.Get(&funcCall.callerNodeId)?;
+                let resp = func::FuncSvcCallResp {
+                    id: funcCall.id.clone(),
+                    error: format!("funcpod {} disconnect ", funcPodId),
+                    resp: String::new(),
+                    caller_node_id: funcCall.callerNodeId.clone(),
+                    caller_pod_id: funcCall.callerFuncPodId.clone(),
+                    callee_node_id: funcCall.calleeNodeId.lock().unwrap().clone(),
+                    callee_pod_id: funcCall.calleeFuncPodId.lock().unwrap().clone(),
+                };
+                callerNode.Send(FuncNodeMsg::FuncCallResp(resp))?;
+            }
+            _ => {}
+        }
+
+        *funcPod.state.lock().unwrap() = FuncPodState::Dead;
+
+        return Ok(())
+    }
+
     // get message from nodeagent
     pub async fn ProcessNodeAgentMsg(&self, msg: func::FuncSvcMsg) -> Result<()> {
         let body = match msg.event_body {
@@ -373,6 +439,9 @@ impl FuncNode {
             } 
             func::func_svc_msg::EventBody::FuncPodConnReq(req) => {
                 return self.OnFuncPodConnReq(req);
+            } 
+            func::func_svc_msg::EventBody::FuncPodDisconnReq(req) => {
+                return self.OnFuncPodDisconnReq(&req.func_pod_id);
             } 
             _ => {
                 error!("didn't get FuncAgentRegisterReq message instead {:?}", body);
@@ -401,7 +470,7 @@ impl FuncNode {
             event_body: Some(func::func_svc_msg::EventBody::FuncSvcCallReq(req))
         }, tx);
 
-        self.lock().unwrap().calleeFuncCalls.insert(call.id.clone());
+        self.lock().unwrap().calleeFuncCalls.insert(call.id.clone(), call.clone());
 
         return Ok(())
     }
@@ -503,7 +572,8 @@ impl FuncNode {
                 msg = rx.message() => {
                     let msg : func::FuncSvcMsg = match msg {
                         Err(e) => {
-                            error!("FuncNode get error message {:?}", e);
+                            error!("FuncNode {} disconnected get error message {:?}", self.NodeName(), e);
+                            self.OnNodeDisconnected()?;
                             break;
                         }
                         Ok(m) => {
@@ -578,7 +648,7 @@ impl FuncNodeMgr {
 
     pub fn Get(&self, nodeName: &str) -> Result<FuncNode> {
         match self.nodes.lock().unwrap().get(nodeName) {
-            None => return Err(Error::ENOENT),
+            None => return Err(Error::ENOENT(format!("can't get node {}", nodeName))),
             Some(n) => Ok(n.clone()),
         }
     }
