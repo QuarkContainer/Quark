@@ -98,7 +98,7 @@ impl FuncCallMgr {
 
     pub fn CallResponse(&self, id: &str, res: QSResult) -> Result<()> {
         let tx = match self.callerCalls.lock().unwrap().remove(id) {
-            None => return Err(Error::ENOENT),
+            None => return Err(Error::ENOENT(format!("FuncCallMgr::CallResponse can't find the id {}", id))),
             Some(tx) => tx,
         };
 

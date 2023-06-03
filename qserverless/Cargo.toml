@@ -47,6 +47,8 @@ rocksdb = "0.20.1"
 async-trait = "0.1.68"
 actix-rt = "*"
 log4rs = "1"
+sha2 = "0.10"
+base64 = "0.21.2"
 
 [dependencies.lazy_static]
 version = "1.0"

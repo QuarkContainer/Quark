@@ -81,9 +81,9 @@ pub enum Error {
 
     MpscSendFail,
 
-    EPERM, // Operation not permitted
+    EPERM(String), // Operation not permitted
     ENOENT(String), // no such entity
-    EINVAL, // Invalid argument
+    EINVAL(String), // Invalid argument
 
     Timeout,
     IpNetworkError(ipnetwork::IpNetworkError),
