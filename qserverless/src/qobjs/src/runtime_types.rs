@@ -538,7 +538,7 @@ pub const PodScheduled: &str = "PodScheduled";
 
 pub fn ContainerExit(status: &Option<cri::ContainerStatus>) -> bool {
     if let Some(status) = status {
-        return status.finished_at != 0 && status.state == cri::ContainerState::ContainerCreated as i32;
+        return status.finished_at != 0 && status.state == cri::ContainerState::ContainerExited as i32;
     }
 
     return false;
