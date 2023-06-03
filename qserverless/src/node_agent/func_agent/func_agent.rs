@@ -362,7 +362,7 @@ impl FuncAgent {
     // get msg from func_svc
     pub async fn OneFuncSvcMsg(&self, msg: func::FuncSvcMsg) -> Result<()> {
         let body = match msg.event_body {
-            None => return Err(Error::EINVAL),
+            None => return Err(Error::EINVAL(format!("OneFuncSvcMsg has None event_body"))),
             Some(b) => b,
         };
 
@@ -404,7 +404,7 @@ impl FuncAgent {
     // let message from funcPod
     pub async fn OnFuncPodMsg(&self, funcPodId: &str, msg: func::FuncAgentMsg) -> Result<()> {
         let body = match msg.event_body {
-            None => return Err(Error::EINVAL),
+            None => return Err(Error::EINVAL(format!("OnFuncPodMsg None event_body"))),
             Some(b) => b,
         };
 
