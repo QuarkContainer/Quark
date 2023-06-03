@@ -113,7 +113,7 @@ impl PodContainerAgent {
     } 
 
     pub async fn Process(&self, mut rx: mpsc::Receiver<NodeAgentMsg>) -> Result<()> {
-        let mut interval = time::interval(time::Duration::from_secs(2));
+        let mut interval = time::interval(time::Duration::from_secs(5));
         loop {
             tokio::select! {
                 _ = self.closeNotify.notified() => {
@@ -126,7 +126,20 @@ impl PodContainerAgent {
                     }
                     
                     let containerId = self.container.lock().unwrap().runtimeContainer.id.clone();
-                    let status = crate::RUNTIME_MGR.get().unwrap().GetContainerStatus(&containerId).await?;
+                    let status = match crate::RUNTIME_MGR.get().unwrap().GetContainerStatus(&containerId).await {
+                        Ok(s) => s,
+                        Err(e) => {
+                            info!("Container missing pod {} containerName {} error {:?}", 
+                                self.pod.PodId(), self.container.ContainerName(), e);
+                            self.Notify(NodeAgentMsg::PodContainerFailed(
+                                PodContainerFailed {
+                                    pod: self.pod.clone(),
+                                    container: self.container.clone(),
+                                }
+                            )).await;
+                            continue;
+                        }
+                    };
                     self.OnContainerProbeResult(&status).await;
                 }
                 msg = rx.recv() => {

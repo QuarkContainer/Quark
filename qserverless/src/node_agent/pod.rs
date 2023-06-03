@@ -363,7 +363,7 @@ impl PodAgent {
         info!("pod Container Failed pod {} container {}", pod.PodId(), container.ContainerName());
         
         // TODO, update pod cpu, memory resource usage
-	    return Ok(())
+	    return self.HandlePodContainerExit(pod, container).await;
     }
 
     pub async fn OnPodContainerStopped(&self, msg: PodContainerStopped) -> Result<()> {
