@@ -176,7 +176,7 @@ impl FuncSvcClientMgr {
                         }
                     };
 
-                    FUNC_AGENT.OneFuncSvcMsg(msg).await?;
+                    FUNC_AGENT.OnFuncSvcMsg(msg).await?;
                 }
 
             }

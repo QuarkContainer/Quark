@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::result::Result as SResult;
-use qobjs::func::BlobSvcMsg;
+use qobjs::func::BlobSvcReq;
 use qobjs::utility::SystemTimeProto;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -29,8 +29,8 @@ pub struct BlogSvc {
 impl BlogSvc {
     pub async fn Process(
         &self,
-        stream: tonic::Streaming<func::BlobSvcMsg>,
-        agentTx: mpsc::Sender<SResult<func::BlobSvcMsg, tonic::Status>>
+        stream: tonic::Streaming<func::BlobSvcReq>,
+        agentTx: mpsc::Sender<SResult<func::BlobSvcResp, tonic::Status>>
     ) -> Result<()> {
         let mut stream = stream;
 
@@ -59,12 +59,13 @@ impl BlogSvc {
 
     pub async fn ProcessMsg(
         &self, 
-        msg: BlobSvcMsg, 
-        agentTx: &mpsc::Sender<SResult<func::BlobSvcMsg, tonic::Status>>
+        msg: BlobSvcReq, 
+        agentTx: &mpsc::Sender<SResult<func::BlobSvcResp, tonic::Status>>
     ) -> Result<()> {
         let body = msg.event_body.unwrap();
+        let msgId = msg.msg_id;
         let resp = match body {
-            func::blob_svc_msg::EventBody::BlobOpenReq(msg) => {
+            func::blob_svc_req::EventBody::BlobOpenReq(msg) => {
                 match self.blobSession.Open(&msg.namespace, &msg.name) {
                     Ok((id, b)) => {
                         let inner = b.lock().unwrap();
@@ -79,8 +80,9 @@ impl BlogSvc {
                             last_access_time: Some(SystemTimeProto::FromSystemTime(inner.lastAccessTime).ToTimeStamp()),
                             error: String::new(),
                         };
-                        func::BlobSvcMsg {
-                            event_body: Some(func::blob_svc_msg::EventBody::BlobOpenResp(resp))
+                        func::BlobSvcResp {
+                            msg_id: msgId,
+                            event_body: Some(func::blob_svc_resp::EventBody::BlobOpenResp(resp))
                         }
                     }
                     Err(e) => {
@@ -89,13 +91,14 @@ impl BlogSvc {
                             error: format!("{:?}", e),
                             ..Default::default()
                         };
-                        func::BlobSvcMsg {
-                            event_body: Some(func::blob_svc_msg::EventBody::BlobOpenResp(resp))
+                        func::BlobSvcResp {
+                            msg_id: msgId,
+                            event_body: Some(func::blob_svc_resp::EventBody::BlobOpenResp(resp))
                         }
                     }
                 }
             }
-            func::blob_svc_msg::EventBody::BlobReadReq(msg) => {
+            func::blob_svc_req::EventBody::BlobReadReq(msg) => {
                 let mut buf = Vec::with_capacity(msg.len as usize);
                 buf.resize(msg.len as usize, 0u8);
 
@@ -106,8 +109,9 @@ impl BlogSvc {
                             data: buf,
                             error: String::new()
                         };
-                        func::BlobSvcMsg {
-                            event_body: Some(func::blob_svc_msg::EventBody::BlobReadResp(resp))
+                        func::BlobSvcResp {
+                            msg_id: msgId,
+                            event_body: Some(func::blob_svc_resp::EventBody::BlobReadResp(resp))
                         }
                     }
                     Err(e) => {
@@ -116,13 +120,14 @@ impl BlogSvc {
                             data: Vec::new(),
                             error: format!("{:?}", e),
                         };
-                        func::BlobSvcMsg {
-                            event_body: Some(func::blob_svc_msg::EventBody::BlobReadResp(resp))
+                        func::BlobSvcResp {
+                            msg_id: msgId,
+                            event_body: Some(func::blob_svc_resp::EventBody::BlobReadResp(resp))
                         }
                     }
                 }
             }
-            func::blob_svc_msg::EventBody::BlobSeekReq(msg) => {
+            func::blob_svc_req::EventBody::BlobSeekReq(msg) => {
                 match self.blobSession.Seek(msg.id, msg.seek_type, msg.pos) {
                     Ok(offset) => {
                         let resp = func::BlobSeekResp {
@@ -130,8 +135,9 @@ impl BlogSvc {
                             offset: offset,
                             error: String::new()
                         };
-                        func::BlobSvcMsg {
-                            event_body: Some(func::blob_svc_msg::EventBody::BlobSeekResp(resp))
+                        func::BlobSvcResp {
+                            msg_id: msgId,
+                            event_body: Some(func::blob_svc_resp::EventBody::BlobSeekResp(resp))
                         }
                     }
                     Err(e) => {
@@ -140,21 +146,23 @@ impl BlogSvc {
                             offset: 0,
                             error: format!("{:?}", e),
                         };
-                        func::BlobSvcMsg {
-                            event_body: Some(func::blob_svc_msg::EventBody::BlobSeekResp(resp))
+                        func::BlobSvcResp {
+                            msg_id: msgId,
+                            event_body: Some(func::blob_svc_resp::EventBody::BlobSeekResp(resp))
                         }
                     }
                 }
             }
-            func::blob_svc_msg::EventBody::BlobCloseReq(msg) => {
+            func::blob_svc_req::EventBody::BlobCloseReq(msg) => {
                 match self.blobSession.Close(msg.id) {
                     Ok(()) => {
                         let resp = func::BlobCloseResp {
                             msg_id: msg.msg_id,
                             error: String::new()
                         };
-                        func::BlobSvcMsg {
-                            event_body: Some(func::blob_svc_msg::EventBody::BlobCloseResp(resp))
+                        func::BlobSvcResp {
+                            msg_id: msgId,
+                            event_body: Some(func::blob_svc_resp::EventBody::BlobCloseResp(resp))
                         }
                     }
                     Err(e) => {
@@ -162,14 +170,13 @@ impl BlogSvc {
                             msg_id: msg.msg_id,
                             error: format!("{:?}", e),
                         };
-                        func::BlobSvcMsg {
-                            event_body: Some(func::blob_svc_msg::EventBody::BlobCloseResp(resp))
+                        func::BlobSvcResp {
+                            msg_id: msgId,
+                            event_body: Some(func::blob_svc_resp::EventBody::BlobCloseResp(resp))
                         }
                     }
                 }
             }
-            
-            _ => return Ok(())
         };
         
         match agentTx.send(Ok(resp)).await {
@@ -181,11 +188,11 @@ impl BlogSvc {
 
 #[tonic::async_trait]
 impl func::blob_service_server::BlobService for BlogSvc {
-    type StreamProcessStream = ReceiverStream<SResult<func::BlobSvcMsg, tonic::Status>>;
+    type StreamProcessStream = ReceiverStream<SResult<func::BlobSvcResp, tonic::Status>>;
     
     async fn stream_process(
         &self,
-        _request: tonic::Request<tonic::Streaming<func::BlobSvcMsg>>,
+        _request: tonic::Request<tonic::Streaming<func::BlobSvcReq>>,
     ) -> SResult<tonic::Response<Self::StreamProcessStream>, tonic::Status> {
         unimplemented!();
     }

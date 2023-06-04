@@ -16,18 +16,25 @@ syntax = "proto3";
 package func;
 
 service BlobService {
-  rpc StreamProcess(stream BlobSvcMsg) returns (stream BlobSvcMsg);
+  rpc StreamProcess(stream BlobSvcReq) returns (stream BlobSvcResp);
 }
 
-message BlobSvcMsg {
+message BlobSvcReq {
+  uint64 msgId = 1;
   oneof EventBody {
     BlobOpenReq BlobOpenReq = 501;
-    BlobOpenResp BlobOpenResp = 502;
     BlobReadReq BlobReadReq = 505;
-    BlobReadResp BlobReadResp = 506;
     BlobSeekReq BlobSeekReq = 507;
+    BlobCloseReq BlobCloseReq = 513;
+  }
+}
+
+message BlobSvcResp {
+  uint64 msgId = 1;
+  oneof EventBody {
+    BlobOpenResp BlobOpenResp = 502;
+    BlobReadResp BlobReadResp = 506;
     BlobSeekResp BlobSeekResp= 508;
-    BlobCloseReq BlobCloseReq = 513; 
     BlobCloseResp BlobCloseResp = 514;
   }
 }
