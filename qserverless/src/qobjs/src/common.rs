@@ -84,6 +84,7 @@ pub enum Error {
     EPERM(String), // Operation not permitted
     ENOENT(String), // no such entity
     EINVAL(String), // Invalid argument
+    ECONNREFUSED(String),
 
     Timeout,
     IpNetworkError(ipnetwork::IpNetworkError),

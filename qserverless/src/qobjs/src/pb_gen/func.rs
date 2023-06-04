@@ -1,33 +1,49 @@
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BlobSvcMsg {
-    #[prost(
-        oneof = "blob_svc_msg::EventBody",
-        tags = "501, 502, 505, 506, 507, 508, 513, 514"
-    )]
-    pub event_body: ::core::option::Option<blob_svc_msg::EventBody>,
+pub struct BlobSvcReq {
+    #[prost(uint64, tag = "1")]
+    pub msg_id: u64,
+    #[prost(oneof = "blob_svc_req::EventBody", tags = "501, 505, 507, 513")]
+    pub event_body: ::core::option::Option<blob_svc_req::EventBody>,
 }
-/// Nested message and enum types in `BlobSvcMsg`.
-pub mod blob_svc_msg {
+/// Nested message and enum types in `BlobSvcReq`.
+pub mod blob_svc_req {
     #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum EventBody {
         #[prost(message, tag = "501")]
         BlobOpenReq(super::BlobOpenReq),
-        #[prost(message, tag = "502")]
-        BlobOpenResp(super::BlobOpenResp),
         #[prost(message, tag = "505")]
         BlobReadReq(super::BlobReadReq),
-        #[prost(message, tag = "506")]
-        BlobReadResp(super::BlobReadResp),
         #[prost(message, tag = "507")]
         BlobSeekReq(super::BlobSeekReq),
-        #[prost(message, tag = "508")]
-        BlobSeekResp(super::BlobSeekResp),
         #[prost(message, tag = "513")]
         BlobCloseReq(super::BlobCloseReq),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BlobSvcResp {
+    #[prost(uint64, tag = "1")]
+    pub msg_id: u64,
+    #[prost(oneof = "blob_svc_resp::EventBody", tags = "502, 506, 508, 514")]
+    pub event_body: ::core::option::Option<blob_svc_resp::EventBody>,
+}
+/// Nested message and enum types in `BlobSvcResp`.
+pub mod blob_svc_resp {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum EventBody {
+        #[prost(message, tag = "502")]
+        BlobOpenResp(super::BlobOpenResp),
+        #[prost(message, tag = "506")]
+        BlobReadResp(super::BlobReadResp),
+        #[prost(message, tag = "508")]
+        BlobSeekResp(super::BlobSeekResp),
         #[prost(message, tag = "514")]
         BlobCloseResp(super::BlobCloseResp),
     }
@@ -556,9 +572,9 @@ pub mod blob_service_client {
         }
         pub async fn stream_process(
             &mut self,
-            request: impl tonic::IntoStreamingRequest<Message = super::BlobSvcMsg>,
+            request: impl tonic::IntoStreamingRequest<Message = super::BlobSvcReq>,
         ) -> Result<
-            tonic::Response<tonic::codec::Streaming<super::BlobSvcMsg>>,
+            tonic::Response<tonic::codec::Streaming<super::BlobSvcResp>>,
             tonic::Status,
         > {
             self.inner
@@ -792,13 +808,13 @@ pub mod blob_service_server {
     pub trait BlobService: Send + Sync + 'static {
         /// Server streaming response type for the StreamProcess method.
         type StreamProcessStream: futures_core::Stream<
-                Item = Result<super::BlobSvcMsg, tonic::Status>,
+                Item = Result<super::BlobSvcResp, tonic::Status>,
             >
             + Send
             + 'static;
         async fn stream_process(
             &self,
-            request: tonic::Request<tonic::Streaming<super::BlobSvcMsg>>,
+            request: tonic::Request<tonic::Streaming<super::BlobSvcReq>>,
         ) -> Result<tonic::Response<Self::StreamProcessStream>, tonic::Status>;
     }
     #[derive(Debug)]
@@ -865,9 +881,9 @@ pub mod blob_service_server {
                     struct StreamProcessSvc<T: BlobService>(pub Arc<T>);
                     impl<
                         T: BlobService,
-                    > tonic::server::StreamingService<super::BlobSvcMsg>
+                    > tonic::server::StreamingService<super::BlobSvcReq>
                     for StreamProcessSvc<T> {
-                        type Response = super::BlobSvcMsg;
+                        type Response = super::BlobSvcResp;
                         type ResponseStream = T::StreamProcessStream;
                         type Future = BoxFuture<
                             tonic::Response<Self::ResponseStream>,
@@ -875,7 +891,7 @@ pub mod blob_service_server {
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<tonic::Streaming<super::BlobSvcMsg>>,
+                            request: tonic::Request<tonic::Streaming<super::BlobSvcReq>>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move {
