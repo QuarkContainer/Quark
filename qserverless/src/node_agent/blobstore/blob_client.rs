@@ -22,13 +22,76 @@ use futures::channel::oneshot;
 use qobjs::utility::SystemTimeProto;
 use tokio::sync::Notify;
 use tokio::sync::mpsc;
-
 use qobjs::func;
 use qobjs::common::*;
+
+use crate::BLOB_SVC_CLIENT_MGR;
 
 use super::blob::Blob;
 use super::blob::BlobInner;
 use super::blob::BlobState;
+use super::blob::RemoteReadBlob;
+
+#[derive(Debug, Default)]
+pub struct BlobSvcClientMgr {
+    pub clients: Mutex<BTreeMap<String, BlobSvcClient>>,
+}
+
+impl BlobSvcClientMgr {
+    pub async fn Open(&self, addr: &str, namespace: &str, name: &str) -> Result<RemoteReadBlob> {
+        let client = self.Get(addr).await?;
+        let (id, blob) = client.Open(addr, namespace, name).await?;
+        return Ok(RemoteReadBlob {
+            id: id,
+            blobSvcAddr: addr.to_string(),
+            blob: blob
+        });
+    }
+
+    pub async fn Read(&self, addr: &str, id: u64, len: usize) -> Result<Vec<u8>> {
+        let client = self.Get(addr).await?;
+        let data = client.Read(id, len).await?;
+        return Ok(data);
+    }
+
+    pub async fn Seek(&self, addr: &str, id: u64, seekType: u32, pos: i64) -> Result<u64> {
+        let client = self.Get(addr).await?;
+        let offset = client.Seek(id, pos, seekType).await?;
+        return Ok(offset);
+    }
+
+    pub async fn Close(&self, addr: &str, id: u64) -> Result<()> {
+        let client = self.Get(addr).await?;
+        client.Close(id).await?;
+        return Ok(());
+    }
+
+    pub async fn Get(&self, addr: &str) -> Result<BlobSvcClient> {
+        let client = self.clients.lock().unwrap().get(addr).cloned();
+        match client {
+            Some(c) => {
+                return Ok(c)
+            }
+            None => ()
+        };
+
+        let client = BlobSvcClient::Init(addr).await?;
+        let mut clients = self.clients.lock().unwrap();
+        match clients.get(addr).cloned() {
+            None => {
+                clients.insert(addr.to_string(), client.clone());
+                return Ok(client);
+            }
+            Some(c) => {
+                return Ok(c)
+            }
+        }
+    }
+
+    pub fn Remove(&self, addr: &str) {
+        self.clients.lock().unwrap().remove(addr);
+    }
+}
 
 #[derive(Debug)]
 pub struct BlobSvcClientInner {
@@ -239,6 +302,7 @@ impl BlobSvcClient {
 
     pub fn Stop(&self) {
         if !self.stop.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            BLOB_SVC_CLIENT_MGR.Remove(&self.svcAddr);
             self.closeNotify.notify_waiters();
             self.calls.lock().unwrap().clear();
         }

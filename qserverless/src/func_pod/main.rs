@@ -36,16 +36,16 @@ lazy_static::lazy_static! {
     pub static ref FUNC_CALL_MGR: FuncCallMgr = {
         FuncCallMgr::Init()
     };
+
 }
 
 pub static FUNC_AGENT_CLIENT: OnceCell<FuncAgentClient> = OnceCell::new();
-pub static BLOB_SVC_ADDR: OnceCell<String> = OnceCell::new();
+
 
 #[tokio::main]
 async fn main() -> Result<()> {
     log4rs::init_file("fp_logging_config.yaml", Default::default()).unwrap();
     FUNC_AGENT_CLIENT.set(FuncAgentClient::Init("http://192.168.0.22:8892").await?).unwrap();
-    BLOB_SVC_ADDR.set("http://192.168.0.22:8893".to_owned()).unwrap();
     FUNC_CALL_MGR.Process().await?;
     
     return Ok(());

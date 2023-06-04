@@ -20,6 +20,8 @@ use tokio_stream::wrappers::ReceiverStream;
 
 use qobjs::func;
 use qobjs::common::*;
+use crate::BLOB_SVC_ADDR;
+
 use super::blob_session::BlobSession;
 
 pub struct BlogSvc {
@@ -69,20 +71,32 @@ impl BlogSvc {
                 match self.blobSession.Open(&msg.namespace, &msg.name) {
                     Ok((id, b)) => {
                         let inner = b.lock().unwrap();
-                        let resp = func::BlobOpenResp {
-                            msg_id: msg.msg_id,
-                            id: id,
-                            namespace: inner.namespace.clone(),
-                            name: inner.name.clone(),
-                            size: inner.size as u64,
-                            checksum: inner.checksum.clone(),
-                            create_time: Some(SystemTimeProto::FromSystemTime(inner.createTime).ToTimeStamp()),
-                            last_access_time: Some(SystemTimeProto::FromSystemTime(inner.lastAccessTime).ToTimeStamp()),
-                            error: String::new(),
-                        };
-                        func::BlobSvcResp {
-                            msg_id: msgId,
-                            event_body: Some(func::blob_svc_resp::EventBody::BlobOpenResp(resp))
+                        if &msg.svc_addr != BLOB_SVC_ADDR.get().unwrap() {
+                            let resp = func::BlobOpenResp {
+                                msg_id: msg.msg_id,
+                                error: format!("svc address doesn't match {:?} {}", msg.svc_addr, BLOB_SVC_ADDR.get().unwrap()),
+                                ..Default::default()
+                            };
+                            func::BlobSvcResp {
+                                msg_id: msgId,
+                                event_body: Some(func::blob_svc_resp::EventBody::BlobOpenResp(resp))
+                            }
+                        } else {
+                            let resp = func::BlobOpenResp {
+                                msg_id: msg.msg_id,
+                                id: id,
+                                namespace: inner.namespace.clone(),
+                                name: inner.name.clone(),
+                                size: inner.size as u64,
+                                checksum: inner.checksum.clone(),
+                                create_time: Some(SystemTimeProto::FromSystemTime(inner.createTime).ToTimeStamp()),
+                                last_access_time: Some(SystemTimeProto::FromSystemTime(inner.lastAccessTime).ToTimeStamp()),
+                                error: String::new(),
+                            };
+                            func::BlobSvcResp {
+                                msg_id: msgId,
+                                event_body: Some(func::blob_svc_resp::EventBody::BlobOpenResp(resp))
+                            }
                         }
                     }
                     Err(e) => {
@@ -102,7 +116,7 @@ impl BlogSvc {
                 let mut buf = Vec::with_capacity(msg.len as usize);
                 buf.resize(msg.len as usize, 0u8);
 
-                match self.blobSession.Read(msg.id, msg.len) {
+                match self.blobSession.Read(msg.id, msg.len).await {
                     Ok(buf) => {
                         let resp = func::BlobReadResp {
                             msg_id: msg.msg_id,
@@ -128,7 +142,7 @@ impl BlogSvc {
                 }
             }
             func::blob_svc_req::EventBody::BlobSeekReq(msg) => {
-                match self.blobSession.Seek(msg.id, msg.seek_type, msg.pos) {
+                match self.blobSession.Seek(msg.id, msg.seek_type, msg.pos).await {
                     Ok(offset) => {
                         let resp = func::BlobSeekResp {
                             msg_id: msg.msg_id,
@@ -154,7 +168,7 @@ impl BlogSvc {
                 }
             }
             func::blob_svc_req::EventBody::BlobCloseReq(msg) => {
-                match self.blobSession.Close(msg.id) {
+                match self.blobSession.Close(msg.id).await {
                     Ok(()) => {
                         let resp = func::BlobCloseResp {
                             msg_id: msg.msg_id,

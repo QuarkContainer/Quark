@@ -21,9 +21,12 @@ use std::fs::File;
 use std::io::SeekFrom;
 use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Digest};
+use tokio::sync::Mutex as TMutex;
 use std::io::prelude::*;
 
 use qobjs::common::*;
+
+use crate::BLOB_SVC_CLIENT_MGR;
 
 use super::blob_store::BLOB_STORE;
 
@@ -193,68 +196,105 @@ impl ReadBlob {
 }
 
 #[derive(Debug)]
+pub struct RemoteReadBlob {
+    pub id: u64,
+    pub blobSvcAddr: String,
+    pub blob: Blob,
+}
+
+#[derive(Debug)]
 pub enum BlobHandlerInner {
     Write(WriteBlob),
     Read(ReadBlob),
+    RemoteReadBlob(RemoteReadBlob)
 }
 
 #[derive(Debug, Clone)]
-pub struct BlobHandler(Arc<Mutex<BlobHandlerInner>>);
+pub struct BlobHandler(Arc<TMutex<BlobHandlerInner>>);
 
 impl Deref for BlobHandler {
-    type Target = Arc<Mutex<BlobHandlerInner>>;
+    type Target = Arc<TMutex<BlobHandlerInner>>;
 
-    fn deref(&self) -> &Arc<Mutex<BlobHandlerInner>> {
+    fn deref(&self) -> &Arc<TMutex<BlobHandlerInner>> {
         &self.0
     }
 }
 
 impl BlobHandler {
     pub fn NewWrite(b: WriteBlob) -> Self {
-        return Self(Arc::new(Mutex::new(BlobHandlerInner::Write(b))));
+        return Self(Arc::new(TMutex::new(BlobHandlerInner::Write(b))));
     }
 
     pub fn NewRead(b: ReadBlob) -> Self {
-        return Self(Arc::new(Mutex::new(BlobHandlerInner::Read(b))));
+        return Self(Arc::new(TMutex::new(BlobHandlerInner::Read(b))));
     }
 
-    pub fn Read(&self, buf: &mut [u8]) -> Result<usize> {
-        let mut inner = self.lock().unwrap();
+    pub async fn Read(&self, len: u64) -> Result<Vec<u8>> {
+        let mut inner: tokio::sync::MutexGuard<BlobHandlerInner> = self.lock().await;
         match &mut *inner {
             BlobHandlerInner::Write(_) => return Err(Error::EINVAL(format!("can't read a writeable blob"))),
             BlobHandlerInner::Read(b) => {
-                return b.Read(buf);
+                let mut buf = Vec::with_capacity(len as usize);
+                buf.resize(len as usize, 0u8);
+        
+                let size = b.Read(&mut buf)?;
+                buf.resize(size, 0);
+                return Ok(buf)
+            }
+            BlobHandlerInner::RemoteReadBlob(b) => {
+                return BLOB_SVC_CLIENT_MGR.Read(&b.blobSvcAddr, b.id, len as usize).await;
             }
         }
     }
 
-    pub fn Seek(&self, pos: SeekFrom) -> Result<u64> {
-        let mut inner = self.lock().unwrap();
+    pub async fn Seek(&self, seekType: u32, pos: i64) -> Result<u64> {
+        let mut inner = self.lock().await;
         match &mut *inner {
             BlobHandlerInner::Write(_) => return Err(Error::EINVAL(format!("can't Seek a writeable blob"))),
             BlobHandlerInner::Read(b) => {
+                let pos = match seekType {
+                    0 => SeekFrom::Start(pos as u64),
+                    1 => SeekFrom::End(pos),
+                    2 => SeekFrom::Current(pos),
+                    _ => return Err(Error::EINVAL(format!("BlobSeekReq invalid seektype {}", seekType)))
+                };
                 return b.Seek(pos);
+            }
+            BlobHandlerInner::RemoteReadBlob(b) => {
+                return BLOB_SVC_CLIENT_MGR.Seek(&b.blobSvcAddr, b.id, seekType, pos).await;
             }
         }
     }
 
-    pub fn Write(&self, buf: &[u8]) -> Result<()> {
-        let mut inner = self.lock().unwrap();
+    pub async fn Close(&self) -> Result<()> {
+        let mut inner = self.lock().await;
         match &mut *inner {
-            BlobHandlerInner::Read(_) => return Err(Error::EINVAL(format!("can't write a readonly blob"))),
+            BlobHandlerInner::RemoteReadBlob(b) => {
+                return BLOB_SVC_CLIENT_MGR.Close(&b.blobSvcAddr, b.id).await;
+            }
+            _ => return Ok(())
+        }
+    }
+
+    pub async fn Write(&self, buf: &[u8]) -> Result<()> {
+        let mut inner = self.lock().await;
+        match &mut *inner {
             BlobHandlerInner::Write(b) => {
                 return b.Write(buf);
             }
+            _ => return Err(Error::EINVAL(format!("can't write a readonly blob"))),
+           
         }
     }
 
-    pub fn Seal(&self) -> Result<()> {
-        let mut inner = self.lock().unwrap();
+    pub async fn Seal(&self) -> Result<()> {
+        let mut inner = self.lock().await;
         match &mut *inner {
-            BlobHandlerInner::Read(_) => return Err(Error::EINVAL(format!("can't write a readonly blob"))),
             BlobHandlerInner::Write(b) => {
                 return b.Seal();
             }
+            _ => return Err(Error::EINVAL(format!("can't write a readonly blob"))),
+            
         }
     }
 }
