@@ -87,6 +87,7 @@ impl FuncCallMgr {
         self.callerCalls.lock().unwrap().insert(id.clone(), tx);
 
         let msg = func::FuncAgentMsg {
+            msg_id: 0,
             event_body: Some(func::func_agent_msg::EventBody::FuncAgentCallReq(req)),
         };
         
@@ -139,6 +140,7 @@ impl FuncCallMgr {
             };
 
             let msg = func::FuncAgentMsg {
+                msg_id: 0,
                 event_body: Some(func::func_agent_msg::EventBody::FuncAgentCallResp(resp))
             };
 
@@ -148,8 +150,8 @@ impl FuncCallMgr {
         return Ok(())
     }
 
-    pub fn LocalCall(&self, call: func::FuncAgentCallReq) -> Result<()>{
-        match self.reqSender.try_send(call) {
+    pub fn LocalCall(&self, call: &func::FuncAgentCallReq) -> Result<()>{
+        match self.reqSender.try_send(call.clone()) {
             Ok(()) => return Ok(()),
             Err(_e) => return Err(Error::MpscSendFail),
         }

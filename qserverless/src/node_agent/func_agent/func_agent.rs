@@ -325,6 +325,7 @@ impl FuncAgent {
         };
 
         funcPod.Send(func::FuncAgentMsg {
+            msg_id: 0,
             event_body: Some(func::func_agent_msg::EventBody::FuncAgentCallReq(req))
         })?;
 
@@ -352,6 +353,7 @@ impl FuncAgent {
             };
             // send response to the caller pod
             self.funcPodMgr.SendTo(&callerPodId, func::FuncAgentMsg {
+                msg_id: 0,
                 event_body: Some(func::func_agent_msg::EventBody::FuncAgentCallResp(resp)),
             })?;
         }

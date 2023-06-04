@@ -24,7 +24,9 @@ pub mod func_def;
 pub mod func_mgr;
 pub mod funcagent_client;
 pub mod funcall_mgr;
+pub mod blob_mgr;
 
+use blob_mgr::BlobMgr;
 use funcagent_client::FuncAgentClient;
 use once_cell::sync::OnceCell;
 
@@ -37,6 +39,9 @@ lazy_static::lazy_static! {
         FuncCallMgr::Init()
     };
 
+    pub static ref BLOB_MGR: BlobMgr = {
+        BlobMgr::default()
+    }; 
 }
 
 pub static FUNC_AGENT_CLIENT: OnceCell<FuncAgentClient> = OnceCell::new();

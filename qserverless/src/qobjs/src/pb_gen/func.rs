@@ -52,6 +52,8 @@ pub mod blob_svc_resp {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncAgentMsg {
+    #[prost(uint64, tag = "1")]
+    pub msg_id: u64,
     #[prost(
         oneof = "func_agent_msg::EventBody",
         tags = "100, 200, 300, 400, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514"
@@ -106,8 +108,6 @@ pub mod func_agent_msg {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlobOpenReq {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(string, tag = "2")]
     pub svc_addr: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
@@ -119,8 +119,6 @@ pub struct BlobOpenReq {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlobOpenResp {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(uint64, tag = "2")]
     pub id: u64,
     #[prost(string, tag = "3")]
@@ -142,8 +140,6 @@ pub struct BlobOpenResp {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlobCreateReq {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(string, tag = "2")]
     pub svc_addr: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
@@ -155,8 +151,6 @@ pub struct BlobCreateReq {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlobCreateResp {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(uint64, tag = "2")]
     pub id: u64,
     #[prost(string, tag = "9")]
@@ -166,8 +160,6 @@ pub struct BlobCreateResp {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlobReadReq {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(uint64, tag = "2")]
     pub id: u64,
     #[prost(uint64, tag = "3")]
@@ -177,8 +169,6 @@ pub struct BlobReadReq {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlobReadResp {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(bytes = "vec", tag = "3")]
     pub data: ::prost::alloc::vec::Vec<u8>,
     #[prost(string, tag = "4")]
@@ -188,8 +178,6 @@ pub struct BlobReadResp {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlobSeekReq {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(uint64, tag = "2")]
     pub id: u64,
     #[prost(int64, tag = "3")]
@@ -201,8 +189,6 @@ pub struct BlobSeekReq {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlobSeekResp {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(uint64, tag = "2")]
     pub offset: u64,
     #[prost(string, tag = "3")]
@@ -212,8 +198,6 @@ pub struct BlobSeekResp {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlobCloseReq {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(uint64, tag = "2")]
     pub id: u64,
 }
@@ -221,8 +205,6 @@ pub struct BlobCloseReq {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlobCloseResp {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(string, tag = "2")]
     pub error: ::prost::alloc::string::String,
 }
@@ -230,8 +212,6 @@ pub struct BlobCloseResp {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlobWriteReq {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(uint64, tag = "2")]
     pub id: u64,
     #[prost(bytes = "vec", tag = "3")]
@@ -241,8 +221,6 @@ pub struct BlobWriteReq {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlobWriteResp {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(string, tag = "2")]
     pub error: ::prost::alloc::string::String,
 }
@@ -250,8 +228,6 @@ pub struct BlobWriteResp {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlobSealReq {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(uint64, tag = "2")]
     pub id: u64,
 }
@@ -259,8 +235,6 @@ pub struct BlobSealReq {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlobSealResp {
-    #[prost(uint64, tag = "1")]
-    pub msg_id: u64,
     #[prost(string, tag = "2")]
     pub error: ::prost::alloc::string::String,
 }

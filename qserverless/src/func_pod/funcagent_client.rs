@@ -23,6 +23,7 @@ use qobjs::func;
 use qobjs::func::FuncAgentMsg;
 use qobjs::common::*;
 
+use crate::BLOB_MGR;
 use crate::FUNC_CALL_MGR;
 use crate::func_def::QSResult;
 
@@ -31,7 +32,8 @@ pub struct FuncAgentClientInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
 
-    pub agentChann: mpsc::Sender<FuncAgentMsg>
+    pub agentChann: mpsc::Sender<FuncAgentMsg>,
+    
 }
 
 #[derive(Debug, Clone)]
@@ -68,6 +70,7 @@ impl FuncAgentClient {
         let (tx, rx) = mpsc::channel(30);
         let regMsg = FUNC_CALL_MGR.funcMgr.RegisterMsg();
         tx.try_send(func::FuncAgentMsg {
+            msg_id: 0,
             event_body: Some(func::func_agent_msg::EventBody::FuncPodRegisterReq(regMsg)),
         }).unwrap();
 
@@ -96,22 +99,24 @@ impl FuncAgentClient {
     }
 
     pub async fn OnFuncAgentMsg(&self, msg: func::FuncAgentMsg) -> Result<()> {
-        let body = msg.event_body.unwrap();
-        match body {
+        match msg.event_body.as_ref().unwrap() {
             func::func_agent_msg::EventBody::FuncAgentCallReq(call) => {
                 FUNC_CALL_MGR.LocalCall(call)?;
                 return Ok(())
             }
             func::func_agent_msg::EventBody::FuncAgentCallResp(resp) => {
                 let res = if resp.error.len() == 0 {
-                    QSResult::Ok(resp.resp)
+                    QSResult::Ok(resp.resp.clone())
                 } else {
-                    QSResult::Ok(resp.error)
+                    QSResult::Ok(resp.error.clone())
                 };
                 FUNC_CALL_MGR.CallResponse(&resp.id, res)?;
                 return Ok(())
             }
-            _ => unimplemented!("OnFuncAgentMsg ..."),
+            _ => {
+                BLOB_MGR.OnFuncAgentMsg(msg)?;
+                return Ok(())
+            }
          }
     }
 

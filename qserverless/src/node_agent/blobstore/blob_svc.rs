@@ -73,7 +73,6 @@ impl BlogSvc {
                         let inner = b.lock().unwrap();
                         if &msg.svc_addr != BLOB_SVC_ADDR.get().unwrap() {
                             let resp = func::BlobOpenResp {
-                                msg_id: msg.msg_id,
                                 error: format!("svc address doesn't match {:?} {}", msg.svc_addr, BLOB_SVC_ADDR.get().unwrap()),
                                 ..Default::default()
                             };
@@ -83,7 +82,6 @@ impl BlogSvc {
                             }
                         } else {
                             let resp = func::BlobOpenResp {
-                                msg_id: msg.msg_id,
                                 id: id,
                                 namespace: inner.namespace.clone(),
                                 name: inner.name.clone(),
@@ -101,7 +99,6 @@ impl BlogSvc {
                     }
                     Err(e) => {
                         let resp = func::BlobOpenResp {
-                            msg_id: msg.msg_id,
                             error: format!("{:?}", e),
                             ..Default::default()
                         };
@@ -119,7 +116,6 @@ impl BlogSvc {
                 match self.blobSession.Read(msg.id, msg.len).await {
                     Ok(buf) => {
                         let resp = func::BlobReadResp {
-                            msg_id: msg.msg_id,
                             data: buf,
                             error: String::new()
                         };
@@ -130,7 +126,6 @@ impl BlogSvc {
                     }
                     Err(e) => {
                         let resp = func::BlobReadResp {
-                            msg_id: msg.msg_id,
                             data: Vec::new(),
                             error: format!("{:?}", e),
                         };
@@ -145,7 +140,6 @@ impl BlogSvc {
                 match self.blobSession.Seek(msg.id, msg.seek_type, msg.pos).await {
                     Ok(offset) => {
                         let resp = func::BlobSeekResp {
-                            msg_id: msg.msg_id,
                             offset: offset,
                             error: String::new()
                         };
@@ -156,7 +150,6 @@ impl BlogSvc {
                     }
                     Err(e) => {
                         let resp = func::BlobSeekResp {
-                            msg_id: msg.msg_id,
                             offset: 0,
                             error: format!("{:?}", e),
                         };
@@ -171,7 +164,6 @@ impl BlogSvc {
                 match self.blobSession.Close(msg.id).await {
                     Ok(()) => {
                         let resp = func::BlobCloseResp {
-                            msg_id: msg.msg_id,
                             error: String::new()
                         };
                         func::BlobSvcResp {
@@ -181,7 +173,6 @@ impl BlogSvc {
                     }
                     Err(e) => {
                         let resp = func::BlobCloseResp {
-                            msg_id: msg.msg_id,
                             error: format!("{:?}", e),
                         };
                         func::BlobSvcResp {

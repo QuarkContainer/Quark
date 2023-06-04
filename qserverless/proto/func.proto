@@ -45,6 +45,7 @@ service FuncAgentService {
 }
 
 message FuncAgentMsg {
+  uint64 msgId = 1;
   oneof EventBody {
     FuncPodRegisterReq FuncPodRegisterReq = 100;
     FuncPodRegisterResp FuncPodRegisterResp = 200;
@@ -68,14 +69,12 @@ message FuncAgentMsg {
 }
 
 message BlobOpenReq {
-  uint64 msgId = 1;
   string svcAddr = 2;
   string namespace = 3;
   string name = 4;
 }
 
 message BlobOpenResp {
-  uint64 msgId = 1;
   uint64 id = 2;
   string namespace = 3;
   string name = 4;
@@ -87,71 +86,59 @@ message BlobOpenResp {
 }
 
 message BlobCreateReq {
-  uint64 msgId = 1;
   string svcAddr = 2;
   string namespace = 3;
   string name = 4;
 }
 
 message BlobCreateResp {
-  uint64 msgId = 1;
   uint64 id = 2;
   string error = 9;
 }
 
 message BlobReadReq {
-  uint64 msgId = 1;
   uint64 id = 2;
   uint64 len = 3;
 }
 
 message BlobReadResp {
-  uint64 msgId = 1;
   bytes data = 3;
   string error = 4;
 }
 
 message BlobSeekReq {
-  uint64 msgId = 1;
   uint64 id = 2;
   int64 pos = 3;
   uint32 seekType = 4;
 }
 
 message BlobSeekResp {
-  uint64 msgId = 1;
   uint64 offset = 2;
   string error = 3;
 }
 
 message BlobCloseReq {
-  uint64 msgId = 1;
   uint64 id = 2;
 }
 
 message BlobCloseResp {
-  uint64 msgId = 1;
   string error = 2;
 }
 
 message BlobWriteReq {
-  uint64 msgId = 1;
   uint64 id = 2;
   bytes data = 3;
 }
 
 message BlobWriteResp {
-  uint64 msgId = 1;
   string error = 2;
 }
 
 message BlobSealReq {
-  uint64 msgId = 1;
   uint64 id = 2;
 }
 
 message BlobSealResp {
-  uint64 msgId = 1;
   string error = 2;
 }
 
