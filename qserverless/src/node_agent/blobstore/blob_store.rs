@@ -14,19 +14,16 @@
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
-use std::sync::Arc;
-use std::ops::Deref;
 use std::path::Path;
 use std::fs;
 use rocksdb::{DB, Options, SingleThreaded, SliceTransform, IteratorMode};
 use rocksdb::DBWithThreadMode;
 
 use qobjs::common::*;
-use crate::blobstore::blob::{BlobState, BlobInner};
 
-use super::blob::BlobHandler;
-use super::blob::{Blob, WriteBlob, ReadBlob};
-use super::blob_fs::BlobFs;
+use crate::blobstore::blob::{BlobState, BlobInner};
+use crate::blobstore::blob::{Blob, WriteBlob, ReadBlob};
+use crate::blobstore::blob_fs::BlobFs;
 
 lazy_static::lazy_static! {
     pub static ref BLOB_STORE: BlobStore = {
@@ -36,56 +33,6 @@ lazy_static::lazy_static! {
 
 pub const BLOB_STORE_META_PATH: &str = "/var/lib/quark/blobstore/meta";
 pub const BLOB_STORE_DATA_PATH: &str = "/var/lib/quark/blobstore/data";
-
-#[derive(Debug)]
-pub struct BlobStoreSessionInner {
-    pub sessionId: u64,
-    pub blobHandlers: BTreeMap<u64, BlobHandler>,
-    pub lastSessionId: u64,
-}
-
-#[derive(Debug, Clone)]
-pub struct BlobStoreSession(Arc<Mutex<BlobStoreSessionInner>>);
-
-impl Deref for BlobStoreSession {
-    type Target = Arc<Mutex<BlobStoreSessionInner>>;
-
-    fn deref(&self) -> &Arc<Mutex<BlobStoreSessionInner>> {
-        &self.0
-    }
-}
-
-impl BlobStoreSession {
-    pub fn New(sessionId: u64) -> Self {
-        let inner = BlobStoreSessionInner {
-            sessionId: sessionId,
-            blobHandlers: BTreeMap::new(),
-            lastSessionId: 0,
-        };
-
-        return Self(Arc::new(Mutex::new(inner)));
-    }
-
-    fn NextSessionId(&self) -> u64 {
-        let mut inner = self.lock().unwrap();
-        inner.lastSessionId += 1;
-        return inner.lastSessionId;
-    }
-
-    pub fn Create(&self, namespace: &str, name: &str) -> Result<u64> {
-        let id = self.NextSessionId();
-        let writeBlob = BLOB_STORE.CreateBlob(id, namespace, name)?;
-        self.lock().unwrap().blobHandlers.insert(id, BlobHandler::NewWrite(writeBlob));
-        return Ok(id)
-    }
-
-    pub fn Open(&self, namespace: &str, name: &str) -> Result<u64> {
-        let id = self.NextSessionId();
-        let b = BLOB_STORE.Open(id, namespace, name)?;
-        self.lock().unwrap().blobHandlers.insert(id, BlobHandler::NewRead(b));
-        return Ok(id)
-    }
-}
 
 pub struct BlobStore {
     pub db: Mutex<DBWithThreadMode<SingleThreaded>>,
