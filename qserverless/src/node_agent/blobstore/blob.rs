@@ -44,7 +44,6 @@ pub struct BlobInner {
     pub lastAccessTime: SystemTime,
 }
 
-
 #[derive(Debug, Clone)]
 pub struct Blob(pub Arc<Mutex<BlobInner>>);
 

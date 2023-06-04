@@ -15,3 +15,5 @@
 pub mod blob;
 pub mod blob_store;
 pub mod blob_fs;
+pub mod blob_session;
+pub mod blob_svc;

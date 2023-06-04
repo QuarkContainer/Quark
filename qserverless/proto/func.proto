@@ -15,6 +15,23 @@
 syntax = "proto3";
 package func;
 
+service BlobService {
+  rpc StreamProcess(stream BlobSvcMsg) returns (stream BlobSvcMsg);
+}
+
+message BlobSvcMsg {
+  oneof EventBody {
+    BlobOpenReq BlobOpenReq = 501;
+    BlobOpenResp BlobOpenResp = 502;
+    BlobCreateReq BlobCreateReq = 503;
+    BlobCreateResp BlobCreateResp = 504;
+    BlobReadReq BlobReadReq = 505;
+    BlobReadResp BlobReadResp = 506;
+    BlobSeekReq BlobSeekReq = 507;
+    BlobSeekResp BlobSeekResp= 508;
+  }
+}
+
 service FuncAgentService {
   rpc StreamProcess(stream FuncAgentMsg) returns (stream FuncAgentMsg);
   rpc FuncCall(FuncAgentCallReq) returns (FuncAgentCallResp);
@@ -26,7 +43,95 @@ message FuncAgentMsg {
     FuncPodRegisterResp FuncPodRegisterResp = 200;
     FuncAgentCallReq FuncAgentCallReq = 300;
     FuncAgentCallResp FuncAgentCallResp = 400;
+    BlobOpenReq BlobOpenReq = 501;
+    BlobOpenResp BlobOpenResp = 502;
+    BlobCreateReq BlobCreateReq = 503;
+    BlobCreateResp BlobCreateResp = 504;
+    BlobReadReq BlobReadReq = 505;
+    BlobReadResp BlobReadResp = 506;
+    BlobSeekReq BlobSeekReq = 507;
+    BlobSeekResp BlobSeekResp= 508;
+    BlobWriteReq BlobWriteReq = 509;
+    BlobWriteResp BlobWriteResp = 510;
+    BlobSealReq BlobSealReq = 511;
+    BlobSealResp BlobSealResp = 512;
   }
+}
+
+message BlobOpenReq {
+  uint64 msgId = 1;
+  string namespace = 2;
+  string name = 3;
+}
+
+message BlobOpenResp {
+  uint64 msgId = 1;
+  uint64 id = 2;
+  string namespace = 3;
+  string name = 4;
+  uint64 size = 5;
+  string checksum = 6;
+  Timestamp createTime = 7;
+  Timestamp lastAccessTime = 8;
+  string error = 9;
+}
+
+message BlobCreateReq {
+  uint64 msgId = 1;
+  string namespace = 2;
+  string name = 3;
+}
+
+message BlobCreateResp {
+  uint64 msgId = 1;
+  uint64 id = 2;
+  string error = 9;
+}
+
+message BlobReadReq {
+  uint64 msgId = 1;
+  uint64 id = 2;
+  uint64 len = 3;
+}
+
+message BlobReadResp {
+  uint64 msgId = 1;
+  bytes data = 3;
+  string error = 4;
+}
+
+message BlobSeekReq {
+  uint64 msgId = 1;
+  string id = 2;
+  uint64 pos = 3;
+  uint32 seekType = 4;
+}
+
+message BlobSeekResp {
+  uint64 msgId = 1;
+  uint64 offset = 2;
+  string error = 3;
+}
+
+message BlobWriteReq {
+  uint64 msgId = 1;
+  string id = 2;
+  bytes data = 3;
+}
+
+message BlobWriteResp {
+  uint64 msgId = 1;
+  string error = 2;
+}
+
+message BlobSealReq {
+  uint64 msgId = 1;
+  string id = 2;
+}
+
+message BlobSealResp {
+  uint64 msgId = 1;
+  string error = 2;
 }
 
 message FuncPodRegisterReq {
