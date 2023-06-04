@@ -151,7 +151,6 @@ impl BlobSvcClient {
     pub async fn Open(&self, svcAddr: &str, namespace: &str, name: &str) -> Result<(u64, Blob)> {
         let msgId = self.MsgId();
         let req = func::BlobOpenReq {
-            msg_id: msgId,
             svc_addr: svcAddr.to_string(),
             namespace: namespace.to_string(),
             name: name.to_string(),
@@ -191,7 +190,6 @@ impl BlobSvcClient {
     pub async fn Read(&self, id: u64, len: usize) -> Result<Vec<u8>> {
         let msgId = self.MsgId();
         let req = func::BlobReadReq {
-            msg_id: msgId,
             id: id,
             len: len as u64,
         };
@@ -221,7 +219,6 @@ impl BlobSvcClient {
     pub async fn Seek(&self, id: u64, pos: i64, seekType: u32) -> Result<u64> {
         let msgId = self.MsgId();
         let req = func::BlobSeekReq {
-            msg_id: msgId,
             id: id,
             pos: pos,
             seek_type: seekType,
@@ -252,7 +249,6 @@ impl BlobSvcClient {
     pub async fn Close(&self, id: u64) -> Result<()> {
         let msgId = self.MsgId();
         let req = func::BlobCloseReq {
-            msg_id: msgId,
             id: id,
         };
 
