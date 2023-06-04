@@ -14,6 +14,7 @@
 
 use std::result::Result as SResult;
 use qobjs::func::BlobSvcMsg;
+use qobjs::utility::SystemTimeProto;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -22,7 +23,7 @@ use qobjs::common::*;
 use super::blob_session::BlobSession;
 
 pub struct BlogSvc {
-    pub session: BlobSession,
+    pub blobSession: BlobSession,
 }
 
 impl BlogSvc {
@@ -63,26 +64,33 @@ impl BlogSvc {
     ) -> Result<()> {
         let body = msg.event_body.unwrap();
         let resp = match body {
-            func::blob_svc_msg::EventBody::BlobCreateReq(msg) => {
-                match self.session.Create(&msg.namespace, &msg.name) {
-                    Ok(id) => {
-                        let resp = func::BlobCreateResp {
+            func::blob_svc_msg::EventBody::BlobOpenReq(msg) => {
+                match self.blobSession.Open(&msg.namespace, &msg.name) {
+                    Ok((id, b)) => {
+                        let inner = b.lock().unwrap();
+                        let resp = func::BlobOpenResp {
                             msg_id: msg.msg_id,
                             id: id,
-                            error: String::new()
+                            namespace: inner.namespace.clone(),
+                            name: inner.name.clone(),
+                            size: inner.size as u64,
+                            checksum: inner.checksum.clone(),
+                            create_time: Some(SystemTimeProto::FromSystemTime(inner.createTime).ToTimeStamp()),
+                            last_access_time: Some(SystemTimeProto::FromSystemTime(inner.lastAccessTime).ToTimeStamp()),
+                            error: String::new(),
                         };
                         func::BlobSvcMsg {
-                            event_body: Some(func::blob_svc_msg::EventBody::BlobCreateResp(resp))
+                            event_body: Some(func::blob_svc_msg::EventBody::BlobOpenResp(resp))
                         }
                     }
                     Err(e) => {
-                        let resp = func::BlobCreateResp {
+                        let resp = func::BlobOpenResp {
                             msg_id: msg.msg_id,
-                            id: 0,
                             error: format!("{:?}", e),
+                            ..Default::default()
                         };
                         func::BlobSvcMsg {
-                            event_body: Some(func::blob_svc_msg::EventBody::BlobCreateResp(resp))
+                            event_body: Some(func::blob_svc_msg::EventBody::BlobOpenResp(resp))
                         }
                     }
                 }
@@ -91,7 +99,7 @@ impl BlogSvc {
                 let mut buf = Vec::with_capacity(msg.len as usize);
                 buf.resize(msg.len as usize, 0u8);
 
-                match self.session.Read(msg.id, msg.len) {
+                match self.blobSession.Read(msg.id, msg.len) {
                     Ok(buf) => {
                         let resp = func::BlobReadResp {
                             msg_id: msg.msg_id,
@@ -110,6 +118,52 @@ impl BlogSvc {
                         };
                         func::BlobSvcMsg {
                             event_body: Some(func::blob_svc_msg::EventBody::BlobReadResp(resp))
+                        }
+                    }
+                }
+            }
+            func::blob_svc_msg::EventBody::BlobSeekReq(msg) => {
+                match self.blobSession.Seek(msg.id, msg.seek_type, msg.pos) {
+                    Ok(offset) => {
+                        let resp = func::BlobSeekResp {
+                            msg_id: msg.msg_id,
+                            offset: offset,
+                            error: String::new()
+                        };
+                        func::BlobSvcMsg {
+                            event_body: Some(func::blob_svc_msg::EventBody::BlobSeekResp(resp))
+                        }
+                    }
+                    Err(e) => {
+                        let resp = func::BlobSeekResp {
+                            msg_id: msg.msg_id,
+                            offset: 0,
+                            error: format!("{:?}", e),
+                        };
+                        func::BlobSvcMsg {
+                            event_body: Some(func::blob_svc_msg::EventBody::BlobSeekResp(resp))
+                        }
+                    }
+                }
+            }
+            func::blob_svc_msg::EventBody::BlobCloseReq(msg) => {
+                match self.blobSession.Close(msg.id) {
+                    Ok(()) => {
+                        let resp = func::BlobCloseResp {
+                            msg_id: msg.msg_id,
+                            error: String::new()
+                        };
+                        func::BlobSvcMsg {
+                            event_body: Some(func::blob_svc_msg::EventBody::BlobCloseResp(resp))
+                        }
+                    }
+                    Err(e) => {
+                        let resp = func::BlobCloseResp {
+                            msg_id: msg.msg_id,
+                            error: format!("{:?}", e),
+                        };
+                        func::BlobSvcMsg {
+                            event_body: Some(func::blob_svc_msg::EventBody::BlobCloseResp(resp))
                         }
                     }
                 }

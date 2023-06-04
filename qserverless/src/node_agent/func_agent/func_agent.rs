@@ -400,28 +400,6 @@ impl FuncAgent {
 
         return Ok(())    
     }
-
-    // let message from funcPod
-    pub async fn OnFuncPodMsg(&self, funcPodId: &str, msg: func::FuncAgentMsg) -> Result<()> {
-        let body = match msg.event_body {
-            None => return Err(Error::EINVAL(format!("OnFuncPodMsg None event_body"))),
-            Some(b) => b,
-        };
-
-        match body {
-            EventBody::FuncAgentCallReq(msg) => {
-                self.OnFuncAgentCallReq(funcPodId, msg)?;
-            }
-            EventBody::FuncAgentCallResp(msg) => {
-                self.OnFuncAgentCallResp(funcPodId, msg)?;
-            }
-            m => {
-                error!("get unexpected msg {:?}", m);
-            }
-        };
-
-        return Ok(())
-    }
 }
 
 #[tonic::async_trait]

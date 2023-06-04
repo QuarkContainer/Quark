@@ -14,13 +14,16 @@
 
 use std::sync::{Arc, atomic::AtomicBool};
 use core::ops::Deref;
+use qobjs::utility::SystemTimeProto;
 use tokio::sync::{mpsc, Notify};
 use std::result::Result as SResult;
 
 use qobjs::func;
 use qobjs::common::*;
+use qobjs::func::func_agent_msg::EventBody;
 
 use crate::FUNC_AGENT;
+use crate::blobstore::blob_session::BlobSession;
 
 
 #[derive(Debug)]
@@ -56,6 +59,8 @@ pub struct FuncPodInner {
     pub state: funcPodState,
 
     pub agentChann: mpsc::Sender<SResult<func::FuncAgentMsg, tonic::Status>>,
+
+    pub blobSession: BlobSession,
 }
 
 #[derive(Debug, Clone)]
@@ -84,6 +89,7 @@ impl FuncPod {
             packageName: registerMsg.package_name.to_string(),
             state: funcPodState::Idle,
             agentChann: agentTx,
+            blobSession: BlobSession::default(),
         };
         let instance = FuncPod(Arc::new(inner));
         let clone = instance.clone();
@@ -111,13 +117,269 @@ impl FuncPod {
         }
     }
 
+    pub fn OnBlobOpenReq(&self, msg: func::BlobOpenReq) -> Result<()> {
+        let resp = match self.blobSession.Open(&self.namespace, &msg.name) {
+            Ok((id, b)) => {
+                let inner = b.lock().unwrap();
+                let resp = func::BlobOpenResp {
+                    msg_id: msg.msg_id,
+                    id: id,
+                    namespace: inner.namespace.clone(),
+                    name: inner.name.clone(),
+                    size: inner.size as u64,
+                    checksum: inner.checksum.clone(),
+                    create_time: Some(SystemTimeProto::FromSystemTime(inner.createTime).ToTimeStamp()),
+                    last_access_time: Some(SystemTimeProto::FromSystemTime(inner.lastAccessTime).ToTimeStamp()),
+                    error: String::new(),
+                };
+                func::FuncAgentMsg {
+                    event_body: Some(func::func_agent_msg::EventBody::BlobOpenResp(resp))
+                }
+            }
+            Err(e) => {
+                let resp = func::BlobOpenResp {
+                    msg_id: msg.msg_id,
+                    error: format!("{:?}", e),
+                    ..Default::default()
+                };
+                func::FuncAgentMsg {
+                    event_body: Some(func::func_agent_msg::EventBody::BlobOpenResp(resp))
+                }
+            }
+        };
+
+        match self.Send(resp) {
+            Ok(()) => return Ok(()),
+            Err(_e) => return Err(Error::CommonError(format!("send fail ...")))
+        };
+    }
+
+    pub fn OnBlobReadReq(&self, msg: func::BlobReadReq) -> Result<()> {
+        let mut buf = Vec::with_capacity(msg.len as usize);
+        buf.resize(msg.len as usize, 0u8);
+
+        let resp = match self.blobSession.Read(msg.id, msg.len) {
+            Ok(buf) => {
+                let resp = func::BlobReadResp {
+                    msg_id: msg.msg_id,
+                    data: buf,
+                    error: String::new()
+                };
+                func::FuncAgentMsg {
+                    event_body: Some(func::func_agent_msg::EventBody::BlobReadResp(resp))
+                }
+            }
+            Err(e) => {
+                let resp = func::BlobReadResp {
+                    msg_id: msg.msg_id,
+                    data: Vec::new(),
+                    error: format!("{:?}", e),
+                };
+                func::FuncAgentMsg {
+                    event_body: Some(func::func_agent_msg::EventBody::BlobReadResp(resp))
+                }
+            }
+        };
+
+        match self.Send(resp) {
+            Ok(()) => return Ok(()),
+            Err(_e) => return Err(Error::CommonError(format!("send fail ...")))
+        };
+    }
+
+    pub fn OnBlobSeekReq(&self, msg: func::BlobSeekReq) -> Result<()> {
+        let resp = match self.blobSession.Seek(msg.id, msg.seek_type, msg.pos) {
+            Ok(offset) => {
+                let resp = func::BlobSeekResp {
+                    msg_id: msg.msg_id,
+                    offset: offset,
+                    error: String::new()
+                };
+                func::FuncAgentMsg {
+                    event_body: Some(func::func_agent_msg::EventBody::BlobSeekResp(resp))
+                }
+            }
+            Err(e) => {
+                let resp = func::BlobSeekResp {
+                    msg_id: msg.msg_id,
+                    offset: 0,
+                    error: format!("{:?}", e),
+                };
+                func::FuncAgentMsg {
+                    event_body: Some(func::func_agent_msg::EventBody::BlobSeekResp(resp))
+                }
+            }
+        };
+
+        match self.Send(resp) {
+            Ok(()) => return Ok(()),
+            Err(_e) => return Err(Error::CommonError(format!("send fail ...")))
+        };
+    }
+    
+    pub fn OnBlobCloseReq(&self, msg: func::BlobCloseReq) -> Result<()> {
+        let resp = match self.blobSession.Close(msg.id) {
+            Ok(()) => {
+                let resp = func::BlobCloseResp {
+                    msg_id: msg.msg_id,
+                    error: String::new()
+                };
+                func::FuncAgentMsg {
+                    event_body: Some(func::func_agent_msg::EventBody::BlobCloseResp(resp))
+                }
+            }
+            Err(e) => {
+                let resp = func::BlobCloseResp {
+                    msg_id: msg.msg_id,
+                    error: format!("{:?}", e),
+                };
+                func::FuncAgentMsg {
+                    event_body: Some(func::func_agent_msg::EventBody::BlobCloseResp(resp))
+                }
+            }
+        };
+
+        match self.Send(resp) {
+            Ok(()) => return Ok(()),
+            Err(_e) => return Err(Error::CommonError(format!("send fail ...")))
+        };
+    }
+
+    pub fn OnBlobCreateReq(&self, msg: func::BlobCreateReq) -> Result<()> {
+        let resp = match self.blobSession.Create(&self.namespace, &msg.name) {
+            Ok(id) => {
+                let resp = func::BlobCreateResp {
+                    msg_id: msg.msg_id,
+                    id: id,
+                    error: String::new()
+                };
+                func::FuncAgentMsg {
+                    event_body: Some(func::func_agent_msg::EventBody::BlobCreateResp(resp))
+                }
+            }
+            Err(e) => {
+                let resp = func::BlobCreateResp {
+                    msg_id: msg.msg_id,
+                    id: 0,
+                    error: format!("{:?}", e),
+                };
+                func::FuncAgentMsg {
+                    event_body: Some(func::func_agent_msg::EventBody::BlobCreateResp(resp))
+                }
+            }
+        };
+
+        match self.Send(resp) {
+            Ok(()) => return Ok(()),
+            Err(_e) => return Err(Error::CommonError(format!("send fail ...")))
+        };
+    }
+
+    pub fn OnBlobWriteReq(&self, msg: func::BlobWriteReq) -> Result<()> {
+        let resp = match self.blobSession.Write(msg.id, &msg.data) {
+            Ok(()) => {
+                let resp = func::BlobWriteResp {
+                    msg_id: msg.msg_id,
+                    error: String::new()
+                };
+                func::FuncAgentMsg {
+                    event_body: Some(func::func_agent_msg::EventBody::BlobWriteResp(resp))
+                }
+            }
+            Err(e) => {
+                let resp = func::BlobWriteResp {
+                    msg_id: msg.msg_id,
+                    error: format!("{:?}", e),
+                };
+                func::FuncAgentMsg {
+                    event_body: Some(func::func_agent_msg::EventBody::BlobWriteResp(resp))
+                }
+            }
+        };
+
+        match self.Send(resp) {
+            Ok(()) => return Ok(()),
+            Err(_e) => return Err(Error::CommonError(format!("send fail ...")))
+        };
+    }
+
+    pub fn OnBlobSealReq(&self, msg: func::BlobSealReq) -> Result<()> {
+        let resp = match self.blobSession.Seal(msg.id) {
+            Ok(()) => {
+                let resp = func::BlobSealResp {
+                    msg_id: msg.msg_id,
+                    error: String::new()
+                };
+                func::FuncAgentMsg {
+                    event_body: Some(func::func_agent_msg::EventBody::BlobSealResp(resp))
+                }
+            }
+            Err(e) => {
+                let resp = func::BlobSealResp {
+                    msg_id: msg.msg_id,
+                    error: format!("{:?}", e),
+                };
+                func::FuncAgentMsg {
+                    event_body: Some(func::func_agent_msg::EventBody::BlobSealResp(resp))
+                }
+            }
+        };
+
+        match self.Send(resp) {
+            Ok(()) => return Ok(()),
+            Err(_e) => return Err(Error::CommonError(format!("send fail ...")))
+        };
+    }
+
+    pub async fn OnFuncPodMsg(&self, funcPodId: &str, msg: func::FuncAgentMsg) -> Result<()> {
+        let body = match msg.event_body {
+            None => return Err(Error::EINVAL(format!("OnFuncPodMsg None event_body"))),
+            Some(b) => b,
+        };
+
+        match body {
+            EventBody::FuncAgentCallReq(msg) => {
+                FUNC_AGENT.OnFuncAgentCallReq(funcPodId, msg)?;
+            }
+            EventBody::FuncAgentCallResp(msg) => {
+                FUNC_AGENT.OnFuncAgentCallResp(funcPodId, msg)?;
+            }
+            EventBody::BlobOpenReq(msg) => {
+                self.OnBlobOpenReq(msg)?;
+            }
+            EventBody::BlobReadReq(msg) => {
+                self.OnBlobReadReq(msg)?;
+            }
+            EventBody::BlobSeekReq(msg) => {
+                self.OnBlobSeekReq(msg)?;
+            }
+            EventBody::BlobCreateReq(msg) => {
+                self.OnBlobCreateReq(msg)?;
+            }
+            EventBody::BlobWriteReq(msg) => {
+                self.OnBlobWriteReq(msg)?;
+            }
+            EventBody::BlobSealReq(msg) => {
+                self.OnBlobSealReq(msg)?;
+            }
+            EventBody::BlobCloseReq(msg) => {
+                self.OnBlobCloseReq(msg)?;
+            }
+            m => {
+                error!("get unexpected msg {:?}", m);
+            }
+        };
+
+        return Ok(())
+    }
+
     pub async fn Process(
         &self, 
         stream: tonic::Streaming<func::FuncAgentMsg>
     ) -> Result<()> {
         let closeNotify = self.closeNotify.clone();
         let mut stream = stream;
-
+        
         loop {
             tokio::select! {
                 _ = closeNotify.notified() => {
@@ -146,7 +408,7 @@ impl FuncPod {
                         }
                     };
                     
-                    FUNC_AGENT.OnFuncPodMsg(&self.funcPodId, msg).await?;
+                    self.OnFuncPodMsg(&self.funcPodId, msg).await?;
                 }
             }
         }

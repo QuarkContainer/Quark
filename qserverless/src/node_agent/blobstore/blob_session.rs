@@ -17,18 +17,21 @@ use std::sync::Mutex;
 use std::sync::Arc;
 use std::ops::Deref;
 
+use futures_io::SeekFrom;
 use qobjs::common::*;
 
 use crate::blobstore::blob::BlobHandler;
 use crate::blobstore::blob_store::BLOB_STORE;
 
-#[derive(Debug)]
+use super::blob::Blob;
+
+#[derive(Debug, Default)]
 pub struct BlobSessionInner {
     pub blobHandlers: BTreeMap<u64, BlobHandler>,
     pub lastSessionId: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BlobSession(Arc<Mutex<BlobSessionInner>>);
 
 impl Deref for BlobSession {
@@ -62,16 +65,27 @@ impl BlobSession {
         return Ok(id)
     }
 
-    pub fn Open(&self, namespace: &str, name: &str) -> Result<u64> {
+    pub fn Write(&self, id: u64, buf: &[u8]) -> Result<()> {
+        let handler = self.Get(id)?;
+        return handler.Write(buf);
+    }
+
+    pub fn Seal(&self, id: u64) -> Result<()> {
+        let handler = self.Get(id)?;
+        return handler.Seal();
+    }
+
+    pub fn Open(&self, namespace: &str, name: &str) -> Result<(u64, Blob)> {
         let id = self.NextSessionId();
         let b = BLOB_STORE.Open(id, namespace, name)?;
+        let blob = b.blob.clone();
         self.lock().unwrap().blobHandlers.insert(id, BlobHandler::NewRead(b));
-        return Ok(id)
+        return Ok((id, blob))
     }
 
     pub fn Get(&self, id: u64) -> Result<BlobHandler> {
         match self.lock().unwrap().blobHandlers.get(&id) {
-            None => return Err(Error::EPERM(format!("BlobSession can't find handler with id {}", id))),
+            None => return Err(Error::EINVAL(format!("BlobSession can't find handler with id {}", id))),
             Some(h) => {
                 return Ok(h.clone());
             }
@@ -85,5 +99,26 @@ impl BlobSession {
         let size = handler.Read(&mut buf)?;
         buf.resize(size, 0);
         return Ok(buf);
+    }
+
+    pub fn Seek(&self, id: u64, seekType: u32, pos: i64) -> Result<u64> {
+        let pos = match seekType {
+            0 => SeekFrom::Start(pos as u64),
+            1 => SeekFrom::End(pos),
+            2 => SeekFrom::Current(pos),
+            _ => return Err(Error::EINVAL(format!("BlobSeekReq invalid seektype {}", seekType)))
+        };
+        
+        let handler = self.Get(id)?;
+        return handler.Seek(pos);
+    }
+
+    pub fn Close(&self, id: u64) -> Result<()> {
+        match self.lock().unwrap().blobHandlers.remove(&id) {
+            None => return Err(Error::EINVAL(format!("BlobSession can't find handler with id {}", id))),
+            Some(_h) => {
+                return Ok(());
+            }
+        }
     }
 }

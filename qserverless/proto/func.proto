@@ -23,12 +23,12 @@ message BlobSvcMsg {
   oneof EventBody {
     BlobOpenReq BlobOpenReq = 501;
     BlobOpenResp BlobOpenResp = 502;
-    BlobCreateReq BlobCreateReq = 503;
-    BlobCreateResp BlobCreateResp = 504;
     BlobReadReq BlobReadReq = 505;
     BlobReadResp BlobReadResp = 506;
     BlobSeekReq BlobSeekReq = 507;
     BlobSeekResp BlobSeekResp= 508;
+    BlobCloseReq BlobCloseReq = 513; 
+    BlobCloseResp BlobCloseResp = 514;
   }
 }
 
@@ -55,13 +55,16 @@ message FuncAgentMsg {
     BlobWriteResp BlobWriteResp = 510;
     BlobSealReq BlobSealReq = 511;
     BlobSealResp BlobSealResp = 512;
+    BlobCloseReq BlobCloseReq = 513; 
+    BlobCloseResp BlobCloseResp = 514;
   }
 }
 
 message BlobOpenReq {
   uint64 msgId = 1;
-  string namespace = 2;
-  string name = 3;
+  string svcAddr = 2;
+  string namespace = 3;
+  string name = 4;
 }
 
 message BlobOpenResp {
@@ -78,8 +81,9 @@ message BlobOpenResp {
 
 message BlobCreateReq {
   uint64 msgId = 1;
-  string namespace = 2;
-  string name = 3;
+  string svcAddr = 2;
+  string namespace = 3;
+  string name = 4;
 }
 
 message BlobCreateResp {
@@ -102,8 +106,8 @@ message BlobReadResp {
 
 message BlobSeekReq {
   uint64 msgId = 1;
-  string id = 2;
-  uint64 pos = 3;
+  uint64 id = 2;
+  int64 pos = 3;
   uint32 seekType = 4;
 }
 
@@ -113,9 +117,19 @@ message BlobSeekResp {
   string error = 3;
 }
 
+message BlobCloseReq {
+  uint64 msgId = 1;
+  uint64 id = 2;
+}
+
+message BlobCloseResp {
+  uint64 msgId = 1;
+  string error = 2;
+}
+
 message BlobWriteReq {
   uint64 msgId = 1;
-  string id = 2;
+  uint64 id = 2;
   bytes data = 3;
 }
 
@@ -126,7 +140,7 @@ message BlobWriteResp {
 
 message BlobSealReq {
   uint64 msgId = 1;
-  string id = 2;
+  uint64 id = 2;
 }
 
 message BlobSealResp {
