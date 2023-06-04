@@ -117,8 +117,8 @@ impl FuncPod {
         }
     }
 
-    pub fn OnBlobOpenReq(&self, msgId: u64, msg: func::BlobOpenReq) -> Result<()> {
-        let resp = match self.blobSession.Open(&self.namespace, &msg.name) {
+    pub async fn OnBlobOpenReq(&self, msgId: u64, msg: func::BlobOpenReq) -> Result<()> {
+        let resp = match self.blobSession.Open(&msg.svc_addr, &self.namespace, &msg.name).await {
             Ok((id, b)) => {
                 let inner = b.lock().unwrap();
                 let resp = func::BlobOpenResp {
@@ -347,7 +347,7 @@ impl FuncPod {
                 FUNC_AGENT.OnFuncAgentCallResp(funcPodId, msg)?;
             }
             EventBody::BlobOpenReq(msg) => {
-                self.OnBlobOpenReq(msgId, msg)?;
+                self.OnBlobOpenReq(msgId, msg).await?;
             }
             EventBody::BlobReadReq(msg) => {
                 self.OnBlobReadReq(msgId, msg).await?;

@@ -68,7 +68,7 @@ impl BlogSvc {
         let msgId = msg.msg_id;
         let resp = match body {
             func::blob_svc_req::EventBody::BlobOpenReq(msg) => {
-                match self.blobSession.Open(&msg.namespace, &msg.name) {
+                match self.blobSession.Open(&msg.svc_addr, &msg.namespace, &msg.name).await {
                     Ok((id, b)) => {
                         let inner = b.lock().unwrap();
                         if &msg.svc_addr != BLOB_SVC_ADDR.get().unwrap() {

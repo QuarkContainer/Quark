@@ -44,7 +44,8 @@ impl BlobSvcClientMgr {
         return Ok(RemoteReadBlob {
             id: id,
             blobSvcAddr: addr.to_string(),
-            blob: blob
+            blob: blob,
+            closed: false,
         });
     }
 
