@@ -119,10 +119,19 @@ impl BlobStore {
         };
 
         let file = self.blobfs.Open(&blob.Address())?;
+        blob.Access();
+        self.db.lock().unwrap().put(blob.Address(), blob.ToString()?)?;
         return Ok(ReadBlob {
             id: id,
             blob: blob,
             file: file,
         });
+    }
+
+    pub fn Removeblob(&self, addr: &str) -> Result<()> {
+        self.db.lock().unwrap().delete(addr.clone())?;
+        
+        self.blobfs.Remove(&addr)?;
+        return Ok(());
     }
 }

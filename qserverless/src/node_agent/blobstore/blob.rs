@@ -131,9 +131,8 @@ pub struct WriteBlob {
 
 impl Drop for WriteBlob {
     fn drop(&mut self) {
-        if self.hasher.is_some() {
-            self.Seal().unwrap();
-        }
+        error!("Blob {:?} dropped without seal", &self.blob);
+        BLOB_STORE.Removeblob(&self.blob.Address()).ok();
     }
 }
 
@@ -200,6 +199,25 @@ pub struct RemoteReadBlob {
     pub id: u64,
     pub blobSvcAddr: String,
     pub blob: Blob,
+    pub closed: bool,
+}
+
+impl Drop for RemoteReadBlob {
+    fn drop(&mut self) {
+        futures::executor::block_on(self.Close()).ok();
+    }
+}
+
+impl RemoteReadBlob {
+    pub async fn Close(&mut self) -> Result<()> {
+        if self.closed {
+            return Ok(())
+        }
+
+        BLOB_SVC_CLIENT_MGR.Close(&self.blobSvcAddr, self.id).await?;
+        self.closed = true;
+        return Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -227,6 +245,10 @@ impl BlobHandler {
 
     pub fn NewRead(b: ReadBlob) -> Self {
         return Self(Arc::new(TMutex::new(BlobHandlerInner::Read(b))));
+    }
+
+    pub fn NewRemoteRead(b: RemoteReadBlob) -> Self {
+        return Self(Arc::new(TMutex::new(BlobHandlerInner::RemoteReadBlob(b))));
     }
 
     pub async fn Read(&self, len: u64) -> Result<Vec<u8>> {
@@ -270,7 +292,7 @@ impl BlobHandler {
         let mut inner = self.lock().await;
         match &mut *inner {
             BlobHandlerInner::RemoteReadBlob(b) => {
-                return BLOB_SVC_CLIENT_MGR.Close(&b.blobSvcAddr, b.id).await;
+                return b.Close().await;
             }
             _ => return Ok(())
         }
