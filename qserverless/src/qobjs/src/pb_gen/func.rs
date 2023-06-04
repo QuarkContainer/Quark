@@ -4,7 +4,7 @@
 pub struct BlobSvcMsg {
     #[prost(
         oneof = "blob_svc_msg::EventBody",
-        tags = "501, 502, 503, 504, 505, 506, 507, 508"
+        tags = "501, 502, 505, 506, 507, 508, 513, 514"
     )]
     pub event_body: ::core::option::Option<blob_svc_msg::EventBody>,
 }
@@ -18,10 +18,6 @@ pub mod blob_svc_msg {
         BlobOpenReq(super::BlobOpenReq),
         #[prost(message, tag = "502")]
         BlobOpenResp(super::BlobOpenResp),
-        #[prost(message, tag = "503")]
-        BlobCreateReq(super::BlobCreateReq),
-        #[prost(message, tag = "504")]
-        BlobCreateResp(super::BlobCreateResp),
         #[prost(message, tag = "505")]
         BlobReadReq(super::BlobReadReq),
         #[prost(message, tag = "506")]
@@ -30,6 +26,10 @@ pub mod blob_svc_msg {
         BlobSeekReq(super::BlobSeekReq),
         #[prost(message, tag = "508")]
         BlobSeekResp(super::BlobSeekResp),
+        #[prost(message, tag = "513")]
+        BlobCloseReq(super::BlobCloseReq),
+        #[prost(message, tag = "514")]
+        BlobCloseResp(super::BlobCloseResp),
     }
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -38,7 +38,7 @@ pub mod blob_svc_msg {
 pub struct FuncAgentMsg {
     #[prost(
         oneof = "func_agent_msg::EventBody",
-        tags = "100, 200, 300, 400, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512"
+        tags = "100, 200, 300, 400, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514"
     )]
     pub event_body: ::core::option::Option<func_agent_msg::EventBody>,
 }
@@ -80,6 +80,10 @@ pub mod func_agent_msg {
         BlobSealReq(super::BlobSealReq),
         #[prost(message, tag = "512")]
         BlobSealResp(super::BlobSealResp),
+        #[prost(message, tag = "513")]
+        BlobCloseReq(super::BlobCloseReq),
+        #[prost(message, tag = "514")]
+        BlobCloseResp(super::BlobCloseResp),
     }
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -89,8 +93,10 @@ pub struct BlobOpenReq {
     #[prost(uint64, tag = "1")]
     pub msg_id: u64,
     #[prost(string, tag = "2")]
-    pub namespace: ::prost::alloc::string::String,
+    pub svc_addr: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
     pub name: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -123,8 +129,10 @@ pub struct BlobCreateReq {
     #[prost(uint64, tag = "1")]
     pub msg_id: u64,
     #[prost(string, tag = "2")]
-    pub namespace: ::prost::alloc::string::String,
+    pub svc_addr: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
     pub name: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -166,10 +174,10 @@ pub struct BlobReadResp {
 pub struct BlobSeekReq {
     #[prost(uint64, tag = "1")]
     pub msg_id: u64,
-    #[prost(string, tag = "2")]
-    pub id: ::prost::alloc::string::String,
-    #[prost(uint64, tag = "3")]
-    pub pos: u64,
+    #[prost(uint64, tag = "2")]
+    pub id: u64,
+    #[prost(int64, tag = "3")]
+    pub pos: i64,
     #[prost(uint32, tag = "4")]
     pub seek_type: u32,
 }
@@ -187,11 +195,29 @@ pub struct BlobSeekResp {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BlobWriteReq {
+pub struct BlobCloseReq {
+    #[prost(uint64, tag = "1")]
+    pub msg_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub id: u64,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BlobCloseResp {
     #[prost(uint64, tag = "1")]
     pub msg_id: u64,
     #[prost(string, tag = "2")]
-    pub id: ::prost::alloc::string::String,
+    pub error: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BlobWriteReq {
+    #[prost(uint64, tag = "1")]
+    pub msg_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub id: u64,
     #[prost(bytes = "vec", tag = "3")]
     pub data: ::prost::alloc::vec::Vec<u8>,
 }
@@ -210,8 +236,8 @@ pub struct BlobWriteResp {
 pub struct BlobSealReq {
     #[prost(uint64, tag = "1")]
     pub msg_id: u64,
-    #[prost(string, tag = "2")]
-    pub id: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub id: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
