@@ -154,11 +154,11 @@ impl FuncPod {
         };
     }
 
-    pub fn OnBlobReadReq(&self, msg: func::BlobReadReq) -> Result<()> {
+    pub async fn OnBlobReadReq(&self, msg: func::BlobReadReq) -> Result<()> {
         let mut buf = Vec::with_capacity(msg.len as usize);
         buf.resize(msg.len as usize, 0u8);
 
-        let resp = match self.blobSession.Read(msg.id, msg.len) {
+        let resp = match self.blobSession.Read(msg.id, msg.len).await {
             Ok(buf) => {
                 let resp = func::BlobReadResp {
                     msg_id: msg.msg_id,
@@ -187,8 +187,8 @@ impl FuncPod {
         };
     }
 
-    pub fn OnBlobSeekReq(&self, msg: func::BlobSeekReq) -> Result<()> {
-        let resp = match self.blobSession.Seek(msg.id, msg.seek_type, msg.pos) {
+    pub async fn OnBlobSeekReq(&self, msg: func::BlobSeekReq) -> Result<()> {
+        let resp = match self.blobSession.Seek(msg.id, msg.seek_type, msg.pos).await {
             Ok(offset) => {
                 let resp = func::BlobSeekResp {
                     msg_id: msg.msg_id,
@@ -217,8 +217,8 @@ impl FuncPod {
         };
     }
     
-    pub fn OnBlobCloseReq(&self, msg: func::BlobCloseReq) -> Result<()> {
-        let resp = match self.blobSession.Close(msg.id) {
+    pub async fn OnBlobCloseReq(&self, msg: func::BlobCloseReq) -> Result<()> {
+        let resp = match self.blobSession.Close(msg.id).await {
             Ok(()) => {
                 let resp = func::BlobCloseResp {
                     msg_id: msg.msg_id,
@@ -275,8 +275,8 @@ impl FuncPod {
         };
     }
 
-    pub fn OnBlobWriteReq(&self, msg: func::BlobWriteReq) -> Result<()> {
-        let resp = match self.blobSession.Write(msg.id, &msg.data) {
+    pub async fn OnBlobWriteReq(&self, msg: func::BlobWriteReq) -> Result<()> {
+        let resp = match self.blobSession.Write(msg.id, &msg.data).await {
             Ok(()) => {
                 let resp = func::BlobWriteResp {
                     msg_id: msg.msg_id,
@@ -303,8 +303,8 @@ impl FuncPod {
         };
     }
 
-    pub fn OnBlobSealReq(&self, msg: func::BlobSealReq) -> Result<()> {
-        let resp = match self.blobSession.Seal(msg.id) {
+    pub async fn OnBlobSealReq(&self, msg: func::BlobSealReq) -> Result<()> {
+        let resp = match self.blobSession.Seal(msg.id).await {
             Ok(()) => {
                 let resp = func::BlobSealResp {
                     msg_id: msg.msg_id,
@@ -348,22 +348,22 @@ impl FuncPod {
                 self.OnBlobOpenReq(msg)?;
             }
             EventBody::BlobReadReq(msg) => {
-                self.OnBlobReadReq(msg)?;
+                self.OnBlobReadReq(msg).await?;
             }
             EventBody::BlobSeekReq(msg) => {
-                self.OnBlobSeekReq(msg)?;
+                self.OnBlobSeekReq(msg).await?;
             }
             EventBody::BlobCreateReq(msg) => {
                 self.OnBlobCreateReq(msg)?;
             }
             EventBody::BlobWriteReq(msg) => {
-                self.OnBlobWriteReq(msg)?;
+                self.OnBlobWriteReq(msg).await?;
             }
             EventBody::BlobSealReq(msg) => {
-                self.OnBlobSealReq(msg)?;
+                self.OnBlobSealReq(msg).await?;
             }
             EventBody::BlobCloseReq(msg) => {
-                self.OnBlobCloseReq(msg)?;
+                self.OnBlobCloseReq(msg).await?;
             }
             m => {
                 error!("get unexpected msg {:?}", m);

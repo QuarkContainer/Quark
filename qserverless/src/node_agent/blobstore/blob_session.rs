@@ -17,7 +17,6 @@ use std::sync::Mutex;
 use std::sync::Arc;
 use std::ops::Deref;
 
-use futures_io::SeekFrom;
 use qobjs::common::*;
 
 use crate::blobstore::blob::BlobHandler;
@@ -65,14 +64,14 @@ impl BlobSession {
         return Ok(id)
     }
 
-    pub fn Write(&self, id: u64, buf: &[u8]) -> Result<()> {
+    pub async fn Write(&self, id: u64, buf: &[u8]) -> Result<()> {
         let handler = self.Get(id)?;
-        return handler.Write(buf);
+        return handler.Write(buf).await;
     }
 
-    pub fn Seal(&self, id: u64) -> Result<()> {
+    pub async fn Seal(&self, id: u64) -> Result<()> {
         let handler = self.Get(id)?;
-        return handler.Seal();
+        return handler.Seal().await;
     }
 
     pub fn Open(&self, namespace: &str, name: &str) -> Result<(u64, Blob)> {
@@ -92,31 +91,23 @@ impl BlobSession {
         }
     }
 
-    pub fn Read(&self, id: u64, len: u64) -> Result<Vec<u8>> {
+    pub async fn Read(&self, id: u64, len: u64) -> Result<Vec<u8>> {
         let handler = self.Get(id)?;
-        let mut buf = Vec::with_capacity(len as usize);
-        buf.resize(len as usize, 0u8);
-        let size = handler.Read(&mut buf)?;
-        buf.resize(size, 0);
+        let buf = handler.Read(len).await?;
         return Ok(buf);
     }
 
-    pub fn Seek(&self, id: u64, seekType: u32, pos: i64) -> Result<u64> {
-        let pos = match seekType {
-            0 => SeekFrom::Start(pos as u64),
-            1 => SeekFrom::End(pos),
-            2 => SeekFrom::Current(pos),
-            _ => return Err(Error::EINVAL(format!("BlobSeekReq invalid seektype {}", seekType)))
-        };
-        
+    pub async fn Seek(&self, id: u64, seekType: u32, pos: i64) -> Result<u64> {
         let handler = self.Get(id)?;
-        return handler.Seek(pos);
+        return handler.Seek(seekType, pos).await;
     }
 
-    pub fn Close(&self, id: u64) -> Result<()> {
-        match self.lock().unwrap().blobHandlers.remove(&id) {
+    pub async fn Close(&self, id: u64) -> Result<()> {
+        let handler = self.lock().unwrap().blobHandlers.remove(&id);
+        match handler {
             None => return Err(Error::EINVAL(format!("BlobSession can't find handler with id {}", id))),
-            Some(_h) => {
+            Some(h) => {
+                h.Close().await?;
                 return Ok(());
             }
         }

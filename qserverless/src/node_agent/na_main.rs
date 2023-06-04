@@ -22,6 +22,7 @@
 extern crate log;
 extern crate simple_logging;
 
+use blobstore::blob_client::BlobSvcClientMgr;
 use func_agent::func_agent::{FuncAgent, FuncAgentGrpcService};
 use func_agent::funcsvc_client::FuncSvcClientMgr;
 use lazy_static::lazy_static;
@@ -60,6 +61,7 @@ pub static IMAGE_MGR: OnceCell<ImageMgr> = OnceCell::new();
 pub static CADVISOR_PROVIDER: OnceCell<CadvisorInfoProvider> = OnceCell::new();
 pub static NODEAGENT_STORE: OnceCell<NodeAgentStore> = OnceCell::new();
 pub static FUNC_SVC_CLIENT: OnceCell<FuncSvcClientMgr> = OnceCell::new();
+pub static BLOB_SVC_ADDR: OnceCell<String> = OnceCell::new();
 
 lazy_static! {
     pub static ref NETWORK_PROVIDER: LocalNetworkAddressProvider = {
@@ -73,11 +75,17 @@ lazy_static! {
     pub static ref FUNC_AGENT: FuncAgent = {
         FuncAgent::New("node1")
     };
+
+
+    pub static ref BLOB_SVC_CLIENT_MGR : BlobSvcClientMgr = {
+        BlobSvcClientMgr::default()
+    };
 }
 
 #[tokio::main]
 async fn main() -> QResult<()> {
     log4rs::init_file("na_logging_config.yaml", Default::default()).unwrap();
+    BLOB_SVC_ADDR.set("http://192.168.0.22:8893".to_owned()).unwrap();
     
     let f1 = FuncAgentSvc();
     let f2 = NodeAgentSvc();
