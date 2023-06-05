@@ -104,6 +104,7 @@ impl BlobStore {
         }
         let file = self.blobfs.Create(&blob.Address())?;
         self.db.lock().unwrap().put(blob.Address(), blob.ToString()?)?;
+        self.blobs.lock().unwrap().insert(blob.Address(), blob.clone());
         let blob = WriteBlob::New(id, &blob, file);
         return Ok(blob)
     }
