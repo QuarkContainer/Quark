@@ -101,6 +101,16 @@ impl Blob {
         return format!("/{}{}", &inner.namespace, &inner.name);
     }
 
+    pub fn Namespace(&self) -> String {
+        let inner = self.lock().unwrap();
+        return inner.namespace.clone();
+    }
+
+    pub fn Name(&self) -> String {
+        let inner = self.lock().unwrap();
+        return inner.name.clone();
+    }
+
     pub fn Access(&self) {
         let mut inner = self.lock().unwrap();
         inner.lastAccessTime = SystemTime::now();
@@ -131,8 +141,10 @@ pub struct WriteBlob {
 
 impl Drop for WriteBlob {
     fn drop(&mut self) {
-        error!("Blob {:?} dropped without seal", &self.blob);
-        BLOB_STORE.Removeblob(&self.blob.Address()).ok();
+        if self.hasher.is_some() {
+            error!("Blob {:?} dropped without seal", &self.blob);
+            BLOB_STORE.RemoveBlob(&self.blob.Namespace(), &self.blob.Name()).ok();
+        }  
     }
 }
 

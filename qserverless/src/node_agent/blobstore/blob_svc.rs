@@ -117,6 +117,48 @@ impl BlogSvcSession {
                     }
                 }
             }
+            func::blob_svc_req::EventBody::BlobDeleteReq(msg) => {
+                match self.blobSession.Open(&msg.svc_addr, &msg.namespace, &msg.name).await {
+                    Ok((id, b)) => {
+                        let inner = b.lock().unwrap();
+                        if &msg.svc_addr != &self.svcAddress {
+                            let resp = func::BlobOpenResp {
+                                error: format!("svc address doesn't match {:?} {}", msg.svc_addr, &self.svcAddress),
+                                ..Default::default()
+                            };
+                            func::BlobSvcResp {
+                                msg_id: msgId,
+                                event_body: Some(func::blob_svc_resp::EventBody::BlobOpenResp(resp))
+                            }
+                        } else {
+                            let resp = func::BlobOpenResp {
+                                id: id,
+                                namespace: inner.namespace.clone(),
+                                name: inner.name.clone(),
+                                size: inner.size as u64,
+                                checksum: inner.checksum.clone(),
+                                create_time: Some(SystemTimeProto::FromSystemTime(inner.createTime).ToTimeStamp()),
+                                last_access_time: Some(SystemTimeProto::FromSystemTime(inner.lastAccessTime).ToTimeStamp()),
+                                error: String::new(),
+                            };
+                            func::BlobSvcResp {
+                                msg_id: msgId,
+                                event_body: Some(func::blob_svc_resp::EventBody::BlobOpenResp(resp))
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let resp = func::BlobOpenResp {
+                            error: format!("{:?}", e),
+                            ..Default::default()
+                        };
+                        func::BlobSvcResp {
+                            msg_id: msgId,
+                            event_body: Some(func::blob_svc_resp::EventBody::BlobOpenResp(resp))
+                        }
+                    }
+                }
+            }
             func::blob_svc_req::EventBody::BlobReadReq(msg) => {
                 let mut buf = Vec::with_capacity(msg.len as usize);
                 buf.resize(msg.len as usize, 0u8);

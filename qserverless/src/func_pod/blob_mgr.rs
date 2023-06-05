@@ -14,9 +14,12 @@
 
 use std::sync::Mutex;
 use std::collections::BTreeMap;
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU64;
 use std::time::SystemTime;
 use std::io::SeekFrom;
+use core::ops::Deref;
+use std::sync::Arc;
 
 use qobjs::utility::SystemTimeProto;
 use tokio::sync::oneshot;
@@ -24,17 +27,110 @@ use tokio::sync::oneshot;
 use qobjs::func;
 use qobjs::common::*;
 
+use crate::BLOB_MGR;
 use crate::FUNC_AGENT_CLIENT;
 
+#[derive(Debug, Clone)]
+pub struct BlobAddr {
+    pub blobSvcAddr: String,
+    pub name: String, 
+}
+
 #[derive(Debug)]
-pub struct Blob {
+pub struct BlobInner {
     pub id: u64,
-    pub namespace: String,
-    pub name: String,
+    pub addr: BlobAddr,
     pub size: usize,
     pub checksum: String,
     pub createTime: SystemTime,
     pub lastAccessTime: SystemTime,
+    pub closed: AtomicBool,
+}
+
+impl Drop for BlobInner {
+    fn drop(&mut self) {
+        futures::executor::block_on(self.Close()).ok();
+    }
+}
+
+impl BlobInner {
+    pub async fn Close(&self) -> Result<()> {
+        if self.closed.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return BLOB_MGR.BlobClose(self.id).await;
+        }
+
+        return Ok(())
+    }
+}
+
+pub struct Blob(Arc<BlobInner>);
+
+impl Deref for Blob {
+    type Target = Arc<BlobInner>;
+
+    fn deref(&self) -> &Arc<BlobInner> {
+        &self.0
+    }
+}
+
+impl Blob {
+    pub async fn Read(&self, len: usize) -> Result<Vec<u8>> {
+        return BLOB_MGR.BlobRead(self.id, len).await;
+    }
+
+    pub async fn Seek(&self, pos: SeekFrom) -> Result<u64> {
+        return BLOB_MGR.BlobSeek(self.id, pos).await;
+    }
+
+    pub async fn Close(&self) -> Result<()> {
+        return self.0.Close().await;
+    }
+}
+
+pub struct WritingBlobInner {
+    pub id: u64,
+    pub addr: BlobAddr, 
+    pub closed: AtomicBool,
+}
+
+impl Drop for WritingBlobInner {
+    fn drop(&mut self) {
+        futures::executor::block_on(self.Close()).ok();
+    }
+}
+
+impl WritingBlobInner {
+    pub async fn Close(&self) -> Result<()> {
+        if self.closed.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return BLOB_MGR.BlobClose(self.id).await;
+        }
+
+        return Ok(())
+    }
+}
+
+pub struct UnsealBlob(Arc<WritingBlobInner>);
+
+impl Deref for UnsealBlob {
+    type Target = Arc<WritingBlobInner>;
+
+    fn deref(&self) -> &Arc<WritingBlobInner> {
+        &self.0
+    }
+}
+
+impl UnsealBlob {
+    pub async fn Write(&self, buf: Vec<u8>) -> Result<()> {
+        return BLOB_MGR.BlobWrite(self.id, buf).await;
+    }
+
+    pub async fn Seal(&self) -> Result<()> {
+        return BLOB_MGR.BlobSeal(self.id).await;
+    }
+
+    pub async fn Close(&self) -> Result<()> {
+        return self.0.Close().await;
+    }
 }
 
 #[derive(Debug, Default)]
@@ -65,11 +161,10 @@ impl BlobMgr {
         return self.lastMsgId.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
     }
 
-    pub async fn BlobCreate(&self, svcAddr: &str, namespace: &str, name: &str) -> Result<u64> {
+    pub async fn BlobCreate(&self, name: &str) -> Result<UnsealBlob> {
         let msgId = self.MsgId();
         let req = func::BlobCreateReq {
-            svc_addr: svcAddr.to_string(),
-            namespace: namespace.to_string(),
+            namespace: String::new(),
             name: name.to_string(),
         };
 
@@ -87,7 +182,14 @@ impl BlobMgr {
                 if resp.error.len() != 0 {
                     return Err(Error::EINVAL(resp.error))
                 }
-                return Ok(resp.id);
+                return Ok(UnsealBlob(Arc::new(WritingBlobInner { 
+                    id: resp.id, 
+                    addr: BlobAddr { 
+                        blobSvcAddr: resp.svc_addr, 
+                        name: name.to_owned(), 
+                    },
+                    closed: AtomicBool::new(false),
+                })));
             }
             b => {
                 return Err(Error::EINVAL(format!("BlobCreate invalid resp {:?}", b)));
@@ -152,11 +254,11 @@ impl BlobMgr {
         }
     } 
 
-    pub async fn BlobOpen(&self, svcAddr: &str, namespace: &str, name: &str) -> Result<Blob> {
+    pub async fn BlobOpen(&self, svcAddr: &str, name: &str) -> Result<Blob> {
         let msgId = self.MsgId();
         let req = func::BlobOpenReq {
             svc_addr: svcAddr.to_string(),
-            namespace: namespace.to_string(),
+            namespace: String::new(),
             name: name.to_string(),
         };
 
@@ -174,15 +276,48 @@ impl BlobMgr {
                 if resp.error.len() != 0 {
                     return Err(Error::EINVAL(resp.error))
                 }
-                return Ok(Blob {
+                return Ok(Blob(Arc::new(BlobInner {
                     id: resp.id,
-                    namespace: resp.namespace,
-                    name: resp.name,
+                    addr: BlobAddr { 
+                        blobSvcAddr: svcAddr.to_owned(), 
+                        name: name.to_owned(), 
+                    },
                     size: resp.size as usize,
                     checksum: resp.checksum,
                     createTime: SystemTimeProto::FromTimestamp(resp.create_time.as_ref().unwrap()).ToSystemTime(),
                     lastAccessTime: SystemTimeProto::FromTimestamp(resp.last_access_time.as_ref().unwrap()).ToSystemTime(),
-                });
+                    closed: AtomicBool::new(false),
+                })));
+            }
+            b => {
+                return Err(Error::EINVAL(format!("BlobOpen invalid resp {:?}", b)));
+            }
+        }
+    }
+
+    pub async fn BlobDelete(&self, svcAddr: &str, name: &str) -> Result<()> {
+        let msgId = self.MsgId();
+        let req = func::BlobDeleteReq {
+            svc_addr: svcAddr.to_string(),
+            namespace: String::new(),
+            name: name.to_string(),
+        };
+
+        let msg = func::FuncAgentMsg {
+            msg_id: msgId,
+            event_body: Some(func::func_agent_msg::EventBody::BlobDeleteReq(req)),
+        };
+
+        let (tx, rx) = oneshot::channel();
+        self.blobReqs.lock().unwrap().insert(msgId, tx);
+        self.BlobReq(msg);
+        let resp = rx.await.unwrap();
+        match resp.event_body.unwrap() {
+            func::func_agent_msg::EventBody::BlobDeleteResp(resp) => {
+                if resp.error.len() != 0 {
+                    return Err(Error::EINVAL(resp.error))
+                }
+                return Ok(());
             }
             b => {
                 return Err(Error::EINVAL(format!("BlobOpen invalid resp {:?}", b)));
