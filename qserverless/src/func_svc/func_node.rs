@@ -292,7 +292,7 @@ impl FuncNode {
             package: package,
             funcName: req.func_name.clone(),
             callerNodeId: req.caller_node_id.clone(),
-            callerFuncPodId: req.callee_pod_id.clone(),
+            callerFuncPodId: req.caller_pod_id.clone(),
             calleeNodeId: Mutex::new(req.callee_node_id.clone()),
             calleeFuncPodId: Mutex::new(req.callee_pod_id.clone()),
             state: Mutex::new(FuncCallState::Scheduling(SystemTime::now())),
@@ -397,7 +397,6 @@ impl FuncNode {
         match funcPod.state.lock().unwrap().clone() {
             FuncPodState::Idle(_) => (),
             FuncPodState::Running(callId) => {
-                self.lock().unwrap().calleeFuncCalls.remove(&callId);
                 let funcCall = match self.lock().unwrap().calleeFuncCalls.remove(&callId) {
                     None => {
                         return Err(Error::CommonError(format!("OnFuncPodDisconnReq can't find funcall {}", callId)));

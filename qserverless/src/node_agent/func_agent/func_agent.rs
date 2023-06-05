@@ -232,7 +232,7 @@ impl FuncAgent {
 
     pub fn OnFuncPodDisconnect(&self, funcPodId: &str) -> Result<()> {
         let pod = self.funcPodMgr.RemovePod(funcPodId)?;
-        match &pod.state {
+        match &pod.State() {
             funcPodState::Idle => (),
             funcPodState::Running(callid) => {
                 let calleeFuncCall = match self.calleeCalls.lock().unwrap().remove(callid) {
@@ -276,6 +276,9 @@ impl FuncAgent {
             }
             Some(call) => call
         };
+
+        let funcPod = self.funcPodMgr.GetPod(calleeFuncPodId)?;
+        funcPod.SetState(funcPodState::Idle);
         
         let resp = func::FuncSvcCallResp {
             id: resp.id,
@@ -325,6 +328,8 @@ impl FuncAgent {
             parameters: req.parameters.clone(),
             priority: req.priority,
         };
+
+        funcPod.SetState(funcPodState::Running(req.id.clone()));
 
         funcPod.Send(func::FuncAgentMsg {
             msg_id: 0,

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::path::Path;
 use std::sync::Mutex;
 use std::sync::Arc;
 use std::ops::Deref;
@@ -66,15 +65,8 @@ impl From<BlobInner> for Blob {
 
 impl Blob {
     pub fn Create(namespace: &str, name: &str) -> Result<Self> {
-        let path = Path::new(name);
-        if !path.has_root() {
-            return Err(Error::EINVAL(format!("Blob name '{:?}' must has root", name)))
-        }
-
-        if path.is_dir() {
-            return Err(Error::EINVAL(format!("Blob name '{:?}' must not be a directory", name)))
-        }
-
+        let name = name.trim_start_matches("/").trim_end_matches("/");
+        
         if namespace.contains("/") {
             return Err(Error::EINVAL(format!("Blob namespace '{}' must not containers '/' ", namespace)))
         }
@@ -92,13 +84,22 @@ impl Blob {
         return Ok(Self(Arc::new(Mutex::new(inner))))
     }
 
+    pub fn BuildAddr(namespace: &str, name: &str) -> Result<String> {
+        let name = name.trim_start_matches("/").trim_end_matches("/");
+        if namespace.contains("/") {
+            return Err(Error::EINVAL(format!("Blob namespace '{}' must not containers '/' ", namespace)))
+        }
+
+        return Ok(format!("/{}/{}", namespace, name));
+    }
+
     pub fn State(&self) -> BlobState {
         return self.lock().unwrap().state;
     }
 
     pub fn Address(&self) -> String {
         let inner = self.lock().unwrap();
-        return format!("/{}{}", &inner.namespace, &inner.name);
+        return format!("/{}/{}", &inner.namespace, &inner.name);
     }
 
     pub fn Namespace(&self) -> String {

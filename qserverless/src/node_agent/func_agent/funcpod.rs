@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::Mutex;
 use std::sync::{Arc, atomic::AtomicBool};
 use core::ops::Deref;
 use qobjs::utility::SystemTimeProto;
@@ -27,7 +28,7 @@ use crate::blobstore::blob_session::BlobSession;
 use super::func_agent::FuncAgent;
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum funcPodState {
     Idle,
     Running(String), // handling FuncCallId
@@ -57,7 +58,7 @@ pub struct FuncPodInner {
     pub funcPodId: String,
     pub namespace: String,
     pub packageName: String,
-    pub state: funcPodState,
+    pub state: Mutex<funcPodState>,
 
     pub agentChann: mpsc::Sender<SResult<func::FuncAgentMsg, tonic::Status>>,
 
@@ -90,7 +91,7 @@ impl FuncPod {
             funcPodId: funcPodId.clone(),
             namespace: registerMsg.namespace.to_string(),
             packageName: registerMsg.package_name.to_string(),
-            state: funcPodState::Idle,
+            state: Mutex::new(funcPodState::Idle),
             agentChann: agentTx,
             blobSession: BlobSession::New(&funcAgent.blobSvcAddr),
             funcAgent: funcAgent.clone(),
@@ -104,13 +105,21 @@ impl FuncPod {
         return Ok(instance);
     }
 
+    pub fn State(&self) -> funcPodState {
+        return self.state.lock().unwrap().clone();
+    }
+
+    pub fn SetState(&self, state: funcPodState) {
+        *self.state.lock().unwrap() = state;
+    }
+
     pub fn ToGrpcType(&self) -> func::FuncPodStatus {
         return func::FuncPodStatus {
             func_pod_id: self.funcPodId.clone(),
             namespace: self.namespace.clone(),
             package_name: self.packageName.clone(),
-            state: self.state.State() as i32,
-            func_call_id: self.state.FuncCallId(),
+            state: self.State().State() as i32,
+            func_call_id: self.State().FuncCallId(),
         }
     }
 
