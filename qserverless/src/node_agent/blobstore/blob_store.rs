@@ -118,7 +118,7 @@ impl BlobStore {
     }
 
     pub fn Open(&self, id: u64, namespace: &str, name: &str) -> Result<ReadBlob> {
-        let addr = format!("/{}{}", namespace, name);
+        let addr = Blob::BuildAddr(namespace, name)?;
         let blob = match self.blobs.lock().unwrap().get(&addr) {
             None => return Err(Error::ENOENT(format!("BlobStore Open blob doesn't exisit {}", &addr))),
             Some(b) => b.clone(),
@@ -135,7 +135,7 @@ impl BlobStore {
     }
 
     pub fn RemoveBlob(&self, namespace: &str, name: &str) -> Result<()> {
-        let addr = format!("/{}{}", namespace, name);
+        let addr = Blob::BuildAddr(namespace, name)?;
         if !self.db.lock().unwrap().key_may_exist(addr.clone()) {
             return Err(Error::ENOENT(format!("RemoveBlob blob {} doesn't exist", addr)));
         }

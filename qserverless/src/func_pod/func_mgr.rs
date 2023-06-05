@@ -18,6 +18,8 @@ use std::collections::BTreeMap;
 use qobjs::func;
 use qobjs::types::*;
 
+use crate::BLOB_MGR;
+use crate::blob_mgr::BlobAddr;
 use crate::{func_def::*, FUNC_CALL_MGR};
 
 //#[derive(Default)]
@@ -38,8 +40,9 @@ impl FuncMgr {
         match env::var(EnvVarNodeMgrPodId) {
             Ok(val) => return val,
             Err(_e) => {
-                error!("can't get pod id from environment variable {}, generate a random pid id", EnvVarNodeMgrPodId);
-                return uuid::Uuid::new_v4().to_string()
+                let id = uuid::Uuid::new_v4().to_string();
+                error!("can't get pod id from environment variable {}, generate a random pid id {}", EnvVarNodeMgrPodId,&id);
+                return id;
             }
 
         };
@@ -90,8 +93,12 @@ impl QSFunc for Add {
             "sub".to_string(), 
             "call from Add".to_string(), 
             1
-        ).await;
-        Ok(format!("add with sub result {:?}", ret))
+        ).await?;
+        let baddr : BlobAddr = serde_json::from_str(&ret).unwrap(); 
+        let b = BLOB_MGR.BlobOpen(&baddr).await.unwrap();
+        let data = b.Read(100).await.unwrap();
+        let str = String::from_utf8(data).unwrap();
+        Ok(format!("add with sub result {:?}", str))
     }
 }
 
@@ -100,9 +107,16 @@ pub struct Sub {}
 
 #[async_trait::async_trait]
 impl QSFunc for Sub {
-    async fn func(&self, parameters: String) -> Result<String, String> {
-
-        Ok(format!("sub with para {}", parameters))
+    async fn func(&self, _parameters: String) -> Result<String, String> {
+        let b = BLOB_MGR.BlobCreate("testblob2").await.unwrap();
+        b.Write("test blob".to_string().as_bytes().to_vec()).await.unwrap();
+        b.Seal().await.unwrap();
+        b.Close().await.unwrap();
+        let b = BLOB_MGR.BlobOpen(&b.addr).await.unwrap();
+        let data = b.Read(100).await.unwrap();
+        let str = String::from_utf8(data).unwrap();
+        error!("func sub {}", str);
+        Ok(format!("{}", serde_json::to_string(&b.addr).unwrap()))
     }
     
 }

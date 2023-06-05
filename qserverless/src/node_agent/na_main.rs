@@ -92,7 +92,7 @@ async fn main() -> QResult<()> {
 
 
 pub async fn FuncAgentSvc() -> QResult<()> {
-    let blobSvcAddr = "0.0.0.0:8892";
+    let blobSvcAddr = "192.168.0.22:8892";
     let funcAgent = FuncAgent::New("node1", blobSvcAddr);
     FUNC_SVC_CLIENT.set(FuncSvcClientMgr::New("http://127.0.0.1:8891", &funcAgent)).unwrap();
     FuncAgentGrpcService(blobSvcAddr, &funcAgent).await?;

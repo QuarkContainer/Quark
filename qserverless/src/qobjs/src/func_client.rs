@@ -34,7 +34,7 @@ impl FuncClient {
                         break;
                     }
                     Err(e) => {
-                        error!("can't connect to funcsvc {}, {:?}", agentAddr, e);
+                        error!("FuncClient can't connect to funcagent {}, {:?}", agentAddr, e);
                         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                     }
                 }

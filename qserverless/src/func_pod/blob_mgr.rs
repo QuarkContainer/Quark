@@ -21,6 +21,7 @@ use std::io::SeekFrom;
 use core::ops::Deref;
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
 use qobjs::utility::SystemTimeProto;
 use tokio::sync::oneshot;
 
@@ -30,7 +31,7 @@ use qobjs::common::*;
 use crate::BLOB_MGR;
 use crate::FUNC_AGENT_CLIENT;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BlobAddr {
     pub blobSvcAddr: String,
     pub name: String, 
@@ -254,12 +255,12 @@ impl BlobMgr {
         }
     } 
 
-    pub async fn BlobOpen(&self, svcAddr: &str, name: &str) -> Result<Blob> {
+    pub async fn BlobOpen(&self, addr: &BlobAddr) -> Result<Blob> {
         let msgId = self.MsgId();
         let req = func::BlobOpenReq {
-            svc_addr: svcAddr.to_string(),
+            svc_addr: addr.blobSvcAddr.clone(),
             namespace: String::new(),
-            name: name.to_string(),
+            name: addr.name.clone(),
         };
 
         let msg = func::FuncAgentMsg {
@@ -278,10 +279,7 @@ impl BlobMgr {
                 }
                 return Ok(Blob(Arc::new(BlobInner {
                     id: resp.id,
-                    addr: BlobAddr { 
-                        blobSvcAddr: svcAddr.to_owned(), 
-                        name: name.to_owned(), 
-                    },
+                    addr: addr.clone(),
                     size: resp.size as usize,
                     checksum: resp.checksum,
                     createTime: SystemTimeProto::FromTimestamp(resp.create_time.as_ref().unwrap()).ToSystemTime(),

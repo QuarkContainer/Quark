@@ -32,7 +32,7 @@ impl BlobFs {
         let path = std::path::Path::new(&addr);
         let prefix = path.parent().unwrap();
         std::fs::create_dir_all(prefix).unwrap();
-        let file = File::create(&self.FileName(&addr))?;
+        let file = File::create(&addr)?;
         return Ok(file)
     }
 
@@ -46,7 +46,7 @@ impl BlobFs {
     }
 
     pub fn Remove(&self, addr: &str) -> Result<()> { 
-         std::fs::remove_file(&self.FileName(addr))?;
+        std::fs::remove_file(&self.FileName(addr))?;
         return Ok(())
     }
 
