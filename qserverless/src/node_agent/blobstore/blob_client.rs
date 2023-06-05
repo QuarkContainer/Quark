@@ -49,6 +49,12 @@ impl BlobSvcClientMgr {
         });
     }
 
+    pub async fn Delete(&self, addr: &str, namespace: &str, name: &str) -> Result<()> {
+        let client = self.Get(addr).await?;
+        client.Delete(addr, namespace, name).await?;
+        return Ok(());
+    }
+
     pub async fn Read(&self, addr: &str, id: u64, len: usize) -> Result<Vec<u8>> {
         let client = self.Get(addr).await?;
         let data = client.Read(id, len).await?;
@@ -181,6 +187,35 @@ impl BlobSvcClient {
 
                 let blob = Blob(Arc::new(Mutex::new(inner)));
                 return Ok((resp.id, blob)); 
+            }
+            msg => {
+                return Err(Error::EINVAL(format!("Invalid Call response {:?}", msg)))
+            }
+        }
+    }
+
+    pub async fn Delete(&self, svcAddr: &str, namespace: &str, name: &str) -> Result<()> {
+        let msgId = self.MsgId();
+        let req = func::BlobDeleteReq {
+            svc_addr: svcAddr.to_string(),
+            namespace: namespace.to_string(),
+            name: name.to_string(),
+        };
+
+        let req = func::BlobSvcReq {
+            msg_id: msgId,
+            event_body: Some(func::blob_svc_req::EventBody::BlobDeleteReq(req)),
+        };
+
+        let resp = self.Call(req).await?;
+
+        match resp.event_body.unwrap() {
+            func::blob_svc_resp::EventBody::BlobDeleteResp(resp) => {
+                if resp.error.len() > 0 {
+                    return Err(Error::CommonError(format!("{}", resp.error))); 
+                }
+
+                return Ok(()); 
             }
             msg => {
                 return Err(Error::EINVAL(format!("Invalid Call response {:?}", msg)))

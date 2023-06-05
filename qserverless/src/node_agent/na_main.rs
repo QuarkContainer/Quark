@@ -293,6 +293,5 @@ mod tests {
         let ret = client.Call("ns1", "package1", "add", "", 1).await;
         error!("ret is {:?}", ret);
         assert!(ret.is_ok());
-        assert!(false);
     }
 }

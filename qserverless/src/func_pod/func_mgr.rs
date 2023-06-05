@@ -88,7 +88,7 @@ impl QSFunc for Add {
             "ns1".to_string(), 
             "package1".to_string(), 
             "sub".to_string(), 
-            String::new(), 
+            "call from Add".to_string(), 
             1
         ).await;
         Ok(format!("add with sub result {:?}", ret))
@@ -100,8 +100,9 @@ pub struct Sub {}
 
 #[async_trait::async_trait]
 impl QSFunc for Sub {
-    async fn func(&self, _parameters: String) -> Result<String, String> {
-        Err("sub".to_string())
+    async fn func(&self, parameters: String) -> Result<String, String> {
+
+        Ok(format!("sub with para {}", parameters))
     }
     
 }

@@ -4,7 +4,7 @@
 pub struct BlobSvcReq {
     #[prost(uint64, tag = "1")]
     pub msg_id: u64,
-    #[prost(oneof = "blob_svc_req::EventBody", tags = "501, 505, 507, 513")]
+    #[prost(oneof = "blob_svc_req::EventBody", tags = "501, 505, 507, 513, 515")]
     pub event_body: ::core::option::Option<blob_svc_req::EventBody>,
 }
 /// Nested message and enum types in `BlobSvcReq`.
@@ -21,6 +21,8 @@ pub mod blob_svc_req {
         BlobSeekReq(super::BlobSeekReq),
         #[prost(message, tag = "513")]
         BlobCloseReq(super::BlobCloseReq),
+        #[prost(message, tag = "515")]
+        BlobDeleteReq(super::BlobDeleteReq),
     }
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -29,7 +31,7 @@ pub mod blob_svc_req {
 pub struct BlobSvcResp {
     #[prost(uint64, tag = "1")]
     pub msg_id: u64,
-    #[prost(oneof = "blob_svc_resp::EventBody", tags = "502, 506, 508, 514")]
+    #[prost(oneof = "blob_svc_resp::EventBody", tags = "502, 506, 508, 514, 516")]
     pub event_body: ::core::option::Option<blob_svc_resp::EventBody>,
 }
 /// Nested message and enum types in `BlobSvcResp`.
@@ -46,6 +48,8 @@ pub mod blob_svc_resp {
         BlobSeekResp(super::BlobSeekResp),
         #[prost(message, tag = "514")]
         BlobCloseResp(super::BlobCloseResp),
+        #[prost(message, tag = "516")]
+        BlobDeleteResp(super::BlobDeleteResp),
     }
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -56,7 +60,7 @@ pub struct FuncAgentMsg {
     pub msg_id: u64,
     #[prost(
         oneof = "func_agent_msg::EventBody",
-        tags = "100, 200, 300, 400, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514"
+        tags = "100, 200, 300, 400, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514, 515, 516"
     )]
     pub event_body: ::core::option::Option<func_agent_msg::EventBody>,
 }
@@ -102,6 +106,10 @@ pub mod func_agent_msg {
         BlobCloseReq(super::BlobCloseReq),
         #[prost(message, tag = "514")]
         BlobCloseResp(super::BlobCloseResp),
+        #[prost(message, tag = "515")]
+        BlobDeleteReq(super::BlobDeleteReq),
+        #[prost(message, tag = "516")]
+        BlobDeleteResp(super::BlobDeleteResp),
     }
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -139,9 +147,25 @@ pub struct BlobOpenResp {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BlobCreateReq {
+pub struct BlobDeleteReq {
     #[prost(string, tag = "2")]
     pub svc_addr: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub name: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BlobDeleteResp {
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BlobCreateReq {
     #[prost(string, tag = "3")]
     pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
@@ -153,6 +177,8 @@ pub struct BlobCreateReq {
 pub struct BlobCreateResp {
     #[prost(uint64, tag = "2")]
     pub id: u64,
+    #[prost(string, tag = "3")]
+    pub svc_addr: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
     pub error: ::prost::alloc::string::String,
 }

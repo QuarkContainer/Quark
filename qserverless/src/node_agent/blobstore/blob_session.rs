@@ -97,6 +97,16 @@ impl BlobSession {
         }
     }
 
+    pub async fn Delete(&self, svcAddr: &str, namespace: &str, name: &str) -> Result<()> {
+        if svcAddr == &self.BlobSvcAddr() {
+            BLOB_STORE.RemoveBlob(namespace, name)?;
+            return Ok(())
+        } else {
+            BLOB_SVC_CLIENT_MGR.Delete(svcAddr, namespace, name).await?;
+            return Ok(())
+        }
+    }
+
     pub fn Get(&self, id: u64) -> Result<BlobHandler> {
         match self.lock().unwrap().blobHandlers.get(&id) {
             None => return Err(Error::EINVAL(format!("BlobSession can't find handler with id {}", id))),

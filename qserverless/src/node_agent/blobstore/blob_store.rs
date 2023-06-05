@@ -99,6 +99,9 @@ impl BlobStore {
 
     pub fn CreateBlob(&self, id: u64, namespace: &str, name: &str) -> Result<WriteBlob> {
         let blob = Blob::Create(namespace, name)?;
+        if self.db.lock().unwrap().key_may_exist(blob.Address()) {
+            return Err(Error::ENOENT(format!("Create blob fail as {} exist", blob.Address())));
+        }
         let file = self.blobfs.Create(&blob.Address())?;
         self.db.lock().unwrap().put(blob.Address(), blob.ToString()?)?;
         let blob = WriteBlob::New(id, &blob, file);
@@ -107,6 +110,9 @@ impl BlobStore {
 
     pub fn Seal(&self, writeBlob: &WriteBlob) -> Result<()> {
         let blob = &writeBlob.blob;
+        if !self.db.lock().unwrap().key_may_exist(blob.Address()) {
+            return Err(Error::ENOENT(format!("Seal blob {} doesn't exist, it might be delete before seal", blob.Address())));
+        }
         self.db.lock().unwrap().put(blob.Address(), blob.ToString()?)?;
         return Ok(())
     }
@@ -128,7 +134,11 @@ impl BlobStore {
         });
     }
 
-    pub fn Removeblob(&self, addr: &str) -> Result<()> {
+    pub fn RemoveBlob(&self, namespace: &str, name: &str) -> Result<()> {
+        let addr = format!("/{}{}", namespace, name);
+        if !self.db.lock().unwrap().key_may_exist(addr.clone()) {
+            return Err(Error::ENOENT(format!("RemoveBlob blob {} doesn't exist", addr)));
+        }
         self.db.lock().unwrap().delete(addr.clone())?;
         
         self.blobfs.Remove(&addr)?;

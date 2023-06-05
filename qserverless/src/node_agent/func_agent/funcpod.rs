@@ -158,6 +158,35 @@ impl FuncPod {
         };
     }
 
+    pub async fn OnBlobDeleteReq(&self, msgId: u64, msg: func::BlobDeleteReq) -> Result<()> {
+        let resp = match self.blobSession.Delete(&msg.svc_addr, &self.namespace, &msg.name).await {
+            Ok(()) => {
+                let resp = func::BlobDeleteResp {
+                    error: String::new(),
+                };
+                func::FuncAgentMsg {
+                    msg_id: msgId,
+                    event_body: Some(func::func_agent_msg::EventBody::BlobDeleteResp(resp))
+                }
+            }
+            Err(e) => {
+                let resp = func::BlobDeleteResp {
+                    error: format!("{:?}", e),
+                    ..Default::default()
+                };
+                func::FuncAgentMsg {
+                    msg_id: msgId,
+                    event_body: Some(func::func_agent_msg::EventBody::BlobDeleteResp(resp))
+                }
+            }
+        };
+
+        match self.Send(resp) {
+            Ok(()) => return Ok(()),
+            Err(_e) => return Err(Error::CommonError(format!("send fail ...")))
+        };
+    }
+
     pub async fn OnBlobReadReq(&self, msgId: u64, msg: func::BlobReadReq) -> Result<()> {
         let mut buf = Vec::with_capacity(msg.len as usize);
         buf.resize(msg.len as usize, 0u8);
@@ -254,6 +283,7 @@ impl FuncPod {
             Ok(id) => {
                 let resp = func::BlobCreateResp {
                     id: id,
+                    svc_addr: self.funcAgent.blobSvcAddr.clone(),
                     error: String::new()
                 };
                 func::FuncAgentMsg {
@@ -264,6 +294,7 @@ impl FuncPod {
             Err(e) => {
                 let resp = func::BlobCreateResp {
                     id: 0,
+                    svc_addr: self.funcAgent.blobSvcAddr.clone(),
                     error: format!("{:?}", e),
                 };
                 func::FuncAgentMsg {
@@ -352,6 +383,9 @@ impl FuncPod {
             }
             EventBody::BlobOpenReq(msg) => {
                 self.OnBlobOpenReq(msgId, msg).await?;
+            }
+            EventBody::BlobDeleteReq(msg) => {
+                self.OnBlobDeleteReq(msgId, msg).await?;
             }
             EventBody::BlobReadReq(msg) => {
                 self.OnBlobReadReq(msgId, msg).await?;
