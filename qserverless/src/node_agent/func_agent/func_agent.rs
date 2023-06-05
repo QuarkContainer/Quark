@@ -25,7 +25,7 @@ use core::ops::Deref;
 
 use qobjs::{common::*, func::{self, func_agent_msg::EventBody}};
 
-use crate::{FUNC_SVC_CLIENT, FUNC_AGENT};
+use crate::{FUNC_SVC_CLIENT};
 
 use super::funcpod::{FuncPod, funcPodState};
 use super::funcpod_mgr::FuncPodMgr;
@@ -83,6 +83,7 @@ pub struct FuncCallContext {
 #[derive(Debug, Default)]
 pub struct FuncAgentInner {
     pub nodeId: String,
+    pub blobSvcAddr: String,
     pub callContexts: Mutex<BTreeMap<String, FuncCallContext>>,
     pub funcPodMgr: FuncPodMgr,
     // func instance id to funcCall
@@ -103,9 +104,10 @@ impl Deref for FuncAgent {
 }
 
 impl FuncAgent {
-    pub fn New(nodeId: &str) -> Self {
+    pub fn New(nodeId: &str, blobSvcAddr: &str) -> Self {
         let inner = FuncAgentInner {
             nodeId: nodeId.to_string(),
+            blobSvcAddr: blobSvcAddr.to_string(),
             ..Default::default()
         };
 
@@ -169,7 +171,7 @@ impl FuncAgent {
         agentTx: mpsc::Sender<SResult<func::FuncAgentMsg, Status>>) 
     -> Result<()> {
         let funcPodId = registerMsg.func_pod_id.clone();
-        let funcPod = FuncPod::New(registerMsg, stream, agentTx)?;
+        let funcPod = FuncPod::New(&self, registerMsg, stream, agentTx)?;
         self.funcPodMgr.AddPod(&funcPodId, &funcPod)?;
 
         let msg = func::FuncPodConnReq {
@@ -457,11 +459,11 @@ impl func::func_agent_service_server::FuncAgentService for FuncAgent {
     }
 }
 
-pub async fn FuncAgentGrpcService() -> Result<()> {
+pub async fn FuncAgentGrpcService(blobSvcAddr: &str, funcAgent: &FuncAgent) -> Result<()> {
     use tonic::transport::Server;
     let funcSvcFuture = Server::builder()
-        .add_service(FuncAgentServiceServer::new(FUNC_AGENT.clone()))
-        .serve("0.0.0.0:8892".parse().unwrap());
+        .add_service(FuncAgentServiceServer::new(funcAgent.clone()))
+        .serve(blobSvcAddr.parse().unwrap());
 
     info!("func agent start ...");
     tokio::select! {

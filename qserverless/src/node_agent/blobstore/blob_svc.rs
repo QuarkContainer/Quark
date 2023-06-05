@@ -20,15 +20,23 @@ use tokio_stream::wrappers::ReceiverStream;
 
 use qobjs::func;
 use qobjs::common::*;
-use crate::BLOB_SVC_ADDR;
 
 use super::blob_session::BlobSession;
 
-pub struct BlogSvc {
+#[derive(Debug, Clone)]
+pub struct BlogSvcSession {
+    pub svcAddress: String,
     pub blobSession: BlobSession,
 }
 
-impl BlogSvc {
+impl BlogSvcSession {
+    pub fn New(addr: &str) -> Self {
+        return Self {
+            svcAddress: addr.to_string(),
+            blobSession: BlobSession::New(addr),
+        }
+    }
+
     pub async fn Process(
         &self,
         stream: tonic::Streaming<func::BlobSvcReq>,
@@ -71,9 +79,9 @@ impl BlogSvc {
                 match self.blobSession.Open(&msg.svc_addr, &msg.namespace, &msg.name).await {
                     Ok((id, b)) => {
                         let inner = b.lock().unwrap();
-                        if &msg.svc_addr != BLOB_SVC_ADDR.get().unwrap() {
+                        if &msg.svc_addr != &self.svcAddress {
                             let resp = func::BlobOpenResp {
-                                error: format!("svc address doesn't match {:?} {}", msg.svc_addr, BLOB_SVC_ADDR.get().unwrap()),
+                                error: format!("svc address doesn't match {:?} {}", msg.svc_addr, &self.svcAddress),
                                 ..Default::default()
                             };
                             func::BlobSvcResp {
@@ -191,14 +199,43 @@ impl BlogSvc {
     }
 }
 
+pub struct BlobSvc {
+    pub addr: String,
+}
+
 #[tonic::async_trait]
-impl func::blob_service_server::BlobService for BlogSvc {
+impl func::blob_service_server::BlobService for BlobSvc {
     type StreamProcessStream = ReceiverStream<SResult<func::BlobSvcResp, tonic::Status>>;
     
     async fn stream_process(
         &self,
-        _request: tonic::Request<tonic::Streaming<func::BlobSvcReq>>,
+        request: tonic::Request<tonic::Streaming<func::BlobSvcReq>>,
     ) -> SResult<tonic::Response<Self::StreamProcessStream>, tonic::Status> {
-        unimplemented!();
+        let stream = request.into_inner();
+
+        let (tx, rx) = mpsc::channel(30);
+        let svcSession = BlogSvcSession::New(&self.addr);
+
+        tokio::spawn(async move {
+            svcSession.Process(stream, tx).await.unwrap();
+        });
+        return Ok(tonic::Response::new(ReceiverStream::new(rx)));
     }
+}
+
+pub async fn BlobServiceGrpcService(addr: &str) -> Result<()> {
+    use tonic::transport::Server;
+    let svc = BlobSvc{
+        addr: addr.to_owned(),
+    };
+    let funcSvcFuture = Server::builder()
+        .add_service(func::blob_service_server::BlobServiceServer::new(svc))
+        .serve(addr.parse().unwrap());
+
+    info!("BlobService start ... on address {}", addr);
+    tokio::select! {
+        _ = funcSvcFuture => {}
+    }
+
+    Ok(())
 }

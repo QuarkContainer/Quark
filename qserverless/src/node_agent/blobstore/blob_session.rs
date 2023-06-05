@@ -19,20 +19,20 @@ use std::ops::Deref;
 
 use qobjs::common::*;
 
-use crate::BLOB_SVC_ADDR;
 use crate::BLOB_SVC_CLIENT_MGR;
 use crate::blobstore::blob::BlobHandler;
 use crate::blobstore::blob_store::BLOB_STORE;
 
 use super::blob::Blob;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct BlobSessionInner {
+    pub svcAddress: String,
     pub blobHandlers: BTreeMap<u64, BlobHandler>,
     pub lastBlobId: u64,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct BlobSession(Arc<Mutex<BlobSessionInner>>);
 
 impl Deref for BlobSession {
@@ -44,8 +44,9 @@ impl Deref for BlobSession {
 }
 
 impl BlobSession {
-    pub fn New() -> Self {
+    pub fn New(svcAddr: &str) -> Self {
         let inner = BlobSessionInner {
+            svcAddress: svcAddr.to_string(),
             blobHandlers: BTreeMap::new(),
             lastBlobId: 0,
         };
@@ -76,10 +77,14 @@ impl BlobSession {
         return handler.Seal().await;
     }
 
+    pub fn BlobSvcAddr(&self) -> String {
+        return self.lock().unwrap().svcAddress.clone();
+    }
+
     pub async fn Open(&self, svcAddr: &str, namespace: &str, name: &str) -> Result<(u64, Blob)> {
         let id = self.NextBlobId();
 
-        if svcAddr == BLOB_SVC_ADDR.get().unwrap() {
+        if svcAddr == &self.BlobSvcAddr() {
             let b = BLOB_STORE.Open(id, namespace, name)?;
             let blob = b.blob.clone();
             self.lock().unwrap().blobHandlers.insert(id, BlobHandler::NewRead(b));

@@ -25,7 +25,7 @@ use qobjs::func::FuncSvcMsg;
 use tokio::sync::Notify;
 use tokio::sync::mpsc;
 
-use crate::FUNC_AGENT;
+use super::func_agent::FuncAgent;
 
 #[derive(Debug, Clone)]
 pub struct FuncSvcClient {
@@ -88,6 +88,7 @@ pub struct FuncSvcClientMgrInner {
 
     pub agentChann: mpsc::Sender<FuncSvcMsg>,
     pub svcAddr: String,
+    pub funcAgent: FuncAgent
 }
 
 #[derive(Debug, Clone)]
@@ -103,7 +104,7 @@ impl Deref for FuncSvcClientMgr {
 
 impl FuncSvcClientMgr {
     // todo: handle master/slave FuncSvc
-    pub fn New(svcAddr: &str) -> Self {
+    pub fn New(svcAddr: &str, funcAgent: &FuncAgent) -> Self {
         let (tx, rx) = mpsc::channel(100);
         
         let inner = FuncSvcClientMgrInner {
@@ -111,6 +112,7 @@ impl FuncSvcClientMgr {
             stop: AtomicBool::new(false),
             agentChann: tx,
             svcAddr: svcAddr.to_string(),
+            funcAgent: funcAgent.clone(),
         };
 
         let ret = Self(Arc::new(inner));
@@ -130,7 +132,7 @@ impl FuncSvcClientMgr {
     }
 
     pub async fn Process(&self, rx: mpsc::Receiver<FuncSvcMsg>) -> Result<()> {
-        let registerMsg = FUNC_AGENT.ToGrpcType();
+        let registerMsg = self.funcAgent.ToGrpcType();
         let mut client = FuncSvcClient::New(&self.svcAddr, registerMsg).await?;
         let mut currentMsg;
         let mut stream = client.stream.lock().unwrap().take().unwrap();
@@ -176,7 +178,7 @@ impl FuncSvcClientMgr {
                         }
                     };
 
-                    FUNC_AGENT.OnFuncSvcMsg(msg).await?;
+                    self.funcAgent.OnFuncSvcMsg(msg).await?;
                 }
 
             }

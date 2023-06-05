@@ -22,8 +22,9 @@ use qobjs::func;
 use qobjs::common::*;
 use qobjs::func::func_agent_msg::EventBody;
 
-use crate::FUNC_AGENT;
 use crate::blobstore::blob_session::BlobSession;
+
+use super::func_agent::FuncAgent;
 
 
 #[derive(Debug)]
@@ -61,6 +62,7 @@ pub struct FuncPodInner {
     pub agentChann: mpsc::Sender<SResult<func::FuncAgentMsg, tonic::Status>>,
 
     pub blobSession: BlobSession,
+    pub funcAgent: FuncAgent,
 }
 
 #[derive(Debug, Clone)]
@@ -76,6 +78,7 @@ impl Deref for FuncPod {
 
 impl FuncPod {
     pub fn New(
+        funcAgent: &FuncAgent,
         registerMsg: &func::FuncPodRegisterReq, 
         stream: tonic::Streaming<func::FuncAgentMsg>,
         agentTx: mpsc::Sender<SResult<func::FuncAgentMsg, tonic::Status>>) 
@@ -89,7 +92,8 @@ impl FuncPod {
             packageName: registerMsg.package_name.to_string(),
             state: funcPodState::Idle,
             agentChann: agentTx,
-            blobSession: BlobSession::default(),
+            blobSession: BlobSession::New(&funcAgent.blobSvcAddr),
+            funcAgent: funcAgent.clone(),
         };
         let instance = FuncPod(Arc::new(inner));
         let clone = instance.clone();
@@ -341,10 +345,10 @@ impl FuncPod {
 
         match body {
             EventBody::FuncAgentCallReq(msg) => {
-                FUNC_AGENT.OnFuncAgentCallReq(funcPodId, msg)?;
+                self.funcAgent.OnFuncAgentCallReq(funcPodId, msg)?;
             }
             EventBody::FuncAgentCallResp(msg) => {
-                FUNC_AGENT.OnFuncAgentCallResp(funcPodId, msg)?;
+                self.funcAgent.OnFuncAgentCallResp(funcPodId, msg)?;
             }
             EventBody::BlobOpenReq(msg) => {
                 self.OnBlobOpenReq(msgId, msg).await?;
@@ -391,7 +395,7 @@ impl FuncPod {
                     let msg : func::FuncAgentMsg = match msg {
                         Err(e) => {
                             error!("FuncPod {} get error message {:?} disconnect...", &self.funcPodId, e);
-                            match FUNC_AGENT.OnFuncPodDisconnect(&self.funcPodId) {
+                            match self.funcAgent.OnFuncPodDisconnect(&self.funcPodId) {
                                 Err(e) => {
                                     error!("FuncPod {} disconnect get error message {:?} ", &self.funcPodId, e);
                                 }
