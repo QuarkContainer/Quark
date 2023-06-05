@@ -98,6 +98,8 @@ impl QSFunc for Add {
         let b = BLOB_MGR.BlobOpen(&baddr).await.unwrap();
         let data = b.Read(100).await.unwrap();
         let str = String::from_utf8(data).unwrap();
+        BLOB_MGR.BlobDelete(&baddr.blobSvcAddr, &baddr.name).await.unwrap();
+        
         Ok(format!("add with sub result {:?}", str))
     }
 }
@@ -108,7 +110,7 @@ pub struct Sub {}
 #[async_trait::async_trait]
 impl QSFunc for Sub {
     async fn func(&self, _parameters: String) -> Result<String, String> {
-        let b = BLOB_MGR.BlobCreate("testblob2").await.unwrap();
+        let b = BLOB_MGR.BlobCreate("testblob5").await.unwrap();
         b.Write("test blob".to_string().as_bytes().to_vec()).await.unwrap();
         b.Seal().await.unwrap();
         b.Close().await.unwrap();
