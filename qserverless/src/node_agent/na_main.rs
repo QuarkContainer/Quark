@@ -61,7 +61,6 @@ pub static IMAGE_MGR: OnceCell<ImageMgr> = OnceCell::new();
 pub static CADVISOR_PROVIDER: OnceCell<CadvisorInfoProvider> = OnceCell::new();
 pub static NODEAGENT_STORE: OnceCell<NodeAgentStore> = OnceCell::new();
 pub static FUNC_SVC_CLIENT: OnceCell<FuncSvcClientMgr> = OnceCell::new();
-pub static BLOB_SVC_ADDR: OnceCell<String> = OnceCell::new();
 
 lazy_static! {
     pub static ref NETWORK_PROVIDER: LocalNetworkAddressProvider = {
@@ -72,11 +71,6 @@ lazy_static! {
         CadvisorClient::Client::Init()
     };
 
-    pub static ref FUNC_AGENT: FuncAgent = {
-        FuncAgent::New("node1")
-    };
-
-
     pub static ref BLOB_SVC_CLIENT_MGR : BlobSvcClientMgr = {
         BlobSvcClientMgr::default()
     };
@@ -85,7 +79,6 @@ lazy_static! {
 #[tokio::main]
 async fn main() -> QResult<()> {
     log4rs::init_file("na_logging_config.yaml", Default::default()).unwrap();
-    BLOB_SVC_ADDR.set("http://192.168.0.22:8893".to_owned()).unwrap();
     
     let f1 = FuncAgentSvc();
     let f2 = NodeAgentSvc();
@@ -99,8 +92,10 @@ async fn main() -> QResult<()> {
 
 
 pub async fn FuncAgentSvc() -> QResult<()> {
-    FUNC_SVC_CLIENT.set(FuncSvcClientMgr::New("http://127.0.0.1:8891")).unwrap();
-    FuncAgentGrpcService().await?;
+    let blobSvcAddr = "0.0.0.0:8892";
+    let funcAgent = FuncAgent::New("node1", blobSvcAddr);
+    FUNC_SVC_CLIENT.set(FuncSvcClientMgr::New("http://127.0.0.1:8891", &funcAgent)).unwrap();
+    FuncAgentGrpcService(blobSvcAddr, &funcAgent).await?;
     return Ok(());
 }
 
