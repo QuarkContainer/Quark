@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::result::Result as SResult;
+use std::sync::Arc;
 
 use tonic::transport::channel::Channel;
 
@@ -25,7 +26,7 @@ pub struct FuncClient {
 
 impl FuncClient {
     pub async fn Init(agentAddr: &str) -> Result<Self> {
-        let client: func::func_agent_service_client::FuncAgentServiceClient<tonic::transport::Channel> = {
+        /*let client: func::func_agent_service_client::FuncAgentServiceClient<tonic::transport::Channel> = {
             let client;
             loop {
                 match func::func_agent_service_client::FuncAgentServiceClient::connect(agentAddr.to_string()).await {
@@ -40,8 +41,40 @@ impl FuncClient {
                 }
             }
             client
-        };
+        };*/
 
+        use tokio::net::UnixStream;
+        use tonic::transport::{Endpoint, Uri};
+        use tower::service_fn;
+
+        let path = Arc::new(agentAddr.to_owned());
+
+        let client = {
+            let client;
+            loop {
+                let path = path.clone();
+                // the uri is useless 
+                let res = Endpoint::from_static("https://example.com")
+                        .connect_with_connector(service_fn(move |_: Uri| {
+                            let path = path.clone();
+                            async move { UnixStream::connect(&*path).await }
+                        }))
+                .await;
+
+                match res {
+                    Err(e) => {
+                        error!("can't connect to funcagent {}, {:?}", agentAddr, e);
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    }
+                    Ok(channel) => {
+                        client = func::func_agent_service_client::FuncAgentServiceClient::new(channel);
+                        break;
+                    }
+                }
+            }
+            client
+        };
+            
         return Ok(Self {
             client: client,
         })

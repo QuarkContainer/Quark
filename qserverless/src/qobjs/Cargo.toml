@@ -33,6 +33,7 @@ chrono = "0.4.24"
 ipnetwork = "0.20.0"
 rocksdb = "0.20.1"
 async-trait = "0.1.68"
+tower = "0.4.13"
 
 [dependencies.uuid]
 version = "1.3.1"

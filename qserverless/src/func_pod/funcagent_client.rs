@@ -16,6 +16,7 @@ use std::sync::Arc;
 use core::ops::Deref;
 use std::sync::atomic::AtomicBool;
 
+use qobjs::config::NodeAgentUnixSocket;
 use tokio::sync::Notify;
 use tokio::sync::mpsc;
 
@@ -50,17 +51,28 @@ impl Deref for FuncAgentClient {
 
 impl FuncAgentClient {
     pub async fn Init(agentAddr: &str) -> Result<Self> {
+        use tokio::net::UnixStream;
+        use tonic::transport::{Endpoint, Uri};
+        use tower::service_fn;
+
         let mut client = {
             let client;
             loop {
-                match func::func_agent_service_client::FuncAgentServiceClient::connect(agentAddr.to_string()).await {
-                    Ok(c) => {
-                        client = c;
-                        break;
-                    }
+                let res = Endpoint::from_static("https://example.com")
+                        .connect_with_connector(service_fn(|_: Uri| {
+                            let path = NodeAgentUnixSocket;
+                            UnixStream::connect(path)
+                        }))
+                .await;
+
+                match res {
                     Err(e) => {
                         error!("can't connect to funcagent {}, {:?}", agentAddr, e);
                         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    }
+                    Ok(channel) => {
+                        client = func::func_agent_service_client::FuncAgentServiceClient::new(channel);
+                        break;
                     }
                 }
             }
