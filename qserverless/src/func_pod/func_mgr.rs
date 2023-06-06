@@ -14,6 +14,7 @@
 
 use std::sync::Arc;
 use std::collections::BTreeMap;
+use std::result::Result as SResult;
 
 use qobjs::func;
 use qobjs::types::*;
@@ -62,6 +63,7 @@ impl FuncMgr {
 
         funcs.insert("add".to_string(), Arc::new(Add{}));
         funcs.insert("sub".to_string(), Arc::new(Sub{}));
+        funcs.insert("simple".to_string(), Arc::new(Simple{}));
 
         return Self {
             funcPodId: Self::GetPodIdFromEnvVar(),
@@ -86,7 +88,7 @@ pub struct Add {}
 
 #[async_trait::async_trait]
 impl QSFunc for Add {
-    async fn func(&self, _parameters: String) -> Result<String, String> {
+    async fn func(&self, _parameters: String) -> SResult<String, String> {
         let ret = FUNC_CALL_MGR.RemoteCall(
             "ns1".to_string(), 
             "package1".to_string(), 
@@ -95,10 +97,9 @@ impl QSFunc for Add {
             1
         ).await?;
         let baddr : BlobAddr = serde_json::from_str(&ret).unwrap(); 
-        let b = BLOB_MGR.BlobOpen(&baddr).await.unwrap();
-        let data = b.Read(100).await.unwrap();
+        let b = BLOB_MGR.BlobOpen(&baddr).await?;
+        let data = b.Read(100).await?;
         let str = String::from_utf8(data).unwrap();
-        BLOB_MGR.BlobDelete(&baddr.blobSvcAddr, &baddr.name).await.unwrap();
         
         Ok(format!("add with sub result {:?}", str))
     }
@@ -109,16 +110,25 @@ pub struct Sub {}
 
 #[async_trait::async_trait]
 impl QSFunc for Sub {
-    async fn func(&self, _parameters: String) -> Result<String, String> {
-        let b = BLOB_MGR.BlobCreate("testblob5").await.unwrap();
-        b.Write("test blob".to_string().as_bytes().to_vec()).await.unwrap();
+    async fn func(&self, _parameters: String) -> SResult<String, String> {
+        BLOB_MGR.BlobDelete("192.168.0.22:8892", "testblob5").await.ok();
+        let b = BLOB_MGR.BlobCreate("testblob5").await?;
+        b.Write("test blob".to_string().as_bytes().to_vec()).await?;
         b.Seal().await.unwrap();
         b.Close().await.unwrap();
-        let b = BLOB_MGR.BlobOpen(&b.addr).await.unwrap();
-        let data = b.Read(100).await.unwrap();
+        let b = BLOB_MGR.BlobOpen(&b.addr).await?;
+        let data = b.Read(100).await?;
         let str = String::from_utf8(data).unwrap();
         error!("func sub {}", str);
-        Ok(format!("{}", serde_json::to_string(&b.addr).unwrap()))
+        return Ok(format!("{}", serde_json::to_string(&b.addr).unwrap()));
     }
-    
+}
+
+pub struct Simple {}
+#[async_trait::async_trait]
+impl QSFunc for Simple {
+    async fn func(&self, _parameters: String) -> SResult<String, String> {
+        error!("Simple test ....");
+        return Ok(format!("Simple result ...."));
+    }
 }

@@ -41,18 +41,21 @@ pub struct Image {
 	pub pinned: bool,
 }
 
+#[derive(Debug, Default)]
 // EnvVar represents the environment variable.
 pub struct EnvVar {
     pub name: String,
     pub value: String,
 }
 
+#[derive(Debug, Default)]
 // Annotation represents an annotation.
 pub struct Annotation {
     pub name: String,
     pub value: String,
 }
 
+#[derive(Debug, Default)]
 // Mount represents a volume mount.
 pub struct Mount {
 	// Name of the volume mount.
@@ -94,6 +97,7 @@ pub struct PortMapping {
 	pub hostIP: String,
 }
 
+#[derive(Debug, Default)]
 // DeviceInfo contains information about the device.
 pub struct DeviceInfo {
 	// Path on host for mapping
@@ -104,6 +108,7 @@ pub struct DeviceInfo {
 	pub permissions: String, 
 }
 
+#[derive(Debug, Default)]
 // RunContainerOptions specify the options which are necessary for running containers
 pub struct RunContainerOptions {
 	// The environment variables list.
