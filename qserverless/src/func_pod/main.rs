@@ -55,3 +55,44 @@ async fn main() -> Result<()> {
     
     return Ok(());
 }
+
+#[cfg(test)]
+mod tests {
+    use qobjs::func_client::FuncClient;
+
+    //use super::*;
+
+    #[actix_rt::test]
+    async fn TestDirectFuncCallAdd() {
+        log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
+        error!("TestDirectFuncCall 1");
+        let mut client = FuncClient::Init("http://192.168.0.22:8892").await.unwrap();
+        error!("TestDirectFuncCall 2");
+        //let ret = client.Call("ns1", "package1", "sub", "", 1).await;
+        let ret = client.Call("ns1", "package1", "add", "", 1).await;
+        error!("ret is {:?}", ret);
+        assert!(ret.is_ok());
+    }
+
+    #[actix_rt::test]
+    async fn TestDirectFuncCallSub() {
+        log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
+        error!("TestDirectFuncCall 1");
+        let mut client = FuncClient::Init("http://192.168.0.22:8892").await.unwrap();
+        error!("TestDirectFuncCall 2");
+        let ret = client.Call("ns1", "package1", "sub", "", 1).await;
+        error!("ret is {:?}", ret);
+        assert!(ret.is_ok());
+    }
+
+    #[actix_rt::test]
+    async fn TestDirectFuncCallSimple() {
+        log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
+        error!("TestDirectFuncCall 1");
+        let mut client = FuncClient::Init("http://192.168.0.22:8892").await.unwrap();
+        error!("TestDirectFuncCall 2");
+        let ret = client.Call("ns1", "package1", "simple", "", 1).await;
+        error!("ret is {:?}", ret);
+        assert!(ret.is_ok());
+    }
+}

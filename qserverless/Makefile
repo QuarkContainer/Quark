@@ -14,10 +14,12 @@ deploy: fp
 	cp ./fp_logging_config.yaml ./target/fp
 	cp ./deployment/fp.Dockerfile ./target/fp/Dockerfile
 	-docker image rm func_pod
+	-docker image rm localhost:5000/func_pod
+	-crictl rmi localhost:5000/func_pod
 	docker build -t func_pod:latest ./target/fp
 	docker image tag func_pod localhost:5000/func_pod
 	docker push localhost:5000/func_pod
-	docker pull localhost:5000/func_pod
+	#docker pull localhost:5000/func_pod
 	crictl pull localhost:5000/func_pod
 	#docker run --network host -it --name fp --rm func_pod
 test:

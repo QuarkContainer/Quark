@@ -516,6 +516,22 @@ pub fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container) -> Vec
         volumeMounts.push(mount);
     }
 
+    let mount = crictl::Mount {
+        host_path: "/var/lib/quark/nodeagent".to_string(),
+        container_path: "/var/lib/quark/nodeagent".to_string(),
+        selinux_relabel: false,
+        ..Default::default()
+    };
+    volumeMounts.push(mount);
+
+    let mount = crictl::Mount {
+        host_path: "/var/log/quark/".to_string(),
+        container_path: "/var/log/quark".to_string(),
+        selinux_relabel: false,
+        ..Default::default()
+    };
+    volumeMounts.push(mount);
+
     // The reason we create and mount the log file in here (not in kubelet) is because
 	// the file's location depends on the ID of the container, and we need to create and
 	// mount the file before actually starting the container.

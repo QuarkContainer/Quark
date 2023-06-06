@@ -46,6 +46,7 @@ use crate::runtime::k8s_helper::*;
 
 use crate::nm_svc::NodeAgentMsg;
 use crate::runtime::k8s_labels::*;
+use crate::runtime::k8s_types::RunContainerOptions;
 use crate::runtime::k8s_util::*;
 use crate::container::*;
 
@@ -779,6 +780,8 @@ impl PodAgent {
             working_dir: container.working_dir.as_deref().unwrap_or("").to_string(),
             labels: NewContainerLabels(container, &pod.read().unwrap()),
             annotations: NewContainerAnnotations(container, &pod.read().unwrap(), 0, &BTreeMap::new()),
+            //devices:
+            mounts: MakeMounts(&RunContainerOptions::default(), container),
             log_path: containerLogsPath,
             stdin: *container.stdin.as_ref().unwrap_or(&false),
             stdin_once: *container.stdin_once.as_ref().unwrap_or(&false),

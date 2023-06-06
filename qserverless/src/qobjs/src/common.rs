@@ -125,6 +125,13 @@ impl Error {
     }
 }
 
+impl From<Error> for String {
+    fn from(item: Error) -> Self {
+        return format!("{:?}", item)
+    }
+}
+
+
 impl From<rocksdb::Error> for Error {
     fn from(item: rocksdb::Error) -> Self {
         return Self::RocksdbError(item)
