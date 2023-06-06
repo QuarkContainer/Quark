@@ -58,7 +58,7 @@ async fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use qobjs::func_client::FuncClient;
+    use qobjs::{func_client::FuncClient, config::NodeAgentUnixSocket};
 
     //use super::*;
 
@@ -66,7 +66,7 @@ mod tests {
     async fn TestDirectFuncCallAdd() {
         log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
         error!("TestDirectFuncCall 1");
-        let mut client = FuncClient::Init("http://192.168.0.22:8892").await.unwrap();
+        let mut client = FuncClient::Init(NodeAgentUnixSocket).await.unwrap();
         error!("TestDirectFuncCall 2");
         //let ret = client.Call("ns1", "package1", "sub", "", 1).await;
         let ret = client.Call("ns1", "package1", "add", "", 1).await;
@@ -78,7 +78,7 @@ mod tests {
     async fn TestDirectFuncCallSub() {
         log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
         error!("TestDirectFuncCall 1");
-        let mut client = FuncClient::Init("http://192.168.0.22:8892").await.unwrap();
+        let mut client = FuncClient::Init(NodeAgentUnixSocket).await.unwrap();
         error!("TestDirectFuncCall 2");
         let ret = client.Call("ns1", "package1", "sub", "", 1).await;
         error!("ret is {:?}", ret);
@@ -89,7 +89,7 @@ mod tests {
     async fn TestDirectFuncCallSimple() {
         log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
         error!("TestDirectFuncCall 1");
-        let mut client = FuncClient::Init("http://192.168.0.22:8892").await.unwrap();
+        let mut client = FuncClient::Init(NodeAgentUnixSocket).await.unwrap();
         error!("TestDirectFuncCall 2");
         let ret = client.Call("ns1", "package1", "simple", "", 1).await;
         error!("ret is {:?}", ret);

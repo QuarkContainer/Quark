@@ -63,7 +63,7 @@ impl func::func_svc_service_server::FuncSvcService for FuncSvc {
     }
 }
 
-pub async fn GrpcService() -> Result<()> {
+pub async fn FuncSvcGrpcService() -> Result<()> {
     use tonic::transport::Server;
     use qobjs::func::func_svc_service_server::FuncSvcServiceServer;
 

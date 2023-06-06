@@ -97,6 +97,6 @@ async fn main() -> Result<()> {
         client.Create("package", obj.Obj()).await.unwrap();
     }
 
-    grpc_svc::GrpcService().await.unwrap();
+    grpc_svc::FuncSvcGrpcService().await.unwrap();
     Ok(())
 }

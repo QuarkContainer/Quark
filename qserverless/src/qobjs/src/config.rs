@@ -31,6 +31,7 @@ pub const CPU                               : &str = "CPU";
 pub const Memory                            : &str = "Memory";
 pub const PID                               : &str = "PID";
 pub const DefaultRootPath                   : &str = "/var/lib/nodeagent";
+pub const NodeAgentUnixSocket               : &str = "/var/lib/quark/nodeagent/sock";
 pub const DefaultDBName                     : &str = "nodeagent.sqlite";
 pub const DefaultContainerRuntimeEndpoint   : &str = "/run/containerd/containerd.sock";
 pub const DefaultMaxPods                    : i32 = 2000;
