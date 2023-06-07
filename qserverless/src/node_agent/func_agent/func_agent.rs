@@ -16,7 +16,6 @@ use std::collections::BTreeMap;
 use std::sync::{Mutex, Arc};
 use std::result::Result as SResult;
 use std::time::SystemTime;
-use qobjs::config::NodeAgentUnixSocket;
 use qobjs::func::func_agent_service_server::FuncAgentServiceServer;
 use qobjs::utility::SystemTimeProto;
 use tokio_stream::wrappers::ReceiverStream;
@@ -26,7 +25,7 @@ use core::ops::Deref;
 
 use qobjs::{common::*, func::{self, func_agent_msg::EventBody}};
 
-use crate::{FUNC_SVC_CLIENT};
+use crate::{FUNC_SVC_CLIENT, NODEAGENT_CONFIG};
 
 use super::funcpod::{FuncPod, funcPodState};
 use super::funcpod_mgr::FuncPodMgr;
@@ -471,10 +470,11 @@ pub async fn FuncAgentGrpcService(_blobSvcAddr: &str, funcAgent: &FuncAgent) -> 
     use tokio::net::UnixListener;
     use tokio_stream::wrappers::UnixListenerStream;
 
-    let path = NodeAgentUnixSocket;
+    let path = NODEAGENT_CONFIG.get().unwrap().FuncAgentSvcSocketAddr();
 
-    std::fs::create_dir_all(Path::new(path).parent().unwrap())?;
-    std::fs::remove_file(Path::new(path)).ok();
+    error!("FuncAgentGrpcService path is {}", &path);
+    std::fs::create_dir_all(Path::new(&path).parent().unwrap())?;
+    std::fs::remove_file(Path::new(&path)).ok();
     let listener = UnixListener::bind(path).unwrap();
     let stream = UnixListenerStream::new(listener);
 

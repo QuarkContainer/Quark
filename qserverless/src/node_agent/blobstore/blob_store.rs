@@ -21,6 +21,7 @@ use rocksdb::DBWithThreadMode;
 
 use qobjs::common::*;
 
+use crate::NODEAGENT_CONFIG;
 use crate::blobstore::blob::{BlobState, BlobInner};
 use crate::blobstore::blob::{Blob, WriteBlob, ReadBlob};
 use crate::blobstore::blob_fs::BlobFs;
@@ -31,9 +32,6 @@ lazy_static::lazy_static! {
     };
 }
 
-pub const BLOB_STORE_META_PATH: &str = "/var/lib/quark/blobstore/meta";
-pub const BLOB_STORE_DATA_PATH: &str = "/var/lib/quark/blobstore/data";
-
 pub struct BlobStore {
     pub db: Mutex<DBWithThreadMode<SingleThreaded>>,
     pub blobs: Mutex<BTreeMap<String, Blob>>,
@@ -42,7 +40,7 @@ pub struct BlobStore {
 
 impl BlobStore {
     pub fn NewFromLoad() -> Result<Self> {
-        let path = BLOB_STORE_META_PATH;
+        let path = &NODEAGENT_CONFIG.get().unwrap().BlobStoreMetaPath();
 
         if !Path::new(path).exists() {
             fs::create_dir_all(path)?;
@@ -54,7 +52,7 @@ impl BlobStore {
         opts.create_if_missing(true);
         opts.set_prefix_extractor(prefix_extractor);
 
-        let blobfs = BlobFs::New(BLOB_STORE_DATA_PATH);
+        let blobfs = BlobFs::New(&&NODEAGENT_CONFIG.get().unwrap().BlobStoreDataPath());
 
         let db = DB::open(&opts, path).unwrap();
         let mut blobs = BTreeMap::new();

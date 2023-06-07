@@ -44,6 +44,7 @@ pub mod func_agent;
 pub mod blobstore;
 
 use qobjs::common::Result as QResult;
+use qobjs::config::NodeAgentConfig;
 //use qobjs::config::NodeConfiguration;
 //use qobjs::nm::NodeAgentMessage;
 use runtime::image_mgr::ImageMgr;
@@ -61,6 +62,7 @@ pub static IMAGE_MGR: OnceCell<ImageMgr> = OnceCell::new();
 pub static CADVISOR_PROVIDER: OnceCell<CadvisorInfoProvider> = OnceCell::new();
 pub static NODEAGENT_STORE: OnceCell<NodeAgentStore> = OnceCell::new();
 pub static FUNC_SVC_CLIENT: OnceCell<FuncSvcClientMgr> = OnceCell::new();
+pub static NODEAGENT_CONFIG: OnceCell<NodeAgentConfig> = OnceCell::new();
 
 lazy_static! {
     pub static ref NETWORK_PROVIDER: LocalNetworkAddressProvider = {
@@ -79,6 +81,8 @@ lazy_static! {
 #[tokio::main]
 async fn main() -> QResult<()> {
     log4rs::init_file("na_logging_config.yaml", Default::default()).unwrap();
+    NODEAGENT_CONFIG.set(NodeAgentConfig::New("", 8892)).unwrap();
+    error!("nodeagent config is {:#?}", NODEAGENT_CONFIG.get().unwrap());
     
     let f1 = FuncAgentSvc();
     let f2 = NodeAgentSvc();

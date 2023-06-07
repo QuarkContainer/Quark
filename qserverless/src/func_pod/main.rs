@@ -46,11 +46,10 @@ lazy_static::lazy_static! {
 
 pub static FUNC_AGENT_CLIENT: OnceCell<FuncAgentClient> = OnceCell::new();
 
-
 #[tokio::main]
 async fn main() -> Result<()> {
     log4rs::init_file("fp_logging_config.yaml", Default::default()).unwrap();
-    FUNC_AGENT_CLIENT.set(FuncAgentClient::Init("http://192.168.0.22:8892").await?).unwrap();
+    FUNC_AGENT_CLIENT.set(FuncAgentClient::Init("/var/lib/quark/nodeagent/sock").await?).unwrap();
     FUNC_CALL_MGR.Process().await?;
     
     return Ok(());
@@ -58,9 +57,8 @@ async fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use qobjs::{func_client::FuncClient, config::NodeAgentUnixSocket};
-
-    //use super::*;
+    use qobjs::func_client::FuncClient;
+    pub const NodeAgentUnixSocket               : &str = "/var/lib/quark/nodeagent/sock";
 
     #[actix_rt::test]
     async fn TestDirectFuncCallAdd() {

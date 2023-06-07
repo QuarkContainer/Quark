@@ -24,6 +24,7 @@ use qobjs::crictl;
 use qobjs::common::*;
 
 use qobjs::config::*;
+use crate::NODEAGENT_CONFIG;
 use crate::runtime::k8s_quantity::*;
 use crate::runtime::security_context::*;
 
@@ -517,8 +518,8 @@ pub fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container) -> Vec
     }
 
     let mount = crictl::Mount {
-        host_path: "/var/lib/quark/nodeagent".to_string(),
-        container_path: "/var/lib/quark/nodeagent".to_string(),
+        host_path: NODEAGENT_CONFIG.get().unwrap().FuncAgentSvcSocketAddr(),
+        container_path: NODEAGENT_CONFIG.get().unwrap().FuncAgentSvcSocketLocalAddr(),
         selinux_relabel: false,
         ..Default::default()
     };
