@@ -44,7 +44,7 @@ pub mod func_agent;
 pub mod blobstore;
 
 use qobjs::common::Result as QResult;
-use qobjs::config::NodeAgentConfig;
+use qobjs::config::{NodeAgentConfig, SystemConfig, SYSTEM_CONFIG};
 //use qobjs::config::NodeConfiguration;
 //use qobjs::nm::NodeAgentMessage;
 use runtime::image_mgr::ImageMgr;
@@ -62,7 +62,6 @@ pub static IMAGE_MGR: OnceCell<ImageMgr> = OnceCell::new();
 pub static CADVISOR_PROVIDER: OnceCell<CadvisorInfoProvider> = OnceCell::new();
 pub static NODEAGENT_STORE: OnceCell<NodeAgentStore> = OnceCell::new();
 pub static FUNC_SVC_CLIENT: OnceCell<FuncSvcClientMgr> = OnceCell::new();
-pub static NODEAGENT_CONFIG: OnceCell<NodeAgentConfig> = OnceCell::new();
 
 lazy_static! {
     pub static ref NETWORK_PROVIDER: LocalNetworkAddressProvider = {
@@ -76,13 +75,21 @@ lazy_static! {
     pub static ref BLOB_SVC_CLIENT_MGR : BlobSvcClientMgr = {
         BlobSvcClientMgr::default()
     };
+
+    pub static ref NODEAGENT_CONFIG: NodeAgentConfig = {
+        let systemConfig: SystemConfig = serde_json::from_str(SYSTEM_CONFIG).unwrap();
+        systemConfig.NodeAgentConfig()
+    };
 }
 
 #[tokio::main]
 async fn main() -> QResult<()> {
     log4rs::init_file("na_logging_config.yaml", Default::default()).unwrap();
-    NODEAGENT_CONFIG.set(NodeAgentConfig::New("", 8892)).unwrap();
-    error!("nodeagent config is {:#?}", NODEAGENT_CONFIG.get().unwrap());
+    //let systemConfig: SystemConfig = serde_json::from_str(SYSTEM_CONFIG)?;
+
+    //let nodeAgentConfig : NodeAgentConfig = systemConfig.nodeAgentConfig.clone();
+
+    //NODEAGENT_CONFIG.set(nodeAgentConfig).unwrap();
     
     let f1 = FuncAgentSvc();
     let f2 = NodeAgentSvc();
@@ -92,14 +99,14 @@ async fn main() -> QResult<()> {
     }
 
     return Ok(())
- }
-
+}
 
 pub async fn FuncAgentSvc() -> QResult<()> {
-    let blobSvcAddr = "192.168.0.22:8892";
+    let blobSvcAddr = &NODEAGENT_CONFIG.BlobSvcAddr();
+    let funcSvcAddr = &NODEAGENT_CONFIG.FuncSvcAddr();
     let funcAgent = FuncAgent::New("node1", blobSvcAddr);
-    FUNC_SVC_CLIENT.set(FuncSvcClientMgr::New("http://127.0.0.1:8891", &funcAgent)).unwrap();
-    FuncAgentGrpcService(blobSvcAddr, &funcAgent).await?;
+    FUNC_SVC_CLIENT.set(FuncSvcClientMgr::New(funcSvcAddr, &funcAgent)).unwrap();
+    FuncAgentGrpcService(&funcAgent).await?;
     return Ok(());
 }
 
@@ -118,8 +125,8 @@ pub async fn NodeAgentSvc() -> QResult<()> {
 
     let na = crate::node::Run(config).await?;
     
-   
-    let nodeAgentSrvMgr = NodeAgentServerMgr::New(vec!["http://127.0.0.1:8888".to_owned()]);
+    let nodeMgrAddrs = NODEAGENT_CONFIG.nodeMgrAddrs();
+    let nodeAgentSrvMgr = NodeAgentServerMgr::New(nodeMgrAddrs);
     
     nodeAgentSrvMgr.Process(&na).await.unwrap();
     return Ok(())
@@ -280,3 +287,4 @@ pub async fn NMClientTest() -> QResult<()> {
 }
 
  */
+

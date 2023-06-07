@@ -111,7 +111,7 @@ pub struct Sub {}
 #[async_trait::async_trait]
 impl QSFunc for Sub {
     async fn func(&self, _parameters: String) -> SResult<String, String> {
-        BLOB_MGR.BlobDelete("192.168.0.22:8892", "testblob5").await.ok();
+        BLOB_MGR.BlobDelete("127.0.0.1:8892", "testblob5").await.ok();
         let b = BLOB_MGR.BlobCreate("testblob5").await?;
         b.Write("test blob".to_string().as_bytes().to_vec()).await?;
         b.Seal().await.unwrap();

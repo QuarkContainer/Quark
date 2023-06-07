@@ -40,7 +40,7 @@ pub struct BlobStore {
 
 impl BlobStore {
     pub fn NewFromLoad() -> Result<Self> {
-        let path = &NODEAGENT_CONFIG.get().unwrap().BlobStoreMetaPath();
+        let path = &NODEAGENT_CONFIG.BlobStoreMetaPath();
 
         if !Path::new(path).exists() {
             fs::create_dir_all(path)?;
@@ -52,7 +52,7 @@ impl BlobStore {
         opts.create_if_missing(true);
         opts.set_prefix_extractor(prefix_extractor);
 
-        let blobfs = BlobFs::New(&&NODEAGENT_CONFIG.get().unwrap().BlobStoreDataPath());
+        let blobfs = BlobFs::New(&NODEAGENT_CONFIG.BlobStoreDataPath());
 
         let db = DB::open(&opts, path).unwrap();
         let mut blobs = BTreeMap::new();

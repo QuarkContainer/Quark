@@ -18,29 +18,75 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
 use core::ops::Deref;
+use serde::{Deserialize, Serialize};
 
 use crate::common::*;
 
-#[derive(Debug)]
+pub const SYSTEM_CONFIG_SIMPLE : &str = r#"
+{
+    "nodeAgentConfig" : {
+        "rootPath"      : "/var/lib/quark/nodeagent",
+        "nodeName"      : "",
+        "hostIP"        : "127.0.0.1",
+        "blobSvcPort"   : 8892,
+        "funcSvcAddr"   : "http://127.0.0.1:8891",
+        "nodeMgrAddrs"  : ["http://127.0.0.1:8888"]
+    },
+    "testConfig" : {
+        "nodeAgentUnixSocket": "/var/lib/quark/nodeagent/sock"
+    }
+}"#;
+
+pub const SYSTEM_CONFIG_ONE_NA : &str = r#"
+{
+    "nodeAgentConfig" : {
+        "rootPath"      : "/var/lib/quark/nodeagent",
+        "nodeName"      : "node1",
+        "hostIP"        : "127.0.0.1",
+        "blobSvcPort"   : 8892,
+        "funcSvcAddr"   : "http://127.0.0.1:8891",
+        "nodeMgrAddrs"  : ["http://127.0.0.1:8888"]
+    },
+    "testConfig" : {
+        "nodeAgentUnixSocket": "/var/lib/quark/nodeagent/node1/sock"
+    }
+}"#;
+
+pub const SYSTEM_CONFIG : &str = SYSTEM_CONFIG_ONE_NA;
+//pub const SYSTEM_CONFIG : &str = SYSTEM_CONFIG_SIMPLE;
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SystemConfig {
+    pub nodeAgentConfig: NodeAgentConfig,
+    pub testConfig: TestConfig,
+}
+
+impl SystemConfig {
+    pub fn NodeAgentConfig(&self) -> NodeAgentConfig {
+        return self.nodeAgentConfig.clone();
+    }
+
+    pub fn TestConfig(&self) -> TestConfig {
+        return self.testConfig.clone();
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct NodeAgentConfig {
     pub rootPath: String,
     pub nodeName: String,
     pub hostIP: String,
     pub blobSvcPort: i32,
+    pub funcSvcAddr: String,
+    pub nodeMgrAddrs: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct TestConfig {
+    pub nodeAgentUnixSocket: String,
 }
 
 impl NodeAgentConfig {
-    pub fn New(nodeName: &str, blobSvcPort: i32) -> Self {
-        use local_ip_address::local_ip;
-        let hostIP = local_ip().unwrap();
-        return Self {
-            rootPath: DefaultRootPath.to_owned(),
-            nodeName: nodeName.to_owned(),
-            hostIP: hostIP.to_string(),
-            blobSvcPort: blobSvcPort,
-        }
-    }
-
     pub fn Base(&self) -> String {
         if self.nodeName.len() == 0 {
             return format!("{}", &self.rootPath);
@@ -54,7 +100,11 @@ impl NodeAgentConfig {
     }
 
     pub fn FuncAgentSvcSocketAddr(&self) -> String {
-        return format!("{}/{}/sock", self.Base(), &self.nodeName);
+        return format!("{}/sock", self.Base());
+    }
+
+    pub fn BlobSvcAddr(&self) -> String {
+        return format!("{}:{}", self.hostIP, self.blobSvcPort);
     }
 
     pub fn BlobStoreMetaPath(&self) -> String {
@@ -63,6 +113,14 @@ impl NodeAgentConfig {
 
     pub fn BlobStoreDataPath(&self) -> String {
         return format!("{}/blobstore/data", self.Base());
+    }
+
+    pub fn FuncSvcAddr(&self) -> String {
+        return self.funcSvcAddr.clone();
+    }
+
+    pub fn nodeMgrAddrs(&self) -> Vec<String> {
+        return self.nodeMgrAddrs.clone();
     }
 }
 
