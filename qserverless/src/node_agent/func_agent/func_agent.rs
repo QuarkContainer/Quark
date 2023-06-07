@@ -464,13 +464,13 @@ impl func::func_agent_service_server::FuncAgentService for FuncAgent {
     }
 }
 
-pub async fn FuncAgentGrpcService(_blobSvcAddr: &str, funcAgent: &FuncAgent) -> Result<()> {
+pub async fn FuncAgentGrpcService(funcAgent: &FuncAgent) -> Result<()> {
     use tonic::transport::Server;
     use std::path::Path;
     use tokio::net::UnixListener;
     use tokio_stream::wrappers::UnixListenerStream;
 
-    let path = NODEAGENT_CONFIG.get().unwrap().FuncAgentSvcSocketAddr();
+    let path = NODEAGENT_CONFIG.FuncAgentSvcSocketAddr();
 
     error!("FuncAgentGrpcService path is {}", &path);
     std::fs::create_dir_all(Path::new(&path).parent().unwrap())?;

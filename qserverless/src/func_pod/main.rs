@@ -58,13 +58,20 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use qobjs::func_client::FuncClient;
-    pub const NodeAgentUnixSocket               : &str = "/var/lib/quark/nodeagent/sock";
+    use qobjs::config::*;
+    
+    lazy_static::lazy_static! {
+        pub static ref TEST_CONFIG: TestConfig = {
+            let systemConfig: SystemConfig = serde_json::from_str(SYSTEM_CONFIG).unwrap();
+            systemConfig.TestConfig()
+        };
+    }
 
     #[actix_rt::test]
     async fn TestDirectFuncCallAdd() {
         log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
         error!("TestDirectFuncCall 1");
-        let mut client = FuncClient::Init(NodeAgentUnixSocket).await.unwrap();
+        let mut client = FuncClient::Init(&TEST_CONFIG.nodeAgentUnixSocket).await.unwrap();
         error!("TestDirectFuncCall 2");
         //let ret = client.Call("ns1", "package1", "sub", "", 1).await;
         let ret = client.Call("ns1", "package1", "add", "", 1).await;
@@ -76,7 +83,7 @@ mod tests {
     async fn TestDirectFuncCallSub() {
         log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
         error!("TestDirectFuncCall 1");
-        let mut client = FuncClient::Init(NodeAgentUnixSocket).await.unwrap();
+        let mut client = FuncClient::Init(&TEST_CONFIG.nodeAgentUnixSocket).await.unwrap();
         error!("TestDirectFuncCall 2");
         let ret = client.Call("ns1", "package1", "sub", "", 1).await;
         error!("ret is {:?}", ret);
@@ -87,7 +94,7 @@ mod tests {
     async fn TestDirectFuncCallSimple() {
         log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
         error!("TestDirectFuncCall 1");
-        let mut client = FuncClient::Init(NodeAgentUnixSocket).await.unwrap();
+        let mut client = FuncClient::Init(&TEST_CONFIG.nodeAgentUnixSocket).await.unwrap();
         error!("TestDirectFuncCall 2");
         let ret = client.Call("ns1", "package1", "simple", "", 1).await;
         error!("ret is {:?}", ret);

@@ -104,14 +104,14 @@ impl Deref for FuncSvcClientMgr {
 
 impl FuncSvcClientMgr {
     // todo: handle master/slave FuncSvc
-    pub fn New(svcAddr: &str, funcAgent: &FuncAgent) -> Self {
+    pub fn New(funcSvcAddr: &str, funcAgent: &FuncAgent) -> Self {
         let (tx, rx) = mpsc::channel(100);
         
         let inner = FuncSvcClientMgrInner {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
             agentChann: tx,
-            svcAddr: svcAddr.to_string(),
+            svcAddr: funcSvcAddr.to_string(),
             funcAgent: funcAgent.clone(),
         };
 

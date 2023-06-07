@@ -51,11 +51,11 @@ impl Deref for NodeAgentServerMgr {
 }
 
 impl NodeAgentServerMgr {
-    pub fn New(addresses: Vec<String>) -> Self {
+    pub fn New(nodeMgrSvcAddrs: Vec<String>) -> Self {
         let inner = NodeAgentServerMgrInner {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
-            nodeMgrAddress: addresses,
+            nodeMgrAddress: nodeMgrSvcAddrs,
         };
 
         return Self(Arc::new(inner));

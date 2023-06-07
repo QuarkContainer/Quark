@@ -119,7 +119,13 @@ impl NodeAgent {
             for container in containers {
                 containerIds.push(container.id);
             }
-            RUNTIME_MGR.get().unwrap().TerminatePod(&pod.id, containerIds).await?;        
+            match RUNTIME_MGR.get().unwrap().TerminatePod(&pod.id, containerIds).await {
+                Ok(()) => (),
+                Err(e) => {
+                    error!("fail to TerminatePod {} with error {:?}", &pod.id, e);
+                }
+            }
+                   
         }
 
         return Ok(())

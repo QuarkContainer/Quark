@@ -47,7 +47,6 @@ impl Deref for FuncAgentClient {
     }
 }
 
-
 impl FuncAgentClient {
     pub async fn Init(agentAddr: &str) -> Result<Self> {
         use tokio::net::UnixStream;
@@ -59,7 +58,7 @@ impl FuncAgentClient {
             let client;
             loop {
                 let path = path.clone();
-                let res = Endpoint::from_static("https://example.com")
+                let res = Endpoint::from_static("https://donotneed.com")
                         .connect_with_connector(service_fn(move |_: Uri| {
                             let path = path.clone();
                             async move { UnixStream::connect(&*path).await }

@@ -518,8 +518,8 @@ pub fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container) -> Vec
     }
 
     let mount = crictl::Mount {
-        host_path: NODEAGENT_CONFIG.get().unwrap().FuncAgentSvcSocketAddr(),
-        container_path: NODEAGENT_CONFIG.get().unwrap().FuncAgentSvcSocketLocalAddr(),
+        host_path: NODEAGENT_CONFIG.FuncAgentSvcSocketAddr(),
+        container_path: NODEAGENT_CONFIG.FuncAgentSvcSocketLocalAddr(),
         selinux_relabel: false,
         ..Default::default()
     };
