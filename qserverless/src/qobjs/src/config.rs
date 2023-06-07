@@ -21,6 +21,51 @@ use core::ops::Deref;
 
 use crate::common::*;
 
+#[derive(Debug)]
+pub struct NodeAgentConfig {
+    pub rootPath: String,
+    pub nodeName: String,
+    pub hostIP: String,
+    pub blobSvcPort: i32,
+}
+
+impl NodeAgentConfig {
+    pub fn New(nodeName: &str, blobSvcPort: i32) -> Self {
+        use local_ip_address::local_ip;
+        let hostIP = local_ip().unwrap();
+        return Self {
+            rootPath: DefaultRootPath.to_owned(),
+            nodeName: nodeName.to_owned(),
+            hostIP: hostIP.to_string(),
+            blobSvcPort: blobSvcPort,
+        }
+    }
+
+    pub fn Base(&self) -> String {
+        if self.nodeName.len() == 0 {
+            return format!("{}", &self.rootPath);
+        }
+
+        return format!("{}/{}", &self.rootPath, &self.nodeName); 
+    }
+
+    pub fn FuncAgentSvcSocketLocalAddr(&self) -> String {
+        return format!("{}/sock", &self.rootPath); 
+    }
+
+    pub fn FuncAgentSvcSocketAddr(&self) -> String {
+        return format!("{}/{}/sock", self.Base(), &self.nodeName);
+    }
+
+    pub fn BlobStoreMetaPath(&self) -> String {
+        return format!("{}/blobstore/meta", self.Base());
+    }
+
+    pub fn BlobStoreDataPath(&self) -> String {
+        return format!("{}/blobstore/data", self.Base());
+    }
+}
+
 //use k8s_openapi::api::core::v1::{self as k8s};
 
 pub const DecimalExponent : &str = "DecimalExponent"; // e.g., 12e6
@@ -30,8 +75,7 @@ pub const DecimalSI       : &str = "DecimalSI";       // e.g., 12M  (12 * 10^6)
 pub const CPU                               : &str = "CPU";
 pub const Memory                            : &str = "Memory";
 pub const PID                               : &str = "PID";
-pub const DefaultRootPath                   : &str = "/var/lib/nodeagent";
-pub const NodeAgentUnixSocket               : &str = "/var/lib/quark/nodeagent/sock";
+pub const DefaultRootPath                   : &str = "/var/lib/quark/nodeagent";
 pub const DefaultDBName                     : &str = "nodeagent.sqlite";
 pub const DefaultContainerRuntimeEndpoint   : &str = "/run/containerd/containerd.sock";
 pub const DefaultMaxPods                    : i32 = 2000;

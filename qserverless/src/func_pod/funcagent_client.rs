@@ -16,7 +16,6 @@ use std::sync::Arc;
 use core::ops::Deref;
 use std::sync::atomic::AtomicBool;
 
-use qobjs::config::NodeAgentUnixSocket;
 use tokio::sync::Notify;
 use tokio::sync::mpsc;
 
@@ -55,13 +54,15 @@ impl FuncAgentClient {
         use tonic::transport::{Endpoint, Uri};
         use tower::service_fn;
 
+        let path = Arc::new(agentAddr.to_owned());
         let mut client = {
             let client;
             loop {
+                let path = path.clone();
                 let res = Endpoint::from_static("https://example.com")
-                        .connect_with_connector(service_fn(|_: Uri| {
-                            let path = NodeAgentUnixSocket;
-                            UnixStream::connect(path)
+                        .connect_with_connector(service_fn(move |_: Uri| {
+                            let path = path.clone();
+                            async move { UnixStream::connect(&*path).await }
                         }))
                 .await;
 
