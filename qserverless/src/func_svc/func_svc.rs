@@ -24,6 +24,7 @@ use qobjs::func;
 
 use crate::FUNC_NODE_MGR;
 use crate::SCHEDULER;
+use crate::func_node::FuncNode;
 use crate::scheduler::Resource;
 use crate::task_queue::*;
 use crate::func_call::*;
@@ -107,8 +108,13 @@ impl FuncSvc {
         tx: mpsc::Sender<SResult<func::FuncSvcMsg, tonic::Status>>
     ) -> Result<()> {
         let nodeId = req.node_id.clone();
+        
         let node = match FUNC_NODE_MGR.Get(&nodeId) {
-            Err(_) => return Err(Error::CommonError(format!("OnAgentRegiste not recognize agent {}", nodeId))),
+            Err(_) => {
+                let node = FuncNode::New(&nodeId);
+                FUNC_NODE_MGR.Insert(&nodeId, &node);
+                node
+            }
             Ok(n) => n.clone()
         };
 

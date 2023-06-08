@@ -22,6 +22,8 @@
 extern crate log;
 extern crate simple_logging;
 
+use std::collections::BTreeMap;
+
 use blobstore::blob_client::BlobSvcClientMgr;
 use func_agent::func_agent::{FuncAgent, FuncAgentGrpcService};
 use func_agent::funcsvc_client::FuncSvcClientMgr;
@@ -44,7 +46,7 @@ pub mod func_agent;
 pub mod blobstore;
 
 use qobjs::common::Result as QResult;
-use qobjs::config::{NodeAgentConfig, SystemConfig, SYSTEM_CONFIG};
+use qobjs::config::{NodeAgentConfig, SystemConfig, SYSTEM_CONFIGS};
 //use qobjs::config::NodeConfiguration;
 //use qobjs::nm::NodeAgentMessage;
 use runtime::image_mgr::ImageMgr;
@@ -62,6 +64,7 @@ pub static IMAGE_MGR: OnceCell<ImageMgr> = OnceCell::new();
 pub static CADVISOR_PROVIDER: OnceCell<CadvisorInfoProvider> = OnceCell::new();
 pub static NODEAGENT_STORE: OnceCell<NodeAgentStore> = OnceCell::new();
 pub static FUNC_SVC_CLIENT: OnceCell<FuncSvcClientMgr> = OnceCell::new();
+pub static NODEAGENT_CONFIG1: OnceCell<NodeAgentConfig> = OnceCell::new();
 
 lazy_static! {
     pub static ref NETWORK_PROVIDER: LocalNetworkAddressProvider = {
@@ -77,19 +80,33 @@ lazy_static! {
     };
 
     pub static ref NODEAGENT_CONFIG: NodeAgentConfig = {
-        let systemConfig: SystemConfig = serde_json::from_str(SYSTEM_CONFIG).unwrap();
-        systemConfig.NodeAgentConfig()
+        let systemConfigs: BTreeMap<String, SystemConfig> = serde_json::from_str(SYSTEM_CONFIGS).unwrap();
+
+        let configName = ConfigName();
+
+        let systemConfig = match systemConfigs.get(&configName) {
+            None => panic!("there is no system config named {}", configName),
+            Some(c) => c,
+        };
+    
+        systemConfig.nodeAgentConfig.clone()
     };
+}
+
+pub fn ConfigName() -> String {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 2 {
+        args[1].clone()
+    } else {
+        "product".to_string()
+    }
 }
 
 #[tokio::main]
 async fn main() -> QResult<()> {
     log4rs::init_file("na_logging_config.yaml", Default::default()).unwrap();
-    //let systemConfig: SystemConfig = serde_json::from_str(SYSTEM_CONFIG)?;
 
-    //let nodeAgentConfig : NodeAgentConfig = systemConfig.nodeAgentConfig.clone();
-
-    //NODEAGENT_CONFIG.set(nodeAgentConfig).unwrap();
+    info!("NodeAgent start with config name {:?}", &ConfigName());
     
     let f1 = FuncAgentSvc();
     let f2 = NodeAgentSvc();
@@ -104,7 +121,7 @@ async fn main() -> QResult<()> {
 pub async fn FuncAgentSvc() -> QResult<()> {
     let blobSvcAddr = &NODEAGENT_CONFIG.BlobSvcAddr();
     let funcSvcAddr = &NODEAGENT_CONFIG.FuncSvcAddr();
-    let funcAgent = FuncAgent::New("node1", blobSvcAddr);
+    let funcAgent = FuncAgent::New(&NODEAGENT_CONFIG.NodeName(), blobSvcAddr);
     FUNC_SVC_CLIENT.set(FuncSvcClientMgr::New(funcSvcAddr, &funcAgent)).unwrap();
     FuncAgentGrpcService(&funcAgent).await?;
     return Ok(());

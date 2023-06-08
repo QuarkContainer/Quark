@@ -639,9 +639,6 @@ impl FuncNodeMgr {
             nodes: Mutex::new(BTreeMap::new()),
         };
 
-        let nodeName = "node1";
-        ret.nodes.lock().unwrap().insert(nodeName.to_string(), FuncNode::New(nodeName));
-
         return ret;
     }
 
@@ -650,5 +647,9 @@ impl FuncNodeMgr {
             None => return Err(Error::ENOENT(format!("can't get node {}", nodeName))),
             Some(n) => Ok(n.clone()),
         }
+    }
+
+    pub fn Insert(&self, nodeName: &str, node: &FuncNode) {
+        self.nodes.lock().unwrap().insert(nodeName.to_owned(), node.clone());
     }
 }

@@ -22,37 +22,50 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::*;
 
-pub const SYSTEM_CONFIG_SIMPLE : &str = r#"
+pub const SYSTEM_CONFIGS : &str = r#"
 {
-    "nodeAgentConfig" : {
-        "rootPath"      : "/var/lib/quark/nodeagent",
-        "nodeName"      : "",
-        "hostIP"        : "127.0.0.1",
-        "blobSvcPort"   : 8892,
-        "funcSvcAddr"   : "http://127.0.0.1:8891",
-        "nodeMgrAddrs"  : ["http://127.0.0.1:8888"]
+    "product": {
+        "nodeAgentConfig" : {
+            "rootPath"      : "/var/lib/quark/nodeagent",
+            "nodeName"      : "",
+            "hostIP"        : "127.0.0.1",
+            "blobSvcPort"   : 8892,
+            "funcSvcAddr"   : "http://127.0.0.1:8891",
+            "nodeMgrAddrs"  : ["http://127.0.0.1:8888"]
+        },
+        "testConfig" : {
+            "nodeAgentUnixSocket": "/var/lib/quark/nodeagent/sock"
+        }
     },
-    "testConfig" : {
-        "nodeAgentUnixSocket": "/var/lib/quark/nodeagent/sock"
-    }
-}"#;
-
-pub const SYSTEM_CONFIG_ONE_NA : &str = r#"
-{
-    "nodeAgentConfig" : {
-        "rootPath"      : "/var/lib/quark/nodeagent",
-        "nodeName"      : "node1",
-        "hostIP"        : "127.0.0.1",
-        "blobSvcPort"   : 8892,
-        "funcSvcAddr"   : "http://127.0.0.1:8891",
-        "nodeMgrAddrs"  : ["http://127.0.0.1:8888"]
+    "node1": {
+        "nodeAgentConfig" : {
+            "rootPath"      : "/var/lib/quark/nodeagent",
+            "nodeName"      : "node1",
+            "hostIP"        : "127.0.0.1",
+            "blobSvcPort"   : 8892,
+            "funcSvcAddr"   : "http://127.0.0.1:8891",
+            "nodeMgrAddrs"  : ["http://127.0.0.1:8888"]
+        },
+        "testConfig" : {
+            "nodeAgentUnixSocket": "/var/lib/quark/nodeagent/node1/sock"
+        }
     },
-    "testConfig" : {
-        "nodeAgentUnixSocket": "/var/lib/quark/nodeagent/node1/sock"
+    "node2": {
+        "nodeAgentConfig" : {
+            "rootPath"      : "/var/lib/quark/nodeagent",
+            "nodeName"      : "node2",
+            "hostIP"        : "127.0.0.1",
+            "blobSvcPort"   : 8893,
+            "funcSvcAddr"   : "http://127.0.0.1:8891",
+            "nodeMgrAddrs"  : ["http://127.0.0.1:8888"]
+        },
+        "testConfig" : {
+            "nodeAgentUnixSocket": "/var/lib/quark/nodeagent/node2/sock"
+        }
     }
-}"#;
+}"#;    
 
-pub const SYSTEM_CONFIG : &str = SYSTEM_CONFIG_ONE_NA;
+pub const TEST_CONFIG_NAME : &str = "product";
 //pub const SYSTEM_CONFIG : &str = SYSTEM_CONFIG_SIMPLE;
 
 #[derive(Debug, Deserialize, Serialize)]
