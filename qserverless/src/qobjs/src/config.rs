@@ -65,7 +65,7 @@ pub const SYSTEM_CONFIGS : &str = r#"
     }
 }"#;    
 
-pub const TEST_CONFIG_NAME : &str = "product";
+pub const TEST_CONFIG_NAME : &str = "node1";
 //pub const SYSTEM_CONFIG : &str = SYSTEM_CONFIG_SIMPLE;
 
 #[derive(Debug, Deserialize, Serialize)]

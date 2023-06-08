@@ -425,6 +425,7 @@ impl FuncNode {
 
     // get message from nodeagent
     pub async fn ProcessNodeAgentMsg(&self, msg: func::FuncSvcMsg) -> Result<()> {
+        error!("ProcessNodeAgentMsg from node {} msg {:?}", self.NodeName(), &msg);
         let body = match msg.event_body {
             None => panic!("ProcessNodeAgentMsg get none eventbody"),
             Some(b) => b,
@@ -505,6 +506,7 @@ impl FuncNode {
 
     // send funccall resp from the nodeagent
     pub fn SendToNodeAgent(&self, msg: func::FuncSvcMsg, tx: &mpsc::Sender<SResult<func::FuncSvcMsg, Status>>) {
+        error!("SendToNodeAgent to node {} msg {:?}", self.NodeName(), &msg);
         match tx.try_send(Ok(msg)) {
             Ok(()) => (),
             Err(_) => {

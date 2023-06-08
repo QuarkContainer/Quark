@@ -64,6 +64,7 @@ impl BlobInner {
     }
 }
 
+#[derive(Debug)]
 pub struct Blob(Arc<BlobInner>);
 
 impl Deref for Blob {

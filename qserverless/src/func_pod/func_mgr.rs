@@ -64,6 +64,7 @@ impl FuncMgr {
         funcs.insert("add".to_string(), Arc::new(Add{}));
         funcs.insert("sub".to_string(), Arc::new(Sub{}));
         funcs.insert("simple".to_string(), Arc::new(Simple{}));
+        funcs.insert("simple1".to_string(), Arc::new(Simple1{}));
 
         return Self {
             funcPodId: Self::GetPodIdFromEnvVar(),
@@ -112,6 +113,7 @@ pub struct Sub {}
 impl QSFunc for Sub {
     async fn func(&self, _parameters: String) -> SResult<String, String> {
         BLOB_MGR.BlobDelete("127.0.0.1:8892", "testblob5").await.ok();
+        BLOB_MGR.BlobDelete("127.0.0.1:8893", "testblob5").await.ok();
         let b = BLOB_MGR.BlobCreate("testblob5").await?;
         b.Write("test blob".to_string().as_bytes().to_vec()).await?;
         b.Seal().await.unwrap();
@@ -130,5 +132,22 @@ impl QSFunc for Simple {
     async fn func(&self, _parameters: String) -> SResult<String, String> {
         error!("Simple test ....");
         return Ok(format!("Simple result ...."));
+    }
+}
+
+pub struct Simple1 {}
+#[async_trait::async_trait]
+impl QSFunc for Simple1 {
+    async fn func(&self, _parameters: String) -> SResult<String, String> {
+        let ret = FUNC_CALL_MGR.RemoteCall(
+            "ns1".to_string(), 
+            "package1".to_string(), 
+            "simple".to_string(), 
+            "call from simple1".to_string(), 
+            1
+        ).await?;
+
+        error!("Simple1 test .... {}", ret);
+        return Ok(format!("Simple1 result ...."));
     }
 }

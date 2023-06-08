@@ -124,6 +124,7 @@ impl FuncCallMgr {
             let res = funcMgr.Call(&call.func_name, &call.parameters).await;
             let resp = match res {
                 Err(e) => {
+                    error!("FuncCallMgr::Call::Process error {:?}", &e);
                     func::FuncAgentCallResp {
                         id: id,
                         resp: String::new(),

@@ -269,7 +269,7 @@ impl FuncAgent {
 
     // get funcagentcallresp from funcpod
     pub fn OnFuncAgentCallResp(&self, calleeFuncPodId: &str, resp: func::FuncAgentCallResp) -> Result<()> {
-        let call = match self.callerCalls.lock().unwrap().remove(&resp.id) {
+        let call = match self.calleeCalls.lock().unwrap().remove(&resp.id) {
             None => {
                 error!("OnFuncAgentCallResp doesn't find funcall id {}", &resp.id);
                 return Ok(())

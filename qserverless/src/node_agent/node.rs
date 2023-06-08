@@ -36,7 +36,7 @@ use qobjs::types::*;
 
 use crate::nm_svc::{NodeAgentMsg, PodCreate};
 use crate::node_status::{SetNodeStatus, IsNodeStatusReady};
-use crate::{pod::*, NODEAGENT_STORE, RUNTIME_MGR, ConfigName};
+use crate::{pod::*, NODEAGENT_STORE, RUNTIME_MGR, ConfigName, NODEAGENT_CONFIG};
 use crate::NETWORK_PROVIDER;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -183,7 +183,7 @@ impl NodeAgent {
                 _ = interval.tick() => {
                     if self.State() == NodeAgentState::Registered {
                         if IsNodeStatusReady(&self.node) {
-                            info!("Node is ready");
+                            info!("Node {} is ready", NODEAGENT_CONFIG.NodeName());
                             *self.state.lock().unwrap() = NodeAgentState::Ready;
                             SetNodeStatus(&self.node).await?;
                             self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodeRunning));

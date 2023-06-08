@@ -108,7 +108,7 @@ impl NodeAgentClient {
                 }
                 msg = rx.message() => {
                     match msg {
-                        Err(e) => return Err(Error::CommonError(format!("QClient::Process rx message fail {:?}", e))),
+                        Err(e) => return Err(Error::CommonError(format!("QClient::Process {:?} rx message fail {:?}", self.nodeName.lock().unwrap(), e))),
                         Ok(msg) => {
                             match msg {
                                 None => break,
@@ -118,12 +118,12 @@ impl NodeAgentClient {
                                             let reqId = resp.request_id;
                                             let chann = self.pendingReqs.lock().unwrap().remove(&reqId);
                                             match chann {
-                                                None => error!("QClient::Process get none exist response {:?}", resp),
+                                                None => error!("QClient::Process {:?} get none exist response {:?}", self.nodeName.lock().unwrap(), resp),
                                                 Some(chann) => {
                                                     match chann.send(resp) {
                                                         Ok(()) => (),
                                                         Err(e) => {
-                                                            error!("QClient::Process send messaage fail response {:?}", e);
+                                                            error!("QClient::Process {:?} send messaage fail response {:?}", self.nodeName.lock().unwrap(), e);
                                                         }
                                                     }
                                                 }

@@ -58,6 +58,7 @@ use crate::runtime::runtime::RuntimeMgr;
 use crate::runtime::network::*;
 use crate::cadvisor::client as CadvisorClient;
 use crate::cadvisor::provider::CadvisorInfoProvider;
+use crate::blobstore::blob_svc::BlobServiceGrpcService;
 
 pub static RUNTIME_MGR: OnceCell<RuntimeMgr> = OnceCell::new();
 pub static IMAGE_MGR: OnceCell<ImageMgr> = OnceCell::new();
@@ -107,12 +108,15 @@ async fn main() -> QResult<()> {
     log4rs::init_file("na_logging_config.yaml", Default::default()).unwrap();
 
     info!("NodeAgent start with config name {:?}", &ConfigName());
-    
-    let f1 = FuncAgentSvc();
-    let f2 = NodeAgentSvc();
+    let blobSvcAddr = &NODEAGENT_CONFIG.BlobSvcAddr();
+     
+    let funcAgentSvc = FuncAgentSvc();
+    let nodeAgentSvc = NodeAgentSvc();
+    let blobSvc = BlobServiceGrpcService(&blobSvcAddr);
     tokio::select! {
-        _ = f1 => (),
-        _ = f2 => (),
+        _ = funcAgentSvc => (),
+        _ = nodeAgentSvc => (),
+        _ = blobSvc => ()
     }
 
     return Ok(())
