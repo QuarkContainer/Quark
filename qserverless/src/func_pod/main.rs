@@ -99,12 +99,22 @@ mod tests {
     }
 
     #[actix_rt::test]
-    async fn TestDirectFuncCallSimple() {
+    async fn TestDirectFuncCall1Call() {
         log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
         error!("TestDirectFuncCall 1");
         let mut client = FuncClient::Init(&TEST_CONFIG.nodeAgentUnixSocket).await.unwrap();
         error!("TestDirectFuncCall 2");
         let ret = client.Call("ns1", "package1", "simple", "", 1).await;
+        error!("ret is {:?}", ret);
+        assert!(ret.is_ok());
+    }
+
+
+    #[actix_rt::test]
+    async fn TestDirectFuncCall2Call() {
+        log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
+        let mut client = FuncClient::Init(&TEST_CONFIG.nodeAgentUnixSocket).await.unwrap();
+        let ret = client.Call("ns1", "package1", "simple1", "", 1).await;
         error!("ret is {:?}", ret);
         assert!(ret.is_ok());
     }

@@ -9,7 +9,7 @@ fs:
 	cargo build --bin func_svc
 deploy: fp 
 	mkdir -p ./target/fp
-	rm ./target/fp/*
+	-rm ./target/fp/*
 	cp ./target/debug/func_pod ./target/fp
 	cp ./fp_logging_config.yaml ./target/fp
 	cp ./deployment/fp.Dockerfile ./target/fp/Dockerfile
