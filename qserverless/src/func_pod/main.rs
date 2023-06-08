@@ -57,12 +57,20 @@ async fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use qobjs::func_client::FuncClient;
     use qobjs::config::*;
     
     lazy_static::lazy_static! {
         pub static ref TEST_CONFIG: TestConfig = {
-            let systemConfig: SystemConfig = serde_json::from_str(SYSTEM_CONFIG).unwrap();
+            let systemConfigs: BTreeMap<String, SystemConfig> = serde_json::from_str(SYSTEM_CONFIGS).unwrap();
+
+            let systemConfig = match systemConfigs.get(TEST_CONFIG_NAME) {
+                None => panic!("there is no system config named {}", TEST_CONFIG_NAME),
+                Some(c) => c,
+            };
+
             systemConfig.TestConfig()
         };
     }

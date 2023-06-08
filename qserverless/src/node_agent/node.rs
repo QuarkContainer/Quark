@@ -36,7 +36,7 @@ use qobjs::types::*;
 
 use crate::nm_svc::{NodeAgentMsg, PodCreate};
 use crate::node_status::{SetNodeStatus, IsNodeStatusReady};
-use crate::{pod::*, NODEAGENT_STORE, RUNTIME_MGR};
+use crate::{pod::*, NODEAGENT_STORE, RUNTIME_MGR, ConfigName};
 use crate::NETWORK_PROVIDER;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -103,17 +103,25 @@ impl NodeAgent {
 
     // clean up all qserverless created pods, used when nodeagent restarted
     // work around when the nodeagent persistent store is not ready
-    pub async fn CleanPods() -> Result<()> {
+    pub async fn CleanPods(nodename: &str) -> Result<()> {
         let pods = RUNTIME_MGR.get().unwrap().GetPods().await?;
+        let nodeName = &format!("{}/{}", DefaultDomainName, nodename);
+        let sysConfigName = ConfigName();
         for p in pods {
             let pod = p.sandbox.unwrap();
 
-            info!("removing pod {} annotations {:#?}", &pod.id, &pod.annotations);
             // skip call sandbox which not created by qserverless
-            if !pod.annotations.contains_key(AnnotationNodeMgrNode) {
-                continue;
+            match pod.annotations.get(AnnotationNodeMgrNode) {
+                None => continue,
+                Some(n) => {
+                    if !(sysConfigName == "product" || n == nodeName) {
+                        continue;
+                    }
+                }
             }
 
+            info!("node {} removing pod {} annotations {:#?}", nodename, &pod.id, &pod.annotations);
+            
             let containers = RUNTIME_MGR.get().unwrap().GetPodContainers(&pod.id).await?;
             let mut containerIds = Vec::new();
             for container in containers {
@@ -563,7 +571,7 @@ pub fn ValidateNodeSpec(node: &k8s::Node) -> Result<()> {
 }
 
 pub async fn Run(nodename: &str, nodeConfig: NodeConfiguration) -> Result<NodeAgent> {
-    NodeAgent::CleanPods().await?;
+    NodeAgent::CleanPods(nodename).await?;
     
     let quarkNode = QuarkNode::NewQuarkNode(nodename, &nodeConfig)?;
     let nodeAgent = NodeAgent::New(&quarkNode)?;
