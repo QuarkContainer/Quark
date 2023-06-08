@@ -401,11 +401,10 @@ impl NodeAgent {
     }
 }
 
-pub fn InitK8sNode() -> Result<k8s::Node> {
-    let hostname = hostname::get()?.to_str().unwrap().to_string();
+pub fn InitK8sNode(hostname: &str) -> Result<k8s::Node> {
     let mut node = k8s::Node {
         metadata: ObjectMeta  {
-            name: Some(hostname),
+            name: Some(hostname.to_owned()),
             annotations: Some(BTreeMap::new()),
             namespace: Some(DefaultNodeMgrNodeNameSpace.to_string()),
             uid: Some(Uuid::new_v4().to_string()),
@@ -473,8 +472,8 @@ impl Deref for QuarkNode {
 }
 
 impl QuarkNode {
-    pub fn NewQuarkNode(nodeConfig: &NodeConfiguration) -> Result<QuarkNode> {
-        let k8sNode = InitK8sNode()?;
+    pub fn NewQuarkNode(nodename: &str, nodeConfig: &NodeConfiguration) -> Result<QuarkNode> {
+        let k8sNode = InitK8sNode(nodename)?;
         
         let inner = QuarkNodeInner {
             nodeConfig: nodeConfig.clone(),
@@ -563,10 +562,10 @@ pub fn ValidateNodeSpec(node: &k8s::Node) -> Result<()> {
     return Ok(())
 }
 
-pub async fn Run(nodeConfig: NodeConfiguration) -> Result<NodeAgent> {
+pub async fn Run(nodename: &str, nodeConfig: NodeConfiguration) -> Result<NodeAgent> {
     NodeAgent::CleanPods().await?;
     
-    let quarkNode = QuarkNode::NewQuarkNode(&nodeConfig)?;
+    let quarkNode = QuarkNode::NewQuarkNode(nodename, &nodeConfig)?;
     let nodeAgent = NodeAgent::New(&quarkNode)?;
     nodeAgent.Start().await?;
     return Ok(nodeAgent);

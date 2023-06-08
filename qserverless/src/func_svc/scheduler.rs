@@ -131,14 +131,13 @@ impl Scheduler {
         }
     }
 
-    pub async fn CreatePod(&self, client: &CacherClient, podName: &str, nodeName: &str, package: &Package) -> Result<()> {
+    pub async fn CreatePod(&self, client: &CacherClient, podName: &str, package: &Package) -> Result<()> {
         let mut pod = k8s::Pod::default();
 
         pod.metadata.namespace = Some(package.Namespace());
         pod.metadata.name = Some(podName.to_string());
         let mut annotations = BTreeMap::new();
         annotations.insert(AnnotationFuncPodPackageName.to_string(), package.Name());
-        annotations.insert(AnnotationNodeMgrNode.to_string(), nodeName.to_string());
         pod.metadata.annotations = Some(annotations);
         
         pod.spec = Some(package.PodSpec());
@@ -194,7 +193,7 @@ impl Scheduler {
                             Some(msg) => msg,
                         };
                         
-                        match self.CreatePod(&cacheClient, &msg.podName, "qserverless.quarksoft.io/brad-desktop", &msg.package).await {
+                        match self.CreatePod(&cacheClient, &msg.podName, &msg.package).await {
                             Ok(()) => (),
                             Err(_) => break,
                         }

@@ -115,7 +115,7 @@ impl qmeta::q_meta_service_server::QMetaService for NodeMgrSvc {
                     return Ok(Response::new(response));
                 }
                 Some(obj) => {
-                    let pod: k8s::Pod = match serde_json::from_str(&obj.data) {
+                    let mut pod: k8s::Pod = match serde_json::from_str(&obj.data) {
                         Ok(pod) => pod, 
                         Err(e) => {
                             let response = qmeta::CreateResponseMessage {
@@ -125,7 +125,7 @@ impl qmeta::q_meta_service_server::QMetaService for NodeMgrSvc {
                             return Ok(Response::new(response));
                         }
                     };
-                    if pod.metadata.annotations.is_none() {
+                    /*if pod.metadata.annotations.is_none() {
                         let response = qmeta::CreateResponseMessage {
                             error: format!("NodeMgr get pod create request with pod with annotations"),
                             ..Default::default()
@@ -140,8 +140,25 @@ impl qmeta::q_meta_service_server::QMetaService for NodeMgrSvc {
                             }))
                         },
                         Some(s) => s,
+                    };*/
+                    let node = match crate::NM_CACHE.get().unwrap().SchedulePod(&pod) {
+                        None => {
+                            return Ok(Response::new(qmeta::CreateResponseMessage {
+                                error: format!("create pod fail as no resource"),
+                                ..Default::default()
+                            }))
+                        },
+                        Some(node) => node,
                     };
-                    match crate::NM_CACHE.get().unwrap().CreatePod(node, &pod, &k8s::ConfigMap::default()).await {
+
+                    if pod.metadata.annotations.is_none() {
+                        pod.metadata.annotations = Some(BTreeMap::new());
+                    }
+
+                    error!("nm create pod {:?} on node {}", &pod.metadata.name, &node);
+
+                    pod.metadata.annotations.as_mut().unwrap().insert(AnnotationNodeMgrNode.to_owned(), node.clone());
+                    match crate::NM_CACHE.get().unwrap().CreatePod(&node, &pod, &k8s::ConfigMap::default()).await {
                         Err(e) => {
                             return Ok(Response::new(qmeta::CreateResponseMessage {
                                 error: format!("create pod fail with error {:?}", e),
