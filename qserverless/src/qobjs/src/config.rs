@@ -122,6 +122,14 @@ impl NodeAgentConfig {
     pub fn nodeMgrAddrs(&self) -> Vec<String> {
         return self.nodeMgrAddrs.clone();
     }
+
+    pub fn NodeName(&self) -> String {
+        if self.nodeName.len() == 0 {
+            return hostname::get().unwrap().to_str().unwrap().to_string();
+        } else {
+            return self.nodeName.clone();
+        }
+    }
 }
 
 //use k8s_openapi::api::core::v1::{self as k8s};
@@ -232,7 +240,7 @@ impl NodeConfigurationInner {
             CgroupRoot:               DefaultCgroupRoot.to_string(),
             CgroupDriver:             DefaultCgroupDriver.to_string(),
             DatabaseURL:              format!("file:{}/db/{}?cache=shared&mode=rwc", DefaultRootPath, DefaultDBName),
-            NodeMgreUrls:           Vec::new(),
+            NodeMgreUrls:             Vec::new(),
             Hostname:                 hostname,
             MaxPods:                  DefaultMaxPods,
             MaxContainerPerPod:       DefaultMaxContainerPerPod,

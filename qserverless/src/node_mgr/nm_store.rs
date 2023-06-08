@@ -89,7 +89,7 @@ pub struct NodeMgrCacheInner {
 }
 
 impl NodeMgrCacheInner {
-    pub fn RefreshNode(&mut self, node: &k8s::Node, pods: &[k8s::Pod]) -> Result<()> {
+     pub fn RefreshNode(&mut self, node: &k8s::Node, pods: &[k8s::Pod]) -> Result<()> {
         let mut podObjs = Vec::new();
         let nodeObj = NodeToDataObject(node)?;
         let mut set = BTreeSet::new();
@@ -182,6 +182,18 @@ impl NodeMgrCache {
         cache.write().unwrap().nodes = Some(nodesCache);
         cache.write().unwrap().pods = Some(podsCache);
         return Ok(cache);
+    }
+
+    // workaround scheduler, schedule pod to node one by one
+    pub fn SchedulePod(&self, _pod: &k8s::Pod) -> Option<String> {
+        let pods = self.GetCacher(QUARK_POD).unwrap();
+        let podCount = pods.Count();
+        let nodes : Vec<String> = self.read().unwrap().nodeAgents.keys().cloned().collect();
+        if nodes.len() == 0 {
+            return None;
+        }
+
+        return Some(nodes[podCount % nodes.len()].clone());
     }
 
     pub fn GetCacher(&self, objType: &str) -> Option<Cacher> {

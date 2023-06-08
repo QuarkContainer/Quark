@@ -189,6 +189,10 @@ impl Cacher {
         }
     }
 
+    pub fn Count(&self) -> usize {
+        return self.read().unwrap().cacheStore.len();
+    }
+
     pub async fn List(&self, namespace: &str, opts: &ListOption) -> Result<DataObjList> {
         if opts.revision == -1 {
             let store = self.Store();
