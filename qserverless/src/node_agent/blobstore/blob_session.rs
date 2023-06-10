@@ -18,6 +18,7 @@ use std::sync::Arc;
 use std::ops::Deref;
 
 use qobjs::common::*;
+use qobjs::types::BLOB_LOCAL_HOST;
 
 use crate::BLOB_SVC_CLIENT_MGR;
 use crate::blobstore::blob::BlobHandler;
@@ -84,7 +85,7 @@ impl BlobSession {
     pub async fn Open(&self, svcAddr: &str, namespace: &str, name: &str) -> Result<(u64, Blob)> {
         let id = self.NextBlobId();
 
-        if svcAddr == &self.BlobSvcAddr() {
+        if svcAddr == BLOB_LOCAL_HOST || svcAddr == &self.BlobSvcAddr() {
             let b = BLOB_STORE.Open(id, namespace, name)?;
             let blob = b.blob.clone();
             self.lock().unwrap().blobHandlers.insert(id, BlobHandler::NewRead(b));
@@ -98,7 +99,7 @@ impl BlobSession {
     }
 
     pub async fn Delete(&self, svcAddr: &str, namespace: &str, name: &str) -> Result<()> {
-        if svcAddr == &self.BlobSvcAddr() {
+        if svcAddr == BLOB_LOCAL_HOST || svcAddr == &self.BlobSvcAddr() {
             BLOB_STORE.RemoveBlob(namespace, name)?;
             return Ok(())
         } else {

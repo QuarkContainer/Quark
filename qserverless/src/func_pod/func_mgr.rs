@@ -23,7 +23,6 @@ use crate::BLOB_MGR;
 use crate::blob_mgr::BlobAddr;
 use crate::{func_def::*, FUNC_CALL_MGR};
 
-//#[derive(Default)]
 pub struct FuncMgr {
     pub funcPodId: String,
     pub namespace: String,
