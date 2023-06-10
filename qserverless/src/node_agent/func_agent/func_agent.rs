@@ -419,8 +419,10 @@ impl func::func_agent_service_server::FuncAgentService for FuncAgent {
         &self,
         request: tonic::Request<tonic::Streaming<func::FuncAgentMsg>>,
     ) -> SResult<tonic::Response<Self::StreamProcessStream>, tonic::Status> {
+        error!("FuncAgentService 1");
         let mut stream = request.into_inner();
         let msg = stream.message().await.unwrap().unwrap();
+        error!("FuncAgentService 2 {:?}", msg);
         let body = match msg.event_body {
             None => return Err(Status::aborted("get non event_body")),
             Some(body) => body,

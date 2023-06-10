@@ -57,6 +57,8 @@ pub const AnnotationNodeMgrSessionServicePod  : &str = "sessionservicepod.core.q
 pub const AnnotationFuncPodPackageName        : &str = "pacagename.qserverless.quarksoft.io";
 pub const EnvVarNodeMgrPodId                  : &str = "podid.core.qserverless.quarksoft.io";
 
+pub const BLOB_LOCAL_HOST                     : &str = "local";
+
 pub trait DeepCopy {
     fn DeepCopy(&self) -> Self;
 }
