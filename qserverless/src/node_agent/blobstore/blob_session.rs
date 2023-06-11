@@ -73,11 +73,6 @@ impl BlobSession {
         return handler.Write(buf).await;
     }
 
-    pub async fn Seal(&self, id: u64) -> Result<()> {
-        let handler = self.Get(id)?;
-        return handler.Seal().await;
-    }
-
     pub fn BlobSvcAddr(&self) -> String {
         return self.lock().unwrap().svcAddress.clone();
     }

@@ -74,7 +74,6 @@ impl BlobSvcClientMgr {
     }
 
     pub async fn Get(&self, addr: &str) -> Result<BlobSvcClient> {
-        error!("BlobSvcClientMgr 1 addr {}", addr);
         let client = self.clients.lock().unwrap().get(addr).cloned();
         match client {
             Some(c) => {
@@ -83,19 +82,14 @@ impl BlobSvcClientMgr {
             None => ()
         };
 
-        error!("BlobSvcClientMgr 2 addr {}", addr);
         let client = BlobSvcClient::Init(addr).await?;
-        error!("BlobSvcClientMgr 3 addr {}", addr);
         let mut clients = self.clients.lock().unwrap();
-        error!("BlobSvcClientMgr 4 addr {}", addr);
         match clients.get(addr).cloned() {
             None => {
-                error!("BlobSvcClientMgr 5 addr {}", addr);
                 clients.insert(addr.to_string(), client.clone());
                 return Ok(client);
             }
             Some(c) => {
-                error!("BlobSvcClientMgr 6 addr {}", addr);
                 return Ok(c)
             }
         }
@@ -356,7 +350,6 @@ impl BlobSvcClient {
     }
 
     pub async fn OnBlobSvcResp(&self, resp: func::BlobSvcResp) -> Result<()> {
-        error!("OnBlobSvcResp resp is {:?}", &resp);
         let notify = match self.calls.lock().unwrap().remove(&resp.msg_id) {
             None => {
                 error!("BlobSvcClient get non exist msg call response {}", resp.msg_id);

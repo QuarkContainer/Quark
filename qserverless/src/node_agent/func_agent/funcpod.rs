@@ -347,34 +347,6 @@ impl FuncPod {
         };
     }
 
-    pub async fn OnBlobSealReq(&self, msgId: u64, msg: func::BlobSealReq) -> Result<()> {
-        let resp = match self.blobSession.Seal(msg.id).await {
-            Ok(()) => {
-                let resp = func::BlobSealResp {
-                    error: String::new()
-                };
-                func::FuncAgentMsg {
-                    msg_id:  msgId,
-                    event_body: Some(func::func_agent_msg::EventBody::BlobSealResp(resp))
-                }
-            }
-            Err(e) => {
-                let resp = func::BlobSealResp {
-                    error: format!("{:?}", e),
-                };
-                func::FuncAgentMsg {
-                    msg_id: msgId,
-                    event_body: Some(func::func_agent_msg::EventBody::BlobSealResp(resp))
-                }
-            }
-        };
-
-        match self.Send(resp) {
-            Ok(()) => return Ok(()),
-            Err(_e) => return Err(Error::CommonError(format!("send fail ...")))
-        };
-    }
-
     pub async fn OnFuncPodMsg(&self, funcPodId: &str, msg: func::FuncAgentMsg) -> Result<()> {
         let body = match msg.event_body {
             None => return Err(Error::EINVAL(format!("OnFuncPodMsg None event_body"))),
@@ -407,9 +379,6 @@ impl FuncPod {
             }
             EventBody::BlobWriteReq(msg) => {
                 self.OnBlobWriteReq(msgId, msg).await?;
-            }
-            EventBody::BlobSealReq(msg) => {
-                self.OnBlobSealReq(msgId, msg).await?;
             }
             EventBody::BlobCloseReq(msg) => {
                 self.OnBlobCloseReq(msgId, msg).await?;

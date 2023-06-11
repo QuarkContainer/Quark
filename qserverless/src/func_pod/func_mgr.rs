@@ -115,7 +115,6 @@ impl QSFunc for Sub {
         BLOB_MGR.BlobDelete("127.0.0.1:8893", "testblob5").await.ok();
         let b = BLOB_MGR.BlobCreate("testblob5").await?;
         b.Write("test blob".to_string().as_bytes().to_vec()).await?;
-        b.Seal().await.unwrap();
         b.Close().await.unwrap();
         let b = BLOB_MGR.BlobOpen(&b.addr).await?;
         let data = b.Read(100).await?;

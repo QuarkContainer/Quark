@@ -307,6 +307,9 @@ impl BlobHandler {
             BlobHandlerInner::RemoteReadBlob(b) => {
                 return b.Close().await;
             }
+            BlobHandlerInner::Write(b) => {
+                return b.Seal();
+            }
             _ => return Ok(())
         }
     }
@@ -319,17 +322,6 @@ impl BlobHandler {
             }
             _ => return Err(Error::EINVAL(format!("can't write a readonly blob"))),
            
-        }
-    }
-
-    pub async fn Seal(&self) -> Result<()> {
-        let mut inner = self.lock().await;
-        match &mut *inner {
-            BlobHandlerInner::Write(b) => {
-                return b.Seal();
-            }
-            _ => return Err(Error::EINVAL(format!("can't write a readonly blob"))),
-            
         }
     }
 }
