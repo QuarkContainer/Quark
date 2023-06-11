@@ -12,38 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import uuid
-
-import func
-
-EnvVarNodeMgrPodId = "podid.core.qserverless.quarksoft.io";
-
-def GetPodIdFromEnvVar() :
-    podId = os.getenv(EnvVarNodeMgrPodId)
-    if podId is None:
-        podId = uuid.uuid4()
-        return uuid.uuid4()
-    else :
-        return podId
-
-class FuncMgr:
-    def __init__(self):
-        self.funcPodId = GetPodIdFromEnvVar()
-        self.namespace = "ns1"
-        packageName = "package1"
+import json
 
 class CallResult:
-    def __init__(self, res, error):
+    def __init__(self, res: str, error: str):
         self.res = res
         self.error = error
     def __str__(self):
         return f"CallResult: res is '{self.res}', error is '{self.error}'"
 
-async def LocalCall(name, parameters):
-    function = getattr(func, name)
-    if function is None:
-        return CallResult("", "There is no func named {}".format(name))
-    result = await function(parameters)
-    return CallResult(result, "")
-        
+class BlobAddr:
+    def __init__(self, blobSvcAddr: str, name: str):
+        self.blobSvcAddr = blobSvcAddr
+        self.name = name
+    
+    def toJson(self):
+        return json.dumps(self, default=lambda o: o.__dict__)
+    
+    @staticmethod
+    def from_json(json_dct):
+      return BlobAddr(json_dct['blobSvcAddr'], json_dct['name'])
