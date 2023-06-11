@@ -89,19 +89,19 @@ impl Blob {
     }
 }
 
-pub struct WritingBlobInner {
+pub struct UnsealBlobInner {
     pub id: u64,
     pub addr: BlobAddr, 
     pub closed: AtomicBool,
 }
 
-impl Drop for WritingBlobInner {
+impl Drop for UnsealBlobInner {
     fn drop(&mut self) {
         futures::executor::block_on(self.Close()).ok();
     }
 }
 
-impl WritingBlobInner {
+impl UnsealBlobInner {
     pub async fn Close(&self) -> Result<()> {
         if self.closed.swap(true, std::sync::atomic::Ordering::SeqCst) {
             return BLOB_MGR.BlobClose(self.id).await;
@@ -111,12 +111,12 @@ impl WritingBlobInner {
     }
 }
 
-pub struct UnsealBlob(Arc<WritingBlobInner>);
+pub struct UnsealBlob(Arc<UnsealBlobInner>);
 
 impl Deref for UnsealBlob {
-    type Target = Arc<WritingBlobInner>;
+    type Target = Arc<UnsealBlobInner>;
 
-    fn deref(&self) -> &Arc<WritingBlobInner> {
+    fn deref(&self) -> &Arc<UnsealBlobInner> {
         &self.0
     }
 }
@@ -180,7 +180,7 @@ impl BlobMgr {
                 if resp.error.len() != 0 {
                     return Err(Error::EINVAL(resp.error))
                 }
-                return Ok(UnsealBlob(Arc::new(WritingBlobInner { 
+                return Ok(UnsealBlob(Arc::new(UnsealBlobInner { 
                     id: resp.id, 
                     addr: BlobAddr { 
                         blobSvcAddr: resp.svc_addr, 
