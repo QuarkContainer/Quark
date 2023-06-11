@@ -126,10 +126,6 @@ impl UnsealBlob {
         return BLOB_MGR.BlobWrite(self.id, buf).await;
     }
 
-    pub async fn Seal(&self) -> Result<()> {
-        return BLOB_MGR.BlobSeal(self.id).await;
-    }
-
     pub async fn Close(&self) -> Result<()> {
         return self.0.Close().await;
     }
@@ -224,34 +220,6 @@ impl BlobMgr {
             }
             b => {
                 return Err(Error::EINVAL(format!("BlobWrite invalid resp {:?}", b)));
-            }
-        }
-    } 
-
-    pub async fn BlobSeal(&self, id: u64) -> Result<()> {
-        let msgId = self.MsgId();
-        let req = func::BlobSealReq {
-            id: id,
-        };
-
-        let msg = func::FuncAgentMsg {
-            msg_id: msgId,
-            event_body: Some(func::func_agent_msg::EventBody::BlobSealReq(req)),
-        };
-
-        let (tx, rx) = oneshot::channel();
-        self.blobReqs.lock().unwrap().insert(msgId, tx);
-        self.BlobReq(msg);
-        let resp = rx.await.unwrap();
-        match resp.event_body.unwrap() {
-            func::func_agent_msg::EventBody::BlobSealResp(resp) => {
-                if resp.error.len() != 0 {
-                    return Err(Error::EINVAL(resp.error))
-                }
-                return Ok(());
-            }
-            b => {
-                return Err(Error::EINVAL(format!("BlobSeal invalid resp {:?}", b)));
             }
         }
     } 

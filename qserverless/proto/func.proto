@@ -63,8 +63,6 @@ message FuncAgentMsg {
     BlobSeekResp BlobSeekResp= 508;
     BlobWriteReq BlobWriteReq = 509;
     BlobWriteResp BlobWriteResp = 510;
-    BlobSealReq BlobSealReq = 511;
-    BlobSealResp BlobSealResp = 512;
     BlobCloseReq BlobCloseReq = 513; 
     BlobCloseResp BlobCloseResp = 514;
     BlobDeleteReq BlobDeleteReq = 515;

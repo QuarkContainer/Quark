@@ -60,7 +60,7 @@ pub struct FuncAgentMsg {
     pub msg_id: u64,
     #[prost(
         oneof = "func_agent_msg::EventBody",
-        tags = "100, 200, 300, 400, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514, 515, 516"
+        tags = "100, 200, 300, 400, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 513, 514, 515, 516"
     )]
     pub event_body: ::core::option::Option<func_agent_msg::EventBody>,
 }
@@ -98,10 +98,6 @@ pub mod func_agent_msg {
         BlobWriteReq(super::BlobWriteReq),
         #[prost(message, tag = "510")]
         BlobWriteResp(super::BlobWriteResp),
-        #[prost(message, tag = "511")]
-        BlobSealReq(super::BlobSealReq),
-        #[prost(message, tag = "512")]
-        BlobSealResp(super::BlobSealResp),
         #[prost(message, tag = "513")]
         BlobCloseReq(super::BlobCloseReq),
         #[prost(message, tag = "514")]
