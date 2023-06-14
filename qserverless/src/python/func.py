@@ -4,11 +4,8 @@ import json
 import common
 from common import BlobAddr 
 
-funcMgr = None
-blobMgr = None
-
-async def add(parameters):
-    res = await funcMgr.RemoteCall(
+async def add(context, parameters):
+    res = await context.RemoteCall(
         namespace= "ns1",
         packageName= "package1",
         funcName= "sub",
@@ -17,25 +14,25 @@ async def add(parameters):
     )
     print("add res is ", res)
     baddr = json.loads(res.res, object_hook=BlobAddr.from_json)
-    res = await blobMgr.BlobOpen(baddr)
+    res = await context.BlobOpen(baddr)
     b = res.res
     res = await b.Read(100)
     str = res.res.decode('utf-8')
     print("func add ", str)
     return "add with sub result "+str
 
-async def sub(parameters):
+async def sub(context, parameters):
     print("sub 1")
-    await blobMgr.BlobDelete("local", "testblob5")
+    await context.BlobDelete("local", "testblob5")
     print("sub 2")
-    createres = await blobMgr.BlobCreate("testblob5")
+    createres = await context.BlobCreate("testblob5")
     b  = createres.res
     print("sub 3")
     await b.Write(bytes("test blob", 'utf-8'))
     print("sub 4")
     await b.Close()
     print("sub 5")
-    openres = await blobMgr.BlobOpen(b.addr)
+    openres = await context.BlobOpen(b.addr)
     b = openres.res
     res = await b.Read(100)
     data = res.res
@@ -43,9 +40,9 @@ async def sub(parameters):
     print("func sub ", str)
     return b.addr.toJson()
 
-async def simple1(parameters):
+async def simple1(context, parameters):
     print("simple1 1")
-    res = await funcMgr.RemoteCall(
+    res = await context.RemoteCall(
         namespace= "ns1",
         packageName= "package1",
         funcName= "simple",
@@ -56,5 +53,5 @@ async def simple1(parameters):
     return "Simple1 %s"%parameters
 
 
-async def simple(parameters):
+async def simple(context, parameters):
     return "Simple with parameter '%s'"%parameters

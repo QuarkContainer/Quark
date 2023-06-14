@@ -16,6 +16,7 @@ import asyncio
 import grpc
 import uuid
 import os
+import numpy as np
 
 import func_pb2_grpc
 import func_pb2
@@ -47,6 +48,7 @@ class FuncMgr:
         self.reqQueue = asyncio.Queue(100)
         self.clientQueue = clientQueue
         self.callerCalls = dict()
+        self.blob_mgr = blob_mgr.BlobMgr(funcAgentQueueTx)
     
     async def RemoteCall(
         self,
@@ -71,6 +73,27 @@ class FuncMgr:
         res = await callQueue.get()
         return res
     
+    async def BlobCreate(self, name: str) -> common.CallResult: 
+        return await self.blob_mgr.BlobCreate(name)
+    
+    async def BlobWrite(self, id: np.uint64, buf: bytes) -> common.CallResult:
+        return await self.blob_mgr.BlobWrite(id, buf)
+    
+    async def BlobOpen(self, addr: common.BlobAddr) -> common.CallResult:
+        return await self.blob_mgr.BlobOpen(addr)
+    
+    async def BlobDelete(self, svcAddr: str, name: str) -> common.CallResult:
+        return await self.blob_mgr.BlobDelete(svcAddr, name)
+    
+    async def BlobRead(self, id: np.uint64, len: np.uint64) -> common.CallResult:
+        return await self.blob_mgr.BlobRead(id, len)
+    
+    async def BlobSeek(self, id: np.uint64, seekType: int, pos: np.int64) -> common.CallResult:
+        return await self.blob_mgr.BlobSeek(id, seekType, pos)
+    
+    async def BlobClose(self, id: np.uint64) -> common.CallResult:
+        return await self.blob_mgr.BlobClose(id)
+    
     def CallRespone(self, id: str, res: common.CallResult) :
         callQueue = self.callerCalls.get(id)
         if callQueue is None:
@@ -87,7 +110,7 @@ class FuncMgr:
         function = getattr(func, name)
         if function is None:
             return common.CallResult("", "There is no func named {}".format(name))
-        result = await function(parameters)
+        result = await function(self, parameters)
         return common.CallResult(result, "")
         
     async def Process(self) :
@@ -101,9 +124,7 @@ class FuncMgr:
             self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(msgId=2, FuncAgentCallResp=resp))
 
 funcMgr = FuncMgr(funcAgentQueueTx)       
-blobMgr = blob_mgr.BlobMgr(funcAgentQueueTx)
-blob_mgr.blobMgr = blobMgr
-func.blobMgr = blobMgr
+blob_mgr.blobMgr = funcMgr.blob_mgr
 
 async def generate_messages():
     while True:
@@ -122,7 +143,7 @@ async def FuncAgentClientProcess(msg: func_pb2.FuncAgentMsg):
             res = common.CallResult(res=resp.resp, error=resp.error)
             funcMgr.CallRespone(resp.id, res)
         case _ :
-            blobMgr.OnFuncAgentMsg(msg)
+            funcMgr.blob_mgr.OnFuncAgentMsg(msg)
             
 
 async def StartClientProcess():
@@ -148,7 +169,7 @@ async def RemoteCall(
     return res
 
 async def main():
-    func.funcMgr = funcMgr
+    #func.funcMgr = funcMgr
     agentClientTask = asyncio.create_task(StartClientProcess())
     await funcMgr.Process()
 
