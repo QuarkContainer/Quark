@@ -59,6 +59,7 @@ pub struct FuncPodInner {
     pub namespace: String,
     pub packageName: String,
     pub state: Mutex<funcPodState>,
+    pub clientMode: bool,
 
     pub agentChann: mpsc::Sender<SResult<func::FuncAgentMsg, tonic::Status>>,
 
@@ -91,6 +92,7 @@ impl FuncPod {
             funcPodId: funcPodId.clone(),
             namespace: registerMsg.namespace.to_string(),
             packageName: registerMsg.package_name.to_string(),
+            clientMode: registerMsg.client_mode,
             state: Mutex::new(funcPodState::Idle),
             agentChann: agentTx,
             blobSession: BlobSession::New(&funcAgent.blobSvcAddr),
@@ -120,6 +122,7 @@ impl FuncPod {
             package_name: self.packageName.clone(),
             state: self.State().State() as i32,
             func_call_id: self.State().FuncCallId(),
+            client_mode: self.clientMode,
         }
     }
 

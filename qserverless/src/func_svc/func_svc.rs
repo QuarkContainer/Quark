@@ -128,8 +128,10 @@ impl FuncSvcInner {
         let package = pod.package.clone();
     
         self.freeResource = self.freeResource + package.ReqResource();
-        self.freeingResource = self.freeingResource - package.ReqResource();
-
+        if pod.IsExiting() {
+            self.freeingResource = self.freeingResource - package.ReqResource();
+        }
+        
         return self.TryCreatePod();
     } 
 
@@ -191,7 +193,7 @@ impl FuncSvcInner {
         return Ok(());
     }
 
-    // it is called when there is a new Pod created
+/*    // it is called when there is a new Pod created
    pub fn OnCreatedPod(&mut self, pod: &FuncPod) -> Result<()> {
         let package = pod.package.clone();
 
@@ -207,7 +209,7 @@ impl FuncSvcInner {
         }
         return Ok(());
     }
-
+ */
     pub fn PushKeepalivePod(&mut self, pod: &FuncPod) -> Result<()> {
         let time = pod.KeepaliveTime()?;
         self.keepalivePods.insert(time, pod.clone());
@@ -281,7 +283,8 @@ impl FuncSvcInner {
         return freemem * 100 / self.totalResource.mem < KEEP_BATCHTASK_THRESHOLD;
     }
 
-    pub fn EvictPod(&mut self, _pod: &FuncPod, freeResource: &Resource) -> Result<()> {
+    pub fn EvictPod(&mut self, pod: &FuncPod, freeResource: &Resource) -> Result<()> {
+        *pod.state.lock().unwrap() = FuncPodState::Exiting;
         self.freeingResource = self.freeingResource + *freeResource;
         unimplemented!();
     }

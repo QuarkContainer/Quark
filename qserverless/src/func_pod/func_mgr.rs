@@ -53,6 +53,7 @@ impl FuncMgr {
             func_pod_id: self.funcPodId.clone(),
             namespace: self.namespace.clone(),
             package_name: self.packageName.clone(),
+            client_mode: false,
         }
     }
     

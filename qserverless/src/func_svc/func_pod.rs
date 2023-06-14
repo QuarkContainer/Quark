@@ -66,6 +66,7 @@ impl Eq for FuncPodId {}
 pub enum FuncPodState {
     Idle(SystemTime), // IdleTime
     Running(String), // the funcCallId
+    Exiting,
     Dead,
 }
 
@@ -76,6 +77,13 @@ impl FuncPodState {
             _ => return false,
         }
     }
+
+    pub fn IsExiting(&self) -> bool {
+        match self {
+            Self::Exiting => return true,
+            _ => return false,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -83,6 +91,7 @@ pub struct FuncPodInner {
     pub podName: String,
     pub package: Package,
     pub node: FuncNode,
+    pub clientMode: bool,
     pub state: Mutex<FuncPodState>,
 }
 
@@ -122,6 +131,10 @@ impl FuncPod {
 
     pub fn IsDead(&self) -> bool {
         return self.state.lock().unwrap().IsDead();
+    }
+
+    pub fn IsExiting(&self) -> bool {
+        return self.state.lock().unwrap().IsExiting();
     }
 }
 
