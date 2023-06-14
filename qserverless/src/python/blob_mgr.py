@@ -98,7 +98,7 @@ class BlobMgr:
         msgId = msg.msgId
         reqQueue = self.blobReqs.get(msgId)
         if reqQueue is None:
-            return common.CallResult("", "BlobMgr::OnFuncAgentMsg unknow msgId " + msgId)
+            return common.CallResult("", "BlobMgr::OnFuncAgentMsg unknow msgId " + str(msgId))
         reqQueue.put_nowait(msg)
         
     def MsgId(self) -> np.uint64 :
