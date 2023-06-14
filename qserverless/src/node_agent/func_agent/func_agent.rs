@@ -178,12 +178,12 @@ impl FuncAgent {
             func_pod_id: registerMsg.func_pod_id.clone(),
             namespace: registerMsg.namespace.clone(),
             package_name: registerMsg.package_name.clone(),
+            client_mode: registerMsg.client_mode,
         };
 
         FUNC_SVC_CLIENT.get().unwrap().Send(func::FuncSvcMsg {
             event_body: Some(func::func_svc_msg::EventBody::FuncPodConnReq(msg))
         })?;
-
 
         return Ok(());
     }
@@ -232,6 +232,7 @@ impl FuncAgent {
 
     pub fn OnFuncPodDisconnect(&self, funcPodId: &str) -> Result<()> {
         let pod = self.funcPodMgr.RemovePod(funcPodId)?;
+
         match &pod.State() {
             funcPodState::Idle => (),
             funcPodState::Running(callid) => {

@@ -41,14 +41,15 @@ def GetPodIdFromEnvVar() :
         return podId
     
 class FuncMgr:
-    def __init__(self, clientQueue):
+    def __init__(self):
         self.funcPodId = GetPodIdFromEnvVar()
         self.namespace = "ns1"
         self.packageName = "package1"
         self.reqQueue = asyncio.Queue(100)
-        self.clientQueue = clientQueue
+        self.clientQueue = funcAgentQueueTx
         self.callerCalls = dict()
         self.blob_mgr = blob_mgr.BlobMgr(funcAgentQueueTx)
+        blob_mgr.blobMgr = self
     
     async def RemoteCall(
         self,
@@ -123,8 +124,7 @@ class FuncMgr:
             resp = func_pb2.FuncAgentCallResp(id=req.id, resp=res.res, error=res.error)
             self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(msgId=2, FuncAgentCallResp=resp))
 
-funcMgr = FuncMgr(funcAgentQueueTx)       
-blob_mgr.blobMgr = funcMgr.blob_mgr
+funcMgr = FuncMgr()       
 
 async def generate_messages():
     while True:
@@ -158,18 +158,7 @@ async def StartClientProcess():
         async for response in responses:
             await FuncAgentClientProcess(response)
 
-async def RemoteCall(
-    namespace: str, 
-    packageName: str, 
-    funcName: str, 
-    parameters: str, 
-    priority: int
-    ) -> common.CallResult: 
-    res = funcMgr.RemoteCall(namespace, packageName, funcName, parameters, priority)
-    return res
-
 async def main():
-    #func.funcMgr = funcMgr
     agentClientTask = asyncio.create_task(StartClientProcess())
     await funcMgr.Process()
 

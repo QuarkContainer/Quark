@@ -159,6 +159,7 @@ message FuncPodRegisterReq {
   string funcPodId = 1;
   string namespace = 2;
   string packageName = 3;
+  bool clientMode = 4; // client mode pod will only send func call request, can't serve func call request
 }
 
 message FuncPodRegisterResp {
@@ -212,6 +213,7 @@ message FuncPodConnReq {
   string funcPodId = 2;
   string namespace = 3;
   string packageName = 4;
+  bool clientMode = 5;
 }
 
 message FuncPodConnResp {
@@ -267,6 +269,7 @@ message FuncPodStatus {
     string packageName = 3;
     FuncPodState state = 4;
     string funcCallId = 5; // when the pod is running the funcCallId
+    bool clientMode = 6;
 }
 
 message Timestamp {

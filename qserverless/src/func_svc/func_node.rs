@@ -239,6 +239,7 @@ impl FuncNode {
                         package: package,
                         node: self.clone(),
                         state: Mutex::new(state),
+                        clientMode: podStatus.client_mode,
                     };
                     let funcPod = FuncPod(Arc::new(podInner));
                     inner.funcPods.insert(funcPodId, funcPod);
@@ -350,6 +351,7 @@ impl FuncNode {
             podName: req.func_pod_id.clone(),
             package : package.clone(),
             node: self.clone(),
+            clientMode: req.client_mode,
             state: Mutex::new(FuncPodState::Idle(SystemTime::now()))
         };
 
@@ -419,7 +421,8 @@ impl FuncNode {
         }
 
         *funcPod.state.lock().unwrap() = FuncPodState::Dead;
-
+        FUNC_SVC_MGR.lock().unwrap().OnPodExit(&funcPod)?;
+        
         return Ok(())
     }
 
@@ -605,6 +608,7 @@ impl FuncNode {
             package: package.clone(),
             node: self.clone(),
             state: Mutex::new(FuncPodState::Idle(SystemTime::now())),
+            clientMode: false,
         };
 
         let pod = FuncPod(Arc::new(inner));

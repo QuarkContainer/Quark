@@ -270,6 +270,9 @@ pub struct FuncPodRegisterReq {
     pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub package_name: ::prost::alloc::string::String,
+    /// client mode pod will only send func call request, can't serve func call request
+    #[prost(bool, tag = "4")]
+    pub client_mode: bool,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -373,6 +376,8 @@ pub struct FuncPodConnReq {
     pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub package_name: ::prost::alloc::string::String,
+    #[prost(bool, tag = "5")]
+    pub client_mode: bool,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -460,6 +465,8 @@ pub struct FuncPodStatus {
     /// when the pod is running the funcCallId
     #[prost(string, tag = "5")]
     pub func_call_id: ::prost::alloc::string::String,
+    #[prost(bool, tag = "6")]
+    pub client_mode: bool,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
