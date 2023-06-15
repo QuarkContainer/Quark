@@ -22,12 +22,9 @@ async def add(context, parameters):
     return "add with sub result "+str
 
 async def sub(context, parameters):
-    print("sub 1")
     await context.BlobDelete("local", "testblob5")
-    print("sub 2")
     createres = await context.BlobCreate("testblob5")
     b  = createres.res
-    print("sub 3")
     await b.Write(bytes("test blob", 'utf-8'))
     print("sub 4")
     await b.Close()
@@ -49,9 +46,18 @@ async def simple1(context, parameters):
         parameters= "call from simple1",
         priority= 1
     )
-    print("simple1 2")
+    print("simple1 2 res {:?}", res)
+    res = await context.RemoteCall(
+        namespace= "ns1",
+        packageName= "package1",
+        funcName= "simple",
+        parameters= "call from simple1",
+        priority= 1
+    )
+    print("simple1 3 res {:?}", res)
     return "Simple1 %s"%parameters
 
 
 async def simple(context, parameters):
+    print("simple ....")
     return "Simple with parameter '%s'"%parameters

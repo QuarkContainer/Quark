@@ -17,6 +17,7 @@ import grpc
 import uuid
 import os
 import numpy as np
+import janus
 
 import func_pb2_grpc
 import func_pb2
@@ -68,10 +69,10 @@ class FuncMgr:
             parameters = parameters,
             priority = 1
         )
-        callQueue = asyncio.Queue(1)
+        callQueue = janus.Queue() #asyncio.Queue(1)
         self.callerCalls[id] = callQueue
         self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(msgId=0, FuncAgentCallReq=req))
-        res = await callQueue.get()
+        res = await callQueue.async_q.get()
         return res
     
     async def BlobCreate(self, name: str) -> common.CallResult: 
@@ -98,10 +99,9 @@ class FuncMgr:
     def CallRespone(self, id: str, res: common.CallResult) :
         callQueue = self.callerCalls.get(id)
         if callQueue is None:
-            print("CallRespone get unknow callid", id)
             return
         
-        callQueue.put_nowait(res)
+        callQueue.async_q.put_nowait(res)
         self.callerCalls.pop(id)
         
     def LocalCall(self, req: func_pb2.FuncAgentCallReq) :
@@ -113,7 +113,10 @@ class FuncMgr:
             return common.CallResult("", "There is no func named {}".format(name))
         result = await function(self, parameters)
         return common.CallResult(result, "")
-        
+    
+    def Close(self) : 
+        self.reqQueue.put_nowait(None)
+    
     async def Process(self) :
         while True :
             req = await self.reqQueue.get();
@@ -124,7 +127,7 @@ class FuncMgr:
             resp = func_pb2.FuncAgentCallResp(id=req.id, resp=res.res, error=res.error)
             self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(msgId=2, FuncAgentCallResp=resp))
 
-funcMgr = FuncMgr()       
+funcMgr = None # FuncMgr()       
 
 async def generate_messages():
     while True:
@@ -133,7 +136,6 @@ async def generate_messages():
 
 async def FuncAgentClientProcess(msg: func_pb2.FuncAgentMsg):
     msgType = msg.WhichOneof('EventBody')
-    #print("FuncAgentClientProcess", msg.msgId, msgType, msg)
     match msgType:
         case 'FuncAgentCallReq' :
             req = msg.FuncAgentCallReq
@@ -147,20 +149,44 @@ async def FuncAgentClientProcess(msg: func_pb2.FuncAgentMsg):
             
 
 async def StartClientProcess():
-    podId = str(uuid.uuid4())
-    regReq = func_pb2.FuncPodRegisterReq(funcPodId=podId,namespace="ns1",packageName="package1")
-    req = func_pb2.FuncAgentMsg(msgId=1, FuncPodRegisterReq=regReq)
-    funcAgentQueueTx.put_nowait(func_pb2.FuncAgentMsg(msgId=1, FuncPodRegisterReq=regReq))
-
     async with grpc.aio.insecure_channel("unix:///var/lib/quark/nodeagent/node1/sock") as channel:
         stub = FuncAgentServiceStub(channel)
         responses = stub.StreamProcess(generate_messages())
         async for response in responses:
             await FuncAgentClientProcess(response)
 
+def Register(clientMode: bool):
+    global funcMgr
+    funcMgr = FuncMgr()  
+    podId = str(uuid.uuid4())
+    regReq = func_pb2.FuncPodRegisterReq(funcPodId=podId,namespace="ns1",packageName="package1", clientMode= clientMode)
+    req = func_pb2.FuncAgentMsg(msgId=1, FuncPodRegisterReq=regReq)
+    funcAgentQueueTx.put_nowait(func_pb2.FuncAgentMsg(msgId=1, FuncPodRegisterReq=regReq))
+
+
 async def main():
     agentClientTask = asyncio.create_task(StartClientProcess())
     await funcMgr.Process()
 
-asyncio.run(main())
 
+if __name__ == '__main__':
+    Register(False)
+    asyncio.run(main())
+
+def Call(namespace: str, packageName: str, funcName: str, parameters: str) -> common.CallResult:
+    id = str(uuid.uuid4())
+    req = func_pb2.FuncAgentCallReq (
+        id = id,
+        namespace = namespace,
+        packageName = packageName,
+        funcName = funcName,
+        parameters = parameters,
+        priority = 1
+    )
+    
+    channel = grpc.insecure_channel("unix:///var/lib/quark/nodeagent/node1/sock")
+    stub = FuncAgentServiceStub(channel)
+    
+    res = stub.FuncCall(req)
+    return common.CallResult(res.resp, res.error)
+    

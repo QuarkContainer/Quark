@@ -40,7 +40,6 @@ use crate::func_call::FuncCallInner;
 use crate::func_call::FuncCallState;
 use crate::func_pod::*;
 use crate::message::FuncNodeMsg;
-use crate::package::Package;
 use crate::package::PackageId;
 
 #[derive(Debug, Clone)]
@@ -211,17 +210,23 @@ impl FuncNode {
         }
         
         for podStatus in regReq.func_pods {
-            let packageId = PackageId {
-                namespace: podStatus.namespace.clone(),
-                packageName: podStatus.package_name.clone(),
+            let package  = if !podStatus.client_mode {
+                let packageId = PackageId {
+                    namespace: podStatus.namespace.clone(),
+                    packageName: podStatus.package_name.clone(),
+                };
+                let package = match PACKAGE_MGR.Get(&packageId) {
+                    Err(_) => {
+                        error!("StartProcess get invalid package {:?}", packageId);
+                        continue;
+                    }
+                    Ok(p) => p,
+                };
+                Some(package)
+            } else {
+                None
             };
-            let package = match PACKAGE_MGR.Get(&packageId) {
-                Err(_) => {
-                    error!("StartProcess get invalid package {:?}", packageId);
-                    continue;
-                }
-                Ok(p) => p,
-            };
+            
             let state = match podStatus.state {
                 n if func::FuncPodState::Idle as i32 == n => FuncPodState::Idle(SystemTime::now()),
                 n if func::FuncPodState::Running as i32 == n => {
@@ -323,28 +328,39 @@ impl FuncNode {
 
     // get new funcpod from nodeagent
     pub fn OnFuncPodConnReq(&self, req: func::FuncPodConnReq) -> Result<()> {
-        let packageId = PackageId {
-            namespace: req.namespace.clone(),
-            packageName: req.package_name.clone(),
-        };
-        error!("OnFuncPodConnReq {:?} ...", &packageId);
-        
-        let package = match PACKAGE_MGR.Get(&packageId) {
-            Ok(p) => {
-                let resp = func::FuncPodConnResp {
-                    func_pod_id: req.func_pod_id.clone(),
-                    error: String::new(),
-                };
-                self.Send(FuncNodeMsg::FuncPodConnResp(resp))?;
-                p
-            }
-            Err(_) => {
-                let resp = func::FuncPodConnResp {
-                    func_pod_id: req.func_pod_id ,
-                    error: format!("FuncCall fail as package {:?} doesn't exist", &packageId),
-                };
-                return self.Send(FuncNodeMsg::FuncPodConnResp(resp));
-            }
+        let package = if !req.client_mode {
+            let packageId = PackageId {
+                namespace: req.namespace.clone(),
+                packageName: req.package_name.clone(),
+            };
+            error!("OnFuncPodConnReq {:?} ...", &packageId);
+            
+            let package = match PACKAGE_MGR.Get(&packageId) {
+                Ok(p) => {
+                    let resp = func::FuncPodConnResp {
+                        func_pod_id: req.func_pod_id.clone(),
+                        error: String::new(),
+                    };
+                    self.Send(FuncNodeMsg::FuncPodConnResp(resp))?;
+                    p
+                }
+                Err(_) => {
+                    let resp = func::FuncPodConnResp {
+                        func_pod_id: req.func_pod_id ,
+                        error: format!("FuncCall fail as package {:?} doesn't exist", &packageId),
+                    };
+                    return self.Send(FuncNodeMsg::FuncPodConnResp(resp));
+                }
+            };
+
+            Some(package)
+        } else {
+            let resp = func::FuncPodConnResp {
+                func_pod_id: req.func_pod_id.clone(),
+                error: String::new(),
+            };
+            self.Send(FuncNodeMsg::FuncPodConnResp(resp))?;
+            None
         };
 
         let funcPodInner = FuncPodInner {
@@ -358,7 +374,10 @@ impl FuncNode {
         let funcPod = FuncPod(Arc::new(funcPodInner));
         self.lock().unwrap().funcPods.insert(req.func_pod_id.clone(), funcPod.clone());
         FUNC_POD_MGR.Add(&funcPod);
-        FUNC_SVC_MGR.lock().unwrap().OnFreePod(&funcPod)?;
+        if !funcPod.clientMode {
+            FUNC_SVC_MGR.lock().unwrap().OnFreePod(&funcPod)?;
+        }
+        
         return Ok(())
     }
 
@@ -421,7 +440,9 @@ impl FuncNode {
         }
 
         *funcPod.state.lock().unwrap() = FuncPodState::Dead;
-        FUNC_SVC_MGR.lock().unwrap().OnPodExit(&funcPod)?;
+        if !funcPod.clientMode {
+            FUNC_SVC_MGR.lock().unwrap().OnPodExit(&funcPod)?;
+        }
         
         return Ok(())
     }
@@ -599,24 +620,6 @@ impl FuncNode {
         self.lock().unwrap().internMsgRx = Some(internMsgRx);
 
         return Ok(())
-    }
-
-    pub fn NewFuncPod(&self, package: &Package) -> Result<FuncPod> {
-        let uid = uuid::Uuid::new_v4().to_string();
-        let inner = FuncPodInner {
-            podName: uid.clone(),
-            package: package.clone(),
-            node: self.clone(),
-            state: Mutex::new(FuncPodState::Idle(SystemTime::now())),
-            clientMode: false,
-        };
-
-        let pod = FuncPod(Arc::new(inner));
-        self.AddPod(&pod)?;
-
-        self.lock().unwrap().funcPods.insert(uid, pod.clone());
-
-        return Ok(pod);
     }
 
     pub fn NodeName(&self) -> String {

@@ -89,7 +89,7 @@ impl FuncPodState {
 #[derive(Debug)]
 pub struct FuncPodInner {
     pub podName: String,
-    pub package: Package,
+    pub package: Option<Package>,
     pub node: FuncNode,
     pub clientMode: bool,
     pub state: Mutex<FuncPodState>,

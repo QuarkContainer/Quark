@@ -433,8 +433,8 @@ impl func::func_agent_service_server::FuncAgentService for FuncAgent {
             EventBody::FuncPodRegisterReq(req) => {
                 req
             }
-            _  => {
-                return Err(Status::aborted("first message should be FuncPodRegisterResp"));
+            msg  => {
+                return Err(Status::aborted(format!("first message should be FuncPodRegisterReq but get {:?}", msg)));
             }
         };
 
