@@ -12,20 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import client;
-import func;
-
-async def test():
-    
-    # Start the background task
-    print("test 1");
-    client.Register(True)
-    background_task_coroutine = asyncio.create_task(client.main())
-    print("test 2");
-    res = await func.add(client.funcMgr, "asdf")
-    print("test 3 ", res);
-    #await background_task_coroutine
-    
-asyncio.run(test())
-
+res = client.Call(
+    "ns1", 
+    "package1",
+    "simple",
+    "call from simple1"
+)
+print("result is ", res)

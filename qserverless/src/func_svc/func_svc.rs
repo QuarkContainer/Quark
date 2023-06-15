@@ -125,7 +125,7 @@ impl FuncSvc {
 impl FuncSvcInner {
     // when a pod exiting process finish, free the occupied resources and schedule creating new pod
     pub fn OnPodExit(&mut self, pod: &FuncPod) -> Result<()> {
-        let package = pod.package.clone();
+        let package = pod.package.clone().unwrap();
     
         self.freeResource = self.freeResource + package.ReqResource();
         if pod.IsExiting() {
@@ -171,7 +171,7 @@ impl FuncSvcInner {
 
     // it is called when there is a Pod finished a task
     pub fn OnFreePod(&mut self, pod: &FuncPod) -> Result<()> {
-        let package = pod.package.clone();
+        let package = pod.package.clone().unwrap();
 
         if self.NeedEvictPod(&package) {
             self.EvictPod(pod, &package.ReqResource())?;
@@ -224,7 +224,7 @@ impl FuncSvcInner {
         }
 
         for (_time, pod) in &self.keepalivePods {
-            let package = pod.package.clone();
+            let package = pod.package.clone().unwrap();
             removePods.push((pod.clone(), package.ReqResource()));
             resource = resource + package.ReqResource();
             package.lock().unwrap().RemoveKeepalivePod(pod)?;
