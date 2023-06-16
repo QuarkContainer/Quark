@@ -14,9 +14,10 @@
 
 import client;
 res = client.Call(
-    "ns1", 
-    "package1",
-    "simple",
-    "call from simple1"
+    svcAddr = "unix:///var/lib/quark/nodeagent/node1/sock",
+    namespace = "ns1", 
+    packageName = "pypackage1",
+    funcName = "add",
+    parameters = "call from client"
 )
 print("result is ", res)

@@ -93,7 +93,20 @@ async fn main() -> Result<()> {
 
     if PACKAGE_MGR.Get(&packageId).is_err() {
         let client = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
-        let obj = DataObject::NewFuncPackage("ns1", "package1").unwrap();
+        let obj = DataObject::NewFuncPackage1("ns1", "package1").unwrap();
+        client.Create("package", obj.Obj()).await.unwrap();
+    }
+
+    let packageId = PackageId {
+        namespace: "ns1".to_string(),
+        packageName: "pypackage1".to_string(),
+    };
+
+    if PACKAGE_MGR.Get(&packageId).is_err() {
+        let client = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
+        let obj = DataObject::NewFuncPyPackage("ns1", "pypackage1").unwrap();
+        client.Delete("package", "ns1", "pypackage1").await.ok();
+        error!("create new package {:#?}", &obj);
         client.Create("package", obj.Obj()).await.unwrap();
     }
 

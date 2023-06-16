@@ -6,8 +6,7 @@ from common import BlobAddr
 
 async def add(context, parameters):
     res = await context.RemoteCall(
-        namespace= "ns1",
-        packageName= "package1",
+        packageName= "",
         funcName= "sub",
         parameters= "call from add",
         priority= 1
@@ -40,16 +39,14 @@ async def sub(context, parameters):
 async def simple1(context, parameters):
     print("simple1 1")
     res = await context.RemoteCall(
-        namespace= "ns1",
-        packageName= "package1",
+        packageName= "",
         funcName= "simple",
         parameters= "call from simple1",
         priority= 1
     )
     print("simple1 2 res {:?}", res)
     res = await context.RemoteCall(
-        namespace= "ns1",
-        packageName= "package1",
+        packageName= "",
         funcName= "simple",
         parameters= "call from simple1",
         priority= 1
