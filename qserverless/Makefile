@@ -22,6 +22,19 @@ deploy: fp
 	#docker pull localhost:5000/func_pod
 	crictl pull localhost:5000/func_pod
 	#docker run --network host -it --name fp --rm func_pod
+py: 
+	mkdir -p ./target/py
+	-rm ./target/py/*
+	cp ./src/python/* ./target/py -r
+	cp ./deployment/py.Dockerfile ./target/py/Dockerfile
+	-docker image rm py_pod
+	-docker image rm localhost:5000/py_pod
+	-crictl rmi localhost:5000/py_pod
+	docker build -t py_pod:latest ./target/py
+	docker image tag py_pod localhost:5000/py_pod
+	docker push localhost:5000/py_pod
+	#docker pull localhost:5000/py_pod
+	crictl pull localhost:5000/py_pod
 test:
 	cargo run --bin test
 all: rf

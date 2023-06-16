@@ -151,7 +151,25 @@ impl Scheduler {
                 name: EnvVarNodeMgrPodId.to_string(),
                 value: Some(podName.to_string()),
                 ..Default::default()
-            })
+            });
+
+            container.env.as_mut().unwrap().push(k8s::EnvVar {
+                name: EnvVarNodeMgrNamespace.to_string(),
+                value: Some(package.Namespace()),
+                ..Default::default()
+            });
+
+            container.env.as_mut().unwrap().push(k8s::EnvVar {
+                name: EnvVarNodeMgrPackageId.to_string(),
+                value: Some(package.Name()),
+                ..Default::default()
+            });
+
+            container.env.as_mut().unwrap().push(k8s::EnvVar {
+                name: EnvVarNodeAgentAddr.to_string(),
+                value: Some(DefaultNodeAgentAddr.to_string()),
+                ..Default::default()
+            });
         }
 
         let podStr = serde_json::to_string(&pod)?;

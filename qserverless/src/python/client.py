@@ -31,7 +31,11 @@ from func_pb2 import *
 funcAgentQueueTx = asyncio.Queue(100)
 funcMgr = None
 
-EnvVarNodeMgrPodId = "podid.core.qserverless.quarksoft.io";
+EnvVarNodeMgrPodId      = "podid_qserverless";
+EnvVarNodeMgrNamespace  = "namespace_qserverless";
+EnvVarNodeMgrPackageId  = "packageid_qserverless";
+EnvVarNodeAgentAddr     = "nodeagentaddr_qserverless";
+DefaultNodeAgentAddr    = "unix:///var/lib/quark/nodeagent/node1/sock";
 
 def GetPodIdFromEnvVar() :
     podId = os.getenv(EnvVarNodeMgrPodId)
@@ -41,29 +45,49 @@ def GetPodIdFromEnvVar() :
     else :
         return podId
     
+def GetNamespaceFromEnvVar() :
+    ns = os.getenv(EnvVarNodeMgrNamespace)
+    if ns is None :
+        return ""
+    return ns
+    
+def GetPackageIdFromEnvVar() :
+    pid = os.getenv(EnvVarNodeMgrPackageId)
+    if pid is None :
+        return ""
+    return pid
+
+def GetNodeAgentAddrFromEnvVar() :
+    pid = os.getenv(EnvVarNodeAgentAddr)
+    if pid is None :
+        return DefaultNodeAgentAddr
+    return pid
+    
 class FuncMgr:
-    def __init__(self):
+    def __init__(self, svcAddr: str, namespace: str, packageName: str):
         self.funcPodId = GetPodIdFromEnvVar()
-        self.namespace = "ns1"
-        self.packageName = "package1"
+        self.namespace = namespace
+        self.packageName = packageName
         self.reqQueue = asyncio.Queue(100)
         self.clientQueue = funcAgentQueueTx
         self.callerCalls = dict()
         self.blob_mgr = blob_mgr.BlobMgr(funcAgentQueueTx)
+        self.svcAddr = svcAddr
         blob_mgr.blobMgr = self
     
     async def RemoteCall(
         self,
-        namespace: str, 
         packageName: str, 
         funcName: str, 
         parameters: str, 
         priority: int
         ) -> common.CallResult: 
         id = str(uuid.uuid4())
+        if packageName == "" :
+            packageName = self.packageName
         req = func_pb2.FuncAgentCallReq (
             id = id,
-            namespace = namespace,
+            namespace = self.namespace,
             packageName = packageName,
             funcName = funcName,
             parameters = parameters,
@@ -127,7 +151,7 @@ class FuncMgr:
             resp = func_pb2.FuncAgentCallResp(id=req.id, resp=res.res, error=res.error)
             self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(msgId=2, FuncAgentCallResp=resp))
 
-funcMgr = None # FuncMgr()       
+funcMgr = None 
 
 async def generate_messages():
     while True:
@@ -148,32 +172,36 @@ async def FuncAgentClientProcess(msg: func_pb2.FuncAgentMsg):
             funcMgr.blob_mgr.OnFuncAgentMsg(msg)
             
 
-async def StartClientProcess():
-    async with grpc.aio.insecure_channel("unix:///var/lib/quark/nodeagent/node1/sock") as channel:
+async def StartClientProcess(svcAddr: str):
+    print("start to connect addr ", svcAddr)
+    async with grpc.aio.insecure_channel(svcAddr) as channel:
         stub = FuncAgentServiceStub(channel)
         responses = stub.StreamProcess(generate_messages())
         async for response in responses:
             await FuncAgentClientProcess(response)
 
-def Register(clientMode: bool):
+def Register(svcAddr: str, namespace: str, packageName: str, clientMode: bool):
     global funcMgr
-    funcMgr = FuncMgr()  
+    funcMgr = FuncMgr(svcAddr, namespace, packageName)  
     podId = str(uuid.uuid4())
-    regReq = func_pb2.FuncPodRegisterReq(funcPodId=podId,namespace="ns1",packageName="package1", clientMode= clientMode)
+    regReq = func_pb2.FuncPodRegisterReq(funcPodId=podId,namespace=namespace,packageName=packageName, clientMode= clientMode)
     req = func_pb2.FuncAgentMsg(msgId=1, FuncPodRegisterReq=regReq)
     funcAgentQueueTx.put_nowait(func_pb2.FuncAgentMsg(msgId=1, FuncPodRegisterReq=regReq))
 
 
-async def main():
-    agentClientTask = asyncio.create_task(StartClientProcess())
+async def StartSvc():
+    agentClientTask = asyncio.create_task(StartClientProcess(funcMgr.svcAddr))
     await funcMgr.Process()
 
 
 if __name__ == '__main__':
-    Register(False)
-    asyncio.run(main())
+    namespace = GetNamespaceFromEnvVar()
+    packageId = GetPackageIdFromEnvVar()
+    svcAddr = GetNodeAgentAddrFromEnvVar()
+    Register(svcAddr, namespace, packageId, False)
+    asyncio.run(StartSvc())
 
-def Call(namespace: str, packageName: str, funcName: str, parameters: str) -> common.CallResult:
+def Call(svcAddr: str, namespace: str, packageName: str, funcName: str, parameters: str) -> common.CallResult:
     id = str(uuid.uuid4())
     req = func_pb2.FuncAgentCallReq (
         id = id,
@@ -184,7 +212,7 @@ def Call(namespace: str, packageName: str, funcName: str, parameters: str) -> co
         priority = 1
     )
     
-    channel = grpc.insecure_channel("unix:///var/lib/quark/nodeagent/node1/sock")
+    channel = grpc.insecure_channel(svcAddr)
     stub = FuncAgentServiceStub(channel)
     
     res = stub.FuncCall(req)

@@ -55,7 +55,11 @@ pub const AnnotationNodeMgrNodeRevision       : &str = "noderevision.core.qserve
 pub const AnnotationNodeMgrHibernatePod       : &str = "hibernatepod.core.qserverless.quarksoft.io";
 pub const AnnotationNodeMgrSessionServicePod  : &str = "sessionservicepod.core.qserverless.quarksoft.io";
 pub const AnnotationFuncPodPackageName        : &str = "pacagename.qserverless.quarksoft.io";
-pub const EnvVarNodeMgrPodId                  : &str = "podid.core.qserverless.quarksoft.io";
+pub const EnvVarNodeMgrPodId                  : &str = "podid_qserverless";
+pub const EnvVarNodeMgrNamespace              : &str = "namespace_qserverless";
+pub const EnvVarNodeMgrPackageId              : &str = "packageid_qserverless";
+pub const EnvVarNodeAgentAddr                 : &str = "nodeagentaddr_qserverless";
+pub const DefaultNodeAgentAddr                : &str = "unix:///var/lib/quark/nodeagent/sock";
 
 pub const BLOB_LOCAL_HOST                     : &str = "local";
 
@@ -508,7 +512,7 @@ impl DataObject {
         return Ok(obj)
     }
 
-    pub fn NewFuncPackage(namespace: &str, name: &str) -> Result<Self> {
+    pub fn NewFuncPackage1(namespace: &str, name: &str) -> Result<Self> {
         let podSpecStr = r#"
         {
             "hostNetwork": true,
@@ -516,6 +520,33 @@ impl DataObject {
                 {
                     "name":"func_pod",
                     "image":"localhost:5000/func_pod:latest"
+                }
+            ]
+        }"#;
+        let podSpec: k8s::PodSpec = serde_json::from_str(podSpecStr)?;
+        let package = FuncPackage {
+            metadata: ObjectMeta { 
+                namespace: Some(namespace.to_string()),
+                name: Some(name.to_string()),
+                ..Default::default()
+            },
+            spec: FuncPackageSpec {
+                template: podSpec
+            },
+        };
+        let packageStr = serde_json::to_string(&package)?;
+        let obj = DataObject::NewFromK8sObj("package", &package.metadata, packageStr);
+        return Ok(obj);
+    }
+
+    pub fn NewFuncPyPackage(namespace: &str, name: &str) -> Result<Self> {
+        let podSpecStr = r#"
+        {
+            "hostNetwork": true,
+            "containers":[
+                {
+                    "name":"py_pod",
+                    "image":"localhost:5000/py_pod:latest"
                 }
             ]
         }"#;
