@@ -55,10 +55,10 @@ pub const AnnotationNodeMgrNodeRevision       : &str = "noderevision.core.qserve
 pub const AnnotationNodeMgrHibernatePod       : &str = "hibernatepod.core.qserverless.quarksoft.io";
 pub const AnnotationNodeMgrSessionServicePod  : &str = "sessionservicepod.core.qserverless.quarksoft.io";
 pub const AnnotationFuncPodPackageName        : &str = "pacagename.qserverless.quarksoft.io";
-pub const EnvVarNodeMgrPodId                  : &str = "podid_qserverless";
-pub const EnvVarNodeMgrNamespace              : &str = "namespace_qserverless";
-pub const EnvVarNodeMgrPackageId              : &str = "packageid_qserverless";
-pub const EnvVarNodeAgentAddr                 : &str = "nodeagentaddr_qserverless";
+pub const EnvVarNodeMgrPodId                  : &str = "qserverless_podid";
+pub const EnvVarNodeMgrNamespace              : &str = "qserverless_namespace";
+pub const EnvVarNodeMgrPackageId              : &str = "qserverless_packageid";
+pub const EnvVarNodeAgentAddr                 : &str = "qserverless_nodeagentaddr";
 pub const DefaultNodeAgentAddr                : &str = "unix:///var/lib/quark/nodeagent/sock";
 
 pub const BLOB_LOCAL_HOST                     : &str = "local";

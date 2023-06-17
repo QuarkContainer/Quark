@@ -286,16 +286,18 @@ pub struct FuncPodRegisterResp {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncAgentCallReq {
     #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String,
+    pub job_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub namespace: ::prost::alloc::string::String,
+    pub id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub package_name: ::prost::alloc::string::String,
+    pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
-    pub func_name: ::prost::alloc::string::String,
+    pub package_name: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
+    pub func_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
     pub parameters: ::prost::alloc::string::String,
-    #[prost(uint64, tag = "6")]
+    #[prost(uint64, tag = "7")]
     pub priority: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -407,27 +409,29 @@ pub struct FuncPodDisconnResp {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncSvcCallReq {
     #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String,
+    pub job_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub namespace: ::prost::alloc::string::String,
+    pub id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub package_name: ::prost::alloc::string::String,
+    pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
-    pub func_name: ::prost::alloc::string::String,
+    pub package_name: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
+    pub func_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
     pub parameters: ::prost::alloc::string::String,
-    #[prost(uint64, tag = "6")]
+    #[prost(uint64, tag = "7")]
     pub priority: u64,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag = "8")]
     pub createtime: ::core::option::Option<Timestamp>,
-    #[prost(string, tag = "8")]
-    pub caller_node_id: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
+    pub caller_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "10")]
     pub caller_pod_id: ::prost::alloc::string::String,
     /// when funcCall is process by a funcPod, this is the NodeId
-    #[prost(string, tag = "10")]
-    pub callee_node_id: ::prost::alloc::string::String,
     #[prost(string, tag = "11")]
+    pub callee_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "12")]
     pub callee_pod_id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]

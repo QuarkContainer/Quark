@@ -90,6 +90,7 @@ impl FuncClient {
     ) -> SResult<String, String> {
         let id = uuid::Uuid::new_v4().to_string();
         let req = func::FuncAgentCallReq {
+            job_id: id.clone(),
             id: id,
             namespace: namespace.to_string(),
             package_name: packageName.to_string(),

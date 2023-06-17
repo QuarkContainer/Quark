@@ -92,6 +92,7 @@ impl FuncCallState {
 
 #[derive(Debug)]
 pub struct FuncCallInner {
+    pub jobId: String,
     pub id: String,
     pub package: Package,
     pub funcName: String,
