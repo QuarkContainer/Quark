@@ -75,6 +75,7 @@ impl FuncCallMgr {
     ) -> QSResult {
         let id = uuid::Uuid::new_v4().to_string();
         let req = func::FuncAgentCallReq {
+            job_id: id.clone(),
             id: id.clone(),
             namespace: namespace,
             package_name: packageName,

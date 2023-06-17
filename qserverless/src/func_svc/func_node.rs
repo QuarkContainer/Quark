@@ -154,6 +154,7 @@ impl FuncNode {
             };
 
             let funcCallInner = FuncCallInner {
+                jobId: funccall.job_id.clone(),
                 id: funcCallId.clone(),
                 package: package.clone(),
                 funcName: funccall.func_name.clone(),
@@ -189,6 +190,7 @@ impl FuncNode {
             };
 
             let funcCallInner = FuncCallInner {
+                jobId: funccall.job_id.clone(),
                 id: funcCallId.clone(),
                 package: package.clone(),
                 funcName: funccall.func_name.clone(),
@@ -294,6 +296,7 @@ impl FuncNode {
             }
         };
         let inner = FuncCallInner {
+            jobId: req.job_id.clone(),
             id: req.id.clone(),
             package: package,
             funcName: req.func_name.clone(),
@@ -477,6 +480,7 @@ impl FuncNode {
     // get funccall req from another func node
     pub fn OnFuncCall(&self, call: FuncCall, tx: &mpsc::Sender<SResult<func::FuncSvcMsg, Status>>) -> Result<()> {
         let req = func::FuncSvcCallReq {
+            job_id: call.jobId.clone(),
             id: call.id.clone(),
             namespace: call.package.Namespace(),
             package_name: call.package.Name(),

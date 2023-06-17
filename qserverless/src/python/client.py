@@ -31,11 +31,11 @@ from func_pb2 import *
 funcAgentQueueTx = asyncio.Queue(100)
 funcMgr = None
 
-EnvVarNodeMgrPodId      = "podid_qserverless";
-EnvVarNodeMgrNamespace  = "namespace_qserverless";
-EnvVarNodeMgrPackageId  = "packageid_qserverless";
-EnvVarNodeAgentAddr     = "nodeagentaddr_qserverless";
-DefaultNodeAgentAddr    = "unix:///var/lib/quark/nodeagent/node1/sock";
+EnvVarNodeMgrPodId      = "qserverless_podid";
+EnvVarNodeMgrNamespace  = "qserverless_namespace";
+EnvVarNodeMgrPackageId  = "qserverless_packageid";
+EnvVarNodeAgentAddr     = "qserverless_nodeagentaddr";
+DefaultNodeAgentAddr    = "unix:///var/lib/quark/nodeagent/sock";
 
 def GetPodIdFromEnvVar() :
     podId = os.getenv(EnvVarNodeMgrPodId)
@@ -86,6 +86,7 @@ class FuncMgr:
         if packageName == "" :
             packageName = self.packageName
         req = func_pb2.FuncAgentCallReq (
+            jobId = id,
             id = id,
             namespace = self.namespace,
             packageName = packageName,
@@ -204,6 +205,7 @@ if __name__ == '__main__':
 def Call(svcAddr: str, namespace: str, packageName: str, funcName: str, parameters: str) -> common.CallResult:
     id = str(uuid.uuid4())
     req = func_pb2.FuncAgentCallReq (
+        jobId = id,
         id = id,
         namespace = namespace,
         packageName = packageName,

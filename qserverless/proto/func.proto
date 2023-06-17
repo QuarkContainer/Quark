@@ -167,12 +167,13 @@ message FuncPodRegisterResp {
 }
 
 message FuncAgentCallReq {
-  string id = 1;
-  string namespace = 2;
-  string packageName = 3;
-  string funcName = 4;
-  string parameters = 5;
-  uint64 priority = 6;
+  string jobId = 1;
+  string id = 2;
+  string namespace = 3;
+  string packageName = 4;
+  string funcName = 5;
+  string parameters = 6;
+  uint64 priority = 7;
 }
 
 message FuncAgentCallResp {
@@ -230,19 +231,20 @@ message FuncPodDisconnResp {
 }
 
 message FuncSvcCallReq {
-  string id = 1;
-  string namespace = 2;
-  string packageName = 3;
-  string funcName = 4;
-  string parameters = 5;
-  uint64 priority = 6;
-  Timestamp createtime = 7;
+  string jobId = 1;
+  string id = 2;
+  string namespace = 3;
+  string packageName = 4;
+  string funcName = 5;
+  string parameters = 6;
+  uint64 priority = 7;
+  Timestamp createtime = 8;
 
-  string callerNodeId = 8;
-  string callerPodId = 9; 
+  string callerNodeId = 9;
+  string callerPodId = 10; 
 
-  string calleeNodeId = 10; // when funcCall is process by a funcPod, this is the NodeId
-  string calleePodId = 11;
+  string calleeNodeId = 11; // when funcCall is process by a funcPod, this is the NodeId
+  string calleePodId = 12;
 
 }
 

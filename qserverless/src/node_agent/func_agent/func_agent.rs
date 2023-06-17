@@ -32,6 +32,7 @@ use super::funcpod_mgr::FuncPodMgr;
 
 #[derive(Debug)]
 pub struct FuncCallInner {
+    pub jobId: String,
     pub id: String,
     pub namespace: String,
     pub packageName: String,
@@ -49,6 +50,7 @@ pub struct FuncCallInner {
 impl FuncCallInner {
     pub fn ToGrpcType(&self) -> func::FuncSvcCallReq {
         return func::FuncSvcCallReq {
+            job_id: self.jobId.clone(),
             id: self.id.clone(),
             namespace: self.namespace.clone(),
             package_name: self.packageName.clone(),
@@ -192,6 +194,7 @@ impl FuncAgent {
     pub fn OnFuncAgentCallReq(&self, callerFuncPodId: &str, req: func::FuncAgentCallReq) -> Result<()> {
         let createTime = SystemTime::now();
         let inner = FuncCallInner {
+            jobId: req.job_id.clone(),
             id: req.id.clone(),
             callerNodeId: self.nodeId.clone(),
             callerFuncPodId: callerFuncPodId.to_string(),
@@ -210,6 +213,7 @@ impl FuncAgent {
 
         let protoTime = SystemTimeProto::FromSystemTime(createTime);
         let req = func::FuncSvcCallReq {
+            job_id: req.job_id.clone(),
             id: req.id.clone(),
             namespace: req.namespace.to_string(),
             package_name: req.package_name.to_string(),
@@ -305,6 +309,7 @@ impl FuncAgent {
         let createTimeProto = SystemTimeProto::FromTimestamp(req.createtime.as_ref().unwrap());
 
         let inner = FuncCallInner {
+            jobId: req.job_id.clone(),
             id: req.id.clone(),
             callerNodeId: req.caller_node_id.clone(),
             callerFuncPodId: req.caller_pod_id.clone(),
@@ -322,6 +327,7 @@ impl FuncAgent {
         self.calleeCalls.lock().unwrap().insert(req.id.clone(), funcCall);
 
         let req = func::FuncAgentCallReq {
+            job_id: req.job_id.clone(),
             id: req.id.clone(),
             namespace: req.namespace.clone(),
             package_name: req.package_name.clone(),
