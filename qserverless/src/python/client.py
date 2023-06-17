@@ -37,6 +37,11 @@ EnvVarNodeMgrPackageId  = "qserverless_packageid";
 EnvVarNodeAgentAddr     = "qserverless_nodeagentaddr";
 DefaultNodeAgentAddr    = "unix:///var/lib/quark/nodeagent/sock";
 
+async def generate_messages():
+    while True:
+        item = await funcAgentQueueTx.get()
+        yield item
+
 def GetPodIdFromEnvVar() :
     podId = os.getenv(EnvVarNodeMgrPodId)
     if podId is None:
@@ -62,7 +67,53 @@ def GetNodeAgentAddrFromEnvVar() :
     if pid is None :
         return DefaultNodeAgentAddr
     return pid
+
+
+class FuncCallContext:
+    def __init__(self, jobId: str, id: str):
+        self.jobId = jobId
+        self.id = id
+        
+    def NewTaskContext(self) :
+        id = str(uuid.uuid4())
+        return FuncCallContext(self.jobId, id)
     
+    async def RemoteCall(
+        self,
+        packageName: str, 
+        funcName: str, 
+        parameters: str, 
+        priority: int
+        ) -> common.CallResult: 
+        taskContext = self.NewTaskContext();
+        
+        return await funcMgr.RemoteCall(taskContext, packageName, funcName, parameters, priority)
+    
+    async def BlobCreate(self, name: str) -> common.CallResult: 
+        return await funcMgr.blob_mgr.BlobCreate(name)
+    
+    async def BlobWrite(self, id: np.uint64, buf: bytes) -> common.CallResult:
+        return await funcMgr.blob_mgr.BlobWrite(id, buf)
+    
+    async def BlobOpen(self, addr: common.BlobAddr) -> common.CallResult:
+        return await funcMgr.blob_mgr.BlobOpen(addr)
+    
+    async def BlobDelete(self, svcAddr: str, name: str) -> common.CallResult:
+        return await funcMgr.blob_mgr.BlobDelete(svcAddr, name)
+    
+    async def BlobRead(self, id: np.uint64, len: np.uint64) -> common.CallResult:
+        return await funcMgr.blob_mgr.BlobRead(id, len)
+    
+    async def BlobSeek(self, id: np.uint64, seekType: int, pos: np.int64) -> common.CallResult:
+        return await funcMgr.blob_mgr.BlobSeek(id, seekType, pos)
+    
+    async def BlobClose(self, id: np.uint64) -> common.CallResult:
+        return await funcMgr.blob_mgr.BlobClose(id)
+
+def NewJobContext() -> FuncCallContext :
+    id = str(uuid.uuid4())
+    return FuncCallContext(id, id)
+
 class FuncMgr:
     def __init__(self, svcAddr: str, namespace: str, packageName: str):
         self.funcPodId = GetPodIdFromEnvVar()
@@ -77,22 +128,25 @@ class FuncMgr:
     
     async def RemoteCall(
         self,
+        context: FuncCallContext,
         packageName: str, 
         funcName: str, 
         parameters: str, 
         priority: int
         ) -> common.CallResult: 
-        id = str(uuid.uuid4())
+        
         if packageName == "" :
             packageName = self.packageName
+        
+        id = context.id
         req = func_pb2.FuncAgentCallReq (
-            jobId = id,
-            id = id,
+            jobId = context.jobId,
+            id = context.id,
             namespace = self.namespace,
             packageName = packageName,
             funcName = funcName,
             parameters = parameters,
-            priority = 1
+            priority = priority
         )
         callQueue = janus.Queue() #asyncio.Queue(1)
         self.callerCalls[id] = callQueue
@@ -132,11 +186,11 @@ class FuncMgr:
     def LocalCall(self, req: func_pb2.FuncAgentCallReq) :
         self.reqQueue.put_nowait(req)
         
-    async def FuncCall(self, name: str, parameters: str) -> common.CallResult:
+    async def FuncCall(self, context: FuncCallContext, name: str, parameters: str) -> common.CallResult:
         function = getattr(func, name)
         if function is None:
             return common.CallResult("", "There is no func named {}".format(name))
-        result = await function(self, parameters)
+        result = await function(context, parameters)
         return common.CallResult(result, "")
     
     def Close(self) : 
@@ -147,39 +201,31 @@ class FuncMgr:
             req = await self.reqQueue.get();
             if req is None:
                 break
-            
-            res = await self.FuncCall(req.funcName, req.parameters)
+            context = FuncCallContext(req.jobId, req.id)
+            res = await self.FuncCall(context, req.funcName, req.parameters)
             resp = func_pb2.FuncAgentCallResp(id=req.id, resp=res.res, error=res.error)
             self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(msgId=2, FuncAgentCallResp=resp))
-
-funcMgr = None 
-
-async def generate_messages():
-    while True:
-        item = await funcAgentQueueTx.get()
-        yield item
-
-async def FuncAgentClientProcess(msg: func_pb2.FuncAgentMsg):
-    msgType = msg.WhichOneof('EventBody')
-    match msgType:
-        case 'FuncAgentCallReq' :
-            req = msg.FuncAgentCallReq
-            funcMgr.LocalCall(req)
-        case 'FuncAgentCallResp':
-            resp = msg.FuncAgentCallResp
-            res = common.CallResult(res=resp.resp, error=resp.error)
-            funcMgr.CallRespone(resp.id, res)
-        case _ :
-            funcMgr.blob_mgr.OnFuncAgentMsg(msg)
             
-
-async def StartClientProcess(svcAddr: str):
-    print("start to connect addr ", svcAddr)
-    async with grpc.aio.insecure_channel(svcAddr) as channel:
-        stub = FuncAgentServiceStub(channel)
-        responses = stub.StreamProcess(generate_messages())
-        async for response in responses:
-            await FuncAgentClientProcess(response)
+    async def FuncAgentClientProcess(self, msg: func_pb2.FuncAgentMsg):
+            msgType = msg.WhichOneof('EventBody')
+            match msgType:
+                case 'FuncAgentCallReq' :
+                    req = msg.FuncAgentCallReq
+                    self.LocalCall(req)
+                case 'FuncAgentCallResp':
+                    resp = msg.FuncAgentCallResp
+                    res = common.CallResult(res=resp.resp, error=resp.error)
+                    self.CallRespone(resp.id, res)
+                case _ :
+                    self.blob_mgr.OnFuncAgentMsg(msg)
+                    
+    async def StartClientProcess(self):
+        print("start to connect addr ", self.svcAddr)
+        async with grpc.aio.insecure_channel(self.svcAddr) as channel:
+            stub = FuncAgentServiceStub(channel)
+            responses = stub.StreamProcess(generate_messages())
+            async for response in responses:
+                await self.FuncAgentClientProcess(response)
 
 def Register(svcAddr: str, namespace: str, packageName: str, clientMode: bool):
     global funcMgr
@@ -191,7 +237,7 @@ def Register(svcAddr: str, namespace: str, packageName: str, clientMode: bool):
 
 
 async def StartSvc():
-    agentClientTask = asyncio.create_task(StartClientProcess(funcMgr.svcAddr))
+    agentClientTask = asyncio.create_task(funcMgr.StartClientProcess())
     await funcMgr.Process()
 
 
@@ -199,6 +245,7 @@ if __name__ == '__main__':
     namespace = GetNamespaceFromEnvVar()
     packageId = GetPackageIdFromEnvVar()
     svcAddr = GetNodeAgentAddrFromEnvVar()
+    print("namespace = ", namespace, " packageId =", packageId, " svcAddr = ", svcAddr)
     Register(svcAddr, namespace, packageId, False)
     asyncio.run(StartSvc())
 

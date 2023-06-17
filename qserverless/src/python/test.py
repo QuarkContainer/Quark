@@ -23,7 +23,8 @@ async def test():
     client.Register("unix:///var/lib/quark/nodeagent/node1/sock", "ns1", "pypackage1", True)
     background_task_coroutine = asyncio.create_task(client.StartSvc())
     print("test 2");
-    res = await func.add(client.funcMgr, "asdf")
+    jobContext = client.NewJobContext()
+    res = await func.add(jobContext, "asdf")
     print("test 3 ", res);
     #await background_task_coroutine
     
