@@ -125,7 +125,7 @@ class BlobMgr:
             case 'BlobCreateResp':
                 resp = msgResp.BlobCreateResp
                 if resp.error != "" :
-                    return common.CallResult(None, resp.error)
+                    return (None, resp.error)
                 
                 blob = UnsealBlob(resp.id, BlobAddr(resp.svcAddr, name))
                 return (blob, None)
@@ -160,9 +160,9 @@ class BlobMgr:
     async def BlobOpen(self, addr: BlobAddr) : #-> (Blob, common.QErr):
         msgId = self.MsgId()
         req = func_pb2.BlobOpenReq (
-            svcAddr = addr.blobSvcAddr,
+            svcAddr = addr['blobSvcAddr'],
             namespace = "",
-            name = addr.name
+            name = addr['name']
         )
         msg = func_pb2.FuncAgentMsg (
             msgId = msgId,
