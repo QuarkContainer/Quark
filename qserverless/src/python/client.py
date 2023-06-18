@@ -96,12 +96,10 @@ class FuncCallContext:
             del kwargs['priority']
         
         del kwargs['funcName']
-        print("RemoteCall kwargs is ", kwargs)
         parameters = json.dumps(kwargs)
          
         taskContext = self.NewTaskContext();
         
-        print("RemoteCall parameter is ", parameters)
         res = await funcMgr.RemoteCall(taskContext, packageName, funcName, priority, parameters)
         if res.error == "":
             return (res.res, None)
@@ -262,10 +260,14 @@ class FuncMgr:
             return common.CallResult("", "There is no func named {}".format(name))
         
         kwargs = json.loads(parameters)
-        print("parameter is ", parameters)
-        print("kwargs ")
-        result = await function(context, **kwargs)
-        return common.CallResult(result, "")
+        (result, err) = await function(context, **kwargs)
+        if result is None:
+            result = ""
+        if err is not None:
+            err = json.dumps(err)
+        else:
+            err = ""
+        return common.CallResult(result, err)
     
     def Close(self) : 
         self.reqQueue.put_nowait(None)
