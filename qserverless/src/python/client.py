@@ -84,31 +84,50 @@ class FuncCallContext:
         funcName: str, 
         parameters: str, 
         priority: int
-        ) -> common.CallResult: 
+        ) : # -> (str, common.QErr): 
         taskContext = self.NewTaskContext();
         
-        return await funcMgr.RemoteCall(taskContext, packageName, funcName, parameters, priority)
+        res = await funcMgr.RemoteCall(taskContext, packageName, funcName, parameters, priority)
+        if res.error == "":
+            return (res.res, None)
+        return (None, common.QErr(res.error))
     
-    async def BlobCreate(self, name: str) -> common.CallResult: 
-        return await funcMgr.blob_mgr.BlobCreate(name)
+    def NewBlobAddr(self) -> common.BlobAddr : 
+        id = self.jobId + "/" + str(uuid.uuid4())
+        return common.BlobAddr(None, id)
     
-    async def BlobWrite(self, id: np.uint64, buf: bytes) -> common.CallResult:
-        return await funcMgr.blob_mgr.BlobWrite(id, buf)
+    def NewBlobVec(self, cols: int) -> common.BlobAddrVec:
+        vec = common.BlobAddrVec(cols)
+        for col in range(0, cols):
+            addr = self.NewBlobAddr()
+            vec.vec[col] = addr
     
-    async def BlobOpen(self, addr: common.BlobAddr) -> common.CallResult:
-        return await funcMgr.blob_mgr.BlobOpen(addr)
+    def NewBlobAddrMatrix(self, rows: int, cols: int) -> common.BlobAddrMatrix:
+        mat = common.BlobAddrMatrix(rows, cols)
+        for row in range(0..rows):
+            mat.mat[row] = self.NewBlobVec(cols)
+        return mat
     
-    async def BlobDelete(self, svcAddr: str, name: str) -> common.CallResult:
-        return await funcMgr.blob_mgr.BlobDelete(svcAddr, name)
+    async def BlobCreate(self, addr: common.BlobAddr): #-> (UnsealBlob, common.QErr):
+        return await funcMgr.BlobCreate(addr.name)
     
-    async def BlobRead(self, id: np.uint64, len: np.uint64) -> common.CallResult:
-        return await funcMgr.blob_mgr.BlobRead(id, len)
+    async def BlobWrite(self, id: np.uint64, buf: bytes) -> common.QErr:
+        return await funcMgr.BlobWrite(id, buf)
     
-    async def BlobSeek(self, id: np.uint64, seekType: int, pos: np.int64) -> common.CallResult:
-        return await funcMgr.blob_mgr.BlobSeek(id, seekType, pos)
+    async def BlobOpen(self, addr: common.BlobAddr) : #-> (Blob, common.QErr):
+        return await funcMgr.BlobOpen(addr)
     
-    async def BlobClose(self, id: np.uint64) -> common.CallResult:
-        return await funcMgr.blob_mgr.BlobClose(id)
+    async def BlobDelete(self, svcAddr: str, name: str) -> common.QErr:
+        return await funcMgr.BlobDelete(svcAddr, name)
+    
+    async def BlobRead(self, id: np.uint64, len: np.uint64) : #-> (bytes, common.QErr):
+        return await funcMgr.BlobRead(id, len)
+    
+    async def BlobSeek(self, id: np.uint64, seekType: int, pos: np.int64) : #-> (int, common.QErr):
+        return await funcMgr.BlobSeek(id, seekType, pos)
+    
+    async def BlobClose(self, id: np.uint64) -> common.QErr:
+        return await funcMgr.BlobClose(id)
 
 def NewJobContext() -> FuncCallContext :
     id = str(uuid.uuid4())
@@ -154,26 +173,26 @@ class FuncMgr:
         res = await callQueue.async_q.get()
         return res
     
-    async def BlobCreate(self, name: str) -> common.CallResult: 
-        return await self.blob_mgr.BlobCreate(name)
+    async def BlobCreate(self, addr: common.BlobAddr): #-> (UnsealBlob, common.QErr):
+        return await funcMgr.blob_mgr.BlobCreate(addr.name)
     
-    async def BlobWrite(self, id: np.uint64, buf: bytes) -> common.CallResult:
-        return await self.blob_mgr.BlobWrite(id, buf)
+    async def BlobWrite(self, id: np.uint64, buf: bytes) -> common.QErr:
+        return await funcMgr.blob_mgr.BlobWrite(id, buf)
     
-    async def BlobOpen(self, addr: common.BlobAddr) -> common.CallResult:
-        return await self.blob_mgr.BlobOpen(addr)
+    async def BlobOpen(self, addr: common.BlobAddr) : #-> (Blob, common.QErr):
+        return await funcMgr.blob_mgr.BlobOpen(addr)
     
-    async def BlobDelete(self, svcAddr: str, name: str) -> common.CallResult:
-        return await self.blob_mgr.BlobDelete(svcAddr, name)
+    async def BlobDelete(self, svcAddr: str, name: str) -> common.QErr:
+        return await funcMgr.blob_mgr.BlobDelete(svcAddr, name)
     
-    async def BlobRead(self, id: np.uint64, len: np.uint64) -> common.CallResult:
-        return await self.blob_mgr.BlobRead(id, len)
+    async def BlobRead(self, id: np.uint64, len: np.uint64) : #-> (bytes, common.QErr):
+        return await funcMgr.blob_mgr.BlobRead(id, len)
     
-    async def BlobSeek(self, id: np.uint64, seekType: int, pos: np.int64) -> common.CallResult:
-        return await self.blob_mgr.BlobSeek(id, seekType, pos)
+    async def BlobSeek(self, id: np.uint64, seekType: int, pos: np.int64) : #-> (int, common.QErr):
+        return await funcMgr.blob_mgr.BlobSeek(id, seekType, pos)
     
-    async def BlobClose(self, id: np.uint64) -> common.CallResult:
-        return await self.blob_mgr.BlobClose(id)
+    async def BlobClose(self, id: np.uint64) -> common.QErr:
+        return await funcMgr.blob_mgr.BlobClose(id)
     
     def CallRespone(self, id: str, res: common.CallResult) :
         callQueue = self.callerCalls.get(id)
