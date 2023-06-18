@@ -4,6 +4,33 @@ import json
 import common
 from common import BlobAddr 
 
+async def wordcount(context, parameters) -> str:
+    filenames = json.loads(parameters)
+    res = ""
+    for filename in filenames:
+        (res, err) = await context.RemoteCall(
+            packageName= "",
+            funcName= "map",
+            parameters= filename,
+            priority= 1
+        )
+    return res
+
+async def map(context, parameters) -> str:
+    filename = parameters
+    word_counts = dict()
+    with open(filename,'r') as file:
+        contents = file.read()
+        words = contents.split()
+        for word in words:
+            if word in word_counts:
+                word_counts[word] += 1
+            else:
+                word_counts[word] = 1 
+    res = json.dumps(word_counts)
+    print(res)
+    return res
+
 async def add(context, parameters):
     (res, err) = await context.RemoteCall(
         packageName= "",
