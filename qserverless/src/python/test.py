@@ -26,7 +26,8 @@ async def test():
     jobContext = client.NewJobContext()
     #res = await func.add(jobContext, "asdf")
     filenames = ["./func.py", "./test.py"]
-    res = await func.wordcount(jobContext, filenames)
+    (res, err) = await func.wordcount(jobContext, filenames)
+    print("test 3 error is ", err);
     print("test 3 ", res);
     #await background_task_coroutine
     

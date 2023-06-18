@@ -4,7 +4,7 @@ import json
 import common
 from common import BlobAddr 
 
-async def wordcount(context, filenames: list[str]) -> str:
+async def wordcount(context, filenames: list[str]): # -> (str, common.Err):
     pcount = len(filenames)
     blobMatrix = list();
 
@@ -31,12 +31,14 @@ async def wordcount(context, filenames: list[str]) -> str:
         ) for i in range(0, 2)]
     )
     for res, err in results:
+        if err is not None :
+            return (None, err)
         map = json.loads(res)
         wordCounts.update(map)
     
-    return json.dumps(wordCounts)
+    return (json.dumps(wordCounts), None)
 
-async def map(context, filename: str, pcount: int) -> str:   
+async def map(context, filename: str, pcount: int): # -> (str, common.Err):   
     blobs = context.NewBlobAddrVec(pcount)
     word_counts = []
     for i in range(0, pcount):
@@ -54,14 +56,18 @@ async def map(context, filename: str, pcount: int) -> str:
     for i in range(0, pcount):
         str = json.dumps(word_counts[i])
         (addr, err) = await context.BlobWriteAll(blobs[i], bytes(str, 'utf-8'))
+        if err is not None :
+            return (None, err)
         blobs[i] = addr
     
-    return json.dumps(blobs)
+    return (json.dumps(blobs), None)
 
-async def reduce(context, blobs: common.BlobAddrVec) -> str:
+async def reduce(context, blobs: common.BlobAddrVec): # -> (str, common.Err):
     wordcounts = dict()
     for b in blobs :
         (data, err) = await context.BlobReadAll(b)
+        if err is not None :
+            return (None, err)
         str = data.decode('utf-8')
         map = json.loads(str)
         for word, count in map.items():
@@ -69,7 +75,34 @@ async def reduce(context, blobs: common.BlobAddrVec) -> str:
                 wordcounts[word] += count
             else:
                 wordcounts[word] = count 
-    return json.dumps(wordcounts)
+    return (json.dumps(wordcounts), None)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 async def add(context, parameters):
     (res, err) = await context.RemoteCall(
