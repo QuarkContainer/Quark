@@ -56,13 +56,13 @@ class Blob:
         self.lastAccessTime = lastAccessTime
         self.closed = False
     
-    async def Read(self, len: np.uint64) -> common.CallResult:
+    async def Read(self, len: np.uint64) : #-> (bytes, common.QErr):
         return await blobMgr.BlobRead(self.id, len)
     
-    async def Seek(self, seekType: int, pos: np.int64) -> common.CallResult:
+    async def Seek(self, seekType: int, pos: np.int64) : #-> (int, common.QErr):
         return await blobMgr.BlobSeek(self.id, seekType, pos)
     
-    async def Close(self):
+    async def Close(self)-> common.QErr:
         if self.closed == False:
             self.closed = True
             await blobMgr.BlobClose(self.id)
@@ -76,10 +76,10 @@ class UnsealBlob:
         self.addr = addr
         self.closed = False 
         
-    async def Write(self, buf: bytes) -> common.CallResult:
+    async def Write(self, buf: bytes) -> common.QErr:
         return await blobMgr.BlobWrite(self.id, buf)
 
-    async def Close(self):
+    async def Close(self) -> common.QErr:
         if self.closed == False:
             self.closed = True
             await blobMgr.BlobClose(self.id)
@@ -105,7 +105,7 @@ class BlobMgr:
         self.lastMsgId += 1
         return self.lastMsgId
     
-    async def BlobCreate(self, name: str) -> common.CallResult:
+    async def BlobCreate(self, name: str) : #-> (UnsealBlob, common.QErr):
         msgId = self.MsgId()
         req = func_pb2.BlobCreateReq(
             namespace = "",
@@ -128,11 +128,11 @@ class BlobMgr:
                     return common.CallResult(None, resp.error)
                 
                 blob = UnsealBlob(resp.id, BlobAddr(resp.svcAddr, name))
-                return common.CallResult(blob, "")
+                return (blob, None)
             case _ :
-                return common.CallResult(None, "BlobCreate invalid resp " + msgResp)
+                return (None, common.QErr("BlobCreate invalid resp " + msgResp))
     
-    async def BlobWrite(self, id: np.uint64, buf: bytes) -> common.CallResult:
+    async def BlobWrite(self, id: np.uint64, buf: bytes) -> common.QErr:
         msgId = self.MsgId()
         req = func_pb2.BlobWriteReq(
             id = id,
@@ -151,13 +151,13 @@ class BlobMgr:
             case 'BlobWriteResp':
                 resp = msgResp.BlobWriteResp
                 if resp.error != "" :
-                    return common.CallResult(None, resp.error)
+                    return common.QErr(resp.error)
                 
-                return common.CallResult("", "")
+                return None
             case _ :
-                return common.CallResult(None, "BlobCreate invalid resp " + resp)
+                return common.QErr("BlobCreate invalid resp " + resp)
             
-    async def BlobOpen(self, addr: BlobAddr) -> common.CallResult:
+    async def BlobOpen(self, addr: BlobAddr) : #-> (Blob, common.QErr):
         msgId = self.MsgId()
         req = func_pb2.BlobOpenReq (
             svcAddr = addr.blobSvcAddr,
@@ -178,7 +178,7 @@ class BlobMgr:
             case 'BlobOpenResp':
                 resp = msgResp.BlobOpenResp
                 if resp.error != "" :
-                    return common.CallResult(None, resp.error)
+                    return (None, common.QErr(resp.error)) 
                 
                 blob = Blob(
                     resp.id,
@@ -188,11 +188,11 @@ class BlobMgr:
                     TimestampToDateTime(resp.createTime),
                     TimestampToDateTime(resp.lastAccessTime)
                     )
-                return common.CallResult(blob, "")
+                return (blob, None)
             case _ :
-                return common.CallResult(None, "BlobCreate invalid resp " + msgResp)
+                return (None,  common.QErr("BlobCreate invalid resp " + msgResp))
             
-    async def BlobDelete(self, svcAddr: str, name: str) -> common.CallResult:
+    async def BlobDelete(self, svcAddr: str, name: str) -> common.QErr:
         msgId = self.MsgId()
         req = func_pb2.BlobDeleteReq (
             svcAddr = svcAddr,
@@ -212,13 +212,13 @@ class BlobMgr:
             case 'BlobDeleteResp':
                 resp = msgResp.BlobDeleteResp
                 if resp.error != "" :
-                    return common.CallResult(None, resp.error)
+                    return common.QErr(resp.error)
                 
-                return common.CallResult(None, "")
+                return None
             case _ :
-                return common.CallResult(None, "BlobDelete invalid resp " + msgResp)
+                return common.QErr("BlobDelete invalid resp " + msgResp)
             
-    async def BlobRead(self, id: np.uint64, len: np.uint64) -> common.CallResult:
+    async def BlobRead(self, id: np.uint64, len: np.uint64) : #-> (bytes, common.QErr):
         msgId = self.MsgId()
         req = func_pb2.BlobReadReq (
             id = id,
@@ -238,13 +238,13 @@ class BlobMgr:
             case 'BlobReadResp':
                 resp = msgResp.BlobReadResp
                 if resp.error != "" :
-                    return common.CallResult(None, resp.error)
+                    return (None, common.QErrresp.error)
                 
-                return common.CallResult(resp.data, "")
+                return (resp.data, None)
             case _ :
-                return common.CallResult(None, "BlobRead invalid resp " + msgResp)
+                return (None, common.QErr("BlobRead invalid resp " + msgResp))
         
-    async def BlobSeek(self, id: np.uint64, seekType: int, pos: np.int64) -> common.CallResult:
+    async def BlobSeek(self, id: np.uint64, seekType: int, pos: np.int64) : #-> (int, common.QErr):
         msgId = self.MsgId()
         req = func_pb2.BlobSeekReq (
             id = id,
@@ -265,13 +265,13 @@ class BlobMgr:
             case 'BlobReadReq':
                 resp = msgResp.BlobSeekResp
                 if resp.error != "" :
-                    return common.CallResult(None, resp.error)
+                    return (0, common.QErr(resp.error))
                 
-                return common.CallResult(resp.offset, "")
+                return (resp.offset, None)
             case _ :
-                return common.CallResult(None, "BlobSeek invalid resp " + msgResp)
+                return (0, common.QErr("BlobSeek invalid resp " + msgResp))
             
-    async def BlobClose(self, id: np.uint64) -> common.CallResult:
+    async def BlobClose(self, id: np.uint64) -> common.QErr:
         msgId = self.MsgId()
         req = func_pb2.BlobCloseReq (
             id = id
@@ -290,9 +290,9 @@ class BlobMgr:
             case 'BlobCloseResp':
                 resp = msgResp.BlobCloseResp
                 if resp.error != "" :
-                    return common.CallResult(None, resp.error)
+                    return common.QErr(resp.error)
                 
-                return common.CallResult(None, "")
+                return None
             case _ :
-                return common.CallResult(None, "BlobClose invalid resp " + msgResp)
+                return common.QErr("BlobClose invalid resp " + msgResp)
         
