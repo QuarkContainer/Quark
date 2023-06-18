@@ -24,7 +24,9 @@ async def test():
     background_task_coroutine = asyncio.create_task(client.StartSvc())
     print("test 2");
     jobContext = client.NewJobContext()
-    res = await func.add(jobContext, "asdf")
+    #res = await func.add(jobContext, "asdf")
+    filenames = '["./func.py"]'
+    res = await func.wordcount(jobContext, filenames)
     print("test 3 ", res);
     #await background_task_coroutine
     
