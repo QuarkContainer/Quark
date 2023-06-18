@@ -18,6 +18,7 @@ import uuid
 import os
 import numpy as np
 import janus
+import json
 
 import func_pb2_grpc
 import func_pb2
@@ -80,14 +81,28 @@ class FuncCallContext:
     
     async def RemoteCall(
         self,
-        packageName: str, 
-        funcName: str, 
-        parameters: str, 
-        priority: int
-        ) : # -> (str, common.QErr): 
+        **kwargs
+        ) : # -> (str, common.QErr):
+        packageName = kwargs.get('packageName')
+        if packageName is None :
+            packageName = ""
+        else: 
+            del kwargs['packageName']
+        funcName = kwargs['funcName']
+        priority = kwargs.get('priority')
+        if priority is None:
+            priority = 1
+        else:
+            del kwargs['priority']
+        
+        del kwargs['funcName']
+        print("RemoteCall kwargs is ", kwargs)
+        parameters = json.dumps(kwargs)
+         
         taskContext = self.NewTaskContext();
         
-        res = await funcMgr.RemoteCall(taskContext, packageName, funcName, parameters, priority)
+        print("RemoteCall parameter is ", parameters)
+        res = await funcMgr.RemoteCall(taskContext, packageName, funcName, priority, parameters)
         if res.error == "":
             return (res.res, None)
         return (None, common.QErr(res.error))
@@ -96,20 +111,56 @@ class FuncCallContext:
         id = self.jobId + "/" + str(uuid.uuid4())
         return common.BlobAddr(None, id)
     
-    def NewBlobVec(self, cols: int) -> common.BlobAddrVec:
-        vec = common.BlobAddrVec(cols)
+    def NewBlobAddrVec(self, cols: int) -> common.BlobAddrVec:
+        vec = list()
         for col in range(0, cols):
             addr = self.NewBlobAddr()
-            vec.vec[col] = addr
+            vec.append(addr)
+        return vec
     
     def NewBlobAddrMatrix(self, rows: int, cols: int) -> common.BlobAddrMatrix:
-        mat = common.BlobAddrMatrix(rows, cols)
-        for row in range(0..rows):
-            mat.mat[row] = self.NewBlobVec(cols)
+        mat = list()
+        print("NewBlobAddrMatrix 1 ret is ", mat)
+        for row in range(0, rows):
+            mat.append(self.NewBlobVec(cols)) 
+        print("NewBlobAddrMatrix 2 ret is ", mat)
         return mat
     
+    async def BlobWriteAll(self, addr: common.BlobAddr, buf: bytes): # -> common.QErr:
+        (b, err) = await self.BlobCreate(addr)
+        if err is not None :
+            return (None, err) 
+        err = await b.Write(buf)
+        if err is not None :
+            return (None, err)  
+        ret = await b.Close()
+        if err is not None :
+            return (None, err)  
+        
+        return (b.addr, None) 
+    
+    async def BlobReadAll(self, addr: common.BlobAddr): # -> (bytes, common.QErr):
+        (b, err) = await self.BlobOpen(addr)
+        if err is not None :
+            return (None, err)
+        ret = bytes()
+        size = 64 * 1024
+        while True:
+            (data, err) = await b.Read(size)
+            if err is not None :
+                return (None, err)
+            ret = ret + data
+            if len(data) < size:
+                break
+            
+        err = await b.Close()
+        if err is not None :
+            return (None, err)
+        
+        return (ret, None)
+            
     async def BlobCreate(self, addr: common.BlobAddr): #-> (UnsealBlob, common.QErr):
-        return await funcMgr.BlobCreate(addr.name)
+        return await funcMgr.BlobCreate(addr)
     
     async def BlobWrite(self, id: np.uint64, buf: bytes) -> common.QErr:
         return await funcMgr.BlobWrite(id, buf)
@@ -150,8 +201,8 @@ class FuncMgr:
         context: FuncCallContext,
         packageName: str, 
         funcName: str, 
-        parameters: str, 
-        priority: int
+        priority: int,
+        parameters: str 
         ) -> common.CallResult: 
         
         if packageName == "" :
@@ -174,7 +225,7 @@ class FuncMgr:
         return res
     
     async def BlobCreate(self, addr: common.BlobAddr): #-> (UnsealBlob, common.QErr):
-        return await funcMgr.blob_mgr.BlobCreate(addr.name)
+        return await funcMgr.blob_mgr.BlobCreate(addr['name'])
     
     async def BlobWrite(self, id: np.uint64, buf: bytes) -> common.QErr:
         return await funcMgr.blob_mgr.BlobWrite(id, buf)
@@ -209,7 +260,11 @@ class FuncMgr:
         function = getattr(func, name)
         if function is None:
             return common.CallResult("", "There is no func named {}".format(name))
-        result = await function(context, parameters)
+        
+        kwargs = json.loads(parameters)
+        print("parameter is ", parameters)
+        print("kwargs ")
+        result = await function(context, **kwargs)
         return common.CallResult(result, "")
     
     def Close(self) : 

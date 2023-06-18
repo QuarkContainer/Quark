@@ -1,35 +1,75 @@
 #from client import RemoteCall
-
+import asyncio
 import json
 import common
 from common import BlobAddr 
 
-async def wordcount(context, parameters) -> str:
-    filenames = json.loads(parameters)
-    res = ""
-    for filename in filenames:
-        (res, err) = await context.RemoteCall(
-            packageName= "",
-            funcName= "map",
-            parameters= filename,
-            priority= 1
-        )
-    return res
+async def wordcount(context, filenames: list[str]) -> str:
+    pcount = len(filenames)
+    blobMatrix = list();
 
-async def map(context, parameters) -> str:
-    filename = parameters
-    word_counts = dict()
+    results = await asyncio.gather(
+        *[context.RemoteCall(
+            funcName = "map",
+            filename = filenames[i],
+            pcount = 2
+        ) for i in range(0, pcount)]
+    )
+    
+    for res, err in results:
+        blobVec = json.loads(res)
+        blobMatrix.append(blobVec)
+        
+    shuffBlobs = common.TransposeBlobMatrix(blobMatrix)
+    
+    wordCounts = dict()
+    
+    results = await asyncio.gather(
+        *[context.RemoteCall(
+            funcName = "reduce",
+            blobs = shuffBlobs[i]
+        ) for i in range(0, 2)]
+    )
+    for res, err in results:
+        map = json.loads(res)
+        wordCounts.update(map)
+    
+    return json.dumps(wordCounts)
+
+async def map(context, filename: str, pcount: int) -> str:   
+    blobs = context.NewBlobAddrVec(pcount)
+    word_counts = []
+    for i in range(0, pcount):
+        word_counts.append(dict())
     with open(filename,'r') as file:
         contents = file.read()
         words = contents.split()
         for word in words:
-            if word in word_counts:
-                word_counts[word] += 1
+            idx = hash(word) % pcount
+            if word in word_counts[idx]:
+                word_counts[idx][word] += 1
             else:
-                word_counts[word] = 1 
-    res = json.dumps(word_counts)
-    print(res)
-    return res
+                word_counts[idx][word] = 1 
+    
+    for i in range(0, pcount):
+        str = json.dumps(word_counts[i])
+        (addr, err) = await context.BlobWriteAll(blobs[i], bytes(str, 'utf-8'))
+        blobs[i] = addr
+    
+    return json.dumps(blobs)
+
+async def reduce(context, blobs: common.BlobAddrVec) -> str:
+    wordcounts = dict()
+    for b in blobs :
+        (data, err) = await context.BlobReadAll(b)
+        str = data.decode('utf-8')
+        map = json.loads(str)
+        for word, count in map.items():
+            if word in wordcounts:
+                wordcounts[word] += count
+            else:
+                wordcounts[word] = count 
+    return json.dumps(wordcounts)
 
 async def add(context, parameters):
     (res, err) = await context.RemoteCall(

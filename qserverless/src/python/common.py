@@ -30,14 +30,13 @@ class CallResult:
     def __str__(self):
         return f"CallResult: res is '{self.res}', error is '{self.error}'"
 
-class BlobAddr:
+class BlobAddr(dict):
     def __init__(self, blobSvcAddr: str, name: str):
-        self.blobSvcAddr = blobSvcAddr
-        self.name = name
+        dict.__init__(self, blobSvcAddr=blobSvcAddr, name=name)
     
     def Set(self, addr):
-        self.blobSvcAddr = addr.blobSvcAddr
-        self.name = addr.name
+        self['blobSvcAddr'] = addr['blobSvcAddr']
+        self['name'] = addr['name']
     
     def toJson(self):
         return json.dumps(self, default=lambda o: o.__dict__)
@@ -49,24 +48,66 @@ class BlobAddr:
     def __str__(self):
         return f"BlobAddr: svcAddr is '{self.blobSvcAddr}', name is '{self.name}'"
 
-class BlobAddrVec:
-    def __init__(self, cols: int):
-        self.cols = cols
-        self.vec = numpy.full(cols, BlobAddr(None, None))
+BlobAddrVec = list[BlobAddr]
+BlobAddrMatrix = list[BlobAddrVec]
 
-class BlobAddrMatrix:
-    def __init__(self, rows: int, cols: int):
-        self.rows = rows
-        self.cols = cols
-        self.mat = numpy.full([rows, cols], BlobAddr(None, None))
-        
-    def Set(self, row: int, col: int, addr: BlobAddr):
-        self.mat[row][col] = addr
-        
-    def Transpose(self):
-        newMat = BlobAddrMatrix(self.cols, self.rows)
-        newMat.mat = self.mat.transpose()
-        return newMat
+def TransposeBlobMatrix(mat: BlobAddrMatrix) -> BlobAddrMatrix:
+    rows = len(mat)
+    cols = len(mat[0])
+    ret = list()
+    for c in range(0, cols):
+        row = list()
+        for r in range(0, rows):
+            row.append(mat[r][c])
+        ret.append(row)
+    return ret
+
+def NewBlobAddrVec(colCount: int) -> BlobAddrVec:
+    cols = list()
+    for i in range(0, colCount):
+        cols.append(BlobAddr(None, None))
+    return cols
+
+def NewBlobAddrMatrix(rowCount: int, colCount: int) -> BlobAddrVec:
+    rows = list()
+    for i in range(0, rowCount):
+        rows.append(NewBlobAddrVec(colCount))
+    return rows
+
+
+# class BlobAddrVec(dict):
+#     def __init__(self, colCount: int):
+#         cols = list()
+#         for i in range(0, colCount):
+#             cols.append(BlobAddr(None, None))
+#         dict.__init__(self, cols = cols)
     
-    def Row(self, idx: int) -> BlobAddrVec:
-        return self.mat(idx)
+#     def ColCount(self):
+#         return len(self.vec)
+
+# class BlobAddrMatrix:
+#     def __init__(self, rows: int, cols: int):
+#         self.rows = list()
+#         for i in range(0, rows):
+#             self.rows.append(BlobAddrVec(cols))
+        
+#     def Set(self, row: int, col: int, addr: BlobAddr):
+#         self.rows[row][col] = addr
+        
+#     def Transpose(self):
+#         newMat = BlobAddrMatrix(self.cols, self.rows)
+#         newMat.rows = self.mat.transpose()
+#         return newMat
+    
+#     def Row(self, idx: int) -> BlobAddrVec:
+#         return self.rows[idx]
+    
+#     def toJson(self):
+#         return json.dumps(self, default=lambda o: o.__dict__)
+    
+#     @staticmethod
+#     def from_json(json_dct):
+#         rows = json_dct['rows']
+#         mat = BlobAddrMatrix(len(rows), len(rows[0]))
+#         mat.rows = rows
+#         return mat
