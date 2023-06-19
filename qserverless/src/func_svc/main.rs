@@ -72,7 +72,7 @@ lazy_static! {
     };
 
     pub static ref AUDIT_AGENT: AuditAgent = {
-        AuditAgent::New("postgresql://testuser:123456@localhost/testdb1")
+        AuditAgent::New("postgresql://audit_user:123456@localhost/auditdb")
     };
 }
 
@@ -122,10 +122,11 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use qobjs::audit::func_audit::*;
+    use qobjs::blob_mgr::*;
 
     #[actix_rt::test]
     async fn test_create() {
-        let mut audit = SqlFuncAudit::New("postgresql://testuser:123456@localhost/testdb1").await.unwrap();
+        let mut audit = SqlFuncAudit::New("postgresql://audit_user:123456@localhost/auditdb").await.unwrap();
         let id = uuid::Uuid::new_v4().to_string();
         
         audit.CreateFunc(
@@ -142,7 +143,7 @@ mod tests {
 
     #[actix_rt::test]
     async fn test_update() {
-        let mut audit = SqlFuncAudit::New("postgresql://testuser:123456@localhost/testdb1").await.unwrap();
+        let mut audit = SqlFuncAudit::New("postgresql://audit_user:123456@localhost/auditdb").await.unwrap();
         let id = uuid::Uuid::new_v4().to_string();
         
         audit.CreateFunc(
@@ -158,6 +159,30 @@ mod tests {
             &id, 
             "Finish"
         ).await.unwrap();
+        assert!(false);
+    }
+
+    #[actix_rt::test]
+    async fn test_blob() {
+        let mut blob = SqlBlobMgr::New("postgresql://blob_user:123456@localhost/blobdb").await.unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        let datastr = "asdfasdfasdfdsafd";
+        blob.CreateBlob(
+            &id, 
+            &datastr.as_bytes()
+        ).await.unwrap();
+
+        let data = blob.ReadBlob(
+            &id
+        ).await.unwrap();
+
+        println!("data is {}", std::str::from_utf8(&data).unwrap());
+
+        blob.DropBlob(
+            &id
+        ).await.unwrap();
+
+        assert!(datastr==std::str::from_utf8(&data).unwrap());
         assert!(false);
     }
 }

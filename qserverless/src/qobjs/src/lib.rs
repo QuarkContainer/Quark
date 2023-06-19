@@ -41,6 +41,7 @@ pub mod utility;
 pub mod func_client;
 pub mod system_types;
 pub mod audit;
+pub mod blob_mgr;
 
 #[macro_use]
 extern crate scopeguard;

@@ -1,3 +1,6 @@
+DROP DATABASE auditdb;
+CREATE DATABASE auditdb;
+
 DROP TABLE FuncAudit;
 CREATE TABLE FuncAudit (
     id              UUID NOT NULL PRIMARY KEY,
@@ -11,6 +14,7 @@ CREATE TABLE FuncAudit (
     finishTime      TIMESTAMP
 );
 
-//CREATE USER testuser WITH PASSWORD '123456';
-//GRANT ALL ON ALL TABLES IN SCHEMA public to testuser;
+CREATE USER audit_user WITH PASSWORD '123456';
+GRANT ALL ON ALL TABLES IN SCHEMA public to audit_user;
+
 // https://stackoverflow.com/questions/18664074/getting-error-peer-authentication-failed-for-user-postgres-when-trying-to-ge
