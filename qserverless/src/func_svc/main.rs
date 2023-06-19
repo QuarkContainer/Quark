@@ -113,3 +113,43 @@ async fn main() -> Result<()> {
     grpc_svc::FuncSvcGrpcService().await.unwrap();
     Ok(())
 }
+
+
+#[cfg(test)]
+mod tests {
+    use qobjs::audit::func_audit::*;
+
+    #[test]
+    fn test_create() {
+        let mut audit = SqlFuncAudit::New("postgresql://testuser:123456@localhost/testdb1").unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        
+        audit.CreateFunc(
+            &id, 
+            &uuid::Uuid::new_v4().to_string(), 
+            "package1", 
+            &uuid::Uuid::new_v4().to_string()
+        ).unwrap();
+        
+        assert!(false);
+    }
+
+    #[test]
+    fn test_update() {
+        let mut audit = SqlFuncAudit::New("postgresql://testuser:123456@localhost/testdb1").unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        
+        audit.CreateFunc(
+            &id, 
+            &uuid::Uuid::new_v4().to_string(), 
+            "package1", 
+            &uuid::Uuid::new_v4().to_string()
+        ).unwrap();
+        
+        audit.FinishFunc(
+            &id, 
+            "Finish"
+        ).unwrap();
+        assert!(false);
+    }
+}
