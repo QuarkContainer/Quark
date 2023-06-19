@@ -75,6 +75,7 @@ pub enum Error {
     AcquireError(tokio::sync::AcquireError),
     ParseIntError(ParseIntError),
     PostgresError(postgres::Error),
+    SqlxError(sqlx::Error),
     RegexError(regex::Error),
     RocksdbError(rocksdb::Error),
     TokioChannFull,
@@ -135,6 +136,12 @@ impl From<Error> for String {
 impl From<postgres::Error> for Error {
     fn from(item: postgres::Error) -> Self {
         return Self::PostgresError(item)
+    }
+}
+
+impl From<sqlx::Error> for Error {
+    fn from(item: sqlx::Error) -> Self {
+        return Self::SqlxError(item)
     }
 }
 

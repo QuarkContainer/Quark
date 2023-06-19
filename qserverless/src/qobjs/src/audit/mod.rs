@@ -13,3 +13,4 @@
 // limitations under the License.
 
 pub mod func_audit;
+pub mod audit_agent;

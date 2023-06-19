@@ -30,6 +30,7 @@ use qobjs::common::*;
 use qobjs::func;
 use tokio::sync::Notify;
 
+use crate::AUDIT_AGENT;
 use crate::FUNC_CALL_MGR;
 use crate::FUNC_NODE_MGR;
 use crate::FUNC_POD_MGR;
@@ -165,6 +166,7 @@ impl FuncNode {
                 calleeFuncPodId: Mutex::new(funccall.caller_pod_id.clone()),
                 state: Mutex::new(FuncCallState::Cancelling),
                 parameters: funccall.parameters.clone(),
+                callerFuncId: funccall.caller_func_id.clone(),
                 priority: funccall.priority as usize,
                 createTime: SystemTimeProto::FromTimestamp(funccall.createtime.as_ref().unwrap()).ToSystemTime(),
             };
@@ -201,6 +203,7 @@ impl FuncNode {
                 calleeFuncPodId: Mutex::new(funccall.caller_pod_id.clone()),
                 state: Mutex::new(FuncCallState::Cancelling),
                 parameters: funccall.parameters.clone(),
+                callerFuncId: funccall.caller_func_id.clone(),
                 priority: funccall.priority as usize,
                 createTime: SystemTimeProto::FromTimestamp(funccall.createtime.as_ref().unwrap()).ToSystemTime(),
             };
@@ -276,6 +279,13 @@ impl FuncNode {
 
     // get funccall req from nodeagent
     pub fn OnFuncSvcCallReq(&self, req: func::FuncSvcCallReq) -> Result<()> {
+        AUDIT_AGENT.CreateFunc(
+            &req.id, 
+            &req.job_id, 
+            &req.namespace, 
+            &req.package_name, 
+            &req.func_name, 
+            &req.caller_func_id)?;
         let packageId = PackageId {
             namespace: req.namespace.clone(),
             packageName: req.package_name.clone(),
@@ -306,6 +316,7 @@ impl FuncNode {
             calleeFuncPodId: Mutex::new(req.callee_pod_id.clone()),
             state: Mutex::new(FuncCallState::Scheduling(SystemTime::now())),
             parameters: req.parameters.clone(),
+            callerFuncId: req.caller_func_id.clone(),
             priority: req.priority as usize,
             createTime: SystemTimeProto::FromTimestamp(&req.createtime.as_ref().unwrap()).ToSystemTime(),
         };
@@ -320,6 +331,15 @@ impl FuncNode {
     // get funccall response from nodeagent
     pub fn OnFuncSvcCallResp(&self, resp: func::FuncSvcCallResp) -> Result<()> {
         error!("OnFuncSvcCallResp ... {:?}", &resp);
+        let state = if resp.error.len() == 0 {
+            "Success"
+        } else {
+            "Fail"
+        };
+        AUDIT_AGENT.FinishFunc(
+            &resp.id, 
+            state
+        )?;
         self.lock().unwrap().calleeFuncCalls.remove(&resp.id);
         let callerNode = FUNC_NODE_MGR.Get(&resp.caller_node_id)?;
         let pod = FUNC_POD_MGR.Get(&resp.callee_pod_id)?;
@@ -486,6 +506,7 @@ impl FuncNode {
             package_name: call.package.Name(),
             func_name: call.funcName.clone(),
             parameters: call.parameters.clone(),
+            caller_func_id: call.callerFuncId.clone(),
             priority: call.priority as u64,
             createtime: Some(SystemTimeProto::FromSystemTime(call.createTime).ToTimeStamp()),
             caller_node_id: call.callerNodeId.clone(),

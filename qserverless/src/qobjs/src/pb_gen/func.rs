@@ -299,6 +299,8 @@ pub struct FuncAgentCallReq {
     pub parameters: ::prost::alloc::string::String,
     #[prost(uint64, tag = "7")]
     pub priority: u64,
+    #[prost(string, tag = "8")]
+    pub caller_func_id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -422,16 +424,18 @@ pub struct FuncSvcCallReq {
     pub parameters: ::prost::alloc::string::String,
     #[prost(uint64, tag = "7")]
     pub priority: u64,
-    #[prost(message, optional, tag = "8")]
+    #[prost(string, tag = "8")]
+    pub caller_func_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "9")]
     pub createtime: ::core::option::Option<Timestamp>,
-    #[prost(string, tag = "9")]
-    pub caller_node_id: ::prost::alloc::string::String,
     #[prost(string, tag = "10")]
+    pub caller_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
     pub caller_pod_id: ::prost::alloc::string::String,
     /// when funcCall is process by a funcPod, this is the NodeId
-    #[prost(string, tag = "11")]
-    pub callee_node_id: ::prost::alloc::string::String,
     #[prost(string, tag = "12")]
+    pub callee_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "13")]
     pub callee_pod_id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
