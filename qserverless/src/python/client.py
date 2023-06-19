@@ -100,7 +100,7 @@ class FuncCallContext:
          
         taskContext = self.NewTaskContext();
         
-        res = await funcMgr.RemoteCall(taskContext, packageName, funcName, priority, parameters)
+        res = await funcMgr.RemoteCall(taskContext, packageName, funcName, self.id, priority, parameters)
         if res.error == "":
             return (res.res, None)
         return (None, common.QErr(res.error))
@@ -199,6 +199,7 @@ class FuncMgr:
         context: FuncCallContext,
         packageName: str, 
         funcName: str, 
+        callerFuncId: str,
         priority: int,
         parameters: str 
         ) -> common.CallResult: 
@@ -214,6 +215,7 @@ class FuncMgr:
             packageName = packageName,
             funcName = funcName,
             parameters = parameters,
+            callerFuncId = callerFuncId,
             priority = priority
         )
         callQueue = janus.Queue() #asyncio.Queue(1)

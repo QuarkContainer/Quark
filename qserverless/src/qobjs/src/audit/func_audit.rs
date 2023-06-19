@@ -12,49 +12,68 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use postgres::{Client, NoTls};
+use sqlx::postgres::PgPoolOptions;
+use sqlx::postgres::PgPool;
 
 use crate::common::*;
 
+#[async_trait::async_trait]
 pub trait FuncAudit {
-    fn CreateFunc(&mut self, id: &str, jobId: &str, packageName: &str, callerFuncId: &str) -> Result<()>;
-    fn FinishFunc(&mut self, id: &str, funcState: &str) -> Result<()>;
+    async fn CreateFunc(&mut self, id: &str, jobId: &str, namespace: &str, packageName: &str, funcName: &str, callerFuncId: &str) -> Result<()>;
+    async fn FinishFunc(&mut self, id: &str, funcState: &str) -> Result<()>;
 }
 
 pub struct SqlFuncAudit {
-    pub client: Client,
+    pub pool: PgPool,
 }
 
 impl SqlFuncAudit {
-    pub fn New(sqlSvcAddr: &str) -> Result<Self> {
-        let client = Client::connect(sqlSvcAddr, NoTls)?;
+    pub async fn New(sqlSvcAddr: &str) -> Result<Self> {
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(sqlSvcAddr)
+		    .await?;
         return Ok(Self {
-            client: client
+            pool: pool
         })
     }
 }
 
+#[async_trait::async_trait]
 impl FuncAudit for SqlFuncAudit {
-    fn CreateFunc(
+    async fn CreateFunc(
         &mut self,
         id: &str, 
         jobId: &str, 
-        packageName: &str, 
+        namespace: &str,
+        packageName: &str,
+        funcName: &str, 
         callerFuncId: &str
     ) -> Result<()> {
-        let sql = format!("insert into FuncAudit (id, jobId, packageName, callerFuncId, funcState, createTime) values \
-            (uuid('{}'), uuid('{}'), '{}', uuid('{}'), 'Running', NOW())", 
-            id, jobId, packageName, callerFuncId);
-        println!("sql is {}", &sql);
-        
-        self.client.execute(&sql, &[])?;
+        let query = "insert into FuncAudit (id, jobId, namespace, packageName, funcName, callerFuncId, funcState, createTime) values \
+            (uuid($1), uuid($2), $3, $4, $5, uuid($6), 'Running', NOW())";
+
+        let _result = sqlx::query(query)
+            .bind(id)
+            .bind(jobId)
+            .bind(namespace)
+            .bind(packageName)
+            .bind(funcName)
+            .bind(callerFuncId)
+            .execute(&self.pool)
+            .await?;
+            
         return Ok(())
     }
 
-    fn FinishFunc(&mut self, id: &str, funcState: &str) -> Result<()> {
-        let sql = format!("Update FuncAudit Set funcState = '{}', finishTime = NOW() where id = uuid('{}')", funcState, id);
-        println!("sql is {}", &sql);
-        self.client.execute(&sql, &[])?;
+    async fn FinishFunc(&mut self, id: &str, funcState: &str) -> Result<()> {
+        let query = "Update FuncAudit Set funcState = $1, finishTime = NOW() where id = uuid($2)";
+        let _result = sqlx::query(query)
+            .bind(funcState)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+
         return Ok(())
     }
 }

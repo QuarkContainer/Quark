@@ -37,6 +37,7 @@ pub struct FuncCallInner {
     pub namespace: String,
     pub packageName: String,
     pub funcName: String,
+    pub callerFuncCallId: String,
     pub priority: usize,
     pub parameters: String,
     pub createTime: SystemTime,
@@ -45,6 +46,7 @@ pub struct FuncCallInner {
     pub callerFuncPodId: String,
     pub calleeNodeId: String,
     pub calleeFuncPodId: String,
+    
 }
 
 impl FuncCallInner {
@@ -55,6 +57,7 @@ impl FuncCallInner {
             namespace: self.namespace.clone(),
             package_name: self.packageName.clone(),
             func_name: self.funcName.clone(),
+            caller_func_id: self.callerFuncCallId.clone(),
             priority: self.priority as u64,
             parameters: self.parameters.clone(),
             createtime: Some(SystemTimeProto::FromSystemTime(self.createTime).ToTimeStamp()),
@@ -204,6 +207,7 @@ impl FuncAgent {
             packageName: req.package_name.clone(),
             funcName: req.func_name.clone(),
             parameters: req.parameters.clone(), 
+            callerFuncCallId: req.caller_func_id.clone(),
             priority: req.priority as usize,
             createTime: createTime,
         };
@@ -219,6 +223,7 @@ impl FuncAgent {
             package_name: req.package_name.to_string(),
             func_name: req.func_name.clone(),
             parameters: req.parameters.clone(), 
+            caller_func_id: req.caller_func_id.clone(),
             priority: req.priority,
             createtime: Some(protoTime.ToTimeStamp()),
             caller_node_id: self.nodeId.clone(),
@@ -319,6 +324,7 @@ impl FuncAgent {
             packageName: req.package_name.clone(),
             funcName: req.func_name.clone(),
             parameters: req.parameters.clone(), 
+            callerFuncCallId: req.caller_func_id.clone(),
             priority: req.priority as usize,
             createTime: createTimeProto.ToSystemTime(),
         }; 
@@ -334,6 +340,7 @@ impl FuncAgent {
             func_name: req.func_name.clone(),
             parameters: req.parameters.clone(),
             priority: req.priority,
+            caller_func_id: req.caller_func_id.clone(),
         };
 
         funcPod.SetState(funcPodState::Running(req.id.clone()));

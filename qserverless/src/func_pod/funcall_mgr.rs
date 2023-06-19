@@ -81,6 +81,7 @@ impl FuncCallMgr {
             package_name: packageName,
             func_name: funcName,
             parameters: parameters,
+            caller_func_id: String::new(),
             priority: priority as u64,
         };
 

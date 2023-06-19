@@ -43,7 +43,7 @@ pub mod message;
 pub mod grpc_svc;
 
 use package::PackageMgr;
-use qobjs::{common::*, cacher_client::CacherClient, types::DataObject, informer_factory::InformerFactory, selection_predicate::ListOption};
+use qobjs::{common::*, cacher_client::CacherClient, types::DataObject, informer_factory::InformerFactory, selection_predicate::ListOption, audit::audit_agent::AuditAgent};
 use scheduler::Scheduler;
 
 lazy_static! {
@@ -69,6 +69,10 @@ lazy_static! {
 
     pub static ref SCHEDULER: Scheduler = {
         Scheduler::New("http://127.0.0.1:8890")
+    };
+
+    pub static ref AUDIT_AGENT: AuditAgent = {
+        AuditAgent::New("postgresql://testuser:123456@localhost/testdb1")
     };
 }
 
@@ -119,37 +123,41 @@ async fn main() -> Result<()> {
 mod tests {
     use qobjs::audit::func_audit::*;
 
-    #[test]
-    fn test_create() {
-        let mut audit = SqlFuncAudit::New("postgresql://testuser:123456@localhost/testdb1").unwrap();
+    #[actix_rt::test]
+    async fn test_create() {
+        let mut audit = SqlFuncAudit::New("postgresql://testuser:123456@localhost/testdb1").await.unwrap();
         let id = uuid::Uuid::new_v4().to_string();
         
         audit.CreateFunc(
             &id, 
             &uuid::Uuid::new_v4().to_string(), 
-            "package1", 
+            "ns1",
+            "package1",
+            "testfunc1", 
             &uuid::Uuid::new_v4().to_string()
-        ).unwrap();
+        ).await.unwrap();
         
         assert!(false);
     }
 
-    #[test]
-    fn test_update() {
-        let mut audit = SqlFuncAudit::New("postgresql://testuser:123456@localhost/testdb1").unwrap();
+    #[actix_rt::test]
+    async fn test_update() {
+        let mut audit = SqlFuncAudit::New("postgresql://testuser:123456@localhost/testdb1").await.unwrap();
         let id = uuid::Uuid::new_v4().to_string();
         
         audit.CreateFunc(
             &id, 
             &uuid::Uuid::new_v4().to_string(), 
-            "package1", 
+            "ns1",
+            "package1",
+            "testfunc1", 
             &uuid::Uuid::new_v4().to_string()
-        ).unwrap();
+        ).await.unwrap();
         
         audit.FinishFunc(
             &id, 
             "Finish"
-        ).unwrap();
+        ).await.unwrap();
         assert!(false);
     }
 }
