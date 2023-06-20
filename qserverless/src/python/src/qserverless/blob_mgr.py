@@ -17,9 +17,8 @@ import datetime
 
 import numpy as np
 
-import func_pb2
-import common
-from common import BlobAddr 
+import qserverless.func_pb2 as func_pb2
+import qserverless.common as common
 
 SeekFromStart = 1
 SeekFromEnd = 2
@@ -42,7 +41,7 @@ class Blob:
     def __init__(
         self,
         id: np.uint64, 
-        addr: BlobAddr, 
+        addr: common.BlobAddr, 
         size: int,
         checksum: str,
         createTime: datetime.datetime,
@@ -71,7 +70,7 @@ class UnsealBlob:
     def __init__(
         self, 
         id: np.uint64,
-        addr: BlobAddr) : 
+        addr: common.BlobAddr) : 
         self.id = id
         self.addr = addr
         self.closed = False 
@@ -127,7 +126,7 @@ class BlobMgr:
                 if resp.error != "" :
                     return (None, resp.error)
                 
-                blob = UnsealBlob(resp.id, BlobAddr(resp.svcAddr, name))
+                blob = UnsealBlob(resp.id, common.BlobAddr(resp.svcAddr, name))
                 return (blob, None)
             case _ :
                 return (None, common.QErr("BlobCreate invalid resp " + msgResp))
@@ -157,7 +156,7 @@ class BlobMgr:
             case _ :
                 return common.QErr("BlobCreate invalid resp " + resp)
             
-    async def BlobOpen(self, addr: BlobAddr) : #-> (Blob, common.QErr):
+    async def BlobOpen(self, addr: common.BlobAddr) : #-> (Blob, common.QErr):
         msgId = self.MsgId()
         req = func_pb2.BlobOpenReq (
             svcAddr = addr['blobSvcAddr'],

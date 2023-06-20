@@ -20,14 +20,13 @@ import numpy as np
 import janus
 import json
 
-import func_pb2_grpc
-import func_pb2
-import blob_mgr
+import qserverless.func_pb2 as func_pb2
+import qserverless.blob_mgr as blob_mgr
 import func
-import common
+import qserverless.common as common
 
-from func_pb2_grpc import *
-from func_pb2 import *
+from qserverless.func_pb2_grpc import *
+from qserverless.func_pb2 import *
 
 funcAgentQueueTx = asyncio.Queue(100)
 funcMgr = None

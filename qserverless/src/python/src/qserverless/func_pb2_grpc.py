@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-import func_pb2 as func__pb2
+import qserverless.func_pb2 as func__pb2
 
 
 class BlobServiceStub(object):

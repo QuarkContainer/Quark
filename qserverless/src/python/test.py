@@ -13,19 +13,19 @@
 # limitations under the License.
 
 import asyncio
-import client;
-import func;
+import qserverless
+import func
 
 async def test():
     
     # Start the background task
     print("test 1");
-    client.Register("unix:///var/lib/quark/nodeagent/node1/sock", "ns1", "pypackage1", True)
-    background_task_coroutine = asyncio.create_task(client.StartSvc())
+    qserverless.Register("unix:///var/lib/quark/nodeagent/node1/sock", "ns1", "pypackage1", True)
+    background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
     print("test 2");
-    jobContext = client.NewJobContext()
+    jobContext = qserverless.NewJobContext()
     #res = await func.add(jobContext, "asdf")
-    filenames = ["./func.py", "./test.py"]
+    filenames = ["./test.py", "./sync_test.py"]
     (res, err) = await func.wordcount(jobContext, filenames)
     print("test 3 error is ", err);
     print("test 3 ", res);

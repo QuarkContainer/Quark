@@ -1,10 +1,23 @@
-#from client import RemoteCall
+# Copyright (c) 2021 Quark Container Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http:#www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import asyncio
 import json
-import common
-from common import BlobAddr 
 
-async def wordcount(context, filenames: list[str]): # -> (str, common.Err):
+import qserverless
+
+async def wordcount(context, filenames: list[str]): # -> (str, qserverless.Err):
     pcount = len(filenames)
     blobMatrix = list();
 
@@ -20,7 +33,7 @@ async def wordcount(context, filenames: list[str]): # -> (str, common.Err):
         blobVec = json.loads(res)
         blobMatrix.append(blobVec)
         
-    shuffBlobs = common.TransposeBlobMatrix(blobMatrix)
+    shuffBlobs = qserverless.TransposeBlobMatrix(blobMatrix)
     
     wordCounts = dict()
     
@@ -38,7 +51,7 @@ async def wordcount(context, filenames: list[str]): # -> (str, common.Err):
     
     return (json.dumps(wordCounts), None)
 
-async def map(context, filename: str, pcount: int): # -> (str, common.Err):   
+async def map(context, filename: str, pcount: int): # -> (str, qserverless.Err):   
     blobs = context.NewBlobAddrVec(pcount)
     word_counts = []
     for i in range(0, pcount):
@@ -62,7 +75,7 @@ async def map(context, filename: str, pcount: int): # -> (str, common.Err):
     
     return (json.dumps(blobs), None)
 
-async def reduce(context, blobs: common.BlobAddrVec): # -> (str, common.Err):
+async def reduce(context, blobs: qserverless.BlobAddrVec): # -> (str, qserverless.Err):
     wordcounts = dict()
     for b in blobs :
         (data, err) = await context.BlobReadAll(b)
@@ -81,29 +94,6 @@ async def reduce(context, blobs: common.BlobAddrVec): # -> (str, common.Err):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 async def add(context, parameters):
     (res, err) = await context.RemoteCall(
         packageName= "",
@@ -112,7 +102,7 @@ async def add(context, parameters):
         priority= 1
     )
     print("add res is ", res, " err is ", err)
-    baddr = json.loads(res, object_hook=BlobAddr.from_json)
+    baddr = json.loads(res, object_hook=qserverless.BlobAddr.from_json)
     (b, err) = await context.BlobOpen(baddr)
     (data, err) = await b.Read(100)
     str = data.decode('utf-8')
