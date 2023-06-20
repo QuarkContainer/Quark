@@ -13,9 +13,6 @@
 # limitations under the License.
 
 import json
-import numpy
-
-from enum import Enum
 
 class QErr:
     def __init__(self, err: str):
