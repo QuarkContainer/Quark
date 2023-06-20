@@ -6,6 +6,7 @@ WORKDIR /app
 
 COPY requirements.txt requirements.txt
 RUN pip3 install -r requirements.txt
+RUN pip install 'qserverless @ git+https://github.com/QuarkContainer/Quark.git#subdirectory=qserverless/src/python'
 
 COPY . .
 

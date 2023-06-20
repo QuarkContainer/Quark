@@ -22,7 +22,7 @@ import json
 
 import qserverless.func_pb2 as func_pb2
 import qserverless.blob_mgr as blob_mgr
-import func
+import qserverless.func as func
 import qserverless.common as common
 
 from qserverless.func_pb2_grpc import *
