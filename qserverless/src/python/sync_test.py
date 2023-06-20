@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import client;
-res = client.Call(
+import qserverless;
+
+res = qserverless.Call(
     svcAddr = "unix:///var/lib/quark/nodeagent/node1/sock",
     namespace = "ns1", 
     packageName = "pypackage1",

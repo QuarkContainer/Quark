@@ -14,7 +14,7 @@
 
 import asyncio
 import qserverless
-import func
+import qserverless.func as func
 
 async def test():
     
