@@ -20,7 +20,7 @@ async def test():
     
     # Start the background task
     print("test 1");
-    qserverless.Register("unix:///var/lib/quark/nodeagent/node1/sock", "ns1", "pypackage1", True)
+    qserverless.Register("unix:///var/lib/quark/nodeagent/node1/sock", "ns1", "pypackage2", True)
     background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
     print("test 2");
     jobContext = qserverless.NewJobContext()

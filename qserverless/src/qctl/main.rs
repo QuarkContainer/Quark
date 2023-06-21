@@ -20,14 +20,28 @@
 #[macro_use]
 extern crate log;
 
-pub mod package_mgr;
+#[macro_use]
+extern crate clap;
 
+pub mod package_mgr;
+pub mod command;
+pub mod create_pypackage;
+
+use command::{Parse, Run};
 use qobjs::{common::*, zip::ZipMgr};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     log4rs::init_file("fp_logging_config.yaml", Default::default()).unwrap();
+    let mut args = match Parse() {
+        Ok(args) => args,
+        Err(e) => {
+            error!("the parse error is {:?}", e);
+            panic!("exitting...")
+        }
+    };
 
+    Run(&mut args).await?;
 
     return Ok(())
 }

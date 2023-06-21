@@ -101,6 +101,7 @@ impl Deref for Scheduler {
 
 impl Scheduler {
     pub fn New(nodeMgrAddr: &str) -> Self {
+        let nodeMgrAddr = &format!("http://{}", nodeMgrAddr);
         let (tx, rx) = mpsc::channel(30);
         let inner = SchedulerInner {
             closeNotify: Arc::new(Notify::new()),

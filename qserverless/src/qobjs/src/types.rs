@@ -570,7 +570,8 @@ impl DataObject {
                 template: podSpec
             },
         };
-        let packageStr = serde_json::to_string(&package)?;
+        let packageStr = serde_json::to_string_pretty(&package)?;
+        error!("packageStr is {}", packageStr);
         let obj = DataObject::NewFromK8sObj("package", &package.metadata, packageStr);
         return Ok(obj);
     }

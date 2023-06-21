@@ -49,6 +49,7 @@ actix-rt = "*"
 log4rs = "1"
 sha2 = "0.10"
 base64 = "0.21.2"
+clap = "2.33.3"
 
 [dependencies.lazy_static]
 version = "1.0"

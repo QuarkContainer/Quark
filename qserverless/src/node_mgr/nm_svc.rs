@@ -473,7 +473,8 @@ pub async fn GrpcService() -> Result<()> {
         .add_service(nodeAgentSvc)
         .serve(NODEMGRSVC_ADDR.parse().unwrap());
 
-    let qserverless: QServerless = QServerless::New(BLOBDB_ADDR, QMETASVC_ADDR).await?;
+    let qmetaSvcAddr = &format!("http://{}", QMETASVC_ADDR);
+    let qserverless: QServerless = QServerless::New(BLOBDB_ADDR, qmetaSvcAddr).await?;
     let qserverlessSvc = qobjs::qmeta::q_serverless_server::QServerlessServer::new(qserverless);
     let qserverlessFuture = Server::builder()
         .add_service(qserverlessSvc)
@@ -500,12 +501,13 @@ mod tests {
 
     #[actix_rt::test]
     async fn NMTest() {
-        let cacheClient = CacherClient::New(QMETASVC_ADDR.into()).await.unwrap();
+        let qmetaSvcAddr = &format!("http://{}", QMETASVC_ADDR);
+        let cacheClient = CacherClient::New(qmetaSvcAddr.into()).await.unwrap();
 
         let list = cacheClient.List(QUARK_POD, "default", &ListOption::default()).await.unwrap();
         println!("list1 is {:?}", list);
 
-        //let client = NodeMgrClient::New(QMETASVC_ADDR.into()).await.unwrap();
+        //let client = NodeMgrClient::New(qmetaSvcAddr.into()).await.unwrap();
         let podstr = r#"
         {
             "apiVersion":"v1",
@@ -558,14 +560,16 @@ mod tests {
 
     #[actix_rt::test]
     async fn EtcdList() {
-        let client = CacherClient::New(QMETASVC_ADDR.into()).await.unwrap();
+        let qmetaSvcAddr = &format!("http://{}", QMETASVC_ADDR);
+        let client = CacherClient::New(qmetaSvcAddr.into()).await.unwrap();
         println!("list is {:#?}", client.List("pod", "", &ListOption::default()).await.unwrap());
         assert!(false);
     }
 
     #[actix_rt::test]
     async fn EtcdTest() {
-        let client = CacherClient::New(QMETASVC_ADDR.into()).await.unwrap();
+        let qmetaSvcAddr = &format!("http://{}", QMETASVC_ADDR);
+        let client = CacherClient::New(qmetaSvcAddr.into()).await.unwrap();
         
         let obj = DataObject::NewPod("namespace1", "name1").unwrap();
         let rev = client.Create("pod", obj.Obj()).await.unwrap();
