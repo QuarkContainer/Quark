@@ -30,56 +30,6 @@ use crate::task_queue::*;
 use crate::scheduler::*;
 use crate::func_pod::*;
 
-#[derive(Debug, Clone)]
-pub struct PackageId {
-    pub namespace: String,
-    pub packageName: String,
-}
-
-impl ToString for PackageId {
-    fn to_string(&self) -> String {
-        return format!("{}/{}", &self.namespace, &self.packageName);
-    }
-}
-
-impl PackageId {
-    pub fn New(packetIdStr: &str) -> Result<Self> {
-        let strs : Vec<&str> = packetIdStr.splitn(2, "/").collect();
-        if strs.len() != 2 {
-            return Err(Error::CommonError(format!("invalid PackageId str {:?}", packetIdStr)));
-        }
-
-        return Ok(Self {
-            namespace: strs[0].to_string(),
-            packageName: strs[1].to_string(),
-        })
-    }
-}
-
-impl Ord for PackageId {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        if self.namespace == other.namespace {
-            return other.packageName.cmp(&self.packageName);
-        }
-
-        return other.namespace.cmp(&other.namespace);
-    }
-}
-
-impl PartialOrd for PackageId {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl PartialEq for PackageId {
-    fn eq(&self, other: &Self) -> bool {
-        return self.namespace == other.namespace && self.packageName == other.packageName;
-    }
-}
-
-impl Eq for PackageId {}
-
 #[derive(Debug, Default)]
 pub struct PackageInner  {
     pub namespace: String,

@@ -89,7 +89,7 @@ async fn main() -> Result<()> {
     let informer = factory.GetInformer("package").await.unwrap();
     let _id1 = informer.AddEventHandler(Arc::new(PACKAGE_MGR.clone())).await.unwrap();
 
-    use crate::package::PackageId;
+    use qobjs::types::PackageId;
     let packageId = PackageId {
         namespace: "ns1".to_string(),
         packageName: "package1".to_string(),
@@ -164,7 +164,7 @@ mod tests {
 
     #[actix_rt::test]
     async fn test_blob() {
-        let mut blob = SqlBlobMgr::New("postgresql://blob_user:123456@localhost/blobdb").await.unwrap();
+        let blob = SqlBlobMgr::New("postgresql://blob_user:123456@localhost/blobdb").await.unwrap();
         let id = uuid::Uuid::new_v4().to_string();
         let datastr = "asdfasdfasdfdsafd";
         blob.CreateBlob(

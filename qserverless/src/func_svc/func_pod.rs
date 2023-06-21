@@ -19,6 +19,7 @@ use std::time::SystemTime;
 use core::ops::Deref;
 
 use qobjs::common::*;
+use qobjs::types::*;
 
 use crate::func_call::FuncCall;
 use crate::package::*;

@@ -25,6 +25,8 @@ async def test():
     print("test 2");
     jobContext = qserverless.NewJobContext()
     #res = await func.add(jobContext, "asdf")
+    #filenames = ["./test.py"]
+    #filenames = ["./sync_test.py"]
     filenames = ["./test.py", "./sync_test.py"]
     (res, err) = await func.wordcount(jobContext, filenames)
     print("test 3 error is ", err);

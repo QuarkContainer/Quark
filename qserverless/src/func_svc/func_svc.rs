@@ -21,6 +21,7 @@ use tokio::sync::mpsc;
 
 use qobjs::common::*;
 use qobjs::func;
+use qobjs::types::*;
 
 use crate::FUNC_NODE_MGR;
 use crate::SCHEDULER;

@@ -23,7 +23,6 @@ pub struct FuncPackage {
     pub spec: FuncPackageSpec,
 }
 
-
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct FuncPackageSpec {
     pub template: k8s::PodSpec,

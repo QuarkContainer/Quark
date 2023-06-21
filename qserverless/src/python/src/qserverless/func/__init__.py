@@ -14,6 +14,7 @@
 
 import asyncio
 import json
+import hashlib
 
 import qserverless
 
@@ -30,7 +31,7 @@ async def wordcount(context, filenames: list[str]): # -> (str, qserverless.Err):
     )
     
     for res, err in results:
-        print("err is ", err)
+        #print("err is ", err)
         blobVec = json.loads(res)
         blobMatrix.append(blobVec)
         
@@ -52,6 +53,12 @@ async def wordcount(context, filenames: list[str]): # -> (str, qserverless.Err):
     
     return (json.dumps(wordCounts), None)
 
+def hash_to_int(string):
+    hash_object = hashlib.shake_128(string.encode('utf-8'))
+    hash_digest = hash_object.digest(16)  # 16 bytes for shake_128
+    hash_int = int.from_bytes(hash_digest, byteorder='big')
+    return hash_int
+
 async def map(context, filename: str, pcount: int): # -> (str, qserverless.Err):   
     blobs = context.NewBlobAddrVec(pcount)
     word_counts = []
@@ -61,12 +68,16 @@ async def map(context, filename: str, pcount: int): # -> (str, qserverless.Err):
         contents = file.read()
         words = contents.split()
         for word in words:
-            idx = hash(word) % pcount
+            hashval = hash_to_int(word)
+            #idx = hash(word) % pcount
+            idx = hashval % pcount
             if word in word_counts[idx]:
                 word_counts[idx][word] += 1
             else:
                 word_counts[idx][word] = 1 
-    
+    # print("hash value ", hashlib.shake_128(b"my ascii string").hexdigest(4));
+    # print("map1 ", filename, word_counts[0])
+    # print("map2 ", filename, word_counts[1])
     for i in range(0, pcount):
         str = json.dumps(word_counts[i])
         (addr, err) = await context.BlobWriteAll(blobs[i], bytes(str, 'utf-8'))
@@ -89,6 +100,7 @@ async def reduce(context, blobs: qserverless.BlobAddrVec): # -> (str, qserverles
                 wordcounts[word] += count
             else:
                 wordcounts[word] = count 
+    print("reduce ", wordcounts)
     return (json.dumps(wordcounts), None)
 
 

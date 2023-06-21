@@ -17,6 +17,20 @@ limitations under the License.
 syntax = "proto3";
 package qmeta;
 
+service QServerless {
+    rpc CreatePyPackage(PyPackageReq) returns (PyPackageResp) {}
+}
+
+message PyPackageReq {
+    string package = 1;
+    bytes zipfile = 2;
+}
+
+message PyPackageResp {
+    string package = 1;
+    string error = 2;
+}
+
 service QMetaService {
   rpc Version (VersionRequestMessage) returns (VersionResponseMessage) {}
   rpc Create (CreateRequestMessage) returns (CreateResponseMessage) {}
