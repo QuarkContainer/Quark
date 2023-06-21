@@ -43,8 +43,9 @@ pub mod message;
 pub mod grpc_svc;
 
 use package::PackageMgr;
-use qobjs::{common::*, cacher_client::CacherClient, types::DataObject, informer_factory::InformerFactory, selection_predicate::ListOption, audit::audit_agent::AuditAgent};
+use qobjs::{common::*, cacher_client::CacherClient, informer_factory::InformerFactory, selection_predicate::ListOption, audit::audit_agent::AuditAgent};
 use scheduler::Scheduler;
+use qobjs::types::*;
 
 lazy_static! {
     pub static ref PACKAGE_MGR: PackageMgr = {
@@ -68,11 +69,11 @@ lazy_static! {
     };
 
     pub static ref SCHEDULER: Scheduler = {
-        Scheduler::New("http://127.0.0.1:8890")
+        Scheduler::New(QMETASVC_ADDR)
     };
 
     pub static ref AUDIT_AGENT: AuditAgent = {
-        AuditAgent::New("postgresql://audit_user:123456@localhost/auditdb")
+        AuditAgent::New(AUDITDB_ADDR)
     };
 }
 
@@ -80,11 +81,13 @@ lazy_static! {
 async fn main() -> Result<()> {
     use std::sync::Arc;
 
+    use qobjs::types::*;
+
     log4rs::init_file("fs_logging_config.yaml", Default::default()).unwrap();
 
     error!("init func svc");
 
-    let factory = InformerFactory::New("http://127.0.0.1:8890", "").await.unwrap();
+    let factory = InformerFactory::New(QMETASVC_ADDR, "").await.unwrap();
     factory.AddInformer("package", &ListOption::default()).await.unwrap();
     let informer = factory.GetInformer("package").await.unwrap();
     let _id1 = informer.AddEventHandler(Arc::new(PACKAGE_MGR.clone())).await.unwrap();
@@ -96,7 +99,7 @@ async fn main() -> Result<()> {
     };
 
     if PACKAGE_MGR.Get(&packageId).is_err() {
-        let client = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
+        let client = CacherClient::New(QMETASVC_ADDR.into()).await.unwrap();
         let obj = DataObject::NewFuncPackage1("ns1", "package1").unwrap();
         client.Create("package", obj.Obj()).await.unwrap();
     }
@@ -107,7 +110,7 @@ async fn main() -> Result<()> {
     };
 
     if PACKAGE_MGR.Get(&packageId).is_err() {
-        let client = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
+        let client = CacherClient::New(QMETASVC_ADDR.into()).await.unwrap();
         let obj = DataObject::NewFuncPyPackage("ns1", "pypackage1").unwrap();
         client.Delete("package", "ns1", "pypackage1").await.ok();
         error!("create new package {:#?}", &obj);
@@ -126,7 +129,7 @@ mod tests {
 
     #[actix_rt::test]
     async fn test_create() {
-        let mut audit = SqlFuncAudit::New("postgresql://audit_user:123456@localhost/auditdb").await.unwrap();
+        let mut audit = SqlFuncAudit::New(AUDITDB_ADDR).await.unwrap();
         let id = uuid::Uuid::new_v4().to_string();
         
         audit.CreateFunc(
@@ -143,7 +146,7 @@ mod tests {
 
     #[actix_rt::test]
     async fn test_update() {
-        let mut audit = SqlFuncAudit::New("postgresql://audit_user:123456@localhost/auditdb").await.unwrap();
+        let mut audit = SqlFuncAudit::New(AUDITDB_ADDR).await.unwrap();
         let id = uuid::Uuid::new_v4().to_string();
         
         audit.CreateFunc(
@@ -164,7 +167,7 @@ mod tests {
 
     #[actix_rt::test]
     async fn test_blob() {
-        let blob = SqlBlobMgr::New("postgresql://blob_user:123456@localhost/blobdb").await.unwrap();
+        let blob = SqlBlobMgr::New(BLOBDB_ADDR).await.unwrap();
         let id = uuid::Uuid::new_v4().to_string();
         let datastr = "asdfasdfasdfdsafd";
         blob.CreateBlob(

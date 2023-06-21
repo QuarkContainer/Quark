@@ -84,5 +84,9 @@ name = "func_svc"
 path = "src/func_svc/main.rs"
 
 [[bin]]
+name = "qctl"
+path = "src/qctl/main.rs"
+
+[[bin]]
 name = "test"
 path = "src/protobtest/main.rs"

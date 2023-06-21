@@ -26,7 +26,7 @@ pub mod service_directory {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cacheClient = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
+    let cacheClient = CacherClient::New(QMETASVC_ADDR.into()).await.unwrap();
 
     println!("nodelist is {:?}", cacheClient.List(QUARK_NODE, "", &ListOption::default()).await.unwrap());
 

@@ -78,6 +78,7 @@ pub enum Error {
     SqlxError(sqlx::Error),
     RegexError(regex::Error),
     RocksdbError(rocksdb::Error),
+    ZipError(zip::result::ZipError),
     TokioChannFull,
     TokioChannClose,
 
@@ -136,6 +137,12 @@ impl From<Error> for String {
 impl From<postgres::Error> for Error {
     fn from(item: postgres::Error) -> Self {
         return Self::PostgresError(item)
+    }
+}
+
+impl From<zip::result::ZipError> for Error {
+    fn from(item: zip::result::ZipError) -> Self {
+        return Self::ZipError(item)
     }
 }
 

@@ -30,10 +30,10 @@ pub struct SqlBlobMgr {
 }
 
 impl SqlBlobMgr {
-    pub async fn New(sqlSvcAddr: &str) -> Result<Self> {
+    pub async fn New(blobDbAddr: &str) -> Result<Self> {
         let pool = PgPoolOptions::new()
             .max_connections(5)
-            .connect(sqlSvcAddr)
+            .connect(blobDbAddr)
 		    .await?;
         return Ok(Self {
             pool: pool
