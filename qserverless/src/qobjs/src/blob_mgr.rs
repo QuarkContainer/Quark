@@ -20,9 +20,9 @@ use crate::common::*;
 
 #[async_trait::async_trait]
 pub trait BlobMgrTrait {
-    async fn CreateBlob(&mut self, id: &str, data: &[u8]) -> Result<()>;
-    async fn DropBlob(&mut self, id: &str) -> Result<()>;
-    async fn ReadBlob(&mut self, id: &str) -> Result<Vec<u8>>;
+    async fn CreateBlob(&self, id: &str, data: &[u8]) -> Result<()>;
+    async fn DropBlob(&self, id: &str) -> Result<()>;
+    async fn ReadBlob(&self, id: &str) -> Result<Vec<u8>>;
 }
 
 pub struct SqlBlobMgr {
@@ -43,7 +43,7 @@ impl SqlBlobMgr {
 
 #[async_trait::async_trait]
 impl BlobMgrTrait for SqlBlobMgr {
-    async fn CreateBlob(&mut self, id: &str, data: &[u8]) -> Result<()> {
+    async fn CreateBlob(&self, id: &str, data: &[u8]) -> Result<()> {
         let query = "insert into blobtbl (id, data, createTime) values \
             (uuid($1), $2, NOW())";
         let _result = sqlx::query(query)
@@ -55,7 +55,7 @@ impl BlobMgrTrait for SqlBlobMgr {
         return Ok(())
     }
     
-    async fn DropBlob(&mut self, id: &str) -> Result<()> {
+    async fn DropBlob(&self, id: &str) -> Result<()> {
         let query = "delete from blobtbl where id = uuid($1)";
         let _result = sqlx::query(query)
             .bind(id)
@@ -65,7 +65,7 @@ impl BlobMgrTrait for SqlBlobMgr {
         return Ok(())
     }
 
-    async fn ReadBlob(&mut self, id: &str) -> Result<Vec<u8>> {
+    async fn ReadBlob(&self, id: &str) -> Result<Vec<u8>> {
         let query = "select data from blobtbl where id = uuid($1)";
         let data = sqlx::query(query)
             .bind(id)
