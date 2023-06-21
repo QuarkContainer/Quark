@@ -15,6 +15,7 @@
 
 use std::collections::BTreeMap;
 use std::result::Result as SResult;
+use tokio::sync::Mutex as TMutex;
 
 use qobjs::qmeta as qmeta;
 use qobjs::system_types::FuncPackage;
@@ -25,15 +26,31 @@ use qobjs::common::*;
 
 pub struct QServerless {
     pub blobMgr: SqlBlobMgr,
-    pub cacheClient: CacherClient, 
+    pub cacheClient: TMutex<Option<CacherClient>>,
+    pub qmetaSvcAddr: String, 
 }
 
 impl QServerless {
     pub async fn New(blobDbAddr: &str, qmetaSvcAddr: &str) -> Result<Self> {
         return Ok(Self {
             blobMgr: SqlBlobMgr::New(blobDbAddr).await?,
-            cacheClient: CacherClient::New(qmetaSvcAddr.into()).await?,
+            qmetaSvcAddr: qmetaSvcAddr.to_owned(),
+            cacheClient: TMutex::new(None), 
         })
+    }
+
+    pub async fn CacheClient(&self) -> Result<CacherClient> {
+        let mut client = self.cacheClient.lock().await;
+        match &*client {
+            None => {
+                let cc = CacherClient::New(self.qmetaSvcAddr.clone()).await?;
+                *client = Some(cc.clone());
+                return Ok(cc);
+            }
+            Some(c) => {
+                return Ok(c.clone());
+            }
+        }
     }
 }
 
@@ -100,9 +117,10 @@ impl qmeta::q_serverless_server::QServerless for QServerless {
         let packageStr = serde_json::to_string(&funcPackage).unwrap();
         let obj = DataObject::NewFromK8sObj("package", &funcPackage.metadata, packageStr.clone());
 
-        self.cacheClient.Delete("package", &namespace, &pacakgeName).await.ok();
+        let client = self.CacheClient().await?;
+        client.Delete("package", &namespace, &pacakgeName).await.ok();
         
-        match self.cacheClient.Create("package", obj.Obj()).await {
+        match client.Create("package", obj.Obj()).await {
             Err(e) => {
                 let response = qmeta::PyPackageResp {
                     error: format!("create_py_package: create pakage meta fail with error {:?}", e),

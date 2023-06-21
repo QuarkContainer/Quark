@@ -87,7 +87,8 @@ async fn main() -> Result<()> {
 
     error!("init func svc");
 
-    let factory = InformerFactory::New(QMETASVC_ADDR, "").await.unwrap();
+    let qmetaSvcAddr = &format!("http://{}", QMETASVC_ADDR);
+    let factory = InformerFactory::New(qmetaSvcAddr, "").await.unwrap();
     factory.AddInformer("package", &ListOption::default()).await.unwrap();
     let informer = factory.GetInformer("package").await.unwrap();
     let _id1 = informer.AddEventHandler(Arc::new(PACKAGE_MGR.clone())).await.unwrap();
@@ -99,7 +100,7 @@ async fn main() -> Result<()> {
     };
 
     if PACKAGE_MGR.Get(&packageId).is_err() {
-        let client = CacherClient::New(QMETASVC_ADDR.into()).await.unwrap();
+        let client = CacherClient::New(qmetaSvcAddr.into()).await.unwrap();
         let obj = DataObject::NewFuncPackage1("ns1", "package1").unwrap();
         client.Create("package", obj.Obj()).await.unwrap();
     }
@@ -110,7 +111,7 @@ async fn main() -> Result<()> {
     };
 
     if PACKAGE_MGR.Get(&packageId).is_err() {
-        let client = CacherClient::New(QMETASVC_ADDR.into()).await.unwrap();
+        let client = CacherClient::New(qmetaSvcAddr.into()).await.unwrap();
         let obj = DataObject::NewFuncPyPackage("ns1", "pypackage1").unwrap();
         client.Delete("package", "ns1", "pypackage1").await.ok();
         error!("create new package {:#?}", &obj);
@@ -126,6 +127,7 @@ async fn main() -> Result<()> {
 mod tests {
     use qobjs::audit::func_audit::*;
     use qobjs::blob_mgr::*;
+    use qobjs::types::*;
 
     #[actix_rt::test]
     async fn test_create() {

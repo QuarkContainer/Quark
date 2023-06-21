@@ -1,0 +1,17 @@
+{
+  "metadata": {
+    "name": "pypackage2",
+    "namespace": "ns1"
+  },
+  "spec": {
+    "template": {
+      "containers": [
+        {
+          "image": "localhost:5000/py_pod:latest",
+          "name": "py_pod"
+        }
+      ],
+      "hostNetwork": true
+    }
+  }
+}
