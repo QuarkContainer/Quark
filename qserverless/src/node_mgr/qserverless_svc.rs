@@ -14,16 +14,27 @@
 
 
 use std::collections::BTreeMap;
+use std::result::Result as SResult;
 
 use qobjs::qmeta as qmeta;
 use qobjs::system_types::FuncPackage;
 use qobjs::blob_mgr::*;
 use qobjs::types::*;
 use qobjs::cacher_client::CacherClient;
+use qobjs::common::*;
 
 pub struct QServerless {
     pub blobMgr: SqlBlobMgr,
-    pub client: CacherClient, // = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
+    pub cacheClient: CacherClient, 
+}
+
+impl QServerless {
+    pub async fn New(blobDbAddr: &str, qmetaSvcAddr: &str) -> Result<Self> {
+        return Ok(Self {
+            blobMgr: SqlBlobMgr::New(blobDbAddr).await?,
+            cacheClient: CacherClient::New(qmetaSvcAddr.into()).await?,
+        })
+    }
 }
 
 #[tonic::async_trait]
@@ -31,7 +42,7 @@ impl qmeta::q_serverless_server::QServerless for QServerless {
     async fn create_py_package(
         &self,
         request: tonic::Request<qmeta::PyPackageReq>,
-    ) -> Result<tonic::Response<qmeta::PyPackageResp>, tonic::Status> {
+    ) -> SResult<tonic::Response<qmeta::PyPackageResp>, tonic::Status> {
         let req = request.get_ref();
 
         let mut funcPackage: FuncPackage = match serde_json::from_str(&req.package) {
@@ -89,9 +100,9 @@ impl qmeta::q_serverless_server::QServerless for QServerless {
         let packageStr = serde_json::to_string(&funcPackage).unwrap();
         let obj = DataObject::NewFromK8sObj("package", &funcPackage.metadata, packageStr.clone());
 
-        self.client.Delete("package", &namespace, &pacakgeName).await.ok();
+        self.cacheClient.Delete("package", &namespace, &pacakgeName).await.ok();
         
-        match self.client.Create("package", obj.Obj()).await {
+        match self.cacheClient.Create("package", obj.Obj()).await {
             Err(e) => {
                 let response = qmeta::PyPackageResp {
                     error: format!("create_py_package: create pakage meta fail with error {:?}", e),

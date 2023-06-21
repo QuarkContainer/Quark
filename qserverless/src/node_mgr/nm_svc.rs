@@ -34,6 +34,7 @@ use crate::VERSION;
 use crate::na_client::*;
 use crate::etcd::etcd_svc::EtcdSvc;
 use crate::SVC_DIR;
+use crate::qserverless_svc::QServerless;
 
 #[derive(Debug)]
 pub struct NodeMgrSvcInner {
@@ -465,17 +466,25 @@ pub async fn GrpcService() -> Result<()> {
 
     let qmetaFuture = Server::builder()
         .add_service(QMetaServiceServer::new(svc.clone()))
-        .serve("127.0.0.1:8890".parse().unwrap());
+        .serve(QMETASVC_ADDR.parse().unwrap());
 
     let nodeAgentSvc = qobjs::nm::node_agent_service_server::NodeAgentServiceServer::new(svc.clone());
     let naFuture = Server::builder()
         .add_service(nodeAgentSvc)
-        .serve("127.0.0.1:8888".parse().unwrap());
+        .serve(NODEMGRSVC_ADDR.parse().unwrap());
+
+    let qserverless: QServerless = QServerless::New(BLOBDB_ADDR, QMETASVC_ADDR).await?;
+    let qserverlessSvc = qobjs::qmeta::q_serverless_server::QServerlessServer::new(qserverless);
+    let qserverlessFuture = Server::builder()
+        .add_service(qserverlessSvc)
+        .serve(QSERVERLESSSVC_ADDR.parse().unwrap());
+
 
     info!("nodemgr start ...");
     tokio::select! {
         _ = qmetaFuture => {}
         _ = naFuture => {}
+        _ = qserverlessFuture => {}
     }
 
     Ok(())
@@ -491,12 +500,12 @@ mod tests {
 
     #[actix_rt::test]
     async fn NMTest() {
-        let cacheClient = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
+        let cacheClient = CacherClient::New(QMETASVC_ADDR.into()).await.unwrap();
 
         let list = cacheClient.List(QUARK_POD, "default", &ListOption::default()).await.unwrap();
         println!("list1 is {:?}", list);
 
-        //let client = NodeMgrClient::New("http://127.0.0.1:8889".into()).await.unwrap();
+        //let client = NodeMgrClient::New(QMETASVC_ADDR.into()).await.unwrap();
         let podstr = r#"
         {
             "apiVersion":"v1",
@@ -549,14 +558,14 @@ mod tests {
 
     #[actix_rt::test]
     async fn EtcdList() {
-        let client = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
+        let client = CacherClient::New(QMETASVC_ADDR.into()).await.unwrap();
         println!("list is {:#?}", client.List("pod", "", &ListOption::default()).await.unwrap());
         assert!(false);
     }
 
     #[actix_rt::test]
     async fn EtcdTest() {
-        let client = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
+        let client = CacherClient::New(QMETASVC_ADDR.into()).await.unwrap();
         
         let obj = DataObject::NewPod("namespace1", "name1").unwrap();
         let rev = client.Create("pod", obj.Obj()).await.unwrap();
@@ -715,10 +724,10 @@ mod tests {
 
     #[actix_rt::test]
     async fn InformerTest() {
-        let client = CacherClient::New("http://127.0.0.1:8890".into()).await.unwrap();
+        let client = CacherClient::New(QMETASVC_ADDR.into()).await.unwrap();
         
         error!("InformerTest 1");
-        let factory = InformerFactory::New("http://127.0.0.1:8890", "").await.unwrap();
+        let factory = InformerFactory::New(QMETASVC_ADDR, "").await.unwrap();
         factory.AddInformer("pod", &ListOption::default()).await.unwrap();
         let informer = factory.GetInformer("pod").await.unwrap();
         let handler1 = Arc::new(InformerHandler::New());

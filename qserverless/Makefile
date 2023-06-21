@@ -1,4 +1,4 @@
-All: na nm fp fs
+All: na nm fp fs qctl
 na:
 	cargo build --bin node_agent
 nm:
@@ -7,6 +7,8 @@ fp:
 	cargo build --bin func_pod
 fs:
 	cargo build --bin func_svc
+qctl:
+	cargo build --bin qctl
 deploy: fp 
 	mkdir -p ./target/fp
 	-rm ./target/fp/*

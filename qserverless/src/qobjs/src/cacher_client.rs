@@ -41,8 +41,8 @@ impl Deref for CacherClient {
 }
 
 impl CacherClient {
-    pub async fn New(addr: String) -> Result<Self> {
-        let inner = CacherClientInner::New(addr).await?;
+    pub async fn New(qmetaSvcAddr: String) -> Result<Self> {
+        let inner = CacherClientInner::New(qmetaSvcAddr).await?;
         return Ok(Self(Arc::new(TMutex::new(inner))));
     }
 
@@ -83,8 +83,8 @@ pub struct CacherClientInner {
 }
 
 impl CacherClientInner {
-    pub async fn New(addr: String) -> Result<Self> {
-        let client = QMetaServiceClient::connect(addr).await?;
+    pub async fn New(qmetaSvcAddr: String) -> Result<Self> {
+        let client = QMetaServiceClient::connect(qmetaSvcAddr).await?;
         return Ok(Self {
             client: client,
         })
