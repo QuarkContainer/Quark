@@ -272,7 +272,8 @@ impl PackageMgr {
 impl EventHandler for PackageMgr {
     fn handle(&self, _store: &ThreadSafeStore, event: &DeltaEvent) {
         let obj = event.obj.clone();
-        let funcPackage : FuncPackage = serde_json::from_str(&obj.data).unwrap();
+        let mut funcPackage : FuncPackage = serde_json::from_str(&obj.data).unwrap();
+        funcPackage.metadata.resource_version = Some(format!("{}", obj.reversion));
         
         match &event.type_{
             EventType::Added => {

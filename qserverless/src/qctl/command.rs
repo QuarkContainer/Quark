@@ -17,7 +17,7 @@ use clap::{App, AppSettings};
 
 use qobjs::common::*;
 
-use crate::create_pypackage::CreatePyPackageCmd;
+use crate::{create_pypackage::CreatePyPackageCmd, list::ListCmd, get::GetCmd, get_object::GetObjectCmd};
 
 pub struct Arguments {
     pub cmd: Command,
@@ -26,11 +26,17 @@ pub struct Arguments {
 #[derive(Debug)]
 pub enum Command {
     CreatePyPackage(CreatePyPackageCmd),
+    List(ListCmd),
+    Get(GetCmd),
+    GetObject(GetObjectCmd),
 }
 
 pub async fn Run(args: &mut Arguments) -> Result<()> {
     match &mut args.cmd {
         Command::CreatePyPackage(cmd) => return cmd.Run().await,
+        Command::List(cmd) => return cmd.Run().await,
+        Command::Get(cmd) => return cmd.Run().await,
+        Command::GetObject(cmd) => return cmd.Run().await,
     }
 }
 
@@ -48,11 +54,23 @@ pub fn Parse() -> Result<Arguments> {
     .setting(AppSettings::SubcommandRequired)
     .version(crate_version!())
     .subcommand(CreatePyPackageCmd::SubCommand())
+    .subcommand(ListCmd::SubCommand())
+    .subcommand(GetCmd::SubCommand())
+    .subcommand(GetObjectCmd::SubCommand())
     .get_matches_from(get_args());
         
     let args = match matches.subcommand() {
         ("createpy", Some(cmd_matches)) => Arguments {
             cmd: Command::CreatePyPackage(CreatePyPackageCmd::Init(&cmd_matches)?),
+        },        
+        ("get", Some(cmd_matches)) => Arguments {
+            cmd: Command::List(ListCmd::Init(&cmd_matches)?),
+        },
+        ("describle", Some(cmd_matches)) => Arguments {
+            cmd: Command::Get(GetCmd::Init(&cmd_matches)?),
+        },
+        ("download", Some(cmd_matches)) => Arguments {
+            cmd: Command::GetObject(GetObjectCmd::Init(&cmd_matches)?),
         },
         // We should never reach here because clap already enforces this
         x => panic!("command not recognized {:?}", x),
