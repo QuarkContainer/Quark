@@ -14,6 +14,8 @@
 
 use std::{collections::BTreeMap, sync::Mutex};
 
+use qobjs::object_mgr::ObjectbMgrTrait;
+use qobjs::object_mgr::SqlObjectMgr;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Response, Status, Request};
 use tokio::sync::mpsc;
@@ -34,12 +36,12 @@ use crate::VERSION;
 use crate::na_client::*;
 use crate::etcd::etcd_svc::EtcdSvc;
 use crate::SVC_DIR;
-use crate::qserverless_svc::QServerless;
 
 #[derive(Debug)]
 pub struct NodeMgrSvcInner {
     pub clients: Mutex<BTreeMap<String, NodeAgentClient>>,
     pub etcdSvc: EtcdSvc,
+    pub objectMgr: SqlObjectMgr,
 }
 
 // NodeMgrSvc direct connect to NodeAgent
@@ -55,13 +57,15 @@ impl Deref for NodeMgrSvc {
 }
 
 impl NodeMgrSvc {
-    pub fn New() -> Self {
+    pub async fn New(ObjectDbAddr: &str, ) -> Result<Self> {
+        let objectMgr = SqlObjectMgr::New(ObjectDbAddr).await?;
         let inner = NodeMgrSvcInner {
             clients: Mutex::new(BTreeMap::new()),
             etcdSvc: EtcdSvc::default(),
+            objectMgr,
         };
 
-        return Self(Arc::new(inner));
+        return Ok(Self(Arc::new(inner)));
     }
 
     pub fn NodeAgent(&self, nodeId: &str) -> Option<NodeAgentClient> {
@@ -455,6 +459,95 @@ impl qmeta::q_meta_service_server::QMetaService for NodeMgrSvc {
 
         return Ok(Response::new(Box::pin(stream) as Self::WatchStream));
     }
+
+    async fn put_obj(
+        &self,
+        request: tonic::Request<qmeta::PutObjReq>,
+    ) -> SResult<tonic::Response<qmeta::PutObjResp>, tonic::Status> {
+        let req = request.get_ref();
+        match self.objectMgr.PutObject(&req.namespace, &req.name, &req.data).await {
+            Err(e) => {
+                return Ok(Response::new(qmeta::PutObjResp {
+                    error: format!("Fail: {:?}", e),
+                    ..Default::default()
+                }))
+            }
+            Ok(()) => {
+                return Ok(Response::new(qmeta::PutObjResp {
+                    ..Default::default()
+                }))
+            }
+        }
+    }
+
+    async fn delete_obj(
+        &self,
+        request: tonic::Request<qmeta::DeleteObjReq>,
+    ) -> SResult<tonic::Response<qmeta::DeleteObjResp>, tonic::Status>{
+        let req = request.get_ref();
+        match self.objectMgr.DeleteObject(&req.namespace, &req.name).await {
+            Err(e) => {
+                return Ok(Response::new(qmeta::DeleteObjResp {
+                    error: format!("Fail: {:?}", e),
+                    ..Default::default()
+                }))
+            }
+            Ok(()) => {
+                return Ok(Response::new(qmeta::DeleteObjResp {
+                    ..Default::default()
+                }))
+            }
+        }
+    }
+    
+    async fn read_obj(
+        &self,
+        request: tonic::Request<qmeta::ReadObjReq>,
+    ) -> SResult<tonic::Response<qmeta::ReadObjResp>, tonic::Status>{
+        let req = request.get_ref();
+        match self.objectMgr.ReadObject(&req.namespace, &req.name).await {
+            Err(e) => {
+                return Ok(Response::new(qmeta::ReadObjResp {
+                    error: format!("Fail: {:?}", e),
+                    ..Default::default()
+                }))
+            }
+            Ok(data) => {
+                return Ok(Response::new(qmeta::ReadObjResp {
+                    data: data,
+                    ..Default::default()
+                }))
+            }
+        }
+    }
+    
+    async fn list_obj(
+        &self,
+        request: tonic::Request<qmeta::ListObjReq>,
+    ) -> SResult<tonic::Response<qmeta::ListObjResp>, tonic::Status>{
+        let req = request.get_ref();
+        match self.objectMgr.ListObjects(&req.namespace, &req.prefix).await {
+            Err(e) => {
+                return Ok(Response::new(qmeta::ListObjResp {
+                    error: format!("Fail: {:?}", e),
+                    ..Default::default()
+                }))
+            }
+            Ok(data) => {
+                let mut objs = Vec::new();
+                for o in data {
+                    objs.push(qmeta::ObjMeta {
+                        name: o.name,
+                        size: o.size,
+                    });
+                }
+                return Ok(Response::new(qmeta::ListObjResp {
+                    objs: objs,
+                    ..Default::default()
+                }))
+            }
+        }
+    }
 }
 
 
@@ -462,7 +555,7 @@ pub async fn GrpcService() -> Result<()> {
     use tonic::transport::Server;
     use qobjs::qmeta::q_meta_service_server::QMetaServiceServer;
 
-    let svc = NodeMgrSvc::New();
+    let svc = NodeMgrSvc::New(OBJECTDB_ADDR).await?;
 
     let qmetaFuture = Server::builder()
         .add_service(QMetaServiceServer::new(svc.clone()))
@@ -473,19 +566,10 @@ pub async fn GrpcService() -> Result<()> {
         .add_service(nodeAgentSvc)
         .serve(NODEMGRSVC_ADDR.parse().unwrap());
 
-    let qmetaSvcAddr = &format!("http://{}", QMETASVC_ADDR);
-    let qserverless: QServerless = QServerless::New(BLOBDB_ADDR, qmetaSvcAddr).await?;
-    let qserverlessSvc = qobjs::qmeta::q_serverless_server::QServerlessServer::new(qserverless);
-    let qserverlessFuture = Server::builder()
-        .add_service(qserverlessSvc)
-        .serve(QSERVERLESSSVC_ADDR.parse().unwrap());
-
-
     info!("nodemgr start ...");
     tokio::select! {
         _ = qmetaFuture => {}
         _ = naFuture => {}
-        _ = qserverlessFuture => {}
     }
 
     Ok(())

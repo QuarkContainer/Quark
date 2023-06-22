@@ -31,7 +31,7 @@ pub const QMETASVC_ADDR : &str = "127.0.0.1:8890";
 pub const NODEMGRSVC_ADDR : &str = "127.0.0.1:8888";
 pub const QSERVERLESSSVC_ADDR : &str = "127.0.0.1:8894";
 pub const AUDITDB_ADDR: &str = "postgresql://audit_user:123456@localhost/auditdb";
-pub const BLOBDB_ADDR: &str = "postgresql://blob_user:123456@localhost/blobdb";
+pub const OBJECTDB_ADDR: &str = "postgresql://blob_user:123456@localhost/blobdb";
 
 pub const QUARK_POD : &str = "qpod";
 pub const QUARK_NODE : &str = "qnode";

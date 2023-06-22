@@ -126,7 +126,7 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use qobjs::audit::func_audit::*;
-    use qobjs::blob_mgr::*;
+    use qobjs::object_mgr::*;
     use qobjs::types::*;
 
     #[actix_rt::test]
@@ -169,22 +169,33 @@ mod tests {
 
     #[actix_rt::test]
     async fn test_blob() {
-        let blob = SqlBlobMgr::New(BLOBDB_ADDR).await.unwrap();
-        let id = uuid::Uuid::new_v4().to_string();
+        let blob = SqlObjectMgr::New(OBJECTDB_ADDR).await.unwrap();
+        let namespace = "ns1";
+        let name = "object1";
         let datastr = "asdfasdfasdfdsafd";
-        blob.CreateBlob(
-            &id, 
+        blob.PutObject(
+            namespace,
+            name, 
             &datastr.as_bytes()
         ).await.unwrap();
 
-        let data = blob.ReadBlob(
-            &id
+        let data = blob.ReadObject(
+            namespace,
+            name
         ).await.unwrap();
 
         println!("data is {}", std::str::from_utf8(&data).unwrap());
 
-        blob.DropBlob(
-            &id
+        let objs = blob.ListObjects(namespace, "obj").await.unwrap();
+        println!("list is {:?}", objs);
+        assert!(objs.len()==1);
+
+        let objs = blob.ListObjects(namespace, "xxx").await.unwrap();
+        assert!(objs.len()==0);
+
+        blob.DeleteObject(
+            namespace,
+            name
         ).await.unwrap();
 
         assert!(datastr==std::str::from_utf8(&data).unwrap());
