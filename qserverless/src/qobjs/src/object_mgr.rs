@@ -54,7 +54,7 @@ pub struct ObjectMeta {
 impl ObjectbMgrTrait for SqlObjectMgr {
     async fn PutObject(&self, namespace: &str, name: &str, data: &[u8]) -> Result<()> {
         self.DeleteObject(namespace, name).await.ok();
-        let query = "insert into blobtbl (namespace, name, data, createTime) values \
+        let query = "insert into objecttbl (namespace, name, data, createTime) values \
             ($1, $2, $3, NOW())";
         let _result = sqlx::query(query)
             .bind(namespace)
@@ -67,7 +67,7 @@ impl ObjectbMgrTrait for SqlObjectMgr {
     }
     
     async fn DeleteObject(&self, namespace: &str, name: &str) -> Result<()> {
-        let query = "delete from blobtbl where namespace=$1 and name = $2";
+        let query = "delete from objecttbl where namespace=$1 and name = $2";
         let _result = sqlx::query(query)
             .bind(namespace)
             .bind(name)
@@ -78,7 +78,7 @@ impl ObjectbMgrTrait for SqlObjectMgr {
     }
 
     async fn ReadObject(&self, namespace: &str, name: &str) -> Result<Vec<u8>> {
-        let query = "select data from blobtbl where namespace=$1 and name = $2";
+        let query = "select data from objecttbl where namespace=$1 and name = $2";
         let data = sqlx::query(query)
             .bind(namespace)
             .bind(name)
@@ -91,7 +91,7 @@ impl ObjectbMgrTrait for SqlObjectMgr {
     }
 
     async fn ListObjects(&self, namespace: &str, prefix: &str) -> Result<Vec<ObjectMeta>> {
-        let query = "select name, length(data) size from blobtbl where namespace=$1 and name like $2";
+        let query = "select name, length(data) size from objecttbl where namespace=$1 and name like $2";
         let prefix = &format!("{}%", prefix);
         let select_query = sqlx::query(query);
         let objs: Vec<ObjectMeta> = select_query

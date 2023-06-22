@@ -14,50 +14,58 @@
 
 use clap::{App, AppSettings, ArgMatches, SubCommand, Arg};
 
-use qobjs::{common::*, types::QMETASVC_ADDR, system_types::FuncPackage};
+use qobjs::{common::*, types::QMETASVC_ADDR};
 
 use crate::package_mgr::PackageMgr;
 
 #[derive(Debug)]
-pub struct CreatePyPackageCmd {
-    pub manifestfile: String,
-    pub zipfolder: String,
+pub struct GetObjectCmd {
+    pub namespace: String,
+    pub name: String,
+    pub outputfile: String,
 }
 
-impl CreatePyPackageCmd {
+impl GetObjectCmd {
     pub fn Init(cmd_matches: &ArgMatches) -> Result<Self> {
         return Ok(Self {
-            manifestfile: cmd_matches.value_of("manifest").unwrap().to_string(),
-            zipfolder: cmd_matches.value_of("func_directory").unwrap().to_string(),
+            namespace: cmd_matches.value_of("namespace").unwrap().to_string(),
+            name: cmd_matches.value_of("name").unwrap().to_string(),
+            outputfile: cmd_matches.value_of("outputfile").unwrap().to_string(),
         });
     }
 
     pub fn SubCommand<'a, 'b>() -> App<'a, 'b> {
-        return SubCommand::with_name("createpy")
+        return SubCommand::with_name("download")
             .setting(AppSettings::ColoredHelp)
             .arg(
-                Arg::with_name("manifest")
+                Arg::with_name("namespace")
                     .required(true)
-                    .help("func package definition")
-                    .long("manifest")
-                    .short("f")
+                    .help("object namespace")
+                    .long("namespace")
+                    .short("n")
                     .takes_value(true),
             )    
             .arg(
-                Arg::with_name("func_directory")
+                Arg::with_name("name")
                     .required(true)
-                    .help("the directory contains functions files")
-                    .long("funcs_dir")
-                    .short("d")
+                    .help("object name")
                     .takes_value(true),
-            )
+            )  
+            .arg(
+                Arg::with_name("outputfile")
+                    .required(true)
+                    .long("output")
+                    .short("o")
+                    .help("output file")
+                    .takes_value(true),
+            )              
             .about("Create a python function package");
     }
 
     pub async fn Run(&self) -> Result<()> {
-        println!("CreatePyPackageCmd is {:?}", self);
+        println!("GetObjectCmd is {:?}", self);
         let addr = format!("http://{}", QMETASVC_ADDR);
-        let mut packageMgr = match PackageMgr::New(&addr).await {
+        let packageMgr = match PackageMgr::New(&addr).await {
             Err(e) => {
                 println!("can't connect the qservereless service {} with error {:?}", &addr, e);
                 return Ok(())
@@ -65,31 +73,25 @@ impl CreatePyPackageCmd {
             Ok(m) => m
         };
 
-        let packageStr = match std::fs::read(&self.manifestfile) {
+        let contents = match packageMgr.ReadObject(&self.namespace, &self.name).await {
             Err(e) => {
-                println!("can't open manifest file {} with error {:?}", &self.manifestfile, e);
+                println!("can't download object for namespace {} objname {} with error {:?}", 
+                    &self.namespace, &self.name, e);
                 return Ok(())
             }
             Ok(s) => s 
         };
 
-        let package : FuncPackage = match serde_json::from_slice(&packageStr) {
+        match std::fs::write(&self.outputfile, contents) {
             Err(e) => {
-                println!("can't deserialize manifest {} with error {:?}", &self.manifestfile, e);
+                println!("can't write object for namespace {} objname {} to file {} with error {:?}", 
+                    &self.namespace, &self.name, &self.outputfile, e);
                 return Ok(())
             }
-            Ok(p) => p 
-        };
-
-        match packageMgr.CreatePyPackage(package, &self.zipfolder).await {
-            Err(e) => {
-                println!("can't create package with error {:?}", e);
-                return Ok(());
-            }
-            Ok(_) => {
-                return Ok(());
-            }
+            Ok(()) => ()
         }
-        
+
+        return Ok(())
     }
+
 }
