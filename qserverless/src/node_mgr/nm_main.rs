@@ -33,7 +33,6 @@ pub mod nodemgr;
 pub mod types;
 pub mod nm_store;
 pub mod etcd;
-pub mod qserverless_svc;
 
 use crate::nm_svc::*;
 use crate::etcd::svc_dir::*;

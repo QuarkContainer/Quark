@@ -20,6 +20,7 @@ use tonic::Streaming;
 use tonic::transport::Channel;
 use tonic::Request;
 
+use crate::object_mgr::ObjectMeta;
 use crate::selection_predicate::ListOption;
 use crate::qmeta::q_meta_service_client::QMetaServiceClient;
 use crate::qmeta::*;
@@ -74,6 +75,26 @@ impl CacherClient {
     pub async fn Watch(&self, objType: &str, namespace: &str, opts: &ListOption) -> Result<WatchStream> {
         let mut inner = self.lock().await;
         return inner.Watch(objType, namespace, opts).await;
+    }
+
+    pub async fn PutObject(&self, namespace: &str, name: &str, data: Vec<u8>) -> Result<()> {
+        let mut inner = self.lock().await;
+        return inner.PutObject(namespace, name, data).await;
+    }
+
+    pub async fn DeleteObject(&self, namespace: &str, name: &str) -> Result<()> {
+        let mut inner = self.lock().await;
+        return inner.DeleteObject(namespace, name).await;
+    }
+
+    pub async fn ReadObject(&self, namespace: &str, name: &str) -> Result<Vec<u8>> {
+        let mut inner = self.lock().await;
+        return inner.ReadObject(namespace, name).await;
+    }
+
+    pub async fn ListObjects(&self, namespace: &str, prefix: &str) -> Result<Vec<ObjectMeta>> {
+        let mut inner = self.lock().await;
+        return inner.ListObjects(namespace, prefix).await;
     }
 }
 
@@ -200,6 +221,74 @@ impl CacherClientInner {
         let response = self.client.watch(Request::new(req)).await?;
         let resp = response.into_inner();
         return Ok(WatchStream { stream: resp })
+    }
+
+    async fn PutObject(&mut self, namespace: &str, name: &str, data: Vec<u8>) -> Result<()> {
+        let req = PutObjReq {
+            namespace: namespace.to_owned(),
+            name: name.to_owned(),
+            data: data,
+        };
+
+        let response = self.client.put_obj(Request::new(req)).await?;
+        let resp = response.into_inner();
+        if resp.error.len() == 0 {
+            return Ok(())
+        }
+
+        return Err(Error::CommonError(resp.error.to_owned()))
+    }
+    
+    async fn DeleteObject(&mut self, namespace: &str, name: &str) -> Result<()> {
+        let req = DeleteObjReq {
+            namespace: namespace.to_owned(),
+            name: name.to_owned(),
+        };
+
+        let response = self.client.delete_obj(Request::new(req)).await?;
+        let resp = response.into_inner();
+        if resp.error.len() == 0 {
+            return Ok(())
+        }
+
+        return Err(Error::CommonError(resp.error.to_owned()))
+    }
+
+    async fn ReadObject(&mut self, namespace: &str, name: &str) -> Result<Vec<u8>> {
+        let req = ReadObjReq {
+            namespace: namespace.to_owned(),
+            name: name.to_owned(),
+        };
+
+        let response = self.client.read_obj(Request::new(req)).await?;
+        let resp = response.into_inner();
+        if resp.error.len() == 0 {
+            return Ok(resp.data)
+        }
+
+        return Err(Error::CommonError(resp.error.to_owned()))
+    }
+
+    async fn ListObjects(&mut self, namespace: &str, prefix: &str) -> Result<Vec<ObjectMeta>> {
+        let req = ListObjReq {
+            namespace: namespace.to_owned(),
+            prefix: prefix.to_owned(),
+        };
+
+        let response = self.client.list_obj(Request::new(req)).await?;
+        let resp = response.into_inner();
+        if resp.error.len() == 0 {
+            let mut objs = Vec::new();
+            for o in resp.objs {
+                objs.push(ObjectMeta {
+                    name: o.name,
+                    size: o.size,
+                })
+            }
+            return Ok(objs)
+        }
+
+        return Err(Error::CommonError(resp.error.to_owned()))
     }
 }
 

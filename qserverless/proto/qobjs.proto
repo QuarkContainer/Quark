@@ -39,6 +39,54 @@ service QMetaService {
   rpc Update (UpdateRequestMessage) returns (UpdateResponseMessage) {}
   rpc List (ListRequestMessage) returns (ListResponseMessage) {}
   rpc Watch (WatchRequestMessage) returns (stream WEvent) {}
+  rpc PutObj (PutObjReq) returns (PutObjResp) {}
+  rpc DeleteObj (DeleteObjReq) returns (DeleteObjResp) {}
+  rpc ReadObj (ReadObjReq) returns (ReadObjResp) {}
+  rpc ListObj (ListObjReq) returns (ListObjResp) {}
+}
+
+message PutObjReq {
+    string namespace = 1;
+    string name = 2;
+    bytes data = 3;
+}
+
+message PutObjResp {
+    string error = 1;
+}
+
+message DeleteObjReq {
+    string namespace = 1;
+    string name = 2;
+}
+
+message DeleteObjResp {
+    string error = 1;
+}
+
+message ReadObjReq {
+    string namespace = 1;
+    string name = 2;
+}
+
+message ReadObjResp {
+    string error = 1;
+    bytes data = 2;
+}
+
+message ObjMeta {
+    string name = 1;
+    int32 size = 2;
+}
+
+message ListObjReq {
+    string namespace = 1;
+    string prefix = 2;
+}
+
+message ListObjResp {
+    string error = 1;
+    repeated ObjMeta objs = 2;
 }
 
 message VersionRequestMessage {

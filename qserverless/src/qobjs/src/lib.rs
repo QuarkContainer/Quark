@@ -41,7 +41,7 @@ pub mod utility;
 pub mod func_client;
 pub mod system_types;
 pub mod audit;
-pub mod blob_mgr;
+pub mod object_mgr;
 pub mod qserverless_cli;
 pub mod zip;
 
