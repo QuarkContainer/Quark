@@ -33,10 +33,10 @@ pub struct SqlObjectMgr {
 }
 
 impl SqlObjectMgr {
-    pub async fn New(blobDbAddr: &str) -> Result<Self> {
+    pub async fn New(objectDbAddr: &str) -> Result<Self> {
         let pool = PgPoolOptions::new()
             .max_connections(5)
-            .connect(blobDbAddr)
+            .connect(objectDbAddr)
 		    .await?;
         return Ok(Self {
             pool: pool

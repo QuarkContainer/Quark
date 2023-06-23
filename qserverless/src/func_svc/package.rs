@@ -59,6 +59,17 @@ impl PackageInner {
         };
     }
 
+    pub fn Annotations(&self) -> BTreeMap<String, String> {
+        let mut map = BTreeMap::new();
+        if let Some(annotations) = &self.funcPackage.metadata.annotations {
+            for (k, v)in annotations {
+                map.insert(k.to_owned(), v.to_owned());
+            }
+        }
+
+        return map;
+    }
+
     pub fn NewFromFuncPackage(fp: FuncPackage) -> Self {
         return Self {
             namespace: fp.metadata.namespace.as_deref().unwrap_or("").to_string(),

@@ -37,6 +37,7 @@ use qobjs::crictl;
 use qobjs::runtime_types::RuntimeContainer;
 use qobjs::config::*;
 use qobjs::runtime_types::*;
+use qobjs::types::*;
 
 use crate::nm_svc::*;
 use crate::IMAGE_MGR;
@@ -79,6 +80,11 @@ pub struct PodAgentInner {
     pub agentRx: Mutex<Option<mpsc::Receiver<NodeAgentMsg>>>,
     pub nodeConfig: NodeConfiguration,
     pub containers: Mutex<BTreeMap<String, PodContainerAgent>>,
+}
+
+pub enum PodType {
+    Normal,
+    Python(String)
 }
 
 #[derive(Clone)]
@@ -135,6 +141,22 @@ impl PodAgent {
             pcm.UpdateQOSCgroups()
         }
         */
+
+        let podType = match pod.read().unwrap().metadata.annotations.as_ref().unwrap().get(AnnotationFuncPodPackageType) {
+            None => PodType::Normal,
+            Some(t) => {
+                if t == "python" {
+                    match pod.read().unwrap().metadata.annotations.as_ref().unwrap().get(AnnotationFuncPodPyPackageId) {
+                        None => panic!("can't get annotation {} for python type package", AnnotationFuncPodPyPackageId),
+                        Some(id) => PodType::Python(id.to_owned()),
+                    }
+                } else {
+                    error!("get unknow package type {}", t);
+                    PodType::Normal
+                }
+            }
+        };
+
         info!("Make Pod data dirs pod {}", &podId);
         MakePodDataDir(&self.nodeConfig.RootPath, &pod.read().unwrap())?;
         info!("Make Pod log dirs pod {}", &podId);

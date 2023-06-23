@@ -17,6 +17,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_upper_case_globals)]
 #![allow(deprecated)]
+#![feature(map_first_last)]
 
 #[macro_use]
 extern crate log;
@@ -44,6 +45,7 @@ pub mod store;
 pub mod nodeagent_server;
 pub mod func_agent;
 pub mod blobstore;
+pub mod funcdir_mgr;
 
 use qobjs::common::Result as QResult;
 use qobjs::config::{NodeAgentConfig, SystemConfig, SYSTEM_CONFIGS};

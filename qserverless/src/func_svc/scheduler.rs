@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
 use std::ops::Add;
 use std::ops::Sub;
 use std::sync::Arc;
@@ -138,7 +137,7 @@ impl Scheduler {
 
         pod.metadata.namespace = Some(package.Namespace());
         pod.metadata.name = Some(podName.to_string());
-        let mut annotations = BTreeMap::new();
+        let mut annotations = package.lock().unwrap().Annotations();
         annotations.insert(AnnotationFuncPodPackageName.to_string(), package.Name());
         pod.metadata.annotations = Some(annotations);
         
