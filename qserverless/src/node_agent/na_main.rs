@@ -28,6 +28,7 @@ use std::collections::BTreeMap;
 use blobstore::blob_client::BlobSvcClientMgr;
 use func_agent::func_agent::{FuncAgent, FuncAgentGrpcService};
 use func_agent::funcsvc_client::FuncSvcClientMgr;
+use funcdir_mgr::FuncDirMgr;
 use lazy_static::lazy_static;
 use once_cell::sync::OnceCell;
 
@@ -49,6 +50,7 @@ pub mod funcdir_mgr;
 
 use qobjs::common::Result as QResult;
 use qobjs::config::{NodeAgentConfig, SystemConfig, SYSTEM_CONFIGS};
+use qobjs::types::*;
 //use qobjs::config::NodeConfiguration;
 //use qobjs::nm::NodeAgentMessage;
 use runtime::image_mgr::ImageMgr;
@@ -68,6 +70,7 @@ pub static CADVISOR_PROVIDER: OnceCell<CadvisorInfoProvider> = OnceCell::new();
 pub static NODEAGENT_STORE: OnceCell<NodeAgentStore> = OnceCell::new();
 pub static FUNC_SVC_CLIENT: OnceCell<FuncSvcClientMgr> = OnceCell::new();
 pub static NODEAGENT_CONFIG1: OnceCell<NodeAgentConfig> = OnceCell::new();
+pub static FUNCDIR_MGR: OnceCell<FuncDirMgr> = OnceCell::new();
 
 lazy_static! {
     pub static ref NETWORK_PROVIDER: LocalNetworkAddressProvider = {
@@ -146,7 +149,11 @@ pub async fn NodeAgentSvc() -> QResult<()> {
    
     let config = qobjs::config::NodeConfiguration::Default()?;
     
+    let funcDirRoot = format!("{}/{}", &config.RootPath, "func");
+    FUNCDIR_MGR.set(FuncDirMgr::New(&funcDirRoot, OBJECTDB_ADDR).await?).unwrap();
+    
     let na = crate::node::Run(&NODEAGENT_CONFIG.NodeName(), config).await?;
+    
     
     let nodeMgrAddrs = NODEAGENT_CONFIG.nodeMgrAddrs();
     let nodeAgentSrvMgr = NodeAgentServerMgr::New(nodeMgrAddrs);

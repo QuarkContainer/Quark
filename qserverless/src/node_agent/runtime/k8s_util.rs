@@ -16,6 +16,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 use std::os::unix::fs::PermissionsExt;
+use std::sync::Arc;
+use std::sync::RwLock;
 use rand::prelude::*;
 use std::fs::Permissions;
 
@@ -24,7 +26,9 @@ use qobjs::crictl;
 use qobjs::common::*;
 
 use qobjs::config::*;
+use crate::FUNCDIR_MGR;
 use crate::NODEAGENT_CONFIG;
+use crate::pod::PodType;
 use crate::runtime::k8s_quantity::*;
 use crate::runtime::security_context::*;
 
@@ -430,11 +434,12 @@ pub const MemoryHigh: &str = "memory.high";
 pub fn generateLinuxContainerConfig(
     nodeConfig: &NodeConfigurationInner, 
     container: &k8s::Container, 
-    pod: &k8s::Pod, 
+    pod: &Arc<RwLock<k8s::Pod>>, 
     uid: Option<i64>, 
     username: &str, 
     enforceMemoryQoS: bool
 ) -> crictl::LinuxContainerConfig {
+    let pod = &pod.read().unwrap();
     let mut lc = crictl::LinuxContainerConfig {
         resources: Some(crictl::LinuxContainerResources::default()),
         security_context: Some(DetermineEffectiveSecurityContext(pod, container, uid, username, nodeConfig.SeccompDefault, &nodeConfig.SeccompProfileRoot)),
@@ -502,7 +507,7 @@ pub fn MakeDevice(opts: &RunContainerOptions) -> Vec<crictl::Device> {
 }
 
 
-pub fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container) -> Vec<crictl::Mount> {
+pub async fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container, namespace: &str, podType: &PodType) -> Result<Vec<crictl::Mount>> {
     let mut volumeMounts = Vec::new();
 
     for v in &opts.mounts {
@@ -533,6 +538,20 @@ pub fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container) -> Vec
     };
     volumeMounts.push(mount);
 
+    match podType {
+        PodType::Normal => (),
+        PodType::Python(objName) => {
+            let funcDir = FUNCDIR_MGR.get().unwrap().GetFuncDir(namespace, objName).await?;
+            let mount = crictl::Mount {
+                host_path: funcDir.to_owned(),
+                container_path: "/app/func".to_string(),
+                selinux_relabel: false,
+                ..Default::default()
+            };
+            volumeMounts.push(mount);
+        }
+    }
+
     // The reason we create and mount the log file in here (not in kubelet) is because
 	// the file's location depends on the ID of the container, and we need to create and
 	// mount the file before actually starting the container.
@@ -557,7 +576,7 @@ pub fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container) -> Vec
         });
     }
 
-    return volumeMounts;
+    return Ok(volumeMounts);
 }
 
 pub fn MakeAbsolutePath(_goos: &str, path: &str) -> String {

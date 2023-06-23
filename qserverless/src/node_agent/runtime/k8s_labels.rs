@@ -14,6 +14,8 @@
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::RwLock;
 use serde::Deserialize;
 
 use k8s_openapi::api::core::v1::{self as k8s, ContainerPort};
@@ -109,7 +111,8 @@ pub fn HashContainer(container: &k8s::Container) -> u64 {
 	return ret;
 }
 
-pub fn NewContainerLabels(container: &k8s::Container, pod: &k8s::Pod) -> HashMap<String, String> {
+pub fn NewContainerLabels(container: &k8s::Container, pod: &Arc<RwLock<k8s::Pod>>) -> HashMap<String, String> {
+	let pod = &pod.read().unwrap();
     let mut labels = HashMap::new();
     labels.insert(KUBERNETES_POD_NAME_LABEL.to_string(), pod.metadata.name.as_deref().unwrap_or("").to_string());
     labels.insert(KUBERNETES_POD_NAMESPACE_LABEL.to_string(), pod.metadata.namespace.as_deref().unwrap_or("").to_string());
@@ -119,8 +122,9 @@ pub fn NewContainerLabels(container: &k8s::Container, pod: &k8s::Pod) -> HashMap
 	return labels;
 }
 
-pub fn NewContainerAnnotations(container: &k8s::Container, pod: &k8s::Pod, restartCount: i32, overrideAnnotations: &BTreeMap<String, String>) -> HashMap<String, String> {
-	let mut annotations = HashMap::new();
+pub fn NewContainerAnnotations(container: &k8s::Container, pod: &Arc<RwLock<k8s::Pod>>, restartCount: i32, overrideAnnotations: &BTreeMap<String, String>) -> HashMap<String, String> {
+	let pod = &pod.read().unwrap();
+    let mut annotations = HashMap::new();
 
 	annotations.insert(CONTAINER_HASH_LABEL.to_string(), format!("{}", HashContainer(container)));
 	annotations.insert(CONTAINER_RESTART_COUNT_LABEL.to_string(), format!("{}", restartCount));

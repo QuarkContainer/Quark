@@ -15,7 +15,6 @@
 use std::collections::HashMap;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::time::SystemTime;
 use std::ops::Deref;
 
@@ -23,6 +22,7 @@ use qobjs::common::*;
 use qobjs::object_mgr::*;
 use qobjs::object_mgr::SqlObjectMgr;
 use qobjs::zip::ZipMgr;
+use tokio::sync::Mutex as TMutex;
 
 #[derive(Debug)]
 pub struct FuncDirMgrInner {
@@ -35,13 +35,13 @@ pub struct FuncDirMgrInner {
     pub objectMgr: Arc<SqlObjectMgr>,
 }
 
-#[derive(Clone)]
-pub struct FuncDirMgr(pub Arc<Mutex<FuncDirMgrInner>>);
+#[derive(Clone, Debug)]
+pub struct FuncDirMgr(pub Arc<TMutex<FuncDirMgrInner>>);
 
 impl Deref for FuncDirMgr {
-    type Target = Arc<Mutex<FuncDirMgrInner>>;
+    type Target = Arc<TMutex<FuncDirMgrInner>>;
 
-    fn deref(&self) -> &Arc<Mutex<FuncDirMgrInner>> {
+    fn deref(&self) -> &Arc<TMutex<FuncDirMgrInner>> {
         &self.0
     }
 }
@@ -51,7 +51,7 @@ pub const MAX_CACHE_DIR_COUNT : usize = 100;
 impl FuncDirMgr {
     pub async fn New(baseDir: &str, objectDbAddr: &str) -> Result<Self> {
         let objectMgr = SqlObjectMgr::New(objectDbAddr).await?;
-        std::fs::remove_dir_all(baseDir)?;
+        std::fs::remove_dir_all(baseDir).ok();
         let inner = FuncDirMgrInner {
             baseDir: baseDir.to_owned(),
             objectMgr: Arc::new(objectMgr),
@@ -59,15 +59,15 @@ impl FuncDirMgr {
             objNameCache: HashMap::new(),
         };
 
-        return Ok(Self(Arc::new(Mutex::new(inner))));
+        return Ok(Self(Arc::new(TMutex::new(inner))));
     }
 
-    pub fn DirName(&self, objName: &str) -> String {
-        return format!("{}/{}", &self.lock().unwrap().baseDir, objName)
+    pub async fn DirName(&self, objName: &str) -> String {
+        return format!("{}/{}", &self.lock().await.baseDir, objName)
     }
 
-    pub fn EvicateFuncDir(&self) -> Result<()> {
-        let mut inner = self.lock().unwrap();
+    pub async fn EvicateFuncDir(&self) -> Result<()> {
+        let mut inner = self.lock().await;
         if inner.objNameCache.len() <= MAX_CACHE_DIR_COUNT {
             return Ok(())
         }
@@ -88,9 +88,9 @@ impl FuncDirMgr {
     }
 
     pub async fn GetFuncDir(&self, namespace: &str, objName: &str) -> Result<String> {
-        self.EvicateFuncDir()?;
+        self.EvicateFuncDir().await?;
         let objMgr = {
-            let mut inner = self.lock().unwrap();
+            let mut inner = self.lock().await;
             match inner.objNameCache.get(objName).cloned() {
                 None => (),
                 Some(time) => {
@@ -99,7 +99,7 @@ impl FuncDirMgr {
                     inner.objNameCache.insert(objName.to_owned(), now);
                     inner.cacheTime.remove(&time); 
                     inner.cacheTime.insert(now, objName.to_owned());
-                    return Ok(self.DirName(objName))
+                    return Ok(format!("{}/{}", &inner.baseDir, objName))
                 }
             }
 
@@ -107,18 +107,18 @@ impl FuncDirMgr {
         };
         
         let data = objMgr.ReadObject(namespace, objName).await?;
-        let targetFolder = self.DirName(objName);
-        let tmpFolder = self.DirName(objName) + ".tmp";
+        let targetFolder = self.DirName(objName).await;
+        let tmpFolder = self.DirName(objName).await + ".tmp";
         
         std::fs::create_dir_all(&tmpFolder)?;
         ZipMgr::Unzip(&tmpFolder, data)?;
 
-        let mut inner = self.lock().unwrap();
+        let mut inner = self.lock().await;
         match inner.objNameCache.get(objName) {
             None => (),
             Some(_time) => {
                 std::fs::remove_dir_all(&tmpFolder)?;
-                return Ok(self.DirName(objName))
+                return Ok(format!("{}/{}", &inner.baseDir, objName))
             }
         }
 
@@ -127,6 +127,6 @@ impl FuncDirMgr {
         inner.cacheTime.insert(now, objName.to_owned());
         inner.objNameCache.insert(objName.to_owned(), now);
 
-        return Ok(self.DirName(objName));
+        return Ok(format!("{}/{}", &inner.baseDir, objName));
     }
 }
