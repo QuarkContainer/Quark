@@ -169,6 +169,9 @@ impl PodAgent {
             return err
         }
          */
+
+        let namespace = pod.read().unwrap().metadata.namespace.clone().unwrap();
+
         info!("Pull pod secret pod {}", &podId);
         let pullSecrets = Vec::new();
         info!("Create pod sandbox {}", &podId);
@@ -183,7 +186,9 @@ impl PodAgent {
                 let runtimeContainer = self.CreateContainer(
                     runtimePod.sandboxConfig.as_ref().unwrap(), 
                     c, 
-                    &pullSecrets
+                    &pullSecrets,
+                    &namespace,
+                    &PodType::Normal
                 ).await?;
                 let inner = QuarkContainerInner {
                     state: RuntimeContainerState::Creating,
@@ -206,7 +211,9 @@ impl PodAgent {
             let runtimeContainer = self.CreateContainer(
                 runtimePod.sandboxConfig.as_ref().unwrap(), 
                 c, 
-                &pullSecrets
+                &pullSecrets,
+                &namespace,
+                &podType
             ).await?;
             let inner = QuarkContainerInner {
                 state: RuntimeContainerState::Creating,
@@ -714,6 +721,8 @@ impl PodAgent {
         podSandboxConfig: &crictl::PodSandboxConfig,
         containerSpec: &k8s::Container,
         _pullSecrets: &Vec<k8s::Secret>,
+        namespace: &str,
+        podType: &PodType
     ) -> Result<RuntimeContainer> {
         info!("Pull image for container pod {} container {}", self.pod.PodId(), &containerSpec.name);
         let pod = self.pod.Pod();
@@ -724,7 +733,7 @@ impl PodAgent {
         let _logDir = BuildContainerLogsDirectory(&pod.read().unwrap(), &containerSpec.name)?;
 
         info!("Generate container runtime config pod {} container {}", self.pod.PodId(), &containerSpec.name);
-        let containerConfig = self.generateContainerConfig(containerSpec, &imageRef).await?;
+        let containerConfig = self.generateContainerConfig(containerSpec, &imageRef, namespace, podType).await?;
 
         info!("Call runtime to create container pod {} container {}", self.pod.PodId(), &containerSpec.name);
         let runtimeContainer = RUNTIME_MGR.get().unwrap().CreateContainer(
@@ -745,7 +754,7 @@ impl PodAgent {
         }
     }
 
-    pub async fn generateContainerConfig(&self, container: &k8s::Container, imageRef: &crictl::Image) -> Result<crictl::ContainerConfig> {
+    pub async fn generateContainerConfig(&self, container: &k8s::Container, imageRef: &crictl::Image, namespace: &str, podType: &PodType) -> Result<crictl::ContainerConfig> {
         let pod = self.pod.Pod();
         BuildContainerLogsDirectory(&pod.read().unwrap(), &container.name)?;
 
@@ -800,10 +809,10 @@ impl PodAgent {
             command: commands,
             args: args,
             working_dir: container.working_dir.as_deref().unwrap_or("").to_string(),
-            labels: NewContainerLabels(container, &pod.read().unwrap()),
-            annotations: NewContainerAnnotations(container, &pod.read().unwrap(), 0, &BTreeMap::new()),
+            labels: NewContainerLabels(container, &pod),
+            annotations: NewContainerAnnotations(container, &pod, 0, &BTreeMap::new()),
             //devices:
-            mounts: MakeMounts(&RunContainerOptions::default(), container),
+            mounts: MakeMounts(&RunContainerOptions::default(), container, namespace, podType).await?,
             log_path: containerLogsPath,
             stdin: *container.stdin.as_ref().unwrap_or(&false),
             stdin_once: *container.stdin_once.as_ref().unwrap_or(&false),
@@ -816,8 +825,8 @@ impl PodAgent {
         };
 
         let username = imageRef.username.clone();
-        generateLinuxContainerConfig(&self.nodeConfig, container, &pod.read().unwrap(), uid, &username, true);
-
+        generateLinuxContainerConfig(&self.nodeConfig, container, &pod, uid, &username, true);
+        
         let mut criEnvs = Vec::with_capacity(envs.len());
         for env in &envs {
             criEnvs.push(crictl::KeyValue {
