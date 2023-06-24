@@ -29,6 +29,7 @@ pub mod create_pypackage;
 pub mod list;
 pub mod get;
 pub mod get_object;
+pub mod delete;
 
 use command::{Parse, Run};
 use qobjs::{common::*, zip::ZipMgr};

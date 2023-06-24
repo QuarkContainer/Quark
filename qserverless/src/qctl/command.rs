@@ -12,12 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::env;
+use std::{env, collections::BTreeSet};
 use clap::{App, AppSettings};
 
 use qobjs::common::*;
 
-use crate::{create_pypackage::CreatePyPackageCmd, list::ListCmd, get::GetCmd, get_object::GetObjectCmd};
+use crate::{create_pypackage::CreatePyPackageCmd, list::ListCmd, get::GetCmd, get_object::GetObjectCmd, delete::DeleteCmd};
+
+lazy_static::lazy_static! {
+    pub static ref SUPPORT_OBJ_TYPES : BTreeSet<String> = [
+        "package".to_string(),
+    ].iter().cloned().collect();
+}
 
 pub struct Arguments {
     pub cmd: Command,
@@ -28,6 +34,7 @@ pub enum Command {
     CreatePyPackage(CreatePyPackageCmd),
     List(ListCmd),
     Get(GetCmd),
+    Delete(DeleteCmd),
     GetObject(GetObjectCmd),
 }
 
@@ -36,6 +43,7 @@ pub async fn Run(args: &mut Arguments) -> Result<()> {
         Command::CreatePyPackage(cmd) => return cmd.Run().await,
         Command::List(cmd) => return cmd.Run().await,
         Command::Get(cmd) => return cmd.Run().await,
+        Command::Delete(cmd) => return cmd.Run().await,
         Command::GetObject(cmd) => return cmd.Run().await,
     }
 }
@@ -56,6 +64,7 @@ pub fn Parse() -> Result<Arguments> {
     .subcommand(CreatePyPackageCmd::SubCommand())
     .subcommand(ListCmd::SubCommand())
     .subcommand(GetCmd::SubCommand())
+    .subcommand(DeleteCmd::SubCommand())
     .subcommand(GetObjectCmd::SubCommand())
     .get_matches_from(get_args());
         
@@ -68,6 +77,9 @@ pub fn Parse() -> Result<Arguments> {
         },
         ("describle", Some(cmd_matches)) => Arguments {
             cmd: Command::Get(GetCmd::Init(&cmd_matches)?),
+        },
+        ("delete", Some(cmd_matches)) => Arguments {
+            cmd: Command::Delete(DeleteCmd::Init(&cmd_matches)?),
         },
         ("download", Some(cmd_matches)) => Arguments {
             cmd: Command::GetObject(GetObjectCmd::Init(&cmd_matches)?),

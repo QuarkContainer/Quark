@@ -60,6 +60,28 @@ impl PackageMgr {
         return Ok(funcPackage);
     }
 
+    pub async fn DeletePackage(&self, namespace: &str, name: &str) -> Result<()> {
+        match self.client.Get("package", &namespace, name, 0).await {
+            Err(_) => (),
+            Ok(obj) => {
+                match obj {
+                    None => (),
+                    Some(obj) => {
+                        match obj.annotations.get(AnnotationFuncPodPyPackageId) {
+                            None => (),
+                            Some(objName) => {
+                                self.client.DeleteObject(&namespace, objName).await.ok();
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        
+        self.client.Delete("package", namespace, name).await?;
+        return Ok(())
+    }
+
     pub async fn CreatePyPackage(&mut self, package: FuncPackage, funcFolder: &str) -> Result<FuncPackage> {
         let namespace = match &package.metadata.namespace {
             None => {

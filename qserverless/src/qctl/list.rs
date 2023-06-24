@@ -17,7 +17,7 @@ use clap::{App, AppSettings, ArgMatches, SubCommand, Arg};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 use qobjs::{common::*, types::QMETASVC_ADDR};
 
-use crate::package_mgr::PackageMgr;
+use crate::{package_mgr::PackageMgr, command::SUPPORT_OBJ_TYPES};
 
 #[derive(Debug)]
 pub struct ListCmd {
@@ -71,7 +71,12 @@ impl ListCmd {
             Ok(m) => m
         };
 
-        assert!(&self.objType == "packages");
+
+        if !SUPPORT_OBJ_TYPES.contains(&self.objType) {
+            println!("doesn't support object type {}, support list is {:?}", &self.objType, SUPPORT_OBJ_TYPES.iter().collect::<Vec<_>>());
+            return Ok(())
+        }
+
         let packages = match packageMgr.ListPackages(&self.namespace).await {
             Err(e) => {
                 println!("can't open list packages for namespace {} with error {:?}", &self.namespace, e);
