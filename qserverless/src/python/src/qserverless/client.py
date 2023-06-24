@@ -256,12 +256,15 @@ class FuncMgr:
         self.reqQueue.put_nowait(req)
         
     async def FuncCall(self, context: FuncCallContext, name: str, parameters: str) -> common.CallResult:
+        print("FuncCall 1 ", name, parameters);
         function = getattr(func, name)
         if function is None:
             return common.CallResult("", "There is no func named {}".format(name))
         
         kwargs = json.loads(parameters)
+        print("FuncCall 2 ", name, parameters);
         (result, err) = await function(context, **kwargs)
+        print("FuncCall 3 ", result, err);
         if result is None:
             result = ""
         if err is not None:
@@ -285,6 +288,7 @@ class FuncMgr:
             
     async def FuncAgentClientProcess(self, msg: func_pb2.FuncAgentMsg):
             msgType = msg.WhichOneof('EventBody')
+            print("FuncAgentClientProcess is ", msg)
             match msgType:
                 case 'FuncAgentCallReq' :
                     req = msg.FuncAgentCallReq
@@ -307,7 +311,7 @@ class FuncMgr:
 def Register(svcAddr: str, namespace: str, packageName: str, clientMode: bool):
     global funcMgr
     funcMgr = FuncMgr(svcAddr, namespace, packageName)  
-    podId = str(uuid.uuid4())
+    podId = GetPodIdFromEnvVar()
     regReq = func_pb2.FuncPodRegisterReq(funcPodId=podId,namespace=namespace,packageName=packageName, clientMode= clientMode)
     req = func_pb2.FuncAgentMsg(msgId=1, FuncPodRegisterReq=regReq)
     funcAgentQueueTx.put_nowait(func_pb2.FuncAgentMsg(msgId=1, FuncPodRegisterReq=regReq))

@@ -25,6 +25,7 @@ use qobjs::system_types::FuncPackage;
 use qobjs::types::*;
 use qobjs::k8s;
 
+use crate::FUNC_SVC_MGR;
 use crate::func_call::FuncCall;
 use crate::task_queue::*;
 use crate::scheduler::*;
@@ -231,6 +232,23 @@ impl Package {
         return self.lock().unwrap().TopPriority();
     }
 
+    pub fn Version(&self) -> String {
+        return self.lock().unwrap().version.clone();
+    }
+
+    pub fn ClearKeepalivePods(&self) {
+        let keepalivePods : Vec<FuncPod> = self.lock().unwrap().keepalivePods.values().cloned().collect();
+        let freeResource = self.ReqResource();
+        for pod in keepalivePods {
+            match FUNC_SVC_MGR.lock().unwrap().EvictPod(&pod, &freeResource) {
+                Err(e) => {
+                    error!("Evict Pod {:?} fail with error {:?}", &pod, e);
+                }
+                Ok(()) => ()
+            }
+        }
+    }
+
     // need create pod for the top priority, if pri is 10, no need create pod
     /*pub fn TopPriNeedCreatingPod(&self) -> usize {
         let inner = self.lock().unwrap();
@@ -254,13 +272,19 @@ impl PackageMgr {
         return ret;
     }
 
-    pub fn Add(&self, package: Package) {
+    pub fn AddOrReplace(&self, package: Package) {
         let packageId = PackageId {
             namespace: package.Namespace(),
             packageName: package.Name(),
         };
 
-        self.packages.lock().unwrap().insert(packageId, package);
+        let ret = self.packages.lock().unwrap().insert(packageId, package);
+        match ret {
+            None => (),
+            Some(p) => {
+                p.ClearKeepalivePods();
+            }
+        }
     }
 
     pub fn Remove(&self, namespace: &str, packageName: &str) {
@@ -269,7 +293,14 @@ impl PackageMgr {
             packageName: packageName.to_string(),
         };
 
-        self.packages.lock().unwrap().remove(&packageId);
+        match self.packages.lock().unwrap().remove(&packageId) {
+            None => {
+                error!("try to remove unknown package {:?}", &packageId);
+            }
+            Some(p) => {
+                p.ClearKeepalivePods();
+            }
+        }
     }
 
     pub fn Get(&self, packageId: &PackageId) -> Result<Package> {
@@ -289,13 +320,17 @@ impl EventHandler for PackageMgr {
         match &event.type_{
             EventType::Added => {
                 let package = Package::NewFromFuncPackage(funcPackage);
-                self.Add(package);
+                self.AddOrReplace(package);
             }
             EventType::Deleted => {
                 self.Remove(
                     funcPackage.metadata.namespace.as_deref().unwrap_or(""), 
                     funcPackage.metadata.name.as_deref().unwrap_or("")
                 );
+            }
+            EventType::Modified => {
+                let package = Package::NewFromFuncPackage(funcPackage);
+                self.AddOrReplace(package);
             }
             t => {
                    unimplemented!("PackageMgr::EventHandler doesn't handle {:?}", t);

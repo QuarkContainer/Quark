@@ -89,6 +89,7 @@ impl FuncPodState {
 
 #[derive(Debug)]
 pub struct FuncPodInner {
+    pub namespace: String,
     pub podName: String,
     pub package: Option<Package>,
     pub node: FuncNode,

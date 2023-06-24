@@ -229,7 +229,7 @@ impl qmeta::q_meta_service_server::QMetaService for NodeMgrSvc {
     ) -> SResult<Response<qmeta::DeleteResponseMessage>, Status> {
         let req = request.get_ref();
         let objType = &req.obj_type;
-        if objType == QUARK_POD ||  objType == QUARK_NODE {
+        if objType == QUARK_POD { // ||  objType == QUARK_NODE {
             let podId = format!("{}/{}", &req.namespace, &req.name);
             match crate::NM_CACHE.get().unwrap().TerminatePod(&podId).await {
                 Err(e) => {

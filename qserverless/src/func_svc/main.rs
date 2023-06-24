@@ -100,7 +100,7 @@ async fn main() -> Result<()> {
     };
 
     if PACKAGE_MGR.Get(&packageId).is_err() {
-        let client = CacherClient::New(qmetaSvcAddr.into()).await.unwrap();
+        let client: CacherClient = CacherClient::New(qmetaSvcAddr.into()).await.unwrap();
         let obj = DataObject::NewFuncPackage1("ns1", "package1").unwrap();
         client.Create("package", obj.Obj()).await.unwrap();
     }

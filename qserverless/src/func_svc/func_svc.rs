@@ -24,6 +24,7 @@ use qobjs::func;
 use qobjs::types::*;
 
 use crate::FUNC_NODE_MGR;
+use crate::PACKAGE_MGR;
 use crate::SCHEDULER;
 use crate::func_node::FuncNode;
 use crate::scheduler::Resource;
@@ -51,7 +52,6 @@ pub struct FuncInstance {
 pub struct FuncSvcInner {
     pub queue: TaskQueue,
     
-    pub packages: BTreeMap<PackageId, Package>,
     pub pods: BTreeMap<FuncCallId, FuncPod>,
     pub funcInstances: BTreeMap<u64, Func>,
 
@@ -153,6 +153,19 @@ impl FuncSvcInner {
     }
 
     pub fn NeedEvictPod(&self, package: &Package) -> bool {
+        match PACKAGE_MGR.Get(&package.PackageId()) {
+            Err(_e) => {
+                // the package has been deleted
+                return true;
+            }
+            Ok(p) => {
+                if p.Version() != package.Version() { 
+                    // the package has new version, all pods of the last package will be evicated
+                    return true;
+                }
+            }
+        }
+
         let pri = package.TopPriority();
         // if it has batch task, if the system free resource is less than threshold, evict it
         if pri > START_BATCHTASK_PRI
@@ -161,13 +174,6 @@ impl FuncSvcInner {
             }
         // it if it has interactive task, compare it with global waiting task, 
         return pri > self.waitResourceQueue.TopPriority() ;
-    }
-
-    pub fn GetPackage(&self, packageId: &PackageId) -> Result<Package> {
-        match self.packages.get(packageId) {
-            None => return Err(Error::NotExist),
-            Some(p) => return Ok(p.clone()),
-        };
     }
 
     // it is called when there is a Pod finished a task
@@ -194,23 +200,6 @@ impl FuncSvcInner {
         return Ok(());
     }
 
-/*    // it is called when there is a new Pod created
-   pub fn OnCreatedPod(&mut self, pod: &FuncPod) -> Result<()> {
-        let package = pod.package.clone();
-
-        if self.NeedEvictPod(&package) {
-            self.EvictPod(pod, &package.ReqResource())?;
-            return Ok(());
-        }
-
-        let keepalive = package.lock().unwrap().OnCreatedPod(pod)?;
-
-        if keepalive {
-            self.PushKeepalivePod(pod)?;
-        }
-        return Ok(());
-    }
- */
     pub fn PushKeepalivePod(&mut self, pod: &FuncPod) -> Result<()> {
         let time = pod.KeepaliveTime()?;
         self.keepalivePods.insert(time, pod.clone());
@@ -270,7 +259,7 @@ impl FuncSvcInner {
         self.freeResource = self.freeResource - package.ReqResource();
         
         let podName = uuid::Uuid::new_v4().to_string();
-        SCHEDULER.Schedule(&podName, package)?;
+        SCHEDULER.SchedulePod(&podName, package)?;
 
         return Ok(())
     }
@@ -287,6 +276,7 @@ impl FuncSvcInner {
     pub fn EvictPod(&mut self, pod: &FuncPod, freeResource: &Resource) -> Result<()> {
         *pod.state.lock().unwrap() = FuncPodState::Exiting;
         self.freeingResource = self.freeingResource + *freeResource;
-        unimplemented!();
+        SCHEDULER.TerminatePod(&pod.namespace, &pod.podName)?;
+        return Ok(())
     }
 }

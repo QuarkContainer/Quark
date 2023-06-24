@@ -245,6 +245,7 @@ impl FuncNode {
             match inner.funcPods.get(&funcPodId) {
                 None => {
                     let podInner = FuncPodInner {
+                        namespace: podStatus.namespace.clone(),
                         podName: podStatus.func_pod_id.clone(),
                         package: package,
                         node: self.clone(),
@@ -387,6 +388,7 @@ impl FuncNode {
         };
 
         let funcPodInner = FuncPodInner {
+            namespace: req.namespace.clone(),
             podName: req.func_pod_id.clone(),
             package : package.clone(),
             node: self.clone(),
