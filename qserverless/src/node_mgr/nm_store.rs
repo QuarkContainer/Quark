@@ -301,7 +301,7 @@ impl NodeMgrCache {
         let pod = self.read().unwrap().pods.as_ref().unwrap().GetObject(podId).clone();
         match pod {
             None => {
-                return Err(Error::CommonError(format!("There is pod named {}", podId)));
+                return Err(Error::CommonError(format!("There is no pod named {}", podId)));
             }
             Some(pod) => {
                 let pod : k8s::Pod = serde_json::from_str(&pod.data)?;

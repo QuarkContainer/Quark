@@ -16,7 +16,7 @@ import asyncio
 import qserverless
 import qserverless.func as func
 
-async def test():
+async def wordcount():
     
     # Start the background task
     print("test 1");
@@ -32,6 +32,18 @@ async def test():
     print("test 3 error is ", err);
     print("test 3 ", res);
     #await background_task_coroutine
+
+async def remoteCallEcho():
+    qserverless.Register("unix:///var/lib/quark/nodeagent/node1/sock", "ns1", "pypackage2", True)
+    background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
+    jobContext = qserverless.NewJobContext()
+    (res, err) = await jobContext.RemoteCall(
+            funcName = "echo",
+            msg = "hello world"
+        )
+    print("remoteCallSimpl result ", res, " err ", err)
     
-asyncio.run(test())
+#asyncio.run(wordcount())
+
+asyncio.run(remoteCallEcho())
 

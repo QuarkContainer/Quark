@@ -72,6 +72,11 @@ impl Resource {
     }
 }
 
+pub enum SchedulerMsg {
+    CreatePod(CreatePod),
+    TerminatePod(TerminatePod),
+}
+
 #[derive(Debug)]
 pub struct CreatePod {
     pub podName: String,
@@ -79,11 +84,18 @@ pub struct CreatePod {
 }
 
 #[derive(Debug)]
+pub struct TerminatePod {
+    pub namespace: String,
+    pub podName: String,
+}
+
+
+#[derive(Debug)]
 pub struct SchedulerInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
 
-    pub agentChann: mpsc::Sender<CreatePod>,
+    pub agentChann: mpsc::Sender<SchedulerMsg>,
     pub nodeMgrAddr: String
 }
 
@@ -122,11 +134,23 @@ impl Scheduler {
         self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
-    pub fn Schedule(&self, podName: &str, package: &Package) -> Result<()> {
-        match self.agentChann.try_send(CreatePod {
+    pub fn SchedulePod(&self, podName: &str, package: &Package) -> Result<()> {
+        let msg = CreatePod {
             podName: podName.to_string(),
             package: package.clone(),
-        }) {
+        };
+        match self.agentChann.try_send(SchedulerMsg::CreatePod(msg)) {
+            Ok(()) => return Ok(()),
+            Err(_) => return Err(Error::MpscSendFail),
+        }
+    }
+
+    pub fn TerminatePod(&self, namespace: &str, podName: &str) -> Result<()> {
+        let msg = TerminatePod {
+            namespace: namespace.to_owned(),
+            podName: podName.to_owned(),
+        };
+        match self.agentChann.try_send(SchedulerMsg::TerminatePod(msg)) {
             Ok(()) => return Ok(()),
             Err(_) => return Err(Error::MpscSendFail),
         }
@@ -136,9 +160,9 @@ impl Scheduler {
         let mut pod = k8s::Pod::default();
 
         pod.metadata.namespace = Some(package.Namespace());
-        pod.metadata.name = Some(podName.to_string());
+        pod.metadata.name = Some(podName.to_owned());
         let mut annotations = package.lock().unwrap().Annotations();
-        annotations.insert(AnnotationFuncPodPackageName.to_string(), package.Name());
+        annotations.insert(AnnotationFuncPodPackageName.to_owned(), package.Name());
         pod.metadata.annotations = Some(annotations);
         
         pod.spec = Some(package.PodSpec());
@@ -178,7 +202,7 @@ impl Scheduler {
         return Ok(())
     }
 
-    pub async fn Process(&self, rx: mpsc::Receiver<CreatePod>) -> Result<()> {
+    pub async fn Process(&self, rx: mpsc::Receiver<SchedulerMsg>) -> Result<()> {
         let mut rx = rx;
         let closeNotify = self.closeNotify.clone();
         let mut cacheClient;
@@ -211,10 +235,20 @@ impl Scheduler {
                             }
                             Some(msg) => msg,
                         };
-                        
-                        match self.CreatePod(&cacheClient, &msg.podName, &msg.package).await {
-                            Ok(()) => (),
-                            Err(_) => break,
+
+                        match msg {
+                            SchedulerMsg::CreatePod(msg) => {
+                                match self.CreatePod(&cacheClient, &msg.podName, &msg.package).await {
+                                    Ok(()) => (),
+                                    Err(_) => break,
+                                }
+                            }
+                            SchedulerMsg::TerminatePod(msg) => {
+                                match cacheClient.Delete(QUARK_POD, &msg.namespace, &msg.podName).await {
+                                    Ok(_) => (),
+                                    Err(_) => break,
+                                }
+                            }
                         }
                     }
                 }
