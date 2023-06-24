@@ -19,13 +19,13 @@ use qobjs::{common::*, types::QMETASVC_ADDR};
 use crate::{package_mgr::PackageMgr, command::SUPPORT_OBJ_TYPES};
 
 #[derive(Debug)]
-pub struct GetCmd {
+pub struct DeleteCmd {
     pub objType: String,
     pub namespace: String,
     pub name: String,
 }
 
-impl GetCmd {
+impl DeleteCmd {
     pub fn Init(cmd_matches: &ArgMatches) -> Result<Self> {
         return Ok(Self {
             objType: cmd_matches.value_of("objectType").unwrap().to_string(),
@@ -35,7 +35,7 @@ impl GetCmd {
     }
 
     pub fn SubCommand<'a, 'b>() -> App<'a, 'b> {
-        return SubCommand::with_name("describle")
+        return SubCommand::with_name("delete")
             .setting(AppSettings::ColoredHelp)
             .arg(
                 Arg::with_name("objectType")
@@ -61,7 +61,7 @@ impl GetCmd {
     }
 
     pub async fn Run(&self) -> Result<()> {
-        println!("Getcmd is {:?}", self);
+        println!("Deletecmd is {:?}", self);
         let addr = format!("http://{}", QMETASVC_ADDR);
         let packageMgr = match PackageMgr::New(&addr).await {
             Err(e) => {
@@ -76,15 +76,14 @@ impl GetCmd {
             return Ok(())
         }
         
-        let package = match packageMgr.GetPackage(&self.namespace, &self.name).await {
+        match packageMgr.DeletePackage(&self.namespace, &self.name).await {
             Err(e) => {
-                println!("can't open list packages for namespace {} with error {:?}", &self.namespace, e);
+                println!("can't delete packages {}/{} with error {:?}", &self.namespace, &self.name, e);
                 return Ok(())
             }
             Ok(s) => s 
         };
 
-        println!("package is {}", serde_json::to_string_pretty(&package).unwrap());
         return Ok(())
     }
 }
