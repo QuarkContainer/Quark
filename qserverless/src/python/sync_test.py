@@ -12,13 +12,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import qserverless;
+import sys
+import qserverless
 
-res = qserverless.Call(
-    svcAddr = "unix:///var/lib/quark/nodeagent/node1/sock",
-    namespace = "ns1", 
-    packageName = "pypackage1",
-    funcName = "add",
-    parameters = "call from client"
-)
-print("result is ", res)
+def echo():
+    res = qserverless.Call(
+        svcAddr = "unix:///var/lib/quark/nodeagent/node1/sock",
+        namespace = "ns1", 
+        packageName = "pypackage1",
+        funcName = "echo",
+        msg = "hello world"
+    )
+    print("echo result is ", res)
+
+def wordcount():
+    filenames = ["./test.py", "./sync_test.py"]
+    res = qserverless.Call(
+        svcAddr = "unix:///var/lib/quark/nodeagent/node1/sock",
+        namespace = "ns1", 
+        packageName = "pypackage1",
+        funcName = "wordcount",
+        filenames = filenames
+    )
+    print("echo result is ", res)
+    
+def main() : 
+    test = sys.argv[1]
+    print("test is ", test)
+    match test:
+        case "echo" : 
+            echo()
+        case "wordcount":
+            wordcount()
+
+if __name__ == "__main__":
+    main()

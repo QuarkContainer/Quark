@@ -51,7 +51,7 @@ impl FuncAudit for SqlFuncAudit {
         callerFuncId: &str
     ) -> Result<()> {
         let query = "insert into FuncAudit (id, jobId, namespace, packageName, funcName, callerFuncId, funcState, createTime) values \
-            (uuid($1), uuid($2), $3, $4, $5, uuid($6), 'Running', NOW())";
+            (uuid($1), uuid($2), $3, $4, $5, $6, 'Running', NOW())";
 
         let _result = sqlx::query(query)
             .bind(id)

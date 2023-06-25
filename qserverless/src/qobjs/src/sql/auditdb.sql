@@ -8,7 +8,7 @@ CREATE TABLE FuncAudit (
     namespace       VARCHAR NOT NULL,
     packageName     VARCHAR NOT NULL,
     funcName        VARCHAR NOT NULL,
-    callerFuncId    UUID,
+    callerFuncId    VARCHAR NOT NULL,
     funcState       VARCHAR NOT NULL,
     createTime      TIMESTAMP,
     finishTime      TIMESTAMP
