@@ -198,7 +198,12 @@ impl Scheduler {
 
         let podStr = serde_json::to_string(&pod)?;
         let dataObj = DataObject::NewFromK8sObj(QUARK_POD, &pod.metadata, podStr);
-        client.Create(QUARK_POD, dataObj.Obj()).await?;
+        match client.Create(QUARK_POD, dataObj.Obj()).await {
+            Ok(_) => (),
+            Err(e) => {
+                error!("fail to create pod with error {:?}", e);
+            }
+        }
         return Ok(())
     }
 

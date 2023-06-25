@@ -302,11 +302,15 @@ class FuncMgr:
                     
     async def StartClientProcess(self):
         print("start to connect addr ", self.svcAddr)
-        async with grpc.aio.insecure_channel(self.svcAddr) as channel:
-            stub = FuncAgentServiceStub(channel)
-            responses = stub.StreamProcess(generate_messages())
-            async for response in responses:
-                await self.FuncAgentClientProcess(response)
+        try: 
+            async with grpc.aio.insecure_channel(self.svcAddr) as channel:
+                stub = FuncAgentServiceStub(channel)
+                responses = stub.StreamProcess(generate_messages())
+                async for response in responses:
+                    await self.FuncAgentClientProcess(response)
+        except Exception as err:
+            print("unexpect error", err)
+            
 
 def Register(svcAddr: str, namespace: str, packageName: str, clientMode: bool):
     global funcMgr
