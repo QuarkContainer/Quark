@@ -335,8 +335,50 @@ if __name__ == '__main__':
     Register(svcAddr, namespace, packageId, False)
     asyncio.run(StartSvc())
 
-def Call(svcAddr: str, namespace: str, packageName: str, funcName: str, parameters: str) -> common.CallResult:
+def Call(**kwargs) :# -> (str, qserverless.Err):
     id = str(uuid.uuid4())
+    
+    svcAddr = kwargs.get('svcAddr')
+    if svcAddr is None :
+        svcAddr = GetNodeAgentAddrFromEnvVar()
+    else: 
+        del kwargs['svcAddr']
+    
+    namespace = kwargs.get('namespace')
+    if namespace is None :
+        namespace = GetNamespaceFromEnvVar()
+    else: 
+        del kwargs['namespace']
+    
+    packageName = kwargs.get('packageName')
+    if packageName is None :
+        packageName = GetPackageIdFromEnvVar()
+    else: 
+        del kwargs['packageName']
+        
+    funcName = kwargs.get('funcName')
+    if packageName is None :
+        print("there is no funcname in parameter list")
+        return (None, common.QErr("Error: there is no funcname in parameter list"))
+    else: 
+        del kwargs['funcName']
+    
+    priority = kwargs.get('priority')
+    if priority is None:
+        priority = 1
+    else:
+        del kwargs['priority']
+    
+    parameters = json.dumps(kwargs)
+    
+    # print("jobid ", id);
+    # print("svcAddr ", svcAddr);
+    # print("namespace ", namespace);
+    # print("packageName ", packageName);
+    # print("funcName ", funcName);
+    # print("parameters ", parameters);
+    # print("priority ", priority);
+    
     req = func_pb2.FuncAgentCallReq (
         jobId = id,
         id = id,
@@ -344,7 +386,7 @@ def Call(svcAddr: str, namespace: str, packageName: str, funcName: str, paramete
         packageName = packageName,
         funcName = funcName,
         parameters = parameters,
-        priority = 1
+        priority = priority
     )
     
     channel = grpc.insecure_channel(svcAddr)

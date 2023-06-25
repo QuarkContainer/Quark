@@ -82,7 +82,5 @@ async def main() :
         case "remote_wordcount":
             await remote_wordcount()
     
-#asyncio.run(wordcount())
-
 asyncio.run(main())
 
