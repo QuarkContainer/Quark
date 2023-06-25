@@ -17,6 +17,7 @@ use std::sync::{Mutex, Arc};
 use std::result::Result as SResult;
 use std::time::SystemTime;
 use qobjs::func::func_agent_service_server::FuncAgentServiceServer;
+use qobjs::types::GATEWAY_PORT;
 use qobjs::utility::SystemTimeProto;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Response, Status};
@@ -496,11 +497,16 @@ pub async fn FuncAgentGrpcService(funcAgent: &FuncAgent) -> Result<()> {
 
     let funcSvcFuture = Server::builder()
         .add_service(FuncAgentServiceServer::new(funcAgent.clone()))
-        //.serve(blobSvcAddr.parse().unwrap());
         .serve_with_incoming(stream);
+
+    let gatewayAddr = format!("0.0.0.0:{}", GATEWAY_PORT);
+    let GatewaySvcFuture = Server::builder()
+        .add_service(FuncAgentServiceServer::new(funcAgent.clone()))
+        .serve(gatewayAddr.parse().unwrap());
 
     tokio::select! {
         _ = funcSvcFuture => {}
+        _ = GatewaySvcFuture => {}
     }
 
     Ok(())

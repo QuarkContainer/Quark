@@ -151,7 +151,6 @@ pub async fn NodeAgentSvc() -> QResult<()> {
     let nodeAgentStore= NodeAgentStore::New()?;
     NODEAGENT_STORE.set(nodeAgentStore).unwrap();
     
-   
     let config = qobjs::config::NodeConfiguration::Default()?;
     
     let funcDirRoot = format!("{}/{}", &config.RootPath, "func");

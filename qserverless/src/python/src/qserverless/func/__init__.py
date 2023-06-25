@@ -31,7 +31,8 @@ async def wordcount(context, filenames: list[str]): # -> (str, qserverless.Err):
     )
     
     for res, err in results:
-        #print("err is ", err)
+        if err is not None:
+            return (None, qserverless.Err(err))
         blobVec = json.loads(res)
         blobMatrix.append(blobVec)
         

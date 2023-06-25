@@ -14,6 +14,7 @@
 
 use std::result::Result as SResult;
 
+use qobjs::types::FUNCSVC_ADDR;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -71,7 +72,7 @@ pub async fn FuncSvcGrpcService() -> Result<()> {
 
     let funcSvcFuture = Server::builder()
         .add_service(FuncSvcServiceServer::new(svc))
-        .serve("127.0.0.1:8891".parse().unwrap());
+        .serve(FUNCSVC_ADDR.parse().unwrap());
 
     info!("func service start ...");
     tokio::select! {

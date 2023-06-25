@@ -27,8 +27,10 @@ use crate::k8s;
 use crate::system_types::{FuncPackage, FuncPackageSpec};
 
 pub const QMETASVC_PORT : u16 = 8890; 
-pub const QMETASVC_ADDR : &str = "127.0.0.1:8890";
+pub const GATEWAY_PORT : u16 = 8889;
 pub const NODEMGRSVC_ADDR : &str = "127.0.0.1:8888";
+pub const QMETASVC_ADDR : &str = "127.0.0.1:8890";
+pub const FUNCSVC_ADDR : &str = "127.0.0.1:8891";
 pub const AUDITDB_ADDR: &str = "postgresql://audit_user:123456@localhost/auditdb";
 pub const OBJECTDB_ADDR: &str = "postgresql://blob_user:123456@localhost/blobdb";
 
