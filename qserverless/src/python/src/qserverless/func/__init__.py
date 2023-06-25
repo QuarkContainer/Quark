@@ -104,23 +104,15 @@ async def reduce(context, blobs: qserverless.BlobAddrVec): # -> (str, qserverles
     return (json.dumps(wordcounts), None)
 
 
-async def simple1(context, msg: str): # -> (str, qserverless.Err):   
-    print("simple1 1")
+async def call_echo(context, msg: str): # -> (str, qserverless.Err):   
     (res, err) = await context.RemoteCall(
         packageName= "",
-        funcName= "simple",
-        parameters= "call from simple1",
+        funcName= "echo",
+        msg = msg,
         priority= 1
     )
-    print("simple1 2 res {:?}", res)
-    (res, err) = await context.RemoteCall(
-        packageName= "",
-        funcName= "simple",
-        parameters= "call from simple1",
-        priority= 1
-    )
-    print("simple1 3 res {:?}", res)
-    return ("Simple1 %s"%msg, None)
+
+    return ("call_echo %s"%res, None)
 
 
 async def echo(context, msg: str): # -> (str, qserverless.Err):   
