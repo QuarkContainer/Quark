@@ -12,29 +12,45 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import sys
 import asyncio
 import qserverless
 import qserverless.func as func
 
+EnvVarNodeAgentAddr     = "qserverless_nodeagentaddr";
+DefaultNodeAgentAddr    = "unix:///var/lib/quark/nodeagent/sock";
+
+def GetNodeAgentAddrFromEnvVar() :
+    addr = os.getenv(EnvVarNodeAgentAddr)
+    if addr is None :
+        return DefaultNodeAgentAddr
+    return addr
+
 async def wordcount():
-    
     # Start the background task
-    print("test 1");
-    qserverless.Register("unix:///var/lib/quark/nodeagent/node1/sock", "ns1", "pypackage2", True)
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage2", True)
     background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
-    print("test 2");
     jobContext = qserverless.NewJobContext()
-    #res = await func.add(jobContext, "asdf")
-    #filenames = ["./test.py"]
-    #filenames = ["./sync_test.py"]
     filenames = ["./test.py", "./sync_test.py"]
     (res, err) = await func.wordcount(jobContext, filenames)
-    print("test 3 error is ", err);
-    print("test 3 ", res);
+    print("res is ", res)
     #await background_task_coroutine
 
+async def remote_wordcount():
+    # Start the background task
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage2", True)
+    background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
+    jobContext = qserverless.NewJobContext()
+    filenames = ["./test.py", "./sync_test.py"]
+    (res, err) = await jobContext.RemoteCall(
+            funcName = "wordcount",
+            filenames = filenames
+        )
+    print("res is ", res)
+
 async def remoteCallEcho():
-    qserverless.Register("unix:///var/lib/quark/nodeagent/node1/sock", "ns1", "pypackage2", True)
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage2", True)
     background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
     jobContext = qserverless.NewJobContext()
     (res, err) = await jobContext.RemoteCall(
@@ -42,8 +58,31 @@ async def remoteCallEcho():
             msg = "hello world"
         )
     print("remoteCallSimpl result ", res, " err ", err)
+
+async def remoteCallCallEcho():
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage2", True)
+    background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
+    jobContext = qserverless.NewJobContext()
+    (res, err) = await jobContext.RemoteCall(
+            funcName = "call_echo",
+            msg = "hello world"
+        )
+    print("remoteCallSimpl result ", res, " err ", err)
+
+async def main() : 
+    test = sys.argv[1]
+    print("test is ", test)
+    match test:
+        case "echo" : 
+            await remoteCallEcho()
+        case "call_echo" : 
+            await remoteCallCallEcho()
+        case "wordcount":
+            await wordcount()
+        case "remote_wordcount":
+            await remote_wordcount()
     
 #asyncio.run(wordcount())
 
-asyncio.run(remoteCallEcho())
+asyncio.run(main())
 

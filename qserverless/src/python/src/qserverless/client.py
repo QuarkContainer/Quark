@@ -19,6 +19,7 @@ import os
 import numpy as np
 import janus
 import json
+import sys
 
 import qserverless.func_pb2 as func_pb2
 import qserverless.blob_mgr as blob_mgr
@@ -63,10 +64,10 @@ def GetPackageIdFromEnvVar() :
     return pid
 
 def GetNodeAgentAddrFromEnvVar() :
-    pid = os.getenv(EnvVarNodeAgentAddr)
-    if pid is None :
+    addr = os.getenv(EnvVarNodeAgentAddr)
+    if addr is None :
         return DefaultNodeAgentAddr
-    return pid
+    return addr
 
 
 class FuncCallContext:
@@ -256,22 +257,22 @@ class FuncMgr:
         self.reqQueue.put_nowait(req)
         
     async def FuncCall(self, context: FuncCallContext, name: str, parameters: str) -> common.CallResult:
-        print("FuncCall 1 ", name, parameters);
         function = getattr(func, name)
         if function is None:
             return common.CallResult("", "There is no func named {}".format(name))
         
         kwargs = json.loads(parameters)
-        print("FuncCall 2 ", name, parameters);
-        (result, err) = await function(context, **kwargs)
-        print("FuncCall 3 ", result, err);
-        if result is None:
-            result = ""
-        if err is not None:
-            err = json.dumps(err)
-        else:
-            err = ""
-        return common.CallResult(result, err)
+        try:
+            (result, err) = await function(context, **kwargs)
+            if result is None:
+                result = ""
+            if err is not None:
+                err = json.dumps(err)
+            else:
+                err = ""
+            return common.CallResult(result, err)
+        except Exception as err:
+            return common.CallResult("", "func {} call fail with exception {}".format(name, err))
     
     def Close(self) : 
         self.reqQueue.put_nowait(None)
@@ -288,7 +289,6 @@ class FuncMgr:
             
     async def FuncAgentClientProcess(self, msg: func_pb2.FuncAgentMsg):
             msgType = msg.WhichOneof('EventBody')
-            print("FuncAgentClientProcess is ", msg)
             match msgType:
                 case 'FuncAgentCallReq' :
                     req = msg.FuncAgentCallReq
@@ -310,6 +310,7 @@ class FuncMgr:
                     await self.FuncAgentClientProcess(response)
         except Exception as err:
             print("unexpect error", err)
+            sys.exit(1)
             
 
 def Register(svcAddr: str, namespace: str, packageName: str, clientMode: bool):
