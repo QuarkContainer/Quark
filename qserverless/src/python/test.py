@@ -20,8 +20,11 @@ import qserverless.func as func
 
 EnvVarNodeAgentAddr     = "qserverless_nodeagentaddr";
 DefaultNodeAgentAddr    = "unix:///var/lib/quark/nodeagent/sock";
+GatewayAddr            = "127.0.0.1:8889";
 
 def GetNodeAgentAddrFromEnvVar() :
+    if GatewayAddr is not None :
+        return GatewayAddr
     addr = os.getenv(EnvVarNodeAgentAddr)
     if addr is None :
         return DefaultNodeAgentAddr

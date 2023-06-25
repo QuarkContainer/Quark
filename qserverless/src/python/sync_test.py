@@ -17,9 +17,10 @@ import qserverless
 
 def echo():
     res = qserverless.Call(
-        svcAddr = "unix:///var/lib/quark/nodeagent/node1/sock",
+        # "unix:///var/lib/quark/nodeagent/node1/sock",
+        svcAddr = "127.0.0.1:8889", 
         namespace = "ns1", 
-        packageName = "pypackage1",
+        packageName = "pypackage2",
         funcName = "echo",
         msg = "hello world"
     )
@@ -28,9 +29,9 @@ def echo():
 def wordcount():
     filenames = ["./test.py", "./sync_test.py"]
     res = qserverless.Call(
-        svcAddr = "unix:///var/lib/quark/nodeagent/node1/sock",
+        svcAddr = "127.0.0.1:8889", 
         namespace = "ns1", 
-        packageName = "pypackage1",
+        packageName = "pypackage2",
         funcName = "wordcount",
         filenames = filenames
     )

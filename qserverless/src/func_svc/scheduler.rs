@@ -58,7 +58,7 @@ impl Sub for Resource {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self::Output {
-        //error!("Resource::sub {:?} - {:?}", &self, &other);
+        assert!(self.mem >= other.mem && self.cpu >= other.cpu, "Resource::sub {:?} - {:?}", &self, &other);
         Self {
             mem: self.mem - other.mem,
             cpu: self.cpu - other.cpu,
