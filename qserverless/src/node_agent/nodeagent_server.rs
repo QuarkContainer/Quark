@@ -256,7 +256,15 @@ impl NodeAgentServer {
         return Ok(list.revision)
     }
 
+    pub fn CreatePod(&self, req: NmMsg::CreatePodReq, nodeAgent: &NodeAgent) -> Result<()> {
+        let pod = PodFromString(&req.pod)?;
+        let configMap = ConfigMapFromString(&req.config_map)?;
+        nodeAgent.CreatePod(&pod, &configMap)?;
+        return Ok(())
+    }
+
     pub async fn ReqHandler(&self, req: NmMsg::NodeAgentReq, nodeAgent: &NodeAgent) -> Result<NmMsg::node_agent_resp::MessageBody> {
+        error!("ReqHandler 1 {:?}", &req);
         let body: NmMsg::node_agent_req::MessageBody = req.message_body.unwrap();
         match body {
             NmMsg::node_agent_req::MessageBody::NodeConfigReq(req) => {
@@ -265,9 +273,7 @@ impl NodeAgentServer {
                 return Ok(NmMsg::node_agent_resp::MessageBody::NodeConfigResp(NmMsg::NodeConfigResp{}));
             }
             NmMsg::node_agent_req::MessageBody::CreatePodReq(req) => {
-                let pod = PodFromString(&req.pod)?;
-                let configMap = ConfigMapFromString(&req.config_map)?;
-                nodeAgent.CreatePod(&pod, &configMap)?;
+                self.CreatePod(req, nodeAgent)?;
                 return Ok(NmMsg::node_agent_resp::MessageBody::CreatePodResp(NmMsg::CreatePodResp{}));
             }
             NmMsg::node_agent_req::MessageBody::TerminatePodReq(req) => {

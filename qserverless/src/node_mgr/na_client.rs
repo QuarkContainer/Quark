@@ -260,7 +260,9 @@ impl NodeAgentClient {
         
         let resp = match rx.await {
             Ok(r) => r,
-            Err(e) => return Err(Error::CommonError(format!("QClient::Call recv fail with error {:?}", e))),
+            Err(e) => {
+                return Err(Error::CommonError(format!("QClient::Call recv fail with error {:?}", e)));
+            }
         };
 
         if resp.error.len() != 0 {

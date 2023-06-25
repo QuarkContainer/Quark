@@ -262,6 +262,7 @@ impl FuncNode {
             }
         }
         
+        FUNC_SVC_MGR.lock().unwrap().TryCreatePod()?;
         return Ok(())
     }
 

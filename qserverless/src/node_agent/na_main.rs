@@ -24,6 +24,7 @@ extern crate log;
 extern crate simple_logging;
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use blobstore::blob_client::BlobSvcClientMgr;
 use func_agent::func_agent::{FuncAgent, FuncAgentGrpcService};
@@ -57,6 +58,7 @@ use runtime::image_mgr::ImageMgr;
 
 use qobjs::crictl;
 use store::nodeagent_store::NodeAgentStore;
+use tokio::sync::Notify;
 use crate::nodeagent_server::NodeAgentServerMgr;
 use crate::runtime::runtime::RuntimeMgr;
 use crate::runtime::network::*;
@@ -97,6 +99,8 @@ lazy_static! {
     
         systemConfig.nodeAgentConfig.clone()
     };
+
+    pub static ref NODE_READY_NOTIFY : Arc<Notify> = Arc::new(Notify::new());
 }
 
 pub fn ConfigName() -> String {
@@ -128,6 +132,7 @@ async fn main() -> QResult<()> {
 }
 
 pub async fn FuncAgentSvc() -> QResult<()> {
+    NODE_READY_NOTIFY.notified().await;
     let blobSvcAddr = &NODEAGENT_CONFIG.BlobSvcAddr();
     let funcSvcAddr = &NODEAGENT_CONFIG.FuncSvcAddr();
     let funcAgent = FuncAgent::New(&NODEAGENT_CONFIG.NodeName(), blobSvcAddr);

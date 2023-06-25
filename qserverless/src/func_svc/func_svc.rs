@@ -142,7 +142,9 @@ impl FuncSvcInner {
         
         let ret = package.lock().unwrap().OnNewFuncCall(funcCall)?;
         match ret {
-            None => return Ok(()),
+            None => {
+                return Ok(());
+            }
             Some(t) => {
                 self.waitResourceQueue.Enq(&t);
             }
@@ -260,7 +262,7 @@ impl FuncSvcInner {
         
         let podName = uuid::Uuid::new_v4().to_string();
         SCHEDULER.SchedulePod(&podName, package)?;
-
+        
         return Ok(())
     }
 

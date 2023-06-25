@@ -183,6 +183,7 @@ impl NodeAgent {
                 _ = interval.tick() => {
                     if self.State() == NodeAgentState::Registered {
                         if IsNodeStatusReady(&self.node) {
+                            crate::NODE_READY_NOTIFY.notify_waiters();
                             info!("Node {} is ready", NODEAGENT_CONFIG.NodeName());
                             *self.state.lock().unwrap() = NodeAgentState::Ready;
                             SetNodeStatus(&self.node).await?;
