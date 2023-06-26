@@ -332,7 +332,6 @@ impl FuncNode {
 
     // get funccall response from nodeagent
     pub fn OnFuncSvcCallResp(&self, resp: func::FuncSvcCallResp) -> Result<()> {
-        error!("OnFuncSvcCallResp ... {:?}", &resp);
         let state = if resp.error.len() == 0 {
             "Success"
         } else {
@@ -347,7 +346,7 @@ impl FuncNode {
         let pod = FUNC_POD_MGR.Get(&resp.callee_pod_id)?;
         *pod.state.lock().unwrap() = FuncPodState::Idle(SystemTime::now());
         callerNode.Send(FuncNodeMsg::FuncCallResp(resp))?;
-        FUNC_SVC_MGR.lock().unwrap().OnFreePod(&pod)?;
+        FUNC_SVC_MGR.lock().unwrap().OnFreePod(&pod, false)?;
         return Ok(())
     }
 
@@ -401,7 +400,7 @@ impl FuncNode {
         self.lock().unwrap().funcPods.insert(req.func_pod_id.clone(), funcPod.clone());
         FUNC_POD_MGR.Add(&funcPod);
         if !funcPod.clientMode {
-            FUNC_SVC_MGR.lock().unwrap().OnFreePod(&funcPod)?;
+            FUNC_SVC_MGR.lock().unwrap().OnFreePod(&funcPod, true)?;
         }
         
         return Ok(())

@@ -179,7 +179,7 @@ impl FuncSvcInner {
     }
 
     // it is called when there is a Pod finished a task
-    pub fn OnFreePod(&mut self, pod: &FuncPod) -> Result<()> {
+    pub fn OnFreePod(&mut self, pod: &FuncPod, newPod: bool) -> Result<()> {
         let package = pod.package.clone().unwrap();
 
         if self.NeedEvictPod(&package) {
@@ -187,7 +187,7 @@ impl FuncSvcInner {
             return Ok(());
         }
         
-        let (keepalive, task) = package.lock().unwrap().OnFreePod(pod)?;
+        let (keepalive, task) = package.lock().unwrap().OnFreePod(pod, newPod)?;
         match task {
             None => (),
             Some(t) => {
@@ -262,7 +262,15 @@ impl FuncSvcInner {
         
         let podName = uuid::Uuid::new_v4().to_string();
         SCHEDULER.SchedulePod(&podName, package)?;
-        
+        match package.lock().unwrap().OnNewPodCreating() {
+            None => {
+                error!("func::svc ceatePod but there is no wait task, todo: investigating...");
+            }
+            Some(funcCall) => {
+                self.waitResourceQueue.Remove(&funcCall);
+            }
+        }
+
         return Ok(())
     }
 
