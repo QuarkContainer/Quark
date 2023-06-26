@@ -205,6 +205,12 @@ message FuncAgentRegisterReq {
   repeated FuncSvcCallReq callerCalls = 2; // func calls from the node
   repeated FuncSvcCallReq calleeCalls = 3; // func calls processing in the node
   repeated FuncPodStatus funcPods = 4; // func pods running on the node
+  Resource resource = 5;
+}
+
+message Resource {
+    uint64 mem = 1;
+    uint32 cpu = 2;
 }
 
 message FuncAgentRegisterResp {

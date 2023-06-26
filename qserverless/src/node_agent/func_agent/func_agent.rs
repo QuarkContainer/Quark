@@ -17,7 +17,7 @@ use std::sync::{Mutex, Arc};
 use std::result::Result as SResult;
 use std::time::SystemTime;
 use qobjs::func::func_agent_service_server::FuncAgentServiceServer;
-use qobjs::types::GATEWAY_PORT;
+use qobjs::types::*;
 use qobjs::utility::SystemTimeProto;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Response, Status};
@@ -26,7 +26,7 @@ use core::ops::Deref;
 
 use qobjs::{common::*, func::{self, func_agent_msg::EventBody}};
 
-use crate::{FUNC_SVC_CLIENT, NODEAGENT_CONFIG};
+use crate::{FUNC_SVC_CLIENT, NODEAGENT_CONFIG, CADVISOR_PROVIDER, NODE_CONFIG};
 
 use super::funcpod::{FuncPod, funcPodState};
 use super::funcpod_mgr::FuncPodMgr;
@@ -96,6 +96,9 @@ pub struct FuncAgentInner {
     pub callerCalls: Mutex<BTreeMap<String, FuncCall>>,
     // func instance id to funcCall
     pub calleeCalls: Mutex<BTreeMap<String, FuncCall>>,
+    pub systemResource: Resource,
+    pub reservedResource: Resource,
+    pub allocableResource: Resource,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -111,9 +114,26 @@ impl Deref for FuncAgent {
 
 impl FuncAgent {
     pub fn New(nodeId: &str, blobSvcAddr: &str) -> Self {
+        let info = CADVISOR_PROVIDER.get().unwrap().CAdvisorInfo();
+        let systemResource = Resource::New(
+            info.machineInfo.MemoryCapacity, 
+            info.machineInfo.NumCores as _
+        );
+
+        let reservedResource = Resource::New(
+            NODE_CONFIG.ReservedMem,
+            NODE_CONFIG.ReservedCpuCores
+        );
+
+        assert!(systemResource.Fullfil(&reservedResource));
+        let allocableResource = systemResource - reservedResource;
+
         let inner = FuncAgentInner {
             nodeId: nodeId.to_string(),
             blobSvcAddr: blobSvcAddr.to_string(),
+            systemResource: systemResource,
+            reservedResource: reservedResource,
+            allocableResource: allocableResource,
             ..Default::default()
         };
 
@@ -134,6 +154,10 @@ impl FuncAgent {
             caller_calls: callerCalls,
             callee_calls: calleeCalls,
             func_pods: self.funcPodMgr.ToGrpcType(),
+            resource: Some(func::Resource {
+                mem: self.allocableResource.mem as _,
+                cpu: self.allocableResource.cpu as _,
+            })
         }
     }
 

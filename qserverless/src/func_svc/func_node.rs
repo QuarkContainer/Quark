@@ -64,6 +64,7 @@ pub struct FuncNodeInner {
     pub internMsgRx: Option<mpsc::Receiver<FuncNodeMsg>>,
 
     pub processorHandler: Option<JoinHandle<()>>,
+    pub resource: Resource,
 }
 
 #[derive(Debug, Clone)]
@@ -91,6 +92,7 @@ impl FuncNode {
             internMsgTx: tx,
             internMsgRx: Some(rx),
             processorHandler: None,
+            resource: Resource::default(),
         };
 
         return Self(Arc::new(Mutex::new(inner)));
@@ -137,7 +139,7 @@ impl FuncNode {
     // this will be called in 2 situations
     // 1. When the nodeagent reconnect to the FuncService, todo: need to handle this scenario
     // 2. When the Master FuncService die, the nodeagent sent FuncAgentRegisterReq to another FuncService
-    pub fn OnNodeRegister(&self, regReq: func::FuncAgentRegisterReq) -> Result<()> {    
+    pub fn OnNodeRegister(&self, regReq: func::FuncAgentRegisterReq) -> Result<()> {  
         let mut inner = self.lock().unwrap();
         for funccall in regReq.callee_calls {
             let packageId = PackageId {
@@ -261,6 +263,19 @@ impl FuncNode {
                 }
             }
         }
+
+        let resource = match &regReq.resource {
+            None => Resource::default(),
+            Some(r) => {
+                Resource {
+                    mem: r.mem as _,
+                    cpu: r.cpu as _,
+                }
+            }
+        };
+
+        inner.resource = resource.clone();
+        FUNC_SVC_MGR.lock().unwrap().OnNodeJoin(resource)?;
         
         FUNC_SVC_MGR.lock().unwrap().TryCreatePod()?;
         return Ok(())
@@ -425,6 +440,9 @@ impl FuncNode {
                 }
             }
         }
+
+        let resource = self.lock().unwrap().resource.clone();
+        FUNC_SVC_MGR.lock().unwrap().OnNodeLeave(resource)?;
         
         return Ok(())
     }

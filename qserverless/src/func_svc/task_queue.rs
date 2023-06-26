@@ -16,9 +16,9 @@ use std::time::SystemTime;
 use std::collections::{BTreeMap, VecDeque};
 use std::collections::btree_map::Iter;
 
-use crate::func_call::*;
-use crate::scheduler::Resource;
+use qobjs::types::Resource;
 
+use crate::func_call::*;
 
 #[derive(Debug, Default)]
 pub struct TaskQueue {
@@ -55,7 +55,7 @@ impl TaskQueue {
 
 pub const PRIORITY_COUNT: usize = 10;
 pub const START_BATCHTASK_PRI: usize = 5;
-pub const KEEP_BATCHTASK_THRESHOLD: u64 = 10; // free memory < 10% total memory 
+pub const KEEP_BATCHTASK_THRESHOLD: i64 = 10; // free memory < 10% total memory 
 
 
 #[derive(Debug, Default)]

@@ -50,7 +50,7 @@ pub mod blobstore;
 pub mod funcdir_mgr;
 
 use qobjs::common::Result as QResult;
-use qobjs::config::{NodeAgentConfig, SystemConfig, SYSTEM_CONFIGS};
+use qobjs::config::{NodeAgentConfig, SystemConfig, SYSTEM_CONFIGS, NodeConfiguration};
 use qobjs::types::*;
 //use qobjs::config::NodeConfiguration;
 //use qobjs::nm::NodeAgentMessage;
@@ -85,6 +85,10 @@ lazy_static! {
 
     pub static ref BLOB_SVC_CLIENT_MGR : BlobSvcClientMgr = {
         BlobSvcClientMgr::default()
+    };
+
+    pub static ref NODE_CONFIG : NodeConfiguration = {
+        NodeConfiguration::Default().unwrap()
     };
 
     pub static ref NODEAGENT_CONFIG: NodeAgentConfig = {
@@ -151,13 +155,12 @@ pub async fn NodeAgentSvc() -> QResult<()> {
     let nodeAgentStore= NodeAgentStore::New()?;
     NODEAGENT_STORE.set(nodeAgentStore).unwrap();
     
-    let config = qobjs::config::NodeConfiguration::Default()?;
+    let config = &NODE_CONFIG;
     
     let funcDirRoot = format!("{}/{}", &config.RootPath, "func");
     FUNCDIR_MGR.set(FuncDirMgr::New(&funcDirRoot, OBJECTDB_ADDR).await?).unwrap();
     
     let na = crate::node::Run(&NODEAGENT_CONFIG.NodeName(), config).await?;
-    
     
     let nodeMgrAddrs = NODEAGENT_CONFIG.nodeMgrAddrs();
     let nodeAgentSrvMgr = NodeAgentServerMgr::New(nodeMgrAddrs);

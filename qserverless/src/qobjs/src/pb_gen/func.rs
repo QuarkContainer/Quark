@@ -362,6 +362,17 @@ pub struct FuncAgentRegisterReq {
     /// func pods running on the node
     #[prost(message, repeated, tag = "4")]
     pub func_pods: ::prost::alloc::vec::Vec<FuncPodStatus>,
+    #[prost(message, optional, tag = "5")]
+    pub resource: ::core::option::Option<Resource>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Resource {
+    #[prost(uint64, tag = "1")]
+    pub mem: u64,
+    #[prost(uint32, tag = "2")]
+    pub cpu: u32,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

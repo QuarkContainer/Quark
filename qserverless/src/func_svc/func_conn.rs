@@ -14,8 +14,9 @@
 
 use std::collections::BTreeMap;
 
+use qobjs::types::Resource;
+
 use crate::func_call::*;
-use crate::scheduler::*;
 
 pub struct Node {
     pub id: String,

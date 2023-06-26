@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::ops::Add;
-use std::ops::Sub;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
@@ -28,49 +26,6 @@ use qobjs::common::*;
 
 use crate::package::Package;
 
-#[derive(Debug, Clone, Copy)]
-pub struct Resource {
-    pub mem: u64,
-    pub cpu: u64,
-}
-
-impl Default for Resource {
-    fn default() -> Self {
-        return Self {
-            mem: 1024 * 1024,
-            cpu: 1000,
-        }
-    }
-}
-
-impl Add for Resource {
-    type Output = Self;
-
-    fn add(self, other: Self) -> Self {
-        Self {
-            mem: self.mem + other.mem,
-            cpu: self.cpu + other.cpu,
-        }
-    }
-}
-
-impl Sub for Resource {
-    type Output = Self;
-
-    fn sub(self, other: Self) -> Self::Output {
-        assert!(self.mem >= other.mem && self.cpu >= other.cpu, "Resource::sub {:?} - {:?}", &self, &other);
-        Self {
-            mem: self.mem - other.mem,
-            cpu: self.cpu - other.cpu,
-        }
-    }
-}
-
-impl Resource {
-    pub fn Fullfil(&self, req: &Self) -> bool {
-        return req.mem <= self.mem && req.cpu <= self.cpu;
-    }
-}
 
 pub enum SchedulerMsg {
     CreatePod(CreatePod),

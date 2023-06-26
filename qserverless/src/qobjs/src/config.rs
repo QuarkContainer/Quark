@@ -202,6 +202,8 @@ pub type ResourceList = BTreeMap<ResourceName, String>;
 
 #[derive(Debug, Default)]
 pub struct NodeConfigurationInner {
+    pub ReservedMem              : u64,
+    pub ReservedCpuCores         : u32,
     pub ContainerRuntime         : String,
 	pub ContainerRuntimeEndpoint : String,
 	pub CgroupRoot               : String,
@@ -249,6 +251,8 @@ impl NodeConfigurationInner {
         let localIp = local_ip().unwrap().to_string();
 
         return Ok(Self {
+            ReservedMem:  4 * 1024 * 1024 * 1024,
+            ReservedCpuCores: 4, 
             ContainerRuntime:         "remote".to_string(),
             ContainerRuntimeEndpoint: DefaultContainerRuntimeEndpoint.to_string(),
             CgroupRoot:               DefaultCgroupRoot.to_string(),
