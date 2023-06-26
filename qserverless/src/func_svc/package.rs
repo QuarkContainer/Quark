@@ -121,7 +121,7 @@ impl PackageInner {
 
     pub fn OnNewPodCreating(&mut self) -> Option<FuncCall> {
         self.creatingPodCnt += 1;
-        self.waitingQueue.GetWaitingTask(self.creatingPodCnt) 
+        self.waitingQueue.GetWaitingTask(self.creatingPodCnt-1) 
     }
 
     // when there is a new task, return task which needs creating new pod

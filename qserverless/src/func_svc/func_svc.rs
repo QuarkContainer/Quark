@@ -269,7 +269,8 @@ impl FuncSvcInner {
         
         let podName = uuid::Uuid::new_v4().to_string();
         SCHEDULER.SchedulePod(&podName, package)?;
-        match package.lock().unwrap().OnNewPodCreating() {
+        let res = package.lock().unwrap().OnNewPodCreating();
+        match res {
             None => {
                 error!("func::svc ceatePod but there is no wait task, todo: investigating...");
             }
@@ -278,6 +279,7 @@ impl FuncSvcInner {
             }
         }
 
+        error!("CreatePod 3");
         return Ok(())
     }
 
