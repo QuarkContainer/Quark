@@ -120,6 +120,11 @@ impl PackageInner {
         return Ok(())
     }
 
+    pub fn OnNewPodCreating(&mut self) -> Option<FuncCall> {
+        self.creatingPodCnt += 1;
+        self.waitingQueue.GetWaitingTask(self.creatingPodCnt) 
+    }
+
     // when there is a new task, return task which needs creating new pod
     pub fn OnNewFuncCall(&mut self, funcCall: &FuncCall) -> Result<Option<FuncCall>> {
         match self.PopKeepalivePod() {
@@ -131,29 +136,20 @@ impl PackageInner {
             }
             None => {
                 self.waitingQueue.Push(funcCall);
-                return Ok(self.waitingQueue.GetWaitingTask(self.creatingPodCnt));
-            }
-        }
-    }
+                let ret = self.waitingQueue.GetWaitingTask(self.creatingPodCnt);
 
-    // when a new Pod is created, return whether the pod has been keepalived
-    pub fn OnCreatedPod(&mut self, pod: &FuncPod) -> Result<bool> {
-        match self.waitingQueue.Pop() {
-            None => {
-                pod.SetKeepalive();
-                self.PushKeepalivePod(pod)?;
-                return Ok(true)
-            }
-            Some(t) => {
-                pod.ScheduleFuncCall(&t)?;
-                self.runningPodCnt += 1;
-                return Ok(false)
+                return Ok(ret);
             }
         }
     }
 
     // when a pod finish processing last task, return the task which needs removed from global task Queue
-    pub fn OnFreePod(&mut self, pod: &FuncPod) -> Result<(bool, Option<FuncCall>)> {
+    pub fn OnFreePod(&mut self, pod: &FuncPod, newPod: bool) -> Result<(bool, Option<FuncCall>)> {
+        if newPod {
+            self.creatingPodCnt -= 1;
+        } else {
+            self.runningPodCnt -= 1;
+        }
         match self.waitingQueue.Pop() {
             None => {
                 pod.SetKeepalive();
@@ -162,7 +158,12 @@ impl PackageInner {
             }
             Some(t) => {
                 pod.ScheduleFuncCall(&t)?;
-                let removeTask = self.waitingQueue.GetWaitingTask(self.creatingPodCnt);
+                self.runningPodCnt += 1;
+                let removeTask = if !newPod {
+                    self.waitingQueue.GetWaitingTask(self.creatingPodCnt)
+                } else {
+                    None
+                };
                 return Ok((false, removeTask));
             }
         }

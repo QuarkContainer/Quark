@@ -180,13 +180,13 @@ pub struct PackageTaskQueue {
 impl PackageTaskQueue {
     // get the Nth task in the waitingQueue 
     pub fn GetWaitingTask(&self, n: usize) -> Option<FuncCall> {
-        if n > self.waitingTask {
+        if n >= self.waitingTask {
             return None;
         }
 
         let mut n: usize = n;
         for i in self.TopPriority()..self.waitingQueue.len() {
-            if n > self.waitingQueue[i].len() {
+            if n >= self.waitingQueue[i].len() {
                 n -= self.waitingQueue[i].len();
             } else {
                 let (s1, s2) = self.waitingQueue[i].as_slices();
