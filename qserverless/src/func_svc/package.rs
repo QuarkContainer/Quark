@@ -28,7 +28,6 @@ use qobjs::k8s;
 use crate::FUNC_SVC_MGR;
 use crate::func_call::FuncCall;
 use crate::task_queue::*;
-use crate::scheduler::*;
 use crate::func_pod::*;
 
 #[derive(Debug, Default)]

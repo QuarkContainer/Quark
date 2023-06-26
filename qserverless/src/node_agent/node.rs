@@ -571,7 +571,7 @@ pub fn ValidateNodeSpec(node: &k8s::Node) -> Result<()> {
     return Ok(())
 }
 
-pub async fn Run(nodename: &str, nodeConfig: NodeConfiguration) -> Result<NodeAgent> {
+pub async fn Run(nodename: &str, nodeConfig: &NodeConfiguration) -> Result<NodeAgent> {
     NodeAgent::CleanPods(nodename).await?;
     
     let quarkNode = QuarkNode::NewQuarkNode(nodename, &nodeConfig)?;

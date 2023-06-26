@@ -27,7 +27,6 @@ use crate::FUNC_NODE_MGR;
 use crate::PACKAGE_MGR;
 use crate::SCHEDULER;
 use crate::func_node::FuncNode;
-use crate::scheduler::Resource;
 use crate::task_queue::*;
 use crate::func_call::*;
 use crate::func_pod::*;
@@ -72,14 +71,6 @@ pub struct FuncSvcInner {
 impl FuncSvcInner {
     pub fn New() -> Self {
         return Self {
-            totalResource: Resource { 
-                mem: 1024 * 1014 * 1014, 
-                cpu: 100 * 1024, 
-            },
-            freeResource: Resource { 
-                mem: 1024 * 1014 * 1014, 
-                cpu: 100 * 1024, 
-            },
             ..Default::default()
         }
     }
@@ -124,6 +115,22 @@ impl FuncSvc {
     }
 }
 impl FuncSvcInner {
+    pub fn OnNodeJoin(&mut self, resource: Resource) -> Result<()> {
+        //error!("OnNodeJoin 1 {:?} {:?}", &self.totalResource, &self.freeResource);
+        self.totalResource = self.totalResource + resource;
+        self.freeResource = self.freeResource + resource;
+        //error!("OnNodeJoin 2 {:?} {:?}", &self.totalResource, &self.freeResource);
+        return Ok(())
+    }
+
+    pub fn OnNodeLeave(&mut self, resource: Resource) -> Result<()> {
+        //error!("OnNodeLeave 1 {:?} {:?}", &self.totalResource, &self.freeResource);
+        self.totalResource = self.totalResource - resource;
+        self.freeResource = self.freeResource - resource;
+        //error!("OnNodeLeave 2 {:?} {:?}", &self.totalResource, &self.freeResource);
+        return Ok(())
+    }
+
     // when a pod exiting process finish, free the occupied resources and schedule creating new pod
     pub fn OnPodExit(&mut self, pod: &FuncPod) -> Result<()> {
         let package = pod.package.clone().unwrap();

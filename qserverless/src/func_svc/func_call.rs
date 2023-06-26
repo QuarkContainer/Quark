@@ -20,7 +20,6 @@ use std::collections::BTreeMap;
 use qobjs::common::*;
 use qobjs::types::*;
 
-use crate::scheduler::Resource;
 use crate::package::*;
 
 #[derive(Debug, Clone)]

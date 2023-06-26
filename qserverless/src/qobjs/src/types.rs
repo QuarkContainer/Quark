@@ -15,6 +15,8 @@
 use serde_derive::{Deserialize, Serialize};  
 use std::{sync::Arc, collections::BTreeMap};
 use std::ops::{Deref};
+use std::ops::Add;
+use std::ops::Sub;
 
 use prost::Message;
 
@@ -629,3 +631,57 @@ impl PartialEq for PackageId {
 }
 
 impl Eq for PackageId {}
+
+
+#[derive(Debug, Clone, Copy)]
+pub struct Resource {
+    pub mem: i64, // 
+    pub cpu: i32,
+}
+
+impl Resource {
+    pub fn New(memory: u64, cpucores: u32) -> Self {
+        return Resource {
+            mem: memory as _,
+            cpu: (cpucores * 1000) as _,
+        }
+    }
+}
+
+impl Default for Resource {
+    fn default() -> Self {
+        return Self {
+            mem: 0,
+            cpu: 0,
+        }
+    }
+}
+
+impl Add for Resource {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self {
+            mem: self.mem + other.mem,
+            cpu: self.cpu + other.cpu,
+        }
+    }
+}
+
+impl Sub for Resource {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self::Output {
+        assert!(self.mem >= other.mem && self.cpu >= other.cpu, "Resource::sub {:?} - {:?}", &self, &other);
+        Self {
+            mem: self.mem - other.mem,
+            cpu: self.cpu - other.cpu,
+        }
+    }
+}
+
+impl Resource {
+    pub fn Fullfil(&self, req: &Self) -> bool {
+        return req.mem <= self.mem && req.cpu <= self.cpu;
+    }
+}
