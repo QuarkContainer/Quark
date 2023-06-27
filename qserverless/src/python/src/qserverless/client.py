@@ -268,7 +268,7 @@ class FuncMgr:
         try:
             result = None
             err = None
-            logname = '/var/log/quark/func/{}.log'.format(context.id)
+            logname = '/var/log/quark/{}.log'.format(context.id)
             with open(logname, 'w') as f:
                 with redirect_stdout(f):
                     with redirect_stderr(f):

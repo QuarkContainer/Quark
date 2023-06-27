@@ -18,6 +18,7 @@ use std::path::Path;
 use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
 use std::sync::RwLock;
+use qobjs::types::DefaultNodeFuncLogFolder;
 use rand::prelude::*;
 use std::fs::Permissions;
 
@@ -530,9 +531,12 @@ pub async fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container, 
     };
     volumeMounts.push(mount);
 
+    let logfolder = format!("{}/func/{}", DefaultNodeFuncLogFolder, namespace);
+    std::fs::create_dir_all(&logfolder).unwrap();
+    
     let mount = crictl::Mount {
-        host_path: "/var/log/quark/".to_string(),
-        container_path: "/var/log/quark".to_string(),
+        host_path: logfolder,
+        container_path: DefaultNodeFuncLogFolder.to_owned(),
         selinux_relabel: false,
         ..Default::default()
     };

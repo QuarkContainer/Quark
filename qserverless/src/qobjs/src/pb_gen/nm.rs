@@ -20,7 +20,7 @@ pub mod node_agent_resp_msg {
 pub struct NodeAgentReq {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
-    #[prost(oneof = "node_agent_req::MessageBody", tags = "100, 200, 300")]
+    #[prost(oneof = "node_agent_req::MessageBody", tags = "100, 200, 300, 400")]
     pub message_body: ::core::option::Option<node_agent_req::MessageBody>,
 }
 /// Nested message and enum types in `NodeAgentReq`.
@@ -34,6 +34,8 @@ pub mod node_agent_req {
         CreatePodReq(super::CreatePodReq),
         #[prost(message, tag = "300")]
         TerminatePodReq(super::TerminatePodReq),
+        #[prost(message, tag = "400")]
+        ReadFuncLogReq(super::ReadFuncLogReq),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -43,7 +45,7 @@ pub struct NodeAgentResp {
     pub request_id: u64,
     #[prost(string, tag = "2")]
     pub error: ::prost::alloc::string::String,
-    #[prost(oneof = "node_agent_resp::MessageBody", tags = "100, 200, 300")]
+    #[prost(oneof = "node_agent_resp::MessageBody", tags = "100, 200, 300, 400")]
     pub message_body: ::core::option::Option<node_agent_resp::MessageBody>,
 }
 /// Nested message and enum types in `NodeAgentResp`.
@@ -57,7 +59,29 @@ pub mod node_agent_resp {
         CreatePodResp(super::CreatePodResp),
         #[prost(message, tag = "300")]
         TerminatePodResp(super::TerminatePodResp),
+        #[prost(message, tag = "400")]
+        ReadFuncLogResp(super::ReadFuncLogResp),
     }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ReadFuncLogReq {
+    #[prost(string, tag = "1")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub func_name: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "3")]
+    pub offset: u64,
+    #[prost(uint32, tag = "4")]
+    pub len: u32,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ReadFuncLogResp {
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub content: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

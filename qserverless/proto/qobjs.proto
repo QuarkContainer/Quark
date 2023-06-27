@@ -17,20 +17,6 @@ limitations under the License.
 syntax = "proto3";
 package qmeta;
 
-service QServerless {
-    rpc CreatePyPackage(PyPackageReq) returns (PyPackageResp) {}
-}
-
-message PyPackageReq {
-    string package = 1;
-    bytes zipfile = 2;
-}
-
-message PyPackageResp {
-    string package = 1;
-    string error = 2;
-}
-
 service QMetaService {
   rpc Version (VersionRequestMessage) returns (VersionResponseMessage) {}
   rpc Create (CreateRequestMessage) returns (CreateResponseMessage) {}
@@ -43,7 +29,21 @@ service QMetaService {
   rpc DeleteObj (DeleteObjReq) returns (DeleteObjResp) {}
   rpc ReadObj (ReadObjReq) returns (ReadObjResp) {}
   rpc ListObj (ListObjReq) returns (ListObjResp) {}
+  rpc ReadFuncLog(ReadFuncLogReq) returns (ReadFuncLogResp) {}
 }
+
+message ReadFuncLogReq {
+  string namespace = 1;
+  string funcName = 2;
+  uint64 offset = 3;
+  uint32 len = 4;
+}
+
+message ReadFuncLogResp {
+  string error = 1;
+  string content = 2;
+}
+
 
 message PutObjReq {
     string namespace = 1;

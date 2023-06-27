@@ -72,6 +72,7 @@ pub const EnvVarNodeMgrNamespace              : &str = "qserverless_namespace";
 pub const EnvVarNodeMgrPackageId              : &str = "qserverless_packageid";
 pub const EnvVarNodeAgentAddr                 : &str = "qserverless_nodeagentaddr";
 pub const DefaultNodeAgentAddr                : &str = "unix:///var/lib/quark/nodeagent/sock";
+pub const DefaultNodeFuncLogFolder            : &str = "/var/log/quark";
 
 pub const BLOB_LOCAL_HOST                     : &str = "local";
 

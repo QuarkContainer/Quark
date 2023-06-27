@@ -32,6 +32,13 @@ pub struct CreateFunc {
 }
 
 #[derive(Debug)]
+pub struct AssignFunc {
+    pub id: String,
+    pub nodeId: String,
+    pub funcState: String,
+}
+
+#[derive(Debug)]
 pub struct FinishFunc {
     pub id: String,
     pub funcState: String,
@@ -40,6 +47,7 @@ pub struct FinishFunc {
 #[derive(Debug)]
 pub enum AuditEvent {
     CreateFunc(CreateFunc),
+    AssignFunc(AssignFunc),
     FinishFunc(FinishFunc),
 }
 
@@ -105,6 +113,22 @@ impl AuditAgent {
         return Ok(())
     }
 
+    pub fn AssignFunc(
+        &self,
+        id: &str,
+        nodeId: &str, 
+        funcState: &str
+    ) -> Result<()> {
+        let cf = AssignFunc {
+            id: id.to_owned(),
+            nodeId: nodeId.to_owned(),
+            funcState: funcState.to_owned(),
+        };
+
+        self.Send(AuditEvent::AssignFunc(cf))?;
+        return Ok(())
+    }
+
     pub fn FinishFunc(
         &self,
         id: &str, 
@@ -129,7 +153,7 @@ impl AuditAgent {
     }
 
     pub async fn Process(&self, rx: mpsc::Receiver<AuditEvent>) -> Result<()> {
-        let mut audit = SqlFuncAudit::New(&self.sqlAddr).await.unwrap();
+        let audit = SqlFuncAudit::New(&self.sqlAddr).await.unwrap();
         let mut rx = rx;
         loop {
             tokio::select! {
@@ -143,6 +167,9 @@ impl AuditAgent {
                         match msg {
                             AuditEvent::CreateFunc(c) => {
                                 audit.CreateFunc(&c.id, &c.jobId, &c.namespace, &c.packageName, &c.funcName, &c.callerFuncId).await?;
+                            }
+                            AuditEvent::AssignFunc(c) => {
+                                audit.AssignFunc(&c.id, &c.nodeId, &c.funcState).await?;
                             }
                             AuditEvent::FinishFunc(c) => {
                                 audit.FinishFunc(&c.id, &c.funcState).await?;
