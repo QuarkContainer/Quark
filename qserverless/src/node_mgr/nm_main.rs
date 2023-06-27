@@ -25,7 +25,9 @@ use once_cell::sync::OnceCell;
 use lazy_static::lazy_static;
 
 use nm_store::NodeMgrCache;
+use qobjs::audit::func_audit::SqlFuncAudit;
 use qobjs::common::Result as QResult;
+use qobjs::types::AUDITDB_ADDR;
 
 pub mod nm_svc;
 pub mod na_client;
@@ -38,6 +40,8 @@ use crate::nm_svc::*;
 use crate::etcd::svc_dir::*;
 
 pub static NM_CACHE : OnceCell<NodeMgrCache> = OnceCell::new();
+pub static FUNCAUDIT: OnceCell<SqlFuncAudit> = OnceCell::new();
+
 pub const VERSION: &str = "0.1";
 
 lazy_static! {
@@ -48,7 +52,10 @@ lazy_static! {
 #[tokio::main]
 async fn main() -> QResult<()> {
     log4rs::init_file("logging_config.yaml", Default::default()).unwrap();
+    
     NM_CACHE.set(NodeMgrCache::New().await.unwrap()).unwrap();
+    FUNCAUDIT.set(SqlFuncAudit::New(AUDITDB_ADDR).await.unwrap()).unwrap();
+
     SVC_DIR.write().await.Init("localhost:2379").await?;
     GrpcService().await.unwrap();
 

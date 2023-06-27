@@ -35,7 +35,6 @@ pub struct CreateFunc {
 pub struct AssignFunc {
     pub id: String,
     pub nodeId: String,
-    pub funcState: String,
 }
 
 #[derive(Debug)]
@@ -116,13 +115,11 @@ impl AuditAgent {
     pub fn AssignFunc(
         &self,
         id: &str,
-        nodeId: &str, 
-        funcState: &str
+        nodeId: &str
     ) -> Result<()> {
         let cf = AssignFunc {
             id: id.to_owned(),
             nodeId: nodeId.to_owned(),
-            funcState: funcState.to_owned(),
         };
 
         self.Send(AuditEvent::AssignFunc(cf))?;
@@ -169,7 +166,7 @@ impl AuditAgent {
                                 audit.CreateFunc(&c.id, &c.jobId, &c.namespace, &c.packageName, &c.funcName, &c.callerFuncId).await?;
                             }
                             AuditEvent::AssignFunc(c) => {
-                                audit.AssignFunc(&c.id, &c.nodeId, &c.funcState).await?;
+                                audit.AssignFunc(&c.id, &c.nodeId).await?;
                             }
                             AuditEvent::FinishFunc(c) => {
                                 audit.FinishFunc(&c.id, &c.funcState).await?;

@@ -242,6 +242,26 @@ impl NodeAgentClient {
         return Ok(())
     }
 
+    pub async fn ReadFuncLog(&self, namespace: &str, funcId: &str) -> Result<String> {
+        let req = NmMsg::ReadFuncLogReq {
+            namespace: namespace.to_owned(),
+            func_name: funcId.to_owned(),
+            ..Default::default()
+        };
+
+        let ret = self.Call(NmMsg::node_agent_req::MessageBody::ReadFuncLogReq(req)).await?;
+        match ret {
+            NmMsg::node_agent_resp::MessageBody::ReadFuncLogResp(resp) => {
+                if resp.error.len() > 0 {
+                    return Err(Error::CommonError(resp.error))
+                }
+
+                return Ok(resp.content)
+            }
+            _ => panic!("ReadFuncLog wrong response type"),
+        }
+    }
+
     pub async fn Call(&self, req: NmMsg::node_agent_req::MessageBody) -> Result<NmMsg::node_agent_resp::MessageBody> {
         let reqId = self.ReqId();
         let req = NmMsg::NodeAgentReq {

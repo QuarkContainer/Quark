@@ -18,6 +18,7 @@ use core::ops::Deref;
 use std::time::SystemTime;
 use async_trait::async_trait;
 
+use qobjs::audit::func_audit::FuncAudit;
 use qobjs::k8s;
 use qobjs::ObjectMeta;
 use qobjs::nm;
@@ -27,6 +28,7 @@ use qobjs::cacher::*;
 use qobjs::selection_predicate::*;
 use tokio::sync::Notify;
 
+use crate::FUNCAUDIT;
 use crate::na_client::NodeAgentClient;
 
 pub fn MetaToDataObject(kind: &str, meta: &ObjectMeta) -> Result<DataObjectInner> {
@@ -319,6 +321,19 @@ impl NodeMgrCache {
                         return client.TerminatePod(podId).await;
                     }
                 }
+            }
+        }
+    }
+
+    pub async fn ReadFuncLog(&self, namespace: &str, funcId: &str) -> Result<String> {
+        let nodeId = FUNCAUDIT.get().unwrap().GetNode(namespace, funcId).await?;
+        let nodeAgentClient = self.read().unwrap().nodeAgents.get(&nodeId).cloned();
+        match nodeAgentClient {
+            None => {
+                return Err(Error::CommonError(format!("Can't find node with name {}", nodeId)));
+            }
+            Some(client) => {
+                return client.ReadFuncLog(namespace, funcId).await;
             }
         }
     }

@@ -553,8 +553,21 @@ impl qmeta::q_meta_service_server::QMetaService for NodeMgrSvc {
         &self,
         request: tonic::Request<qmeta::ReadFuncLogReq>,
     ) -> SResult<tonic::Response<qmeta::ReadFuncLogResp>, tonic::Status> {
-        let _req = request.get_ref();
-        unimplemented!();
+        let req = request.get_ref();
+        match crate::NM_CACHE.get().unwrap().ReadFuncLog(&req.namespace, &req.func_name).await {
+            Err(e) => {
+                return Ok(Response::new(qmeta::ReadFuncLogResp {
+                    error: format!("read_func_log fail with error {:?}", e),
+                    ..Default::default()
+                }));
+            }
+            Ok(content) =>  {
+                return Ok(Response::new(qmeta::ReadFuncLogResp {
+                    content: content,
+                    ..Default::default()
+                }));
+            }
+        }
     }
 }
 
