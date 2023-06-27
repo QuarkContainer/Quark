@@ -52,6 +52,18 @@ async def remote_wordcount():
         )
     print("res is ", res)
 
+async def readfile():
+    # Start the background task
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage2", True)
+    background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
+    jobContext = qserverless.NewJobContext()
+    filename = "src/qserverless/func/__init__.py"
+    (res, err) = await jobContext.RemoteCall(
+            funcName = "readfile",
+            filename = filename
+        )
+    print("res is ", res)
+
 async def remoteCallEcho():
     qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage2", True)
     background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
@@ -60,7 +72,7 @@ async def remoteCallEcho():
             funcName = "echo",
             msg = "hello world"
         )
-    print("remoteCallSimpl result ", res, " err ", err)
+    print("remoteCallecho result ", res, " err ", err)
 
 async def remoteCallCallEcho():
     qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage2", True)
@@ -70,7 +82,7 @@ async def remoteCallCallEcho():
             funcName = "call_echo",
             msg = "hello world"
         )
-    print("remoteCallSimpl result ", res, " err ", err)
+    print("remoteCallCallEcho result ", res, " err ", err)
 
 async def main() : 
     test = sys.argv[1]
@@ -84,6 +96,7 @@ async def main() :
             await wordcount()
         case "remote_wordcount":
             await remote_wordcount()
-    
+        case "readfile":
+            await readfile()   
 asyncio.run(main())
 
