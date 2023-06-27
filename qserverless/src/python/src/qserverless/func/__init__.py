@@ -121,6 +121,7 @@ async def call_echo(context, msg: str): # -> (str, qserverless.Err):
 
 async def echo(context, msg: str): # -> (str, qserverless.Err):   
     print("echo .... get message", msg);
+    print('stderr', file=sys.stderr)
     return (msg, None)
 
 async def readfile(context, filename: str):

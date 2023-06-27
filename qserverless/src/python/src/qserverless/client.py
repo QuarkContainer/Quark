@@ -20,6 +20,9 @@ import numpy as np
 import janus
 import json
 import sys
+import io
+from contextlib import redirect_stdout
+from contextlib import redirect_stderr
 
 import qserverless.func_pb2 as func_pb2
 import qserverless.blob_mgr as blob_mgr
@@ -263,7 +266,13 @@ class FuncMgr:
         
         kwargs = json.loads(parameters)
         try:
-            (result, err) = await function(context, **kwargs)
+            result = None
+            err = None
+            logname = '/var/log/quark/func/{}.log'.format(context.id)
+            with open(logname, 'w') as f:
+                with redirect_stdout(f):
+                    with redirect_stderr(f):
+                        (result, err) = await function(context, **kwargs)
             if result is None:
                 result = ""
             if err is not None:
