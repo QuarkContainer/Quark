@@ -19,8 +19,9 @@ use crate::common::*;
 
 #[async_trait::async_trait]
 pub trait FuncAudit {
-    async fn CreateFunc(&mut self, id: &str, jobId: &str, namespace: &str, packageName: &str, funcName: &str, callerFuncId: &str) -> Result<()>;
-    async fn FinishFunc(&mut self, id: &str, funcState: &str) -> Result<()>;
+    async fn CreateFunc(&self, id: &str, jobId: &str, namespace: &str, packageName: &str, funcName: &str, callerFuncId: &str) -> Result<()>;
+    async fn AssignFunc(&self, id: &str, nodeId: &str, funcState: &str) -> Result<()>;
+    async fn FinishFunc(&self, id: &str, funcState: &str) -> Result<()>;
 }
 
 pub struct SqlFuncAudit {
@@ -42,7 +43,7 @@ impl SqlFuncAudit {
 #[async_trait::async_trait]
 impl FuncAudit for SqlFuncAudit {
     async fn CreateFunc(
-        &mut self,
+        &self,
         id: &str, 
         jobId: &str, 
         namespace: &str,
@@ -66,7 +67,19 @@ impl FuncAudit for SqlFuncAudit {
         return Ok(())
     }
 
-    async fn FinishFunc(&mut self, id: &str, funcState: &str) -> Result<()> {
+    async fn AssignFunc(&self, id: &str, nodeId: &str, funcState: &str) -> Result<()> {
+        let query = "Update FuncAudit Set funcState = $1, nodeId=$2, assignedTime = NOW() where id = uuid($3)";
+        let _result = sqlx::query(query)
+            .bind(funcState)
+            .bind(nodeId)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+
+        return Ok(())
+    }
+
+    async fn FinishFunc(&self, id: &str, funcState: &str) -> Result<()> {
         let query = "Update FuncAudit Set funcState = $1, finishTime = NOW() where id = uuid($2)";
         let _result = sqlx::query(query)
             .bind(funcState)

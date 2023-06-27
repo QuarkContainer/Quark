@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h2>func audit</h2>
+
+    <style>
+        table, th, td {
+          border:1px solid black;
+        }
+    </style>
+    <table style="width:100%">
+    <tr>
+        <th>id</th>
+        <th>jobId</th>
+        <th>namespace</th>
+        <th>packageName</th>
+        <th>funcName</th>
+        <th>callerFuncId</th>
+        <th>funcState</th>
+        <th>nodeId</th>
+        <th>createTime</th>
+        <th>assignedTime</th>
+        <th>finishTime</th>
+    </tr>
+    {% for audit in audits %}
+        <tr>
+            <td>{{ audit[0] }}</td>
+            <td>{{ audit[1] }}</td>
+            <td>{{ audit[2] }}</td>
+            <td>{{ audit[3] }}</td>
+            <td>{{ audit[4] }}</td>
+            <td>{{ audit[5] }}</td>
+            <td>{{ audit[6] }}</td>
+            <td>{{ audit[7] }}</td>
+            <td>{{ audit[8] }}</td>
+            <td>{{ audit[9] }}</td>
+            <td>{{ audit[10] }}</td>
+        </tr>
+    {% endfor %}
+    </table>
+{% endblock %}

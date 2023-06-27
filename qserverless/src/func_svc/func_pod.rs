@@ -21,6 +21,7 @@ use core::ops::Deref;
 use qobjs::common::*;
 use qobjs::types::*;
 
+use crate::AUDIT_AGENT;
 use crate::func_call::FuncCall;
 use crate::package::*;
 use crate::func_node::*;
@@ -113,6 +114,11 @@ impl FuncPod {
         *self.state.lock().unwrap() = FuncPodState::Running(funcCall.id.clone());
         *funcCall.calleeNodeId.lock().unwrap() = self.node.NodeName();
         *funcCall.calleeFuncPodId.lock().unwrap() = self.podName.clone();
+        AUDIT_AGENT.AssignFunc(
+            &funcCall.id, 
+            &self.node.NodeName(),
+            "assigned"
+        )?;
         self.node.Send(FuncNodeMsg::FuncCall(funcCall.clone()))?;
         return Ok(())
     }

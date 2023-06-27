@@ -548,8 +548,15 @@ impl qmeta::q_meta_service_server::QMetaService for NodeMgrSvc {
             }
         }
     }
-}
 
+    async fn read_func_log(
+        &self,
+        request: tonic::Request<qmeta::ReadFuncLogReq>,
+    ) -> SResult<tonic::Response<qmeta::ReadFuncLogResp>, tonic::Status> {
+        let _req = request.get_ref();
+        unimplemented!();
+    }
+}
 
 pub async fn GrpcService() -> Result<()> {
     use tonic::transport::Server;

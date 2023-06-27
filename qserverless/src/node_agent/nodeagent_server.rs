@@ -281,6 +281,23 @@ impl NodeAgentServer {
                 nodeAgent.TerminatePod(podId)?;
                 return Ok(NmMsg::node_agent_resp::MessageBody::TerminatePodResp(NmMsg::TerminatePodResp{}));
             }
+            NmMsg::node_agent_req::MessageBody::ReadFuncLogReq(req) => {
+                match nodeAgent.ReadFuncLog(&req.namespace, &req.func_name, req.offset as usize, req.len as usize) {
+                    Err(e) => {
+                        return Ok(NmMsg::node_agent_resp::MessageBody::ReadFuncLogResp(NmMsg::ReadFuncLogResp{
+                            error: format!("{:?}", e),
+                            ..Default::default()
+                        }));
+                    }
+                    Ok(content) => {
+                        return Ok(NmMsg::node_agent_resp::MessageBody::ReadFuncLogResp(NmMsg::ReadFuncLogResp{
+                            content: content,
+                            ..Default::default()
+                        }));
+                    }
+                }
+                
+            }
         }
     }
 

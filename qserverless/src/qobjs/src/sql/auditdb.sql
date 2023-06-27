@@ -10,7 +10,9 @@ CREATE TABLE FuncAudit (
     funcName        VARCHAR NOT NULL,
     callerFuncId    VARCHAR NOT NULL,
     funcState       VARCHAR NOT NULL,
+    nodeId          VARCHAR,
     createTime      TIMESTAMP,
+    assignedTime    TIMESTAMP,
     finishTime      TIMESTAMP
 );
 

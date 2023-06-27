@@ -353,6 +353,12 @@ impl NodeAgent {
         return Ok(())
     }
 
+    pub fn ReadFuncLog(&self, namespace: &str, funcName: &str, _offset: usize, _len: usize) -> Result<String> {
+        let filename = format!("{}/func/{}/{}.log", DefaultNodeFuncLogFolder, namespace, funcName);
+        let content = std::fs::read_to_string(&filename)?;
+        return Ok(content)
+    }
+
     pub fn BuildAQuarkPod(&self, state: PodState, pod: &k8s::Pod, configMap: &Option<k8s::ConfigMap>, isDaemon: bool) -> Result<QuarkPod> {
         ValidatePodSpec(pod)?;
 
