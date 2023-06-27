@@ -544,7 +544,7 @@ pub async fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container, 
             let funcDir = FUNCDIR_MGR.get().unwrap().GetFuncDir(namespace, objName).await?;
             let mount = crictl::Mount {
                 host_path: funcDir.to_owned(),
-                container_path: "/app/func".to_string(),
+                container_path: "/app/src/qserverless/func".to_string(),
                 selinux_relabel: false,
                 ..Default::default()
             };
