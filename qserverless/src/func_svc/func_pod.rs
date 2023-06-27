@@ -117,7 +117,6 @@ impl FuncPod {
         AUDIT_AGENT.AssignFunc(
             &funcCall.id, 
             &self.node.NodeName(),
-            "assigned"
         )?;
         self.node.Send(FuncNodeMsg::FuncCall(funcCall.clone()))?;
         return Ok(())

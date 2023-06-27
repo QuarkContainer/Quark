@@ -131,7 +131,7 @@ mod tests {
 
     #[actix_rt::test]
     async fn test_create() {
-        let mut audit = SqlFuncAudit::New(AUDITDB_ADDR).await.unwrap();
+        let audit = SqlFuncAudit::New(AUDITDB_ADDR).await.unwrap();
         let id = uuid::Uuid::new_v4().to_string();
         
         audit.CreateFunc(
@@ -148,7 +148,7 @@ mod tests {
 
     #[actix_rt::test]
     async fn test_update() {
-        let mut audit = SqlFuncAudit::New(AUDITDB_ADDR).await.unwrap();
+        let audit = SqlFuncAudit::New(AUDITDB_ADDR).await.unwrap();
         let id = uuid::Uuid::new_v4().to_string();
         
         audit.CreateFunc(

@@ -18,6 +18,8 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
 use core::ops::Deref;
+use qobjs::audit::func_audit::FuncStateFail;
+use qobjs::audit::func_audit::FuncStateSuccess;
 use qobjs::utility::SystemTimeProto;
 use tokio::sync::Mutex as TMutex;
 use tonic::Streaming;
@@ -348,9 +350,9 @@ impl FuncNode {
     // get funccall response from nodeagent
     pub fn OnFuncSvcCallResp(&self, resp: func::FuncSvcCallResp) -> Result<()> {
         let state = if resp.error.len() == 0 {
-            "Success"
+            FuncStateSuccess
         } else {
-            "Fail"
+            FuncStateFail
         };
         AUDIT_AGENT.FinishFunc(
             &resp.id, 

@@ -14,16 +14,24 @@
 
 use sqlx::postgres::PgPoolOptions;
 use sqlx::postgres::PgPool;
+use sqlx::Row;
 
 use crate::common::*;
+
+pub const FuncStateCreated : &str = "created";
+pub const FuncStateAssigned : &str = "assgined";
+pub const FuncStateSuccess : &str = "sucsess";
+pub const FuncStateFail : &str = "fail";
 
 #[async_trait::async_trait]
 pub trait FuncAudit {
     async fn CreateFunc(&self, id: &str, jobId: &str, namespace: &str, packageName: &str, funcName: &str, callerFuncId: &str) -> Result<()>;
-    async fn AssignFunc(&self, id: &str, nodeId: &str, funcState: &str) -> Result<()>;
+    async fn AssignFunc(&self, id: &str, nodeId: &str) -> Result<()>;
     async fn FinishFunc(&self, id: &str, funcState: &str) -> Result<()>;
+    async fn GetNode(&self, namespace: &str, funcId: &str) -> Result<String>;
 }
 
+#[derive(Debug)]
 pub struct SqlFuncAudit {
     pub pool: PgPool,
 }
@@ -52,7 +60,7 @@ impl FuncAudit for SqlFuncAudit {
         callerFuncId: &str
     ) -> Result<()> {
         let query = "insert into FuncAudit (id, jobId, namespace, packageName, funcName, callerFuncId, funcState, createTime) values \
-            (uuid($1), uuid($2), $3, $4, $5, $6, 'Running', NOW())";
+            (uuid($1), uuid($2), $3, $4, $5, $6, $7, NOW())";
 
         let _result = sqlx::query(query)
             .bind(id)
@@ -61,16 +69,17 @@ impl FuncAudit for SqlFuncAudit {
             .bind(packageName)
             .bind(funcName)
             .bind(callerFuncId)
+            .bind(FuncStateCreated.to_owned())
             .execute(&self.pool)
             .await?;
             
         return Ok(())
     }
 
-    async fn AssignFunc(&self, id: &str, nodeId: &str, funcState: &str) -> Result<()> {
+    async fn AssignFunc(&self, id: &str, nodeId: &str) -> Result<()> {
         let query = "Update FuncAudit Set funcState = $1, nodeId=$2, assignedTime = NOW() where id = uuid($3)";
         let _result = sqlx::query(query)
-            .bind(funcState)
+            .bind(FuncStateAssigned)
             .bind(nodeId)
             .bind(id)
             .execute(&self.pool)
@@ -88,5 +97,32 @@ impl FuncAudit for SqlFuncAudit {
             .await?;
 
         return Ok(())
+    }
+
+    async fn GetNode(&self, namespace: &str, funcId: &str) -> Result<String> {
+        let query = "Select nodeId, namespace, funcState from FuncAudit where id = uuid($1)";
+        let rows = sqlx::query(query)
+            .bind(funcId)
+            .fetch_all(&self.pool)
+            .await?;
+
+        if rows.len() >= 1 {
+            let row = &rows[0];
+            let expecNamespace = row.get::<String, _>("namespace");
+            let funcState = row.get::<String, _>("funcState");
+            let nodeId = row.get::<String, _>("nodeId");
+
+            if &expecNamespace != namespace {
+                return Err(Error::ENOENT(format!("SqlFuncAudit::GetNode has no audit for func {} with matched namespace {}", funcId, namespace)));
+            }
+
+            if funcState == FuncStateCreated {
+                return Err(Error::ENOENT(format!("SqlFuncAudit::GetNode fail as func {} has not been assigned node", funcId)));
+            }
+
+            return Ok(nodeId)
+        } else {
+            return Err(Error::ENOENT(format!("SqlFuncAudit::GetNode has no audit for func {}", funcId)));
+        }
     }
 }
