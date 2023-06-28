@@ -55,7 +55,8 @@ def index():
     #print(audits)
     cur.close()
     conn.close()
-    return render_template('index.html', audits=audits)
+    hosturl = request.host_url
+    return render_template('index.html', audits=audits, hosturl=hosturl)
 
 @app.route('/funclog')
 def funclog():
