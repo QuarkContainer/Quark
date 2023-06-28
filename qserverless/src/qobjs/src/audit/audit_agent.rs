@@ -27,6 +27,7 @@ pub struct CreateFunc {
     pub jobId: String,
     pub namespace: String,
     pub packageName: String,
+    pub revision: i64,
     pub funcName: String,
     pub callerFuncId: String,
 }
@@ -96,6 +97,7 @@ impl AuditAgent {
         jobId: &str, 
         namespace: &str,
         packageName: &str,
+        revision: i64,
         funcName: &str,  
         callerFuncId: &str
     ) -> Result<()> {
@@ -104,6 +106,7 @@ impl AuditAgent {
             jobId: jobId.to_owned(),
             namespace: namespace.to_owned(),
             packageName: packageName.to_owned(),
+            revision: revision,
             funcName: funcName.to_owned(),
             callerFuncId: callerFuncId.to_owned()
         };
@@ -163,7 +166,7 @@ impl AuditAgent {
                     if let Some(msg) = msg {
                         match msg {
                             AuditEvent::CreateFunc(c) => {
-                                audit.CreateFunc(&c.id, &c.jobId, &c.namespace, &c.packageName, &c.funcName, &c.callerFuncId).await?;
+                                audit.CreateFunc(&c.id, &c.jobId, &c.namespace, &c.packageName, c.revision, &c.funcName, &c.callerFuncId).await?;
                             }
                             AuditEvent::AssignFunc(c) => {
                                 audit.AssignFunc(&c.id, &c.nodeId).await?;

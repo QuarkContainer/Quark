@@ -57,7 +57,7 @@ def listpackages(namespace: str):
         jsonstr = json.dumps(data, indent = 4)
         jsonstr = jsonstr.replace('\n', '<br>')
         jsonstr = jsonstr.replace('    ', '&emsp;')
-        packages.append((obj.namespace, obj.name, jsonstr))
+        packages.append((obj.namespace, obj.name, jsonstr, obj.revision))
     
     return packages
 
@@ -75,7 +75,7 @@ def getpackage(namespace: str, pacakgeName: str):
     jsonstr = json.dumps(data, indent = 4)
     jsonstr = jsonstr.replace('\n', '<br>')
     jsonstr = jsonstr.replace('    ', '&emsp;')
-    return jsonstr
+    return (jsonstr, obj.revision)
 
 @app.route('/')
 def index():
@@ -115,8 +115,8 @@ def ListPackage():
 def GetPackage():
     namespace = request.args.get('namespace')
     name = request.args.get('name')
-    package = getpackage(namespace, name)
-    return render_template('package.html', namespace=namespace, name=name, package=package)
+    (package, revision) = getpackage(namespace, name)
+    return render_template('package.html', namespace=namespace, name=name, package=package, revision=revision)
     
 
 

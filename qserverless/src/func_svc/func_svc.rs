@@ -168,7 +168,7 @@ impl FuncSvcInner {
                 return true;
             }
             Ok(p) => {
-                if p.Version() != package.Version() { 
+                if p.Revision() != package.Revision() { 
                     // the package has new version, all pods of the last package will be evicated
                     return true;
                 }
