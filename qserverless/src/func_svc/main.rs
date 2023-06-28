@@ -43,7 +43,7 @@ pub mod message;
 pub mod grpc_svc;
 
 use package::PackageMgr;
-use qobjs::{common::*, cacher_client::CacherClient, informer_factory::InformerFactory, selection_predicate::ListOption, audit::audit_agent::AuditAgent};
+use qobjs::{common::*, informer_factory::InformerFactory, selection_predicate::ListOption, audit::audit_agent::AuditAgent};
 use scheduler::Scheduler;
 use qobjs::types::*;
 
@@ -92,31 +92,6 @@ async fn main() -> Result<()> {
     factory.AddInformer("package", &ListOption::default()).await.unwrap();
     let informer = factory.GetInformer("package").await.unwrap();
     let _id1 = informer.AddEventHandler(Arc::new(PACKAGE_MGR.clone())).await.unwrap();
-
-    use qobjs::types::PackageId;
-    let packageId = PackageId {
-        namespace: "ns1".to_string(),
-        packageName: "package1".to_string(),
-    };
-
-    if PACKAGE_MGR.Get(&packageId).is_err() {
-        let client: CacherClient = CacherClient::New(qmetaSvcAddr.into()).await.unwrap();
-        let obj = DataObject::NewFuncPackage1("ns1", "package1").unwrap();
-        client.Create("package", obj.Obj()).await.unwrap();
-    }
-
-    let packageId = PackageId {
-        namespace: "ns1".to_string(),
-        packageName: "pypackage1".to_string(),
-    };
-
-    if PACKAGE_MGR.Get(&packageId).is_err() {
-        let client = CacherClient::New(qmetaSvcAddr.into()).await.unwrap();
-        let obj = DataObject::NewFuncPyPackage("ns1", "pypackage1").unwrap();
-        client.Delete("package", "ns1", "pypackage1").await.ok();
-        error!("create new package {:#?}", &obj);
-        client.Create("package", obj.Obj()).await.unwrap();
-    }
 
     grpc_svc::FuncSvcGrpcService().await.unwrap();
     Ok(())

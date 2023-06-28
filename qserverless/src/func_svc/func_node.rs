@@ -312,6 +312,10 @@ impl FuncNode {
         let package = match PACKAGE_MGR.Get(&packageId) {
             Ok(p) => p,
             Err(_) => {
+                AUDIT_AGENT.FinishFunc(
+                    &req.id, 
+                    FuncStateFail
+                )?;
                 let resp = func::FuncSvcCallResp {
                     id: req.id,
                     error: format!("FuncCall fail as package {:?} doesn't exist", &packageId),
@@ -321,6 +325,7 @@ impl FuncNode {
                     callee_node_id: req.callee_node_id.clone(),
                     callee_pod_id: req.callee_node_id.clone(),
                 };
+
                 return self.Send(FuncNodeMsg::FuncCallResp(resp));
             }
         };
@@ -386,9 +391,9 @@ impl FuncNode {
                     p
                 }
                 Err(_) => {
-                    let resp = func::FuncPodConnResp {
+                   let resp = func::FuncPodConnResp {
                         func_pod_id: req.func_pod_id ,
-                        error: format!("FuncCall fail as package {:?} doesn't exist", &packageId),
+                        error: format!("Funcpod connect fail as package {:?} doesn't exist", &packageId),
                     };
                     return self.Send(FuncNodeMsg::FuncPodConnResp(resp));
                 }
