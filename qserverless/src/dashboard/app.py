@@ -61,6 +61,25 @@ def listpackages(namespace: str):
     
     return packages
 
+def listnodes(): 
+    req = qobjs_pb2.GetRequestMessage (
+        obj_type = "qnode"
+    )
+    
+    channel = grpc.insecure_channel("127.0.0.1:8890")
+    stub = qobjs_pb2_grpc.QMetaServiceStub(channel)
+    res = stub.List(req)
+    
+    nodes = []
+    for obj in res.objs:
+        data = json.loads(obj.data) 
+        jsonstr = json.dumps(data, indent = 4)
+        jsonstr = jsonstr.replace('\n', '<br>')
+        jsonstr = jsonstr.replace('    ', '&emsp;')
+        nodes.append((obj.name, jsonstr, obj.revision))
+    
+    return nodes
+
 def getpackage(namespace: str, pacakgeName: str):
     req = qobjs_pb2.GetRequestMessage (
         obj_type = "package",
@@ -76,6 +95,23 @@ def getpackage(namespace: str, pacakgeName: str):
     jsonstr = jsonstr.replace('\n', '<br>')
     jsonstr = jsonstr.replace('    ', '&emsp;')
     return (jsonstr, obj.revision)
+
+def getnode(name: str):
+    req = qobjs_pb2.GetRequestMessage (
+        obj_type = "qnode",
+        namespace = "qserverless.quarksoft.io",
+        name = name
+    )     
+    channel = grpc.insecure_channel("127.0.0.1:8890")
+    stub = qobjs_pb2_grpc.QMetaServiceStub(channel)
+    res = stub.Get(req)
+    obj = res.obj
+    print("obj is ", obj)
+    data = json.loads(obj.data) 
+    jsonstr = json.dumps(data, indent = 4)
+    jsonstr = jsonstr.replace('\n', '<br>')
+    jsonstr = jsonstr.replace('    ', '&emsp;')
+    return jsonstr
 
 @app.route('/')
 def index():
@@ -118,6 +154,16 @@ def GetPackage():
     (package, revision) = getpackage(namespace, name)
     return render_template('package.html', namespace=namespace, name=name, package=package, revision=revision)
     
+@app.route('/listnode')
+def ListNode():
+    nodes = listnodes()
+    return render_template('node_list.html', nodes=nodes)
+
+@app.route('/node')
+def GetNode():
+    name = request.args.get('name')
+    node = getnode(name)
+    return render_template('node.html', name=name, node=node)
 
 
 if __name__ == '__main__':

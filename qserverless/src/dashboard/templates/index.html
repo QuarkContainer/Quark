@@ -4,6 +4,7 @@
     <nav>
         <a href="{{ hosturl }}?namespace={{ namespace }}">FuncAudit</a>
         <a href="{{ hosturl }}listpackage?namespace={{ namespace }}">Packages</a>
+        <a href="{{ hosturl }}listnode">Nodes</a>
     </nav>
 
     <h2>func audit</h2>
@@ -38,12 +39,11 @@
             <td><a href="{{ hosturl }}funclog?namespace={{ audit[2] }}&&funcId={{ audit[0] }}&&funcName={{ audit[5] }}">{{ audit[5] }}</a></td>
             <td>{{ audit[6] }}</td>
             <td>{{ audit[7] }}</td>
-            <td>{{ audit[8] }}</td>
+            <td><a href="{{ hosturl }}node?name={{ audit[8] }}">{{ audit[8] }}</a></td>
             <td>{{ audit[9] }}</td>
             <td>{{ audit[10] }}</td>
             <td>{{ audit[11] }}</td>
         </tr>
     {% endfor %}
     </table>
-    {{ hosturl }}
 {% endblock %}
