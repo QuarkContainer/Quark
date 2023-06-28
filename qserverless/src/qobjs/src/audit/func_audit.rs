@@ -100,7 +100,7 @@ impl FuncAudit for SqlFuncAudit {
     }
 
     async fn GetNode(&self, namespace: &str, funcId: &str) -> Result<String> {
-        let query = "Select nodeId, namespace, funcState from FuncAudit where id = uuid($1)";
+        let query = "Select nodeid, namespace, funcstate from FuncAudit where id = uuid($1)";
         let rows = sqlx::query(query)
             .bind(funcId)
             .fetch_all(&self.pool)
@@ -109,8 +109,8 @@ impl FuncAudit for SqlFuncAudit {
         if rows.len() >= 1 {
             let row = &rows[0];
             let expecNamespace = row.get::<String, _>("namespace");
-            let funcState = row.get::<String, _>("funcState");
-            let nodeId = row.get::<String, _>("nodeId");
+            let funcState = row.get::<String, _>("funcstate");
+            let nodeId = row.get::<String, _>("nodeid");
 
             if &expecNamespace != namespace {
                 return Err(Error::ENOENT(format!("SqlFuncAudit::GetNode has no audit for func {} with matched namespace {}", funcId, namespace)));

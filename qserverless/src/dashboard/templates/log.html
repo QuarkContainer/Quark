@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h2>func log</h2>
+
+    <style>
+        table, th, td {
+          border:1px solid black;
+        }
+    </style>
+    <table style="width:100%">
+    <tr>
+        <th>namespace</th>
+        <th>func name</th>
+        <th>func id</th>
+    </tr>
+    <tr>
+        <td>{{ namespace }}</td>
+        <td>{{ funcName }}</td>
+        <td>{{ funcId }}</td>
+    </tr>
+    </table>
+
+    {{ log | safe  }}
+{% endblock %}

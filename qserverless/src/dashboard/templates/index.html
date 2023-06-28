@@ -21,11 +21,12 @@
         <th>createTime</th>
         <th>assignedTime</th>
         <th>finishTime</th>
+        <th>func log</th>
     </tr>
     {% for audit in audits %}
         <tr>
             <td>{{ audit[0] }}</td>
-            <td>{{ audit[1] }}</td>
+            <td><a href="http://localhost:1234/?namespace={{ audit[2] }}&&jobid={{ audit[1] }}">{{ audit[1] }}</a></td>
             <td>{{ audit[2] }}</td>
             <td>{{ audit[3] }}</td>
             <td>{{ audit[4] }}</td>
@@ -35,6 +36,7 @@
             <td>{{ audit[8] }}</td>
             <td>{{ audit[9] }}</td>
             <td>{{ audit[10] }}</td>
+            <td><a href="http://localhost:1234/funclog?namespace={{ audit[2] }}&&funcId={{ audit[0] }}&&funcName={{ audit[4] }}">func log</a></td>
         </tr>
     {% endfor %}
     </table>
