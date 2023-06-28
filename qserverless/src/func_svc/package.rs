@@ -34,7 +34,7 @@ use crate::func_pod::*;
 pub struct PackageInner  {
     pub namespace: String,
     pub packageName: String,
-    pub version: String,
+    pub revision: i64,
 
     pub reqResource: Resource,
 
@@ -70,11 +70,11 @@ impl PackageInner {
         return map;
     }
 
-    pub fn NewFromFuncPackage(fp: FuncPackage) -> Self {
+    pub fn NewFromFuncPackage(fp: FuncPackage, revision: i64) -> Self {
         return Self {
             namespace: fp.metadata.namespace.as_deref().unwrap_or("").to_string(),
             packageName: fp.metadata.name.as_deref().unwrap_or("").to_string(),
-            version: fp.metadata.resource_version.as_deref().unwrap_or("").to_string(),
+            revision: revision,
             // todo: get resource requirement from podspec
             reqResource: Resource::default(),
             funcPackage: fp,
@@ -195,8 +195,8 @@ impl Package {
         return self.lock().unwrap().funcPackage.spec.template.clone();
     }
 
-    pub fn NewFromFuncPackage(fp: FuncPackage) -> Self {
-        let inner = PackageInner::NewFromFuncPackage(fp);
+    pub fn NewFromFuncPackage(fp: FuncPackage, revision: i64) -> Self {
+        let inner = PackageInner::NewFromFuncPackage(fp, revision);
         return Self(Arc::new(Mutex::new(inner)));
     }
 
@@ -232,8 +232,8 @@ impl Package {
         return self.lock().unwrap().TopPriority();
     }
 
-    pub fn Version(&self) -> String {
-        return self.lock().unwrap().version.clone();
+    pub fn Revision(&self) -> i64 {
+        return self.lock().unwrap().revision;
     }
 
     pub fn ClearKeepalivePods(&self) {
@@ -319,7 +319,7 @@ impl EventHandler for PackageMgr {
         
         match &event.type_{
             EventType::Added => {
-                let package = Package::NewFromFuncPackage(funcPackage);
+                let package = Package::NewFromFuncPackage(funcPackage, obj.reversion);
                 self.AddOrReplace(package);
             }
             EventType::Deleted => {
@@ -329,7 +329,7 @@ impl EventHandler for PackageMgr {
                 );
             }
             EventType::Modified => {
-                let package = Package::NewFromFuncPackage(funcPackage);
+                let package = Package::NewFromFuncPackage(funcPackage, obj.reversion);
                 self.AddOrReplace(package);
             }
             t => {

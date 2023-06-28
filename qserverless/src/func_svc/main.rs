@@ -114,6 +114,7 @@ mod tests {
             &uuid::Uuid::new_v4().to_string(), 
             "ns1",
             "package1",
+            1,
             "testfunc1", 
             &uuid::Uuid::new_v4().to_string()
         ).await.unwrap();
@@ -131,6 +132,7 @@ mod tests {
             &uuid::Uuid::new_v4().to_string(), 
             "ns1",
             "package1",
+            2,
             "testfunc1", 
             &uuid::Uuid::new_v4().to_string()
         ).await.unwrap();

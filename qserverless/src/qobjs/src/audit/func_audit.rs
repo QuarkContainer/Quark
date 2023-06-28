@@ -25,7 +25,7 @@ pub const FuncStateFail : &str = "fail";
 
 #[async_trait::async_trait]
 pub trait FuncAudit {
-    async fn CreateFunc(&self, id: &str, jobId: &str, namespace: &str, packageName: &str, funcName: &str, callerFuncId: &str) -> Result<()>;
+    async fn CreateFunc(&self, id: &str, jobId: &str, namespace: &str, packageName: &str, revision: i64, funcName: &str, callerFuncId: &str) -> Result<()>;
     async fn AssignFunc(&self, id: &str, nodeId: &str) -> Result<()>;
     async fn FinishFunc(&self, id: &str, funcState: &str) -> Result<()>;
     async fn GetNode(&self, namespace: &str, funcId: &str) -> Result<String>;
@@ -56,11 +56,12 @@ impl FuncAudit for SqlFuncAudit {
         jobId: &str, 
         namespace: &str,
         packageName: &str,
+        revision: i64,
         funcName: &str, 
         callerFuncId: &str
     ) -> Result<()> {
-        let query = "insert into FuncAudit (id, jobId, namespace, packageName, funcName, callerFuncId, funcState, createTime) values \
-            (uuid($1), uuid($2), $3, $4, $5, $6, $7, NOW())";
+        let query = "insert into FuncAudit (id, jobId, namespace, packageName, funcName, revision, callerFuncId, funcState, createTime) values \
+            (uuid($1), uuid($2), $3, $4, $5, $6, $7, $8, NOW())";
 
         let _result = sqlx::query(query)
             .bind(id)
@@ -68,6 +69,7 @@ impl FuncAudit for SqlFuncAudit {
             .bind(namespace)
             .bind(packageName)
             .bind(funcName)
+            .bind(revision)
             .bind(callerFuncId)
             .bind(FuncStateCreated.to_owned())
             .execute(&self.pool)

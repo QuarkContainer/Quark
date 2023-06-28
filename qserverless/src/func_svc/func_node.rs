@@ -298,20 +298,33 @@ impl FuncNode {
 
     // get funccall req from nodeagent
     pub fn OnFuncSvcCallReq(&self, req: func::FuncSvcCallReq) -> Result<()> {
-        AUDIT_AGENT.CreateFunc(
-            &req.id, 
-            &req.job_id, 
-            &req.namespace, 
-            &req.package_name, 
-            &req.func_name, 
-            &req.caller_func_id)?;
+
         let packageId = PackageId {
             namespace: req.namespace.clone(),
             packageName: req.package_name.clone(),
         };
         let package = match PACKAGE_MGR.Get(&packageId) {
-            Ok(p) => p,
+            Ok(p) => {
+                AUDIT_AGENT.CreateFunc(
+                    &req.id, 
+                    &req.job_id, 
+                    &req.namespace, 
+                    &req.package_name,
+                    p.Revision(),
+                    &req.func_name, 
+                    &req.caller_func_id)?;
+                p
+            }
             Err(_) => {
+                AUDIT_AGENT.CreateFunc(
+                    &req.id, 
+                    &req.job_id, 
+                    &req.namespace, 
+                    &req.package_name,
+                    -1,
+                    &req.func_name, 
+                    &req.caller_func_id)?;
+
                 AUDIT_AGENT.FinishFunc(
                     &req.id, 
                     FuncStateFail

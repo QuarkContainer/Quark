@@ -7,6 +7,7 @@ CREATE TABLE FuncAudit (
     jobId           UUID NOT NULL,
     namespace       VARCHAR NOT NULL,
     packageName     VARCHAR NOT NULL,
+    revision        bigint,
     funcName        VARCHAR NOT NULL,
     callerFuncId    VARCHAR NOT NULL,
     funcState       VARCHAR NOT NULL,
