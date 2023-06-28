@@ -25,6 +25,7 @@ async def wordcount(context, filenames: list[str]): # -> (str, qserverless.Err):
 
     results = await asyncio.gather(
         *[context.RemoteCall(
+            packageName = "pypackage1",
             funcName = "map",
             filename = filenames[i],
             pcount = 2
@@ -44,6 +45,7 @@ async def wordcount(context, filenames: list[str]): # -> (str, qserverless.Err):
     
     results = await asyncio.gather(
         *[context.RemoteCall(
+            packageName = "pypackage1",
             funcName = "reduce",
             blobs = shuffBlobs[i]
         ) for i in range(0, 2)]

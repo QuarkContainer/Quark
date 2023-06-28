@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h2>func log</h2>
+
+    <style>
+        table, th, td {
+          border:1px solid black;
+        }
+    </style>
+    <table style="width:100%">
+    <tr>
+        <th>namespace</th>
+        <th>package name</th>
+        <th>package</th>
+    </tr>
+    <tr>
+        <td>{{ namespace }}</td>
+        <td>{{ name }}</td>
+        {% autoescape false %}
+        <td>{{ package }}</td>
+        {% endautoescape %}
+    </tr>
+    </table>
+
+    {{ log | safe  }}
+{% endblock %}
