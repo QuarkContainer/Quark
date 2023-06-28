@@ -14,8 +14,9 @@
 
 import os
 import psycopg2
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, render_template_string
 import grpc
+import json
 
 import qobjs_pb2
 import qobjs_pb2_grpc
@@ -40,6 +41,42 @@ def ReadFuncLog(namespace: str, funcId: str) -> str:
     res = stub.ReadFuncLog(req)
     return res.content
 
+def listpackages(namespace: str): 
+    req = qobjs_pb2.GetRequestMessage (
+        obj_type = "package",
+        namespace = namespace,
+    )
+    
+    channel = grpc.insecure_channel("127.0.0.1:8890")
+    stub = qobjs_pb2_grpc.QMetaServiceStub(channel)
+    res = stub.List(req)
+    
+    packages = []
+    for obj in res.objs:
+        data = json.loads(obj.data) 
+        jsonstr = json.dumps(data, indent = 4)
+        jsonstr = jsonstr.replace('\n', '<br>')
+        jsonstr = jsonstr.replace('    ', '&emsp;')
+        packages.append((obj.namespace, obj.name, jsonstr))
+    
+    return packages
+
+def getpackage(namespace: str, pacakgeName: str):
+    req = qobjs_pb2.GetRequestMessage (
+        obj_type = "package",
+        namespace = namespace,
+        name = pacakgeName
+    )     
+    channel = grpc.insecure_channel("127.0.0.1:8890")
+    stub = qobjs_pb2_grpc.QMetaServiceStub(channel)
+    res = stub.Get(req)
+    obj = res.obj
+    data = json.loads(obj.data) 
+    jsonstr = json.dumps(data, indent = 4)
+    jsonstr = jsonstr.replace('\n', '<br>')
+    jsonstr = jsonstr.replace('    ', '&emsp;')
+    return jsonstr
+
 @app.route('/')
 def index():
     conn = get_db_connection()
@@ -52,11 +89,11 @@ def index():
     
     cur.execute(query)
     audits = cur.fetchall()
-    #print(audits)
+    
     cur.close()
     conn.close()
     hosturl = request.host_url
-    return render_template('index.html', audits=audits, hosturl=hosturl)
+    return render_template('index.html', audits=audits, hosturl=hosturl, namespace=namespace)
 
 @app.route('/funclog')
 def funclog():
@@ -67,6 +104,21 @@ def funclog():
     log = ReadFuncLog(namespace, funcId)
     output = log.replace('\n', '<br>')
     return render_template('log.html', namespace=namespace, funcId=funcId, funcName=funcName, log=output)
+
+@app.route('/listpackage')
+def ListPackage():
+    namespace = request.args.get('namespace')
+    packages = listpackages(namespace)
+    return render_template('package_list.html', packages=packages)
+    
+@app.route('/package')
+def GetPackage():
+    namespace = request.args.get('namespace')
+    name = request.args.get('name')
+    package = getpackage(namespace, name)
+    return render_template('package.html', namespace=namespace, name=name, package=package)
+    
+
 
 if __name__ == '__main__':
       app.run(host='0.0.0.0', port=1234)

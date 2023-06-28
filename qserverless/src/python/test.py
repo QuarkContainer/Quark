@@ -47,6 +47,7 @@ async def remote_wordcount():
     jobContext = qserverless.NewJobContext()
     filenames = ["./test.py", "./sync_test.py"]
     (res, err) = await jobContext.RemoteCall(
+            #packageName = "pypackage1",
             funcName = "wordcount",
             filenames = filenames
         )
