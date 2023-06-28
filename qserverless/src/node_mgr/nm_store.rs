@@ -22,6 +22,7 @@ use qobjs::audit::func_audit::FuncAudit;
 use qobjs::k8s;
 use qobjs::ObjectMeta;
 use qobjs::nm;
+use qobjs::runtime_types::DefaultDomainName;
 use qobjs::{types::*, selector::Labels};
 use qobjs::common::*;
 use qobjs::cacher::*;
@@ -327,6 +328,7 @@ impl NodeMgrCache {
 
     pub async fn ReadFuncLog(&self, namespace: &str, funcId: &str) -> Result<String> {
         let nodeId = FUNCAUDIT.get().unwrap().GetNode(namespace, funcId).await?;
+        let nodeId = format!("{}/{}", DefaultDomainName, nodeId);
         let nodeAgentClient = self.read().unwrap().nodeAgents.get(&nodeId).cloned();
         match nodeAgentClient {
             None => {

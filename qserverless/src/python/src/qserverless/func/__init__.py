@@ -80,8 +80,8 @@ async def map(context, filename: str, pcount: int): # -> (str, qserverless.Err):
             else:
                 word_counts[idx][word] = 1 
     # print("hash value ", hashlib.shake_128(b"my ascii string").hexdigest(4));
-    # print("map1 ", filename, word_counts[0])
-    # print("map2 ", filename, word_counts[1])
+    print("map1 ", filename, word_counts[0])
+    print("map2 ", filename, word_counts[1])
     for i in range(0, pcount):
         str = json.dumps(word_counts[i])
         (addr, err) = await context.BlobWriteAll(blobs[i], bytes(str, 'utf-8'))
