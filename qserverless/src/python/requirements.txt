@@ -27,3 +27,5 @@ ujson==5.7.0
 uvloop==0.17.0
 websockets==11.0.3
 Werkzeug==2.3.6
+pandas
+matplotlib

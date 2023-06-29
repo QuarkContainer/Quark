@@ -85,6 +85,13 @@ async def remoteCallCallEcho():
         )
     print("remoteCallCallEcho result ", res, " err ", err)
 
+async def ai():
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage1", True)
+    background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
+    jobContext = qserverless.NewJobContext()
+    (res, err) = await func.AITest(jobContext, "testai")
+    print("res is ", res)
+
 async def main() : 
     test = sys.argv[1]
     print("test is ", test)
@@ -99,5 +106,7 @@ async def main() :
             await remote_wordcount()
         case "readfile":
             await readfile()   
+        case "ai":
+            await ai() 
 asyncio.run(main())
 

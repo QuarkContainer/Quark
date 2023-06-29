@@ -17,6 +17,7 @@ use std::{sync::Arc, collections::BTreeMap};
 use std::ops::{Deref};
 use std::ops::Add;
 use std::ops::Sub;
+use regex::Regex;
 
 use prost::Message;
 
@@ -645,6 +646,48 @@ impl Resource {
         return Resource {
             mem: memory as _,
             cpu: (cpucores * 1000) as _,
+        }
+    }
+
+    pub fn NewFromStr(memStr: &str, cpuStr: &str) -> Result<Self> {
+        let mem = Self::ParseMemoryString(memStr)?;
+        let cpu = Self::ParseCpuStr(cpuStr)?;
+        return Ok(Resource {
+            mem: mem as _,
+            cpu: cpu as _,
+        })
+    }
+
+    pub fn ParseMemoryString(memStr: &str) -> Result<u64> {
+        let re = Regex::new(r"(\d+)([KMG]i?)?")?;
+        if let Some(captures) = re.captures(memStr) {
+            let value: u64 = captures.get(1).unwrap().as_str().parse()?;
+            let unit = captures.get(2).map(|m| m.as_str()).unwrap_or("");
+    
+            match unit {
+                "" => Ok(value),
+                "K" | "Ki" => Ok(value * 1024),
+                "M" | "Mi" => Ok(value * 1024 * 1024),
+                "G" | "Gi" => Ok(value * 1024 * 1024 * 1024),
+                _ => return Err(Error::CommonError(format!("ParseMemoryString fail with memory {:?}", memStr))),
+            }
+        } else {
+            return Err(Error::CommonError(format!("ParseMemoryString fail with memory {:?}", memStr)));
+        }
+    }
+
+    pub fn ParseCpuStr(cpuStr: &str) -> Result<u32> {
+        let re = Regex::new(r"(\d+)(m)?")?;
+        if let Some(captures) = re.captures(cpuStr) {
+            let value: u32 = captures.get(1).unwrap().as_str().parse()?;
+            let milli = captures.get(2).is_some();
+            if milli {
+                Ok(value)
+            } else {
+                Ok(value * 1000)
+            }
+        } else {
+            return Err(Error::CommonError(format!("ParseCpuStr fail with cpuStr {:?}", cpuStr)));
         }
     }
 }
