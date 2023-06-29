@@ -36,7 +36,17 @@ def wordcount():
         filenames = filenames
     )
     print("echo result is ", res)
-    
+
+def ai():
+    res = qserverless.Call(
+        svcAddr = "127.0.0.1:8889", 
+        namespace = "ns1", 
+        packageName = "pypackage2",
+        funcName = "AITest",
+        test = "xyz"
+    )
+    print("echo result is ", res)
+
 def main() : 
     test = sys.argv[1]
     print("test is ", test)
@@ -45,6 +55,7 @@ def main() :
             echo()
         case "wordcount":
             wordcount()
-
+        case "ai":
+            ai()
 if __name__ == "__main__":
     main()

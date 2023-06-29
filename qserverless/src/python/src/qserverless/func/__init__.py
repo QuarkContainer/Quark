@@ -18,7 +18,13 @@ import hashlib
 import sys
 
 import qserverless
+import qserverless.func.ai
+from qserverless.func.ai import handwritingClassification
 
+async def AITest(context, test):
+    print("AITest ", test)
+    await handwritingClassification(context)
+    
 async def wordcount(context, filenames: list[str]): # -> (str, qserverless.Err):
     pcount = len(filenames)
     blobMatrix = list();
@@ -130,3 +136,4 @@ async def readfile(context, filename: str):
     with open(filename,'r') as file:
         contents = file.read()
         return (contents, None)
+    
