@@ -84,7 +84,7 @@ def getpackage(namespace: str, pacakgeName: str):
     req = qobjs_pb2.GetRequestMessage (
         obj_type = "package",
         namespace = namespace,
-        name = pacakgeName
+        name = pacakgeName,
     )     
     channel = grpc.insecure_channel("127.0.0.1:8890")
     stub = qobjs_pb2_grpc.QMetaServiceStub(channel)
@@ -106,7 +106,6 @@ def getnode(name: str):
     stub = qobjs_pb2_grpc.QMetaServiceStub(channel)
     res = stub.Get(req)
     obj = res.obj
-    print("obj is ", obj)
     data = json.loads(obj.data) 
     jsonstr = json.dumps(data, indent = 4)
     jsonstr = jsonstr.replace('\n', '<br>')

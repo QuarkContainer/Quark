@@ -110,13 +110,20 @@ impl EtcdSvc {
                 }))
             }
             Ok(o) => {
-                return Ok(Response::new(GetResponseMessage {
-                    error: "".into(),
-                    obj: match o {
-                        None => None,
-                        Some(o) => Some(o.Obj()),
-                    },
-                }))
+                match o {
+                    None => {
+                        return Ok(Response::new(GetResponseMessage {
+                            error: format!("the obj doesn't exist namespace for request {:?}", req),
+                            obj: None,
+                        }))
+                    }
+                    Some(o) => {
+                        return Ok(Response::new(GetResponseMessage {
+                            error: "".into(),
+                            obj: Some(o.Obj()),
+                        }))
+                    }
+                }
             }
         }
     }
