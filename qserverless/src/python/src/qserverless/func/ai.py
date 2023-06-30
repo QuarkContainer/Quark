@@ -77,10 +77,10 @@ def load_model(data, i):
     return loaded_model
 
 
-async def train(context, blob, device, epoch, i, parallelism, batch_size):
+async def train(context, blob, state, device, epoch, i, parallelism, batch_size):
     """Loop used to train the network"""
     torch.manual_seed(42) 
-    print("train 1");
+    print("train 1", state);
 
     trainStart = datetime.now()
     model = ConvNet()
@@ -90,12 +90,13 @@ async def train(context, blob, device, epoch, i, parallelism, batch_size):
         # load the global averaged model
         (data, err) = await context.BlobReadAll(blob)
         model = load_model(data, 'average')
+        (statedata, err) = await context.BlobReadAll(state)
  
     model.to(device)
 
     optimizer = optim.SGD(model.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.9)
-    # if epoch > 0:
-    #     load_state(optimizer, i)
+    if epoch > 0:
+        load_state(statedata, optimizer, i)
 
     criterion = nn.CrossEntropyLoss().to(device)
     
@@ -142,11 +143,11 @@ async def train(context, blob, device, epoch, i, parallelism, batch_size):
 
     return (state_data, model_data)
 
-async def trainrunner(context, blob, epoch, i, parallelism):
+async def trainrunner(context, blob, state, epoch, i, parallelism):
     device = "cpu" 
     batch_size = 256
     print("trainrunner ....1")
-    (state_data, model_data) = await train(context, blob, device, epoch, i, parallelism, batch_size)
+    (state_data, model_data) = await train(context, blob, state, device, epoch, i, parallelism, batch_size)
     print("trainrunner ....2")
     blobs = context.NewBlobAddrVec(2)
     (addr, err) = await context.BlobWriteAll(blobs[0], state_data)
@@ -217,22 +218,24 @@ async def model_weight_average_runner(context, blobs: qserverless.BlobAddrVec, p
 
 async def handwritingClassification(context):
     epochs = 2
-    parallelism = 1
+    parallelism = 2
     blob = None
-    print("handwritingClassification 1")
+    states = []
+    for i in range(0, parallelism):  
+        states.append(None)
+    
     for epoch in range(epochs):
-        print("handwritingClassification 2 ", epoch)
         results = await asyncio.gather(
                     *[context.RemoteCall(
                         packageName = "pypackage2",
                         funcName = "trainrunner",
                         blob = blob,
+                        state = states[i],
                         epoch = epoch,
                         i = i,
                         parallelism = parallelism
                     ) for i in range(0, parallelism)]
                 )
-        print("handwritingClassification 3 ", epoch, results)
         blobMatrix = list();
         for res, err in results:
             if err is not None:
@@ -241,14 +244,13 @@ async def handwritingClassification(context):
             blobMatrix.append(blobVec)
         
         shuffBlobs = qserverless.TransposeBlobMatrix(blobMatrix)
-        print("handwritingClassification 4 ", epoch, shuffBlobs)
+        states = shuffBlobs[0]
         (res, err) = await context.RemoteCall(
                 packageName = "pypackage2",
                 funcName = "model_weight_average_runner",
                 blobs = shuffBlobs[1],
                 parallelism = parallelism
         )
-        print("handwritingClassification 5 ", res, err)
         if err is not None:
             return (None, qserverless.QErr(err))
         blob = json.loads(res)
