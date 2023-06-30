@@ -66,20 +66,21 @@ def save_model(model, i):
     return data
 
 def load_model(data, i):
+    storage_key = f'model_{i}'
     filename = f"{path}/tmp/{storage_key}.pt"
     out_file = open(filename, "wb") # open for [w]riting as [b]inary
     out_file.write(data)
     out_file.close()
     loaded_model = ConvNet()
-    storage_key = f'model_{i}'
     loaded_model.load_state_dict(torch.load(f"{path}/tmp/{storage_key}.pt"))
         
     return loaded_model
 
 
-async def train(context, blob, device, epoch, i,  args):
+async def train(context, blob, device, epoch, i, parallelism, batch_size):
     """Loop used to train the network"""
     torch.manual_seed(42) 
+    print("train 1");
 
     trainStart = datetime.now()
     model = ConvNet()
@@ -93,8 +94,8 @@ async def train(context, blob, device, epoch, i,  args):
     model.to(device)
 
     optimizer = optim.SGD(model.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.9)
-    if epoch > 0:
-        load_state(optimizer, i)
+    # if epoch > 0:
+    #     load_state(optimizer, i)
 
     criterion = nn.CrossEntropyLoss().to(device)
     
@@ -105,14 +106,16 @@ async def train(context, blob, device, epoch, i,  args):
     trainset = datasets.MNIST(root='./data', train=True,
                                             download=True, transform=transform)
     
-    train_sampler = torch.utils.data.distributed.DistributedSampler(trainset,num_replicas=args.parallelism, rank=i)
+    train_sampler = torch.utils.data.distributed.DistributedSampler(trainset,num_replicas=parallelism, rank=i)
+    print("train 2");
     train_loader = torch.utils.data.DataLoader(dataset=trainset,
-                                    batch_size=args.batch_size,
+                                    batch_size=batch_size,
                                     shuffle=False,
                                     num_workers=0,
                                     pin_memory=True,
                                     sampler=train_sampler)
     
+    print("train 3");
     model.train()
     loss, tot = 0, 0
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -139,16 +142,12 @@ async def train(context, blob, device, epoch, i,  args):
 
     return (state_data, model_data)
 
-async def trainrunner(context, blob, epoch, i):
+async def trainrunner(context, blob, epoch, i, parallelism):
     device = "cpu" 
-    print("training ....")
-    #assignProcssToCPU()
-    (state_data, model_data) = await train(context, blob, device, epoch, i, 
-        batch_size = 256,
-        learning_rate = 0.1,
-        parallelism = 4,
-        epochs = 5,
-    )
+    batch_size = 256
+    print("trainrunner ....1")
+    (state_data, model_data) = await train(context, blob, device, epoch, i, parallelism, batch_size)
+    print("trainrunner ....2")
     blobs = context.NewBlobAddrVec(2)
     (addr, err) = await context.BlobWriteAll(blobs[0], state_data)
     if err is not None :
@@ -191,6 +190,7 @@ def load_state(data, optimizer, i):
 async def model_weight_average_runner(context, blobs: qserverless.BlobAddrVec, parallelism):
     model = ConvNet()
 
+    print("model_weight_average_runner 1");
     cur_model = ConvNet()
 
     sd_avg = model.state_dict()
@@ -199,6 +199,7 @@ async def model_weight_average_runner(context, blobs: qserverless.BlobAddrVec, p
     for i in range(parallelism):
         (data, err) = await context.BlobReadAll(blobs[i])
         if err is not None :
+            print("model_weight_average_runner 2");
             return (None, err)
         cur_model = load_model(data, i)
         for key in cur_model.state_dict():
@@ -206,28 +207,29 @@ async def model_weight_average_runner(context, blobs: qserverless.BlobAddrVec, p
                 sd_avg[key] = (cur_model.state_dict()[key]) / parallelism
             else:
                 sd_avg[key] += (cur_model.state_dict()[key]) / parallelism
+    print("model_weight_average_runner 3");
     model.load_state_dict(sd_avg)
     model_data = save_model(model, 'average')
     blob = context.NewBlobAddr()
     (addr, err) = await context.BlobWriteAll(blob, model_data)
-    if err is not None :
-        return (None, err)
-    return (addr, err)
+    print("model_weight_average_runner 4");
+    return (json.dumps(addr), err)
 
 async def handwritingClassification(context):
     epochs = 2
-    parallelism = 2
+    parallelism = 1
     blob = None
     print("handwritingClassification 1")
     for epoch in range(epochs):
         print("handwritingClassification 2 ", epoch)
         results = await asyncio.gather(
                     *[context.RemoteCall(
-                        packageName = "pypackage1",
+                        packageName = "pypackage2",
                         funcName = "trainrunner",
                         blob = blob,
                         epoch = epoch,
-                        i = i
+                        i = i,
+                        parallelism = parallelism
                     ) for i in range(0, parallelism)]
                 )
         print("handwritingClassification 3 ", epoch, results)
@@ -239,12 +241,14 @@ async def handwritingClassification(context):
             blobMatrix.append(blobVec)
         
         shuffBlobs = qserverless.TransposeBlobMatrix(blobMatrix)
-        (res, err) = context.RemoteCall(
-                packageName = "pypackage1",
+        print("handwritingClassification 4 ", epoch, shuffBlobs)
+        (res, err) = await context.RemoteCall(
+                packageName = "pypackage2",
                 funcName = "model_weight_average_runner",
-                blobs = blobMatrix[1],
+                blobs = shuffBlobs[1],
                 parallelism = parallelism
         )
+        print("handwritingClassification 5 ", res, err)
         if err is not None:
             return (None, qserverless.QErr(err))
         blob = json.loads(res)

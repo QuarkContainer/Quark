@@ -19,11 +19,11 @@ import sys
 
 import qserverless
 import qserverless.func.ai
-from qserverless.func.ai import handwritingClassification
+from qserverless.func.ai import *
 
 async def AITest(context, test):
     print("AITest ", test)
-    await handwritingClassification(context)
+    return await handwritingClassification(context)
     
 async def wordcount(context, filenames: list[str]): # -> (str, qserverless.Err):
     pcount = len(filenames)

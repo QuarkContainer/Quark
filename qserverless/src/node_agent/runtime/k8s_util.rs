@@ -261,7 +261,7 @@ pub fn IpcNamespaceForPod(pod: &k8s::Pod) -> NamespaceMode {
 }
 
 pub fn NetworkNamespaceForPod(pod: &k8s::Pod) -> NamespaceMode {
-	if *pod.spec.as_ref().unwrap().host_network.as_ref().unwrap() {
+	if pod.spec.as_ref().unwrap().host_network.as_ref().is_some() {
 		return NamespaceMode_NODE
 	}
 	return NamespaceMode_POD

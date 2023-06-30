@@ -43,10 +43,11 @@ pub fn DeterminePodSandboxIPs(podNamespace: &str, podName: &str, podSandbox: &cr
 }
 
 pub fn AddPodSecurityContext(pod: &k8s::Pod, lpsc: &mut crictl::LinuxPodSandboxConfig) {
-    let spec = pod.spec.as_ref().unwrap();
-    
+    let mut spec = pod.spec.as_ref().unwrap().clone();
     let mut sysctls = HashMap::new();
-
+    if spec.security_context.is_none() {
+        spec.security_context = Some(k8s::PodSecurityContext::default());
+    }
     if let Some(sc) = &spec.security_context {
         if let Some(ctls) = &sc.sysctls {
             for c in ctls {

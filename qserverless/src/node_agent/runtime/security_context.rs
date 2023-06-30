@@ -62,7 +62,7 @@ pub fn DetermineEffectiveSecurityContext(
         &container.security_context, 
         seccompDefault
     ));
-
+    
     synthesized.namespace_options = Some(k8s_util::NamespacesForPod(pod));
 
     let podSc = &pod.spec.as_ref().unwrap().security_context;
