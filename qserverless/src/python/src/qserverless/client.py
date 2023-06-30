@@ -21,6 +21,7 @@ import janus
 import json
 import sys
 import io
+import traceback
 from contextlib import redirect_stdout
 from contextlib import redirect_stderr
 
@@ -260,12 +261,12 @@ class FuncMgr:
         self.reqQueue.put_nowait(req)
         
     async def FuncCall(self, context: FuncCallContext, name: str, parameters: str) -> common.CallResult:
-        function = getattr(func, name)
-        if function is None:
-            return common.CallResult("", "There is no func named {}".format(name))
-        
-        kwargs = json.loads(parameters)
         try:
+            function = getattr(func, name)
+            if function is None:
+                return common.CallResult("", "There is no func named {}".format(name))
+            
+            kwargs = json.loads(parameters)
             result = None
             err = None
             logname = '/var/log/quark/{}.log'.format(context.id)
@@ -281,7 +282,7 @@ class FuncMgr:
                 err = ""
             return common.CallResult(result, err)
         except Exception as err:
-            return common.CallResult("", "func {} call fail with exception {}".format(name, err))
+            return common.CallResult("", "func {} call fail with exception {} {}".format(name, err, traceback.format_exc()))
     
     def Close(self) : 
         self.reqQueue.put_nowait(None)

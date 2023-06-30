@@ -14,7 +14,9 @@
 
 use sqlx::postgres::PgPoolOptions;
 use sqlx::postgres::PgPool;
+use sqlx::postgres::PgConnectOptions;
 use sqlx::Row;
+use sqlx::ConnectOptions;
 
 use crate::common::*;
 
@@ -38,10 +40,26 @@ pub struct SqlFuncAudit {
 
 impl SqlFuncAudit {
     pub async fn New(sqlSvcAddr: &str) -> Result<Self> {
+        let url_parts = url::Url::parse(sqlSvcAddr).expect("Failed to parse URL");
+        let username = url_parts.username();
+        let password = url_parts.password().unwrap_or("");
+        let host = url_parts.host_str().unwrap_or("localhost");
+        let port = url_parts.port().unwrap_or(5432);
+        let database = url_parts.path().trim_start_matches('/');
+
+        let mut options = PgConnectOptions::new()
+            .host(host)
+            .port(port)
+            .username(username)
+            .password(password)
+            .database(database);
+
+        options.disable_statement_logging();
+
         let pool = PgPoolOptions::new()
             .max_connections(5)
-            .connect(sqlSvcAddr)
-		    .await?;
+            .connect_with(options)
+            .await?;
         return Ok(Self {
             pool: pool
         })

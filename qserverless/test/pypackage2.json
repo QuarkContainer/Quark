@@ -5,13 +5,13 @@
   },
   "spec": {
     "template": {
+      "hostNetwork": true,
       "containers": [
         {
           "image": "localhost:5000/py_pod:latest",
           "name": "py_pod"
         }
-      ],
-      "hostNetwork": true
+      ]
     }
   }
 }

@@ -378,9 +378,17 @@ impl FuncNode {
         )?;
         self.lock().unwrap().calleeFuncCalls.remove(&resp.id);
         let callerNode = FUNC_NODE_MGR.Get(&resp.caller_node_id)?;
-        let pod = FUNC_POD_MGR.Get(&resp.callee_pod_id)?;
-        *pod.state.lock().unwrap() = FuncPodState::Idle(SystemTime::now());
+        let callee_pod_id = resp.callee_pod_id.clone();
         callerNode.Send(FuncNodeMsg::FuncCallResp(resp))?;
+        let pod = match FUNC_POD_MGR.Get(&callee_pod_id) {
+            Err(Error::ENOENT(_)) => {
+                // the pod has disconnected
+                return Ok(())
+            }
+            Err(e) => return Err(e),
+            Ok(p) => p,
+        };
+        *pod.state.lock().unwrap() = FuncPodState::Idle(SystemTime::now());
         FUNC_SVC_MGR.lock().unwrap().OnFreePod(&pod, false)?;
         return Ok(())
     }
@@ -485,7 +493,7 @@ impl FuncNode {
                     None => {
                         return Err(Error::CommonError(format!("OnFuncPodDisconnReq can't find funcall {}", callId)));
                     }
-                    Some(c) => c
+                    Some(c) => c,
                 };
                 let callerNode = FUNC_NODE_MGR.Get(&funcCall.callerNodeId)?;
                 let resp = func::FuncSvcCallResp {
