@@ -261,28 +261,31 @@ class FuncMgr:
         self.reqQueue.put_nowait(req)
         
     async def FuncCall(self, context: FuncCallContext, name: str, parameters: str) -> common.CallResult:
-        try:
-            function = getattr(func, name)
-            if function is None:
-                return common.CallResult("", "There is no func named {}".format(name))
-            
-            kwargs = json.loads(parameters)
-            result = None
-            err = None
-            logname = '/var/log/quark/{}.log'.format(context.id)
-            with open(logname, 'w') as f:
-                with redirect_stdout(f):
-                    with redirect_stderr(f):
+        logname = '/var/log/quark/{}.log'.format(context.id)
+        with open(logname, 'w') as f:
+            with redirect_stdout(f):
+                with redirect_stderr(f):
+                    try:
+                        function = getattr(func, name)
+                        if function is None:
+                            return common.CallResult("", "There is no func named {}".format(name))
+                        
+                        kwargs = json.loads(parameters)
+                        result = None
+                        err = None
+
                         (result, err) = await function(context, **kwargs)
-            if result is None:
-                result = ""
-            if err is not None:
-                err = json.dumps(err)
-            else:
-                err = ""
-            return common.CallResult(result, err)
-        except Exception as err:
-            return common.CallResult("", "func {} call fail with exception {} {}".format(name, err, traceback.format_exc()))
+                        if result is None:
+                            result = ""
+                        if err is not None:
+                            err = json.dumps(err)
+                        else:
+                            err = ""
+                        return common.CallResult(result, err)
+                    except Exception as err:
+                        err = "func {} call fail with exception {} {}".format(name, err, traceback.format_exc())
+                        print(err)
+                        return common.CallResult("", err)
     
     def Close(self) : 
         self.reqQueue.put_nowait(None)

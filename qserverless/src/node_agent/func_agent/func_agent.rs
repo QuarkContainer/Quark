@@ -277,7 +277,7 @@ impl FuncAgent {
 
                 let resp: func::FuncSvcCallResp = func::FuncSvcCallResp {
                     id: calleeFuncCall.id.clone(),
-                    error: format!("func pod {} fail", funcPodId),
+                    error: format!("func pod {} unexpected disconnect  ... maybe network issue", funcPodId),
                     resp: String::new(),
                     caller_node_id: calleeFuncCall.callerNodeId.clone(),
                     caller_pod_id: calleeFuncCall.callerFuncPodId.clone(),
