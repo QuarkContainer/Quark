@@ -66,7 +66,7 @@ async def readfile():
     print("res is ", res)
 
 async def remoteCallEcho():
-    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage2", True)
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage1", True)
     background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
     jobContext = qserverless.NewJobContext()
     (res, err) = await jobContext.RemoteCall(
@@ -102,6 +102,20 @@ async def remote_ai():
         )
     print("res is ", res, " error is {}", err)
 
+async def call_none(): # -> (str, qserverless.Err):   
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage1", True)
+    background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
+    jobContext = qserverless.NewJobContext()
+    results = await asyncio.gather(
+        *[jobContext.RemoteCall(
+            packageName = "pypackage1",
+            funcName = "None",
+        ) for i in range(0, 2)]
+    )
+
+    for res, err in results:
+        print("res ", res, "err ", err)
+
 async def main() : 
     test = sys.argv[1]
     print("test is ", test)
@@ -120,5 +134,7 @@ async def main() :
             await ai() 
         case "remote_ai":
             await remote_ai() 
+        case "call_none":
+            await call_none() 
 asyncio.run(main())
 

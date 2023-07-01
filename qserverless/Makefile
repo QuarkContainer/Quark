@@ -11,7 +11,7 @@ qctl:
 	cargo build --bin qctl
 deploy: fp 
 	mkdir -p ./target/fp
-	-rm ./target/fp/*
+	-rm ./target/fp/* -rf
 	cp ./target/debug/func_pod ./target/fp
 	cp ./fp_logging_config.yaml ./target/fp
 	cp ./deployment/fp.Dockerfile ./target/fp/Dockerfile
@@ -26,7 +26,7 @@ deploy: fp
 	#docker run --network host -it --name fp --rm func_pod
 py: 
 	mkdir -p ./target/py
-	-rm ./target/py/*
+	-rm ./target/py/* -rf
 	cp ./src/python/* ./target/py -r
 	cp ./deployment/py.Dockerfile ./target/py/Dockerfile
 	-docker image rm py_pod
