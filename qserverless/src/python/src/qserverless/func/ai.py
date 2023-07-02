@@ -35,6 +35,8 @@ warnings.filterwarnings("ignore")
 experiment_name ="convNet"
 path = os.getcwd()
 
+batch_size = 256
+
 class ConvNet(nn.Module):
     def __init__(self, num_classes=10):
         super(ConvNet, self).__init__()
@@ -145,7 +147,6 @@ async def train(context, blob, state, device, epoch, i, parallelism, batch_size)
 
 async def trainrunner(context, blob, state, epoch, i, parallelism):
     device = "cpu" 
-    batch_size = 256
     print("trainrunner ....1")
     (state_data, model_data) = await train(context, blob, state, device, epoch, i, parallelism, batch_size)
     print("trainrunner ....2")
@@ -217,7 +218,7 @@ async def model_weight_average_runner(context, blobs: qserverless.BlobAddrVec, p
     return (json.dumps(addr), err)
 
 async def handwritingClassification(context):
-    epochs = 2
+    epochs = 4
     parallelism = 2
     blob = None
     states = []
@@ -255,7 +256,58 @@ async def handwritingClassification(context):
             return (None, qserverless.QErr(err))
         blob = json.loads(res)
         print("success ", epoch)
-        
+    
+    (res, err) = await context.RemoteCall(
+                packageName = "pypackage2",
+                funcName = "validaterunner",
+                blob = blob,
+                batch_size = batch_size
+    )
+  
     print("finish.....")
     
-    return ("sucess", None)
+    return (res, None)
+
+
+def validate(model, device, batch_size) -> (float, float):
+    """Loop used to validate the network"""
+
+    transform = transforms.Compose(
+    [transforms.ToTensor(),
+    transforms.Normalize((0.1307,), (0.3081,))])
+
+    valset = datasets.MNIST(root='./data', train=False,
+                                        download=True, transform=transform)
+    val_loader= torch.utils.data.DataLoader(valset, batch_size=batch_size)
+
+    criterion =nn.CrossEntropyLoss()
+    model.eval()
+    model.to(device)
+    test_loss = 0
+    correct = 0
+    with torch.no_grad():
+        for data, target in val_loader:
+            #print(data.dtype, type(target))
+            data, target = data.to(device), target.to(device)
+            output = model(data)
+            _, predicted = torch.max(output.data, 1)
+            test_loss += cross_entropy(output, target).item()  # sum up batch loss
+            correct += predicted.eq(target).sum().item()
+
+    test_loss /= len(val_loader)
+
+    accuracy = 100. * correct / len(val_loader.dataset)
+    print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)'.format(
+        test_loss, correct, len(val_loader.dataset),
+        100. * correct / len(val_loader.dataset)))
+    return accuracy, test_loss
+
+async def validaterunner(context, blob, batch_size):
+    device = "cpu"
+    (data, err) = await context.BlobReadAll(blob)
+    
+    model = ConvNet()
+    model = load_model(data, 'average')
+    (accu, loss) = validate(model, device, batch_size)
+    print("accu is ", accu, "loss is ", loss)
+    return ("accus is {} loss is {}".format(accu, loss), None)

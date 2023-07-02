@@ -317,10 +317,6 @@ if __name__ == "__main__":
             model_averging_time.append((datetime.now() - modelAverageStart).total_seconds())
             epoch_time.append((datetime.now() - start).total_seconds())
 
-
-
-
-
         print("Training Completion Time: ", (datetime.now() - start).total_seconds())
         finish_time = time.perf_counter()
         validation_start = datetime.now()
