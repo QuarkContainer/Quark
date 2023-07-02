@@ -286,6 +286,7 @@ impl VirtualMachine {
 
         let kvm = unsafe { Kvm::from_raw_fd(kvmfd) };
 
+        #[cfg(target_arch = "x86_64")]
         let kvm_cpuid = kvm
             .get_supported_cpuid(kvm_bindings::KVM_MAX_CPUID_ENTRIES)
             .unwrap();
@@ -404,7 +405,9 @@ impl VirtualMachine {
                 SHARE_SPACE.Value(),
                 autoStart,
             )?);
+
             // enable cpuid in host
+            #[cfg(target_arch = "x86_64")]
             vcpu.vcpu.set_cpuid2(&kvm_cpuid).unwrap();
             VMS.lock().vcpus.push(vcpu.clone());
             vcpus.push(vcpu);
