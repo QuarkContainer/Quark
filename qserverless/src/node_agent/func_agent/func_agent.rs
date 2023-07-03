@@ -71,7 +71,7 @@ impl FuncCallInner {
 }
 
 #[derive(Debug, Clone)]
-pub struct FuncCall(Arc<FuncCallInner>);
+pub struct FuncCall(pub Arc<FuncCallInner>);
 
 impl Deref for FuncCall {
     type Target = Arc<FuncCallInner>;
@@ -169,7 +169,7 @@ impl FuncAgent {
                 context.respChann.send(response).expect("CallResponse fail...");
             }
         };
-
+    
         return Ok(())
     }
 
