@@ -34,7 +34,7 @@ use super::func_agent::{FuncAgent, FuncCall, FuncCallContext, FuncCallInner};
 #[derive(Debug, Clone)]
 pub enum funcPodState {
     Idle,
-    Running(String), // handling FuncCallId
+    Running(FuncCall), // handling FuncCallId
 }
 
 impl funcPodState {
@@ -48,7 +48,7 @@ impl funcPodState {
     pub fn FuncCallId(&self) -> String {
         match self {
             Self::Idle => String::new(),
-            Self::Running(id) => id.clone(),
+            Self::Running(funcCall) => funcCall.id.clone(),
         }
     }
 }
@@ -69,8 +69,6 @@ pub struct FuncPodInner {
 
     // func call id to funcCall
     pub callerCalls: Mutex<BTreeMap<String, FuncCall>>,
-    // func call id to funcCall
-    pub calleeCalls: Mutex<Option<FuncCall>>,
     pub callContexts: Mutex<BTreeMap<String, FuncCallContext>>,
     
     pub blobSession: BlobSession,
@@ -107,7 +105,6 @@ impl FuncPod {
             state: Mutex::new(funcPodState::Idle),
             agentChann: agentTx,
             callerCalls: Mutex::new(BTreeMap::new()),
-            calleeCalls: Mutex::new(None),
             callContexts: Mutex::new(BTreeMap::new()),
             blobSession: BlobSession::New(&funcAgent.blobSvcAddr),
             funcAgent: funcAgent.clone(),
@@ -423,7 +420,34 @@ impl FuncPod {
                 self.OnFuncAgentCallReq(funcPodId, msg)?;
             }
             EventBody::FuncAgentCallResp(msg) => {
-                self.funcAgent.OnFuncAgentCallResp(funcPodId, msg)?;
+                let call = match self.State() {
+                    funcPodState::Idle => {
+                        error!("OnFuncAgentCallResp doesn't find funcall id {}", &msg.id);
+                        return Ok(())
+                    }
+                    funcPodState::Running(funccall) => {
+                        funccall
+                    }
+                };
+                
+                self.SetState(funcPodState::Idle);
+                
+                let resp = func::FuncSvcCallResp {
+                    id: msg.id,
+                    error: msg.error,
+                    resp: msg.resp,
+                    caller_node_id: call.callerNodeId.clone(),
+                    caller_pod_id: call.callerFuncPodId.clone(),
+                    callee_node_id: self.nodeId.clone(),
+                    callee_pod_id: funcPodId.to_string(),
+                };
+        
+                FUNC_SVC_CLIENT.get().unwrap().Send(func::FuncSvcMsg {
+                    event_body: Some(func::func_svc_msg::EventBody::FuncSvcCallResp(resp))
+                })?;
+        
+
+                //self.funcAgent.OnFuncAgentCallResp(funcPodId, msg)?;
             }
             EventBody::BlobOpenReq(msg) => {
                 self.OnBlobOpenReq(msgId, msg).await?;

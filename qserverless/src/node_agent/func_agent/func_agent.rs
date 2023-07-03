@@ -269,12 +269,7 @@ impl FuncAgent {
 
         match &pod.State() {
             funcPodState::Idle => (),
-            funcPodState::Running(callid) => {
-                let calleeFuncCall = match self.calleeCalls.lock().unwrap().remove(callid) {
-                    None => panic!("OnFuncPodDisconnect missing callid {}", callid),
-                    Some(c) => c,
-                };
-
+            funcPodState::Running(calleeFuncCall) => {
                 let resp: func::FuncSvcCallResp = func::FuncSvcCallResp {
                     id: calleeFuncCall.id.clone(),
                     error: format!("func pod {} unexpected disconnect  ... maybe network issue", funcPodId),
@@ -297,36 +292,6 @@ impl FuncAgent {
 
         FUNC_SVC_CLIENT.get().unwrap().Send(func::FuncSvcMsg {
             event_body: Some(func::func_svc_msg::EventBody::FuncPodDisconnReq(req))
-        })?;
-
-        return Ok(())
-    }
-
-    // get funcagentcallresp from funcpod
-    pub fn OnFuncAgentCallResp(&self, calleeFuncPodId: &str, resp: func::FuncAgentCallResp) -> Result<()> {
-        let call = match self.calleeCalls.lock().unwrap().remove(&resp.id) {
-            None => {
-                error!("OnFuncAgentCallResp doesn't find funcall id {}", &resp.id);
-                return Ok(())
-            }
-            Some(call) => call
-        };
-
-        let funcPod = self.funcPodMgr.GetPod(calleeFuncPodId)?;
-        funcPod.SetState(funcPodState::Idle);
-        
-        let resp = func::FuncSvcCallResp {
-            id: resp.id,
-            error: resp.error,
-            resp: resp.resp,
-            caller_node_id: call.callerNodeId.clone(),
-            caller_pod_id: call.callerFuncPodId.clone(),
-            callee_node_id: self.nodeId.clone(),
-            callee_pod_id: calleeFuncPodId.to_string(),
-        };
-
-        FUNC_SVC_CLIENT.get().unwrap().Send(func::FuncSvcMsg {
-            event_body: Some(func::func_svc_msg::EventBody::FuncSvcCallResp(resp))
         })?;
 
         return Ok(())
@@ -355,7 +320,7 @@ impl FuncAgent {
         }; 
 
         let funcCall = FuncCall(Arc::new(inner));
-        self.calleeCalls.lock().unwrap().insert(req.id.clone(), funcCall);
+        //self.calleeCalls.lock().unwrap().insert(req.id.clone(), funcCall);
 
         let req = func::FuncAgentCallReq {
             job_id: req.job_id.clone(),
@@ -368,7 +333,7 @@ impl FuncAgent {
             caller_func_id: req.caller_func_id.clone(),
         };
 
-        funcPod.SetState(funcPodState::Running(req.id.clone()));
+        funcPod.SetState(funcPodState::Running(funcCall));
 
         funcPod.Send(func::FuncAgentMsg {
             msg_id: 0,
