@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::sync::{Arc, atomic::AtomicBool};
 use core::ops::Deref;
+use std::time::SystemTime;
 use qobjs::utility::SystemTimeProto;
 use tokio::sync::{mpsc, Notify};
 use std::result::Result as SResult;
@@ -23,9 +25,10 @@ use qobjs::func;
 use qobjs::common::*;
 use qobjs::func::func_agent_msg::EventBody;
 
+use crate::FUNC_SVC_CLIENT;
 use crate::blobstore::blob_session::BlobSession;
 
-use super::func_agent::FuncAgent;
+use super::func_agent::{FuncAgent, FuncCall, FuncCallContext, FuncCallInner};
 
 
 #[derive(Debug, Clone)]
@@ -55,6 +58,7 @@ pub struct FuncPodInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
 
+    pub nodeId: String,
     pub funcPodId: String,
     pub namespace: String,
     pub packageName: String,
@@ -63,6 +67,12 @@ pub struct FuncPodInner {
 
     pub agentChann: mpsc::Sender<SResult<func::FuncAgentMsg, tonic::Status>>,
 
+    // func call id to funcCall
+    pub callerCalls: Mutex<BTreeMap<String, FuncCall>>,
+    // func call id to funcCall
+    pub calleeCalls: Mutex<Option<FuncCall>>,
+    pub callContexts: Mutex<BTreeMap<String, FuncCallContext>>,
+    
     pub blobSession: BlobSession,
     pub funcAgent: FuncAgent,
 }
@@ -87,6 +97,7 @@ impl FuncPod {
     -> Result<Self> {
         let funcPodId = registerMsg.func_pod_id.clone();
         let inner = FuncPodInner {
+            nodeId: funcAgent.nodeId.clone(),
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
             funcPodId: funcPodId.clone(),
@@ -95,6 +106,9 @@ impl FuncPod {
             clientMode: registerMsg.client_mode,
             state: Mutex::new(funcPodState::Idle),
             agentChann: agentTx,
+            callerCalls: Mutex::new(BTreeMap::new()),
+            calleeCalls: Mutex::new(None),
+            callContexts: Mutex::new(BTreeMap::new()),
             blobSession: BlobSession::New(&funcAgent.blobSvcAddr),
             funcAgent: funcAgent.clone(),
         };
@@ -105,6 +119,52 @@ impl FuncPod {
         });
 
         return Ok(instance);
+    }
+
+    // get funcagentcallreq from funcpod
+    pub fn OnFuncAgentCallReq(&self, callerFuncPodId: &str, req: func::FuncAgentCallReq) -> Result<()> {
+        let createTime = SystemTime::now();
+        let inner = FuncCallInner {
+            jobId: req.job_id.clone(),
+            id: req.id.clone(),
+            callerNodeId: self.nodeId.clone(),
+            callerFuncPodId: callerFuncPodId.to_string(),
+            calleeNodeId: String::new(),
+            calleeFuncPodId: String::new(), // not assigned,
+            namespace: req.namespace.clone(),
+            packageName: req.package_name.clone(),
+            funcName: req.func_name.clone(),
+            parameters: req.parameters.clone(), 
+            callerFuncCallId: req.caller_func_id.clone(),
+            priority: req.priority as usize,
+            createTime: createTime,
+        };
+
+        let funcCall = FuncCall(Arc::new(inner));
+        self.callerCalls.lock().unwrap().insert(req.id.clone(), funcCall);
+
+        let protoTime = SystemTimeProto::FromSystemTime(createTime);
+        let req = func::FuncSvcCallReq {
+            job_id: req.job_id.clone(),
+            id: req.id.clone(),
+            namespace: req.namespace.to_string(),
+            package_name: req.package_name.to_string(),
+            func_name: req.func_name.clone(),
+            parameters: req.parameters.clone(), 
+            caller_func_id: req.caller_func_id.clone(),
+            priority: req.priority,
+            createtime: Some(protoTime.ToTimeStamp()),
+            caller_node_id: self.nodeId.clone(),
+            caller_pod_id: callerFuncPodId.to_string(),
+            callee_node_id: String::new(),
+            callee_pod_id: String::new(),
+        };
+
+        FUNC_SVC_CLIENT.get().unwrap().Send(func::FuncSvcMsg {
+            event_body: Some(func::func_svc_msg::EventBody::FuncSvcCallReq(req))
+        })?;
+
+        return Ok(())
     }
 
     pub fn State(&self) -> funcPodState {
@@ -360,7 +420,7 @@ impl FuncPod {
 
         match body {
             EventBody::FuncAgentCallReq(msg) => {
-                self.funcAgent.OnFuncAgentCallReq(funcPodId, msg)?;
+                self.OnFuncAgentCallReq(funcPodId, msg)?;
             }
             EventBody::FuncAgentCallResp(msg) => {
                 self.funcAgent.OnFuncAgentCallResp(funcPodId, msg)?;
