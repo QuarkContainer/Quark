@@ -19,7 +19,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::SystemTime;
 use core::ops::Deref;
 use qobjs::audit::func_audit::FuncStateFail;
-use qobjs::audit::func_audit::FuncStateSuccess;
+//use qobjs::audit::func_audit::FuncStateSuccess;
 use qobjs::utility::SystemTimeProto;
 use tokio::sync::Mutex as TMutex;
 use tonic::Streaming;
@@ -34,7 +34,7 @@ use qobjs::func;
 use tokio::sync::Notify;
 
 use crate::AUDIT_AGENT;
-use crate::FUNC_CALL_MGR;
+//use crate::FUNC_CALL_MGR;
 use crate::FUNC_NODE_MGR;
 use crate::FUNC_POD_MGR;
 use crate::FUNC_SVC_MGR;
@@ -60,8 +60,7 @@ pub struct FuncNodeInner {
     pub state: FuncNodeState,
     pub funcPods: BTreeMap<String, FuncPod>,
     pub callerFuncCalls: BTreeMap<String, FuncCall>, 
-    pub calleeFuncCalls: BTreeMap<String, FuncCall>, 
-
+    
     pub internMsgTx: mpsc::Sender<FuncNodeMsg>,
     pub internMsgRx: Option<mpsc::Receiver<FuncNodeMsg>>,
 
@@ -90,7 +89,6 @@ impl FuncNode {
             state: FuncNodeState::WaitingConn,
             funcPods: BTreeMap::new(),
             callerFuncCalls: BTreeMap::new(),
-            calleeFuncCalls: BTreeMap::new(),
             internMsgTx: tx,
             internMsgRx: Some(rx),
             processorHandler: None,
@@ -128,21 +126,13 @@ impl FuncNode {
         self.lock().unwrap().state = state;
     }
 
-    pub fn HasCallerFuncCall(&self, funcCallId: &str) -> bool {
-        let inner = self.lock().unwrap();
-        return inner.callerFuncCalls.contains_key(funcCallId);
-    }
-
-    pub fn HasCalleeFuncCall(&self, funcCallId: &str) -> bool {
-        let inner = self.lock().unwrap();
-        return inner.calleeFuncCalls.contains_key(funcCallId);
-    }
-
     // this will be called in 2 situations
     // 1. When the nodeagent reconnect to the FuncService, todo: need to handle this scenario
     // 2. When the Master FuncService die, the nodeagent sent FuncAgentRegisterReq to another FuncService
     pub fn OnNodeRegister(&self, regReq: func::FuncAgentRegisterReq) -> Result<()> {  
         let mut inner = self.lock().unwrap();
+        
+        /* 
         for funccall in regReq.callee_calls {
             let packageId = PackageId {
                 namespace: funccall.namespace.clone(),
@@ -179,6 +169,8 @@ impl FuncNode {
             
             FUNC_CALL_MGR.RegisteCallee(&funcCall)?;
         }
+
+        
 
         for funccall in regReq.caller_calls {
             let packageId = PackageId {
@@ -255,6 +247,7 @@ impl FuncNode {
                         node: self.clone(),
                         state: Mutex::new(state),
                         clientMode: podStatus.client_mode,
+                        callerFuncCalls: Mutex::new(BTreeMap::new()),
                     };
                     let funcPod = FuncPod(Arc::new(podInner));
                     inner.funcPods.insert(funcPodId, funcPod);
@@ -266,6 +259,7 @@ impl FuncNode {
             }
         }
 
+        */
         let resource = match &regReq.resource {
             None => Resource::default(),
             Some(r) => {
@@ -359,7 +353,22 @@ impl FuncNode {
         };
 
         let funcCall = FuncCall(Arc::new(inner));
-        self.lock().unwrap().callerFuncCalls.insert(req.id.clone(), funcCall.clone());
+        if req.caller_pod_id.len() == 0 {
+            // it is a gateway funccall
+            self.lock().unwrap().callerFuncCalls.insert(req.id.clone(), funcCall.clone());
+        } else {
+            let inner = self.lock().unwrap();
+            let pod = match inner.funcPods.get(&req.caller_pod_id) {
+                None => {
+                    panic!("funcNode::OnFuncSvcCallReq miss callerfuncPod {:?}", &req.caller_pod_id);
+                }
+                Some(pod) => {
+                    pod.clone()
+                }
+            };
+
+            pod.OnFuncSvcCallReq(&funcCall)?;
+        }
         FUNC_SVC_MGR.lock().unwrap().OnNewFuncCall(&funcCall)?;
         
         return Ok(())
@@ -367,19 +376,7 @@ impl FuncNode {
 
     // get funccall response from nodeagent
     pub fn OnFuncSvcCallResp(&self, resp: func::FuncSvcCallResp) -> Result<()> {
-        let state = if resp.error.len() == 0 {
-            FuncStateSuccess
-        } else {
-            FuncStateFail
-        };
-        AUDIT_AGENT.FinishFunc(
-            &resp.id, 
-            state
-        )?;
-        self.lock().unwrap().calleeFuncCalls.remove(&resp.id);
-        let callerNode = FUNC_NODE_MGR.Get(&resp.caller_node_id)?;
         let callee_pod_id = resp.callee_pod_id.clone();
-        callerNode.Send(FuncNodeMsg::FuncCallResp(resp))?;
         let pod = match FUNC_POD_MGR.Get(&callee_pod_id) {
             Err(Error::ENOENT(_)) => {
                 // the pod has disconnected
@@ -388,9 +385,8 @@ impl FuncNode {
             Err(e) => return Err(e),
             Ok(p) => p,
         };
-        *pod.state.lock().unwrap() = FuncPodState::Idle(SystemTime::now());
-        FUNC_SVC_MGR.lock().unwrap().OnFreePod(&pod, false)?;
-        return Ok(())
+
+        return pod.OnFuncSvcCallResp(resp);
     }
 
     // get new funcpod from nodeagent
@@ -436,7 +432,8 @@ impl FuncNode {
             package : package.clone(),
             node: self.clone(),
             clientMode: req.client_mode,
-            state: Mutex::new(FuncPodState::Idle(SystemTime::now()))
+            state: Mutex::new(FuncPodState::Idle(SystemTime::now())),
+            callerFuncCalls: Mutex::new(BTreeMap::new()),
         };
 
         let funcPod = FuncPod(Arc::new(funcPodInner));
@@ -486,34 +483,7 @@ impl FuncNode {
         };
         FUNC_POD_MGR.Remove(funcPodId)?;
                 
-        match funcPod.state.lock().unwrap().clone() {
-            FuncPodState::Idle(_) => (),
-            FuncPodState::Running(callId) => {
-                let funcCall = match self.lock().unwrap().calleeFuncCalls.remove(&callId) {
-                    None => {
-                        return Err(Error::CommonError(format!("OnFuncPodDisconnReq can't find funcall {}", callId)));
-                    }
-                    Some(c) => c,
-                };
-                let callerNode = FUNC_NODE_MGR.Get(&funcCall.callerNodeId)?;
-                let resp = func::FuncSvcCallResp {
-                    id: funcCall.id.clone(),
-                    error: format!("funcpod {} disconnect ", funcPodId),
-                    resp: String::new(),
-                    caller_node_id: funcCall.callerNodeId.clone(),
-                    caller_pod_id: funcCall.callerFuncPodId.clone(),
-                    callee_node_id: funcCall.calleeNodeId.lock().unwrap().clone(),
-                    callee_pod_id: funcCall.calleeFuncPodId.lock().unwrap().clone(),
-                };
-                callerNode.Send(FuncNodeMsg::FuncCallResp(resp))?;
-            }
-            _ => {}
-        }
-
-        *funcPod.state.lock().unwrap() = FuncPodState::Dead;
-        if !funcPod.clientMode {
-            FUNC_SVC_MGR.lock().unwrap().OnPodExit(&funcPod)?;
-        }
+        funcPod.OnFuncPodDisconnReq()?;
         
         return Ok(())
     }
@@ -567,14 +537,25 @@ impl FuncNode {
             event_body: Some(func::func_svc_msg::EventBody::FuncSvcCallReq(req))
         }, tx);
 
-        self.lock().unwrap().calleeFuncCalls.insert(call.id.clone(), call.clone());
-
         return Ok(())
     }
 
     // get funccall resp from another func node
     pub fn OnFuncCallResp(&self, resp: func::FuncSvcCallResp, tx: &mpsc::Sender<SResult<func::FuncSvcMsg, Status>>) -> Result<()> {
-        self.lock().unwrap().calleeFuncCalls.remove(&resp.id);
+        if resp.caller_pod_id.len() != 0 {
+            let pod = match FUNC_POD_MGR.Get(&resp.caller_pod_id) {
+                Err(Error::ENOENT(_)) => {
+                    // the pod has disconnected
+                    return Ok(())
+                }
+                Err(e) => return Err(e),
+                Ok(p) => p,
+            };
+            pod.OnFuncCallResp(&resp)?;
+        } else {
+            self.lock().unwrap().callerFuncCalls.remove(&resp.id);
+        }
+        
         self.SendToNodeAgent(func::FuncSvcMsg {
             event_body: Some(func::func_svc_msg::EventBody::FuncSvcCallResp(resp))
         }, tx);
