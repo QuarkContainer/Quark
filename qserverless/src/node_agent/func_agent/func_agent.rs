@@ -330,6 +330,8 @@ impl FuncAgent {
             func_name: req.func_name.clone(),
             parameters: req.parameters.clone(),
             priority: req.priority,
+            caller_node_id: req.caller_node_id.clone(),
+            caller_pod_id: req.caller_pod_id.clone(),
             caller_func_id: req.caller_func_id.clone(),
         };
 
@@ -372,6 +374,22 @@ impl FuncAgent {
         return Ok(())
     }
 
+    pub fn OnFuncSvcFuncMsg(&self, msg: func::FuncMsg) -> Result<()> { 
+        let dstPod = msg.dst_pod_id.clone();
+        match self.funcPodMgr.SendTo(&dstPod, func::FuncAgentMsg {
+            msg_id: 0,
+            event_body: Some(func::func_agent_msg::EventBody::FuncMsg(msg.clone())),
+        }) {
+            Err(e) => {
+                // silience drop
+                error!("OnFuncSvcFuncMsg send funcmsg {:?} fail with error {:?}", msg, e);
+            }
+            Ok(()) => ()
+        }
+
+        return Ok(())
+    }
+
     // get msg from func_svc
     pub async fn OnFuncSvcMsg(&self, msg: func::FuncSvcMsg) -> Result<()> {
         let body = match msg.event_body {
@@ -405,6 +423,9 @@ impl FuncAgent {
             }
             func::func_svc_msg::EventBody::FuncSvcCallResp(msg) => {
                 self.OnFuncSvcCallResp(msg)?;
+            }
+            func::func_svc_msg::EventBody::FuncMsg(msg) => {
+                self.OnFuncSvcFuncMsg(msg)?;
             }
             _ => {
 

@@ -60,7 +60,7 @@ pub struct FuncAgentMsg {
     pub msg_id: u64,
     #[prost(
         oneof = "func_agent_msg::EventBody",
-        tags = "100, 200, 300, 400, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 513, 514, 515, 516"
+        tags = "100, 200, 300, 400, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 513, 514, 515, 516, 517"
     )]
     pub event_body: ::core::option::Option<func_agent_msg::EventBody>,
 }
@@ -106,6 +106,8 @@ pub mod func_agent_msg {
         BlobDeleteReq(super::BlobDeleteReq),
         #[prost(message, tag = "516")]
         BlobDeleteResp(super::BlobDeleteResp),
+        #[prost(message, tag = "517")]
+        FuncMsg(super::FuncMsg),
     }
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -301,6 +303,10 @@ pub struct FuncAgentCallReq {
     pub priority: u64,
     #[prost(string, tag = "8")]
     pub caller_func_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub caller_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "10")]
+    pub caller_pod_id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -313,13 +319,90 @@ pub struct FuncAgentCallResp {
     #[prost(string, tag = "3")]
     pub resp: ::prost::alloc::string::String,
 }
+/// notify caller the funcinstance has been started
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FuncAgentCallAck {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub error: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub callee_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub callee_pod_id: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Kv {
+    #[prost(string, tag = "1")]
+    pub key: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub val: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FuncMsg {
+    #[prost(string, tag = "2")]
+    pub src_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub src_pod_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub src_func_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub dst_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub dst_pod_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "7")]
+    pub dst_func_id: ::prost::alloc::string::String,
+    #[prost(oneof = "func_msg::Payload", tags = "101, 102")]
+    pub payload: ::core::option::Option<func_msg::Payload>,
+}
+/// Nested message and enum types in `FuncMsg`.
+pub mod func_msg {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Payload {
+        #[prost(message, tag = "101")]
+        FuncMsgBody(super::FuncMsgBody),
+        #[prost(message, tag = "102")]
+        FuncMsgAck(super::FuncMsgAck),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FuncMsgBody {
+    #[prost(uint32, tag = "1")]
+    pub seq_id: u32,
+    /// <0 reserved by system -1 means func close,
+    #[prost(int64, tag = "2")]
+    pub msg_code: i64,
+    #[prost(message, repeated, tag = "3")]
+    pub annotations: ::prost::alloc::vec::Vec<Kv>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub data: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FuncMsgAck {
+    #[prost(uint32, tag = "1")]
+    pub seq_id: u32,
+    #[prost(string, tag = "2")]
+    pub error: ::prost::alloc::string::String,
+}
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncSvcMsg {
     #[prost(
         oneof = "func_svc_msg::EventBody",
-        tags = "100, 200, 300, 400, 500, 600, 700, 800"
+        tags = "100, 200, 300, 400, 500, 600, 700, 800, 900"
     )]
     pub event_body: ::core::option::Option<func_svc_msg::EventBody>,
 }
@@ -345,6 +428,8 @@ pub mod func_svc_msg {
         FuncSvcCallReq(super::FuncSvcCallReq),
         #[prost(message, tag = "800")]
         FuncSvcCallResp(super::FuncSvcCallResp),
+        #[prost(message, tag = "900")]
+        FuncMsg(super::FuncMsg),
     }
 }
 #[derive(serde::Serialize, serde::Deserialize)]

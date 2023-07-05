@@ -22,6 +22,7 @@ pub enum FuncNodeMsg {
     FuncCall(FuncCall),
     FuncCallResp(func::FuncSvcCallResp),
     FuncPodConnResp(func::FuncPodConnResp),
+    FuncMsg(func::FuncMsg),
 }
 
 pub struct FuncCalleeMsg {
