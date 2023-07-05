@@ -407,6 +407,25 @@ impl FuncPod {
         };
     }
 
+    pub async fn OnFuncMsg(&self, msg: func::FuncMsg) -> Result<()> {
+        let mut msg = msg;
+        msg.src_node_id = self.nodeId.clone();
+        msg.src_pod_id = self.funcPodId.clone();
+        msg.src_func_id = match &*self.state.lock().unwrap() {
+            funcPodState::Running(funccall) => funccall.callerFuncCallId.clone(),
+            _ => {
+                error!("OnFuncMsg: Get funcmsg from an idle pod ");
+                return Ok(())
+            }
+        };
+
+        FUNC_SVC_CLIENT.get().unwrap().Send(func::FuncSvcMsg {
+            event_body: Some(func::func_svc_msg::EventBody::FuncMsg(msg))
+        })?;
+
+        return Ok(())
+    }
+
     pub async fn OnFuncPodMsg(&self, funcPodId: &str, msg: func::FuncAgentMsg) -> Result<()> {
         let body = match msg.event_body {
             None => return Err(Error::EINVAL(format!("OnFuncPodMsg None event_body"))),
@@ -469,6 +488,9 @@ impl FuncPod {
             }
             EventBody::BlobCloseReq(msg) => {
                 self.OnBlobCloseReq(msgId, msg).await?;
+            }
+            EventBody::FuncMsg(msg) => {
+                self.OnFuncMsg(msg).await?;
             }
             m => {
                 error!("get unexpected msg {:?}", m);

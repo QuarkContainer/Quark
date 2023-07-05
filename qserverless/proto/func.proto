@@ -67,6 +67,7 @@ message FuncAgentMsg {
     BlobCloseResp BlobCloseResp = 514;
     BlobDeleteReq BlobDeleteReq = 515;
     BlobDeleteResp BlobDeleteResp = 516;
+    FuncMsg FuncMsg = 517;
   }
 }
 
@@ -175,12 +176,52 @@ message FuncAgentCallReq {
   string parameters = 6;
   uint64 priority = 7;
   string callerFuncId = 8;
+  string callerNodeId = 9;
+  string callerPodId = 10;
 }
 
 message FuncAgentCallResp {
   string id = 1;
   string error = 2;
   string resp = 3;
+}
+
+// notify caller the funcinstance has been started
+message FuncAgentCallAck {
+  string id = 1;
+  string error = 2;
+  string calleeNodeId = 3;
+  string calleePodId = 4;
+}
+
+message KV {
+    string key = 1;
+    string val = 2;
+} 
+
+message FuncMsg {
+  string srcNodeId = 2;
+  string srcPodId = 3;
+  string srcFuncId = 4;
+  string dstNodeId = 5;
+  string dstPodId = 6;
+  string dstFuncId = 7;
+  oneof Payload {
+    FuncMsgBody FuncMsgBody = 101;
+    FuncMsgAck FuncMsgAck = 102;
+  }
+}
+
+message FuncMsgBody {
+  uint32 seqId = 1;
+  int64 msgCode = 2; // <0 reserved by system -1 means func close, 
+  repeated KV annotations = 3;
+  bytes data = 4;
+}
+
+message FuncMsgAck {
+  uint32 seqId = 1;
+  string error = 2;
 }
 
 service FuncSvcService {
@@ -197,6 +238,7 @@ message FuncSvcMsg {
     FuncPodDisconnResp FuncPodDisconnResp = 600;
     FuncSvcCallReq FuncSvcCallReq = 700;
     FuncSvcCallResp FuncSvcCallResp = 800;
+    FuncMsg FuncMsg = 900;
   }
 }
 

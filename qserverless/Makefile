@@ -1,4 +1,4 @@
-All: na nm fp fs qctl
+All: na nm fs qctl
 na:
 	cargo build --bin node_agent
 nm:

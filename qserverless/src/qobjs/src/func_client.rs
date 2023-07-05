@@ -96,6 +96,8 @@ impl FuncClient {
             package_name: packageName.to_string(),
             func_name: funcName.to_string(),
             parameters: parameters.to_string(),
+            caller_node_id: String::new(),
+            caller_pod_id: String::new(),
             caller_func_id: String::new(), // direct call has no caller func
             priority: priority as u64,
         };

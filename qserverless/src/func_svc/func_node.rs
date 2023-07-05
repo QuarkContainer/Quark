@@ -508,6 +508,42 @@ impl FuncNode {
             func::func_svc_msg::EventBody::FuncPodDisconnReq(req) => {
                 return self.OnFuncPodDisconnReq(&req.func_pod_id);
             } 
+            func::func_svc_msg::EventBody::FuncMsg(req) => {
+                let nodeId = req.dst_node_id.clone();
+                match FUNC_NODE_MGR.Get(&nodeId) {
+                    Ok(node) => {
+                        match node.Send(FuncNodeMsg::FuncMsg(req.clone())) {
+                            Ok(()) =>(),
+                            Err(e) => {
+                                error!("send funcmsg {:?} fail with error {:?}", req, e)
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // can't find the node, silenece drop the msg
+
+                        // let msgAck = FuncMsgAck {
+                        //     seq_id: 
+                        //     error: format!("can't find target node {}", &req.dst_node_id);
+                        // }
+                        // let Payload = Payload {
+                            
+                        //     error: 
+                        // }
+                        // let funcMsg = func::FuncMsg {
+                        //     src_node_id: String::new(),
+                        //     src_pod_id: String::new(),
+                        //     src_func_id: String::new(),
+                        //     dst_node_id: req.src_node_id.clone(),
+                        //     dst_pod_id: req.src_pod_id.clone(),
+                        //     dst_func_id: req.src_func_id.clone(),
+                        //     payload: Some(fun::func_svc_msg::)
+                        // }
+                    }
+                }
+
+                return Ok(())
+            }
             _ => {
                 error!("didn't get FuncAgentRegisterReq message instead {:?}", body);
                 return Err(Error::CommonError(format!("didn't get FuncAgentRegisterReq message instead {:?}", body)));
@@ -576,6 +612,12 @@ impl FuncNode {
             FuncNodeMsg::FuncPodConnResp(resp) => {
                 self.SendToNodeAgent(func::FuncSvcMsg {
                     event_body: Some(func::func_svc_msg::EventBody::FuncPodConnResp(resp))
+                }, tx);
+                return Ok(())
+            }
+            FuncNodeMsg::FuncMsg(resp) => {
+                self.SendToNodeAgent(func::FuncSvcMsg {
+                    event_body: Some(func::func_svc_msg::EventBody::FuncMsg(resp))
                 }, tx);
                 return Ok(())
             }
