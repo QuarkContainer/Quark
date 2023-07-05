@@ -18,10 +18,15 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use core::ops::Deref;
 
+use qobjs::audit::func_audit::FuncStateFail;
+use qobjs::audit::func_audit::FuncStateSuccess;
 use qobjs::common::*;
 use qobjs::types::*;
+use qobjs::func;
 
 use crate::AUDIT_AGENT;
+use crate::FUNC_NODE_MGR;
+use crate::FUNC_SVC_MGR;
 use crate::func_call::FuncCall;
 use crate::package::*;
 use crate::func_node::*;
@@ -67,7 +72,7 @@ impl Eq for FuncPodId {}
 #[derive(Debug, Clone)]
 pub enum FuncPodState {
     Idle(SystemTime), // IdleTime
-    Running(String), // the funcCallId
+    Running(FuncCall), // the funcCallId
     Exiting,
     Dead,
 }
@@ -96,6 +101,7 @@ pub struct FuncPodInner {
     pub node: FuncNode,
     pub clientMode: bool,
     pub state: Mutex<FuncPodState>,
+    pub callerFuncCalls: Mutex<BTreeMap<String, FuncCall>>, 
 }
 
 #[derive(Debug, Clone)]
@@ -111,7 +117,7 @@ impl Deref for FuncPod {
 
 impl FuncPod {
     pub fn ScheduleFuncCall(&self, funcCall: &FuncCall) -> Result<()> {
-        *self.state.lock().unwrap() = FuncPodState::Running(funcCall.id.clone());
+        *self.state.lock().unwrap() = FuncPodState::Running(funcCall.clone());
         *funcCall.calleeNodeId.lock().unwrap() = self.node.NodeName();
         *funcCall.calleeFuncPodId.lock().unwrap() = self.podName.clone();
         AUDIT_AGENT.AssignFunc(
@@ -143,6 +149,66 @@ impl FuncPod {
     pub fn IsExiting(&self) -> bool {
         return self.state.lock().unwrap().IsExiting();
     }
+
+    pub fn OnFuncSvcCallReq(&self, funccall: &FuncCall) -> Result<()> {
+        self.callerFuncCalls.lock().unwrap().insert(funccall.id.clone(), funccall.clone());
+        return Ok(())
+    }
+
+    // get funccall response from nodeagent
+    pub fn OnFuncSvcCallResp(&self, resp: func::FuncSvcCallResp) -> Result<()> {
+        let state = if resp.error.len() == 0 {
+            FuncStateSuccess
+        } else {
+            FuncStateFail
+        };
+        AUDIT_AGENT.FinishFunc(
+            &resp.id, 
+            state
+        )?;
+        
+        let callerNode = FUNC_NODE_MGR.Get(&resp.caller_node_id)?;
+        callerNode.Send(FuncNodeMsg::FuncCallResp(resp))?;
+        *self.state.lock().unwrap() = FuncPodState::Idle(SystemTime::now());
+        
+        FUNC_SVC_MGR.lock().unwrap().OnFreePod(self, false)?;
+        return Ok(())
+    } 
+
+    // get funccall resp from another func node
+    pub fn OnFuncCallResp(&self, resp: &func::FuncSvcCallResp) -> Result<()> {
+        self.callerFuncCalls.lock().unwrap().remove(&resp.caller_pod_id);
+        return Ok(())
+    }
+    
+    // when a pod is disconnected
+    pub fn OnFuncPodDisconnReq(&self) -> Result<()> {
+        match self.state.lock().unwrap().clone() {
+            FuncPodState::Idle(_) => (),
+            FuncPodState::Running(funcCall) => {
+                let callerNode = FUNC_NODE_MGR.Get(&funcCall.callerNodeId)?;
+                let resp = func::FuncSvcCallResp {
+                    id: funcCall.id.clone(),
+                    error: format!("funcpod {} disconnect ", &self.podName),
+                    resp: String::new(),
+                    caller_node_id: funcCall.callerNodeId.clone(),
+                    caller_pod_id: funcCall.callerFuncPodId.clone(),
+                    callee_node_id: funcCall.calleeNodeId.lock().unwrap().clone(),
+                    callee_pod_id: funcCall.calleeFuncPodId.lock().unwrap().clone(),
+                };
+                callerNode.Send(FuncNodeMsg::FuncCallResp(resp))?;
+            }
+            _ => {}
+        }
+
+        *self.state.lock().unwrap() = FuncPodState::Dead;
+        if !self.clientMode {
+            FUNC_SVC_MGR.lock().unwrap().OnPodExit(self)?;
+        }
+
+        return Ok(())
+    }
+
 }
 
 pub struct FuncPodMgr {
