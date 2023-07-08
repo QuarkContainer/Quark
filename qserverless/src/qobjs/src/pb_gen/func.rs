@@ -388,11 +388,6 @@ pub mod func_msg {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncMsgBody {
-    /// <0 reserved by system -1 means func close,
-    #[prost(int64, tag = "2")]
-    pub msg_code: i64,
-    #[prost(message, repeated, tag = "3")]
-    pub annotations: ::prost::alloc::vec::Vec<Kv>,
     #[prost(string, tag = "4")]
     pub data: ::prost::alloc::string::String,
 }
