@@ -9,4 +9,7 @@ impl KVMVcpu {
     pub fn dump(&self) -> Result<()> {
         Ok(())
     }
+
+    pub fn Signal(&self, signal: i32) {
+    }
 }

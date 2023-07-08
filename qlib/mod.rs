@@ -15,6 +15,24 @@
 extern crate alloc;
 extern crate spin;
 
+macro_rules! cfg_x86_64 {
+    ($($item:item)*) => {
+        $(
+            #[cfg(target_arch="x86_64")]
+            $item
+        )*
+    }
+}
+
+macro_rules! cfg_aarch64 {
+    ($($item:item)*) => {
+        $(
+            #[cfg(target_arch="aarch64")]
+            $item
+        )*
+    }
+}
+
 //#[macro_use]
 //pub mod macros;
 pub mod addr;

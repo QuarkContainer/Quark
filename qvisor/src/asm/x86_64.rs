@@ -12,12 +12,49 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(target_arch="aarch64")]
-mod aarch64;
-#[cfg(target_arch="aarch64")]
-pub use aarch64::*;
+use core::arch::asm;
 
-#[cfg(target_arch="x86_64")]
-mod x86_64;
-#[cfg(target_arch="x86_64")]
-pub use x86_64::*;
+pub fn LoadCr3(_cr3: u64) {}
+pub fn ReadCr3() -> u64 {
+    0
+}
+pub fn HyperCall(_type_: u16, _para1: u64) {}
+
+#[inline]
+pub fn CurrentCr3() -> u64 {
+    let cr3: u64;
+    unsafe {
+        asm!(
+            "mov {0} cr3",
+            out(reg) cr3
+        )
+    };
+    return cr3;
+}
+
+#[inline(always)]
+pub fn mfence() {
+    unsafe { asm!("mfence") }
+}
+
+#[inline(always)]
+pub fn sfence() {
+    unsafe {
+        asm!(
+            "
+        sfence
+    "
+        )
+    }
+}
+
+#[inline(always)]
+pub fn lfence() {
+    unsafe {
+        asm!(
+            "
+        lfence
+    "
+        )
+    }
+}

@@ -230,6 +230,7 @@ pub fn Wait() {
             }
         } else {
             if PollAsyncMsg() == 0 {
+                #[cfg(target_arch = "x86_64")]
                 unsafe {
                     asm!("pause");
                 }
