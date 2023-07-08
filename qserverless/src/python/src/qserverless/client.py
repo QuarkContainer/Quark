@@ -389,8 +389,6 @@ class FuncMgr:
             dstPodId = funcInstance.podId,
             dstFuncId = funcInstance.funcId,
             FuncMsgBody = func_pb2.FuncMsgBody (
-                msgCode = msgCode,
-                annotations = annotations,
                 data = data,
             )
         )
@@ -515,7 +513,7 @@ class FuncMgr:
                             err = ""
                         return common.CallResult(result, err)
                     except Exception as err:
-                        err = "func ttttt {} call fail with exception {} {}".format(name, err, traceback.format_exc())
+                        err = "func {} call fail with exception {} {}".format(name, err, traceback.format_exc())
                         return common.CallResult("", err)
     
     def Close(self) : 

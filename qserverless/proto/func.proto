@@ -219,8 +219,6 @@ message FuncMsg {
 }
 
 message FuncMsgBody {
-  int64 msgCode = 2; // <0 reserved by system -1 means func close, 
-  repeated KV annotations = 3;
   string data = 4;
 }
 
