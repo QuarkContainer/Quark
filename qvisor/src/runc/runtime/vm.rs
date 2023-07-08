@@ -298,6 +298,7 @@ impl VirtualMachine {
         let mut cap: kvm_enable_cap = Default::default();
         cap.cap = KVM_CAP_X86_DISABLE_EXITS;
         cap.args[0] = (KVM_X86_DISABLE_EXITS_HLT | KVM_X86_DISABLE_EXITS_MWAIT) as u64;
+        #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
         vm_fd.enable_cap(&cap).unwrap();
         if !kvm.check_extension(Cap::ImmediateExit) {
             panic!("KVM_CAP_IMMEDIATE_EXIT not supported");

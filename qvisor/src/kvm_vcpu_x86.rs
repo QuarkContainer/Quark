@@ -31,6 +31,7 @@ use crate::qlib::kernel::asm::xgetbv;
 
 use super::*;
 //use super::qlib::kernel::TSC;
+#[cfg(target_arch="aarch64")]
 use super::amd64_def::*;
 use super::qlib::buddyallocator::ZeroPage;
 use super::qlib::*;
@@ -91,16 +92,6 @@ impl RefMgr for HostPageAllocator {
         panic!("HostPageAllocator doesn't support GetRef");
     }
 }
-
-#[derive(Clone, Debug, PartialEq, Copy)]
-#[repr(u64)]
-pub enum KVMVcpuState {
-    HOST,
-    GUEST,
-}
-
-//for pub shareSpace: * mut Mutex<ShareSpace>
-unsafe impl Send for KVMVcpu {}
 
 impl KVMVcpu {
 
