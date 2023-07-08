@@ -137,3 +137,7 @@ async def readfile(context, filename: str):
         contents = file.read()
         return (contents, None)
     
+async def IternateCall(context, msg: str):
+    yield msg + "asdf1"
+    msg1 = await context.ReadParentMsg()
+    yield msg1 + "asdfdf2"

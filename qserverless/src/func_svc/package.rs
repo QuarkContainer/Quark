@@ -145,7 +145,7 @@ impl PackageInner {
     // when a pod finish processing last task, return the task which needs removed from global task Queue
     pub fn OnFreePod(&mut self, pod: &FuncPod, newPod: bool) -> Result<(bool, Option<FuncCall>)> {
         if newPod {
-            self.creatingPodCnt -= 1;
+            //self.creatingPodCnt -= 1;
         } else {
             self.runningPodCnt -= 1;
         }

@@ -116,6 +116,24 @@ async def call_none(): # -> (str, qserverless.Err):
     for res, err in results:
         print("res ", res, "err ", err)
 
+async def IternateCallTest():
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage1", True)
+    background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
+    jobContext = qserverless.NewJobContext()
+    fi = await jobContext.RemoteCallIterate(
+            packageName = "pypackage1",
+            funcName = "IternateCall",
+            msg = "test"
+    )
+    print("IternateCallTest *************** 1 ", fi.funcId)
+    msg1 = await jobContext.ReadChildMsg(fi)
+    print("IternateCallTest *************** 2 ", msg1)
+    await jobContext.SendChildMsg(fi, 1, "parent msg")
+    msg2 = await jobContext.ReadChildMsg(fi)
+    print("IternateCallTest *************** 3 ", msg2)
+    msg3 = await jobContext.ReadChildMsg(fi)
+    print("IternateCallTest *************** 4 ", msg3) 
+
 async def main() : 
     test = sys.argv[1]
     print("test is ", test)
@@ -136,5 +154,7 @@ async def main() :
             await remote_ai() 
         case "call_none":
             await call_none() 
+        case "IternateCallTest":
+            await IternateCallTest()
 asyncio.run(main())
 

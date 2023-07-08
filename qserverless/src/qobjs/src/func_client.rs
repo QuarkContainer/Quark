@@ -100,6 +100,7 @@ impl FuncClient {
             caller_pod_id: String::new(),
             caller_func_id: String::new(), // direct call has no caller func
             priority: priority as u64,
+            call_type: 1,
         };
 
         let res = match self.client.func_call(req).await {

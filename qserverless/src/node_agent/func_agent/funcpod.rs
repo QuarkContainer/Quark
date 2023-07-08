@@ -135,11 +135,12 @@ impl FuncPod {
             callerFuncCallId: req.caller_func_id.clone(),
             priority: req.priority as usize,
             createTime: createTime,
+            callType: req.call_type,
         };
 
         let funcCall = FuncCall(Arc::new(inner));
         self.callerCalls.lock().unwrap().insert(req.id.clone(), funcCall);
-
+        
         let protoTime = SystemTimeProto::FromSystemTime(createTime);
         let req = func::FuncSvcCallReq {
             job_id: req.job_id.clone(),
@@ -155,6 +156,7 @@ impl FuncPod {
             caller_pod_id: callerFuncPodId.to_string(),
             callee_node_id: String::new(),
             callee_pod_id: String::new(),
+            call_type: req.call_type,
         };
 
         FUNC_SVC_CLIENT.get().unwrap().Send(func::FuncSvcMsg {
@@ -407,18 +409,21 @@ impl FuncPod {
         };
     }
 
+    // get funcMsg from pod
     pub async fn OnFuncMsg(&self, msg: func::FuncMsg) -> Result<()> {
         let mut msg = msg;
         msg.src_node_id = self.nodeId.clone();
         msg.src_pod_id = self.funcPodId.clone();
-        msg.src_func_id = match &*self.state.lock().unwrap() {
-            funcPodState::Running(funccall) => funccall.callerFuncCallId.clone(),
+        match self.State() {
+            funcPodState::Running(funccall) => {
+                msg.src_func_id = funccall.id.clone()
+            }
             _ => {
-                error!("OnFuncMsg: Get funcmsg from an idle pod ");
-                return Ok(())
+                // it is caller pod
             }
         };
 
+        //error!("OnFuncMsg msg is {:#?}", &msg);
         FUNC_SVC_CLIENT.get().unwrap().Send(func::FuncSvcMsg {
             event_body: Some(func::func_svc_msg::EventBody::FuncMsg(msg))
         })?;
@@ -427,6 +432,7 @@ impl FuncPod {
     }
 
     pub async fn OnFuncPodMsg(&self, funcPodId: &str, msg: func::FuncAgentMsg) -> Result<()> {
+        //error!("OnFuncPodMsg msg is {:#?}", &msg);
         let body = match msg.event_body {
             None => return Err(Error::EINVAL(format!("OnFuncPodMsg None event_body"))),
             Some(b) => b,
@@ -458,7 +464,7 @@ impl FuncPod {
                     caller_node_id: call.callerNodeId.clone(),
                     caller_pod_id: call.callerFuncPodId.clone(),
                     callee_node_id: self.nodeId.clone(),
-                    callee_pod_id: funcPodId.to_string(),
+                    callee_pod_id: funcPodId.to_owned(),
                 };
         
                 FUNC_SVC_CLIENT.get().unwrap().Send(func::FuncSvcMsg {
@@ -467,6 +473,30 @@ impl FuncPod {
         
 
                 //self.funcAgent.OnFuncAgentCallResp(funcPodId, msg)?;
+            }
+            EventBody::FuncAgentCallAck(msg) => {
+                let call = match self.State() {
+                    funcPodState::Idle => {
+                        error!("OnFuncAgentCallResp doesn't find funcall id {}", &msg.id);
+                        return Ok(())
+                    }
+                    funcPodState::Running(funccall) => {
+                        funccall
+                    }
+                };
+
+                let ack = func::FuncSvcCallAck {
+                    id: msg.id,
+                    error: msg.error,
+                    caller_node_id: call.callerNodeId.clone(),
+                    caller_pod_id: call.callerFuncPodId.clone(),
+                    callee_node_id: self.nodeId.clone(),
+                    callee_pod_id: funcPodId.to_owned(),
+                };
+
+                FUNC_SVC_CLIENT.get().unwrap().Send(func::FuncSvcMsg {
+                    event_body: Some(func::func_svc_msg::EventBody::FuncSvcCallAck(ack))
+                })?;
             }
             EventBody::BlobOpenReq(msg) => {
                 self.OnBlobOpenReq(msgId, msg).await?;

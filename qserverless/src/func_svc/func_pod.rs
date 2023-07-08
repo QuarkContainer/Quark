@@ -175,6 +175,13 @@ impl FuncPod {
         return Ok(())
     } 
 
+        // get funccall ack from nodeagent
+        pub fn OnFuncSvcCallAck(&self, ack: func::FuncSvcCallAck) -> Result<()> {
+            let callerNode = FUNC_NODE_MGR.Get(&ack.caller_node_id)?;
+            callerNode.Send(FuncNodeMsg::FuncCallAck(ack))?;
+            return Ok(())
+        } 
+
     // get funccall resp from another func node
     pub fn OnFuncCallResp(&self, resp: &func::FuncSvcCallResp) -> Result<()> {
         self.callerFuncCalls.lock().unwrap().remove(&resp.caller_pod_id);

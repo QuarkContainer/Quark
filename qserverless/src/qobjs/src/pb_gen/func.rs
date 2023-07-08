@@ -60,7 +60,7 @@ pub struct FuncAgentMsg {
     pub msg_id: u64,
     #[prost(
         oneof = "func_agent_msg::EventBody",
-        tags = "100, 200, 300, 400, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 513, 514, 515, 516, 517"
+        tags = "100, 200, 300, 400, 401, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 513, 514, 515, 516, 517"
     )]
     pub event_body: ::core::option::Option<func_agent_msg::EventBody>,
 }
@@ -78,6 +78,8 @@ pub mod func_agent_msg {
         FuncAgentCallReq(super::FuncAgentCallReq),
         #[prost(message, tag = "400")]
         FuncAgentCallResp(super::FuncAgentCallResp),
+        #[prost(message, tag = "401")]
+        FuncAgentCallAck(super::FuncAgentCallAck),
         #[prost(message, tag = "501")]
         BlobOpenReq(super::BlobOpenReq),
         #[prost(message, tag = "502")]
@@ -307,6 +309,9 @@ pub struct FuncAgentCallReq {
     pub caller_node_id: ::prost::alloc::string::String,
     #[prost(string, tag = "10")]
     pub caller_pod_id: ::prost::alloc::string::String,
+    /// 1: Normal 2: Iterate
+    #[prost(int32, tag = "11")]
+    pub call_type: i32,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -332,6 +337,10 @@ pub struct FuncAgentCallAck {
     pub callee_node_id: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub callee_pod_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub caller_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub caller_pod_id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -346,6 +355,8 @@ pub struct Kv {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncMsg {
+    #[prost(string, tag = "1")]
+    pub msg_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub src_node_id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
@@ -377,22 +388,18 @@ pub mod func_msg {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncMsgBody {
-    #[prost(uint32, tag = "1")]
-    pub seq_id: u32,
     /// <0 reserved by system -1 means func close,
     #[prost(int64, tag = "2")]
     pub msg_code: i64,
     #[prost(message, repeated, tag = "3")]
     pub annotations: ::prost::alloc::vec::Vec<Kv>,
-    #[prost(bytes = "vec", tag = "4")]
-    pub data: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, tag = "4")]
+    pub data: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FuncMsgAck {
-    #[prost(uint32, tag = "1")]
-    pub seq_id: u32,
     #[prost(string, tag = "2")]
     pub error: ::prost::alloc::string::String,
 }
@@ -402,7 +409,7 @@ pub struct FuncMsgAck {
 pub struct FuncSvcMsg {
     #[prost(
         oneof = "func_svc_msg::EventBody",
-        tags = "100, 200, 300, 400, 500, 600, 700, 800, 900"
+        tags = "100, 200, 300, 400, 500, 600, 700, 800, 801, 900"
     )]
     pub event_body: ::core::option::Option<func_svc_msg::EventBody>,
 }
@@ -428,6 +435,8 @@ pub mod func_svc_msg {
         FuncSvcCallReq(super::FuncSvcCallReq),
         #[prost(message, tag = "800")]
         FuncSvcCallResp(super::FuncSvcCallResp),
+        #[prost(message, tag = "801")]
+        FuncSvcCallAck(super::FuncSvcCallAck),
         #[prost(message, tag = "900")]
         FuncMsg(super::FuncMsg),
     }
@@ -533,6 +542,8 @@ pub struct FuncSvcCallReq {
     pub callee_node_id: ::prost::alloc::string::String,
     #[prost(string, tag = "13")]
     pub callee_pod_id: ::prost::alloc::string::String,
+    #[prost(int32, tag = "14")]
+    pub call_type: i32,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -553,6 +564,24 @@ pub struct FuncSvcCallResp {
     pub callee_node_id: ::prost::alloc::string::String,
     #[prost(string, tag = "11")]
     pub callee_pod_id: ::prost::alloc::string::String,
+}
+/// notify caller the funcinstance has been started
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FuncSvcCallAck {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub error: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub callee_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub callee_pod_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub caller_node_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub caller_pod_id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
