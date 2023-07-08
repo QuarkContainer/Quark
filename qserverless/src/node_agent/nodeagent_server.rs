@@ -264,7 +264,7 @@ impl NodeAgentServer {
     }
 
     pub async fn ReqHandler(&self, req: NmMsg::NodeAgentReq, nodeAgent: &NodeAgent) -> Result<NmMsg::node_agent_resp::MessageBody> {
-        error!("ReqHandler 1 {:?}", &req);
+        //error!("ReqHandler 1 {:?}", &req);
         let body: NmMsg::node_agent_req::MessageBody = req.message_body.unwrap();
         match body {
             NmMsg::node_agent_req::MessageBody::NodeConfigReq(req) => {

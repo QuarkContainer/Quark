@@ -107,6 +107,7 @@ pub struct FuncCallInner {
     pub parameters: String,
     pub priority: usize,
     pub createTime: SystemTime,
+    pub callType: i32,
 }
 
 #[derive(Debug, Clone)]

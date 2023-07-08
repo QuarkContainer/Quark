@@ -21,6 +21,7 @@ use crate::func_call::FuncCall;
 pub enum FuncNodeMsg {
     FuncCall(FuncCall),
     FuncCallResp(func::FuncSvcCallResp),
+    FuncCallAck(func::FuncSvcCallAck),
     FuncPodConnResp(func::FuncPodConnResp),
     FuncMsg(func::FuncMsg),
 }

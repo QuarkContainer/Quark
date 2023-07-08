@@ -42,16 +42,22 @@ EnvVarNodeMgrPackageId  = "qserverless_packageid";
 EnvVarNodeAgentAddr     = "qserverless_nodeagentaddr";
 DefaultNodeAgentAddr    = "unix:///var/lib/quark/nodeagent/sock";
 
+funcPodId = None
+
 async def generate_messages():
     while True:
         item = await funcAgentQueueTx.get()
         yield item
 
 def GetPodIdFromEnvVar() :
+    global funcPodId
+    if funcPodId is not None:
+        return funcPodId
+    
     podId = os.getenv(EnvVarNodeMgrPodId)
     if podId is None:
-        podId = str(uuid.uuid4())
-        return podId
+        funcPodId = str(uuid.uuid4())
+        return funcPodId
     else :
         return podId
     
@@ -73,16 +79,74 @@ def GetNodeAgentAddrFromEnvVar() :
         return DefaultNodeAgentAddr
     return addr
 
+class FuncInstance: 
+    def __init__(self, nodeId: str, podId: str, funcId: str):
+        self.nodeId = nodeId
+        self.podId = podId
+        self.funcId = funcId
+        self.msgQueue = asyncio.Queue(100)
+    
+    async def ReadMsg(self) :
+        msg = await self.msgQueue.get()
+        return msg
+        
 
 class FuncCallContext:
-    def __init__(self, jobId: str, id: str):
+    def __init__(self, jobId: str, id: str, parent: FuncInstance):
         self.jobId = jobId
         self.id = id
-        
+        self.funcInstances = dict()
+        self.parent = parent
+        self.msgQueues = dict()
+    
+    async def SendMsg(self, funcInstance: FuncInstance, msgCode: int, data: str):
+        await funcMgr.SendMsg(self, funcInstance, msgCode, dict(), data)
+    
+    async def ReadParentMsg(self):
+        return await self.parent.ReadMsg()
+    
+    async def ReadChildMsg(self, funcInstance: FuncInstance):
+        return await funcInstance.ReadMsg()
+    
+    async def SendParentMsg(self, msgCode: int, data: str):
+        await self.SendMsg(self, self.parent, msgCode, data)
+    
+    async def SendChildMsg(self, funcInstance: FuncInstance, msgCode: int, data: str):
+        await self.SendMsg(funcInstance, msgCode, data)
+    
     def NewTaskContext(self) :
         id = str(uuid.uuid4())
-        return FuncCallContext(self.jobId, id)
+        return FuncCallContext(self.jobId, id, None)
     
+    def NewChildFuncInstance(self, nodeId: str, podId: str, funcId: str):
+        instance = FuncInstance(nodeId, podId, funcId)
+        self.funcInstances[funcId] = instance
+        return instance
+    
+    def CallRespone(self, id: str, res: common.CallResult):
+        funcInstance = self.funcInstances.get(id)
+        if funcInstance is None:
+            return
+        if len(res.error) != 0:
+            funcInstance.msgQueue.put_nowait((None, res.error))
+            
+        funcInstance.msgQueue.put_nowait(None)
+    
+    def DispatchFuncMsg(self, msg: func_pb2.FuncMsg):
+        if msg.dstFuncId != self.id:
+            print("get unexpect FuncMsg for func ", msg.dstFuncId, "my func is ", self.id)
+            return;
+        
+        if self.parent is not None and msg.srcFuncId == self.parent.funcId:
+            self.parent.msgQueue.put_nowait(msg.FuncMsgBody.data)
+            return
+        
+        funcInstance = self.funcInstances.get(msg.srcFuncId)
+        if funcInstance is None:
+            return
+        
+        funcInstance.msgQueue.put_nowait((msg.FuncMsgBody.data, ""))
+        
     async def RemoteCall(
         self,
         **kwargs
@@ -101,13 +165,46 @@ class FuncCallContext:
         
         del kwargs['funcName']
         parameters = json.dumps(kwargs)
-         
-        taskContext = self.NewTaskContext();
+                 
+        res = await funcMgr.RemoteCall(
+            self, 
+            packageName, 
+            funcName, 
+            self.id, 
+            priority, 
+            parameters
+        )
         
-        res = await funcMgr.RemoteCall(taskContext, packageName, funcName, self.id, priority, parameters)
         if res.error == "":
             return (res.res, None)
         return (None, common.QErr(res.error))
+    
+    async def RemoteCallIterate(self, **kwargs) -> FuncInstance:
+        packageName = kwargs.get('packageName')
+        if packageName is None :
+            packageName = ""
+        else: 
+            del kwargs['packageName']
+        funcName = kwargs['funcName']
+        priority = kwargs.get('priority')
+        if priority is None:
+            priority = 1
+        else:
+            del kwargs['priority']
+        
+        del kwargs['funcName']
+        parameters = json.dumps(kwargs)
+         
+        res = await funcMgr.RemoteCallIterate(
+            self, 
+            packageName, 
+            funcName, 
+            self.id, 
+            priority, 
+            parameters
+        )
+        
+        return res;
     
     def NewBlobAddr(self) -> common.BlobAddr : 
         id = self.jobId + "/" + str(uuid.uuid4())
@@ -122,10 +219,8 @@ class FuncCallContext:
     
     def NewBlobAddrMatrix(self, rows: int, cols: int) -> common.BlobAddrMatrix:
         mat = list()
-        print("NewBlobAddrMatrix 1 ret is ", mat)
         for row in range(0, rows):
             mat.append(self.NewBlobVec(cols)) 
-        print("NewBlobAddrMatrix 2 ret is ", mat)
         return mat
     
     async def BlobWriteAll(self, addr: common.BlobAddr, buf: bytes): # -> common.QErr:
@@ -184,7 +279,9 @@ class FuncCallContext:
 
 def NewJobContext() -> FuncCallContext :
     id = str(uuid.uuid4())
-    return FuncCallContext(id, id)
+    context = FuncCallContext(id, id, None)
+    funcMgr.context = context
+    return context
 
 class FuncMgr:
     def __init__(self, svcAddr: str, namespace: str, packageName: str):
@@ -194,9 +291,44 @@ class FuncMgr:
         self.reqQueue = asyncio.Queue(100)
         self.clientQueue = funcAgentQueueTx
         self.callerCalls = dict()
+        self.childrenMsg = asyncio.Queue(100)
         self.blob_mgr = blob_mgr.BlobMgr(funcAgentQueueTx)
         self.svcAddr = svcAddr
+        self.context = None
+        self.funcMsgs = dict()
         blob_mgr.blobMgr = self
+    
+    async def Call(
+        self,
+        context: FuncCallContext,
+        packageName: str, 
+        funcName: str, 
+        callerFuncId: str,
+        priority: int,
+        parameters: str,
+        callType: int
+        ) : 
+        
+        if packageName == "" :
+            packageName = self.packageName
+        
+        id = str(uuid.uuid4())
+        req = func_pb2.FuncAgentCallReq (
+            jobId = context.jobId,
+            id = id,
+            namespace = self.namespace,
+            packageName = packageName,
+            funcName = funcName,
+            parameters = parameters,
+            callerFuncId = callerFuncId,
+            priority = priority,
+            callType = callType
+        )
+        callQueue = janus.Queue() #asyncio.Queue(1)
+        self.callerCalls[id] = callQueue
+        self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(msgId=0, FuncAgentCallReq=req))
+        res = await callQueue.async_q.get()
+        return res
     
     async def RemoteCall(
         self,
@@ -207,26 +339,83 @@ class FuncMgr:
         priority: int,
         parameters: str 
         ) -> common.CallResult: 
-        
-        if packageName == "" :
-            packageName = self.packageName
-        
-        id = context.id
-        req = func_pb2.FuncAgentCallReq (
-            jobId = context.jobId,
-            id = context.id,
-            namespace = self.namespace,
-            packageName = packageName,
-            funcName = funcName,
-            parameters = parameters,
-            callerFuncId = callerFuncId,
-            priority = priority
+        return await self.Call (
+            context,
+            packageName,
+            funcName,
+            callerFuncId,
+            priority,
+            parameters,
+            1
         )
-        callQueue = janus.Queue() #asyncio.Queue(1)
-        self.callerCalls[id] = callQueue
-        self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(msgId=0, FuncAgentCallReq=req))
-        res = await callQueue.async_q.get()
-        return res
+        
+    async def RemoteCallIterate(
+        self,
+        context: FuncCallContext,
+        packageName: str, 
+        funcName: str, 
+        callerFuncId: str,
+        priority: int,
+        parameters: str 
+        ) -> FuncInstance: 
+        msg = await self.Call (
+            context,
+            packageName,
+            funcName,
+            callerFuncId,
+            priority,
+            parameters,
+            2
+        )
+        
+        childFuncInstance = context.funcInstances[msg.id]
+        return childFuncInstance
+        
+    async def SendMsg (
+        self,
+        context: FuncCallContext,
+        funcInstance: FuncInstance,
+        msgCode: int,
+        annotations: dict,
+        data: str
+    ) : 
+        id = str(uuid.uuid4())
+        msg = func_pb2.FuncMsg (
+            msgId = id,
+            srcNodeId = "",
+            srcPodId = self.funcPodId,
+            srcFuncId = context.id,
+            dstNodeId = funcInstance.nodeId,
+            dstPodId = funcInstance.podId,
+            dstFuncId = funcInstance.funcId,
+            FuncMsgBody = func_pb2.FuncMsgBody (
+                msgCode = msgCode,
+                annotations = annotations,
+                data = data,
+            )
+        )
+        
+        msgQueue = janus.Queue() #asyncio.Queue(1)
+        self.funcMsgs[id] = msgQueue
+        self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(msgId=0, FuncMsg=msg))
+        res = await msgQueue.async_q.get()
+        assert res.srcNodeId == msg.dstNodeId 
+        assert res.srcPodId == msg.dstPodId
+        assert res.srcFuncId == msg.dstFuncId
+        #  msg.srcNodeId is not set, no need check ....assert msg.srcNodeId == res.dstNodeId 
+        assert msg.srcPodId == res.dstPodId
+        assert msg.srcFuncId == res.dstFuncId
+        if len(res.FuncMsgAck.error):
+            raise Exception("SendMsg msg annotations {} fail with error {}".format(annotations, res.FuncMsgAck.error))
+    
+    def MsgAck(self, ack: func_pb2.FuncMsg):
+        id = ack.msgId
+        msgQueue = self.funcMsgs.get(id)
+        if msgQueue is None:
+            return
+        
+        msgQueue.async_q.put_nowait(ack)
+        self.funcMsgs.pop(id)
     
     async def BlobCreate(self, addr: common.BlobAddr): #-> (UnsealBlob, common.QErr):
         return await funcMgr.blob_mgr.BlobCreate(addr['name'])
@@ -251,15 +440,58 @@ class FuncMgr:
     
     def CallRespone(self, id: str, res: common.CallResult) :
         callQueue = self.callerCalls.get(id)
+        self.context.CallRespone(id, res)
         if callQueue is None:
             return
-        
         callQueue.async_q.put_nowait(res)
+        self.callerCalls.pop(id)
+    
+    def CallIterateAck(self, id: str, msg: func_pb2.FuncAgentCallAck):
+        callQueue = self.callerCalls.get(id)
+        if callQueue is None:
+            return
+        self.context.NewChildFuncInstance(msg.calleeNodeId, msg.calleePodId, msg.id)
+        callQueue.async_q.put_nowait(msg)
         self.callerCalls.pop(id)
         
     def LocalCall(self, req: func_pb2.FuncAgentCallReq) :
         self.reqQueue.put_nowait(req)
-        
+    
+    async def FuncCallIterate(self, context: FuncCallContext, name: str, parameters: str) -> common.CallResult:
+        logname = '/var/log/quark/{}.log'.format(context.id)
+        with open(logname, 'w') as f:
+            with redirect_stdout(f):
+                with redirect_stderr(f):
+                    try:
+                        function = getattr(func, name)
+                        if function is None:
+                            return common.CallResult("", "There is no func named {}".format(name))
+                        
+                        kwargs = json.loads(parameters)
+                        result = None
+                        err = None
+
+                        ack = func_pb2.FuncAgentCallAck(
+                            id=context.id, error="", 
+                            calleePodId=self.funcPodId
+                        )
+                        
+                        self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(FuncAgentCallAck=ack))
+                
+                        async for data in function(context, **kwargs):
+                            await self.SendMsg(
+                                context,
+                                context.parent,
+                                0,
+                                dict(),
+                                data
+                            )
+                            
+                        return common.CallResult("", "")
+                    except Exception as err:
+                        err = "func xxxx {} call iterate fail with exception {} {}".format(name, err, traceback.format_exc())
+                        return common.CallResult("", err)
+    
     async def FuncCall(self, context: FuncCallContext, name: str, parameters: str) -> common.CallResult:
         logname = '/var/log/quark/{}.log'.format(context.id)
         with open(logname, 'w') as f:
@@ -283,8 +515,7 @@ class FuncMgr:
                             err = ""
                         return common.CallResult(result, err)
                     except Exception as err:
-                        err = "func {} call fail with exception {} {}".format(name, err, traceback.format_exc())
-                        print(err)
+                        err = "func ttttt {} call fail with exception {} {}".format(name, err, traceback.format_exc())
                         return common.CallResult("", err)
     
     def Close(self) : 
@@ -295,23 +526,63 @@ class FuncMgr:
             req = await self.reqQueue.get();
             if req is None:
                 break
-            context = FuncCallContext(req.jobId, req.id)
-            res = await self.FuncCall(context, req.funcName, req.parameters)
+            parent = FuncInstance(req.callerNodeId, req.callerPodId, req.callerFuncId)
+            context = FuncCallContext(req.jobId, req.id, parent)
+            res = None
+            self.context = context
+            if req.callType == 1 :
+                res = await self.FuncCall(context, req.funcName, req.parameters)
+            else:
+               res = await self.FuncCallIterate(context, req.funcName, req.parameters)
+            self.context = None
             resp = func_pb2.FuncAgentCallResp(id=req.id, resp=res.res, error=res.error)
             self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(msgId=2, FuncAgentCallResp=resp))
+    
+    def DispatchFuncMsg(self, msg: func_pb2.FuncMsg):
+        resp = func_pb2.FuncMsgAck(error="")
+        if msg.dstPodId != self.funcPodId:
+            resp = func_pb2.FuncMsgAck(error="can't find target func pod")
+            return;
+        
+        if self.context is not None:
+            self.context.DispatchFuncMsg(msg)
+            
+        ack = func_pb2.FuncMsg (
+            msgId = msg.msgId,
+            srcNodeId = msg.dstNodeId,
+            srcPodId = msg.dstPodId,
+            srcFuncId = msg.dstFuncId,
+            dstNodeId = msg.srcNodeId,
+            dstPodId = msg.srcPodId,
+            dstFuncId = msg.srcFuncId,
+            FuncMsgAck = resp
+        )
+        self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(msgId=2, FuncMsg=ack))
             
     async def FuncAgentClientProcess(self, msg: func_pb2.FuncAgentMsg):
-            msgType = msg.WhichOneof('EventBody')
-            match msgType:
-                case 'FuncAgentCallReq' :
-                    req = msg.FuncAgentCallReq
-                    self.LocalCall(req)
-                case 'FuncAgentCallResp':
-                    resp = msg.FuncAgentCallResp
-                    res = common.CallResult(res=resp.resp, error=resp.error)
-                    self.CallRespone(resp.id, res)
-                case _ :
-                    self.blob_mgr.OnFuncAgentMsg(msg)
+        msgType = msg.WhichOneof('EventBody')
+        match msgType:
+            case 'FuncAgentCallReq' :
+                req = msg.FuncAgentCallReq
+                self.LocalCall(req)
+            case 'FuncAgentCallResp':
+                resp = msg.FuncAgentCallResp
+                res = common.CallResult(res=resp.resp, error=resp.error)
+                self.CallRespone(resp.id, res)
+            case 'FuncAgentCallAck':
+                resp = msg.FuncAgentCallAck
+                self.CallIterateAck(resp.id, resp)
+            case 'FuncMsg':
+                msg = msg.FuncMsg
+                payloadType = msg.WhichOneof('Payload')
+                match payloadType:
+                    case 'FuncMsgBody':
+                        self.DispatchFuncMsg(msg)
+                        
+                    case 'FuncMsgAck':
+                        self.MsgAck(msg)
+            case _ :
+                self.blob_mgr.OnFuncAgentMsg(msg)
                     
     async def StartClientProcess(self):
         print("start to connect addr ", self.svcAddr)

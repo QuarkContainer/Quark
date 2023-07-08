@@ -47,6 +47,7 @@ pub struct FuncCallInner {
     pub callerFuncPodId: String,
     pub calleeNodeId: String,
     pub calleeFuncPodId: String,
+    pub callType: i32,
     
 }
 
@@ -66,6 +67,7 @@ impl FuncCallInner {
             caller_pod_id: self.callerFuncPodId.clone(),
             callee_node_id: self.calleeNodeId.clone(),
             callee_pod_id: self.calleeFuncPodId.clone(),
+            call_type: self.callType,
         }
     }
 }
@@ -235,6 +237,7 @@ impl FuncAgent {
             callerFuncCallId: req.caller_func_id.clone(),
             priority: req.priority as usize,
             createTime: createTime,
+            callType: req.call_type,
         };
 
         let funcCall = FuncCall(Arc::new(inner));
@@ -255,6 +258,7 @@ impl FuncAgent {
             caller_pod_id: callerFuncPodId.to_string(),
             callee_node_id: String::new(),
             callee_pod_id: String::new(),
+            call_type: req.call_type,
         };
 
         FUNC_SVC_CLIENT.get().unwrap().Send(func::FuncSvcMsg {
@@ -317,6 +321,7 @@ impl FuncAgent {
             callerFuncCallId: req.caller_func_id.clone(),
             priority: req.priority as usize,
             createTime: createTimeProto.ToSystemTime(),
+            callType: req.call_type,
         }; 
 
         let funcCall = FuncCall(Arc::new(inner));
@@ -333,6 +338,7 @@ impl FuncAgent {
             caller_node_id: req.caller_node_id.clone(),
             caller_pod_id: req.caller_pod_id.clone(),
             caller_func_id: req.caller_func_id.clone(),
+            call_type: req.call_type
         };
 
         funcPod.SetState(funcPodState::Running(funcCall));
@@ -374,6 +380,29 @@ impl FuncAgent {
         return Ok(())
     }
 
+    // when the func_agent get call ack from funcSvc
+    pub fn OnFuncSvcCallAck(&self, ack: func::FuncSvcCallAck) -> Result<()> {
+        let id = ack.id.clone();
+        let callerPodId = ack.caller_pod_id.clone();
+        
+        let resp = func::FuncAgentCallAck {
+            id: id,
+            error: ack.error,
+            callee_node_id: ack.callee_node_id,
+            callee_pod_id: ack.callee_pod_id,
+            caller_node_id: ack.caller_node_id,
+            caller_pod_id: ack.caller_pod_id,
+        };
+
+        // send response to the caller pod
+        self.funcPodMgr.SendTo(&callerPodId, func::FuncAgentMsg {
+            msg_id: 0,
+            event_body: Some(func::func_agent_msg::EventBody::FuncAgentCallAck(resp)),
+        })?;
+        
+        return Ok(())
+    }
+
     pub fn OnFuncSvcFuncMsg(&self, msg: func::FuncMsg) -> Result<()> { 
         let dstPod = msg.dst_pod_id.clone();
         match self.funcPodMgr.SendTo(&dstPod, func::FuncAgentMsg {
@@ -392,6 +421,7 @@ impl FuncAgent {
 
     // get msg from func_svc
     pub async fn OnFuncSvcMsg(&self, msg: func::FuncSvcMsg) -> Result<()> {
+        //error!("OnFuncSvcMsg msg {:#?}", &msg);
         let body = match msg.event_body {
             None => return Err(Error::EINVAL(format!("OneFuncSvcMsg has None event_body"))),
             Some(b) => b,
@@ -423,6 +453,9 @@ impl FuncAgent {
             }
             func::func_svc_msg::EventBody::FuncSvcCallResp(msg) => {
                 self.OnFuncSvcCallResp(msg)?;
+            }
+            func::func_svc_msg::EventBody::FuncSvcCallAck(msg) => {
+                self.OnFuncSvcCallAck(msg)?;
             }
             func::func_svc_msg::EventBody::FuncMsg(msg) => {
                 self.OnFuncSvcFuncMsg(msg)?;
@@ -497,7 +530,7 @@ pub async fn FuncAgentGrpcService(funcAgent: &FuncAgent) -> Result<()> {
 
     let path = NODEAGENT_CONFIG.FuncAgentSvcSocketAddr();
 
-    error!("FuncAgentGrpcService path is {}", &path);
+    info!("FuncAgentGrpcService path is {}", &path);
     std::fs::create_dir_all(Path::new(&path).parent().unwrap())?;
     std::fs::remove_file(Path::new(&path)).ok();
     let listener = UnixListener::bind(path).unwrap();
