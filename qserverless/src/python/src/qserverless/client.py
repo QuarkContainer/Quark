@@ -223,6 +223,10 @@ class FuncCallContext:
             mat.append(self.NewBlobVec(cols)) 
         return mat
     
+    async def BlobNew(self, buf: bytes):
+        blob = self.NewBlobAddr()
+        return await self.BlobWriteAll(blob, buf)
+    
     async def BlobWriteAll(self, addr: common.BlobAddr, buf: bytes): # -> common.QErr:
         (b, err) = await self.BlobCreate(addr)
         if err is not None :
