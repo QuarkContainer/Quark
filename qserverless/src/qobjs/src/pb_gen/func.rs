@@ -319,10 +319,8 @@ pub struct FuncAgentCallReq {
 pub struct FuncAgentCallResp {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub error: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub resp: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub res: ::core::option::Option<FuncRes>,
 }
 /// notify caller the funcinstance has been started
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -512,6 +510,7 @@ pub struct FuncPodDisconnResp {
 pub struct FuncSvcCallReq {
     #[prost(string, tag = "1")]
     pub job_id: ::prost::alloc::string::String,
+    /// this is calleeFuncCallId
     #[prost(string, tag = "2")]
     pub id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
@@ -524,14 +523,14 @@ pub struct FuncSvcCallReq {
     pub parameters: ::prost::alloc::string::String,
     #[prost(uint64, tag = "7")]
     pub priority: u64,
-    #[prost(string, tag = "8")]
-    pub caller_func_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "9")]
     pub createtime: ::core::option::Option<Timestamp>,
     #[prost(string, tag = "10")]
     pub caller_node_id: ::prost::alloc::string::String,
     #[prost(string, tag = "11")]
     pub caller_pod_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub caller_func_id: ::prost::alloc::string::String,
     /// when funcCall is process by a funcPod, this is the NodeId
     #[prost(string, tag = "12")]
     pub callee_node_id: ::prost::alloc::string::String,
@@ -546,10 +545,8 @@ pub struct FuncSvcCallReq {
 pub struct FuncSvcCallResp {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub error: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub resp: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub res: ::core::option::Option<FuncRes>,
     #[prost(string, tag = "8")]
     pub caller_node_id: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
@@ -559,6 +556,35 @@ pub struct FuncSvcCallResp {
     pub callee_node_id: ::prost::alloc::string::String,
     #[prost(string, tag = "11")]
     pub callee_pod_id: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Error {
+    /// 1: from user, 2: from system
+    #[prost(int32, tag = "1")]
+    pub source: i32,
+    #[prost(string, tag = "2")]
+    pub error: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FuncRes {
+    #[prost(oneof = "func_res::Res", tags = "2, 3")]
+    pub res: ::core::option::Option<func_res::Res>,
+}
+/// Nested message and enum types in `FuncRes`.
+pub mod func_res {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Res {
+        #[prost(message, tag = "2")]
+        Error(super::Error),
+        #[prost(string, tag = "3")]
+        Resp(::prost::alloc::string::String),
+    }
 }
 /// notify caller the funcinstance has been started
 #[derive(serde::Serialize, serde::Deserialize)]

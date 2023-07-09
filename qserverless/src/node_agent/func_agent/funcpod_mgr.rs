@@ -67,6 +67,7 @@ impl FuncPodMgr {
     }
 
     pub fn SendTo(&self, funcPodId: &str, msg: func::FuncAgentMsg) -> Result<()> {
+        error!("sendto msg is {:#?}", &msg);
         let pod = self.GetPod(funcPodId)?;
         pod.Send(msg)?;
         return Ok(())

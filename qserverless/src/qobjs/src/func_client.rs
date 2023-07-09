@@ -19,6 +19,9 @@ use tonic::transport::channel::Channel;
 
 use crate::func;
 use crate::common::*;
+use crate::types::FuncRes;
+use crate::types::FuncErr;
+use crate::types::FuncErrSource;
 
 pub struct FuncClient {
     pub client: func::func_agent_service_client::FuncAgentServiceClient<Channel>,
@@ -87,7 +90,7 @@ impl FuncClient {
         funcName: &str,
         parameters: &str,
         priority: usize,
-    ) -> SResult<String, String> {
+    ) -> SResult<String, FuncErr> {
         let id = uuid::Uuid::new_v4().to_string();
         let req = func::FuncAgentCallReq {
             job_id: id.clone(),
@@ -104,15 +107,17 @@ impl FuncClient {
         };
 
         let res = match self.client.func_call(req).await {
-            Err(e) => return Err(format!("funcall fail with error {:?}", e)),
-            Ok(res) => res,
+            Err(e) => FuncRes::NewError(
+                FuncErrSource::System,
+                format!("funcall fail with error {:?}", e)
+            ),
+            Ok(res) => {
+                let resp = res.into_inner();
+                let resp = resp.res.unwrap();
+                resp.into()
+            }
         };
 
-        let resp = res.into_inner();
-        if resp.error.len() > 0 {
-            return Err(resp.error);
-        } else {
-            return Ok(resp.resp);
-        }
+        return res.ToResult();
     }
 }

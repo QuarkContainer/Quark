@@ -17,6 +17,7 @@ use std::{sync::Arc, collections::BTreeMap};
 use std::ops::{Deref};
 use std::ops::Add;
 use std::ops::Sub;
+use std::result::Result as SResult;
 use regex::Regex;
 
 use prost::Message;
@@ -28,6 +29,7 @@ use crate::selection_predicate::*;
 use crate::ObjectMeta;
 use crate::k8s;
 use crate::system_types::{FuncPackage, FuncPackageSpec};
+use crate::func;
 
 pub const QMETASVC_PORT : u16 = 8890; 
 pub const GATEWAY_PORT : u16 = 8889;
@@ -76,6 +78,93 @@ pub const DefaultNodeAgentAddr                : &str = "unix:///var/lib/quark/no
 pub const DefaultNodeFuncLogFolder            : &str = "/var/log/quark";
 
 pub const BLOB_LOCAL_HOST                     : &str = "local";
+
+pub const ERROR_SOURCE_SYSTEM: i32 = 1;
+pub const ERROR_SOURCE_USER: i32 = 2;
+
+#[derive(Debug, Clone)]
+pub struct FuncErr {
+    pub source: i32,
+    pub error: String,
+}
+
+pub enum FuncErrSource {
+    System = 1,
+    User = 2,
+}
+
+#[derive(Debug)]
+pub enum FuncRes {
+    Error(FuncErr),
+    Resp(String)
+}
+
+impl From<func::FuncRes> for FuncRes {
+    fn from(item: func::FuncRes) -> Self {
+        let res = item.res.unwrap();
+        match res {
+            func::func_res::Res::Error(error) => {
+                return Self::NewErrorWithCode(error.source, error.error)
+            }
+            func::func_res::Res::Resp(resp) => {
+                return Self::NewResponse(resp)
+            }
+        }
+    }
+}
+
+impl FuncRes {
+    pub fn NewError(source: FuncErrSource, error: String) -> Self {
+        return Self::Error(FuncErr {
+            source: source as i32,
+            error: error
+        })
+    }
+
+    pub fn NewErrorWithCode(source: i32, error: String) -> Self {
+        return Self::Error(FuncErr {
+            source: source,
+            error: error
+        })
+    }
+
+    pub fn ToResult(&self) -> SResult<String, FuncErr> {
+        match self {
+            FuncRes::Resp(resp) => return Ok(resp.clone()),
+            FuncRes::Error(e) => return Err(e.clone()),
+        }
+    }
+
+    pub fn NewResponse(response: String) -> Self {
+        return Self::Resp(response)
+    }
+
+    pub fn ToGrpc(&self) -> func::FuncRes {
+        let res = match self {
+            Self::Error(e) => {
+                let error = func::Error {
+                    source: e.source,
+                    error: e.error.clone(),
+                };
+                func::func_res::Res::Error(error)
+            }
+            Self::Resp(r) => {
+                func::func_res::Res::Resp(r.clone())
+            }
+        };
+
+        return func::FuncRes {
+            res: Some(res)
+        }
+    }
+
+    pub fn Success(&self) -> bool {
+        match self {
+            Self::Error(_) => false,
+            Self::Resp(_) => true,
+        }
+    }
+}
 
 pub trait DeepCopy {
     fn DeepCopy(&self) -> Self;

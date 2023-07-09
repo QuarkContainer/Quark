@@ -14,6 +14,8 @@
 
 import json
 
+import qserverless.func_pb2 as func_pb2
+
 class QErr:
     def __init__(self, err: str):
         self.err = err
@@ -21,11 +23,38 @@ class QErr:
         return f"QErr: error is '{self.err}'"
 
 class CallResult:
-    def __init__(self, res: str, error: str):
+    def __init__(self, res: str, error: str="", source="user"):
         self.res = res
         self.error = error
+        self.source = source
+        
     def __str__(self):
-        return f"CallResult: res is '{self.res}', error is '{self.error}'"
+        return f"CallResult: res is '{self.res}', error is '{self.error}' from '{self.source}'"
+    
+    def ToGrpc(self) -> func_pb2.FuncRes :
+        res = None
+        if len(self.error) > 0 :
+            error = None
+            if self.source == 'user':
+                error = func_pb2.Error(source=1, error=self.error)
+            else:
+                error = func_pb2.Error(source=2, error=self.error)
+            return func_pb2.FuncRes(error=error)
+        else:
+            return func_pb2.FuncRes(resp=self.res)
+            
+
+class QException(Exception):
+    """Exception raised for funcCall
+
+    Attributes:
+        source -- where is exception from "system" or "user"
+        error -- explanation of the error
+    """
+    def __init__(self, error, source="user"):
+        self.source = source
+        self.error = error
+        super().__init__(self.error)
 
 class BlobAddr(dict):
     def __init__(self, blobSvcAddr: str, name: str):

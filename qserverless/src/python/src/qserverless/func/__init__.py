@@ -25,12 +25,12 @@ async def AITest(context, test):
     print("AITest ", test)
     return await handwritingClassification(context)
     
-async def wordcount(context, filenames: list[str]): # -> (str, qserverless.Err):
+async def wordcount(context, filenames: list[str]) -> str: 
     pcount = len(filenames)
     blobMatrix = list();
 
     results = await asyncio.gather(
-        *[context.RemoteCall(
+        *[context.CallFunc(
             packageName = "pypackage1",
             funcName = "map",
             filename = filenames[i],
@@ -38,10 +38,7 @@ async def wordcount(context, filenames: list[str]): # -> (str, qserverless.Err):
         ) for i in range(0, pcount)]
     )
     
-    for res, err in results:
-        if err is not None:
-            print("wordcount 1 ", res, err)
-            return (None, qserverless.QErr(err))
+    for res in results:
         blobVec = json.loads(res)
         blobMatrix.append(blobVec)
         
@@ -50,20 +47,17 @@ async def wordcount(context, filenames: list[str]): # -> (str, qserverless.Err):
     wordCounts = dict()
     
     results = await asyncio.gather(
-        *[context.RemoteCall(
+        *[context.CallFunc(
             packageName = "pypackage1",
             funcName = "reduce",
             blobs = shuffBlobs[i]
         ) for i in range(0, 2)]
     )
-    for res, err in results:
-        if err is not None :
-            print("wordcount 2 ", res, err)
-            return (None, err)
+    for res in results:
         map = json.loads(res)
         wordCounts.update(map)
     
-    return (json.dumps(wordCounts), None)
+    return json.dumps(wordCounts)
 
 def hash_to_int(string):
     hash_object = hashlib.shake_128(string.encode('utf-8'))
@@ -71,7 +65,7 @@ def hash_to_int(string):
     hash_int = int.from_bytes(hash_digest, byteorder='big')
     return hash_int
 
-async def map(context, filename: str, pcount: int): # -> (str, qserverless.Err):   
+async def map(context, filename: str, pcount: int) -> str: 
     blobs = context.NewBlobAddrVec(pcount)
     word_counts = []
     for i in range(0, pcount):
@@ -92,19 +86,15 @@ async def map(context, filename: str, pcount: int): # -> (str, qserverless.Err):
     print("map2 ", filename, word_counts[1])
     for i in range(0, pcount):
         str = json.dumps(word_counts[i])
-        (addr, err) = await context.BlobWriteAll(blobs[i], bytes(str, 'utf-8'))
-        if err is not None :
-            return (None, err)
+        addr = await context.BlobWriteAll(blobs[i], bytes(str, 'utf-8'))
         blobs[i] = addr
     
-    return (json.dumps(blobs), None)
+    return json.dumps(blobs)
 
-async def reduce(context, blobs: qserverless.BlobAddrVec): # -> (str, qserverless.Err):
+async def reduce(context, blobs: qserverless.BlobAddrVec) -> str : 
     wordcounts = dict()
     for b in blobs :
-        (data, err) = await context.BlobReadAll(b)
-        if err is not None :
-            return (None, err)
+        data = await context.BlobReadAll(b)
         str = data.decode('utf-8')
         map = json.loads(str)
         for word, count in map.items():
@@ -112,34 +102,38 @@ async def reduce(context, blobs: qserverless.BlobAddrVec): # -> (str, qserverles
                 wordcounts[word] += count
             else:
                 wordcounts[word] = count 
-    print("reduce ", wordcounts)
-    return (json.dumps(wordcounts), None)
+    return json.dumps(wordcounts)
 
 
 async def call_echo(context, msg: str): # -> (str, qserverless.Err):   
-    (res, err) = await context.RemoteCall(
+    res = await context.CallFunc(
         packageName= "",
         funcName= "echo",
         msg = msg,
         priority= 1
     )
 
-    return ("call_echo %s"%res, None)
+    return "call_echo %s"%res
 
-async def echo(context, msg: str): # -> (str, qserverless.Err):   
+async def echo(context, msg: str) -> str: 
     print("echo .... get message", msg);
     print('stderr', file=sys.stderr)
-    return (msg, None)
+    return msg
 
 
 async def readfile(context, filename: str):
+    directory = os.getcwd()
+
+    print("current path is ", directory)
+    
     with open(filename,'r') as file:
         contents = file.read()
-        return (contents, None)
+        return contents
     
-async def IternateCall(context, msg: str):
-    yield msg + "asdf1"
+async def IternateCall(context, msg: str) -> str :
+    await context.SendToParent(msg + "asdf1")
     print("IternateCall 1")
-    msg1 = await context.ReadParentMsg()
+    msg1 = await context.RecvFromParent()
     print("IternateCall 2")
-    yield msg1 + "asdfdf2"
+    await context.SendToParent(msg + "asdf2")
+    return "test result"

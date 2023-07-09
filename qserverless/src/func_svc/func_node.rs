@@ -323,10 +323,15 @@ impl FuncNode {
                     &req.id, 
                     FuncStateFail
                 )?;
+
+                let funcRes = FuncRes::NewError(
+                    FuncErrSource::System, 
+                    format!("FuncCall fail as package {:?} doesn't exist", &packageId)
+                );
+
                 let resp = func::FuncSvcCallResp {
                     id: req.id,
-                    error: format!("FuncCall fail as package {:?} doesn't exist", &packageId),
-                    resp: String::new(),
+                    res: Some(funcRes.ToGrpc()),
                     caller_node_id: req.caller_node_id.clone(),
                     caller_pod_id: req.caller_pod_id.clone(),
                     callee_node_id: req.callee_node_id.clone(),

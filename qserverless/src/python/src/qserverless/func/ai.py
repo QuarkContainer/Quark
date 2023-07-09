@@ -84,9 +84,9 @@ async def trainer(context, blob, state, epoch, i, parallelism):
     trainStart = datetime.now()
     model = ConvNet()
     
-    (data, err) = await context.BlobReadAll(blob)
+    data = await context.BlobReadAll(blob)
     model = load_model(data, 'average')
-    (statedata, err) = await context.BlobReadAll(state)
+    statedata = await context.BlobReadAll(state)
  
     model.to(device)
 
@@ -136,17 +136,13 @@ async def trainer(context, blob, state, epoch, i, parallelism):
     print("trainrunner ....2")
     blobs = list()
     
-    (state_blob, err) = await context.BlobNew(state_data)
-    if err is not None :
-        return (None, err)
+    state_blob = await context.BlobNew(state_data)
     blobs.append(state_blob)
     
-    (model_blob, err) = await context.BlobNew(model_data)
-    if err is not None :
-        return (None, err)
+    model_blob = await context.BlobNew(model_data)
     blobs.append(model_blob)
     
-    return (json.dumps(blobs), None)
+    return json.dumps(blobs)
 
 def save_state(optimizer, i):
     data = pickle.dumps(optimizer.state_dict())
@@ -167,10 +163,7 @@ async def model_weight_average_runner(context, blobs: qserverless.BlobAddrVec, p
 
     beta = 1.0/parallelism 
     for i in range(parallelism):
-        (data, err) = await context.BlobReadAll(blobs[i])
-        if err is not None :
-            print("model_weight_average_runner 2");
-            return (None, err)
+        data = await context.BlobReadAll(blobs[i])
         cur_model = load_model(data, i)
         for key in cur_model.state_dict():
             if i == 0:
@@ -181,12 +174,12 @@ async def model_weight_average_runner(context, blobs: qserverless.BlobAddrVec, p
     model.load_state_dict(sd_avg)
     model_data = save_model(model, 'average')
     blob = context.NewBlobAddr()
-    (addr, err) = await context.BlobWriteAll(blob, model_data)
+    addr = await context.BlobWriteAll(blob, model_data)
     print("model_weight_average_runner 4");
-    return (json.dumps(addr), err)
+    return json.dumps(addr)
 
 async def handwritingClassification(context):
-    epochs = 4
+    epochs = 2
     parallelism = 2
     
     model = ConvNet()
@@ -196,8 +189,8 @@ async def handwritingClassification(context):
     state_data = save_state(optimizer, 0)
     
     
-    (model_blob, err) = await context.BlobNew(model_data)
-    (state_blob, err) = await context.BlobNew(state_data)
+    model_blob = await context.BlobNew(model_data)
+    state_blob = await context.BlobNew(state_data)
     
     blob = model_blob
     
@@ -207,8 +200,8 @@ async def handwritingClassification(context):
     
     for epoch in range(epochs):
         results = await asyncio.gather(
-                    *[context.RemoteCall(
-                        packageName = "pypackage2",
+                    *[context.CallFunc(
+                        packageName = "pypackage1",
                         funcName = "trainer",
                         blob = blob,
                         state = states[i],
@@ -218,27 +211,23 @@ async def handwritingClassification(context):
                     ) for i in range(0, parallelism)]
                 )
         blobMatrix = list();
-        for res, err in results:
-            if err is not None:
-                return (None, qserverless.QErr(err))
+        for res in results:
             blobVec = json.loads(res)
             blobMatrix.append(blobVec)
         
         shuffBlobs = qserverless.TransposeBlobMatrix(blobMatrix)
         states = shuffBlobs[0]
-        (res, err) = await context.RemoteCall(
-                packageName = "pypackage2",
+        res = await context.CallFunc(
+                packageName = "pypackage1",
                 funcName = "model_weight_average_runner",
                 blobs = shuffBlobs[1],
                 parallelism = parallelism
         )
-        if err is not None:
-            return (None, qserverless.QErr(err))
         blob = json.loads(res)
         print("success ", epoch)
     
-    (res, err) = await context.RemoteCall(
-                packageName = "pypackage2",
+    res = await context.CallFunc(
+                packageName = "pypackage1",
                 funcName = "validaterunner",
                 blob = blob,
                 batch_size = batch_size
@@ -246,7 +235,7 @@ async def handwritingClassification(context):
   
     print("finish.....")
     
-    return (res, None)
+    return res
 
 
 def validate(model, device, batch_size) -> (float, float):
@@ -284,10 +273,10 @@ def validate(model, device, batch_size) -> (float, float):
 
 async def validaterunner(context, blob, batch_size):
     device = "cpu"
-    (data, err) = await context.BlobReadAll(blob)
+    data = await context.BlobReadAll(blob)
     
     model = ConvNet()
     model = load_model(data, 'average')
     (accu, loss) = validate(model, device, batch_size)
     print("accu is ", accu, "loss is ", loss)
-    return ("accus is {} loss is {}".format(accu, loss), None)
+    return "accus is {} loss is {}".format(accu, loss)

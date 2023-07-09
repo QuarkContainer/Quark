@@ -32,106 +32,106 @@ def GetNodeAgentAddrFromEnvVar() :
 
 async def wordcount():
     # Start the background task
-    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage2", True)
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage1", True)
     background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
     jobContext = qserverless.NewJobContext()
-    filenames = ["./test.py", "./sync_test.py"]
-    (res, err) = await func.wordcount(jobContext, filenames)
+    filenames = ["../test.py", "../sync_test.py"]
+    res = await func.wordcount(jobContext, filenames)
     print("res is ", res)
-    #await background_task_coroutine
+    
 
 async def remote_wordcount():
     # Start the background task
-    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage2", True)
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage1", True)
     background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
     jobContext = qserverless.NewJobContext()
-    filenames = ["./test.py", "./sync_test.py"]
-    (res, err) = await jobContext.RemoteCall(
+    filenames = ["../test.py", "../sync_test.py"]
+    res = await jobContext.CallFunc(
             #packageName = "pypackage1",
             funcName = "wordcount",
             filenames = filenames
         )
-    print("res is ", res, " error is {}", err)
+    print("res is ", res)
 
 async def readfile():
     # Start the background task
-    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage2", True)
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage1", True)
     background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
     jobContext = qserverless.NewJobContext()
-    filename = "src/qserverless/func/__init__.py"
-    (res, err) = await jobContext.RemoteCall(
+    filename = "qserverless/func/__init__.py"
+    res = await jobContext.CallFunc(
             funcName = "readfile",
             filename = filename
         )
     print("res is ", res)
 
-async def remoteCallEcho():
+async def CallFuncEcho():
     qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage1", True)
     background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
     jobContext = qserverless.NewJobContext()
-    (res, err) = await jobContext.RemoteCall(
+    res = await jobContext.CallFunc(
             funcName = "echo",
             msg = "hello world"
         )
-    print("remoteCallecho result ", res, " err ", err)
+    print("CallFuncecho result ", res)
 
-async def remoteCallCallEcho():
-    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage2", True)
+async def CallFuncCallEcho():
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage1", True)
     background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
     jobContext = qserverless.NewJobContext()
-    (res, err) = await jobContext.RemoteCall(
+    res = await jobContext.CallFunc(
             funcName = "call_echo",
             msg = "hello world"
         )
-    print("remoteCallCallEcho result ", res, " err ", err)
+    print("CallFuncCallEcho result ", res)
 
 async def ai():
-    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage2", True)
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage1", True)
     background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
     jobContext = qserverless.NewJobContext()
-    (res, err) = await func.AITest(jobContext, "testai")
-    print("res is ", res, " error is {}", err)
+    res = await func.AITest(jobContext, "testai")
+    print("res is ", res)
 
 async def remote_ai():
-    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage2", True)
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage1", True)
     background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
     jobContext = qserverless.NewJobContext()
-    (res, err) = await jobContext.RemoteCall(
+    res = await jobContext.CallFunc(
             funcName = "AITest",
             test = "hello world"
         )
-    print("res is ", res, " error is {}", err)
+    print("res is ", res)
 
 async def call_none(): # -> (str, qserverless.Err):   
     qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage1", True)
     background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
     jobContext = qserverless.NewJobContext()
     results = await asyncio.gather(
-        *[jobContext.RemoteCall(
+        *[jobContext.CallFunc(
             packageName = "pypackage1",
             funcName = "None",
         ) for i in range(0, 2)]
     )
 
-    for res, err in results:
-        print("res ", res, "err ", err)
+    for res in results:
+        print("res ", res)
 
 async def IternateCallTest():
     qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage1", True)
     background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
     jobContext = qserverless.NewJobContext()
-    fi = await jobContext.RemoteCallIterate(
+    fi = await jobContext.StartFunc(
             packageName = "pypackage1",
             funcName = "IternateCall",
             msg = "test"
     )
     print("IternateCallTest *************** 1 ", fi.funcId)
-    msg1 = await jobContext.ReadChildMsg(fi)
+    msg1 = await jobContext.ReadFromChild(fi)
     print("IternateCallTest *************** 2 ", msg1)
-    await jobContext.SendChildMsg(fi, 1, "parent msg")
-    msg2 = await jobContext.ReadChildMsg(fi)
+    await jobContext.SendToChild(fi, "parent msg")
+    msg2 = await jobContext.ReadFromChild(fi)
     print("IternateCallTest *************** 3 ", msg2)
-    msg3 = await jobContext.ReadChildMsg(fi)
+    msg3 = await jobContext.ReadFromChild(fi)
     print("IternateCallTest *************** 4 ", msg3) 
 
 async def main() : 
@@ -139,9 +139,9 @@ async def main() :
     print("test is ", test)
     match test:
         case "echo" : 
-            await remoteCallEcho()
+            await CallFuncEcho()
         case "call_echo" : 
-            await remoteCallCallEcho()
+            await CallFuncCallEcho()
         case "wordcount":
             await wordcount()
         case "remote_wordcount":
