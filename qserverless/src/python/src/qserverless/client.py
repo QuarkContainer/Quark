@@ -99,20 +99,20 @@ class FuncCallContext:
         self.parent = parent
         self.msgQueues = dict()
     
-    async def SendMsg(self, funcInstance: FuncInstance, msgCode: int, data: str):
-        await funcMgr.SendMsg(self, funcInstance, msgCode, dict(), data)
+    async def SendMsg(self, funcInstance: FuncInstance, data: str):
+        await funcMgr.SendMsg(self, funcInstance, data)
     
-    async def ReadParentMsg(self):
+    async def RecvFromParent(self):
         return await self.parent.ReadMsg()
     
-    async def ReadChildMsg(self, funcInstance: FuncInstance):
+    async def RecvFromChild(self, funcInstance: FuncInstance):
         return await funcInstance.ReadMsg()
     
-    async def SendParentMsg(self, msgCode: int, data: str):
-        await self.SendMsg(self, self.parent, msgCode, data)
+    async def SendToParent(self, data: str):
+        await self.SendMsg(self, self.parent, data)
     
-    async def SendChildMsg(self, funcInstance: FuncInstance, msgCode: int, data: str):
-        await self.SendMsg(funcInstance, msgCode, data)
+    async def SendToChild(self, funcInstance: FuncInstance, data: str):
+        await self.SendMsg(funcInstance, data)
     
     def NewTaskContext(self) :
         id = str(uuid.uuid4())
@@ -147,10 +147,10 @@ class FuncCallContext:
         
         funcInstance.msgQueue.put_nowait((msg.FuncMsgBody.data, ""))
         
-    async def RemoteCall(
+    async def CallFunc(
         self,
         **kwargs
-        ) : # -> (str, common.QErr):
+        ) -> str :
         packageName = kwargs.get('packageName')
         if packageName is None :
             packageName = ""
@@ -166,7 +166,7 @@ class FuncCallContext:
         del kwargs['funcName']
         parameters = json.dumps(kwargs)
                  
-        res = await funcMgr.RemoteCall(
+        res = await funcMgr.CallFunc(
             self, 
             packageName, 
             funcName, 
@@ -175,11 +175,9 @@ class FuncCallContext:
             parameters
         )
         
-        if res.error == "":
-            return (res.res, None)
-        return (None, common.QErr(res.error))
+        return res
     
-    async def RemoteCallIterate(self, **kwargs) -> FuncInstance:
+    async def StartFunc(self, **kwargs) -> FuncInstance:
         packageName = kwargs.get('packageName')
         if packageName is None :
             packageName = ""
@@ -195,7 +193,7 @@ class FuncCallContext:
         del kwargs['funcName']
         parameters = json.dumps(kwargs)
          
-        res = await funcMgr.RemoteCallIterate(
+        res = await funcMgr.StartFunc(
             self, 
             packageName, 
             funcName, 
@@ -227,58 +225,44 @@ class FuncCallContext:
         blob = self.NewBlobAddr()
         return await self.BlobWriteAll(blob, buf)
     
-    async def BlobWriteAll(self, addr: common.BlobAddr, buf: bytes): # -> common.QErr:
-        (b, err) = await self.BlobCreate(addr)
-        if err is not None :
-            return (None, err) 
-        err = await b.Write(buf)
-        if err is not None :
-            return (None, err)  
-        ret = await b.Close()
-        if err is not None :
-            return (None, err)  
-        
-        return (b.addr, None) 
+    async def BlobWriteAll(self, addr: common.BlobAddr, buf: bytes): 
+        b = await self.BlobCreate(addr)
+        await b.Write(buf)
+        await b.Close()
+        return b.addr 
     
     async def BlobReadAll(self, addr: common.BlobAddr): # -> (bytes, common.QErr):
-        (b, err) = await self.BlobOpen(addr)
-        if err is not None :
-            return (None, err)
+        b = await self.BlobOpen(addr)
         ret = bytes()
         size = 64 * 1024
         while True:
-            (data, err) = await b.Read(size)
-            if err is not None :
-                return (None, err)
+            data = await b.Read(size)
             ret = ret + data
             if len(data) < size:
                 break
             
-        err = await b.Close()
-        if err is not None :
-            return (None, err)
-        
-        return (ret, None)
+        await b.Close()
+        return ret
             
-    async def BlobCreate(self, addr: common.BlobAddr): #-> (UnsealBlob, common.QErr):
+    async def BlobCreate(self, addr: common.BlobAddr) :
         return await funcMgr.BlobCreate(addr)
     
-    async def BlobWrite(self, id: np.uint64, buf: bytes) -> common.QErr:
+    async def BlobWrite(self, id: np.uint64, buf: bytes) :
         return await funcMgr.BlobWrite(id, buf)
     
-    async def BlobOpen(self, addr: common.BlobAddr) : #-> (Blob, common.QErr):
+    async def BlobOpen(self, addr: common.BlobAddr) : 
         return await funcMgr.BlobOpen(addr)
     
-    async def BlobDelete(self, svcAddr: str, name: str) -> common.QErr:
+    async def BlobDelete(self, svcAddr: str, name: str) :
         return await funcMgr.BlobDelete(svcAddr, name)
     
-    async def BlobRead(self, id: np.uint64, len: np.uint64) : #-> (bytes, common.QErr):
+    async def BlobRead(self, id: np.uint64, len: np.uint64) : 
         return await funcMgr.BlobRead(id, len)
     
     async def BlobSeek(self, id: np.uint64, seekType: int, pos: np.int64) : #-> (int, common.QErr):
         return await funcMgr.BlobSeek(id, seekType, pos)
     
-    async def BlobClose(self, id: np.uint64) -> common.QErr:
+    async def BlobClose(self, id: np.uint64) :
         return await funcMgr.BlobClose(id)
 
 def NewJobContext() -> FuncCallContext :
@@ -311,7 +295,7 @@ class FuncMgr:
         priority: int,
         parameters: str,
         callType: int
-        ) : 
+        ) -> str : 
         
         if packageName == "" :
             packageName = self.packageName
@@ -332,9 +316,11 @@ class FuncMgr:
         self.callerCalls[id] = callQueue
         self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(msgId=0, FuncAgentCallReq=req))
         res = await callQueue.async_q.get()
-        return res
+        if len(res.error) > 0:
+            raise common.QException(res.error, res.source)
+        return res.res
     
-    async def RemoteCall(
+    async def CallFunc(
         self,
         context: FuncCallContext,
         packageName: str, 
@@ -342,7 +328,7 @@ class FuncMgr:
         callerFuncId: str,
         priority: int,
         parameters: str 
-        ) -> common.CallResult: 
+        ) -> str: 
         return await self.Call (
             context,
             packageName,
@@ -353,7 +339,7 @@ class FuncMgr:
             1
         )
         
-    async def RemoteCallIterate(
+    async def StartFunc(
         self,
         context: FuncCallContext,
         packageName: str, 
@@ -379,8 +365,6 @@ class FuncMgr:
         self,
         context: FuncCallContext,
         funcInstance: FuncInstance,
-        msgCode: int,
-        annotations: dict,
         data: str
     ) : 
         id = str(uuid.uuid4())
@@ -408,7 +392,7 @@ class FuncMgr:
         assert msg.srcPodId == res.dstPodId
         assert msg.srcFuncId == res.dstFuncId
         if len(res.FuncMsgAck.error):
-            raise Exception("SendMsg msg annotations {} fail with error {}".format(annotations, res.FuncMsgAck.error))
+            raise Exception("SendMsg msg fail with error {}".format(res.FuncMsgAck.error))
     
     def MsgAck(self, ack: func_pb2.FuncMsg):
         id = ack.msgId
@@ -419,25 +403,25 @@ class FuncMgr:
         msgQueue.async_q.put_nowait(ack)
         self.funcMsgs.pop(id)
     
-    async def BlobCreate(self, addr: common.BlobAddr): #-> (UnsealBlob, common.QErr):
+    async def BlobCreate(self, addr: common.BlobAddr) : 
         return await funcMgr.blob_mgr.BlobCreate(addr['name'])
     
-    async def BlobWrite(self, id: np.uint64, buf: bytes) -> common.QErr:
+    async def BlobWrite(self, id: np.uint64, buf: bytes) :
         return await funcMgr.blob_mgr.BlobWrite(id, buf)
     
-    async def BlobOpen(self, addr: common.BlobAddr) : #-> (Blob, common.QErr):
+    async def BlobOpen(self, addr: common.BlobAddr) : 
         return await funcMgr.blob_mgr.BlobOpen(addr)
     
-    async def BlobDelete(self, svcAddr: str, name: str) -> common.QErr:
+    async def BlobDelete(self, svcAddr: str, name: str):
         return await funcMgr.blob_mgr.BlobDelete(svcAddr, name)
     
-    async def BlobRead(self, id: np.uint64, len: np.uint64) : #-> (bytes, common.QErr):
+    async def BlobRead(self, id: np.uint64, len: np.uint64) -> bytes : 
         return await funcMgr.blob_mgr.BlobRead(id, len)
     
-    async def BlobSeek(self, id: np.uint64, seekType: int, pos: np.int64) : #-> (int, common.QErr):
+    async def BlobSeek(self, id: np.uint64, seekType: int, pos: np.int64) -> int : 
         return await funcMgr.blob_mgr.BlobSeek(id, seekType, pos)
     
-    async def BlobClose(self, id: np.uint64) -> common.QErr:
+    async def BlobClose(self, id: np.uint64) :
         return await funcMgr.blob_mgr.BlobClose(id)
     
     def CallRespone(self, id: str, res: common.CallResult) :
@@ -459,7 +443,7 @@ class FuncMgr:
     def LocalCall(self, req: func_pb2.FuncAgentCallReq) :
         self.reqQueue.put_nowait(req)
     
-    async def FuncCallIterate(self, context: FuncCallContext, name: str, parameters: str) -> common.CallResult:
+    async def FuncCall(self, context: FuncCallContext, name: str, parameters: str, needAck: bool) -> common.CallResult:
         logname = '/var/log/quark/{}.log'.format(context.id)
         with open(logname, 'w') as f:
             with redirect_stdout(f):
@@ -467,55 +451,27 @@ class FuncMgr:
                     try:
                         function = getattr(func, name)
                         if function is None:
-                            return common.CallResult("", "There is no func named {}".format(name))
-                        
-                        kwargs = json.loads(parameters)
-                        result = None
-                        err = None
-
-                        ack = func_pb2.FuncAgentCallAck(
-                            id=context.id, error="", 
-                            calleePodId=self.funcPodId
-                        )
-                        
-                        self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(FuncAgentCallAck=ack))
-                
-                        async for data in function(context, **kwargs):
-                            await self.SendMsg(
-                                context,
-                                context.parent,
-                                0,
-                                dict(),
-                                data
+                            return common.CallResult(
+                                "", 
+                                "There is no func named {}".format(name),
+                                "system"
                             )
-                            
-                        return common.CallResult("", "")
-                    except Exception as err:
-                        err = "func xxxx {} call iterate fail with exception {} {}".format(name, err, traceback.format_exc())
-                        return common.CallResult("", err)
-    
-    async def FuncCall(self, context: FuncCallContext, name: str, parameters: str) -> common.CallResult:
-        logname = '/var/log/quark/{}.log'.format(context.id)
-        with open(logname, 'w') as f:
-            with redirect_stdout(f):
-                with redirect_stderr(f):
-                    try:
-                        function = getattr(func, name)
-                        if function is None:
-                            return common.CallResult("", "There is no func named {}".format(name))
                         
                         kwargs = json.loads(parameters)
                         result = None
                         err = None
+                        
+                        if needAck:
+                            ack = func_pb2.FuncAgentCallAck(
+                                id=context.id, 
+                                error="", 
+                                calleePodId=self.funcPodId
+                            )
+                            self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(FuncAgentCallAck=ack))
 
-                        (result, err) = await function(context, **kwargs)
-                        if result is None:
-                            result = ""
-                        if err is not None:
-                            err = json.dumps(err)
-                        else:
-                            err = ""
-                        return common.CallResult(result, err)
+                        result = await function(context, **kwargs)
+                        
+                        return common.CallResult(result)
                     except Exception as err:
                         err = "func {} call fail with exception {} {}".format(name, err, traceback.format_exc())
                         return common.CallResult("", err)
@@ -533,11 +489,12 @@ class FuncMgr:
             res = None
             self.context = context
             if req.callType == 1 :
-                res = await self.FuncCall(context, req.funcName, req.parameters)
+                res = await self.FuncCall(context, req.funcName, req.parameters, False)
             else:
-               res = await self.FuncCallIterate(context, req.funcName, req.parameters)
+                res = await self.FuncCall(context, req.funcName, req.parameters, True)
+                #res = await self.FuncCallIterate(context, req.funcName, req.parameters)
             self.context = None
-            resp = func_pb2.FuncAgentCallResp(id=req.id, resp=res.res, error=res.error)
+            resp = func_pb2.FuncAgentCallResp(id=req.id, res=res.ToGrpc())
             self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(msgId=2, FuncAgentCallResp=resp))
     
     def DispatchFuncMsg(self, msg: func_pb2.FuncMsg):
@@ -568,9 +525,16 @@ class FuncMgr:
                 req = msg.FuncAgentCallReq
                 self.LocalCall(req)
             case 'FuncAgentCallResp':
-                resp = msg.FuncAgentCallResp
-                res = common.CallResult(res=resp.resp, error=resp.error)
-                self.CallRespone(resp.id, res)
+                id = msg.FuncAgentCallResp.id
+                resp = msg.FuncAgentCallResp.res
+                respType = resp.WhichOneof('res')
+                res = None
+                match respType:
+                    case 'error':
+                        res = common.CallResult(res='', error=resp.error.error, source=resp.error.source)
+                    case 'resp':
+                        res = common.CallResult(res=resp.resp)
+                self.CallRespone(id, res)
             case 'FuncAgentCallAck':
                 resp = msg.FuncAgentCallAck
                 self.CallIterateAck(resp.id, resp)
@@ -645,7 +609,7 @@ def Call(**kwargs) :# -> (str, qserverless.Err):
     funcName = kwargs.get('funcName')
     if packageName is None :
         print("there is no funcname in parameter list")
-        return (None, common.QErr("Error: there is no funcname in parameter list"))
+        raise Exception("Error: there is no funcname in parameter list")
     else: 
         del kwargs['funcName']
     
@@ -672,12 +636,25 @@ def Call(**kwargs) :# -> (str, qserverless.Err):
         packageName = packageName,
         funcName = funcName,
         parameters = parameters,
-        priority = priority
+        priority = priority,
+        callType = 1
     )
     
     channel = grpc.insecure_channel(svcAddr)
     stub = FuncAgentServiceStub(channel)
     
     res = stub.FuncCall(req)
-    return common.CallResult(res.resp, res.error)
+    
+    resp = res.res
+    respType = resp.WhichOneof('res')
+    res = None
+    match respType:
+        case 'error':
+            res = common.CallResult(res='', error=resp.error.error, source=resp.error.source)
+        case 'resp':
+            res = common.CallResult(res=resp.resp)
+            
+    if len(res.error) > 0:
+            raise common.QException(res.error, res.source)
+    return res.res
     

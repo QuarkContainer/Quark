@@ -20,18 +20,18 @@ def echo():
         # "unix:///var/lib/quark/nodeagent/node1/sock",
         svcAddr = "127.0.0.1:8889", 
         namespace = "ns1", 
-        packageName = "pypackage2",
+        packageName = "pypackage1",
         funcName = "echo",
         msg = "hello world"
     )
     print("echo result is ", res)
 
 def wordcount():
-    filenames = ["./test.py", "./sync_test.py"]
+    filenames = ["../test.py", "../sync_test.py"]
     res = qserverless.Call(
         svcAddr = "127.0.0.1:8889", 
         namespace = "ns1", 
-        packageName = "pypackage2",
+        packageName = "pypackage1",
         funcName = "wordcount",
         filenames = filenames
     )
@@ -41,7 +41,7 @@ def ai():
     res = qserverless.Call(
         svcAddr = "127.0.0.1:8889", 
         namespace = "ns1", 
-        packageName = "pypackage2",
+        packageName = "pypackage1",
         funcName = "AITest",
         test = "xyz"
     )

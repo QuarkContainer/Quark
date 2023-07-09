@@ -184,8 +184,7 @@ message FuncAgentCallReq {
 
 message FuncAgentCallResp {
   string id = 1;
-  string error = 2;
-  string resp = 3;
+  FuncRes res = 2;
 }
 
 // notify caller the funcinstance has been started
@@ -284,18 +283,18 @@ message FuncPodDisconnResp {
 
 message FuncSvcCallReq {
   string jobId = 1;
-  string id = 2;
+  string id = 2; // this is calleeFuncCallId
   string namespace = 3;
   string packageName = 4;
   string funcName = 5;
   string parameters = 6;
   uint64 priority = 7;
-  string callerFuncId = 8;
   Timestamp createtime = 9;
 
   string callerNodeId = 10;
   string callerPodId = 11; 
-
+  string callerFuncId = 8;
+  
   string calleeNodeId = 12; // when funcCall is process by a funcPod, this is the NodeId
   string calleePodId = 13;
 
@@ -304,14 +303,25 @@ message FuncSvcCallReq {
 
 message FuncSvcCallResp {
   string id = 1;
-  string error = 2;
-  string resp = 3;
+  FuncRes res = 2;
   
   string callerNodeId = 8;
   string callerPodId = 9; 
 
   string calleeNodeId = 10; // when funcCall is process by a funcPod, this is the NodeId
   string calleePodId = 11;
+}
+
+message Error {
+  int32 source = 1; // 1: from user, 2: from system
+  string error = 2;
+}
+
+message FuncRes {
+  oneof res {
+    Error error = 2; 
+    string resp = 3;
+  }
 }
 
 // notify caller the funcinstance has been started

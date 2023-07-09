@@ -459,8 +459,7 @@ impl FuncPod {
                 
                 let resp = func::FuncSvcCallResp {
                     id: msg.id,
-                    error: msg.error,
-                    resp: msg.resp,
+                    res: msg.res,
                     caller_node_id: call.callerNodeId.clone(),
                     caller_pod_id: call.callerFuncPodId.clone(),
                     callee_node_id: self.nodeId.clone(),

@@ -157,15 +157,24 @@ impl FuncPod {
 
     // get funccall response from nodeagent
     pub fn OnFuncSvcCallResp(&self, resp: func::FuncSvcCallResp) -> Result<()> {
-        let state = if resp.error.len() == 0 {
-            FuncStateSuccess
-        } else {
-            FuncStateFail
+        match resp.res.as_ref() {
+            None => {
+                error!("get none func res {:#?}", resp);
+            }
+            Some(res) => {
+                let funcRes : FuncRes = res.clone().into();
+                let state = match funcRes {
+                    FuncRes::Resp(_) => FuncStateSuccess,
+                    FuncRes::Error(_) => FuncStateFail,
+                };
+        
+                AUDIT_AGENT.FinishFunc(
+                    &resp.id, 
+                    state
+                )?;
+            }
         };
-        AUDIT_AGENT.FinishFunc(
-            &resp.id, 
-            state
-        )?;
+        
         
         let callerNode = FUNC_NODE_MGR.Get(&resp.caller_node_id)?;
         callerNode.Send(FuncNodeMsg::FuncCallResp(resp))?;
@@ -194,10 +203,14 @@ impl FuncPod {
             FuncPodState::Idle(_) => (),
             FuncPodState::Running(funcCall) => {
                 let callerNode = FUNC_NODE_MGR.Get(&funcCall.callerNodeId)?;
+                let funcRes = FuncRes::NewError(
+                    FuncErrSource::System, 
+                    format!("funcpod {} disconnect ", &self.podName)
+                );
+
                 let resp = func::FuncSvcCallResp {
                     id: funcCall.id.clone(),
-                    error: format!("funcpod {} disconnect ", &self.podName),
-                    resp: String::new(),
+                    res: Some(funcRes.ToGrpc()),
                     caller_node_id: funcCall.callerNodeId.clone(),
                     caller_pod_id: funcCall.callerFuncPodId.clone(),
                     callee_node_id: funcCall.calleeNodeId.lock().unwrap().clone(),

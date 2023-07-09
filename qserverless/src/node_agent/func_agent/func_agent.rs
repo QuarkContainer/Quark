@@ -16,6 +16,7 @@ use std::collections::BTreeMap;
 use std::sync::{Mutex, Arc};
 use std::result::Result as SResult;
 use std::time::SystemTime;
+use qobjs::func::FuncAgentCallResp;
 use qobjs::func::func_agent_service_server::FuncAgentServiceServer;
 use qobjs::types::*;
 use qobjs::utility::SystemTimeProto;
@@ -85,7 +86,7 @@ impl Deref for FuncCall {
 
 #[derive(Debug)]
 pub struct FuncCallContext {
-    pub respChann: oneshot::Sender<SResult<String, String>>,
+    pub respChann: oneshot::Sender<FuncRes>,
 }
 
 #[derive(Debug, Default)]
@@ -164,7 +165,7 @@ impl FuncAgent {
     }
 
     // when funcagent get response from funcsvc for direct call
-    pub fn CallResponse(&self, funcCallId: &str, response: SResult<String, String>) -> Result<()> {
+    pub fn CallResponse(&self, funcCallId: &str, response: FuncRes) -> Result<()> {
         match self.callContexts.lock().unwrap().remove(funcCallId) {
             None => return Err(Error::CommonError(format!("get unepxecet callid {}", funcCallId))),
             Some(context) => {
@@ -175,7 +176,7 @@ impl FuncAgent {
         return Ok(())
     }
 
-    pub async fn FuncCall(&self, funcCallReq: func::FuncAgentCallReq) -> SResult<String, String> {
+    pub async fn FuncCall(&self, funcCallReq: func::FuncAgentCallReq) -> FuncRes {
         let (tx, rx) = oneshot::channel();
         let id = funcCallReq.id.clone();
         self.callContexts.lock().unwrap().insert(id.clone(), FuncCallContext {
@@ -187,7 +188,10 @@ impl FuncAgent {
             Ok(()) => (),
             Err(e) => {
                 self.callContexts.lock().unwrap().remove(&id);
-                return Err(format!("{:?}", e));
+                return FuncRes::NewError(
+                    FuncErrSource::System, 
+                    format!("{:?}", e)
+                );
             }
         }
 
@@ -274,10 +278,14 @@ impl FuncAgent {
         match &pod.State() {
             funcPodState::Idle => (),
             funcPodState::Running(calleeFuncCall) => {
+                let funcRes = FuncRes::NewError(
+                    FuncErrSource::System, 
+                    format!("func pod {} unexpected disconnect  ... maybe network issue", funcPodId),
+                );
+
                 let resp: func::FuncSvcCallResp = func::FuncSvcCallResp {
                     id: calleeFuncCall.id.clone(),
-                    error: format!("func pod {} unexpected disconnect  ... maybe network issue", funcPodId),
-                    resp: String::new(),
+                    res: Some(funcRes.ToGrpc()),
                     caller_node_id: calleeFuncCall.callerNodeId.clone(),
                     caller_pod_id: calleeFuncCall.callerFuncPodId.clone(),
                     callee_node_id: calleeFuncCall.calleeNodeId.clone(),
@@ -358,17 +366,12 @@ impl FuncAgent {
         let callerPodId = resp.caller_pod_id.clone();
         
         if callerPodId.len() == 0 { // it is from grpc gateway direct call
-            let resp = if resp.error.len() == 0 {
-                Ok(resp.resp)
-            } else {
-                Err(resp.error)
-            };
-            self.CallResponse(&id, resp)?;
+            let res = resp.res.unwrap();
+            self.CallResponse(&id, res.into())?;
         } else {
             let resp = func::FuncAgentCallResp {
                 id: id,
-                resp: resp.resp,
-                error: resp.error,
+                res: resp.res.clone()
             };
             // send response to the caller pod
             self.funcPodMgr.SendTo(&callerPodId, func::FuncAgentMsg {
@@ -376,7 +379,7 @@ impl FuncAgent {
                 event_body: Some(func::func_agent_msg::EventBody::FuncAgentCallResp(resp)),
             })?;
         }
-        
+
         return Ok(())
     }
 
@@ -434,11 +437,13 @@ impl FuncAgent {
                     Err(e) => {
                         // try remove caller caller if it exists
                         self.callerCalls.lock().unwrap().remove(&msg.id);
-                        
+                        let funcRes = FuncRes::NewError(
+                            FuncErrSource::System, 
+                            format!("funccall {} get error {:?}", msg.id, e)
+                        );
                         let resp = func::FuncSvcCallResp {
                             id: msg.id.clone(),
-                            error: format!("funccall {} get error {:?}", msg.id, e),
-                            resp: String::new(),
+                            res: Some(funcRes.ToGrpc()),
                             caller_node_id: msg.caller_node_id.clone(),
                             caller_pod_id: msg.caller_pod_id.clone(),
                             callee_node_id: msg.callee_node_id.clone(),
@@ -505,20 +510,11 @@ impl func::func_agent_service_server::FuncAgentService for FuncAgent {
         let req = request.into_inner();
         let id = req.id.clone();
         let res = self.FuncCall(req).await;
-        let resp = match res {
-            Ok(response) => func::FuncAgentCallResp {
-                id: id,
-                resp: response,
-                error: String::new(),
-            },
-            Err(err) => func::FuncAgentCallResp {
-                id: id,
-                resp: String::new(),
-                error: err,
-            }
-        };
         
-        return Ok(Response::new(resp));
+        return Ok(Response::new(FuncAgentCallResp {
+            id: id,
+            res: Some(res.ToGrpc())
+        }));
     }
 }
 
