@@ -6,6 +6,7 @@ import numpy as np
 import pickle
 import matplotlib.pyplot as plt
 import os
+import io
 import argparse
 import csv
 
@@ -60,33 +61,29 @@ class ConvNet(nn.Module):
         return out
 
 def save_model(model, i):
-    storage_key = f'model_{i}'
-    filename = f"{path}/tmp/{storage_key}.pt"
-    torch.save(model.state_dict(), filename)
-    in_file = open(filename, "rb") # opening for [r]eading as [b]inary
-    data = in_file.read() # if you only wanted to read 512 bytes, do .read(512)
+    buffer = io.BytesIO()
+    torch.save(model.state_dict(), buffer)
+    buffer.seek(0)
+    data = buffer.read()
     return data
 
 def load_model(data, i):
-    storage_key = f'model_{i}'
-    filename = f"{path}/tmp/{storage_key}.pt"
-    out_file = open(filename, "wb") # open for [w]riting as [b]inary
-    out_file.write(data)
-    out_file.close()
-    loaded_model = ConvNet()
-    loaded_model.load_state_dict(torch.load(f"{path}/tmp/{storage_key}.pt"))
-        
+    buffer = io.BytesIO()
+    buffer.write(data)
+    buffer.seek(0)
+    loaded_model = ConvNet()   
+    loaded_model.load_state_dict(torch.load(buffer))
     return loaded_model
 
-
-async def train(context, blob, state, device, epoch, i, parallelism, batch_size):
+async def trainer(context, blob, state, epoch, i, parallelism):
+    device = "cpu" 
     """Loop used to train the network"""
     torch.manual_seed(42) 
     print("train 1", state);
 
     trainStart = datetime.now()
     model = ConvNet()
-    #model = torch.hub.load('pytorch/vision:v0.10.0', 'alexnet', pretrained=False)
+    
     # create optimizer
     if epoch > 0:
         # load the global averaged model
@@ -126,14 +123,11 @@ async def train(context, blob, state, device, epoch, i, parallelism, batch_size)
         optimizer.zero_grad()
         output = model(data)
 
-
         loss = criterion(output, target)
         tot += loss.item()
-        
 
         loss.backward()
         optimizer.step()
-        
 
         if batch_idx % 30 == 0:
             print('Process: {}, Device: {} Train Epoch: {} Step: [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
@@ -142,13 +136,7 @@ async def train(context, blob, state, device, epoch, i, parallelism, batch_size)
             
     state_data = save_state(optimizer, i)
     model_data = save_model(model, str(i))
-
-    return (state_data, model_data)
-
-async def trainrunner(context, blob, state, epoch, i, parallelism):
-    device = "cpu" 
-    print("trainrunner ....1")
-    (state_data, model_data) = await train(context, blob, state, device, epoch, i, parallelism, batch_size)
+    
     print("trainrunner ....2")
     blobs = context.NewBlobAddrVec(2)
     (addr, err) = await context.BlobWriteAll(blobs[0], state_data)
@@ -161,33 +149,89 @@ async def trainrunner(context, blob, state, epoch, i, parallelism):
         return (None, err)
     blobs[1] = addr
     return (json.dumps(blobs), None)
+
+
+async def iternate_trainer(context, blob, state, epoch, i, parallelism):
+    device = "cpu" 
+    """Loop used to train the network"""
+    torch.manual_seed(42) 
+    print("iternate_trainer 1", state);
+
+    trainStart = datetime.now()
+    model = ConvNet()
     
+    (data, err) = await context.BlobReadAll(blob)
+    model = load_model(data, 'average')
+    (statedata, err) = await context.BlobReadAll(state)
+ 
+    model.to(device)
+
+    optimizer = optim.SGD(model.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.9)
+    load_state(statedata, optimizer, i)
+
+    criterion = nn.CrossEntropyLoss().to(device)
+    
+    transform = transforms.Compose(
+    [transforms.ToTensor(),
+    transforms.Normalize((0.1307,), (0.3081,))])
+
+    trainset = datasets.MNIST(root='./data', train=True,
+                                            download=True, transform=transform)
+    
+    train_sampler = torch.utils.data.distributed.DistributedSampler(trainset,num_replicas=parallelism, rank=i)
+    print("train 2");
+    train_loader = torch.utils.data.DataLoader(dataset=trainset,
+                                    batch_size=batch_size,
+                                    shuffle=False,
+                                    num_workers=0,
+                                    pin_memory=True,
+                                    sampler=train_sampler)
+    
+    print("train 3");
+    model.train()
+    loss, tot = 0, 0
+    for batch_idx, (data, target) in enumerate(train_loader):
+        data, target = data.to(device), target.to(device)
+        optimizer.zero_grad()
+        output = model(data)
+
+        loss = criterion(output, target)
+        tot += loss.item()
+
+        loss.backward()
+        optimizer.step()
+
+        if batch_idx % 30 == 0:
+            print('Process: {}, Device: {} Train Epoch: {} Step: [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                i, device, epoch, batch_idx, len(train_loader.batch_sampler),
+                   100. * batch_idx / len(train_loader), loss.item()))
+            
+    state_data = save_state(optimizer, i)
+    model_data = save_model(model, str(i))
+    
+    print("trainrunner ....2")
+    blobs = list()
+    
+    (state_blob, err) = await context.BlobNew(state_data)
+    if err is not None :
+        return (None, err)
+    blobs.append(state_blob)
+    
+    (model_blob, err) = await context.BlobNew(model_data)
+    if err is not None :
+        return (None, err)
+    blobs.append(model_blob)
+    
+    return (json.dumps(blobs), None)
+
 def save_state(optimizer, i):
-    isExist = os.path.exists(f'{path}/tmp/')
-    if not isExist:
-        os.makedirs(f'{path}/tmp/') 
-    filename = f'{path}/tmp/optimizer_state_{i}.pkl'
-    with open(filename, 'wb') as f:
-        #print(optimizer.state_dict()['state'])
-        pickle.dump(optimizer.state_dict(), f)
-    in_file = open(filename, "rb") # opening for [r]eading as [b]inary
-    data = in_file.read() # if you only wanted to read 512 bytes, do .read(512)
+    data = pickle.dumps(optimizer.state_dict())
     return data
         
     #print('saving optimizer state done, time is: ', datetime.now() - start)
 def load_state(data, optimizer, i):
-    filename = f'{path}/tmp/optimizer_state_{i}.pkl'
-    out_file = open(filename, "wb") # open for [w]riting as [b]inary
-    out_file.write(data)
-    out_file.close()
-    if os.path.isfile(filename):
-        with open(filename, 'rb') as f:
-            state = pickle.load(f)
-            optimizer.load_state_dict(state)
-            #update_state(optimizer, state)
-        #print('loading optimizer state done, time is: ', datetime.now() - start)
-    else:
-        print('no state found')
+    state = pickle.loads(data)
+    optimizer.load_state_dict(state)
 
 async def model_weight_average_runner(context, blobs: qserverless.BlobAddrVec, parallelism):
     model = ConvNet()
@@ -220,16 +264,33 @@ async def model_weight_average_runner(context, blobs: qserverless.BlobAddrVec, p
 async def handwritingClassification(context):
     epochs = 4
     parallelism = 2
-    blob = None
+    
+    model = ConvNet()
+    model_data = save_model(model, 0)
+    
+    optimizer = optim.SGD(model.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.9)
+    state_data = save_state(optimizer, 0)
+    
+    blobs = context.NewBlobAddrVec(2)
+    
+    (addr, err) = await context.BlobWriteAll(blobs[0], model_data)
+    blobs[0] = addr
+    
+    (addr, err) = await context.BlobWriteAll(blobs[1], state_data)
+    blobs[1] = addr
+    
+
+    blob = blobs[0]
+    
     states = []
     for i in range(0, parallelism):  
-        states.append(None)
+        states.append(blobs[1])
     
     for epoch in range(epochs):
         results = await asyncio.gather(
                     *[context.RemoteCall(
                         packageName = "pypackage2",
-                        funcName = "trainrunner",
+                        funcName = "iternate_trainer",
                         blob = blob,
                         state = states[i],
                         epoch = epoch,
