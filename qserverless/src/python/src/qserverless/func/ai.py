@@ -79,82 +79,6 @@ async def trainer(context, blob, state, epoch, i, parallelism):
     device = "cpu" 
     """Loop used to train the network"""
     torch.manual_seed(42) 
-    print("train 1", state);
-
-    trainStart = datetime.now()
-    model = ConvNet()
-    
-    # create optimizer
-    if epoch > 0:
-        # load the global averaged model
-        (data, err) = await context.BlobReadAll(blob)
-        model = load_model(data, 'average')
-        (statedata, err) = await context.BlobReadAll(state)
- 
-    model.to(device)
-
-    optimizer = optim.SGD(model.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.9)
-    if epoch > 0:
-        load_state(statedata, optimizer, i)
-
-    criterion = nn.CrossEntropyLoss().to(device)
-    
-    transform = transforms.Compose(
-    [transforms.ToTensor(),
-    transforms.Normalize((0.1307,), (0.3081,))])
-
-    trainset = datasets.MNIST(root='./data', train=True,
-                                            download=True, transform=transform)
-    
-    train_sampler = torch.utils.data.distributed.DistributedSampler(trainset,num_replicas=parallelism, rank=i)
-    print("train 2");
-    train_loader = torch.utils.data.DataLoader(dataset=trainset,
-                                    batch_size=batch_size,
-                                    shuffle=False,
-                                    num_workers=0,
-                                    pin_memory=True,
-                                    sampler=train_sampler)
-    
-    print("train 3");
-    model.train()
-    loss, tot = 0, 0
-    for batch_idx, (data, target) in enumerate(train_loader):
-        data, target = data.to(device), target.to(device)
-        optimizer.zero_grad()
-        output = model(data)
-
-        loss = criterion(output, target)
-        tot += loss.item()
-
-        loss.backward()
-        optimizer.step()
-
-        if batch_idx % 30 == 0:
-            print('Process: {}, Device: {} Train Epoch: {} Step: [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                i, device, epoch, batch_idx, len(train_loader.batch_sampler),
-                   100. * batch_idx / len(train_loader), loss.item()))
-            
-    state_data = save_state(optimizer, i)
-    model_data = save_model(model, str(i))
-    
-    print("trainrunner ....2")
-    blobs = context.NewBlobAddrVec(2)
-    (addr, err) = await context.BlobWriteAll(blobs[0], state_data)
-    if err is not None :
-        return (None, err)
-    blobs[0] = addr
-    
-    (addr, err) = await context.BlobWriteAll(blobs[1], model_data)
-    if err is not None :
-        return (None, err)
-    blobs[1] = addr
-    return (json.dumps(blobs), None)
-
-
-async def iternate_trainer(context, blob, state, epoch, i, parallelism):
-    device = "cpu" 
-    """Loop used to train the network"""
-    torch.manual_seed(42) 
     print("iternate_trainer 1", state);
 
     trainStart = datetime.now()
@@ -271,26 +195,21 @@ async def handwritingClassification(context):
     optimizer = optim.SGD(model.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.9)
     state_data = save_state(optimizer, 0)
     
-    blobs = context.NewBlobAddrVec(2)
     
-    (addr, err) = await context.BlobWriteAll(blobs[0], model_data)
-    blobs[0] = addr
+    (model_blob, err) = await context.BlobNew(model_data)
+    (state_blob, err) = await context.BlobNew(state_data)
     
-    (addr, err) = await context.BlobWriteAll(blobs[1], state_data)
-    blobs[1] = addr
-    
-
-    blob = blobs[0]
+    blob = model_blob
     
     states = []
     for i in range(0, parallelism):  
-        states.append(blobs[1])
+        states.append(state_blob)
     
     for epoch in range(epochs):
         results = await asyncio.gather(
                     *[context.RemoteCall(
                         packageName = "pypackage2",
-                        funcName = "iternate_trainer",
+                        funcName = "trainer",
                         blob = blob,
                         state = states[i],
                         epoch = epoch,
