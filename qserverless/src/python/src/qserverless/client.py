@@ -85,7 +85,7 @@ class FuncInstance:
         self.podId = podId
         self.funcId = funcId
         self.msgQueue = asyncio.Queue(100)
-        self.result = None
+        self.result = asyncio.Queue(1)
     
     async def ReadMsg(self) :
         msg = await self.msgQueue.get()
@@ -93,15 +93,17 @@ class FuncInstance:
     
     def PutMsg(self, msg: str) :
         self.msgQueue.put_nowait(msg)
+    
+    def PutResult(self, result: common.CallResult):
+        self.result.put_nowait(result)
+    
+    async def Result(self):
+        result = await self.result.get()
         
-    def Result(self):
-        if self.result is None:
-            return None
+        if len(result.error) != 0:
+            raise common.QException(result.error, result.source)
         
-        if len(self.result.error) != 0:
-            raise common.QException(self.result.error, self.result.source)
-        
-        return self.result.res
+        return result.res
         
 class FuncCallContext:
     def __init__(self, jobId: str, id: str, parent: FuncInstance):
@@ -145,7 +147,7 @@ class FuncCallContext:
         child = self.children.get(id)
         if child is None:
             return
-        child.result = res
+        child.PutResult(res)
         child.PutMsg(None)
     
     def DispatchFuncMsg(self, msg: func_pb2.FuncMsg):
@@ -337,7 +339,6 @@ class FuncMgr:
         if callType == 1:
             if len(res.error) > 0:
                 raise common.QException(res.error, res.source)
-            print("res is ", res)
             return res.res
         # Start Func, this is a funcInstance
         else:

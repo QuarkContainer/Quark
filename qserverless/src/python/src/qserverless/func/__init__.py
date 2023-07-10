@@ -21,10 +21,14 @@ import qserverless
 import qserverless.func.ai
 from qserverless.func.ai import *
 
+async def AITestIterate(context, test):
+    print("AITest ", test)
+    return await handwritingClassification2(context)
+
 async def AITest(context, test):
     print("AITest ", test)
     return await handwritingClassification(context)
-    
+
 async def wordcount(context, filenames: list[str]) -> str: 
     pcount = len(filenames)
     blobMatrix = list();
