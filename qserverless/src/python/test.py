@@ -125,14 +125,17 @@ async def IternateCallTest():
             funcName = "IternateCall",
             msg = "test"
     )
-    print("IternateCallTest *************** 1 ", fi.funcId)
-    msg1 = await jobContext.ReadFromChild(fi)
+    print("IternateCallTest *************** 1 ", fi)
+    msg1 = await jobContext.RecvFromChild(fi)
     print("IternateCallTest *************** 2 ", msg1)
     await jobContext.SendToChild(fi, "parent msg")
-    msg2 = await jobContext.ReadFromChild(fi)
+    msg2 = await jobContext.RecvFromChild(fi)
     print("IternateCallTest *************** 3 ", msg2)
-    msg3 = await jobContext.ReadFromChild(fi)
+    msg3 = await jobContext.RecvFromChild(fi)
     print("IternateCallTest *************** 4 ", msg3) 
+    res = jobContext.Result(fi)
+    print("IternateCallTest result ", res)
+    
 
 async def main() : 
     test = sys.argv[1]

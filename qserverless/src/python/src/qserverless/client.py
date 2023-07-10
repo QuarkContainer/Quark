@@ -85,17 +85,29 @@ class FuncInstance:
         self.podId = podId
         self.funcId = funcId
         self.msgQueue = asyncio.Queue(100)
+        self.result = None
     
     async def ReadMsg(self) :
         msg = await self.msgQueue.get()
         return msg
+    
+    def PutMsg(self, msg: str) :
+        self.msgQueue.put_nowait(msg)
         
-
+    def Result(self):
+        if self.result is None:
+            return None
+        
+        if len(self.result.error) != 0:
+            raise common.QException(self.result.error, self.result.source)
+        
+        return self.result.res
+        
 class FuncCallContext:
     def __init__(self, jobId: str, id: str, parent: FuncInstance):
         self.jobId = jobId
         self.id = id
-        self.funcInstances = dict()
+        self.children = dict()
         self.parent = parent
         self.msgQueues = dict()
     
@@ -105,14 +117,20 @@ class FuncCallContext:
     async def RecvFromParent(self):
         return await self.parent.ReadMsg()
     
-    async def RecvFromChild(self, funcInstance: FuncInstance):
-        return await funcInstance.ReadMsg()
+    async def RecvFromChild(self, child: str):
+        child = self.children[child]
+        return await child.ReadMsg()
     
     async def SendToParent(self, data: str):
-        await self.SendMsg(self, self.parent, data)
+        await self.SendMsg(self.parent, data)
     
-    async def SendToChild(self, funcInstance: FuncInstance, data: str):
-        await self.SendMsg(funcInstance, data)
+    async def SendToChild(self, child: str, data: str):
+        child = self.children[child]
+        await self.SendMsg(child, data)
+        
+    def Result(self, child: str):
+        child = self.children[child]
+        return child.Result()
     
     def NewTaskContext(self) :
         id = str(uuid.uuid4())
@@ -120,17 +138,15 @@ class FuncCallContext:
     
     def NewChildFuncInstance(self, nodeId: str, podId: str, funcId: str):
         instance = FuncInstance(nodeId, podId, funcId)
-        self.funcInstances[funcId] = instance
+        self.children[funcId] = instance
         return instance
     
     def CallRespone(self, id: str, res: common.CallResult):
-        funcInstance = self.funcInstances.get(id)
-        if funcInstance is None:
+        child = self.children.get(id)
+        if child is None:
             return
-        if len(res.error) != 0:
-            funcInstance.msgQueue.put_nowait((None, res.error))
-            
-        funcInstance.msgQueue.put_nowait(None)
+        child.result = res
+        child.PutMsg(None)
     
     def DispatchFuncMsg(self, msg: func_pb2.FuncMsg):
         if msg.dstFuncId != self.id:
@@ -138,14 +154,14 @@ class FuncCallContext:
             return;
         
         if self.parent is not None and msg.srcFuncId == self.parent.funcId:
-            self.parent.msgQueue.put_nowait(msg.FuncMsgBody.data)
+            self.parent.PutMsg(msg.FuncMsgBody.data)
             return
         
-        funcInstance = self.funcInstances.get(msg.srcFuncId)
-        if funcInstance is None:
+        child = self.children.get(msg.srcFuncId)
+        if child is None:
             return
         
-        funcInstance.msgQueue.put_nowait((msg.FuncMsgBody.data, ""))
+        child.PutMsg(msg.FuncMsgBody.data)
         
     async def CallFunc(
         self,
@@ -316,9 +332,16 @@ class FuncMgr:
         self.callerCalls[id] = callQueue
         self.clientQueue.put_nowait(func_pb2.FuncAgentMsg(msgId=0, FuncAgentCallReq=req))
         res = await callQueue.async_q.get()
-        if len(res.error) > 0:
-            raise common.QException(res.error, res.source)
-        return res.res
+        
+        # FuncCall, this is func resp
+        if callType == 1:
+            if len(res.error) > 0:
+                raise common.QException(res.error, res.source)
+            print("res is ", res)
+            return res.res
+        # Start Func, this is a funcInstance
+        else:
+            return res
     
     async def CallFunc(
         self,
@@ -348,7 +371,7 @@ class FuncMgr:
         priority: int,
         parameters: str 
         ) -> FuncInstance: 
-        msg = await self.Call (
+        childFuncInstance = await self.Call (
             context,
             packageName,
             funcName,
@@ -358,8 +381,7 @@ class FuncMgr:
             2
         )
         
-        childFuncInstance = context.funcInstances[msg.id]
-        return childFuncInstance
+        return childFuncInstance.funcId
         
     async def SendMsg (
         self,
@@ -436,8 +458,8 @@ class FuncMgr:
         callQueue = self.callerCalls.get(id)
         if callQueue is None:
             return
-        self.context.NewChildFuncInstance(msg.calleeNodeId, msg.calleePodId, msg.id)
-        callQueue.async_q.put_nowait(msg)
+        fi = self.context.NewChildFuncInstance(msg.calleeNodeId, msg.calleePodId, msg.id)
+        callQueue.async_q.put_nowait(fi)
         self.callerCalls.pop(id)
         
     def LocalCall(self, req: func_pb2.FuncAgentCallReq) :
@@ -501,10 +523,12 @@ class FuncMgr:
         resp = func_pb2.FuncMsgAck(error="")
         if msg.dstPodId != self.funcPodId:
             resp = func_pb2.FuncMsgAck(error="can't find target func pod")
-            return;
-        
-        if self.context is not None:
-            self.context.DispatchFuncMsg(msg)
+        else:
+            if self.context is not None:
+                try:
+                    self.context.DispatchFuncMsg(msg)
+                except Exception as err:
+                    resp = func_pb2.FuncMsgAck(error="put msg to target fail with {}".fomrat(err))
             
         ack = func_pb2.FuncMsg (
             msgId = msg.msgId,
