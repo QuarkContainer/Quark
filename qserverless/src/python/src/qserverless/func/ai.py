@@ -144,6 +144,94 @@ async def trainer(context, blob, state, epoch, i, parallelism):
     
     return json.dumps(blobs)
 
+async def iterate_trainer(context, state, epoch, i, parallelism):
+    device = "cpu" 
+    """Loop used to train the network"""
+    torch.manual_seed(42) 
+    
+    trainStart = datetime.now()
+    #model = ConvNet()
+    
+    blobStr = await context.RecvFromParent()
+    blob = json.loads(blobStr)
+    
+    data = await context.BlobReadAll(blob)
+    model = load_model(data, 'average')
+    model.train()
+    
+    statedata = await context.BlobReadAll(state)
+ 
+    optimizer = optim.SGD(model.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.9)
+    load_state(statedata, optimizer, i)
+    
+    criterion = nn.CrossEntropyLoss().to(device)
+    
+    transform = transforms.Compose(
+        [transforms.ToTensor(),transforms.Normalize((0.1307,), (0.3081,))]
+    )
+
+    trainset = datasets.MNIST(root='./data', train=True,
+                                            download=True, transform=transform)
+    
+    train_sampler = torch.utils.data.distributed.DistributedSampler(trainset,num_replicas=parallelism, rank=i)
+    print("train 2");
+    train_loader = torch.utils.data.DataLoader(dataset=trainset,
+                                    batch_size=batch_size,
+                                    shuffle=False,
+                                    num_workers=0,
+                                    pin_memory=True,
+                                    sampler=train_sampler)
+    
+    print("train 3");
+    
+
+    
+    loss, tot = 0, 0
+    for batch_idx, (data, target) in enumerate(train_loader):
+        print("batch start ", batch_idx)
+        blobStr = await context.RecvFromParent()
+        blob = json.loads(blobStr)
+        
+        blobdata = await context.BlobReadAll(blob)
+        model = load_model(blobdata, 'average')
+        model.train()
+        optimizer = optim.SGD(model.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.9)
+    
+        data, target = data.to(device), target.to(device)
+        optimizer.zero_grad()
+        output = model(data)
+
+        loss = criterion(output, target)
+        tot += loss.item()
+
+        loss.backward()
+        optimizer.step()
+        
+        model_data = save_model(model, str(i))
+        model_blob = await context.BlobNew(model_data)
+        blobStr = json.dumps(model_blob)
+        await context.SendToParent(blobStr)
+        
+        print("batch end ", batch_idx)
+        if batch_idx % 30 == 0:
+            print('Process: {}, Device: {} Train Epoch: {} Step: [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                i, device, epoch, batch_idx, len(train_loader.batch_sampler),
+                   100. * batch_idx / len(train_loader), loss.item()))
+            
+    state_data = save_state(optimizer, i)
+    model_data = save_model(model, str(i))
+    
+    print("trainrunner ....2")
+    blobs = list()
+    
+    state_blob = await context.BlobNew(state_data)
+    blobs.append(state_blob)
+    
+    model_blob = await context.BlobNew(model_data)
+    blobs.append(model_blob)
+    
+    return json.dumps(blobs)
+
 def save_state(optimizer, i):
     data = pickle.dumps(optimizer.state_dict())
     return data
@@ -156,7 +244,6 @@ def load_state(data, optimizer, i):
 async def model_weight_average_runner(context, blobs: qserverless.BlobAddrVec, parallelism):
     model = ConvNet()
 
-    print("model_weight_average_runner 1");
     cur_model = ConvNet()
 
     sd_avg = model.state_dict()
@@ -170,12 +257,10 @@ async def model_weight_average_runner(context, blobs: qserverless.BlobAddrVec, p
                 sd_avg[key] = (cur_model.state_dict()[key]) / parallelism
             else:
                 sd_avg[key] += (cur_model.state_dict()[key]) / parallelism
-    print("model_weight_average_runner 3");
     model.load_state_dict(sd_avg)
     model_data = save_model(model, 'average')
     blob = context.NewBlobAddr()
     addr = await context.BlobWriteAll(blob, model_data)
-    print("model_weight_average_runner 4");
     return json.dumps(addr)
 
 async def handwritingClassification(context):
@@ -237,6 +322,97 @@ async def handwritingClassification(context):
     
     return res
 
+async def handwritingClassification2(context):
+    epochs = 2
+    parallelism = 2
+    
+    model = ConvNet()
+    model_data = save_model(model, 0)
+    
+    optimizer = optim.SGD(model.parameters(), lr=0.1, weight_decay=1e-4, momentum=0.9)
+    state_data = save_state(optimizer, 0)
+    
+    
+    model_blob = await context.BlobNew(model_data)
+    state_blob = await context.BlobNew(state_data)
+    
+    blob = model_blob
+    
+    states = []
+    for i in range(0, parallelism):  
+        states.append(state_blob)
+    
+    for epoch in range(epochs):
+        children = await asyncio.gather(
+                    *[context.StartFunc(
+                        packageName = "pypackage1",
+                        funcName = "iterate_trainer",
+                        state = states[i],
+                        epoch = epoch,
+                        i = i,
+                        parallelism = parallelism
+                    ) for i in range(0, parallelism)]
+                )
+        
+        blobStr = json.dumps(blob)
+        for fi in children:
+            await context.SendToChild(fi, blobStr)
+            
+        for fi in children:
+            await context.SendToChild(fi, blobStr)
+        
+        while True:
+            modelblobs = await asyncio.gather(
+                *[context.RecvFromChild(children[i]) for i in range(0, parallelism)]
+            )
+            if modelblobs[0] is None:
+                break
+            
+            blobs = list()
+            for m in modelblobs:
+                blob = json.loads(m)
+                blobs.append(blob)
+                
+            blobStr = await model_weight_average_runner(context, blobs, parallelism)
+                   
+            for fi in children:
+                await context.SendToChild(fi, blobStr)
+            # for fi in children:
+            #     await context.RecvFromChild(fi)
+        
+        results = list()
+        for i in range(0, parallelism):
+            result = await context.Result(children[i])
+            results.append(result)
+        
+        blobMatrix = list();
+        for res in results:
+            blobVec = json.loads(res)
+            blobMatrix.append(blobVec)
+        
+        shuffBlobs = qserverless.TransposeBlobMatrix(blobMatrix)
+        states = shuffBlobs[0]
+        # res = await context.CallFunc(
+        #         packageName = "pypackage1",
+        #         funcName = "model_weight_average_runner",
+        #         blobs = shuffBlobs[1],
+        #         parallelism = parallelism
+        # )
+        
+        res = await model_weight_average_runner(context, shuffBlobs[1], parallelism)
+        blob = json.loads(res)
+        print("success ", epoch)
+    
+    res = await context.CallFunc(
+                packageName = "pypackage1",
+                funcName = "validaterunner",
+                blob = blob,
+                batch_size = batch_size
+    )
+  
+    print("finish.....")
+    
+    return res
 
 def validate(model, device, batch_size) -> (float, float):
     """Loop used to validate the network"""

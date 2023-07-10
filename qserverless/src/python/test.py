@@ -92,6 +92,13 @@ async def ai():
     res = await func.AITest(jobContext, "testai")
     print("res is ", res)
 
+async def ai2():
+    qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage1", True)
+    background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
+    jobContext = qserverless.NewJobContext()
+    res = await func.AITestIterate(jobContext, "testai")
+    print("res is ", res)
+
 async def remote_ai():
     qserverless.Register(GetNodeAgentAddrFromEnvVar(), "ns1", "pypackage1", True)
     background_task_coroutine = asyncio.create_task(qserverless.StartSvc())
@@ -133,7 +140,7 @@ async def IternateCallTest():
     print("IternateCallTest *************** 3 ", msg2)
     msg3 = await jobContext.RecvFromChild(fi)
     print("IternateCallTest *************** 4 ", msg3) 
-    res = jobContext.Result(fi)
+    res = await jobContext.Result(fi)
     print("IternateCallTest result ", res)
     
 
@@ -153,6 +160,8 @@ async def main() :
             await readfile()   
         case "ai":
             await ai() 
+        case "ai2":
+            await ai2() 
         case "remote_ai":
             await remote_ai() 
         case "call_none":
