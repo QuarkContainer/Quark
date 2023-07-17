@@ -253,6 +253,7 @@ extern "C" {
     pub fn CopyPageUnsafe(to: u64, from: u64);
 }
 
+#[cfg(target_arch = "x86_64")]
 #[inline]
 pub fn Invlpg(addr: u64) {
     if !super::SHARESPACE.config.read().KernelPagetable {

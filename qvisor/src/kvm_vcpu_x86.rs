@@ -31,7 +31,6 @@ use crate::qlib::kernel::asm::xgetbv;
 
 use super::*;
 //use super::qlib::kernel::TSC;
-#[cfg(target_arch="aarch64")]
 use super::amd64_def::*;
 use super::qlib::buddyallocator::ZeroPage;
 use super::qlib::*;
