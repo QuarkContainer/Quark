@@ -15,11 +15,11 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use spin::Mutex;
-use x86_64::structures::paging::PageTable;
-use x86_64::structures::paging::PageTableFlags;
-use x86_64::PhysAddr;
-use x86_64::VirtAddr;
 
+use super::super::super::pagetable::PageTableFlags;
+use super::super::super::pagetable::PageTable;
+use super::super::super::pagetable::PhysAddr;
+use super::super::super::pagetable::VirtAddr;
 use super::super::super::addr::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;

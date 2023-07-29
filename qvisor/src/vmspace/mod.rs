@@ -38,7 +38,6 @@ use std::os::unix::io::IntoRawFd;
 use std::slice;
 use std::str;
 use uuid::Uuid;
-use x86_64::structures::paging::PageTableFlags;
 
 use crate::qlib::fileinfo::*;
 use crate::vmspace::kernel::GlobalIOMgr;
@@ -58,6 +57,7 @@ use super::qlib::kernel::SignalProcess;
 use super::qlib::linux::membarrier::*;
 use super::qlib::linux_def::*;
 use super::qlib::pagetable::PageTables;
+use super::qlib::pagetable::PageTableFlags;
 use super::qlib::perf_tunning::*;
 use super::qlib::qmsg::*;
 use super::qlib::socket_buf::*;
