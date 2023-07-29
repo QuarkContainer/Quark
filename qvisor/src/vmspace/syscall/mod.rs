@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(target_arch="aarch64")]
+#[cfg(target_arch = "aarch64")]
 mod syscall_aarch64;
-#[cfg(target_arch="aarch64")]
+#[cfg(target_arch = "aarch64")]
 pub use syscall_aarch64::*;
 
-#[cfg(target_arch="x86_64")]
+#[cfg(target_arch = "x86_64")]
 mod syscall_x86_64;
-#[cfg(target_arch="x86_64")]
+#[cfg(target_arch = "x86_64")]
 pub use syscall_x86_64::*;
