@@ -23,21 +23,21 @@ use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
 cfg_x86_64! {
-    use x86_64::structures::paging::page_table::PageTableEntry;
-    use x86_64::structures::paging::page_table::PageTableIndex;
-    use x86_64::structures::paging::PageTable;
-    use x86_64::structures::paging::PageTableFlags;
-    use x86_64::PhysAddr;
-    use x86_64::VirtAddr;
+   pub use x86_64::structures::paging::page_table::PageTableEntry;
+   pub use x86_64::structures::paging::page_table::PageTableIndex;
+   pub use x86_64::structures::paging::PageTable;
+   pub use x86_64::structures::paging::PageTableFlags;
+   pub use x86_64::PhysAddr;
+   pub use x86_64::VirtAddr;
 }
 
 cfg_aarch64! {
-    use super::pagetable_aarch64::PageTableEntry;
-    use super::pagetable_aarch64::PageTableIndex;
-    use super::pagetable_aarch64::PageTable;
-    use super::pagetable_aarch64::PageTableFlags;
-    use super::pagetable_aarch64::PhysAddr;
-    use super::pagetable_aarch64::VirtAddr;
+   pub use super::pagetable_aarch64::PageTableEntry;
+   pub use super::pagetable_aarch64::PageTableIndex;
+   pub use super::pagetable_aarch64::PageTable;
+   pub use super::pagetable_aarch64::PageTableFlags;
+   pub use super::pagetable_aarch64::PhysAddr;
+   pub use super::pagetable_aarch64::VirtAddr;
 }
 
 
