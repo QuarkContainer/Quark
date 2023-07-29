@@ -85,6 +85,9 @@ pub mod rdma_svc_cli;
 pub mod rdmasocket;
 pub mod unix_socket;
 
+#[cfg(target_arch = "aarch64")]
+mod pagetable_aarch64;
+
 use self::mutex::*;
 use alloc::vec::Vec;
 use cache_padded::CachePadded;

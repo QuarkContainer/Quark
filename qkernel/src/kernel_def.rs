@@ -266,6 +266,21 @@ pub fn Invlpg(addr: u64) {
     }
 }
 
+#[cfg(target_arch = "aarch64")]
+#[inline]
+pub fn Invlpg(addr: u64) {
+    if !super::SHARESPACE.config.read().KernelPagetable {
+        unsafe {
+            asm!("
+            dsb ishst
+            tlbi vaae1is, {}
+            dsb ish
+            isb
+        ", in(reg) (addr >> Self::PAGE_SHIFT));
+        };
+    }
+}
+
 #[inline(always)]
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     unsafe {
