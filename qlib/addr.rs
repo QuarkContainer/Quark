@@ -15,8 +15,8 @@
 use alloc::string::String;
 use alloc::string::ToString;
 use core::u64;
-use x86_64::structures::paging::PageTableFlags;
 
+use super::pagetable::PageTableFlags;
 use super::common::*;
 use super::linux_def::*;
 use super::range::*;
