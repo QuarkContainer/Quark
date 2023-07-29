@@ -138,7 +138,7 @@ impl Tsc {
     }
 
     #[inline(always)]
-    #[cfg(target_arch="x86_64")]
+    #[cfg(target_arch = "x86_64")]
     pub fn RawRdtsc() -> i64 {
         let rax: u64;
         let rdx: u64;
@@ -156,7 +156,7 @@ impl Tsc {
     }
 
     #[inline(always)]
-    #[cfg(target_arch="aarch64")]
+    #[cfg(target_arch = "aarch64")]
     pub fn RawRdtsc() -> i64 {
         let val: u64;
         unsafe {
@@ -167,8 +167,6 @@ impl Tsc {
 
         return val as i64;
     }
-
-  
 
     pub fn SetOffset(&self, offset: i64) {
         self.offset.store(offset, Ordering::SeqCst);

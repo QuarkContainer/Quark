@@ -1581,10 +1581,10 @@ impl VMSpace {
 
     pub fn PrintStr(phAddr: u64) {
         unsafe {
-            #[cfg(target_arch="aarch64")]
-            let ptr = phAddr as *const u8; 
-            #[cfg(target_arch="x86_64")]
-            let ptr = phAddr as *const i8; 
+            #[cfg(target_arch = "aarch64")]
+            let ptr = phAddr as *const u8;
+            #[cfg(target_arch = "x86_64")]
+            let ptr = phAddr as *const i8;
             info!(
                 "the Str: {} ",
                 str::from_utf8_unchecked(slice::from_raw_parts(
@@ -1679,9 +1679,9 @@ impl VMSpace {
 
     pub fn LibcStatx(osfd: i32) {
         let statx = Statx::default();
-        #[cfg(target_arch="x86_64")]
+        #[cfg(target_arch = "x86_64")]
         let addr: i8 = 0;
-        #[cfg(target_arch="aarch64")]
+        #[cfg(target_arch = "aarch64")]
         let addr: u8 = 0;
         let ret = unsafe {
             libc::statx(
@@ -1701,16 +1701,16 @@ impl VMSpace {
         );
     }
 
-    #[cfg(target_arch="x86_64")]
+    #[cfg(target_arch = "x86_64")]
     pub fn GetVcpuFreq(&self) -> i64 {
         let freq = self.vcpus[0].vcpu.get_tsc_khz().unwrap() * 1000;
         return freq as i64;
     }
 
-    #[cfg(target_arch="aarch64")]
+    #[cfg(target_arch = "aarch64")]
     pub fn GetVcpuFreq(&self) -> i64 {
         return 0;
-    }    
+    }
 
     pub fn Membarrier(cmd: i32) -> i32 {
         let nr = SysCallID::sys_membarrier as usize;

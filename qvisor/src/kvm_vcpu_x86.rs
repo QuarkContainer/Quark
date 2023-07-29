@@ -39,6 +39,8 @@ use super::qlib::common::*;
 use super::qlib::kernel::IOURING;
 use super::qlib::GetTimeCall;
 //use super::qlib::kernel::stack::*;
+use super::kvm_vcpu::KVMVcpuState;
+use super::kvm_vcpu::SetExitSignal;
 use super::qlib::linux::time::Timespec;
 use super::qlib::linux_def::*;
 use super::qlib::pagetable::*;
@@ -93,7 +95,6 @@ impl RefMgr for HostPageAllocator {
 }
 
 impl KVMVcpu {
-
     fn SetupGDT(&self, sregs: &mut kvm_sregs) {
         let gdtTbl = unsafe { std::slice::from_raw_parts_mut(self.gdtAddr as *mut u64, 4096 / 8) };
 

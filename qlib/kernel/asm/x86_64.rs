@@ -14,7 +14,7 @@
 
 //use super::super::perf_tunning::*;
 
-use super::{SUPPORT_XSAVE, SUPPORT_XSAVEOPT};
+use super::super::{SUPPORT_XSAVE, SUPPORT_XSAVEOPT};
 use core::arch::asm;
 use core::sync::atomic::Ordering;
 
