@@ -118,7 +118,7 @@ bitflags! {
     /// Possible flags for a page table entry.
     pub struct PageTableFlags: u64 {
         const VALID           = 1;
-        const TYPE            = 1 << 1;
+        const TABLE           = 1 << 1;
         const USER_ACCESSIBLE = 1 << 6;
         const READ_ONLY       = 1 << 7;
         const SHARED          = 3 << 8;
@@ -127,6 +127,8 @@ bitflags! {
         const DBM             = 1 << 51;
         const PXN             = 1 << 53;
         const UXN             = 1 << 54;
+
+        const HUGE_PAGE       = 1 << 1;
     }
 }
 
