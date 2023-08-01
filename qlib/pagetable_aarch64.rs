@@ -87,7 +87,7 @@ impl PageTableEntry {
     /// Map the entry to the specified physical address with the specified flags.
     #[inline]
     pub fn set_addr(&mut self, addr: PhysAddr, flags: PageTableFlags) {
-        assert!(addr.is_aligned(4096));
+        assert!(addr.is_aligned(4096u64));
         self.entry = (addr.as_u64()) | flags.bits();
     }
 
@@ -129,6 +129,8 @@ bitflags! {
         const UXN             = 1 << 54;
 
         const HUGE_PAGE       = 1 << 1;
+        const ZERO            = 0;
+        const PRESENT         = 1;
     }
 }
 
