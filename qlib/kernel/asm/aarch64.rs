@@ -43,25 +43,28 @@ pub fn Hlt() {
 }
 
 #[inline]
-pub fn LoadCr3(cr3: u64) {
+pub fn LoadUserTable(table: u64) {
     unsafe {
-        asm!(
-            "mov cr3, {0}",
-            in(reg) cr3
-        )
+        asm!("msr ttbr0_el1, {0}", in(reg) table);
     };
 }
 
 #[inline]
-pub fn CurrentCr3() -> u64 {
-    let cr3: u64;
+pub fn CurrentUserTable() -> u64 {
+    let table: u64;
     unsafe {
-        asm!(
-            "mov {0}, cr3",
-            out(reg) cr3
-        )
+        asm!("mrs {0}, ttbr0_el1", out(reg) table);
     };
-    return cr3;
+    return table;
+}
+
+#[inline]
+pub fn CurrentKernelTable() -> u64 {
+    let table: u64;
+    unsafe {
+        asm!("mrs {0}, ttbr1_el1", out(reg) table);
+    };
+    return table;
 }
 
 #[inline]

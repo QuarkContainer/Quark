@@ -84,6 +84,16 @@ pub fn LoadCr3(cr3: u64) {
 }
 
 #[inline]
+pub fn CurrentUserTable() -> u64 {
+    return CurrentCr3();
+}
+
+#[inline]
+pub fn CurrentKernelTable() -> u64 {
+    return CurrentCr3();
+}
+
+#[inline]
 pub fn CurrentCr3() -> u64 {
     let cr3: u64;
     unsafe {

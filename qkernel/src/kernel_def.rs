@@ -29,6 +29,7 @@ use super::qlib::kernel::vcpu::*;
 use super::qlib::kernel::SHARESPACE;
 use super::qlib::kernel::TSC;
 
+use super::qlib::addr::PAGE_SHIFT;
 use super::qlib::common::*;
 use super::qlib::kernel::memmgr::pma::*;
 use super::qlib::kernel::task::*;
@@ -276,11 +277,12 @@ pub fn Invlpg(addr: u64) {
             tlbi vaae1is, {}
             dsb ish
             isb
-        ", in(reg) (addr >> Self::PAGE_SHIFT));
+        ", in(reg) (addr >> PAGE_SHIFT));
         };
     }
 }
 
+#[cfg(target_arch = "x86_64")]
 #[inline(always)]
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     unsafe {
@@ -296,6 +298,12 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
             in("r10") para4
         )
     }
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline(always)]
+pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
+    // TODO add HyperCall64
 }
 
 impl CPULocal {
