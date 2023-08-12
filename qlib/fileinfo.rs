@@ -67,7 +67,6 @@ impl SockInfo {
             Self::RDMADataSocket(ref sock) => sock.Notify(eventmask, waitinfo),
             Self::RDMAContext => {
                 //RDMA.PollCompletion().expect("RDMA.PollCompletion fail");
-                //error!("RDMAContextEpoll");
             }
             Self::RDMAUDPSocket(ref sock) => sock.Notify(eventmask, waitinfo),
         }
