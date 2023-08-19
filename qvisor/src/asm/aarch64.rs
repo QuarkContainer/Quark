@@ -32,6 +32,22 @@ pub fn CurrentCr3() -> u64 {
     return cr3;
 }
 
+#[inline]
+pub fn LoadUserTable(table: u64) {
+    unsafe {
+        asm!("msr ttbr0_el1, {0}", in(reg) table);
+    };
+}
+
+#[inline]
+pub fn CurrentUserTable() -> u64 {
+    let table: u64;
+    unsafe {
+        asm!("mrs {0}, ttbr0_el1", out(reg) table);
+    };
+    return table;
+}
+
 #[inline(always)]
 pub fn mfence() {
     unsafe { asm!("dmb ish") }
