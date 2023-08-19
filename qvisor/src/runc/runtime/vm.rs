@@ -29,6 +29,8 @@ use crate::qlib::MAX_VCPU_COUNT;
 
 use super::super::super::elf_loader::*;
 use super::super::super::kvm_vcpu::*;
+#[cfg(target_arch = "aarch64")]
+use super::super::super::kvm_vcpu_aarch64::KVMVcpuInit;
 use super::super::super::print::LOG;
 use super::super::super::qlib::addr;
 use super::super::super::qlib::common::*;
@@ -393,6 +395,9 @@ impl VirtualMachine {
             super::super::super::URING_MGR.lock();
         }
 
+        #[cfg(target_arch = "aarch64")]
+        set_kvm_vcpu_init(&vm_fd)?;
+
         let mut vcpus = Vec::with_capacity(cpuCount);
         for i in 0..cpuCount
         /*args.NumCPU*/
@@ -492,6 +497,23 @@ impl VirtualMachine {
     pub fn PrintQ(shareSpace: &ShareSpace, vcpuId: u64) -> String {
         return shareSpace.scheduler.PrintQ(vcpuId);
     }
+}
+
+#[cfg(target_arch = "aarch64")]
+const _KVM_ARM_PREFERRED_TARGET:u64  = 0x8020aeaf;
+
+#[cfg(target_arch = "aarch64")]
+fn set_kvm_vcpu_init(vmfd: &VmFd) -> Result<()> {
+    use crate::kvm_vcpu_aarch64::KVM_VCPU_INIT;
+
+    let mut kvm_vcpu_init = KVMVcpuInit::default();
+    let raw_fd = vmfd.as_raw_fd();
+    let ret = unsafe { libc::ioctl(raw_fd, _KVM_ARM_PREFERRED_TARGET, &kvm_vcpu_init as *const _ as u64) };
+    if ret != 0 {
+        return Err(Error::SysError(ret));
+    }
+    unsafe { KVM_VCPU_INIT.Init(kvm_vcpu_init); }
+    Ok(())
 }
 
 fn SetSigusr1Handler() {
