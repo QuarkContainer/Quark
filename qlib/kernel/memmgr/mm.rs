@@ -507,7 +507,10 @@ impl MemoryManager {
             CPULocal::Myself()
                 .tlbEpoch
                 .store(currTLBEpoch, Ordering::Relaxed);
+            #[cfg(target_arch = "aarch64")]
             let curr = super::super::super::super::asm::CurrentUserTable();
+            #[cfg(target_arch = "x86_64")]
+            let curr = super::super::super::super::asm::CurrentCr3();
             PageTables::Switch(curr);
         }
     }
