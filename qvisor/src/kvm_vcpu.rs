@@ -14,7 +14,9 @@ use super::qlib::ShareSpace;
 use super::FD_NOTIFIER;
 use super::URING_MGR;
 use super::VMS;
+use super::vmspace::VMSpace;
 use alloc::alloc::alloc;
+use libc::ioctl;
 use core::alloc::Layout;
 use core::slice;
 use core::sync::atomic::AtomicU64;
@@ -22,6 +24,7 @@ use nix::sys::signal;
 use spin::Mutex;
 use std::sync::atomic::{fence, Ordering};
 use std::sync::mpsc::Sender;
+use std::os::unix::io::AsRawFd;
 
 pub struct HostPageAllocator {
     pub allocator: AlignedAllocator,
@@ -63,6 +66,14 @@ impl RefMgr for HostPageAllocator {
 pub enum KVMVcpuState {
     HOST,
     GUEST,
+}
+
+#[repr(C)]
+pub struct SignalMaskStruct {
+    length: u32,
+    mask1: u32,
+    mask2: u32,
+    _pad: u32,
 }
 
 pub struct KVMVcpu {
@@ -219,6 +230,58 @@ impl KVMVcpu {
             interrupting.0 = true;
             self.Signal(Signal::SIGCHLD);
         }
+    }
+
+    pub fn Signal(&self, signal: i32) {
+        loop {
+            let ret = VMSpace::TgKill(
+                self.tgid.load(Ordering::Relaxed) as i32,
+                self.threadid.load(Ordering::Relaxed) as i32,
+                signal,
+            );
+
+            if ret == 0 {
+                break;
+            }
+
+            if ret < 0 {
+                let errno = errno::errno().0;
+                if errno == SysErr::EAGAIN {
+                    continue;
+                }
+
+                panic!("vcpu tgkill fail with error {}", errno);
+            }
+        }
+    }
+
+    pub const KVM_SET_SIGNAL_MASK: u64 = 0x4004ae8b;
+    pub fn SignalMask(&self) {
+        let boundSignal = Signal::SIGSEGV; // Signal::SIGCHLD;
+        let bounceSignalMask: u64 = 1 << (boundSignal as u64 - 1);
+
+        let data = SignalMaskStruct {
+            length: 8,
+            mask1: (bounceSignalMask & 0xffffffff) as _,
+            mask2: (bounceSignalMask >> 32) as _,
+            _pad: 0,
+        };
+
+        let ret = unsafe {
+            ioctl(
+                self.vcpu.as_raw_fd(),
+                Self::KVM_SET_SIGNAL_MASK,
+                &data as *const _ as u64,
+            )
+        };
+
+        assert!(
+            ret == 0,
+            "SignalMask ret is {}/{}/{}",
+            ret,
+            errno::errno().0,
+            self.vcpu.as_raw_fd()
+        );
     }
 }
 

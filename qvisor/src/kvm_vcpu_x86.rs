@@ -205,29 +205,6 @@ impl KVMVcpu {
         Ok(())
     }
 
-    pub fn Signal(&self, signal: i32) {
-        loop {
-            let ret = vmspace::VMSpace::TgKill(
-                self.tgid.load(Ordering::Relaxed) as i32,
-                self.threadid.load(Ordering::Relaxed) as i32,
-                signal,
-            );
-
-            if ret == 0 {
-                break;
-            }
-
-            if ret < 0 {
-                let errno = errno::errno().0;
-                if errno == SysErr::EAGAIN {
-                    continue;
-                }
-
-                panic!("vcpu tgkill fail with error {}", errno);
-            }
-        }
-    }
-
     pub const KVM_SET_SIGNAL_MASK: u64 = 0x4004ae8b;
     pub fn SignalMask(&self) {
         let boundSignal = Signal::SIGSEGV; // Signal::SIGCHLD;
