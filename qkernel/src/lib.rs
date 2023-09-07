@@ -281,15 +281,28 @@ pub extern "C" fn syscall_handler(
 
     if debugLevel > DebugLevel::Error {
         let llevel = SHARESPACE.config.read().LogLevel;
-        callId = if nr < SysCallID::UnknowSyscall as u64 {
-            unsafe { mem::transmute(nr as u64) }
-        } else if SysCallID::sys_socket_produce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64
+        #[cfg(target_arch = "x86_64")]
         {
-            unsafe { mem::transmute(nr as u64) }
-        } else {
-            nr = SysCallID::UnknowSyscall as _;
-            SysCallID::UnknowSyscall
-        };
+            callId = if nr < SysCallID::UnknowSyscall as u64 {
+                unsafe { mem::transmute(nr as u64) }
+            } else if SysCallID::sys_socket_produce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64
+            {
+                unsafe { mem::transmute(nr as u64) }
+            } else {
+                nr = SysCallID::UnknowSyscall as _;
+                SysCallID::UnknowSyscall
+            };
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        {
+            callId = if nr < SysCallID::UnknowSyscall as u64 {
+                unsafe { mem::transmute(nr as u64) }
+            } else {
+                nr = SysCallID::UnknowSyscall as _;
+                SysCallID::UnknowSyscall
+            };
+        }
 
         if llevel == LogLevel::Complex {
             tid = currTask.Thread().lock().id;
