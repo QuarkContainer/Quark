@@ -391,6 +391,7 @@ impl HostAllocator {
     pub const fn New() -> Self {
         return Self {
             listHeapAddr: AtomicU64::new(0),
+            ioHeapAddr: AtomicU64::new(0),
             initialized: AtomicBool::new(true),
         };
     }
