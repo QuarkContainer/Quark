@@ -138,8 +138,8 @@ impl PageTables {
     }
 
     #[cfg(target_arch = "aarch64")]
-    pub fn Switch(cr3: u64) {
-        asm!("msr ttbr0_el1, {0}", in(reg) cr3);
+    pub fn Switch(table: u64) {
+        LoadUserTable(table)
     }
 
     pub fn SetRoot(&self, root: u64) {

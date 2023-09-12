@@ -782,13 +782,13 @@ impl ShareSpace {
         return self.signalHandlerAddr.load(Ordering::Relaxed);
     }
 
-    pub fn SetvirtualizationHandlerAddr(&self, addr: u64) {
-        self.virtualizationHandlerAddr.store(addr, Ordering::SeqCst);
-    }
+    // pub fn SetvirtualizationHandlerAddr(&self, addr: u64) {
+    //     self.virtualizationHandlerAddr.store(addr, Ordering::SeqCst);
+    // }
 
-    pub fn VirtualizationHandlerAddr(&self) -> u64 {
-        return self.virtualizationHandlerAddr.load(Ordering::Relaxed);
-    }
+    // pub fn VirtualizationHandlerAddr(&self) -> u64 {
+    //     return self.virtualizationHandlerAddr.load(Ordering::Relaxed);
+    // }
 
     pub fn StoreShutdown(&self) {
         self.shutdown.store(true, Ordering::SeqCst);

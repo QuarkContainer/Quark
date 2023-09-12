@@ -507,7 +507,7 @@ impl MemoryManager {
             CPULocal::Myself()
                 .tlbEpoch
                 .store(currTLBEpoch, Ordering::Relaxed);
-            let curr = super::super::super::super::asm::CurrentCr3();
+            let curr = super::super::super::super::asm::CurrentUserTable();
             PageTables::Switch(curr);
         }
     }

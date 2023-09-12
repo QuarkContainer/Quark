@@ -70,7 +70,6 @@ use crate::qlib::kernel::GlobalIOMgr;
 use self::asm::*;
 use self::boot::controller::*;
 use self::boot::loader::*;
-use self::interrupt::virtualization_handler;
 use self::kernel::timer::*;
 use self::kernel_def::*;
 use self::loader::vdso::*;
@@ -166,11 +165,11 @@ pub fn SingletonInit() {
         vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
         vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
         InitGs(0);
-        KERNEL_PAGETABLE.Init(PageTables::Init(CurrentCr3()));
+        KERNEL_PAGETABLE.Init(PageTables::Init(CurrentKernelTable()));
         //init fp state with current fp state as it is brand new vcpu
         FP_STATE.Reset();
         SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
-        SHARESPACE.SetvirtualizationHandlerAddr(virtualization_handler as u64);
+        //SHARESPACE.SetvirtualizationHandlerAddr(virtualization_handler as u64);
         IOURING.SetValue(SHARESPACE.GetIOUringAddr());
 
         // the error! can run after this point

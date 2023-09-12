@@ -231,13 +231,18 @@ impl PageTables {
             let nPt: *mut PageTable = ret.GetRoot() as *mut PageTable;
             let nPgdEntry = &mut (*nPt)[0];
             let nPudTbl = pagePool.AllocPage(true)? as *mut PageTable;
+            #[cfg(target_arch = "x86_64")]
             nPgdEntry.set_addr(
                 PhysAddr::new(nPudTbl as u64),
                 PageTableFlags::PRESENT
                     | PageTableFlags::WRITABLE
                     | PageTableFlags::USER_ACCESSIBLE,
             );
-
+            #[cfg(target_arch = "aarch64")]
+            nPgdEntry.set_addr(
+                PhysAddr::new(nPudTbl as u64),
+                PageTableFlags::VALID | PageTableFlags::TABLE | PageTableFlags::ACCESSED | PageTableFlags::USER_ACCESSIBLE,
+            );
             for i in MemoryDef::KERNEL_START_P2_ENTRY..MemoryDef::KERNEL_END_P2_ENTRY {
                 //memspace between 256GB to 512GB
                 //copy entry[i]
