@@ -21,11 +21,11 @@ use core::ops::Deref;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use x86_64::structures::paging::PageTableFlags;
 
 use crate::kernel_def::Invlpg;
 use crate::qlib::mutex::*;
 
+use super::super::super::pagetable::PageTableFlags;
 use super::super::super::addr::*;
 use super::super::super::auxv::*;
 use super::super::super::common::*;
