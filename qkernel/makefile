@@ -30,6 +30,9 @@ kernel:
 kernel_debug:
 	CARGO_TARGET_DIR=../target cargo xbuild --target x86_64-qkernel.json
 
+kernel_arm:
+	CARGO_TARGET_DIR=../target cargo xbuild --target aarch64-unknown-none-softfloat --release
+
 ../build/arch/$(arch)/%.o: src/qlib/kernel/arch/$(arch)/%.s
 	@mkdir -p $(shell dirname $@)
 	$(AS) $^ -o $@
