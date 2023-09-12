@@ -1,4 +1,4 @@
-arch ?= x86_64
+arch = $(shell uname -m)
 kernel := ../build/qkernel.bin
 kernel_debug := ../build/qkernel_d.bin
 target ?= $(arch)-qkernel
@@ -25,10 +25,10 @@ $(kernel_debug): kernel_debug $(assembly_object_files)
 		$(assembly_object_files) $(qkernel_debug)
 
 kernel:
-	CARGO_TARGET_DIR=../target cargo xbuild --target x86_64-qkernel.json --release
+	CARGO_TARGET_DIR=../target cargo xbuild --target $(arch)-qkernel.json --release
 
 kernel_debug:
-	CARGO_TARGET_DIR=../target cargo xbuild --target x86_64-qkernel.json
+	CARGO_TARGET_DIR=../target cargo xbuild --target $(arch)-qkernel.json
 
 ../build/arch/$(arch)/%.o: src/qlib/kernel/arch/$(arch)/%.s
 	@mkdir -p $(shell dirname $@)

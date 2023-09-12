@@ -783,7 +783,7 @@ impl Task {
     #[inline]
     pub fn SwitchPageTable(&self) {
         let root = self.mm.GetRoot();
-        let curr = super::asm::CurrentCr3();
+        let curr = super::asm::CurrentUserTable();
         if curr != root {
             CPULocal::Myself()
                 .tlbEpoch
@@ -792,6 +792,7 @@ impl Task {
         }
     }
 
+    #[cfg(target_arch="x86_64")]
     pub fn SetKernelPageTable() {
         KERNEL_PAGETABLE.SwitchTo();
     }

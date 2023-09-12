@@ -15,11 +15,11 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use spin::Mutex;
-use x86_64::structures::paging::PageTable;
-use x86_64::structures::paging::PageTableFlags;
-use x86_64::PhysAddr;
-use x86_64::VirtAddr;
 
+use super::super::super::pagetable::PageTableFlags;
+use super::super::super::pagetable::PageTable;
+use super::super::super::pagetable::PhysAddr;
+use super::super::super::pagetable::VirtAddr;
 use super::super::super::addr::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
@@ -231,13 +231,18 @@ impl PageTables {
             let nPt: *mut PageTable = ret.GetRoot() as *mut PageTable;
             let nPgdEntry = &mut (*nPt)[0];
             let nPudTbl = pagePool.AllocPage(true)? as *mut PageTable;
+            #[cfg(target_arch = "x86_64")]
             nPgdEntry.set_addr(
                 PhysAddr::new(nPudTbl as u64),
                 PageTableFlags::PRESENT
                     | PageTableFlags::WRITABLE
                     | PageTableFlags::USER_ACCESSIBLE,
             );
-
+            #[cfg(target_arch = "aarch64")]
+            nPgdEntry.set_addr(
+                PhysAddr::new(nPudTbl as u64),
+                PageTableFlags::VALID | PageTableFlags::TABLE | PageTableFlags::ACCESSED | PageTableFlags::USER_ACCESSIBLE,
+            );
             for i in MemoryDef::KERNEL_START_P2_ENTRY..MemoryDef::KERNEL_END_P2_ENTRY {
                 //memspace between 256GB to 512GB
                 //copy entry[i]

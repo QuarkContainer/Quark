@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2022 Quark Container Authors / 2018 The gVisor Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,12 +21,35 @@ use core::sync::atomic::fence;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use x86_64::structures::paging::page_table::PageTableEntry;
-use x86_64::structures::paging::page_table::PageTableIndex;
-use x86_64::structures::paging::PageTable;
-use x86_64::structures::paging::PageTableFlags;
-use x86_64::PhysAddr;
-use x86_64::VirtAddr;
+
+cfg_x86_64! {
+   pub use x86_64::structures::paging::page_table::PageTableEntry;
+   pub use x86_64::structures::paging::page_table::PageTableIndex;
+   pub use x86_64::structures::paging::PageTable;
+   pub use x86_64::structures::paging::PageTableFlags;
+   pub use x86_64::PhysAddr;
+   pub use x86_64::VirtAddr;
+
+   #[inline]
+   pub fn default_table_user() -> PageTableFlags {
+       return PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE | PageTableFlags::WRITABLE;
+   }
+}
+
+cfg_aarch64! {
+   pub use super::pagetable_aarch64::PageTableEntry;
+   pub use super::pagetable_aarch64::PageTableIndex;
+   pub use super::pagetable_aarch64::PageTable;
+   pub use super::pagetable_aarch64::PageTableFlags;
+   pub use super::pagetable_aarch64::PhysAddr;
+   pub use super::pagetable_aarch64::VirtAddr;
+
+   #[inline]
+   pub fn default_table_user() -> PageTableFlags {
+       return PageTableFlags::VALID | PageTableFlags::TABLE | PageTableFlags::ACCESSED | PageTableFlags::USER_ACCESSIBLE;
+   }
+}
+
 
 use super::super::asm::*;
 use super::addr::*;
@@ -97,18 +120,26 @@ impl PageTables {
         Self::Switch(addr);
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn IsActivePagetable(&self) -> bool {
         let root = self.GetRoot();
         return root == Self::CurrentCr3();
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn CurrentCr3() -> u64 {
         return CurrentCr3();
     }
 
     //switch pagetable for the cpu, Cr3
+    #[cfg(target_arch = "x86_64")]
     pub fn Switch(cr3: u64) {
         LoadCr3(cr3)
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn Switch(table: u64) {
+        LoadUserTable(table)
     }
 
     pub fn SetRoot(&self, root: u64) {
@@ -123,6 +154,7 @@ impl PageTables {
         return self.root.swap(0, Ordering::Acquire);
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn Print(&self) {
         let cr3 = CurrentCr3();
 
@@ -338,9 +370,7 @@ impl PageTables {
                 pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
                 pgdEntry.set_addr(
                     PhysAddr::new(pudTbl as u64),
-                    PageTableFlags::PRESENT
-                        | PageTableFlags::WRITABLE
-                        | PageTableFlags::USER_ACCESSIBLE,
+                    default_table_user(),
                 );
             } else {
                 pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
@@ -353,9 +383,7 @@ impl PageTables {
                 pmdTbl = pagePool.AllocPage(true)? as *mut PageTable;
                 pudEntry.set_addr(
                     PhysAddr::new(pmdTbl as u64),
-                    PageTableFlags::PRESENT
-                        | PageTableFlags::WRITABLE
-                        | PageTableFlags::USER_ACCESSIBLE,
+                    default_table_user(),
                 );
             } else {
                 pmdTbl = pudEntry.addr().as_u64() as *mut PageTable;
@@ -368,9 +396,7 @@ impl PageTables {
                 pteTbl = pagePool.AllocPage(true)? as *mut PageTable;
                 pmdEntry.set_addr(
                     PhysAddr::new(pteTbl as u64),
-                    PageTableFlags::PRESENT
-                        | PageTableFlags::WRITABLE
-                        | PageTableFlags::USER_ACCESSIBLE,
+                    default_table_user(),
                 );
             } else {
                 pteTbl = pmdEntry.addr().as_u64() as *mut PageTable;
@@ -577,9 +603,7 @@ impl PageTables {
                     pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
                     pgdEntry.set_addr(
                         PhysAddr::new(pudTbl as u64),
-                        PageTableFlags::PRESENT
-                            | PageTableFlags::WRITABLE
-                            | PageTableFlags::USER_ACCESSIBLE,
+                        default_table_user(),
                     );
                 } else {
                     pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
@@ -1095,6 +1119,7 @@ impl PageTables {
         }
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn SwapOutPages(
         &self,
         start: u64,
@@ -1156,6 +1181,17 @@ impl PageTables {
         );
     }
 
+    #[cfg(target_arch = "aarch64")]
+    pub fn SwapOutPages(
+        &self,
+        start: u64,
+        len: u64,
+        pages: &mut BTreeSet<u64>,
+        updatePageEntry: bool,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     // ret: >0: the swapped out page addr, 0: the page is missing
     pub fn SwapInPage(&self, vaddr: Addr) -> Result<u64> {
         let vaddr = Addr(vaddr.0 & !(PAGE_SIZE - 1));
@@ -1215,6 +1251,7 @@ impl PageTables {
         }
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
         let flags = pteEntry.flags();
         // bit9 : whether the page is swapout
@@ -1266,6 +1303,10 @@ impl PageTables {
                 }
             }
         }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
     }
 
     pub fn MProtect(
@@ -1329,9 +1370,7 @@ impl PageTables {
                     pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
                     pgdEntry.set_addr(
                         PhysAddr::new(pudTbl as u64),
-                        PageTableFlags::PRESENT
-                            | PageTableFlags::WRITABLE
-                            | PageTableFlags::USER_ACCESSIBLE,
+                        default_table_user(),
                     );
                 } else {
                     pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
@@ -1345,9 +1384,7 @@ impl PageTables {
                         pmdTbl = pagePool.AllocPage(true)? as *mut PageTable;
                         pudEntry.set_addr(
                             PhysAddr::new(pmdTbl as u64),
-                            PageTableFlags::PRESENT
-                                | PageTableFlags::WRITABLE
-                                | PageTableFlags::USER_ACCESSIBLE,
+                            default_table_user(),
                         );
                     } else {
                         pmdTbl = pudEntry.addr().as_u64() as *mut PageTable;
@@ -1361,9 +1398,7 @@ impl PageTables {
                             pteTbl = pagePool.AllocPage(true)? as *mut PageTable;
                             pmdEntry.set_addr(
                                 PhysAddr::new(pteTbl as u64),
-                                PageTableFlags::PRESENT
-                                    | PageTableFlags::WRITABLE
-                                    | PageTableFlags::USER_ACCESSIBLE,
+                                default_table_user(),
                             );
                         } else {
                             pteTbl = pmdEntry.addr().as_u64() as *mut PageTable;

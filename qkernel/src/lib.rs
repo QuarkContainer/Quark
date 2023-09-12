@@ -49,6 +49,7 @@ extern crate scopeguard;
 #[macro_use]
 extern crate serde_derive;
 extern crate spin;
+#[cfg(target_arch="x86_64")]
 extern crate x86_64;
 extern crate xmas_elf;
 extern crate log;
@@ -69,7 +70,6 @@ use crate::qlib::kernel::GlobalIOMgr;
 use self::asm::*;
 use self::boot::controller::*;
 use self::boot::loader::*;
-use self::interrupt::virtualization_handler;
 use self::kernel::timer::*;
 use self::kernel_def::*;
 use self::loader::vdso::*;
@@ -165,11 +165,11 @@ pub fn SingletonInit() {
         vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
         vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
         InitGs(0);
-        KERNEL_PAGETABLE.Init(PageTables::Init(CurrentCr3()));
+        KERNEL_PAGETABLE.Init(PageTables::Init(CurrentKernelTable()));
         //init fp state with current fp state as it is brand new vcpu
         FP_STATE.Reset();
         SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
-        SHARESPACE.SetvirtualizationHandlerAddr(virtualization_handler as u64);
+        //SHARESPACE.SetvirtualizationHandlerAddr(virtualization_handler as u64);
         IOURING.SetValue(SHARESPACE.GetIOUringAddr());
 
         // the error! can run after this point
@@ -281,15 +281,28 @@ pub extern "C" fn syscall_handler(
 
     if debugLevel > DebugLevel::Error {
         let llevel = SHARESPACE.config.read().LogLevel;
-        callId = if nr < SysCallID::UnknowSyscall as u64 {
-            unsafe { mem::transmute(nr as u64) }
-        } else if SysCallID::sys_socket_produce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64
+        #[cfg(target_arch = "x86_64")]
         {
-            unsafe { mem::transmute(nr as u64) }
-        } else {
-            nr = SysCallID::UnknowSyscall as _;
-            SysCallID::UnknowSyscall
-        };
+            callId = if nr < SysCallID::UnknowSyscall as u64 {
+                unsafe { mem::transmute(nr as u64) }
+            } else if SysCallID::sys_socket_produce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64
+            {
+                unsafe { mem::transmute(nr as u64) }
+            } else {
+                nr = SysCallID::UnknowSyscall as _;
+                SysCallID::UnknowSyscall
+            };
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        {
+            callId = if nr < SysCallID::UnknowSyscall as u64 {
+                unsafe { mem::transmute(nr as u64) }
+            } else {
+                nr = SysCallID::UnknowSyscall as _;
+                SysCallID::UnknowSyscall
+            };
+        }
 
         if llevel == LogLevel::Complex {
             tid = currTask.Thread().lock().id;

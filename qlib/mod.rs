@@ -15,6 +15,24 @@
 extern crate alloc;
 extern crate spin;
 
+macro_rules! cfg_x86_64 {
+    ($($item:item)*) => {
+        $(
+            #[cfg(target_arch="x86_64")]
+            $item
+        )*
+    }
+}
+
+macro_rules! cfg_aarch64 {
+    ($($item:item)*) => {
+        $(
+            #[cfg(target_arch="aarch64")]
+            $item
+        )*
+    }
+}
+
 //#[macro_use]
 //pub mod macros;
 pub mod addr;
@@ -66,6 +84,9 @@ pub mod proxy;
 pub mod rdma_svc_cli;
 pub mod rdmasocket;
 pub mod unix_socket;
+
+#[cfg(target_arch = "aarch64")]
+mod pagetable_aarch64;
 
 use self::mutex::*;
 use alloc::vec::Vec;
@@ -133,6 +154,7 @@ pub const DUMMY_TASKID: TaskId = TaskId::New(0xffff_ffff);
 
 pub const MAX_VCPU_COUNT: usize = 64;
 
+#[cfg(target_arch = "x86_64")]
 #[allow(non_camel_case_types)]
 #[repr(u64)]
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -630,6 +652,447 @@ pub enum SysCallID {
     EXTENSION_MAX,
 }
 
+#[cfg(target_arch = "aarch64")]
+#[allow(non_camel_case_types)]
+#[repr(u64)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum SysCallID {
+    sys_io_setup = 0 as u64,
+    sys_io_destroy,
+    sys_io_submit,
+    sys_io_cancel,
+    sys_io_getevents,
+    sys_setxattr,
+    sys_lsetxattr,
+    sys_fsetxattr,
+    sys_getxattr,
+    sys_lgetxattr,
+    sys_fgetxattr, //10
+    sys_listxattr,
+    sys_llistxattr,
+    sys_flistxattr,
+    sys_removexattr,
+    sys_lremovexattr,
+    sys_fremovexattr,
+    sys_getcwd,
+    sys_lookup_dcookie,
+    sys_eventfd2,
+    sys_epoll_create1, //20
+    sys_epoll_ctl,
+    sys_epoll_pwait,
+    sys_dup,
+    sys_dup3,
+    sys_fcntl,
+    sys_inotify_init1,
+    sys_inotify_add_watch,
+    sys_inotify_rm_watch,
+    sys_ioctl,
+    sys_ioprio_set, //30
+    sys_ioprio_get,
+    sys_flock,
+    sys_mknodat,
+    sys_mkdirat,
+    sys_unlinkat,
+    sys_symlinkat,
+    sys_linkat,
+    sys_renameat,
+    sys_umount2,
+    sys_mount, //40
+    sys_pivot_root,
+    sys_nfsservctl,
+    sys_statfs,
+    sys_fstatfs,
+    sys_truncate,
+    sys_ftruncate,
+    sys_fallocate,
+    sys_faccessat,
+    sys_chdir,
+    sys_fchdir, //50
+    sys_chroot,
+    sys_fchmod,
+    sys_fchmodat,
+    sys_fchownat,
+    sys_fchown,
+    sys_openat,
+    sys_close,
+    sys_vhangup,
+    sys_pipe2,
+    sys_quotactl, //60
+    sys_getdents64,
+    sys_lseek,
+    sys_read,
+    sys_write,
+    sys_readv,
+    sys_writev,
+    sys_pread64,
+    sys_pwrite64,
+    sys_preadv,
+    sys_pwritev, //70
+    sys_sendfile,
+    sys_pselect6,
+    sys_ppoll,
+    sys_signalfd4,
+    sys_vmsplice,
+    sys_splice,
+    sys_tee,
+    sys_readlinkat,
+    sys_newfstatat,
+    sys_fstat, //80
+    sys_sync,
+    sys_fsync,
+    sys_fdatasync,
+    sys_sync_file_range,
+    sys_timerfd_create,
+    sys_timerfd_settime,
+    sys_timerfd_gettime,
+    sys_utimensat,
+    sys_acct,
+    sys_capget, //90
+    sys_capset,
+    sys_personality,
+    sys_exit,
+    sys_exit_group,
+    sys_waitid,
+    sys_set_tid_address,
+    sys_unshare,
+    sys_futex,
+    sys_set_robust_list,
+    sys_get_robust_list, //100
+    sys_nanosleep,
+    sys_getitimer,
+    sys_setitimer,
+    sys_kexec_load,
+    sys_init_module,
+    sys_delete_module,
+    sys_timer_create,
+    sys_timer_gettime,
+    sys_timer_getoverrun,
+    sys_timer_settime, //110
+    sys_timer_delete,
+    sys_clock_settime,
+    sys_clock_gettime,
+    sys_clock_getres,
+    sys_clock_nanosleep,
+    sys_syslog,
+    sys_ptrace,
+    sys_sched_setparam,
+    sys_sched_setscheduler,
+    sys_sched_getscheduler, //120
+    sys_sched_getparam,
+    sys_sched_setaffinity,
+    sys_sched_getaffinity,
+    sys_sched_yield,
+    sys_sched_get_priority_max,
+    sys_sched_get_priority_min,
+    sys_sched_rr_get_interval,
+    sys_restart_syscall,
+    sys_kill,
+    sys_tkill, //130
+    sys_tgkill,
+    sys_sigaltstack,
+    sys_rt_sigsuspend,
+    sys_rt_sigaction,
+    sys_rt_sigprocmask,
+    sys_rt_sigpending,
+    sys_rt_sigtimedwait,
+    sys_rt_sigqueueinfo,
+    sys_rt_sigreturn,
+    sys_setpriority, //140
+    sys_getpriority,
+    sys_reboot,
+    sys_setregid,
+    sys_setgid,
+    sys_setreuid,
+    sys_setuid,
+    sys_setresuid,
+    sys_getresuid,
+    sys_setresgid,
+    sys_getresgid, //150
+    sys_setfsuid,
+    sys_setfsgid,
+    sys_times,
+    sys_setpgid,
+    sys_getpgid,
+    sys_getsid,
+    sys_setsid,
+    sys_getgroups,
+    sys_setgroups,
+    sys_uname, // 160
+    sys_sethostname,
+    sys_setdomainname,
+    sys_getrlimit,
+    sys_setrlimit,
+    sys_getrusage,
+    sys_umask,
+    sys_prctl,
+    sys_getcpu,
+    sys_gettimeofday,
+    sys_settimeofday, //170
+    sys_adjtimex,
+    sys_getpid,
+    sys_getppid,
+    sys_getuid,
+    sys_geteuid,
+    sys_getgid,
+    sys_getegid,
+    sys_gettid,
+    sys_sysinfo,
+    sys_mq_open, //180
+    sys_mq_unlink,
+    sys_mq_timedsend,
+    sys_mq_timedreceive,
+    sys_mq_notify,
+    sys_mq_getsetattr,
+    sys_msgget,
+    sys_msgctl,
+    sys_msgrcv,
+    sys_msgsnd,
+    sys_semget, //190
+    sys_semctl,
+    sys_semtimedop,
+    sys_semop,
+    sys_shmget,
+    sys_shmctl,
+    sys_shmat,
+    sys_shmdt,
+    sys_socket,
+    sys_socketpair,
+    sys_bind, //200
+    sys_listen,
+    sys_accept,
+    sys_connect,
+    sys_getsockname,
+    sys_getpeername,
+    sys_sendto,
+    sys_recvfrom,
+    sys_setsockopt,
+    sys_getsockopt,
+    sys_shutdown, //210
+    sys_sendmsg,
+    sys_recvmsg,
+    sys_readahead,
+    sys_brk,
+    sys_munmap,
+    sys_mremap,
+    sys_add_key,
+    sys_request_key,
+    sys_keyctl,
+    sys_clone, //220
+    sys_execve,
+    sys_mmap,
+    sys_fadvise64,
+    sys_swapon,
+    sys_swapoff,
+    sys_mprotect,
+    sys_msync,
+    sys_mlock,
+    sys_munlock,
+    sys_mlockall, //230
+    sys_munlockall,
+    sys_mincore,
+    sys_madvise,
+    sys_remap_file_pages,
+    sys_mbind,
+    sys_get_mempolicy,
+    sys_set_mempolicy,
+    sys_migrate_pages,
+    sys_move_pages,
+    sys_rt_tgsigqueueinfo, //240
+    sys_perf_event_open,
+    sys_accept4,
+    sys_recvmmsg,
+    syscall_244,
+    syscall_245,
+    syscall_246,
+    syscall_247,
+    syscall_248,
+    syscall_249,
+    syscall_250, //250
+    syscall_251,
+    syscall_252,
+    syscall_253,
+    syscall_254,
+    syscall_255,
+    syscall_256,
+    syscall_257,
+    syscall_258,
+    syscall_259,
+    sys_wait4, //260
+    sys_prlimit64,
+    sys_fanotify_init,
+    sys_fanotify_mark,
+    sys_name_to_handle_at,
+    sys_open_by_handle_at,
+    sys_clock_adjtime,
+    sys_syncfs,
+    sys_setns,
+    sys_sendmmsg,
+    sys_process_vm_readv, //270
+    sys_process_vm_writev,
+    sys_kcmp,
+    sys_finit_module,
+    sys_sched_setattr,
+    sys_sched_getattr,
+    sys_renameat2,
+    sys_seccomp,
+    sys_getrandom,
+    sys_memfd_create,
+    sys_bpf, //280
+    sys_execveat,
+    sys_userfaultfd,
+    sys_membarrier,
+    sys_mlock2,
+    sys_copy_file_range,
+    sys_preadv2,
+    sys_pwritev2,
+    sys_pkey_mprotect,
+    sys_pkey_alloc,
+    sys_pkey_free,
+    //290
+    sys_statx,
+    syscall_292,
+    syscall_293,
+    syscall_294,
+    syscall_295,
+    syscall_296,
+    syscall_297,
+    syscall_298,
+    syscall_299,
+    syscall_300,
+    //300
+    syscall_301,
+    syscall_302,
+    syscall_303,
+    syscall_304,
+    syscall_305,
+    syscall_306,
+    syscall_307,
+    syscall_308,
+    syscall_309,
+    syscall_310,
+    //310
+    syscall_311,
+    syscall_312,
+    syscall_313,
+    syscall_314,
+    syscall_315,
+    syscall_316,
+    syscall_317,
+    syscall_318,
+    syscall_319,
+    syscall_320,
+    //320
+    syscall_321,
+    syscall_322,
+    syscall_323,
+    syscall_324,
+    syscall_325,
+    syscall_326,
+    syscall_327,
+    syscall_328,
+    syscall_329,
+    syscall_330,
+    // 330
+    syscall_331,
+    syscall_332,
+
+    syscall_333,
+    syscall_334,
+    syscall_335,
+    syscall_336,
+    syscall_337,
+    syscall_338,
+    syscall_339,
+    syscall_340,
+    syscall_341,
+    syscall_342,
+    syscall_343,
+    syscall_344,
+    syscall_345,
+    syscall_346,
+    syscall_347,
+    syscall_348,
+    syscall_349,
+    syscall_350,
+    syscall_351,
+    syscall_352,
+    syscall_353,
+    syscall_354,
+    syscall_355,
+    syscall_356,
+    syscall_357,
+    syscall_358,
+    syscall_359,
+    syscall_360,
+    syscall_361,
+    syscall_362,
+    syscall_363,
+    syscall_364,
+    syscall_365,
+    syscall_366,
+    syscall_367,
+    syscall_368,
+    syscall_369,
+    syscall_370,
+    syscall_371,
+    syscall_372,
+    syscall_373,
+    syscall_374,
+    syscall_375,
+    syscall_376,
+    syscall_377,
+    syscall_378,
+    syscall_379,
+    syscall_380,
+    syscall_381,
+    syscall_382,
+    syscall_383,
+    syscall_384,
+    syscall_385,
+    syscall_386,
+    syscall_387,
+    syscall_388,
+    syscall_389,
+    syscall_390,
+    syscall_391,
+    syscall_392,
+    syscall_393,
+    syscall_394,
+    syscall_395,
+    syscall_396,
+    syscall_397,
+    syscall_398,
+    syscall_399,
+    syscall_400,
+    syscall_401,
+    syscall_402,
+    syscall_403,
+    syscall_404,
+    syscall_405,
+    syscall_406,
+    syscall_407,
+    syscall_408,
+    syscall_409,
+    syscall_410,
+    syscall_411,
+    syscall_412,
+    syscall_413,
+    syscall_414,
+    syscall_415,
+    syscall_416,
+    syscall_417,
+    syscall_418,
+    syscall_419,
+    syscall_420,
+    syscall_421,
+    syscall_422,
+    syscall_423,
+   
+    UnknowSyscall = 451,
+
+    EXTENSION_MAX,
+}
+
 #[derive(Clone, Default, Debug, Copy)]
 pub struct GetTimeCall {
     pub res: i64,
@@ -761,13 +1224,13 @@ impl ShareSpace {
         return self.signalHandlerAddr.load(Ordering::Relaxed);
     }
 
-    pub fn SetvirtualizationHandlerAddr(&self, addr: u64) {
-        self.virtualizationHandlerAddr.store(addr, Ordering::SeqCst);
-    }
+    // pub fn SetvirtualizationHandlerAddr(&self, addr: u64) {
+    //     self.virtualizationHandlerAddr.store(addr, Ordering::SeqCst);
+    // }
 
-    pub fn VirtualizationHandlerAddr(&self) -> u64 {
-        return self.virtualizationHandlerAddr.load(Ordering::Relaxed);
-    }
+    // pub fn VirtualizationHandlerAddr(&self) -> u64 {
+    //     return self.virtualizationHandlerAddr.load(Ordering::Relaxed);
+    // }
 
     pub fn StoreShutdown(&self) {
         self.shutdown.store(true, Ordering::SeqCst);

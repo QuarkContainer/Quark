@@ -56,13 +56,17 @@ pub mod asm;
 
 #[macro_use]
 pub mod print;
-
+#[cfg(target_arch="x86_64")]
 pub mod amd64_def;
 pub mod console;
 pub mod elf_loader;
 pub mod heap_alloc;
 pub mod kernel_def;
 mod kvm_vcpu;
+#[cfg(target_arch = "aarch64")]
+mod kvm_vcpu_aarch64;
+#[cfg(target_arch = "x86_64")]
+mod kvm_vcpu_x86;
 mod memmgr;
 pub mod namespace;
 mod qcall;

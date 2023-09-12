@@ -11,13 +11,3 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-#[cfg(target_arch = "aarch64")]
-mod aarch64;
-#[cfg(target_arch = "aarch64")]
-pub use aarch64::*;
-
-#[cfg(target_arch = "x86_64")]
-mod x86_64;
-#[cfg(target_arch = "x86_64")]
-pub use x86_64::*;
