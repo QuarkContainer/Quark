@@ -19,10 +19,10 @@ pub unsafe fn syscall0(n: usize) -> usize {
     let ret: usize;
     asm!(
         "
-            mov w8, w0
-            svc #0 
+            svc #0
         ",
-        inlateout("x0") n as usize => ret,
+        out("x0") ret,
+        in("x8") n,
     );
     ret
 }
@@ -32,12 +32,10 @@ pub unsafe fn syscall1(n: usize, a1: usize) -> usize {
     let ret: usize;
     asm!(
         "
-            mov w8, w0
-            mov x0, x1
             svc #0
         ",
-        inlateout("x0") n as usize => ret,
-        in("x1") a1,
+        inlateout("x0") a1 as usize => ret,
+        in("x8") n,
     );
     ret
 }
@@ -47,14 +45,11 @@ pub unsafe fn syscall2(n: usize, a1: usize, a2: usize) -> usize {
     let ret: usize;
     asm!(
         "
-            mov w8, w0
-            mov x0, x1
-            mov x1, x2
             svc #0
         ",
-        inlateout("x0") n as usize => ret,
-        in("x1") a1,
-        in("x2") a2,
+        inlateout("x0") a1 as usize => ret,
+        in("x1") a2,
+        in("x8") n,
     );
     ret
 }
@@ -64,16 +59,12 @@ pub unsafe fn syscall3(n: usize, a1: usize, a2: usize, a3: usize) -> usize {
     let ret: usize;
     asm!(
         "
-            mov w8, w0
-            mov x0, x1
-            mov x1, x2
-            mov x2, x3
             svc #0
         ",
-        inlateout("x0") n as usize => ret,
-        in("x1") a1,
-        in("x2") a2,
-        in("x3") a3,
+        inlateout("x0") a1 as usize => ret,
+        in("x1") a2,
+        in("x2") a3, 
+        in("x8") n,
     );
     ret
 }
@@ -83,18 +74,13 @@ pub unsafe fn syscall4(n: usize, a1: usize, a2: usize, a3: usize, a4: usize) -> 
     let ret: usize;
     asm!(
         "
-            mov w8, w0
-            mov x0, x1
-            mov x1, x2
-            mov x2, x3
-            mov x3, x4
             svc #0
         ",
-        inlateout("x0") n as usize => ret,
-        in("x1") a1,
-        in("x2") a2,
-        in("x3") a3,
-        in("x4") a4,
+        inlateout("x0") a1 as usize => ret,
+        in("x1") a2,
+        in("x2") a3,
+        in("x3") a4,
+        in("x8") n,
     );
     ret
 }
@@ -104,20 +90,14 @@ pub unsafe fn syscall5(n: usize, a1: usize, a2: usize, a3: usize, a4: usize, a5:
     let ret: usize;
     asm!(
         "
-            mov w8, w0
-            mov x0, x1
-            mov x1, x2
-            mov x2, x3
-            mov x3, x4
-            mov x4, x5
             svc #0
         ",
-        inlateout("x0") n as usize => ret,
-        in("x1") a1,
-        in("x2") a2,
-        in("x3") a3,
-        in("x4") a4,
-        in("x5")  a5,
+        inlateout("x0") a1 as usize => ret,
+        in("x1") a2,
+        in("x2") a3,
+        in("x3") a4,
+        in("x4") a5,
+        in("x8") n,
     );
     ret
 }
@@ -134,23 +114,16 @@ pub unsafe fn syscall6(
 ) -> usize {
     let ret: usize;
     asm!(
-        "
-            mov w8, w0
-            mov x0, x1
-            mov x1, x2
-            mov x2, x3
-            mov x3, x4
-            mov x4, x5
-            mov x5, x6
-            svc #0
-        ",
-        inlateout("x0") n as usize => ret,
-        in("x1") a1,
-        in("x2") a2,
-        in("x3") a3,
-        in("x4") a4,
-        in("x5") a5,
-        in("x6") a6,
+    "
+        svc #0
+    ",
+    inlateout("x0") a1 as usize => ret,
+    in("x1") a2,
+    in("x2") a3,
+    in("x3") a4,
+    in("x4") a5,
+    in("x5") a6,
+    in("x8") n,
     );
     ret
 }

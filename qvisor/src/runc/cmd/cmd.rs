@@ -58,6 +58,7 @@ impl CmdCmd {
         let mut args = Args::default();
         args.KvmFd = kvmfd;
         args.AutoStart = true;
+        args.ID = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_string();
 
         for a in &self.cmd {
             args.Spec.process.args.push(a.to_string());
