@@ -512,6 +512,7 @@ fn set_kvm_vcpu_init(vmfd: &VmFd) -> Result<()> {
     if ret != 0 {
         return Err(Error::SysError(ret));
     }
+    kvm_vcpu_init.set_psci_0_2();
     unsafe { KVM_VCPU_INIT.Init(kvm_vcpu_init); }
     Ok(())
 }
