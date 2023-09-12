@@ -1479,6 +1479,7 @@ impl VMSpace {
         return ret;
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn HostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
         let mut ax: u32 = axArg;
         let bx: u32;
@@ -1497,6 +1498,11 @@ impl VMSpace {
         }
 
         return (ax, bx, cx, dx);
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn HostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
+        return (0, 0, 0, 0);
     }
 
     pub fn SymLinkAt(oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {
@@ -1575,11 +1581,15 @@ impl VMSpace {
 
     pub fn PrintStr(phAddr: u64) {
         unsafe {
+            #[cfg(target_arch="aarch64")]
+            let ptr = phAddr as *const u8; 
+            #[cfg(target_arch="x86_64")]
+            let ptr = phAddr as *const i8; 
             info!(
                 "the Str: {} ",
                 str::from_utf8_unchecked(slice::from_raw_parts(
                     phAddr as *const u8,
-                    strlen(phAddr as *const i8) + 1
+                    strlen(ptr) + 1
                 ))
             );
         }
@@ -1669,7 +1679,10 @@ impl VMSpace {
 
     pub fn LibcStatx(osfd: i32) {
         let statx = Statx::default();
+        #[cfg(target_arch="x86_64")]
         let addr: i8 = 0;
+        #[cfg(target_arch="aarch64")]
+        let addr: u8 = 0;
         let ret = unsafe {
             libc::statx(
                 osfd,
@@ -1688,10 +1701,16 @@ impl VMSpace {
         );
     }
 
+    #[cfg(target_arch="x86_64")]
     pub fn GetVcpuFreq(&self) -> i64 {
         let freq = self.vcpus[0].vcpu.get_tsc_khz().unwrap() * 1000;
         return freq as i64;
     }
+
+    #[cfg(target_arch="aarch64")]
+    pub fn GetVcpuFreq(&self) -> i64 {
+        return 0;
+    }    
 
     pub fn Membarrier(cmd: i32) -> i32 {
         let nr = SysCallID::sys_membarrier as usize;
