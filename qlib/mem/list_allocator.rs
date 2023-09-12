@@ -249,12 +249,21 @@ impl VcpuAllocator {
 #[derive(Debug, Default)]
 pub struct HostAllocator {
     pub listHeapAddr: AtomicU64,
+    pub ioHeapAddr: AtomicU64,
     pub initialized: AtomicBool,
 }
 
 impl HostAllocator {
     pub fn Allocator(&self) -> &mut ListAllocator {
         return unsafe { &mut *(self.listHeapAddr.load(Ordering::Relaxed) as *mut ListAllocator) };
+    }
+
+    pub fn IOAllocator(&self) -> &mut ListAllocator {
+        return unsafe { &mut *(self.ioHeapAddr.load(Ordering::Relaxed) as *mut ListAllocator) };
+    }
+
+    pub fn IsHeapAddr(addr: u64) -> bool {
+        return addr < MemoryDef::HEAP_END;
     }
 
     #[inline]
