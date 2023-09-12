@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::alloc::{alloc, Layout};
-use alloc::slice;
+//use alloc::alloc::{alloc, Layout};
+//use alloc::slice;
 use core::mem::size_of;
-use core::sync::atomic::AtomicU64;
+//use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use std::os::unix::io::AsRawFd;
 use std::sync::atomic::fence;
-use std::sync::mpsc::Sender;
+//use std::sync::mpsc::Sender;
 
 use kvm_bindings::*;
 use kvm_ioctls::VcpuExit;
 use libc::*;
-use nix::sys::signal;
+//use nix::sys::signal;
 
 use crate::qlib::cpuid::XSAVEFeature::{XSAVEFeatureBNDCSR, XSAVEFeatureBNDREGS};
 use crate::qlib::kernel::asm::xgetbv;
@@ -45,8 +45,8 @@ use super::qlib::linux::time::Timespec;
 use super::qlib::linux_def::*;
 use super::qlib::pagetable::*;
 use super::qlib::perf_tunning::*;
-use super::qlib::task_mgr::*;
-use super::qlib::vcpu_mgr::*;
+//use super::qlib::task_mgr::*;
+//use super::qlib::vcpu_mgr::*;
 use super::runc::runtime::vm::*;
 use super::syncmgr::*;
 use super::URING_MGR;
