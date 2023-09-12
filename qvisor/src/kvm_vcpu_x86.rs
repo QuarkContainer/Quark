@@ -205,35 +205,6 @@ impl KVMVcpu {
         Ok(())
     }
 
-    pub const KVM_SET_SIGNAL_MASK: u64 = 0x4004ae8b;
-    pub fn SignalMask(&self) {
-        let boundSignal = Signal::SIGSEGV; // Signal::SIGCHLD;
-        let bounceSignalMask: u64 = 1 << (boundSignal as u64 - 1);
-
-        let data = SignalMaskStruct {
-            length: 8,
-            mask1: (bounceSignalMask & 0xffffffff) as _,
-            mask2: (bounceSignalMask >> 32) as _,
-            _pad: 0,
-        };
-
-        let ret = unsafe {
-            ioctl(
-                self.vcpu.as_raw_fd(),
-                Self::KVM_SET_SIGNAL_MASK,
-                &data as *const _ as u64,
-            )
-        };
-
-        assert!(
-            ret == 0,
-            "SignalMask ret is {}/{}/{}",
-            ret,
-            errno::errno().0,
-            self.vcpu.as_raw_fd()
-        );
-    }
-
     pub const KVM_INTERRUPT: u64 = 0x4004ae86;
     pub fn InterruptGuest(&self) {
         let bounce: u32 = 20; //VirtualizationException
