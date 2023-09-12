@@ -29,7 +29,6 @@ use super::qlib::kernel::vcpu::*;
 use super::qlib::kernel::SHARESPACE;
 use super::qlib::kernel::TSC;
 
-use super::qlib::addr::PAGE_SHIFT;
 use super::qlib::common::*;
 use super::qlib::kernel::memmgr::pma::*;
 use super::qlib::kernel::task::*;
