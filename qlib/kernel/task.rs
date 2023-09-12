@@ -792,6 +792,7 @@ impl Task {
         }
     }
 
+    #[cfg(target_arch="x86_64")]
     pub fn SetKernelPageTable() {
         KERNEL_PAGETABLE.SwitchTo();
     }

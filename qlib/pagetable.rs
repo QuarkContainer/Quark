@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2022 Quark Container Authors / 2018 The gVisor Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,12 +21,25 @@ use core::sync::atomic::fence;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use x86_64::structures::paging::page_table::PageTableEntry;
-use x86_64::structures::paging::page_table::PageTableIndex;
-use x86_64::structures::paging::PageTable;
-use x86_64::structures::paging::PageTableFlags;
-use x86_64::PhysAddr;
-use x86_64::VirtAddr;
+
+cfg_x86_64! {
+    use x86_64::structures::paging::page_table::PageTableEntry;
+    use x86_64::structures::paging::page_table::PageTableIndex;
+    use x86_64::structures::paging::PageTable;
+    use x86_64::structures::paging::PageTableFlags;
+    use x86_64::PhysAddr;
+    use x86_64::VirtAddr;
+}
+
+cfg_aarch64! {
+    use super::pagetable_aarch64::PageTableEntry;
+    use super::pagetable_aarch64::PageTableIndex;
+    use super::pagetable_aarch64::PageTable;
+    use super::pagetable_aarch64::PageTableFlags;
+    use super::pagetable_aarch64::PhysAddr;
+    use super::pagetable_aarch64::VirtAddr;
+}
+
 
 use super::super::asm::*;
 use super::addr::*;
@@ -97,18 +110,26 @@ impl PageTables {
         Self::Switch(addr);
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn IsActivePagetable(&self) -> bool {
         let root = self.GetRoot();
         return root == Self::CurrentCr3();
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn CurrentCr3() -> u64 {
         return CurrentCr3();
     }
 
     //switch pagetable for the cpu, Cr3
+    #[cfg(target_arch = "x86_64")]
     pub fn Switch(cr3: u64) {
         LoadCr3(cr3)
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn Switch(cr3: u64) {
+        // TODO support context switch of pagetable
     }
 
     pub fn SetRoot(&self, root: u64) {
@@ -123,6 +144,7 @@ impl PageTables {
         return self.root.swap(0, Ordering::Acquire);
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn Print(&self) {
         let cr3 = CurrentCr3();
 
