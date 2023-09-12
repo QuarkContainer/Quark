@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#![cfg(target_arch="x86_64")]
-
 use kvm_bindings::kvm_segment;
 
 pub type SegmentDescriptorFlags = u32;

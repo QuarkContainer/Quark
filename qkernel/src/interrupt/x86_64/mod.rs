@@ -15,19 +15,19 @@
 use core::arch::asm;
 mod idt;
 
-use super::asm::*;
-use super::qlib::addr::*;
-use super::qlib::backtracer;
-use super::qlib::common::*;
-use super::qlib::kernel::TSC;
-use super::qlib::linux_def::*;
-use super::qlib::singleton::*;
-use super::qlib::vcpu_mgr::*;
-use super::task::*;
-use super::threadmgr::task_sched::*;
-use super::MainRun;
-use super::SignalDef::*;
-use super::SHARESPACE;
+use super::super::asm::*;
+use super::super::qlib::addr::*;
+use super::super::qlib::backtracer;
+use super::super::qlib::common::*;
+use super::super::qlib::kernel::TSC;
+use super::super::qlib::linux_def::*;
+use super::super::qlib::singleton::*;
+use super::super::qlib::vcpu_mgr::*;
+use super::super::task::*;
+use super::super::threadmgr::task_sched::*;
+use super::super::MainRun;
+use super::super::SignalDef::*;
+use super::super::SHARESPACE;
 
 #[derive(Clone, Copy, Debug, core::cmp::PartialEq)]
 pub enum ExceptionStackVec {
@@ -738,7 +738,7 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
         currTask.AccountTaskLeave(SchedState::RunningApp);
         //currTask.SaveFp();
         CPULocal::Myself().ResetEnterAppTimestamp();
-        super::qlib::kernel::taskMgr::Yield();
+        super::super::qlib::kernel::taskMgr::Yield();
         MainRun(currTask, TaskRunState::RunApp);
         currTask.RestoreFp();
         CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());

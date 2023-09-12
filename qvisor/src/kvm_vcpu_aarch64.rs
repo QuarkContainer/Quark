@@ -10,6 +10,5 @@ impl KVMVcpu {
         Ok(())
     }
 
-    pub fn Signal(&self, signal: i32) {
-    }
+    pub fn Signal(&self, signal: i32) {}
 }

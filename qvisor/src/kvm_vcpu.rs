@@ -1,27 +1,27 @@
-use core::sync::atomic::AtomicU64;
-use core::alloc::Layout;
-use alloc::alloc::alloc;
-use core::slice;
-use spin::Mutex;
-use std::sync::mpsc::Sender;
-use super::qlib::linux_def::{MemoryDef, SysErr};
-use super::qlib::common::{Error, Result};
-use super::VMS;
-use super::qlib::ShareSpace;
-use super::qlib::qmsg::qcall::{HostOutputMsg, QMsg};
 use super::qcall::AQHostCall;
-use super::qlib::linux_def::{Signal, EVENT_READ};
-use super::qlib::vcpu_mgr::CPULocal;
-use super::FD_NOTIFIER;
-use super::URING_MGR;
-use super::qlib::kernel::IOURING;
-use super::qlib::task_mgr::Scheduler;
-use super::qlib::pagetable::AlignedAllocator;
 use super::qlib::buddyallocator::ZeroPage;
 use super::qlib::common::Allocator;
 use super::qlib::common::RefMgr;
+use super::qlib::common::{Error, Result};
+use super::qlib::kernel::IOURING;
+use super::qlib::linux_def::{MemoryDef, SysErr};
+use super::qlib::linux_def::{Signal, EVENT_READ};
+use super::qlib::pagetable::AlignedAllocator;
+use super::qlib::qmsg::qcall::{HostOutputMsg, QMsg};
+use super::qlib::task_mgr::Scheduler;
+use super::qlib::vcpu_mgr::CPULocal;
+use super::qlib::ShareSpace;
+use super::FD_NOTIFIER;
+use super::URING_MGR;
+use super::VMS;
+use alloc::alloc::alloc;
+use core::alloc::Layout;
+use core::slice;
+use core::sync::atomic::AtomicU64;
 use nix::sys::signal;
+use spin::Mutex;
 use std::sync::atomic::{fence, Ordering};
+use std::sync::mpsc::Sender;
 
 pub struct HostPageAllocator {
     pub allocator: AlignedAllocator,
@@ -103,8 +103,8 @@ impl KVMVcpu {
         shareSpaceAddr: u64,
         autoStart: bool,
     ) -> Result<Self> {
-                const DEFAULT_STACK_PAGES: u64 = MemoryDef::DEFAULT_STACK_PAGES; //64KB
-                                                                                          //let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
+        const DEFAULT_STACK_PAGES: u64 = MemoryDef::DEFAULT_STACK_PAGES; //64KB
+        //let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
         let stackSize = DEFAULT_STACK_PAGES << 12;
         let stackAddr = AlignedAllocate(stackSize as usize, stackSize as usize, false).unwrap();
         let topStackAddr = stackAddr + (DEFAULT_STACK_PAGES << 12);
@@ -245,7 +245,6 @@ pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64>
     }
 }
 
-
 // SetVmExitSigAction set SIGCHLD as the vm exit signal,
 // the signal handler will set_kvm_immediate_exit to 1,
 // which will force the vcpu running exit with Intr.
@@ -326,7 +325,14 @@ impl CPULocal {
             u64: eventfd as u64,
         };
 
-        let ret = unsafe { libc::epoll_ctl(epfd, libc::EPOLL_CTL_ADD, eventfd, &mut ev as *mut libc::epoll_event) };
+        let ret = unsafe {
+            libc::epoll_ctl(
+                epfd,
+                libc::EPOLL_CTL_ADD,
+                eventfd,
+                &mut ev as *mut libc::epoll_event,
+            )
+        };
 
         if ret == -1 {
             panic!(
