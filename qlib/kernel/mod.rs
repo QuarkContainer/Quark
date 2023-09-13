@@ -117,7 +117,8 @@ pub fn LoadVcpuFreq() -> i64 {
 
 #[inline]
 pub fn Shutdown() -> bool {
-    return SHARESPACE.Shutdown();
+    let ret = SHARESPACE.IsShutdown();
+    return ret;
 }
 
 #[derive(Default)]

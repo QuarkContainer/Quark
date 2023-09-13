@@ -67,7 +67,7 @@ impl KIOThread {
     pub fn Process(sharespace: &ShareSpace) {
         let mut start = TSC.Rdtsc();
 
-        while !sharespace.Shutdown() {
+        while !sharespace.IsShutdown() {
             let count = Self::ProcessOnce(sharespace);
             if count > 0 {
                 start = TSC.Rdtsc()
@@ -165,7 +165,7 @@ impl KIOThread {
         let mut data: u64 = 0;
         loop {
             sharespace.IncrHostProcessor();
-            if sharespace.Shutdown() {
+            if sharespace.IsShutdown() {
                 return Err(Error::Exit);
             }
             if QUARK_CONFIG.lock().EnableRDMA {

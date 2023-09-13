@@ -35,7 +35,7 @@ impl Default for CompletionQueue {
 
 /// Completion Entry
 #[repr(transparent)]
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct Entry(pub(crate) sys::io_uring_cqe);
 
 impl CompletionQueue {

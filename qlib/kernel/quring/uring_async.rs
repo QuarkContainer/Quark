@@ -639,6 +639,7 @@ impl AsyncOpsTrait for AsyncFiletWrite {
             self.buf.SetErr(-result);
             self.queue
                 .Notify(EventMaskFromLinux((EVENT_ERR | READABLE_EVENT) as u32));
+            SHARESPACE.DecrPendingWrite();
             return false;
             //return true;
         }
@@ -654,6 +655,7 @@ impl AsyncOpsTrait for AsyncFiletWrite {
                 self.queue
                     .Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
             }
+            SHARESPACE.DecrPendingWrite();
             return false;
         }
 
@@ -668,6 +670,7 @@ impl AsyncOpsTrait for AsyncFiletWrite {
                 self.queue.Notify(EVENT_PENDING_SHUTDOWN);
             }
 
+            SHARESPACE.DecrPendingWrite();
             return false;
         }
 
@@ -687,6 +690,7 @@ impl AsyncFiletWrite {
         len: usize,
         fops: Arc<FileOperations>,
     ) -> Self {
+        SHARESPACE.IncrPendingWrite();
         return Self {
             fd,
             queue,
