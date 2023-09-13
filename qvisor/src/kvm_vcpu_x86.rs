@@ -372,6 +372,7 @@ impl KVMVcpu {
                                 return Ok(());
                             }
 
+                            defer!(SHARE_SPACE.scheduler.WakeAll());
                             //error!("HYPERCALL_IOWAIT sleeping ...");
                             match KERNEL_IO_THREAD.Wait(&SHARE_SPACE) {
                                 Ok(()) => (),

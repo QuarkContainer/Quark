@@ -1141,6 +1141,7 @@ pub struct ShareSpace {
     pub VcpuSearchingCnt: CachePadded<AtomicU64>,
 
     pub shutdown: CachePadded<AtomicBool>,
+    pub pendingWrite: CachePadded<AtomicU64>,
     pub ioUring: CachePadded<QUring>,
     pub timerkeeper: CachePadded<TimeKeeper>,
     pub timerStore: CachePadded<TimerStore>,
@@ -1236,8 +1237,24 @@ impl ShareSpace {
         self.shutdown.store(true, Ordering::SeqCst);
     }
 
+    pub fn IsShutdown(&self) -> bool {
+        return self.Shutdown() && !self.IsPendingWrite();
+    }
+
     pub fn Shutdown(&self) -> bool {
         return self.shutdown.load(Ordering::Relaxed);
+    }
+
+    fn IsPendingWrite(&self) -> bool {
+        return self.pendingWrite.load(Ordering::Relaxed) != 0;
+    }
+
+    pub fn IncrPendingWrite(&self) {
+        self.pendingWrite.fetch_add(1, Ordering::SeqCst);
+    }
+
+    pub fn DecrPendingWrite(&self) {
+        self.pendingWrite.fetch_sub(1, Ordering::SeqCst);
     }
 
     pub fn GetPageMgrAddr(&self) -> u64 {
