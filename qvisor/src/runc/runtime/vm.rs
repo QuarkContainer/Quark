@@ -29,8 +29,6 @@ use crate::qlib::MAX_VCPU_COUNT;
 
 use super::super::super::elf_loader::*;
 use super::super::super::kvm_vcpu::*;
-#[cfg(target_arch = "aarch64")]
-use super::super::super::kvm_vcpu_aarch64::KVMVcpuInit;
 use super::super::super::print::LOG;
 use super::super::super::qlib::addr;
 use super::super::super::qlib::common::*;
@@ -506,14 +504,10 @@ const _KVM_ARM_PREFERRED_TARGET:u64  = 0x8020aeaf;
 fn set_kvm_vcpu_init(vmfd: &VmFd) -> Result<()> {
     use crate::kvm_vcpu_aarch64::KVM_VCPU_INIT;
 
-    let mut kvm_vcpu_init = KVMVcpuInit::default();
-    let raw_fd = vmfd.as_raw_fd();
-    let ret = unsafe { libc::ioctl(raw_fd, _KVM_ARM_PREFERRED_TARGET, &kvm_vcpu_init as *const _ as u64) };
-    if ret != 0 {
-        return Err(Error::SysError(ret));
-    }
-    kvm_vcpu_init.set_psci_0_2();
-    unsafe { KVM_VCPU_INIT.Init(kvm_vcpu_init); }
+    let mut kvi = kvm_vcpu_init::default();
+    vmfd.get_preferred_target(&mut kvi).map_err(|e| Error::SysError(e.errno()))?;
+    kvi.features[0] |= 1 << kvm_bindings::KVM_ARM_VCPU_PSCI_0_2;
+    unsafe { KVM_VCPU_INIT.Init(kvi); }
     Ok(())
 }
 

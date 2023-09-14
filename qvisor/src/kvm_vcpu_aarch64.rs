@@ -1,7 +1,7 @@
 use std::os::fd::AsRawFd;
 use std::sync::atomic::Ordering;
 
-use kvm_bindings::{kvm_vcpu_events, kvm_vcpu_events__bindgen_ty_1};
+use kvm_bindings::{kvm_vcpu_events, kvm_vcpu_events__bindgen_ty_1, kvm_vcpu_init};
 use libc::{gettid, clock_gettime, clockid_t, timespec};
 use kvm_ioctls::VcpuExit;
 
@@ -120,21 +120,8 @@ const _SCTLR_UCT        :u64 = 1 << 15;
 const _SCTLR_UCI        :u64 = 1 << 26;
 const _SCTLR_EL1_DEFAULT:u64 = _SCTLR_M | _SCTLR_C | _SCTLR_I | _SCTLR_UCT | _SCTLR_UCI | _SCTLR_DZE;
 
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
-pub struct KVMVcpuInit {
-    target: u32,
-    features: [u32;7],
-}
-
-impl KVMVcpuInit {
-    pub fn set_psci_0_2(&mut self) {
-        self.features[0] |= _KVM_ARM_VCPU_PSCI_0_2;
-    }
-}
 lazy_static! {
-    pub static ref KVM_VCPU_INIT: Singleton<KVMVcpuInit> = Singleton::<KVMVcpuInit>::New();
+    pub static ref KVM_VCPU_INIT: Singleton<kvm_vcpu_init> = Singleton::<kvm_vcpu_init>::New();
 }
 
 impl KVMVcpu {
@@ -249,7 +236,7 @@ impl KVMVcpu {
     }
 
     fn setup_registers(&self) -> Result<()> {
-        self.ioctl_set_kvm_vcpu_init()?;
+        self.vcpu.vcpu_init(&KVM_VCPU_INIT).map_err(|e|Error::SysError(e.errno()))?;
         // tcr_el1
         let data = _TCR_TXSZ_VA48 |  _TCR_CACHE_FLAGS | _TCR_SHARED | _TCR_TG_FLAGS |  _TCR_ASID16 |  _TCR_IPS_40BITS;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_TCR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
