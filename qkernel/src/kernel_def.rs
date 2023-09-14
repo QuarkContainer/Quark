@@ -230,7 +230,27 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
-    // TODO add HyperCall64
+    // use MMIO to cause VM exit hence "hypercall"
+    // the data does not matter, 
+    // addr of the MMIO identifies the Hypercall.
+    // x0 and x1 (w1) are used by the str instruction
+    // the 64-bit parameters 1,2,3,4 are passed via
+    // x2,x3,x4,x5
+    unsafe {
+        let data: u8 = 0;
+        let addr: u64 = MemoryDef::HYPERCALL_MMIO_BASE + (type_ as u64);
+
+        asm!("
+             str w1, [x0]
+             ",
+             in("x0") addr,
+             in("w1") data,
+             in("x2") para1,
+             in("x3") para2,
+             in("x4") para3,
+             in("x5") para4,
+             )
+    }
 }
 
 impl CPULocal {
