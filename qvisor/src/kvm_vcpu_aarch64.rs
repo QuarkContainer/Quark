@@ -183,10 +183,16 @@ impl KVMVcpu {
                         interrupting.0 = false;
                         interrupting.1.clear();
                     }
-                    let para1 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R0).map_err(|e| Error::SysError(e.errno()))?;
-                    let para2 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R1).map_err(|e| Error::SysError(e.errno()))?;
-                    let para3 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R2).map_err(|e| Error::SysError(e.errno()))?;
-                    let para4 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R3).map_err(|e| Error::SysError(e.errno()))?;
+                    
+                    // reading hypercall parameters from vcpu register file
+                    // x0 and x1 (w1) are used by the str instruction
+                    // the 64-bit parameters 1,2,3,4 are passed via
+                    // x2,x3,x4,x5
+                    let para1 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R2).map_err(|e| Error::SysError(e.errno()))?;
+                    let para2 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R3).map_err(|e| Error::SysError(e.errno()))?;
+                    let para3 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R4).map_err(|e| Error::SysError(e.errno()))?;
+                    let para4 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R5).map_err(|e| Error::SysError(e.errno()))?;
+
                     if addr > (u16::MAX as u64) {
                         panic!("cpu[{}] Received hypercall id max than 255");
                     }
