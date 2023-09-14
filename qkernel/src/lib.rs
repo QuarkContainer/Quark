@@ -132,8 +132,6 @@ mod syscalls;
 
 //use self::heap::QAllocator;
 //use qlib::mem::bitmap_allocator::BitmapAllocatorWrapper;
-pub const HEAP_START: usize = 0x70_2000_0000;
-pub const HEAP_SIZE: usize = 0x1000_0000;
 
 //use buddy_system_allocator::*;
 //#[global_allocator]
