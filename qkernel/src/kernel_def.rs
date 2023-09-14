@@ -420,7 +420,8 @@ impl HostAllocator {
     }
 
     pub fn Init(&self, heapAddr: u64) {
-        self.listHeapAddr.store(heapAddr, Ordering::SeqCst)
+        self.listHeapAddr.store(heapAddr, Ordering::SeqCst);
+        self.ioHeapAddr.store(heapAddr + MemoryDef::HEAP_SIZE, Ordering::SeqCst)
     }
 }
 
@@ -430,7 +431,14 @@ unsafe impl GlobalAlloc for HostAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        self.Allocator().dealloc(ptr, layout);
+        
+        let addr = ptr as u64;
+        if !Self::IsIOBuf(addr) {
+            self.Allocator().dealloc(ptr, layout);
+        } else {
+            //self.Allocator().dealloc(ptr, layout);
+            self.IOAllocator().dealloc(ptr, layout);
+        }
     }
 }
 
@@ -463,6 +471,10 @@ unsafe impl GlobalAlloc for GlobalVcpuAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        // if !HostAllocator::IsHeapAddr(ptr as u64) {
+        //     return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
+        // }
+
         if !self.init.load(Ordering::Relaxed) {
             return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
         }
