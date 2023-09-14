@@ -96,8 +96,8 @@ impl HostAllocator {
 
         // reserve first 4KB gor the listAllocator
         let size = core::mem::size_of::<ListAllocator>();
-        self.Allocator().Add(addr as usize + size, MemoryDef::HEAP_SIZE as usize - size);
-        self.Allocator().Add(addr as usize + MemoryDef::HEAP_SIZE as usize + size, MemoryDef::IO_HEAP_SIZE as usize - size);
+        self.Allocator().Add(MemoryDef::HEAP_OFFSET as usize + size, MemoryDef::HEAP_SIZE as usize - size);
+        self.IOAllocator().Add(MemoryDef::HEAP_END as usize + size, MemoryDef::IO_HEAP_SIZE as usize - size);
         self.initialized.store(true, Ordering::Relaxed);
     }
 

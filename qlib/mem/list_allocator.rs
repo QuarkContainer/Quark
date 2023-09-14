@@ -266,10 +266,24 @@ impl HostAllocator {
         return addr < MemoryDef::HEAP_END;
     }
 
+    pub fn IsIOBuf(addr: u64) -> bool {
+        return MemoryDef::HEAP_END <= addr && addr < MemoryDef::HEAP_END + MemoryDef::IO_HEAP_SIZE;
+    }
+
     #[inline]
     pub fn HeapRange(&self) -> (u64, u64) {
         let allocator = self.Allocator();
         return (allocator.heapStart, allocator.heapEnd);
+    }
+
+    pub unsafe fn AllocIOBuf(&self, size: usize) -> *mut u8 {
+        let layout = Layout::from_size_align(size, size)
+            .expect("RingeBufAllocator::AllocHeadTail can't allocate memory");
+        return self.IOAllocator().alloc(layout);
+    }
+
+    unsafe fn DeallocIOBuf(&self, ptr: *mut u8, layout: Layout) {
+        self.IOAllocator().dealloc(ptr, layout);
     }
 }
 

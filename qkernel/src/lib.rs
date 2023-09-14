@@ -158,6 +158,12 @@ lazy_static! {
     return ALLOCATOR.Print(class);
 }*/
 
+pub fn AllocIOBuf(size: usize) -> *mut u8 {
+    unsafe {
+        return GLOBAL_ALLOCATOR.AllocIOBuf(size);
+    }
+}
+
 pub fn SingletonInit() {
     unsafe {
         vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
