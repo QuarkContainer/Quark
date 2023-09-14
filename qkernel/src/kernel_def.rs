@@ -276,7 +276,7 @@ pub fn Invlpg(addr: u64) {
             tlbi vaae1is, {}
             dsb ish
             isb
-        ", in(reg) (addr >> PAGE_SHIFT));
+        ", in(reg) (addr >> MemoryDef::PAGE_SHIFT));
         };
     }
 }
