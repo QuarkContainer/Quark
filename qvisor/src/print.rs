@@ -194,7 +194,6 @@ impl Log {
 
     pub fn Print(&self, level: &str, str: &str) {
         let now = Timestamp();
-        //let now = RawTimestamp();
         if MEMORY_LEAK_LOG {
             self.Write(&format!(
                 "{:?} [{}] [{}/{}] {}\n",
@@ -210,7 +209,6 @@ impl Log {
     }
 
     pub fn RawPrint(&self, level: &str, str: &str) {
-        //self.Write(&format!("{} [{}] {}\n", Self::Now(), level, str));
         self.RawWrite(&format!("[{}] {}\n", level, str));
     }
 
@@ -226,7 +224,6 @@ impl Log {
 macro_rules! raw {
     // macth like arm for macro
     ($a:expr,$b:expr,$c:expr,$d:expr) => {{
-        //error!("raw:: {:x}/{:x}/{:x}", $a, $b, $c);
         crate::print::LOG.RawLog($a, $b, $c, $d);
     }};
 }

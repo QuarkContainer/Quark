@@ -36,7 +36,6 @@ use super::super::super::pagetable::*;
 use super::super::super::range::*;
 use super::super::super::vcpu_mgr::CPULocal;
 use super::super::arch::x86_64::context::*;
-use super::super::asm::*;
 use super::super::fs::dirent::*;
 use super::super::kernel::aio::aio_context::*;
 use super::super::mm::*;
@@ -52,7 +51,7 @@ use super::metadata::*;
 use super::syscalls::*;
 use super::vma::*;
 use super::*;
-use crate::qlib::kernel::SHARESPACE;
+use crate::qlib::kernel::{SHARESPACE, asm::*};
 use crate::qlib::vcpu_mgr::VcpuMode;
 
 pub struct MMMapping {
@@ -508,9 +507,9 @@ impl MemoryManager {
                 .tlbEpoch
                 .store(currTLBEpoch, Ordering::Relaxed);
             #[cfg(target_arch = "aarch64")]
-            let curr = super::super::super::super::asm::CurrentUserTable();
+            let curr = CurrentUserTable();
             #[cfg(target_arch = "x86_64")]
-            let curr = super::super::super::super::asm::CurrentCr3();
+            let curr = CurrentCr3();
             PageTables::Switch(curr);
         }
     }

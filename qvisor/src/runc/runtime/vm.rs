@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//use kvm_bindings::{kvm_userspace_memory_region, KVM_CAP_X86_DISABLE_EXITS, kvm_enable_cap, KVM_X86_DISABLE_EXITS_HLT, KVM_X86_DISABLE_EXITS_MWAIT};
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use std::os::unix::io::AsRawFd;
@@ -25,7 +24,6 @@ use lazy_static::lazy_static;
 use nix::sys::signal;
 
 use crate::qlib::MAX_VCPU_COUNT;
-//use crate::vmspace::hibernate::HiberMgr;
 
 use super::super::super::elf_loader::*;
 use super::super::super::kvm_vcpu::*;
@@ -236,7 +234,7 @@ impl VirtualMachine {
         error!("VM::InitShareSpace, after call init 2");
     }
 
-    pub fn Init(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
+    pub fn Init(args: Args) -> Result<Self> {
         PerfGoto(PerfType::Other);
 
         *ROOT_CONTAINER_ID.lock() = args.ID.clone();
@@ -248,13 +246,6 @@ impl VirtualMachine {
         let cpuCount = args.GetCpuCount();
 
         let kvmfd = args.KvmFd;
-
-        /*if QUARK_CONFIG.lock().EnableRDMA {
-            // use default rdma device
-            let rdmaDeviceName = "";
-            let lbPort = QUARK_CONFIG.lock().RDMAPort;
-            super::super::super::vmspace::HostFileMap::rdma::RDMA.Init(rdmaDeviceName, lbPort);
-        }*/
 
         let reserveCpuCount = QUARK_CONFIG.lock().ReserveCpuCount;
         let cpuCount = if cpuCount == 0 {
@@ -272,7 +263,7 @@ impl VirtualMachine {
 
         let cpuCount = cpuCount.max(2); // minimal 2 cpus
 
-        VMS.lock().vcpuCount = cpuCount; //VMSpace::VCPUCount();
+        VMS.lock().vcpuCount = cpuCount;
         VMS.lock().RandomVcpuMapping();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
         let controlSock = args.ControlSock;
@@ -327,15 +318,7 @@ impl VirtualMachine {
         let podIdStr = args.ID.clone();
         let mut podId = [0u8; 64];
         podId.clone_from_slice(podIdStr.as_bytes());
-        // let mut podId: [u8; 64] = [0; 64];
-        // debug!("VM::Initxxxxx, podIdStr: {}", podIdStr);
-        // if podIdStr.len() != podId.len() {
-        //     panic!("podId len: {} is not equal to podIdStr len: {}", podId.len(), podIdStr.len());
-        // }
 
-        // podIdStr.bytes()
-        //     .zip(podId.iter_mut())
-        //     .for_each(|(b, ptr)| *ptr = b);
         {
             let vms = &mut VMS.lock();
             vms.controlSock = controlSock;
@@ -347,7 +330,7 @@ impl VirtualMachine {
 
             vms.KernelMap(
                 addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
-                addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR + 0x1000),
+                addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR + MemoryDef::PAGE_SIZE),
                 addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
                 addr::PageOpts::Zero()
                     .SetPresent()
@@ -356,7 +339,6 @@ impl VirtualMachine {
                     .Val(),
             )?;
 
-            //info!("the pageAllocatorBaseAddr is {:x}, the end of pageAllocator is {:x}", pageAllocatorBaseAddr, pageAllocatorBaseAddr + kernelMemSize);
             vms.KernelMapHugeTable(
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR),
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
@@ -377,7 +359,6 @@ impl VirtualMachine {
         info!("before loadKernel");
 
         let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
-        //let vdsoMap = VDSOMemMap::Init(&"/home/brad/rust/quark/vdso/vdso.so".to_string()).unwrap();
         elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
         VMS.lock().vdsoAddr = elf.vdsoStart;
 
@@ -496,9 +477,6 @@ impl VirtualMachine {
         return shareSpace.scheduler.PrintQ(vcpuId);
     }
 }
-
-#[cfg(target_arch = "aarch64")]
-const _KVM_ARM_PREFERRED_TARGET:u64  = 0x8020aeaf;
 
 #[cfg(target_arch = "aarch64")]
 fn set_kvm_vcpu_init(vmfd: &VmFd) -> Result<()> {
