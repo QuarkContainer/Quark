@@ -12,7 +12,7 @@ use crate::qlib::qmsg::{Print, QMsg};
 use crate::{KVMVcpu, VMS, kvm_vcpu::SetExitSignal};
 use crate::qlib::singleton::Singleton;
 use crate::kvm_vcpu::KVMVcpuState;
-use crate::qlib::linux_def::SysErr;
+use crate::qlib::linux_def::{SysErr, MemoryDef};
 use crate::qlib::{backtracer, VcpuFeq, GetTimeCall};
 use crate::{qlib, URING_MGR};
 use crate::KERNEL_IO_THREAD;
@@ -196,7 +196,7 @@ impl KVMVcpu {
                     if addr > (u16::MAX as u64) {
                         panic!("cpu[{}] Received hypercall id max than 255");
                     }
-                    self.handle_hypercall(addr as u16, data, para1, para2, para3, para4)?;
+                    self.handle_hypercall(addr, data, para1, para2, para3, para4)?;
                 }
                 VcpuExit::Hlt => {
                     error!("in hlt....");
@@ -304,8 +304,8 @@ impl KVMVcpu {
         }
     }
 
-    fn handle_hypercall(&self, addr: u16, data: &[u8], para1: u64, para2: u64,para3: u64, para4: u64) -> Result<()> {
-        match addr {
+    fn handle_hypercall(&self, addr: u64, data: &[u8], para1: u64, para2: u64,para3: u64, para4: u64) -> Result<()> {
+        match (addr - MemoryDef::HYPERCALL_MMIO_BASE) as u16 {
             qlib::HYPERCALL_IOWAIT => {
                 if !super::runc::runtime::vm::IsRunning() {
                     return Ok(());

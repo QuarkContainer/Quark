@@ -310,10 +310,12 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     // x2,x3,x4,x5
     unsafe {
         let data: u8 = 0;
+        let addr: u64 = MemoryDef::HYPERCALL_MMIO_BASE + (type_ as u64);
+
         asm!("
              str w1, [x0]
              ",
-             in("x0") type_,
+             in("x0") addr,
              in("w1") data,
              in("x2") para1,
              in("x3") para2,
