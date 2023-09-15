@@ -42,6 +42,7 @@ pub struct Config {
     pub TlbShootdownWait: bool,
     #[serde(default)]
     pub Sandboxed: bool,
+    pub EnableIOBuf: bool,
 }
 
 impl Config {
@@ -86,6 +87,7 @@ impl Default for Config {
             CopyDataWithPf: false,
             TlbShootdownWait: false,
             Sandboxed: false,
+            EnableIOBuf: false,
         };
     }
 }

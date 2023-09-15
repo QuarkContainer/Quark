@@ -471,9 +471,9 @@ unsafe impl GlobalAlloc for GlobalVcpuAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        // if !HostAllocator::IsHeapAddr(ptr as u64) {
-        //     return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
-        // }
+        if !HostAllocator::IsHeapAddr(ptr as u64) {
+            return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
+        }
 
         if !self.init.load(Ordering::Relaxed) {
             return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
