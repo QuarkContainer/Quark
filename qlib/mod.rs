@@ -87,9 +87,6 @@ pub mod rdmasocket;
 pub mod tsot_msg;
 pub mod unix_socket;
 
-#[cfg(target_arch = "aarch64")]
-mod pagetable_aarch64;
-
 use self::kernel::dns::dns_svc::DnsSvc;
 use self::mutex::*;
 use alloc::collections::VecDeque;

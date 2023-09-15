@@ -2954,10 +2954,10 @@ impl MemoryDef {
     pub const HUGE_PAGE_SHIFT: u64 = 21;
     pub const HUGE_1GPAGE_SHIFT: u64 = 30;
 
-    pub const ONE_KB: u64 = 1 << 10; //0x100_000;
+    pub const ONE_KB: u64 = 1 << 10; //0x400;
     pub const ONE_MB: u64 = 1 << 20; //0x100_000;
     pub const ONE_GB: u64 = 1 << 30; //0x40_000_000;
-    pub const ONE_TB: u64 = 1 << 40; //0x1_000_000_000; //0x10_000_000_000;
+    pub const ONE_TB: u64 = 1 << 40; //0x10_000_000_000;
     pub const TWO_MB: u64 = 2 * Self::ONE_MB;
 
     //interrupt stack pages

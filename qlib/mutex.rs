@@ -24,26 +24,17 @@ use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use spin::*;
 
-use super::kernel::uid::*;
+use super::kernel::{uid::*, asm::*};
 use super::linux_def::QOrdering;
-
-//use super::super::asm::*;
 
 pub struct Spin;
 
 pub type QMutex<T> = Mutex<T>;
 pub type QMutexGuard<'a, T> = MutexGuard<'a, T>;
 
-//pub type QMutex<T> = QMutexIntern<T>;
-//pub type QMutexGuard<'a, T> = QMutexInternGuard<'a, T>;
-
 pub type QRwLock<T> = RwLock<T>;
 pub type QRwLockReadGuard<'a, T> = RwLockReadGuard<'a, T>;
 pub type QRwLockWriteGuard<'a, T> = RwLockWriteGuard<'a, T>;
-
-//pub type QRwLock<T> = QRwLockIntern<T>;
-//pub type QRwLockReadGuard<'a, T> = QRwLockInternReadGuard<'a, T>;
-//pub type QRwLockWriteGuard<'a, T> = QRwLockInternWriteGuard<'a, T>;
 
 pub struct QMutexIntern<T: ?Sized, R = Spin> {
     phantom: PhantomData<R>,
@@ -136,13 +127,7 @@ pub fn LoadOnce(addr: u64) -> u64 {
 impl<T: ?Sized> QMutexIntern<T> {
     #[inline(always)]
     pub fn CmpExchg(&self, old: u64, new: u64) -> u64 {
-        /*match self.lock.compare_exchange(old, new, QOrdering::ACQUIRE, QOrdering::RELAXED) {
-            Ok(v) => return v,
-            Err(v) => return v,
-        }*/
-
         return CmpExchg(&self.lock as *const _ as u64, old, new);
-        //return self.lock.compare_and_swap(old, new, QOrdering::ACQUIRE);
     }
 
     pub fn Addr(&self) -> u64 {
@@ -158,13 +143,10 @@ impl<T: ?Sized> QMutexIntern<T> {
         // Can fail to lock even if the spinlock is not locked. May be more efficient than `try_lock`
         // when called in a loop.
         let id = Self::GetID();
-        /*if id < 0x4040000000 {
-            raw!(0x122, id, &self.lock as * const _ as u64, 0);
-        }*/
 
         let mut val = 0;
         for _ in 0..10000 {
-            super::super::asm::mfence();
+            mfence();
             //val = self.lock.compare_and_swap(0, id, QOrdering::ACQUIRE);
             val = self.CmpExchg(0, id);
             if val == 0 {
@@ -181,7 +163,7 @@ impl<T: ?Sized> QMutexIntern<T> {
         defer!(raw!(0x122, val, &self.lock as *const _ as u64, 0));
 
         loop {
-            super::super::asm::mfence();
+            mfence();
             //let val = self.lock.compare_and_swap(0, id, QOrdering::ACQUIRE);
             let val = self.CmpExchg(0, id);
             if val == 0 {
@@ -210,7 +192,7 @@ impl<T: ?Sized> QMutexIntern<T> {
     pub fn try_lock(&self) -> Option<QMutexInternGuard<T>> {
         let id = Self::GetID();
 
-        super::super::asm::mfence();
+        mfence();
         let val = self.CmpExchg(0, id);
         if val == 0 {
             Some(QMutexInternGuard {
@@ -275,9 +257,6 @@ impl<'a, T: ?Sized> Drop for QMutexInternGuard<'a, T> {
     /// The dropping of the QMutexInternGuard will release the lock it was created from.
     fn drop(&mut self) {
         self.lock.store(0, QOrdering::RELEASE);
-
-        //WriteOnce(self.lock as * const _ as u64, 0);
-        //super::super::asm::mfence();
     }
 }
 
@@ -317,7 +296,7 @@ impl<T: ?Sized> QRwLockIntern<T> {
 
     #[inline]
     pub fn write(&self) -> QRwLockInternWriteGuard<T> {
-        super::super::asm::mfence();
+        mfence();
         return QRwLockInternWriteGuard {
             data: self.data.lock(),
         };
@@ -569,128 +548,3 @@ impl QUpgradableLockGuard {
         //error!("RWLock {}: Downgrade2 {:x}", self.lock.id, self.lock.Value());
     }
 }
-
-//////////////////////////////////////////////////////////////////
-
-/*
-pub struct QRwLockIntern<T: ?Sized> {
-    data: RwLock<T>,
-}
-
-pub struct QRwLockInternReadGuard<'a, T: 'a + ?Sized> {
-    data: RwLockReadGuard<'a, T>,
-}
-
-pub struct QRwLockInternWriteGuard<'a, T: 'a + ?Sized> {
-    data: RwLockWriteGuard<'a, T>,
-}
-
-pub struct QRwLockInternUpgradableGuard<'a, T: 'a + ?Sized> {
-    data: RwLockUpgradableGuard<'a, T>,
-}
-
-unsafe impl<T: ?Sized + Send> Send for QRwLockIntern<T> {}
-unsafe impl<T: ?Sized + Send + Sync> Sync for QRwLockIntern<T> {}
-
-impl<T> QRwLockIntern<T> {
-    #[inline]
-    pub const fn new(data: T) -> Self {
-        return Self {
-            data: RwLock::new(data)
-        }
-    }
-}
-
-impl<T: ?Sized> QRwLockIntern<T> {
-    #[inline]
-    pub fn read(&self) -> QRwLockInternReadGuard<T> {
-        super::super::asm::mfence();
-        return QRwLockInternReadGuard {
-            data: self.data.read()
-        }
-    }
-
-    #[inline]
-    pub fn write(&self) -> QRwLockInternWriteGuard<T> {
-        super::super::asm::mfence();
-        return QRwLockInternWriteGuard {
-            data: self.data.write()
-        }
-    }
-
-    #[inline]
-    pub fn upgradeable_read(&self) -> QRwLockInternUpgradableGuard<T> {
-        return QRwLockInternUpgradableGuard {
-            data: self.data.upgradeable_read()
-        }
-    }
-
-    #[inline]
-    pub fn try_read(&self) -> Option<QRwLockInternReadGuard<T>> {
-        super::super::asm::mfence();
-        match self.data.try_read() {
-            None => None,
-            Some(g) => Some(QRwLockInternReadGuard{
-                data: g
-            })
-        }
-    }
-
-    #[inline]
-    pub fn try_write(&self) -> Option<QRwLockInternWriteGuard<T>> {
-        match self.data.try_write() {
-            None => None,
-            Some(g) => Some(QRwLockInternWriteGuard{
-                data: g
-            })
-        }
-    }
-
-    #[inline]
-    pub fn try_upgradeable_read(&self) -> Option<QRwLockInternUpgradableGuard<T>> {
-        super::super::asm::mfence();
-        match self.data.try_upgradeable_read() {
-            None => None,
-            Some(g) => Some(QRwLockInternUpgradableGuard {
-                data: g
-            })
-        }
-    }
-}
-
-impl<'rwlock, T: ?Sized> Deref for QRwLockInternReadGuard<'rwlock, T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.data
-    }
-}
-
-impl<'rwlock, T: ?Sized> Deref for QRwLockInternUpgradableGuard<'rwlock, T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.data
-    }
-}
-
-impl<'rwlock, T: ?Sized> Deref for QRwLockInternWriteGuard<'rwlock, T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.data
-    }
-}
-
-impl<'rwlock, T: ?Sized> DerefMut for QRwLockInternWriteGuard<'rwlock, T> {
-    fn deref_mut(&mut self) -> &mut T {
-        &mut self.data
-    }
-}
-
-impl<T: ?Sized + Default> Default for QRwLockIntern<T> {
-    fn default() -> Self {
-        Self::new(Default::default())
-    }
-}
-*/
