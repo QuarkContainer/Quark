@@ -45,10 +45,10 @@ impl Util {
 
     pub fn Mount(src: &str, target: &str, fstype: &str, flags: u64, data: &str) -> i32 {
         //error!("mount .... src {}, target {}", src, target);
-        let src = CString::new(src.clone()).expect("CString::new src failed");
-        let target = CString::new(target.clone()).expect("CString::new target failed");
-        let fstype = CString::new(fstype.clone()).expect("CString::new fstype failed");
-        let data = CString::new(data.clone()).expect("CString::new fstype failed");
+        let src = CString::new(src).expect("CString::new src failed");
+        let target = CString::new(target).expect("CString::new target failed");
+        let fstype = CString::new(fstype).expect("CString::new fstype failed");
+        let data = CString::new(data).expect("CString::new fstype failed");
 
         let srcAddr = if src.as_bytes().len() == 0 {
             0 as *const c_char
@@ -86,26 +86,26 @@ impl Util {
     }
 
     pub fn Umount2(target: &str, flags: i32) -> i32 {
-        let target = CString::new(target.clone()).expect("CString::new target failed");
+        let target = CString::new(target).expect("CString::new target failed");
 
         return unsafe { GetRet(umount2(target.as_ptr(), flags)) };
     }
 
     pub fn Chdir(dir: &str) -> i32 {
-        let dir = CString::new(dir.clone()).expect("CString::new src failed");
+        let dir = CString::new(dir).expect("CString::new src failed");
 
         return unsafe { GetRet(chdir(dir.as_ptr())) };
     }
 
     pub fn Mkdir(path: &str, mode: u32) -> i32 {
-        let path = CString::new(path.clone()).expect("CString::new src failed");
+        let path = CString::new(path).expect("CString::new src failed");
 
         return unsafe { GetRet(mkdir(path.as_ptr(), mode)) };
     }
 
     pub fn PivotRoot(newRoot: &str, putOld: &str) -> i32 {
-        let newRoot = CString::new(newRoot.clone()).expect("CString::new src failed");
-        let putOld = CString::new(putOld.clone()).expect("CString::new target failed");
+        let newRoot = CString::new(newRoot).expect("CString::new src failed");
+        let putOld = CString::new(putOld).expect("CString::new target failed");
 
         let nr = SysCallID::sys_pivot_root as usize;
         unsafe {

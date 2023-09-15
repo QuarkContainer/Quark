@@ -401,7 +401,7 @@ impl Thread {
             ..Default::default()
         };
 
-        let mut sigchld = sigchldInfo.SigChld();
+        let sigchld = sigchldInfo.SigChld();
         let pidns = tg.PIDNamespace();
         let creds = self.lock().creds.clone();
         let userns = creds.lock().UserNamespace.clone();

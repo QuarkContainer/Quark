@@ -76,7 +76,7 @@ impl BufferIntern {
     //
     // This must be called before use.
     pub fn Reset(&mut self) {
-        let mut b = self;
+        let b = self;
         b.read = 0;
         b.write = 0;
     }

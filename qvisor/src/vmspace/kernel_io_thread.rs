@@ -40,7 +40,7 @@ impl KIOThread {
     pub fn Init(&self, eventfd: i32) {
         unsafe {
             *(&self.eventfd as *const _ as u64 as *mut i32) = eventfd;
-        }
+    }
     }
 
     pub fn ProcessOnce(sharespace: &ShareSpace) -> usize {

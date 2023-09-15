@@ -115,7 +115,7 @@ impl PipeInternal {
     }
 
     pub fn Write(&mut self, _task: &Task, src: BlockSeq, _atomicIOBytes: usize) -> Result<usize> {
-        let mut p = self;
+        let p = self;
 
         let mut src = src;
 

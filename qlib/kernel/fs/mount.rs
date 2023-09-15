@@ -482,7 +482,7 @@ impl MountNs {
             return Ok(name.to_string());
         }
 
-        let mut wd = wd.clone();
+        let mut wd = wd;
         if let Some(idx) = name.find('/') {
             if idx > 0 {
                 if wd.len() == 0 {

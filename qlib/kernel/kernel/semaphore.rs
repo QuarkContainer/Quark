@@ -114,7 +114,7 @@ impl SemRegistryInternal {
             perms.clone(),
             nsems,
         );
-        let mut me = self;
+        let me = self;
 
         let mut id = me.lastIDUsed + 1;
         while id != me.lastIDUsed {

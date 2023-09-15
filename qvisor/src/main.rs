@@ -21,6 +21,7 @@
 #![allow(dead_code)]
 //#![feature(asm)]
 #![recursion_limit = "256"]
+//#![allow(invalid_reference_casting)]
 
 extern crate alloc;
 extern crate bit_field;

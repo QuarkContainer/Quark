@@ -187,12 +187,12 @@ impl InodeOperations for DirInodeOperations {
             Ok(n) => n,
         };
 
-        let s = match &internal.slaves.get(&n) {
-            Some(s) => s.clone(),
+        match internal.slaves.get(&n) {
+            Some(s) => {
+                return Ok(Dirent::New(s, name))
+            }
             _ => return Err(Error::SysError(SysErr::ENOENT)),
         };
-
-        return Ok(Dirent::New(s, name));
     }
 
     fn Create(
