@@ -15,7 +15,7 @@
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicI64, AtomicU8};
-use spin::Mutex;
+use core::cell::UnsafeCell;
 
 use super::mem::list_allocator::*;
 use super::ShareSpace;
@@ -53,14 +53,19 @@ pub struct CPULocal {
     pub data: u64, // for eventfd data writing and reading
     pub eventfd: i32,
     pub epollfd: i32,
-    pub allocator: VcpuAllocator,
-    pub pageAllocator: Mutex<PageAllocator>,
+    pub allocator: UnsafeCell<VcpuAllocator>,
+    pub pageAllocator: UnsafeCell<PageAllocator>,
 
     // it is the time to enter guest ring3. If it is in ring0, the vale will be zero
     pub enterAppTimestamp: AtomicI64,
     pub interruptMask: AtomicU64,
     pub mode: AtomicU8,
 }
+
+
+unsafe impl Send for CPULocal {}
+unsafe impl Sync for CPULocal {}
+
 
 impl CPULocal {
     pub fn State(&self) -> VcpuState {
@@ -69,7 +74,8 @@ impl CPULocal {
     }
 
     pub fn AllocatorMut(&self) -> &mut VcpuAllocator {
-        return unsafe { &mut *(&self.allocator as *const _ as u64 as *mut VcpuAllocator) };
+        //return unsafe { &mut *(&self.allocator as *const _ as u64 as *mut VcpuAllocator) };
+        return unsafe { &mut *self.allocator.get() }
     }
 
     pub fn ToSearch(&self, sharespace: &ShareSpace) -> u64 {

@@ -197,7 +197,7 @@ impl PagePool {
     }
 
     pub fn Allocate(&self) -> Result<u64> {
-        match CPULocal::Myself().pageAllocator.lock().AllocPage() {
+        match unsafe { (*CPULocal::Myself().pageAllocator.get()).AllocPage()} {
             Some(page) => {
                 ZeroPage(page);
                 return Ok(page);

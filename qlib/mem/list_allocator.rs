@@ -77,7 +77,7 @@ impl GlobalVcpuAllocator {
         error!(
             "GlobalVcpuAllocator {}/{}",
             VcpuId(),
-            CPU_LOCAL[VcpuId()].allocator.bufs.len()
+            unsafe { (*CPU_LOCAL[VcpuId()].allocator.get()).bufs.len()}
         )
     }
 
