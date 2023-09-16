@@ -407,13 +407,6 @@ impl PageTables {
             pagePool.Ref(phyAddr.0).unwrap();
             if !pteEntry.is_unused() {
                 self.freeEntry(pteEntry, pagePool)?;
-
-                /*let addr = pteEntry.addr().as_u64();
-                let bit9 = pteEntry.flags() & PageTableFlags::BIT_9 == PageTableFlags::BIT_9;
-
-                if vaddr.0 != 0 && !bit9 {
-                    pagePool.Deref(addr).unwrap();
-                }*/
                 res = true;
             }
 
@@ -435,16 +428,6 @@ impl PageTables {
                 None => break,
                 Some(page) => {
                     PAGE_MGR.FreePage(page).unwrap();
-
-                    /*let layout = Layout::from_size_align(MemoryDef::PAGE_SIZE_4K as _, MemoryDef::PAGE_SIZE_4K as _);
-                    match layout {
-                        Err(_e) => {
-                            panic!("pagetable free unaligned page {:x}", page);
-                        },
-                        Ok(l) => unsafe {
-                            dealloc(page as *mut u8, l);
-                        },
-                    }*/
                 }
             }
         }
@@ -522,26 +505,6 @@ impl PageTables {
         if end.0 < start.0 {
             return Err(Error::AddressNotInRange);
         }
-
-        /*let mut addrs = Vec::new();
-
-        let mut offset = 0;
-        while start.0 + offset < end.0 {
-            let entry = self.VirtualToEntry(oldStart.0 + offset);
-            match entry {
-                Ok(oldentry) => {
-                    let phyAddr = oldentry.addr().as_u64();
-                    addrs.push(Some(phyAddr));
-                    pagePool.Ref(phyAddr).unwrap();
-                    self.Unmap(oldStart.0 + offset, oldStart.0 + offset + MemoryDef::PAGE_SIZE, pagePool)?;
-                }
-                Err(_) => {
-                    addrs.push(None);
-                }
-            }
-            offset += MemoryDef::PAGE_SIZE;
-        }*/
-
         // todo: handle overlap...
         let mut offset = 0;
         'a: while start.0 + offset < end.0 {
@@ -658,15 +621,6 @@ impl PageTables {
         if start.0 < MemoryDef::LOWER_TOP {
             if end.0 <= MemoryDef::LOWER_TOP {
                 return self.mapCanonical(start, end, physical, flags, pagePool, kernel);
-            } else if end.0 > MemoryDef::LOWER_TOP && end.0 <= MemoryDef::UPPER_BOTTOM {
-                return self.mapCanonical(
-                    start,
-                    Addr(MemoryDef::LOWER_TOP),
-                    physical,
-                    flags,
-                    pagePool,
-                    kernel,
-                );
             } else {
                 return self.mapCanonical(
                     start,
