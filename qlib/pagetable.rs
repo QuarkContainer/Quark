@@ -51,7 +51,7 @@ cfg_aarch64! {
 }
 
 
-use super::super::asm::*;
+use super::kernel::asm::*;
 use super::addr::*;
 use super::common::{Allocator, Error, Result};
 use super::kernel::Kernel::HostSpace;

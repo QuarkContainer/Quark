@@ -330,7 +330,7 @@ impl VirtualMachine {
 
             vms.KernelMap(
                 addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
-                addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR + 0x1000),
+                addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR + MemoryDef::PAGE_SIZE),
                 addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
                 addr::PageOpts::Zero()
                     .SetPresent()

@@ -52,9 +52,6 @@ extern crate spin;
 extern crate tabwriter;
 
 #[macro_use]
-pub mod asm;
-
-#[macro_use]
 pub mod print;
 #[cfg(target_arch="x86_64")]
 pub mod amd64_def;
