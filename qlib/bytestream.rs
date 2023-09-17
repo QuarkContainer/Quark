@@ -317,8 +317,8 @@ impl HeapAllocator {
             unsafe { alloc(layout) }
         };
 
-        use crate::qlib::mem::list_allocator::HostAllocator;
-        error!("AlllocBuf addr {:x} isIOBuf {}", addr as u64, HostAllocator ::IsIOBuf(addr as u64) );
+        // use crate::qlib::mem::list_allocator::HostAllocator;
+        // error!("AlllocBuf addr {:x} isIOBuf {}", addr as u64, HostAllocator ::IsIOBuf(addr as u64) );
          
         return addr as u64;
     }
