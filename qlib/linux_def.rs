@@ -2947,10 +2947,10 @@ impl MemoryDef {
     pub const HUGE_PAGE_SHIFT: u64 = 21;
     pub const HUGE_1GPAGE_SHIFT: u64 = 30;
 
-    pub const ONE_KB: u64 = 1 << 10; //0x100_000;
+    pub const ONE_KB: u64 = 1 << 10; //0x400;
     pub const ONE_MB: u64 = 1 << 20; //0x100_000;
     pub const ONE_GB: u64 = 1 << 30; //0x40_000_000;
-    pub const ONE_TB: u64 = 1 << 40; //0x1_000_000_000; //0x10_000_000_000;
+    pub const ONE_TB: u64 = 1 << 40; //0x10_000_000_000;
     pub const TWO_MB: u64 = 2 * Self::ONE_MB;
 
     //interrupt stack pages
@@ -3009,7 +3009,7 @@ impl MemoryDef {
     pub const UPPER_BOTTOM: u64 = 0xffff_8000_0000_0000;
     pub const ENTRY_COUNT: u16 = 512 as u16;
 
-    pub const KVM_IOEVENTFD_BASEADDR: u64 = Self::PHY_LOWER_ADDR - 0x1000;
+    pub const KVM_IOEVENTFD_BASEADDR: u64 = Self::PHY_LOWER_ADDR - Self::PAGE_SIZE;
 
     pub const KERNEL_START_P2_ENTRY: usize = (Self::PHY_LOWER_ADDR / Self::ONE_GB) as usize; //256
     pub const KERNEL_END_P2_ENTRY: usize = (Self::PHY_UPPER_ADDR / Self::ONE_GB) as usize; //512
