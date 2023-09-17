@@ -183,7 +183,9 @@ impl InodeOperations for DirInodeOperations {
         }
 
         let n: u32 = match name.parse::<u32>() {
-            Err(_) => return Err(Error::SysError(SysErr::ENOENT)),
+            Err(_) => {
+                return Err(Error::SysError(SysErr::ENOENT))
+            }
             Ok(n) => n,
         };
 
