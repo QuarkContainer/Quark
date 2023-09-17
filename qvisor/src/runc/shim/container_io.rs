@@ -483,7 +483,6 @@ pub fn Redirect(
             if let Some(x) = on_close_opt {
                 x()
             };
-
             unsafe {
                 libc::close(readPipe);
             }
@@ -587,7 +586,7 @@ fn filter_signal_and_write(
 ) -> Result<()> {
     let len = s.len();
     let mut offset = 0;
-    let rawData = s.clone();
+    let rawData = s;
     for i in 0..len {
         if let Some(sig) = get_signal(s[i]) {
             write_buf(to_fd, &s[offset..i])?;

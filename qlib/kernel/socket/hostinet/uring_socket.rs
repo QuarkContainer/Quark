@@ -1140,7 +1140,7 @@ impl SockOperations for UringSocketOperations {
                         let errno = self.ConnErrno();
                         self.SetConnErrno(0);
                         unsafe {
-                            *(&opt[0] as *const _ as u64 as *mut i32) = -errno;
+                            *(&mut opt[0] as *mut _ as u64 as *mut i32) = -errno;
                         }
                         return Ok(4);
                     }

@@ -190,7 +190,9 @@ impl InodeOperations for DirInodeOperations {
         };
 
         match internal.slaves.get(&n) {
-            Some(s) => return Ok(Dirent::New(s, name)),
+        Some(s) => {
+                return Ok(Dirent::New(s, name))
+            }
             _ => return Err(Error::SysError(SysErr::ENOENT)),
         };
     }

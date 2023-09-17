@@ -29,7 +29,6 @@
 #![feature(core_intrinsics)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(panic_info_message)]
-#![feature(map_first_last)]
 #![allow(deprecated)]
 #![recursion_limit = "256"]
 
@@ -132,8 +131,6 @@ mod syscalls;
 
 //use self::heap::QAllocator;
 //use qlib::mem::bitmap_allocator::BitmapAllocatorWrapper;
-pub const HEAP_START: usize = 0x70_2000_0000;
-pub const HEAP_SIZE: usize = 0x1000_0000;
 
 //use buddy_system_allocator::*;
 //#[global_allocator]
