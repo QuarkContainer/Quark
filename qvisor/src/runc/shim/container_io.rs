@@ -484,9 +484,6 @@ pub fn Redirect(
                 x()
             };
 
-            drop(&from);
-            drop(&to);
-
             unsafe {
                 libc::close(readPipe);
             }

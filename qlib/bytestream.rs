@@ -548,7 +548,7 @@ impl RingBuf {
     }
 
     pub fn PrepareDataIovs(&self, data: &mut SocketBufIovs) {
-        let mut iovs = &mut data.iovs;
+        let iovs = &mut data.iovs;
 
         let head = self.headtail[0].load(Ordering::Relaxed);
         let tail = self.headtail[1].load(Ordering::Acquire);
@@ -625,7 +625,7 @@ impl RingBuf {
     }
 
     pub fn PrepareSpaceIovs(&self, data: &mut SocketBufIovs) {
-        let mut iovs = &mut data.iovs;
+        let iovs = &mut data.iovs;
 
         let head = self.headtail[0].load(Ordering::Acquire);
         let tail = self.headtail[1].load(Ordering::Relaxed);

@@ -1467,7 +1467,7 @@ impl VMSpace {
         let contents = fs::read_to_string(STATM).expect("Something went wrong reading the file");
 
         let output = scan!(&contents, char::is_whitespace, u64, u64);
-        let mut statm = unsafe { &mut *(buf as *mut StatmInfo) };
+        let statm = unsafe { &mut *(buf as *mut StatmInfo) };
 
         statm.vss = output.0.unwrap();
         statm.rss = output.1.unwrap();

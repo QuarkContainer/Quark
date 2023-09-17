@@ -332,7 +332,7 @@ impl Loader {
         let kernel = lockedLoader.kernel.clone();
         let cid = processSpec.ID.clone();
         let execId = ExecID { cid: cid, pid: 0 };
-        let mut process = match lockedLoader.processes.get_mut(&execId) {
+        let process = match lockedLoader.processes.get_mut(&execId) {
             None => {
                 return Err(Error::Common(format!(
                     "trying to start a deleted container {}",
