@@ -483,10 +483,6 @@ pub fn Redirect(
             if let Some(x) = on_close_opt {
                 x()
             };
-
-            // drop(&from);
-            // drop(&to);
-
             unsafe {
                 libc::close(readPipe);
             }

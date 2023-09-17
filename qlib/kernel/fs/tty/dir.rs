@@ -183,12 +183,14 @@ impl InodeOperations for DirInodeOperations {
         }
 
         let n: u32 = match name.parse::<u32>() {
-            Err(_) => return Err(Error::SysError(SysErr::ENOENT)),
+            Err(_) => {
+                return Err(Error::SysError(SysErr::ENOENT))
+            }
             Ok(n) => n,
         };
 
         match internal.slaves.get(&n) {
-            Some(s) => {
+        Some(s) => {
                 return Ok(Dirent::New(s, name))
             }
             _ => return Err(Error::SysError(SysErr::ENOENT)),
