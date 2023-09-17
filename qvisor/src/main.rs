@@ -52,9 +52,6 @@ extern crate spin;
 extern crate tabwriter;
 
 #[macro_use]
-pub mod asm;
-
-#[macro_use]
 pub mod print;
 #[cfg(target_arch="x86_64")]
 pub mod amd64_def;
@@ -104,9 +101,6 @@ use self::vmspace::kernel_io_thread::*;
 use self::vmspace::uringMgr::*;
 use crate::kvm_vcpu::KVMVcpu;
 use vmspace::*;
-
-const LOWER_TOP: u64 = 0x00007fffffffffff;
-const UPPER_BOTTOM: u64 = 0xffff800000000000;
 
 pub fn AllocatorPrint(_class: usize) -> String {
     return "".to_string();
