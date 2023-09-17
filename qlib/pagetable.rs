@@ -37,12 +37,9 @@ cfg_x86_64! {
 }
 
 cfg_aarch64! {
-   pub use super::pagetable_aarch64::PageTableEntry;
-   pub use super::pagetable_aarch64::PageTableIndex;
-   pub use super::pagetable_aarch64::PageTable;
-   pub use super::pagetable_aarch64::PageTableFlags;
-   pub use super::pagetable_aarch64::PhysAddr;
-   pub use super::pagetable_aarch64::VirtAddr;
+   pub use super::kernel::arch::aarch64::mm::pagetable::{PhysAddr, VirtAddr, PageTable,
+                                                         PageTableEntry, PageTableIndex,
+                                                         PageTableFlags};
 
    #[inline]
    pub fn default_table_user() -> PageTableFlags {

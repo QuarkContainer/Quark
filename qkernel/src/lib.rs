@@ -130,12 +130,6 @@ pub mod kernel_def;
 pub mod rdma_def;
 mod syscalls;
 
-//use self::heap::QAllocator;
-//use qlib::mem::bitmap_allocator::BitmapAllocatorWrapper;
-
-//use buddy_system_allocator::*;
-//#[global_allocator]
-
 #[global_allocator]
 pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 
@@ -145,18 +139,6 @@ pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
 }
-
-//static ALLOCATOR: QAllocator = QAllocator::New();
-//static ALLOCATOR: StackHeap = StackHeap::Empty();
-//static ALLOCATOR: ListAllocator = ListAllocator::Empty();
-//static ALLOCATOR: GuestAllocator = GuestAllocator::New();
-//static ALLOCATOR: BufHeap = BufHeap::Empty();
-//static ALLOCATOR: LockedHeap<33> = LockedHeap::empty();
-
-/*pub fn AllocatorPrint(_class: usize) -> String {
-    let class = 6;
-    return ALLOCATOR.Print(class);
-}*/
 
 pub fn SingletonInit() {
     unsafe {
@@ -231,18 +213,8 @@ pub extern "C" fn syscall_handler(
     CPULocal::Myself().SetMode(VcpuMode::Kernel);
 
     let currTask = task::Task::Current();
-    //currTask.PerfGofrom(PerfType::User);
-
-    //currTask.PerfGoto(PerfType::Kernel);
-
-    /*if SHARESPACE.config.read().KernelPagetable {
-        Task::SetKernelPageTable();
-    }*/
-
-    //currTask.mm.VcpuLeave();
     currTask.AccountTaskLeave(SchedState::RunningApp);
     let pt = currTask.GetPtRegs();
-    //pt.rip = 0; // set rip as 0 as the syscall will set cs as ret ipaddr
 
     let mut rflags = pt.eflags;
     rflags &= !USER_FLAGS_CLEAR;
@@ -270,7 +242,6 @@ pub extern "C" fn syscall_handler(
         arg5: arg5,
     };
 
-    //let tid = currTask.Thread().lock().id;
     let mut tid = 0;
     let mut pid = 0;
     let mut callId: SysCallID = SysCallID::UnknowSyscall;
@@ -318,7 +289,6 @@ pub extern "C" fn syscall_handler(
     }
 
     let currTask = task::Task::Current();
-    //currTask.DoStop();
 
     let state = SysCall(currTask, nr, &args);
     MainRun(currTask, state);
@@ -350,11 +320,6 @@ pub extern "C" fn syscall_handler(
     }
 
     let kernalRsp = pt as *const _ as u64;
-
-    /*if SHARESPACE.config.read().KernelPagetable {
-        currTask.SwitchPageTable();
-    }*/
-    //currTask.mm.VcpuEnter();
 
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
     CPULocal::Myself().SetMode(VcpuMode::User);
@@ -422,9 +387,6 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     CPULocal::SetPendingFreeStack(currTask.taskId);
 
                     error!("RunExitDone xxx 2 [{:x}] ...", currTask.taskId);
-                    /*if !SHARESPACE.config.read().KernelPagetable {
-                        KERNEL_PAGETABLE.SwitchTo();
-                    }*/
                     // mm needs to be clean as last function before SwitchToNewTask
                     // after this is called, another vcpu might drop the pagetable
                     core::mem::drop(mm);
