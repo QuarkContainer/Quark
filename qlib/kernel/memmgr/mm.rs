@@ -35,7 +35,7 @@ use super::super::super::mem::areaset::*;
 use super::super::super::pagetable::*;
 use super::super::super::range::*;
 use super::super::super::vcpu_mgr::CPULocal;
-use super::super::arch::x86_64::context::*;
+use super::super::arch::__arch::context::Context64;
 use super::super::fs::dirent::*;
 use super::super::kernel::aio::aio_context::*;
 use super::super::mm::*;
@@ -45,7 +45,6 @@ use super::super::uid::*;
 use super::super::Kernel::HostSpace;
 use super::super::KERNEL_PAGETABLE;
 use super::super::PAGE_MGR;
-//use super::super::asm::*;
 use super::arch::*;
 use super::metadata::*;
 use super::syscalls::*;
@@ -231,7 +230,6 @@ impl MemoryManager {
         };
 
         let gap: AreaGap<VMA> = vmas.FindGap(MemoryDef::PHY_LOWER_ADDR);
-
         vmas.Insert(
             &gap,
             &Range::New(
@@ -666,7 +664,6 @@ impl MemoryManager {
         ret += Self::VSYSCALL_MAPS_ENTRY;
 
         return ret;
-        //return ret.as_bytes().to_vec();
     }
 
     pub fn GenMapsSnapshot(&self, task: &Task) -> Vec<u8> {

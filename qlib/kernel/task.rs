@@ -21,7 +21,7 @@ use core::ops::Deref;
 use core::ptr;
 use core::sync::atomic::Ordering;
 
-//use super::arch::x86_64::arch_x86::*;
+use super::arch::__arch::arch_def::ArchFPState;
 use super::super::super::kernel_def::*;
 use super::super::auth::*;
 use super::super::common::*;
@@ -243,13 +243,13 @@ impl Task {
     }
 
     pub fn SaveFp(&mut self) {
-        self.context.X86fpstate.as_ref().unwrap().SaveFp();
+        self.context.archfpstate.as_ref().unwrap().SaveFp();
         self.context.savefpsate = true;
     }
 
     pub fn RestoreFp(&mut self) {
         if self.context.savefpsate {
-            self.context.X86fpstate.as_ref().unwrap().RestoreFp();
+            self.context.archfpstate.as_ref().unwrap().RestoreFp();
             self.context.savefpsate = false;
         }
     }

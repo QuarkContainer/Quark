@@ -11,8 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-pub mod x86_64;
+#[cfg(target_arch = "x86_64")]
+#[path = "./x86_64/mod.rs"]
+pub mod __arch;
 #[cfg(target_arch = "aarch64")]
 #[path = "./aarch64/mod.rs"]
-pub mod aarch64;
-
+pub mod __arch;

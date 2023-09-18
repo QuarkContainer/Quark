@@ -21,7 +21,6 @@ use super::super::super::super::cpuid::*;
 use super::super::super::asm::*;
 use super::super::super::SignalDef::*;
 use super::super::super::FP_STATE;
-//use super::super::super::super::super::kernel_def::*;
 
 // System-related constants for x86.
 
@@ -127,11 +126,13 @@ pub struct X86fpstate {
     pub size: AtomicUsize,
 }
 
+
 impl Default for X86fpstate {
     fn default() -> Self {
         return Self::Load();
     }
 }
+pub type ArchFPState = X86fpstate;
 
 impl X86fpstate {
     // minXstateBytes is the minimum size in bytes of an x86 XSAVE area, equal

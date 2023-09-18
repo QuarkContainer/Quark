@@ -151,8 +151,8 @@ pub fn WaitFn() -> ! {
                 if pendingFreeStack != 0 {
                     //(*PAGE_ALLOCATOR).Free(pendingFreeStack, DEFAULT_STACK_PAGES).unwrap();
                     let task = TaskId::New(pendingFreeStack).GetTask();
-                    //free X86fpstate
-                    task.context.X86fpstate.take();
+                    //free FPstate
+                    task.context.archfpstate.take();
 
                     KERNEL_STACK_ALLOCATOR.Free(pendingFreeStack).unwrap();
                     CPULocal::SetPendingFreeStack(0);
