@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//#![feature(macro_rules)]
-#![feature(lang_items)]
+
 #![no_std]
 #![feature(proc_macro_hygiene)]
 #![feature(alloc_error_handler)]
@@ -646,6 +645,3 @@ fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
     loop {}
 }
 
-#[lang = "eh_personality"]
-extern "C" fn eh_personality() {}
-//#[lang = "panic_fmt"] #[no_mangle] pub extern fn panic_fmt() -> ! {loop{}}
