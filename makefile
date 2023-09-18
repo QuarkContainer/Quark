@@ -1,11 +1,21 @@
-all: release debug
+MAKEFLAGS += -j4
 
-release:
+all:: release debug
+
+release:: qvisor_release qkernel_release
+
+qvisor_release:
 	make -C ./qvisor release
+	
+qkernel_release:
 	make -C ./qkernel release
 
-debug:
+debug:: qvisor_debug qkernel_debug
+
+qvisor_debug:
 	make -C ./qvisor debug
+
+qkernel_debug:
 	make -C ./qkernel debug
 
 clean:
