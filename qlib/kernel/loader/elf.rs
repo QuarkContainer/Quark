@@ -27,7 +27,7 @@ use super::super::super::common::*;
 use super::super::super::limits::*;
 use super::super::super::linux_def::*;
 use super::super::super::platform::defs_impl::*;
-use super::super::arch::x86_64::context::*;
+use super::super::arch::__arch::context::Context64;
 use super::super::fs::file::*;
 use super::super::memmgr::*;
 use super::super::task::*;
@@ -72,19 +72,6 @@ pub struct ElfHeadersInfo {
 // parseHeader parse the ELF header, verifying that this is a supported ELF
 // file and returning the ELF program headers.
 pub fn ParseHeader(task: &mut Task, file: &File) -> Result<ElfHeadersInfo> {
-    /*let mut moptions = MMapOpts::NewFileOptions(&file)?;
-    moptions.Length = 2 * 4096;
-    moptions.Fixed = false;
-    moptions.Perms = AccessType::ReadOnly();
-    moptions.MaxPerms = AccessType::ReadOnly();
-    moptions.Private = false;
-    moptions.Offset = 0;
-
-    error!("ParseHeader 2");
-    let addr = task.mm.MMap(task, &mut moptions).expect("mmap elf head fail");
-    error!("ParseHeader 3 addr is {:x}", addr);
-    let slice = unsafe { slice::from_raw_parts(addr as *const u8, 2 * 4096) };*/
-
     let mut buf = DataBuff::New(2 * 0x1000);
     let n = match ReadAll(task, &file, &mut buf.buf, 0) {
         Err(e) => {
@@ -326,14 +313,6 @@ pub fn LoadParseElf(
                 }
 
                 let mut fileName: Vec<u8> = vec![0; header.file_size as usize]; //remove last '/0'
-
-                /*if task.Seek(fd as u64, header.offset as u64, SeekWhence::SEEK_SET as u64) == -1 {
-                    return Err(Error::ELFLoadError("read interpreter seek fail"))
-                }
-
-                if task.Read(fd as u64, &fileName[0] as *const u8 as u64, header.file_size - 1, ) != (header.file_size - 1) as i64 {
-                    return Err(Error::ELFLoadError("read interpreter fail"))
-                }*/
 
                 match ReadAll(task, file, &mut fileName, header.offset as u64) {
                     Err(e) => {

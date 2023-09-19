@@ -14,7 +14,7 @@
 
 use core::mem;
 
-use super::super::arch::x86_64::context::*;
+use super::super::arch::__arch::context::MAX_ADDR64;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
@@ -41,7 +41,6 @@ pub fn SysArchPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     match cmdCode {
         PrCtlEnum::ARCH_SET_GS => {
-            //WriteMsr(MSR::MSR_KERNEL_GS_BASE as u32, addr);
             SetGs(addr);
         }
         PrCtlEnum::ARCH_SET_FS => {
@@ -54,15 +53,11 @@ pub fn SysArchPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             //info!("after ARCH_SET_FS, the input value is {:x}, the get fs result is {:x}", addr, ReadMsr(MSR::MSR_FS_BASE as u32));
         }
         PrCtlEnum::ARCH_GET_FS => {
-            //*task.GetTypeMut::<u64>(addr)? = GetFs();
             task.CopyOutObj(&GetFs(), addr)?;
         }
         PrCtlEnum::ARCH_GET_GS => {
-            //*task.GetTypeMut::<u64>(addr)? = GetGs();
             task.CopyOutObj(&GetGs(), addr)?;
-            //unsafe {*(addr as *mut u64) = ReadMsr(MSR::MSR_KERNEL_GS_BASE as u32)}
         }
     }
-
     return Ok(0);
 }
