@@ -21,13 +21,12 @@ use super::super::super::super::kernel_def::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::task_mgr::*;
-use super::super::arch::x86_64::context::*;
+use super::super::arch::__arch::context::MAX_ADDR64;
 use super::super::kernel::ipc_namespace::*;
 use super::super::threadmgr::task_start::*;
 use super::super::threadmgr::thread::*;
 use super::super::SignalDef::*;
 use super::super::*;
-//use super::super::syscalls::sys_tls::*;
 use super::super::task::*;
 use super::task_block::*;
 use super::task_stop::*;
@@ -664,8 +663,8 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
         toTask.context.rsp = toTask.GetPtRegs() as *const _ as u64 - 8;
         toTask.context.rdi = userSp;
         toTask.context.savefpsate = true;
-        toTask.context.X86fpstate = Some(Box::new(
-            fromTask.context.X86fpstate.as_ref().unwrap().Fork(),
+        toTask.context.archfpstate = Some(Box::new(
+            fromTask.context.archfpstate.as_ref().unwrap().Fork(),
         ));
         toPtRegs.rax = 0;
         toPtRegs.rsp = userSp;

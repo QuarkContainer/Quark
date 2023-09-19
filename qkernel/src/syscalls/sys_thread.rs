@@ -44,7 +44,7 @@ use super::super::vcpu::*;
 use super::super::SignalDef::*;
 use super::super::SHARESPACE;
 use super::sys_rusage::*;
-use arch::x86_64::arch_x86::X86fpstate;
+use arch::__arch::arch_def::ArchFPState;
 
 #[derive(Default, Debug)]
 pub struct ElfInfo {
@@ -337,7 +337,7 @@ pub fn Execvat(
             SetFs(0);
             task.tidInfo = TidInfo::default();
             task.context.fs = 0;
-            task.context.X86fpstate = Some(Box::new(X86fpstate::default()));
+            task.context.archfpstate = Some(Box::new(ArchFPState::default()));
 
             let newMM = MemoryManager::Init(false);
             let oldMM = task.mm.clone();

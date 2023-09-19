@@ -19,7 +19,7 @@ use super::super::super::super::linux_def::*;
 use super::super::super::kernel_util::*;
 use super::super::super::memmgr::arch::*;
 use super::super::super::SignalDef::*;
-use super::arch_x86::*;
+use super::arch_def::*;
 
 // These constants come directly from Linux.
 
@@ -91,18 +91,6 @@ pub struct Context64 {
 }
 
 impl Context64 {
-    /*pub fn New() -> Self {
-        return Self {
-            state: State {
-                Regs: unsafe {
-                    &mut *(0 as *mut PtRegs)
-                },
-                x86FPState: Arc::new(QMutex::new(X86fpstate::NewX86FPState())),
-            },
-            sigFPState: Vec::new(),
-        }
-    }*/
-
     // Fork returns an exact copy of this context.
     pub fn Fork(&self, regs: &'static mut PtRegs) -> Self {
         return Self {

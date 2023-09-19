@@ -37,7 +37,7 @@ cfg_x86_64! {
 }
 
 cfg_aarch64! {
-   pub use super::kernel::arch::aarch64::mm::pagetable::{PhysAddr, VirtAddr, PageTable,
+   pub use super::kernel::arch::__arch::mm::pagetable::{PhysAddr, VirtAddr, PageTable,
                                                          PageTableEntry, PageTableIndex,
                                                          PageTableFlags};
 
