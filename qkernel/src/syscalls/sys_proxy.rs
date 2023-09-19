@@ -104,7 +104,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
             
         }
-        ProxyCommand::CudaUnRegisterFatBinary => {
+        ProxyCommand::CudaUnregisterFatBinary => {
             //error!("fatCubinHandle from the cudaproxy is {:x}", parameters.para1 as u64);
             let ret = HostSpace::Proxy(
                  ProxyCommand::CudaUnRegisterFatBinary,

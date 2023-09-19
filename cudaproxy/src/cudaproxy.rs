@@ -55,14 +55,10 @@ pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) -> *mut u64 {
 pub extern "C" fn __cudaUnregisterFatBinary(fatCubinHandle:u64) {
     // println!("Hijacked __cudaUnregisterFatBinary(fatCubinHandle = {:x})", fatCubinHandle);
     let fatCubinPtr: *const u64 = fatCubinHandle as *const u64;
-    // unsafe{
-    // println!("Hijacked __cudaUnregisterFatBinaryEnd( the content of fatCubinHandle = {:x})", *fatCubinPtr);
-    // }
-
     unsafe{
         //  if *fatCubinPtr != 0 {
-        //  println!("the content of fatCubin poninter is not 0, need to unload the module");
-         syscall2(SYS_PROXY, ProxyCommand::CudaUnRegisterFatBinary as usize,fatCubinHandle as usize);
+        //  println!("the content of fatCubin pointer is not 0, need to unload the module");
+         syscall2(SYS_PROXY, ProxyCommand::CudaUnregisterFatBinary as usize,fatCubinHandle as usize);
         //  }
     }
 }

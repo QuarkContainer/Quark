@@ -38,7 +38,7 @@ lazy_static! {
         (ProxyCommand::CudaMemcpy,(XpuLibrary::CudaRuntime, "cudaMemcpy")),
         (ProxyCommand::CudaRegisterFatBinary,(XpuLibrary::CudaDriver, "cuModuleLoadData")),
         (ProxyCommand::CudaRegisterFunction,(XpuLibrary::CudaDriver, "cuModuleGetFunction")),
-        (ProxyCommand::CudaUnRegisterFatBinary,(XpuLibrary::CudaDriver,"cuModuleUnload")),
+        (ProxyCommand::CudaUnregisterFatBinary,(XpuLibrary::CudaDriver,"cuModuleUnload")),
         (ProxyCommand::CudaLaunchKernel,(XpuLibrary::CudaDriver, "cuLaunchKernel")),
         (ProxyCommand::CudaFree,(XpuLibrary::CudaRuntime,"cudaFree")),
     ]);
@@ -136,7 +136,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             // );
             return Ok(ret as i64);
         }
-        ProxyCommand::CudaUnRegisterFatBinary => {
+        ProxyCommand::CudaUnregisterFatBinary => {
             let moduleKey = parameters.para1;
             //error!("unregister module key:{:x}", moduleKey);
 
