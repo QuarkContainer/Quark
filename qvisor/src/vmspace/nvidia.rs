@@ -146,7 +146,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                     *module 
                 }
                 None => {
-                    //error!("no module be found with this fatcubinHandle:{:x}",moduleKey);
+                    error!("no module be found with this fatcubinHandle:{:x}",moduleKey);
                     0
                 }
             };
@@ -157,6 +157,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             // delete the module 
             MODULES.lock().remove(&moduleKey);
             //error!("modules treepmap should be empty:{:x?}",MODULES.lock());
+            //TODO: may need to remove the FUNCTIONS key value pair 
             return Ok(ret as i64);
 
         }
