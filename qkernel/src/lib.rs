@@ -260,7 +260,14 @@ pub extern "C" fn syscall_handler(
     let startTime = TSC.Rdtsc();
     let enterAppTimestamp = CPULocal::Myself().ResetEnterAppTimestamp() as i64;
     let worktime = Tsc::Scale(startTime - enterAppTimestamp) * 1000; // the thread has used up time slot
-    if worktime > CLOCK_TICK {
+    
+    let tick = if SHARESPACE.config.read().Realtime {
+        REALTIME_CLOCK_TICK
+    } else {
+        CLOCK_TICK
+    };
+
+    if worktime > tick {
         taskMgr::Yield();
     }
 

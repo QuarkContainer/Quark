@@ -28,7 +28,7 @@ pub struct AsyncProcess {
 }
 
 const TSC_GAP: i64 = 2_000_000; // for 2 GHZ process, it is 1 ms
-const CLOCK_TICK_MS: i64 = CLOCK_TICK / MILLISECOND;
+static CLOCK_TICK_MS: i64 = CLOCK_TICK / MILLISECOND;
 
 pub fn CyclesPerTick() -> i64 {
     CLOCK_TICK_MS * LoadVcpuFreq() / 1000

@@ -61,7 +61,7 @@ use super::uts_namespace::*;
 
 pub static ASYNC_PROCESS_TIMER: Singleton<Timer> = Singleton::<Timer>::New();
 
-const CLOCK_TICK_MS: i64 = CLOCK_TICK / MILLISECOND;
+static CLOCK_TICK_MS: i64 = CLOCK_TICK / MILLISECOND;
 
 #[inline]
 pub fn GetKernel() -> Kernel {

@@ -26,5 +26,6 @@
   "CopyDataWithPf": true,
   "TlbShootdownWait": true,
   "Sandboxed"     : false,
+  "Realtime"      : false,
   "EnableIOBuf"   : false
 }

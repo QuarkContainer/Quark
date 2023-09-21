@@ -17,7 +17,9 @@ use super::super::linux_def::*;
 
 // ClockTick is the length of time represented by a single clock tick, as
 // used by times(2) and /proc/[pid]/stat.
-pub const CLOCK_TICK: i64 = SECOND / CLOCKS_PER_SEC;
+pub static CLOCK_TICK: i64 = SECOND / CLOCKS_PER_SEC;
+pub static REALTIME_CLOCK_TICK: i64 = SECOND / REALTIME_CLOCKS_PER_SEC;
+
 
 // CLOCKS_PER_SEC is the number of ClockTicks per second.
 //
@@ -32,6 +34,7 @@ pub const CLOCK_TICK: i64 = SECOND / CLOCKS_PER_SEC;
 // requires that [POSIX] CLOCKS_PER_SEC equals 1000000 independent of the
 // actual resolution" - clock(3).
 pub const CLOCKS_PER_SEC: i64 = 100;
+pub const REALTIME_CLOCKS_PER_SEC: i64 = 1000;
 
 // CPU clock types for use with clock_gettime(2) et al.
 //
