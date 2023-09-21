@@ -182,8 +182,14 @@ impl ShareSpace {
                 continue;
             }
 
+            let tick = if SHARE_SPACE.config.read().Realtime {
+                REALTIME_CLOCK_TICK
+            } else {
+                CLOCK_TICK
+            };
+
             //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
-            if Tsc::Scale(now - enterAppTimestamp) * 1000 > 2 * CLOCK_TICK {
+            if Tsc::Scale(now - enterAppTimestamp) * 1000 > 2 * tick {
                 self.scheduler.VcpuArr[i].SetEnterAppTimestamp(now);
                 self.scheduler.VcpuArr[i].InterruptThreadTimeout();
                 //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));

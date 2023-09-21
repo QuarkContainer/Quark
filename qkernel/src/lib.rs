@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//#![feature(macro_rules)]
-#![feature(lang_items)]
+
 #![no_std]
 #![feature(proc_macro_hygiene)]
 #![feature(alloc_error_handler)]
@@ -261,7 +260,14 @@ pub extern "C" fn syscall_handler(
     let startTime = TSC.Rdtsc();
     let enterAppTimestamp = CPULocal::Myself().ResetEnterAppTimestamp() as i64;
     let worktime = Tsc::Scale(startTime - enterAppTimestamp) * 1000; // the thread has used up time slot
-    if worktime > CLOCK_TICK {
+    
+    let tick = if SHARESPACE.config.read().Realtime {
+        REALTIME_CLOCK_TICK
+    } else {
+        CLOCK_TICK
+    };
+
+    if worktime > tick {
         taskMgr::Yield();
     }
 
@@ -646,6 +652,3 @@ fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
     loop {}
 }
 
-#[lang = "eh_personality"]
-extern "C" fn eh_personality() {}
-//#[lang = "panic_fmt"] #[no_mangle] pub extern fn panic_fmt() -> ! {loop{}}
