@@ -19,7 +19,7 @@ use super::super::super::common::*;
 use super::super::super::cpuid::*;
 use super::super::super::linux::time::*;
 use super::super::super::linux_def::*;
-use super::super::arch::x86_64::arch_x86::*;
+use super::super::arch::__arch::arch_def::ArchFPState;
 use super::super::kernel::posixtimer::*;
 use super::super::kernel::waiter::*;
 use super::super::stack::*;
@@ -27,7 +27,6 @@ use super::super::task::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::thread_group::*;
 use super::super::SignalDef::*;
-//use super::super::eventchannel::*;
 use super::task_exit::*;
 use super::task_stop::*;
 use super::task_syscall::*;
@@ -753,11 +752,6 @@ impl ThreadGroupInternal {
             return;
         }
 
-        /*let mut completeStr = "incomplete";
-        if self.groupStopComplete {
-            completeStr = "complete";
-        }*/
-
         for t in &self.tasks {
             let mut t = t.lock();
             t.groupStopPending = false;
@@ -1151,11 +1145,11 @@ impl Task {
         if !self.context.savefpsate {
             self.SaveFp();
         }
-        let fpstate = self.context.X86fpstate.as_ref().unwrap().Slice();
+        let fpstate = self.context.archfpstate.as_ref().unwrap().Slice();
         if fpstate.len() > 512 {
             userStack.PushSlice(
                 self,
-                &self.context.X86fpstate.as_ref().unwrap().Slice()[512..],
+                &self.context.archfpstate.as_ref().unwrap().Slice()[512..],
             )?;
         }
 
@@ -1170,7 +1164,7 @@ impl Task {
         userStack.PushType::<FPSoftwareFrame>(self, &fpsw)?;
         let fpstateAddr = userStack.PushSlice(self, &fpstate[..464])?;
 
-        self.context.X86fpstate = Some(Box::new(X86fpstate::default()));
+        self.context.archfpstate = Some(Box::new(ArchFPState::default()));
 
         let t = self.Thread();
         let mut mask = t.lock().signalMask;
@@ -1206,9 +1200,6 @@ impl Task {
             sigAct, rsp, signo
         );
         let currTask = Task::Current();
-        //SetGsOffset(CPULocalType::KernelStack, currTask.GetKernelSp());
-        //SetFs(currTask.GetFs());
-
         let regs = currTask.GetPtRegs();
         *regs = PtRegs::default();
         regs.rsp = rsp;
@@ -1234,12 +1225,12 @@ impl Task {
         userStack.PopType::<SignalInfo>(self, &mut sigInfo)?;
 
         if uc.MContext.fpstate == 0 {
-            self.context.X86fpstate = Some(Box::new(X86fpstate::default()));
+            self.context.archfpstate = Some(Box::new(ArchFPState::default()));
         } else {
             userStack.sp = uc.MContext.fpstate;
-            let slice = self.context.X86fpstate.as_ref().unwrap().Slice();
+            let slice = self.context.archfpstate.as_ref().unwrap().Slice();
             userStack.PopSlice(self, slice)?;
-            self.context.X86fpstate.as_ref().unwrap().SanitizeUser();
+            self.context.archfpstate.as_ref().unwrap().SanitizeUser();
             self.context.savefpsate = true;
         }
 

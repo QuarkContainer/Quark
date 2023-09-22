@@ -25,7 +25,7 @@ use super::control_msg::*;
 use super::pagetable::*;
 use super::singleton::*;
 
-use self::arch::x86_64::arch_x86::*;
+use self::arch::__arch::arch_def::ArchFPState;
 use self::boot::loader::*;
 use self::kernel::async_process::*;
 use self::memmgr::pma::*;
@@ -72,7 +72,7 @@ pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> =
 pub static EXIT_CODE: Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
 pub static VCPU_FREQ: AtomicI64 = AtomicI64::new(2_000_000_000); // default 2GHZ
 pub static ASYNC_PROCESS: AsyncProcess = AsyncProcess::New();
-pub static FP_STATE: X86fpstate = X86fpstate::Init();
+pub static FP_STATE: ArchFPState = ArchFPState::Init();
 pub static SUPPORT_XSAVE: AtomicBool = AtomicBool::new(false);
 pub static SUPPORT_XSAVEOPT: AtomicBool = AtomicBool::new(false);
 
