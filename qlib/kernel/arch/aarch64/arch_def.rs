@@ -14,6 +14,63 @@
 
 
 //
+// General Purpose Registers
+// ref: ARM Cortex-A Series Programmer's Guide for ARMv8-A.
+//      Procedure Call Standart for the Arm 64-bit Architecture.
+//
+//
+#[derive(Debug, Copy, Clone, Default)]
+pub struct Arm64SysRegs {
+    //
+    // Non Preserved Registers
+    //
+    X0  : u64,
+    X1  : u64,
+    X2  : u64,
+    X3  : u64,
+    X4  : u64,
+    X5  : u64,
+    X6  : u64,
+    X7  : u64,
+
+    X8  : u64,
+    //
+    // Local variables, Caller-saved Registers
+    //
+    X9  : u64,
+    X10 : u64,
+    X11 : u64,
+    X12 : u64,
+    X13 : u64,
+    X14 : u64,
+    X15 : u64,
+    //
+    // End Caller-saved Registers
+    //
+    X16 : u64,
+    X17 : u64,
+    X18 : u64,
+    //
+    // Calle-saved Registers
+    //
+    X19 : u64,
+    X20 : u64,
+    X21 : u64,
+    X22 : u64,
+    X23 : u64,
+    X24 : u64,
+    X25 : u64,
+    X26 : u64,
+    X27 : u64,
+    X28 : u64,
+    //
+    // End Calle-saved Registers
+    X29 : u64, //FramePointer
+    X30 : u64, //LinkRegister
+    X31 : u64, //StackPointer
+}
+
+//
 //NOTE: Every thing here is placeholder.
 //
 
