@@ -98,7 +98,7 @@ impl HostAllocator {
         let size = core::mem::size_of::<ListAllocator>();
         self.Allocator().Add(MemoryDef::HEAP_OFFSET as usize + size, MemoryDef::HEAP_SIZE as usize - size);
         self.IOAllocator().Add(MemoryDef::HEAP_END as usize + size, MemoryDef::IO_HEAP_SIZE as usize - size);
-        self.initialized.store(true, Ordering::Relaxed);
+        self.initialized.store(true, Ordering::SeqCst);
     }
 
     pub fn Clear(&self) -> bool {
@@ -118,7 +118,14 @@ unsafe impl GlobalAlloc for HostAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        self.Allocator().dealloc(ptr, layout);
+        
+        let addr = ptr as u64;
+        if !Self::IsIOBuf(addr) {
+            self.Allocator().dealloc(ptr, layout);
+        } else {
+            //self.Allocator().dealloc(ptr, layout);
+            self.IOAllocator().dealloc(ptr, layout);
+        }
     }
 }
 
