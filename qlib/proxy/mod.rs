@@ -13,6 +13,7 @@
 
 pub mod nvgpu;
 pub mod classes;
+pub mod frontend;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u64)]
