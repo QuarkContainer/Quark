@@ -21,7 +21,7 @@ $(kernel): kernel $(assembly_object_files)
 		$(assembly_object_files) $(qkernel)
 
 $(kernel_debug): kernel_debug $(assembly_object_files)
-	@ld -n --gc-sections -T $(linker_script) -o $(kernel_debug) \
+	@ld --gc-sections -T $(linker_script) -o $(kernel_debug) \
 		$(assembly_object_files) $(qkernel_debug)
 
 kernel:
