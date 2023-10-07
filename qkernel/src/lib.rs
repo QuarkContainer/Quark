@@ -442,9 +442,19 @@ pub extern "C" fn rust_main(
     vcpuCnt: u64,
     autoStart: bool,
 ) {
+    Kernel::HostSpace::SyncPrint(self::qlib::config::DebugLevel::Info, "enter rust_main, haha");
+    HyperCall64(qlib::HYPERCALL_MSG, 0x240, id, vcpuCnt, 0);
+    Kernel::HostSpace::SyncPrint(self::qlib::config::DebugLevel::Error, "enter rust_main");
+    HyperCall64(qlib::HYPERCALL_MSG, 0x240, id, vcpuCnt, 1);
     self::qlib::kernel::asm::fninit();
     if id == 0 {
+        let msg = "init global allocator";
+        Kernel::HostSpace::SyncPrint(self::qlib::config::DebugLevel::Debug, msg);
+        raw!(0x240, id, vcpuCnt, 2);
         GLOBAL_ALLOCATOR.Init(heapStart);
+        //let msg = format!("[INFO] cpu{} {}", id, "init sharespace");
+        Kernel::HostSpace::SyncPrint(self::qlib::config::DebugLevel::Trace, "init sharespace");
+        raw!(0x240, id, vcpuCnt, 3);
         SHARESPACE.SetValue(shareSpaceAddr);
         SingletonInit();
 
