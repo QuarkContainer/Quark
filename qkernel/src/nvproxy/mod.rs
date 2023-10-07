@@ -10,26 +10,3 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-pub mod nvgpu;
-pub mod classes;
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-#[repr(u64)]
-pub enum Command {
-    Cmd1 = 1 as u64,
-    Cmd2,
-}
-
-#[derive(Copy, Clone)]
-#[repr(C)]
-pub struct Cmd1In {
-    pub val: u64,
-}
-
-#[derive(Default, Copy, Clone)]
-#[repr(C)]
-pub struct Cmd1Out {
-    pub val1: u64,
-    pub val2: u64,
-}
