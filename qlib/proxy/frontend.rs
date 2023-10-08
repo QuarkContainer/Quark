@@ -218,22 +218,22 @@ pub struct NVOS32AllocSize {
 //
 #[repr(C)]
 pub struct IoctlNVOS33ParametersWithFD {
-    pub Params : NVOS33Parameters,
-	pub FD     : i32,
+    pub params : NVOS33Parameters,
+	pub fd     : i32,
 	// pub pad0   : u32,
 }
 
 #[repr(C)]
 pub struct NVOS33Parameters {
-    pub HClient        : Handle,
-	pub HDevice        : Handle,
-	pub HMemory        : Handle,
+    pub client        : Handle,
+	pub device        : Handle,
+	pub memory        : Handle,
 	//pub Pad0           : u32,
-	pub Offset         : u64,
-	pub Length         : u64,
-	pub PLinearAddress : P64, // address of application mapping, without indirection
-	pub Status         : u32,
-	pub Flags          : u32,
+	pub offset         : u64,
+	pub length         : u64,
+	pub linearAddress : P64, // address of application mapping, without indirection
+	pub status         : u32,
+	pub flags          : u32,
 }
 
 // NVOS34Parameters is NVOS34_PARAMETERS, the parameter type for
@@ -241,13 +241,13 @@ pub struct NVOS33Parameters {
 //
 #[repr(C)]
 pub struct NVOS34Parameters {
-    pub HClient        : Handle,
-	pub HDevice        : Handle,
-	pub HMemory        : Handle,
+    pub client        : Handle,
+	pub device        : Handle,
+	pub memory        : Handle,
 	//pub Pad0           : u32,
-	pub PLinearAddress : P64, // address of application mapping, without indirection
-	pub Status         : u32,
-	pub Flags          : u32,
+	pub linearAddress : P64, // address of application mapping, without indirection
+	pub status         : u32,
+	pub flags          : u32,
 }
 
 // NVOS54Parameters is NVOS54_PARAMETERS, the parameter type for
@@ -255,13 +255,13 @@ pub struct NVOS34Parameters {
 //
 #[repr(C)]
 pub struct NVOS54Parameters {
-    pub HClient    : Handle,
-	pub HObject    : Handle,
-	pub Cmd        : u32,
-	pub Flags      : u32,
-	pub Params     : P64,
-	pub ParamsSize : u32,
-	pub Status     : u32,
+    pub client    : Handle,
+	pub object    : Handle,
+	pub cmd        : u32,
+	pub flags      : u32,
+	pub params     : P64,
+	pub paramsSize : u32,
+	pub status     : u32,
 }
 
 // NVOS56Parameters is NVOS56_PARAMETERS, the parameter type for
@@ -269,13 +269,13 @@ pub struct NVOS54Parameters {
 //
 #[repr(C)]
 pub struct NVOS56Parameters {
-    pub HClient        : Handle,
-	pub HDevice        : Handle,
-	pub HMemory        : Handle,
+    pub client        : Handle,
+	pub device        : Handle,
+	pub memory        : Handle,
 	//pub Pad0           : u32,
-	pub POldCPUAddress : P64,
-	pub PNewCPUAddress : P64,
-	pub Status         : u32,
+	pub oldCPUAddress : P64,
+	pub newCPUAddress : P64,
+	pub status         : u32,
 	//pub Pad1           : u32,
 }
 
@@ -284,14 +284,14 @@ pub struct NVOS56Parameters {
 //
 #[repr(C)]
 pub struct NVOS64Parameters {
-    pub HRoot            : Handle,
-	pub HObjectParent    : Handle,
-	pub HObjectNew       : Handle,
-	pub HClass           : u32,
-	pub PAllocParms      : P64,
-	pub PRightsRequested : P64,
-	pub Flags            : u32,
-	pub Status           : u32,
+    pub root            : Handle,
+	pub objectParent    : Handle,
+	pub objectNew       : Handle,
+	pub class           : u32,
+	pub allocParms      : P64,
+	pub rightsRequested : P64,
+	pub flags            : u32,
+	pub status           : u32,
 }
 
 pub const SIZEOF_IOCTL_REGISTER_FD                  : u32 = core::mem::size_of::<IoctlRegisterFD>() as u32;
