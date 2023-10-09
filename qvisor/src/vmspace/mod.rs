@@ -507,6 +507,17 @@ impl VMSpace {
         return Self::GetRet(fd as i64);
     }
 
+    pub fn OpenDevFile(dirfd: i32, name: u64, flags: i32) -> i64 {
+        let ret = unsafe { libc::openat(dirfd, name as *const c_char, flags, 0) };
+        let fd = Self::GetRet(ret as i64) as i32;
+        if fd < 0 {
+            return fd as i64;
+        }
+
+        let hostfd = GlobalIOMgr().AddFile(fd);
+        return Self::GetRet(hostfd as i64);
+    }
+
     pub fn CreateAt(
         dirfd: i32,
         fileName: u64,

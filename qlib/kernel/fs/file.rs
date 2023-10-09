@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -22,6 +21,8 @@ use core::any::Any;
 use core::ops::Deref;
 use enum_dispatch::enum_dispatch;
 
+use crate::qlib::nvproxy::frontendfd::NvFrontendFileOptions;
+use crate::qlib::mutex::*;
 use super::super::super::auth::*;
 use super::super::super::common::*;
 use super::super::super::limits::*;
@@ -302,6 +303,7 @@ pub enum FileOpsType {
     SignalOperation,
     InotifyFileOperations,
     ProxyFileOperations,
+    NvFrontendFileOptions,
 }
 
 #[derive(Clone)]
@@ -344,6 +346,7 @@ pub enum FileOps {
     UringSocketOperations(UringSocketOperations),
     UnixSocketOperations(UnixSocketOperations),
     RootProcFile(RootProcFile),
+    NvFrontendFileOptions(NvFrontendFileOptions)
 }
 
 impl FileOps {

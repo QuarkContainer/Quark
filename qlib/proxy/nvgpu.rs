@@ -17,10 +17,7 @@ pub const NVIDIA_UVM_PRIMARY_MINOR_NUMBER : u16 = 0;   // from kernel-open/nvidi
 
 
 // Handle is NvHandle, from src/common/sdk/nvidia/inc/nvtypes.h.
-#[repr(C)]
-pub struct Handle {
-    pub Val: u32,
-}
+pub type Handle = u32;
 
 // P64 is NvP64, from src/common/sdk/nvidia/inc/nvtypes.h.
 pub type P64 = u64;
