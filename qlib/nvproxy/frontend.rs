@@ -18,8 +18,8 @@ use crate::qlib::kernel::task::Task;
 use crate::qlib::common::*;
 use crate::qlib::linux::ioctl::*;
 use crate::qlib::linux_def::SysErr;
-use crate::qlib::proxy::frontend::*;
-use crate::qlib::proxy::nvgpu::*;
+use crate::qlib::nvproxy::frontend_type::*;
+use crate::qlib::nvproxy::nvgpu::*;
 
 use super::frontendfd::*;
 
@@ -212,12 +212,12 @@ pub fn RMVidHeapControlAllocSize (
     ioctlParams: &NVOS32Parameters
 ) -> Result<u64> {
     let allocSizeParams = unsafe {
-        &*(&ioctlParams.Data[0] as * const _ as u64 as * const NVOS32AllocSize)
+        &*(&ioctlParams.data[0] as * const _ as u64 as * const NVOS32AllocSize)
     };
 
     let mut ioctlParamsTmp = *ioctlParams;
     let mut allocSizeParamsTmp = unsafe {
-        &mut *(&mut ioctlParamsTmp.Data[0] as * mut _ as u64 as * mut NVOS32AllocSize)
+        &mut *(&mut ioctlParamsTmp.data[0] as * mut _ as u64 as * mut NVOS32AllocSize)
     };
 
     let mut addr: u64= 0;
@@ -230,7 +230,7 @@ pub fn RMVidHeapControlAllocSize (
 
     let mut outIoctlParams = ioctlParamsTmp;
     let outAllocSizeParams = unsafe {
-        &mut *(&mut outIoctlParams.Data[0] as * mut _ as u64 as * mut NVOS32AllocSize)
+        &mut *(&mut outIoctlParams.data[0] as * mut _ as u64 as * mut NVOS32AllocSize)
     };
 
     if allocSizeParams.address != 0 {

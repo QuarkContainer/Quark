@@ -182,20 +182,20 @@ pub struct NVOS57Parameters {
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct NVOS32Parameters {
-    pub HRoot         : Handle,
-	pub HObjectParent : Handle,
-	pub Function      : u32,
+    pub root         : Handle,
+	pub objectParent : Handle,
+	pub function      : u32,
 	pub HVASpace      : Handle,
 	pub IVCHeapNumber : i16,
 	// pub Pad           : [u8; 2],
-	pub Status        : u32,
-	pub Total         : u64,
-	pub Free          : u64,
-	pub Data          : [u8; 144], // union
+	pub status        : u32,
+	pub total         : u64,
+	pub free          : u64,
+	pub data          : [u8; 144], // union
 }
 
 // Possible values for NVOS32Parameters.Function:
-pub const NVOS32_FUNCTION_ALLOC_SIZE : usize = 2;
+pub const NVOS32_FUNCTION_ALLOC_SIZE : u32 = 2;
 
 // NVOS32AllocSize is the type of NVOS32Parameters.Data for
 // NVOS32_FUNCTION_ALLOC_SIZE.

@@ -19,6 +19,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
+use core::sync::atomic::Ordering;
 
 use crate::qlib::cstring::CString;
 use crate::qlib::kernel::Kernel::HostSpace;
@@ -47,14 +48,12 @@ use crate::qlib::kernel::fs::flags::*;
 use crate::qlib::kernel::fs::fsutil::inode::*;
 //use crate::qlib::kernel::fs::inode::*;
 use crate::qlib::kernel::fs::mount::*;
+use crate::qlib::nvproxy::frontend::*;
 use crate::qlib::path;
-use crate::qlib::proxy::classes::Nv0005AllocParameters;
-use crate::qlib::proxy::frontend::NVOS64Parameters;
-use crate::qlib::proxy::nvgpu::NV_CONTROL_DEVICE_MINOR;
+use crate::qlib::nvproxy::classes::Nv0005AllocParameters;
+use crate::qlib::nvproxy::frontend_type::*;
 use crate::qlib::nvproxy::nvproxy::NVProxy;
-
-use super::frontend::FrontendIoctlState;
-use super::frontend::RMAllocInvoke;
+use crate::qlib::nvproxy::nvgpu::NV_CONTROL_DEVICE_MINOR;
 
 pub struct NvFrontendDevice {
     pub nvp: NVProxy,
@@ -486,3 +485,61 @@ pub fn RMAllocEventOSEvent(
     return Ok(n)
 }
 
+pub fn RMVidHeapControl(fi: &FrontendIoctlState) -> Result<u64> {
+    if fi.ioctlParamsSize as usize != core::mem::size_of::<NVOS32Parameters>() {
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    // Function determines the type of Data.
+    let ioctlParams: NVOS32Parameters = fi.task.CopyInObj(fi.ioctlParamsAddr)?;
+    debug!("nvproxy: VID_HEAP_CONTROL function {}", ioctlParams.function);
+
+    // See
+	// src/nvidia/interface/deprecated/rmapi_deprecated_vidheapctrl.c:rmVidHeapControlTable
+	// for implementation.
+
+    if ioctlParams.function == NVOS32_FUNCTION_ALLOC_SIZE {
+        return RMVidHeapControlAllocSize(fi, &ioctlParams);
+    } 
+
+    warn!("nvproxy: unknown VID_HEAP_CONTROL function {}", ioctlParams.function);
+    return Err(Error::SysError(SysErr::EINVAL));
+}
+
+pub fn RMMapMemory(fi: &FrontendIoctlState) -> Result<u64> {
+    if fi.ioctlParamsSize as usize != core::mem::size_of::<IoctlNVOS33ParametersWithFD>() {
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    let ioctlParams: IoctlNVOS33ParametersWithFD = fi.task.CopyInObj(fi.ioctlParamsAddr)?;
+
+    let mapFileGeneric = match fi.task.GetFile(ioctlParams.fd) {
+        Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
+        Ok(f) => f
+    };
+
+    let mapfile = match &mapFileGeneric.FileOp {
+        FileOps::NvFrontendFileOptions(nvfops) => {
+            nvfops.clone()
+        }
+        _ => {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+    };
+
+    if mapfile.hasMmapContext.load(Ordering::Relaxed) ||
+        !mapfile.hasMmapContext.compare_and_swap(false, true, Ordering::SeqCst) {
+        warn!("nvproxy: attempted to reuse FD {} for NV_ESC_RM_MAP_MEMORY", ioctlParams.fd);
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    let mut ioctlParamsTmp = ioctlParams;
+    ioctlParamsTmp.fd = mapfile.fd;
+
+    let n = FrontendIoctlInvoke(fi, &ioctlParamsTmp)?;
+    let mut outIoctlParams = ioctlParamsTmp;
+    outIoctlParams.fd = ioctlParams.fd;
+    fi.task.CopyOutObj(&outIoctlParams, fi.ioctlParamsAddr)?;
+    
+    return Ok(n)    
+}

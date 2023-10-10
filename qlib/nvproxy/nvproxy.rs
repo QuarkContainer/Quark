@@ -15,7 +15,8 @@ use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::ops::Deref;
 
-use crate::qlib::{proxy::nvgpu, mutex::QMutex};
+use crate::qlib::mutex::QMutex;
+use crate::qlib::nvproxy::nvgpu;
 
 pub struct NVProxyInner {
     pub objs: BTreeMap<nvgpu::Handle, NVObject>
