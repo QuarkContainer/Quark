@@ -148,6 +148,7 @@ pub enum IopsType {
     SymlinkNode,
     SimpleFileInode,
     ProxyDevice,
+    NvFrontendDevice
 }
 
 #[enum_dispatch]

@@ -48,8 +48,13 @@ use crate::qlib::kernel::fs::fsutil::inode::*;
 //use crate::qlib::kernel::fs::inode::*;
 use crate::qlib::kernel::fs::mount::*;
 use crate::qlib::path;
+use crate::qlib::proxy::classes::Nv0005AllocParameters;
+use crate::qlib::proxy::frontend::NVOS64Parameters;
 use crate::qlib::proxy::nvgpu::NV_CONTROL_DEVICE_MINOR;
 use crate::qlib::nvproxy::nvproxy::NVProxy;
+
+use super::frontend::FrontendIoctlState;
+use super::frontend::RMAllocInvoke;
 
 pub struct NvFrontendDevice {
     pub nvp: NVProxy,
@@ -64,7 +69,7 @@ impl InodeOperations for NvFrontendDevice {
     }
 
     fn IopsType(&self) -> IopsType {
-        return IopsType::NullDevice;
+        return IopsType::NvFrontendDevice;
     }
 
     fn InodeType(&self) -> InodeType {
@@ -423,3 +428,61 @@ impl FileOperations for NvFrontendFileOptions {
 }
 
 impl SockOperations for NvFrontendFileOptions {}
+
+pub fn RMAllocSimple<Params: Sized + Clone + Copy>(
+    fi: &FrontendIoctlState, 
+    ioctlParams: &NVOS64Parameters,
+    isNVOS64: bool
+) -> Result<u64> {
+    if ioctlParams.allocParms == 0 {
+        return RMAllocInvoke::<u8>(fi, ioctlParams, None, isNVOS64)
+    }
+
+    let allocParams: Params = fi.task.CopyInObj(ioctlParams.allocParms)?;
+
+    let n = RMAllocInvoke::<Params>(fi, ioctlParams, Some(&allocParams), isNVOS64)?;
+
+    fi.task.CopyOutObj(&allocParams, ioctlParams.allocParms)?;
+
+    return Ok(n)
+}
+
+pub fn RMAllocNoParams(
+    fi: &FrontendIoctlState, 
+    ioctlParams: &NVOS64Parameters,
+    isNVOS64: bool
+) -> Result<u64> {
+    return RMAllocInvoke::<u8>(fi, ioctlParams, None, isNVOS64);
+}
+
+pub fn RMAllocEventOSEvent(
+    fi: &FrontendIoctlState, 
+    ioctlParams: &NVOS64Parameters,
+    isNVOS64: bool
+) -> Result<u64> {
+    let allocParams : Nv0005AllocParameters = fi.task.CopyInObj(ioctlParams.allocParms)?;
+    let eventFileGeneric = match fi.task.GetFile(allocParams.data as i32) {
+        Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
+        Ok(f) => f
+    };
+
+    let eventFile = match &eventFileGeneric.FileOp {
+        FileOps::NvFrontendFileOptions(nvfops) => {
+            nvfops.clone()
+        }
+        _ => {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+    };
+
+    let mut allocParamsTmp = allocParams;
+    allocParamsTmp.data = eventFile.fd as u64;
+
+    let n = RMAllocInvoke(fi, ioctlParams, Some(&allocParamsTmp), isNVOS64)?;
+
+    let mut outAllocParams = allocParamsTmp;
+    outAllocParams.data = allocParams.data;
+    fi.task.CopyOutObj(&outAllocParams, ioctlParams.allocParms)?;
+    return Ok(n)
+}
+

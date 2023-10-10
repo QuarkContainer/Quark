@@ -49,6 +49,7 @@ pub const NV_ESC_RM_UPDATE_DEVICE_MAPPING_INFO : u64 = 0x5e;
 
 // IoctlRegisterFD is nv_ioctl_register_fd_t, the parameter type for
 // NV_ESC_REGISTER_FD.
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct IoctlRegisterFD {
     pub ctlFD: i32,
@@ -56,6 +57,7 @@ pub struct IoctlRegisterFD {
 
 // IoctlAllocOSEvent is nv_ioctl_alloc_os_event_t, the parameter type for
 // NV_ESC_ALLOC_OS_EVENT.
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct IoctlAllocOSEvent {
     pub client : Handle,
@@ -66,6 +68,7 @@ pub struct IoctlAllocOSEvent {
 
 // IoctlFreeOSEvent is nv_ioctl_free_os_event_t, the parameter type for
 // NV_ESC_FREE_OS_EVENT.
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct IoctlFreeOSEvent {
     pub client : Handle,
@@ -78,6 +81,7 @@ pub struct IoctlFreeOSEvent {
 // RMAPIVersion is nv_rm_api_version_t, the parameter type for
 // NV_ESC_CHECK_VERSION_STR.
 //
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct RMAPIVersion {
     pub cmd           : u32,
@@ -87,6 +91,7 @@ pub struct RMAPIVersion {
 
 // IoctlSysParams is nv_ioctl_sys_params_t, the parameter type for
 // NV_ESC_SYS_PARAMS.
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct IoctlSysParams {
     pub memblockSize: u64,
@@ -95,6 +100,7 @@ pub struct IoctlSysParams {
 // IoctlNVOS02ParametersWithFD is nv_ioctl_nvos2_parameters_with_fd, the
 // parameter type for NV_ESC_RM_ALLOC_MEMORY.
 //
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct IoctlNVOS02ParametersWithFD {
     pub params : NVOS02Parameters,
@@ -102,6 +108,7 @@ pub struct IoctlNVOS02ParametersWithFD {
 	// pub pad0   : i32,
 }
 
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct NVOS02Parameters {
     pub root         : Handle,
@@ -119,6 +126,7 @@ pub struct NVOS02Parameters {
 // NVOS00Parameters is NVOS00_PARAMETERS, the parameter type for
 // NV_ESC_RM_FREE.
 //
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct NVOS00Parameters {
     pub root         : Handle,
@@ -130,6 +138,7 @@ pub struct NVOS00Parameters {
 // NVOS21Parameters is NVOS21_PARAMETERS, one possible parameter type for
 // NV_ESC_RM_ALLOC.
 //
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct NVOS21Parameters {
     pub root         : Handle,
@@ -144,6 +153,7 @@ pub struct NVOS21Parameters {
 // NVOS55Parameters is NVOS55_PARAMETERS, the parameter type for
 // NV_ESC_RM_DUP_OBJECT.
 //
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct NVOS55Parameters {
     pub client    : Handle,
@@ -157,6 +167,7 @@ pub struct NVOS55Parameters {
 
 // NVOS57Parameters is NVOS57_PARAMETERS, the parameter type for
 // NV_ESC_RM_SHARE.
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct NVOS57Parameters {
     pub client     : Handle,
@@ -168,6 +179,7 @@ pub struct NVOS57Parameters {
 // NVOS32Parameters is NVOS32_PARAMETERS, the parameter type for
 // NV_ESC_RM_VID_HEAP_CONTROL.
 //
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct NVOS32Parameters {
     pub HRoot         : Handle,
@@ -187,6 +199,7 @@ pub const NVOS32_FUNCTION_ALLOC_SIZE : usize = 2;
 
 // NVOS32AllocSize is the type of NVOS32Parameters.Data for
 // NVOS32_FUNCTION_ALLOC_SIZE.
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct NVOS32AllocSize {
     pub owner           : u32,
@@ -216,6 +229,7 @@ pub struct NVOS32AllocSize {
 // parameter type for NV_ESC_RM_MAP_MEMORY, from
 // src/nvidia/arch/nvalloc/unix/include/nv-unix-nvos-params-wrappers.h.
 //
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct IoctlNVOS33ParametersWithFD {
     pub params : NVOS33Parameters,
@@ -223,6 +237,7 @@ pub struct IoctlNVOS33ParametersWithFD {
 	// pub pad0   : u32,
 }
 
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct NVOS33Parameters {
     pub client        : Handle,
@@ -239,6 +254,7 @@ pub struct NVOS33Parameters {
 // NVOS34Parameters is NVOS34_PARAMETERS, the parameter type for
 // NV_ESC_RM_UNMAP_MEMORY.
 //
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct NVOS34Parameters {
     pub client        : Handle,
@@ -253,6 +269,7 @@ pub struct NVOS34Parameters {
 // NVOS54Parameters is NVOS54_PARAMETERS, the parameter type for
 // NV_ESC_RM_CONTROL.
 //
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct NVOS54Parameters {
     pub client    : Handle,
@@ -267,6 +284,7 @@ pub struct NVOS54Parameters {
 // NVOS56Parameters is NVOS56_PARAMETERS, the parameter type for
 // NV_ESC_RM_UPDATE_DEVICE_MAPPING_INFO.
 //
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct NVOS56Parameters {
     pub client        : Handle,
@@ -282,6 +300,7 @@ pub struct NVOS56Parameters {
 // NVOS64Parameters is NVOS64_PARAMETERS, one possible parameter type for
 // NV_ESC_RM_ALLOC.
 //
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct NVOS64Parameters {
     pub root            : Handle,
