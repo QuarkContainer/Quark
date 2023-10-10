@@ -117,6 +117,9 @@ impl KVMVcpu {
             Msg::OpenAt(msg) => {
                 ret = super::VMSpace::OpenAt(msg.dirfd, msg.name, msg.flags, msg.addr) as u64;
             }
+            Msg::OpenDevFile(msg) => {
+                ret = super::VMSpace::OpenDevFile(msg.dirfd, msg.name, msg.flags) as u64;
+            }
             Msg::CreateAt(msg) => {
                 ret = super::VMSpace::CreateAt(
                     msg.dirfd,

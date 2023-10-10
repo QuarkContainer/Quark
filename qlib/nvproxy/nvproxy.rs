@@ -1,5 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
-//
+// Copyright (c) 2021 Quark Container Authors
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -12,20 +11,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod fcntl;
-pub mod futex;
-pub mod inotify;
-pub mod ipc;
-pub mod limits;
-pub mod membarrier;
-pub mod msgqueue;
-pub mod netdevice;
-pub mod rusage;
-pub mod sem;
-pub mod shm;
-pub mod signal;
-pub mod socket;
-pub mod time;
-pub mod ioctl;
+use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
+use core::ops::Deref;
 
-pub type TimeID = i32;
+use crate::qlib::{proxy::nvgpu, mutex::QMutex};
+
+pub struct NVProxyInner {
+    pub objs: BTreeMap<nvgpu::Handle, NVObject>
+}
+
+#[derive(Clone)]
+pub struct NVProxy(Arc<QMutex<NVProxyInner>>);
+
+impl Deref for NVProxy {
+    type Target = Arc<QMutex<NVProxyInner>>;
+
+    fn deref(&self) -> &Arc<QMutex<NVProxyInner>> {
+        &self.0
+    }
+}
+
+pub struct NVObject {
+
+}

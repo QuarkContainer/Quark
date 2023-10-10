@@ -84,6 +84,7 @@ pub mod proxy;
 pub mod rdma_svc_cli;
 pub mod rdmasocket;
 pub mod unix_socket;
+pub mod nvproxy;
 
 #[cfg(target_arch = "aarch64")]
 mod pagetable_aarch64;

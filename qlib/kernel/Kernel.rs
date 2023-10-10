@@ -637,6 +637,18 @@ impl HostSpace {
         //return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn OpenDevFile(dirfd: i32, name: u64, flags: i32) -> i64 {
+        let mut msg = Msg::OpenDevFile(OpenDevFile {
+            dirfd: dirfd,
+            name: name,
+            flags: flags,
+        });
+
+        let ret = Self::HCall(&mut msg, false) as i64;
+        return ret;
+        //return HostSpace::Call(&mut msg, false) as i64;
+    }
+
     pub fn CreateAt(
         dirfd: i32,
         pathName: u64,

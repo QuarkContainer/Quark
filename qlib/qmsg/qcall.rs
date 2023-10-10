@@ -48,6 +48,7 @@ pub enum Msg {
 
     TryOpenAt(TryOpenAt),
     OpenAt(OpenAt),
+    OpenDevFile(OpenDevFile),
     CreateAt(CreateAt),
     Mkdirat(Mkdirat),
     SysSync(SysSync),
@@ -440,6 +441,13 @@ pub struct OpenAt {
     pub name: u64,
     pub flags: i32,
     pub addr: u64,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct OpenDevFile {
+    pub dirfd: i32,
+    pub name: u64,
+    pub flags: i32,
 }
 
 #[derive(Clone, Default, Debug)]

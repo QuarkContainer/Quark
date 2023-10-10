@@ -17,10 +17,7 @@ pub const NVIDIA_UVM_PRIMARY_MINOR_NUMBER : u16 = 0;   // from kernel-open/nvidi
 
 
 // Handle is NvHandle, from src/common/sdk/nvidia/inc/nvtypes.h.
-#[repr(C)]
-pub struct Handle {
-    pub Val: u32,
-}
+pub type Handle = u32;
 
 // P64 is NvP64, from src/common/sdk/nvidia/inc/nvtypes.h.
 pub type P64 = u64;
@@ -31,6 +28,7 @@ pub const NV_MAX_SUBDEVICES : usize = 8;
 
 // RsAccessMask is RS_ACCESS_MASK, from
 // src/common/sdk/nvidia/inc/rs_access.h.
+#[derive(Debug, Default, Copy, Clone)]
 #[repr(C)]
 pub struct RsAccessMask {
     pub limbs: [u32; SDK_RS_ACCESS_MAX_LIMBS],
@@ -41,13 +39,14 @@ pub const SDK_RS_ACCESS_MAX_LIMBS : usize = 1;
 // RS_SHARE_POLICY is RS_SHARE_POLICY, from
 // src/common/sdk/nvidia/inc/rs_access.h.
 //
+#[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub struct RsSharePolicy {
     pub target     : u32, 
 	pub accessMask : RsAccessMask,
 	pub _type      : u16, 
 	pub action     : u8, 
-	// pub Pad        : u8
+	pub Pad        : u8
 }
 
 
@@ -55,6 +54,7 @@ pub struct RsSharePolicy {
 pub const RM_GSS_LEGACY_MASK : u64  = 0x00008000;
 
 // From src/common/sdk/nvidia/inc/ctrl/ctrlxxxx.h:
+// NVXXXX_CTRL_XXX_INFO
 #[repr(C)]
 pub struct NvxxxxCtrlXxxInfo {
     pub index: u32,
@@ -86,6 +86,8 @@ pub const NV0000_CTRL_CMD_SYSTEM_GET_P2P_CAPS        : u64 = 0x127;
 pub const NV0000_CTRL_CMD_SYSTEM_GET_FABRIC_STATUS   : u64 = 0x136;
 pub const NV0000_CTRL_CMD_SYSTEM_GET_P2P_CAPS_MATRIX : u64 = 0x13a;
 
+// NV0000_CTRL_SYSTEM_GET_BUILD_VERSION_PARAMS
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Nv0000CtrlSystemGetBuildVersionParams {
     pub sizeOfStrings: u32,
@@ -100,6 +102,8 @@ pub struct Nv0000CtrlSystemGetBuildVersionParams {
 // From src/common/sdk/nvidia/inc/ctrl/ctrl0080/ctrl0080fifo.h:
 pub const NV0080_CTRL_CMD_FB_GET_CAPS_V2 : u64 = 0x801307;
 
+// NV0000_CTRL_SYSTEM_GET_BUILD_VERSION_PARAMS
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Nv0080CtrlFifoGetChannellistParams {
     pub numChannels        : u32,
@@ -116,6 +120,7 @@ pub const NV0080_CTRL_CMD_GPU_GET_CLASSLIST_V2           : u64 = 0x800292;
 
 // From src/common/sdk/nvidia/inc/ctrl/ctrl0080/ctrl0080gr.h:
 // NV0080_CTRL_GR_ROUTE_INFO
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Nv0080CtrlGrRouteInfo {
     pub flags : u32,
@@ -144,6 +149,7 @@ pub const NV2080_CTRL_CMD_FIFO_DISABLE_CHANNELS : u64 = 0x2080110b;
 pub const NV2080_CTRL_FIFO_DISABLE_CHANNELS_MAX_ENTRIES : usize = 64;
 
 // NV2080_CTRL_FIFO_DISABLE_CHANNELS_PARAMS
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Nv2080CtrlFifoDisableChannelsParams {
 	pub BDisable               : u8,
@@ -188,6 +194,7 @@ pub const NV2080_CTRL_CMD_GR_GET_TPC_MASK              : u64 = 0x2080122b;
 pub const NV2080_CTRL_CMD_GSP_GET_FEATURES : u64 = 0x20803601;
 
 // NV2080_CTRL_GR_GET_INFO_PARAMS
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Nv2080CtrlGrGetInfoParams {
     pub GRInfoListSize : u32, // in elements

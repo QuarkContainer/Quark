@@ -53,6 +53,7 @@ pub const VOLTA_DMA_COPY_A : u64 = 0x0000c3b5;
 
 // Nv0005AllocParameters NV0005_ALLOC_PARAMETERS is the alloc params type for NV01_EVENT_OS_EVENT,
 // from src/common/sdk/nvidia/inc/class/cl0005.h.
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Nv0005AllocParameters {
 	pub parentClient : Handle,
@@ -64,6 +65,7 @@ pub struct Nv0005AllocParameters {
 
 // Nv0080AllocParameters NV0080_ALLOC_PARAMETERS is the alloc params type for NV01_DEVICE_0, from
 // src/common/sdk/nvidia/inc/class/cl0080.h.
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Nv0080AllocParameters {
     pub DeviceID        : u32,
@@ -81,6 +83,7 @@ pub struct Nv0080AllocParameters {
 
 // Nv2080AllocParameters NV2080_ALLOC_PARAMETERS is the alloc params type for NV20_SUBDEVICE_0, from
 // src/common/sdk/nvidia/inc/class/cl2080.h.
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Nv2080AllocParameters {
     pub subDeviceID : u32,
@@ -88,6 +91,7 @@ pub struct Nv2080AllocParameters {
 
 // Nv503cAllocParameters is the alloc params type for NV50_THIRD_PARTY_P2P,
 // from src/common/sdk/nvidia/inc/class/cl503c.h.
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Nv503cAllocParameters {
     pub Flags: u32,
@@ -95,6 +99,7 @@ pub struct Nv503cAllocParameters {
 
 // Nv83deAllocParameters NV83DE_ALLOC_PARAMETERS is the alloc params type for GT200_DEBUGGER,
 // from src/common/sdk/nvidia/inc/class/cl83de.h.
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Nv83deAllocParameters {
     pub debuggerClient_Obsolete : Handle,
@@ -104,6 +109,7 @@ pub struct Nv83deAllocParameters {
 
 // NvCtxshareAllocationParameters NV_CTXSHARE_ALLOCATION_PARAMETERS is the alloc params type for
 // FERMI_CONTEXT_SHARE_A, from src/common/sdk/nvidia/inc/nvos.h.
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct NvCtxshareAllocationParameters {
     pub vASpace : Handle,
@@ -113,6 +119,7 @@ pub struct NvCtxshareAllocationParameters {
 
 // NvVaspaceAllocationParameters NV_VASPACE_ALLOCATION_PARAMETERS is the alloc params type for
 // FERMI_VASPACE_A, from src/common/sdk/nvidia/inc/nvos.h.
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct NvVaspaceAllocationParameters {
     pub index           : u32,
@@ -128,6 +135,7 @@ pub struct NvVaspaceAllocationParameters {
 
 // NvChannelGroupAllocationParameters NV_CHANNEL_GROUP_ALLOCATION_PARAMETERS is the alloc params type for
 // KEPLER_CHANNEL_GROUP_A, from src/common/sdk/nvidia/inc/nvos.h.
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct NvChannelGroupAllocationParameters {
     pub objectError                : Handle, 
@@ -140,6 +148,7 @@ pub struct NvChannelGroupAllocationParameters {
 
 // NvMemoryDescParams NV_MEMORY_DESC_PARAMS is from
 // src/common/sdk/nvidia/inc/alloc/alloc_channel.h.
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct NvMemoryDescParams {
     pub Base         : u64,
@@ -151,6 +160,7 @@ pub struct NvMemoryDescParams {
 // NvChannelAllocParams NV_CHANNEL_ALLOC_PARAMS is the alloc params type for TURING_CHANNEL_GPFIFO_A
 // and AMPERE_CHANNEL_GPFIFO_A, from
 // src/common/sdk/nvidia/inc/alloc/alloc_channel.h.
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct NvChannelAllocParams {
     pub HObjectError        : Handle,
@@ -181,6 +191,7 @@ pub struct NvChannelAllocParams {
 // Nvb0b5AllocationParameters NVB0B5_ALLOCATION_PARAMETERS is the alloc param type for TURING_DMA_COPY_A,
 // AMPERE_DMA_COPY_A, and AMPERE_DMA_COPY_B from
 // src/common/sdk/nvidia/inc/class/clb0b5sw.h.
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Nvb0b5AllocationParameters {
     pub version    : u32,
@@ -190,6 +201,7 @@ pub struct Nvb0b5AllocationParameters {
 // NvGrAllocationParameters NV_GR_ALLOCATION_PARAMETERS is the alloc param type for TURING_COMPUTE_A,
 // AMPERE_COMPUTE_A, and ADA_COMPUTE_A, from src/common/sdk/nvidia/inc/nvos.h.
 //
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct NvGrAllocationParameters {
     pub version : u32,
@@ -201,12 +213,14 @@ pub struct NvGrAllocationParameters {
 // NvHopperUsermodeAParams NV_HOPPER_USERMODE_A_PARAMS is the alloc param type for HOPPER_USERMODE_A,
 // from src/common/sdk/nvidia/inc/nvos.h.
 //
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct NvHopperUsermodeAParams {
     pub Bar1Mapping : u8,
 	pub Priv        : u8,
 }
 
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Nv00f8Map {
 	pub offset  : u64,
@@ -217,6 +231,7 @@ pub struct Nv00f8Map {
 // NV00F8_ALLOCATION_PARAMETERS is the alloc param type for NV_MEMORY_FABRIC,
 // from src/common/sdk/nvidia/inc/class/cl00f8.h
 //
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Nv00f8AllocationParameters {
     pub Alignment  : u64,
