@@ -12,10 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::super::super::{limits::LimitSet,
-                                 kernel::memmgr::arch::MmapLayout,
-                                 MemoryDef};
-use super::super::super::super::common::*;
+use crate::qlib as qlib;
+use qlib::limits::{Limit, LimitSet, LimitType, INFINITY};
+use qlib::{linux_def::SysErr, MemoryDef, addr::Addr};
+use qlib::kernel::{arch, memmgr, kernel_util::RandU64};
+use memmgr::arch::{MmapLayout, MMAP_BOTTOM_UP, MMAP_TOP_DOWN};
+use qlib::common::*;
+
+use arch::__arch::arch_def::{Aarch64Regs, State};
 
 // MAX_ADDR64 is the maximum userspace address. It is TASK_SIZE in Linux
 // for a 64-bit process.
@@ -55,23 +59,116 @@ pub const PREFERRED_TOP_DOWN_BASE_MIN: u64 =
 //
 
 pub struct Context64 {
-    pub data: [u64; 4069],
+    pub state: State,
 }
 
 impl Context64 {
+    pub fn Fork(&self, regs: &'static mut Aarch64Regs) -> Self {
+        Self {
+            state: self.state.Fork(regs),
+        }
+    }
+
+    //
+    // Syscall return value.
+    //
+    pub fn Return(&self) -> u64 {
+        self.state.Regs.X0
+    }
+
+    //
+    // Set Syscall return value manualy.
+    //
+    pub fn SetReturn(&mut self, _ret: u64) {
+        self.state.Regs.X0 = _ret;
+    }
+
     pub fn PIELoadAddress(l: &MmapLayout) -> Result<u64> {
-        Ok(0)
+        let mut pref_base: u64 = PREFERRED_PIELOAD_ADDR;
+        let top_addr = match Addr(pref_base).AddLen(MAX_MMAP_RAND64) {
+            Ok(a) => a.0,
+            Err(_) => panic!("Preferred PIELoadAddress {} is too large.", pref_base),
+        };
+
+        if top_addr > l.MaxAddr {
+            //
+            // Linux resets base to 2/3rd;
+            //
+            pref_base = (l.TopDownBase * 2) / 3;
+        }
+
+        Ok(Addr(pref_base + Self::MMapRand(MAX_MMAP_RAND64).unwrap())
+           .RoundDown().unwrap().0)
     }
 
     pub fn MMapRand(max: u64) -> Result<u64> {
-        Ok(0)
+        let _new_addr: u64 = RandU64().unwrap() % max;
+        Ok(Addr(_new_addr).RoundDown().unwrap().0)
     }
 
     pub fn NewMmapLayout(min: u64, max: u64, r: &LimitSet) -> Result<MmapLayout> {
-       Ok(
-           MmapLayout{
-            ..Default::default()
-           }) 
-    }
+        //
+        // Sanity check.
+        //
+        if min > max {
+            return Err(Error::SysError(SysErr::EINVAL));
+        }
 
+        let mut max_addr = if max > MAX_ADDR64 {
+            MAX_ADDR64
+        } else { max };
+        max_addr = Addr(max_addr).RoundUp()?.0;
+        let min_addr = Addr(min).RoundUp()?.0;
+        
+        let stack_size: u64 = r.Get(LimitType::Stack).Cur;
+        let default_direction = if stack_size == INFINITY {
+            MMAP_BOTTOM_UP
+        }else { MMAP_TOP_DOWN };
+        
+        let max_gap = (max_addr / 6) * 5; // Linux defiened
+        let mut gap = if stack_size < MIN_GAP64 {
+            MIN_GAP64
+        } else { stack_size };
+        if gap > max_gap {
+            gap = max_gap;
+        }
+
+        let mut max_rand: u64 = MAX_MMAP_RAND64;
+        if (max_addr - gap - max_rand) < PREFERRED_TOP_DOWN_BASE_MIN {
+            let bottom_base_adjust = PREFERRED_TOP_DOWN_BASE_MIN -
+                                     (max_addr - gap - max_rand);
+            let max_adjust = MAX_MMAP_RAND64 - MIN_MMAP_RAND64;
+            if bottom_base_adjust <= max_adjust {
+                max_rand = MAX_MMAP_RAND64 - bottom_base_adjust;
+            }
+        }
+
+        let rand: u64 = Self::MMapRand(max_rand)?;
+
+        let layout = MmapLayout {
+            MinAddr: min_addr,
+            MaxAddr: max_addr,
+            //
+            // TASK_UNMAPPED_BASE
+            //
+            BottomUpBase: Addr(max/3 + rand).RoundDown()?.0,
+            TopDownBase: Addr(max - gap - rand).RoundDown()?.0,
+            DefaultDirection: default_direction,
+            //
+            // Stack allocation must use the max randomization to avoid
+            // eating into the gap.
+            //
+            MaxStackRand: max_rand,
+            sharedLoadsOffset: 0,
+        };
+
+        //
+        // Layout sanity check.
+        //
+        if !layout.Valid() {
+            panic!("QKernel: Context64 - Invalid MmapLayout: {:?}", layout);
+        }
+
+        Ok(layout)
+    }
 }

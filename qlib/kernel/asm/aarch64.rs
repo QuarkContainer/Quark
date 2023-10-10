@@ -176,14 +176,18 @@ pub fn SaveFloatingPoint(addr: u64) {
 //    } else {
 //        fxsave(addr);
 //    }
+//    NOTE Arm does not seem to have direct aquivalents for the above instructions: xsaveopt/xsave/fxsave.
+//          As both SUPPORT_XSAVEOPT/XSAVE are per default not taken,
+//          only an fxsave is emulated.
+
+            fxsave(addr);
 }
 
+//    NOTE Arm does not seem to have direct aquivalents for the above instructions: xrstor/fxrstor.
+//          As SUPPORT_XSAVE is per default not taken,
+//          only an fxrstor is emulated.
 pub fn LoadFloatingPoint(addr: u64) {
-//    if SUPPORT_XSAVE.load(Ordering::Acquire) {
-//        xrstor(addr);
-//    } else {
-//        fxrstor(addr);
-//    }
+        fxrstor(addr);
 }
 
 pub fn xsave(addr: u64) {
@@ -219,22 +223,65 @@ pub fn xrstor(addr: u64) {
 //    };
 }
 
+//  FPCR;FPSR Registers are saved placed after 'q15'.
 pub fn fxsave(addr: u64) {
-//    unsafe {
-//        asm!("\
-//                fxsave64 [rax + 0]
-//            ",
-//            in("rax") addr)
-//    };
+    unsafe {
+        asm!("\
+              mrs x1, FPCR
+              mrs x2, FPSR
+              stp  q0,  q1,  [x0, #32*0]
+              stp  q2,  q3,  [x0, #32*1]
+              stp  q4,  q5,  [x0, #32*2]
+              stp  q6,  q7,  [x0, #32*3]
+              stp  q8,  q9,  [x0, #32*4]
+              stp q10, q11,  [x0, #32*5]
+              stp q12, q13,  [x0, #32*6]
+              stp q14, q15,  [x0, #32*7]
+              stp q16, q17,  [x0, #32*8]
+              stp q18, q19,  [x0, #32*9]
+              stp q20, q21, [x0, #32*10]
+              stp q22, q23, [x0, #32*11]
+              stp q24, q25, [x0, #32*12]
+              stp q26, q27, [x0, #32*13]
+              stp q28, q29, [x0, #32*14]
+              stp q30, q31, [x0, #32*15]!
+              stp  x1,  x2, [x0, #32*1]
+            ",
+            in("x0") addr,
+            // Let compiler know about clobbered registers
+            out("x1") _,
+            out("x2") _,)
+    };
 }
 
 pub fn fxrstor(addr: u64) {
-//    unsafe {
-//        asm!("\
-//                fxrstor64 [rax + 0]
-//            ",
-//            in("rax") addr)
-//    };
+    unsafe {
+        asm!("\
+              ldp  q0,  q1,  [x0, #32*0]
+              ldp  q2,  q3,  [x0, #32*1]
+              ldp  q4,  q5,  [x0, #32*2]
+              ldp  q6,  q7,  [x0, #32*3]
+              ldp  q8,  q9,  [x0, #32*4]
+              ldp q10, q11,  [x0, #32*5]
+              ldp q12, q13,  [x0, #32*6]
+              ldp q14, q15,  [x0, #32*7]
+              ldp q16, q17,  [x0, #32*8]
+              ldp q18, q19,  [x0, #32*9]
+              ldp q20, q21, [x0, #32*10]
+              ldp q22, q23, [x0, #32*11]
+              ldp q24, q25, [x0, #32*12]
+              ldp q26, q27, [x0, #32*13]
+              ldp q28, q29, [x0, #32*14]
+              ldp q30, q31, [x0, #32*15]!
+              ldp  x1,  x2, [x0, #32*1]
+              msr FPCR, x1
+              msr FPSR, x2
+            ",
+            in("x0") addr,
+            // Let compiler know about clobbered registers
+            out("x1") _,
+            out("x2") _,)
+    };
 }
 
 #[inline(always)]
