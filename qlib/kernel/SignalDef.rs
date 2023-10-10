@@ -20,7 +20,11 @@ use super::super::common::*;
 use super::super::linux_def::*;
 use super::kernel::posixtimer::*;
 use super::task::*;
-
+//
+// ARM port
+// Rename / Refactor
+//
+//#[cfg(target_arch = "x86_64")]
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 //copy from https://elixir.bootlin.com/linux/latest/source/arch/x86/include/uapi/asm/ptrace.h#L18
