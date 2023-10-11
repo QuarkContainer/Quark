@@ -446,7 +446,7 @@ pub trait FileOperations: Sync + Send + Waitable + SockOperations + SpliceOperat
     fn Flush(&self, task: &Task, f: &File) -> Result<()>;
 
     fn UnstableAttr(&self, task: &Task, f: &File) -> Result<UnstableAttr>;
-    fn Ioctl(&self, task: &Task, f: &File, fd: i32, request: u64, val: u64) -> Result<()>;
+    fn Ioctl(&self, task: &Task, f: &File, fd: i32, request: u64, val: u64) -> Result<u64>;
 
     fn IterateDir(
         &self,
@@ -1043,7 +1043,7 @@ impl File {
         return fops.UnstableAttr(task, self);
     }
 
-    pub fn Ioctl(&self, task: &Task, fd: i32, request: u64, val: u64) -> Result<()> {
+    pub fn Ioctl(&self, task: &Task, fd: i32, request: u64, val: u64) -> Result<u64> {
         let fops = self.FileOp.clone();
         let res = fops.Ioctl(task, self, fd, request, val);
         return res;

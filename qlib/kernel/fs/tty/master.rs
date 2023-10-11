@@ -439,32 +439,44 @@ impl FileOperations for MasterFileOperations {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<()> {
+    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<u64> {
         let cmd = request;
         match cmd {
-            IoCtlCmd::FIONREAD => return self.t.ld.lock().OutputQueueReadSize(task, val),
-            IoCtlCmd::TCGETS => return self.t.ld.lock().GetTermios(task, val),
-            IoCtlCmd::TCSETS => return self.t.ld.lock().SetTermios(task, val),
+            IoCtlCmd::FIONREAD => {
+                self.t.ld.lock().OutputQueueReadSize(task, val)?;
+                return Ok(0);
+            } 
+            IoCtlCmd::TCGETS => {
+                self.t.ld.lock().GetTermios(task, val)?;
+                return Ok(0);
+            }
+            IoCtlCmd::TCSETS => {
+                self.t.ld.lock().SetTermios(task, val)?;
+                return Ok(0);
+            }
             IoCtlCmd::TCSETSW => {
                 //This should drain the output queue first.
-                return self.t.ld.lock().SetTermios(task, val);
+                self.t.ld.lock().SetTermios(task, val)?;
+                return Ok(0)
             }
             IoCtlCmd::TIOCGPTN => {
                 let n = self.t.n;
                 task.CopyOutObj(&n, val)?;
-                return Ok(());
+                return Ok(0);
             }
             IoCtlCmd::TIOCSPTLCK => {
                 //Implement pty locking. For now just pretend we do.
-                return Ok(());
+                return Ok(0);
             }
             IoCtlCmd::TIOCGWINSZ => {
                 //This should drain the output queue first.
-                return self.t.ld.lock().GetWindowSize(task, val);
+                self.t.ld.lock().GetWindowSize(task, val)?;
+                return Ok(0);
             }
             IoCtlCmd::TIOCSWINSZ => {
                 //This should drain the output queue first.
-                return self.t.ld.lock().SetWindowSize(task, val);
+                self.t.ld.lock().SetWindowSize(task, val)?;
+                return Ok(0);
             }
             _ => return Err(Error::SysError(SysErr::ENOTTY)),
         }

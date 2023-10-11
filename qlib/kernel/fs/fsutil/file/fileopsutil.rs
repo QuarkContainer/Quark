@@ -759,7 +759,7 @@ impl FileOperations for FileOptionsUtil {
         return (self.unstableAttr)(&self.data, task, f);
     }
 
-    fn Ioctl(&self, task: &Task, f: &File, fd: i32, request: u64, val: u64) -> Result<()> {
+    fn Ioctl(&self, task: &Task, f: &File, fd: i32, request: u64, val: u64) -> Result<u64> {
         return (self.ioctl)(&self.data, task, f, fd, request, val);
     }
 

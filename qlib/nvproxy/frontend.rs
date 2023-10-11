@@ -28,9 +28,9 @@ pub fn FrontendIoctlCmd(nr: u32, argSize: u32) -> u64 {
 }
 
 // frontendIoctlState holds the state of a call to NvFrontendFileOptions.Ioctl().
-pub struct FrontendIoctlState {
+pub struct FrontendIoctlState <'a> {
     pub fd: NvFrontendFileOptions,              
-	pub task: &'static Task,
+	pub task: &'a Task,
     pub nr: u32,
     pub ioctlParamsAddr: u64,
 	pub ioctlParamsSize: u32,

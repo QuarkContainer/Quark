@@ -119,7 +119,7 @@ impl FileOperations for StaticDirFileOperations {
         return Ok(());
     }
 
-    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
+    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<u64> {
         return Err(Error::SysError(SysErr::ENOTTY));
     }
 

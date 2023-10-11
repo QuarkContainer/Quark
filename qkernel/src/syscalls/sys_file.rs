@@ -663,7 +663,7 @@ pub fn SysIoctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     return Ok(0);
 }
 
-pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
+pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<u64> {
     let file = task.GetFile(fd)?;
 
     if file.Flags().Path {
@@ -678,12 +678,12 @@ pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
         IoCtlCmd::FIONCLEX => {
             task.SetFlags(fd, &FDFlags { CloseOnExec: false })?;
 
-            return Ok(());
+            return Ok(0);
         }
         IoCtlCmd::FIOCLEX => {
             task.SetFlags(fd, &FDFlags { CloseOnExec: true })?;
 
-            return Ok(());
+            return Ok(0);
         }
         IoCtlCmd::FIONBIO => {
             let set: u32 = task.CopyInObj(val)?;
@@ -697,7 +697,7 @@ pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
             }
 
             file.SetFlags(task, flags.SettableFileFlags());
-            return Ok(());
+            return Ok(0);
         }
         IoCtlCmd::FIOASYNC => {
             let set: u32 = task.CopyInObj(val)?;
@@ -711,18 +711,18 @@ pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
             }
 
             file.SetFlags(task, flags.SettableFileFlags());
-            return Ok(());
+            return Ok(0);
         }
         IoCtlCmd::FIOSETOWN | IoCtlCmd::SIOCSPGRP => {
             let set: i32 = task.CopyInObj(val)?;
             FSetOwner(task, fd, &file, set)?;
-            return Ok(());
+            return Ok(0);
         }
         IoCtlCmd::FIOGETOWN | IoCtlCmd::SIOCGPGRP => {
             let who = FGetOwn(task, &file);
             //*task.GetTypeMut(val)? = who;
             task.CopyOutObj(&who, val)?;
-            return Ok(());
+            return Ok(0);
         }
         _ => return file.Ioctl(task, fd, request, val),
     }

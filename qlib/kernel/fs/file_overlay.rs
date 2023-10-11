@@ -258,7 +258,7 @@ impl FileOperations for OverlayFileOperations {
         return ops.UnstableAttr(task, f);
     }
 
-    fn Ioctl(&self, task: &Task, f: &File, fd: i32, request: u64, val: u64) -> Result<()> {
+    fn Ioctl(&self, task: &Task, f: &File, fd: i32, request: u64, val: u64) -> Result<u64> {
         let upper = {
             let upper = self.upper.lock();
             if upper.is_none() {

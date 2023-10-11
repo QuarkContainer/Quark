@@ -553,7 +553,7 @@ impl FileOperations for SeqFileOperations {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
+    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<u64> {
         return Err(Error::SysError(SysErr::ENOTTY));
     }
 

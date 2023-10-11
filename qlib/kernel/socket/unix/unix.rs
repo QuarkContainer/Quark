@@ -504,8 +504,9 @@ impl FileOperations for UnixSocketOperations {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, task: &Task, _f: &File, fd: i32, request: u64, val: u64) -> Result<()> {
-        return Ioctl(task, &self.ep, fd, request, val);
+    fn Ioctl(&self, task: &Task, _f: &File, fd: i32, request: u64, val: u64) -> Result<u64> {
+        Ioctl(task, &self.ep, fd, request, val)?;
+        return Ok(0)
     }
 
     fn IterateDir(

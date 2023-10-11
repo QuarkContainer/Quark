@@ -39,6 +39,7 @@ use crate::qlib::kernel::socket::unix::transport::unix::*;
 use crate::qlib::kernel::task::*;
 use crate::qlib::kernel::uid::*;
 use crate::qlib::kernel::fs::host::hostinodeop::*;
+use crate::qlib::linux::ioctl::*;
 
 use crate::qlib::kernel::fs::attr::*;
 use crate::qlib::kernel::fs::dentry::*;
@@ -411,8 +412,52 @@ impl FileOperations for NvFrontendFileOptions {
         return Err(Error::SysError(SysErr::ENOTSUP));
     }
 
-    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
-        return Err(Error::SysError(SysErr::ENOTTY));
+    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<u64> {
+        let cmd = request as u32;
+        let nr = IOCBits::IOC_NR(cmd);
+        let argPtr = val;
+        let argSize = IOCBits::IOC_SIZE(cmd);
+
+        let fi = FrontendIoctlState {
+            fd: self.clone(),
+            task: task,
+            nr: nr,
+            ioctlParamsAddr: argPtr,
+            ioctlParamsSize: argSize,
+        };
+
+        // nr determines the argument type.
+        // Don't log nr since it's already visible as the last byte of cmd in
+        // strace logging.
+        // Implementors:
+        // - To map nr to a symbol, look in
+        // src/nvidia/arch/nvalloc/unix/include/nv_escape.h,
+        // kernel-open/common/inc/nv-ioctl-numbers.h, and
+        // kernel-open/common/inc/nv-ioctl-numa.h.
+        // - To determine the parameter type, find the implementation in
+        // kernel-open/nvidia/nv.c:nvidia_ioctl() or
+        // src/nvidia/arch/nvalloc/unix/src/escape.c:RmIoctl().
+        // - Add symbol and parameter type definitions to //pkg/abi/nvgpu.
+        // - Add filter to seccomp_filters.go.
+        // - Add handling below.
+        match nr {
+            NV_ESC_CARD_INFO |                     // nv_ioctl_card_info_t
+            NV_ESC_CHECK_VERSION_STR |             // nv_rm_api_version_t
+            NV_ESC_SYS_PARAMS |                    // nv_ioctl_sys_params_t
+            NV_ESC_RM_DUP_OBJECT |                 // NVOS55_PARAMETERS
+            NV_ESC_RM_SHARE |                      // NVOS57_PARAMETERS
+            NV_ESC_RM_UNMAP_MEMORY |               // NVOS34_PARAMETERS
+            NV_ESC_RM_UPDATE_DEVICE_MAPPING_INFO => { // NVOS56_PARAMETERS
+                return FrontendIoctlSimple(&fi);
+            }
+            NV_ESC_REGISTER_FD => {
+                return FrontendRegisterFD(&fi);
+            }
+            _ => {
+                warn!("nvproxy: unknown frontend ioctl {} == {:x?} (argSize={}, cmd={:x?})", nr, nr, argSize, cmd);
+                return Err(Error::SysError(SysErr::EINVAL));
+            }
+        }
     }
 
     fn IterateDir(

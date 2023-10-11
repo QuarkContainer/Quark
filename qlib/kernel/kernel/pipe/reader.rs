@@ -167,7 +167,7 @@ impl FileOperations for Reader {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<()> {
+    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<u64> {
         if request == IoCtlCmd::FIONREAD {
             let mut v = self.pipe.Queued();
             if v > core::i32::MAX as usize {
@@ -176,7 +176,7 @@ impl FileOperations for Reader {
             }
 
             task.CopyOutObj(&v, val)?;
-            return Ok(());
+            return Ok(0);
         }
         return Err(Error::SysError(SysErr::ENOTTY));
     }
