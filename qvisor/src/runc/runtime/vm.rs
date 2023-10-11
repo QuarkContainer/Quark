@@ -285,12 +285,15 @@ impl VirtualMachine {
         let vm_fd = kvm
             .create_vm()
             .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-
-        let mut cap: kvm_enable_cap = Default::default();
-        cap.cap = KVM_CAP_X86_DISABLE_EXITS;
-        cap.args[0] = (KVM_X86_DISABLE_EXITS_HLT | KVM_X86_DISABLE_EXITS_MWAIT) as u64;
+        
         #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
-        vm_fd.enable_cap(&cap).unwrap();
+        {
+            let mut cap: kvm_enable_cap = Default::default();
+            cap.cap = KVM_CAP_X86_DISABLE_EXITS;
+            cap.args[0] = (KVM_X86_DISABLE_EXITS_HLT | KVM_X86_DISABLE_EXITS_MWAIT) as u64;
+            vm_fd.enable_cap(&cap).unwrap();
+        }
+
         if !kvm.check_extension(Cap::ImmediateExit) {
             panic!("KVM_CAP_IMMEDIATE_EXIT not supported");
         }
@@ -328,27 +331,31 @@ impl VirtualMachine {
                 MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
             vms.pageTables = PageTables::New(&vms.allocator)?;
 
+            let mut opts = addr::PageOpts::Zero();
+            opts.SetPresent().SetWrite().SetGlobal();
+            #[cfg(target_arch = "aarch64")]
+            opts.SetMtNormal().SetDirty().SetAccessed();
+
             vms.KernelMap(
                 addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
                 addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR + MemoryDef::PAGE_SIZE),
                 addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
-                addr::PageOpts::Zero()
-                    .SetPresent()
-                    .SetWrite()
-                    .SetGlobal()
-                    .Val(),
+                opts.Val(),
             )?;
 
             vms.KernelMapHugeTable(
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR),
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR),
-                addr::PageOpts::Zero()
-                    .SetPresent()
-                    .SetWrite()
-                    .SetGlobal()
-                    .Val(),
+                opts.Val(),
             )?;
+
+            // vms.KernelMap(
+            //     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+            //     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE + 0x1000),
+            //     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+            //     opts.Val(),
+            // )?;
             autoStart = args.AutoStart;
             vms.pivot = args.Pivot;
             vms.args = Some(args);
@@ -359,24 +366,59 @@ impl VirtualMachine {
         info!("before loadKernel");
 
         let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
-        elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
-        VMS.lock().vdsoAddr = elf.vdsoStart;
+        //elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
+        //VMS.lock().vdsoAddr = elf.vdsoStart;
 
         let p = entry as *const u8;
+        let p1 = (entry+1) as *const u8;
+        let p2 = (entry+2) as *const u8;
+        let p3 = (entry+3) as *const u8;
         info!(
-            "entry is 0x{:x}, data at entry is {:x}, heapStartAddr is {:x}",
+            "entry is 0x{:x}, data at entry is {:x} {:x} {:x} {:x}, heapStartAddr is {:x}",
             entry,
             unsafe { *p },
+            unsafe { *p1 },
+            unsafe { *p2 },
+            unsafe { *p3 },
             heapStartAddr
         );
+
+        #[cfg(target_arch = "aarch64")]
+        {
+
+            let mem = unsafe {
+                libc::mmap(
+                    std::ptr::null_mut(),
+                    0x1000,
+                    libc::PROT_READ | libc::PROT_WRITE,
+                    libc::MAP_SHARED | libc::MAP_FIXED | libc::MAP_ANONYMOUS,
+                    0,
+                    0,
+                )
+            };
+            let mem_region = kvm_userspace_memory_region {
+                slot: 2,
+                guest_phys_addr: MemoryDef::HYPERCALL_MMIO_BASE,
+                memory_size: 0x1000,
+                userspace_addr: mem as u64,
+                flags: 0x1 << 1,
+            };
+    
+            unsafe {
+                vm_fd
+                    .set_user_memory_region(mem_region)
+                    .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+            }
+    
+        }
 
         {
             super::super::super::URING_MGR.lock();
         }
 
         #[cfg(target_arch = "aarch64")]
-        set_kvm_vcpu_init(&vm_fd)?;
-
+        let kvi = get_kvm_vcpu_init(&vm_fd)?;
+        info!("kvm_vcpu_init {:?}", kvi);
         let mut vcpus = Vec::with_capacity(cpuCount);
         for i in 0..cpuCount
         /*args.NumCPU*/
@@ -390,12 +432,16 @@ impl VirtualMachine {
                 SHARE_SPACE.Value(),
                 autoStart,
             )?);
-
             // enable cpuid in host
             #[cfg(target_arch = "x86_64")]
             vcpu.vcpu.set_cpuid2(&kvm_cpuid).unwrap();
             VMS.lock().vcpus.push(vcpu.clone());
             vcpus.push(vcpu);
+        }
+        
+        #[cfg(target_arch = "aarch64")]
+        for vcpu in vcpus.iter() {
+            vcpu.vcpu.vcpu_init(&kvi).map_err(|e| Error::SysError(e.errno()))?;
         }
 
         let vm = Self {
@@ -479,14 +525,11 @@ impl VirtualMachine {
 }
 
 #[cfg(target_arch = "aarch64")]
-fn set_kvm_vcpu_init(vmfd: &VmFd) -> Result<()> {
-    use crate::kvm_vcpu_aarch64::KVM_VCPU_INIT;
-
+fn get_kvm_vcpu_init(vmfd: &VmFd) -> Result<kvm_vcpu_init> {
     let mut kvi = kvm_vcpu_init::default();
     vmfd.get_preferred_target(&mut kvi).map_err(|e| Error::SysError(e.errno()))?;
     kvi.features[0] |= 1 << kvm_bindings::KVM_ARM_VCPU_PSCI_0_2;
-    unsafe { KVM_VCPU_INIT.Init(kvi); }
-    Ok(())
+    Ok(kvi)
 }
 
 fn SetSigusr1Handler() {
