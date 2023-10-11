@@ -842,7 +842,7 @@ impl FileOperations for SocketOperations {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<()> {
+    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<u64> {
         let flags = request as i32;
 
         let hostfd = self.fd;
@@ -861,19 +861,19 @@ impl FileOperations for SocketOperations {
                 let addr = val;
                 HostIoctlIFReq(task, hostfd, request, addr)?;
 
-                return Ok(());
+                return Ok(0);
             }
             LibcConst::SIOCGIFCONF => {
                 let addr = val;
                 HostIoctlIFConf(task, hostfd, request, addr)?;
 
-                return Ok(());
+                return Ok(0);
             }
             LibcConst::TIOCINQ => {
                 if self.SocketBufEnabled() {
                     let v = self.SocketBuf().readBuf.lock().AvailableDataSize() as i32;
                     task.CopyOutObj(&v, val)?;
-                    return Ok(());
+                    return Ok(0);
                 } else if self.udpRDMA {
                     let sockInfo = GlobalIOMgr()
                         .GetByHost(self.fd)
@@ -900,7 +900,7 @@ impl FileOperations for SocketOperations {
                             }
 
                             task.CopyOutObj(&v, val)?;
-                            return Ok(());
+                            return Ok(0);
                         }
                         _ => {
                             return Err(Error::SysError(SysErr::EINVAL));
@@ -913,7 +913,7 @@ impl FileOperations for SocketOperations {
                         return Err(Error::SysError(-res as i32));
                     }
                     task.CopyOutObj(&tmp, val)?;
-                    return Ok(());
+                    return Ok(0);
                 }
             }
             _ => {
@@ -923,7 +923,7 @@ impl FileOperations for SocketOperations {
                     return Err(Error::SysError(-res as i32));
                 }
                 task.CopyOutObj(&tmp, val)?;
-                return Ok(());
+                return Ok(0);
             }
         }
     }

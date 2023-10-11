@@ -632,7 +632,7 @@ impl FileOperations for Inotify {
         return f.Dirent.Inode().UnstableAttr(task);
     }
 
-    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<()> {
+    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<u64> {
         match request {
             IoCtlCmd::FIONREAD => {
                 let events = self.events.lock();
@@ -643,7 +643,7 @@ impl FileOperations for Inotify {
                     }
 
                     task.CopyOutObj(&size, val)?;
-                    return Ok(());
+                    return Ok(0);
                 }
             }
             _ => return Err(Error::SysError(SysErr::ENOTTY)),

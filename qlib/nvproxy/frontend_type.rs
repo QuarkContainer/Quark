@@ -21,28 +21,28 @@ pub const NV_IOCTL_MAGIC : u32 = 'F' as u32;
 // Note that these are only the IOC_NR part of the ioctl command.
 
 // From kernel-open/common/inc/nv-ioctl-numbers.h:
-pub const NV_IOCTL_BASE            : u64 = 200;
-pub const NV_ESC_CARD_INFO         : u64 = NV_IOCTL_BASE + 0;
-pub const NV_ESC_REGISTER_FD       : u64 = NV_IOCTL_BASE + 1;
-pub const NV_ESC_ALLOC_OS_EVENT    : u64 = NV_IOCTL_BASE + 6;
-pub const NV_ESC_FREE_OS_EVENT     : u64 = NV_IOCTL_BASE + 7;
-pub const NV_ESC_CHECK_VERSION_STR : u64 = NV_IOCTL_BASE + 10;
-pub const NV_ESC_SYS_PARAMS        : u64 = NV_IOCTL_BASE + 14;
+pub const NV_IOCTL_BASE            : u32 = 200;
+pub const NV_ESC_CARD_INFO         : u32 = NV_IOCTL_BASE + 0;
+pub const NV_ESC_REGISTER_FD       : u32 = NV_IOCTL_BASE + 1;
+pub const NV_ESC_ALLOC_OS_EVENT    : u32 = NV_IOCTL_BASE + 6;
+pub const NV_ESC_FREE_OS_EVENT     : u32 = NV_IOCTL_BASE + 7;
+pub const NV_ESC_CHECK_VERSION_STR : u32 = NV_IOCTL_BASE + 10;
+pub const NV_ESC_SYS_PARAMS        : u32 = NV_IOCTL_BASE + 14;
 
 // From kernel-open/common/inc/nv-ioctl-numa.h:
-pub const NV_ESC_NUMA_INFO : u64 = NV_IOCTL_BASE + 15;
+pub const NV_ESC_NUMA_INFO : u32 = NV_IOCTL_BASE + 15;
 
 // From src/nvidia/arch/nvalloc/unix/include/nv_escape.h:
-pub const NV_ESC_RM_ALLOC_MEMORY               : u64 = 0x27;
-pub const NV_ESC_RM_FREE                       : u64 = 0x29;
-pub const NV_ESC_RM_CONTROL                    : u64 = 0x2a;
-pub const NV_ESC_RM_ALLOC                      : u64 = 0x2b;
-pub const NV_ESC_RM_DUP_OBJECT                 : u64 = 0x34;
-pub const NV_ESC_RM_SHARE                      : u64 = 0x35;
-pub const NV_ESC_RM_VID_HEAP_CONTROL           : u64 = 0x4a;
-pub const NV_ESC_RM_MAP_MEMORY                 : u64 = 0x4e;
-pub const NV_ESC_RM_UNMAP_MEMORY               : u64 = 0x4f;
-pub const NV_ESC_RM_UPDATE_DEVICE_MAPPING_INFO : u64 = 0x5e;
+pub const NV_ESC_RM_ALLOC_MEMORY               : u32 = 0x27;
+pub const NV_ESC_RM_FREE                       : u32 = 0x29;
+pub const NV_ESC_RM_CONTROL                    : u32 = 0x2a;
+pub const NV_ESC_RM_ALLOC                      : u32 = 0x2b;
+pub const NV_ESC_RM_DUP_OBJECT                 : u32 = 0x34;
+pub const NV_ESC_RM_SHARE                      : u32 = 0x35;
+pub const NV_ESC_RM_VID_HEAP_CONTROL           : u32 = 0x4a;
+pub const NV_ESC_RM_MAP_MEMORY                 : u32 = 0x4e;
+pub const NV_ESC_RM_UNMAP_MEMORY               : u32 = 0x4f;
+pub const NV_ESC_RM_UPDATE_DEVICE_MAPPING_INFO : u32 = 0x5e;
 
 // Frontend ioctl parameter structs, from src/common/sdk/nvidia/inc/nvos.h or
 // kernel-open/common/inc/nv-ioctl.h.

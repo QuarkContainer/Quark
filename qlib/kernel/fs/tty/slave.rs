@@ -456,32 +456,44 @@ impl FileOperations for SlaveFileOperations {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<()> {
+    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<u64> {
         let cmd = request;
         match cmd {
-            IoCtlCmd::FIONREAD => return self.d.read().t.ld.lock().InputQueueReadSize(task, val),
-            IoCtlCmd::TCGETS => return self.d.read().t.ld.lock().GetTermios(task, val),
-            IoCtlCmd::TCSETS => return self.d.read().t.ld.lock().SetTermios(task, val),
+            IoCtlCmd::FIONREAD => {
+                self.d.read().t.ld.lock().InputQueueReadSize(task, val)?;
+                return Ok(0);
+            } 
+            IoCtlCmd::TCGETS => {
+                self.d.read().t.ld.lock().GetTermios(task, val)?;
+                return Ok(0)
+            } 
+            IoCtlCmd::TCSETS => {
+                self.d.read().t.ld.lock().SetTermios(task, val)?;
+                return Ok(0);
+            }
             IoCtlCmd::TCSETSW => {
                 //This should drain the output queue first.
-                return self.d.read().t.ld.lock().SetTermios(task, val);
+                self.d.read().t.ld.lock().SetTermios(task, val)?;
+                return Ok(0);
             }
             IoCtlCmd::TIOCGPTN => {
                 let n = self.d.read().t.n;
                 task.CopyOutObj(&n, val)?;
-                return Ok(());
+                return Ok(0);
             }
             IoCtlCmd::TIOCSPTLCK => {
                 //Implement pty locking. For now just pretend we do.
-                return Ok(());
+                return Ok(0);
             }
             IoCtlCmd::TIOCGWINSZ => {
                 //This should drain the output queue first.
-                return self.d.read().t.ld.lock().GetWindowSize(task, val);
+                self.d.read().t.ld.lock().GetWindowSize(task, val)?;
+                return Ok(0);
             }
             IoCtlCmd::TIOCSWINSZ => {
                 //This should drain the output queue first.
-                return self.d.read().t.ld.lock().SetWindowSize(task, val);
+                self.d.read().t.ld.lock().SetWindowSize(task, val)?;
+                return Ok(0);
             }
             _ => return Err(Error::SysError(SysErr::ENOTTY)),
         }
