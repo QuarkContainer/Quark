@@ -12,7 +12,7 @@ use crate::qlib::qmsg::{Print, QMsg};
 use crate::{KVMVcpu, VMS, kvm_vcpu::SetExitSignal};
 use crate::qlib::singleton::Singleton;
 use crate::kvm_vcpu::KVMVcpuState;
-use crate::qlib::linux_def::SysErr;
+use crate::qlib::linux_def::{SysErr, MemoryDef};
 use crate::qlib::{backtracer, VcpuFeq, GetTimeCall};
 use crate::{qlib, URING_MGR};
 use crate::KERNEL_IO_THREAD;
@@ -35,7 +35,7 @@ const _KVM_ARM64_REGS_R6         :u64 = 0x603000000010000c;
 const _KVM_ARM64_REGS_R7         :u64 = 0x603000000010000e;
 const _KVM_ARM64_REGS_R8         :u64 = 0x6030000000100010;
 const _KVM_ARM64_REGS_R18        :u64 = 0x6030000000100024;
-const _KVM_ARM64_REGS_R29        :u64 = 0x6030000000100036;
+const _KVM_ARM64_REGS_R29        :u64 = 0x603000000010003a;
 const _KVM_ARM64_REGS_PC         :u64 = 0x6030000000100040;
 const _KVM_ARM64_REGS_MAIR_EL1   :u64 = 0x603000000013c510;
 const _KVM_ARM64_REGS_TCR_EL1    :u64 = 0x603000000013c102;
@@ -143,9 +143,11 @@ impl KVMVcpu {
             }
             self.state
                 .store(KVMVcpuState::GUEST as u64, Ordering::Release);
+            info!("enter vcpu run");
             let kvmRet = match self.vcpu.run() {
                 Ok(ret) => ret,
                 Err(e) => {
+                    error!("kvm vcpu exit {}", e);
                     if e.errno() == SysErr::EINTR {
                         self.vcpu.set_kvm_immediate_exit(0);
                         self.dump()?;
@@ -155,42 +157,44 @@ impl KVMVcpu {
                             VcpuExit::Intr
                         }
                     } else {
-                        let pc = self.vcpu.get_one_reg(_KVM_ARM64_REGS_PC).map_err(|e| Error::SysError(e.errno()))?;
-                        let rsp = self.vcpu.get_one_reg(_KVM_ARM64_REGS_SP_EL1).map_err(|e| Error::SysError(e.errno()))?;
-                        let rbp = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R29).map_err(|e| Error::SysError(e.errno()))?;
+                        self.backtrace()?;
                         error!("vcpu error: {:?}", e);
-                        backtracer::trace(pc, rsp, rbp, &mut |frame| {
-                            print!("host frame is {:#x?}", frame);
-                            true
-                        });
-
                         panic!("kvm virtual cpu[{}] run failed: Error {:?}", self.id, e)
                     }
                 }
             };
-            self.state
-            .store(KVMVcpuState::HOST as u64, Ordering::Release);
+            self.state.store(KVMVcpuState::HOST as u64, Ordering::Release);
+            info!("kvmRet: {:?}", kvmRet);
             match kvmRet {
                 VcpuExit::MmioRead(addr, data) => {
+                    self.backtrace()?;
                     panic!(
                         "CPU[{}] Received an MMIO Read Request for the address {:#x}.",
                         self.id, addr,
                     );
                 }
                 VcpuExit::MmioWrite(addr, data) => {
+                    info!("handle hypercall {}", addr);
                     {
                         let mut interrupting = self.interrupting.lock();
                         interrupting.0 = false;
                         interrupting.1.clear();
                     }
-                    let para1 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R0).map_err(|e| Error::SysError(e.errno()))?;
-                    let para2 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R1).map_err(|e| Error::SysError(e.errno()))?;
-                    let para3 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R2).map_err(|e| Error::SysError(e.errno()))?;
-                    let para4 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R3).map_err(|e| Error::SysError(e.errno()))?;
-                    if addr > (u16::MAX as u64) {
+                    
+                    // reading hypercall parameters from vcpu register file
+                    // x0 and x1 (w1) are used by the str instruction
+                    // the 64-bit parameters 1,2,3,4 are passed via
+                    // x2,x3,x4,x5
+                    let para1 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R2).map_err(|e| Error::SysError(e.errno()))?;
+                    let para2 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R3).map_err(|e| Error::SysError(e.errno()))?;
+                    let para3 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R4).map_err(|e| Error::SysError(e.errno()))?;
+                    let para4 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R5).map_err(|e| Error::SysError(e.errno()))?;
+                    info!("paras:{:x} {:x} {:x} {:x}", para1, para2, para3, para4); 
+                    let hypercall_id = (addr - MemoryDef::HYPERCALL_MMIO_BASE) as u16;
+                    if hypercall_id > u16::MAX {
                         panic!("cpu[{}] Received hypercall id max than 255");
                     }
-                    self.handle_hypercall(addr as u16, data, para1, para2, para3, para4)?;
+                    self.handle_hypercall(hypercall_id, data, para1, para2, para3, para4)?;
                 }
                 VcpuExit::Hlt => {
                     error!("in hlt....");
@@ -203,6 +207,7 @@ impl KVMVcpu {
                     info!("get exception");
                 }
                 VcpuExit::IrqWindowOpen => {
+                    info!("irq window open");
                     self.InterruptGuest();
                     self.vcpu.set_kvm_request_interrupt_window(0);
                     {
@@ -212,6 +217,7 @@ impl KVMVcpu {
                     }
                 }
                 VcpuExit::Intr => {
+                    info!("handle interruptted");
                     self.vcpu.set_kvm_request_interrupt_window(1);
                     {
                         let mut interrupting = self.interrupting.lock();
@@ -236,32 +242,33 @@ impl KVMVcpu {
     }
 
     fn setup_registers(&self) -> Result<()> {
-        self.vcpu.vcpu_init(&KVM_VCPU_INIT).map_err(|e|Error::SysError(e.errno()))?;
-        // tcr_el1
-        let data = _TCR_TXSZ_VA48 |  _TCR_CACHE_FLAGS | _TCR_SHARED | _TCR_TG_FLAGS |  _TCR_ASID16 |  _TCR_IPS_40BITS;
-        self.vcpu.set_one_reg(_KVM_ARM64_REGS_TCR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
-        // mair_el1
-        let data = _MT_EL1_INIT;
-        self.vcpu.set_one_reg(_KVM_ARM64_REGS_MAIR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
-        // ttbr0_el1
-        let data = VMS.lock().pageTables.GetRoot();
-        self.vcpu.set_one_reg(_KVM_ARM64_REGS_TTBR0_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
-        // TODO set ttbr1_el1
-        // cntkctl_el1
-        let data = _CNTKCTL_EL1_DEFAULT;
-        self.vcpu.set_one_reg(_KVM_ARM64_REGS_CNTKCTL_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
-        // cpacr_el1
-        let data = 0;
-        self.vcpu.set_one_reg(_KVM_ARM64_REGS_CPACR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
-        // sctlr_el1
-        let data = _SCTLR_EL1_DEFAULT;
-        self.vcpu.set_one_reg(_KVM_ARM64_REGS_SCTLR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
+        // // tcr_el1
+        // let data = _TCR_TXSZ_VA48 |  _TCR_CACHE_FLAGS | _TCR_SHARED | _TCR_TG_FLAGS |  _TCR_ASID16 |  _TCR_IPS_40BITS;
+        // //let data = _TCR_TXSZ_VA48 | _TCR_TG_FLAGS | _TCR_IPS_40BITS;
+        // self.vcpu.set_one_reg(_KVM_ARM64_REGS_TCR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
+        // // mair_el1
+        // let data = _MT_EL1_INIT;
+        // self.vcpu.set_one_reg(_KVM_ARM64_REGS_MAIR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
+        // // ttbr0_el1
+        // let data = VMS.lock().pageTables.GetRoot();
+        // self.vcpu.set_one_reg(_KVM_ARM64_REGS_TTBR0_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
+        // // TODO set ttbr1_el1
+        // // cntkctl_el1
+        // let data = _CNTKCTL_EL1_DEFAULT;
+        // self.vcpu.set_one_reg(_KVM_ARM64_REGS_CNTKCTL_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
+        // // cpacr_el1
+        // let data = 0;
+        // self.vcpu.set_one_reg(_KVM_ARM64_REGS_CPACR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
+        // // sctlr_el1
+        // let data = _SCTLR_EL1_DEFAULT;
+        // //let data = _SCTLR_M;
+        // self.vcpu.set_one_reg(_KVM_ARM64_REGS_SCTLR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
         // tpidr_el1 has to be set in kernel
         // sp_el1
         let data = self.topStackAddr;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_SP_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
         // pc
-        let data = self.entry;
+        let data: u64 = self.entry;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_PC, data).map_err(|e| Error::SysError(e.errno()))?;
         // vbar_el1 holds exception vector base address, should be set in kernel
         // system time, is it necessary?
@@ -298,8 +305,8 @@ impl KVMVcpu {
         }
     }
 
-    fn handle_hypercall(&self, addr: u16, data: &[u8], para1: u64, para2: u64,para3: u64, para4: u64) -> Result<()> {
-        match addr {
+    fn handle_hypercall(&self, hypercall_id: u16, data: &[u8], para1: u64, para2: u64,para3: u64, para4: u64) -> Result<()> {
+        match  hypercall_id {
             qlib::HYPERCALL_IOWAIT => {
                 if !super::runc::runtime::vm::IsRunning() {
                     return Ok(());
@@ -363,8 +370,7 @@ impl KVMVcpu {
             qlib::HYPERCALL_PRINT => {
                 let addr = para1;
                 let msg = unsafe { &*(addr as *const Print) };
-
-                log!("{}", msg.str);
+                log!("{:p} {:p}: {}", msg.str, &msg.level,  msg.str);
             }
 
             qlib::HYPERCALL_MSG => {
@@ -495,8 +501,20 @@ impl KVMVcpu {
                 }
             }
 
-            _ => info!("Unknow hyper call!!!!! address is {}", addr),
+            _ => panic!("Unknow hypercall {}", hypercall_id),
         }
+        Ok(())
+    }
+
+    fn backtrace(&self) -> Result<()> {
+        let pc = self.vcpu.get_one_reg(_KVM_ARM64_REGS_PC).map_err(|e| Error::SysError(e.errno()))?;
+        let rsp = self.vcpu.get_one_reg(_KVM_ARM64_REGS_SP_EL1).map_err(|e| Error::SysError(e.errno()))?;
+        let rbp = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R29).map_err(|e| Error::SysError(e.errno()))?;
+
+        backtracer::trace(pc, rsp, rbp, &mut |frame| {
+            print!("host frame is {:#x?}", frame);
+            true
+        });
         Ok(())
     }
 }

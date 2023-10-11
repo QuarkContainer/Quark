@@ -442,9 +442,26 @@ pub extern "C" fn rust_main(
     vcpuCnt: u64,
     autoStart: bool,
 ) {
+    let msg1 = qlib::qmsg::Print { level: self::qlib::config::DebugLevel::Info, str: "enter rust_main, haha" };
+    HyperCall64(qlib::HYPERCALL_PRINT, &msg1 as *const _ as u64, 0, 0, 0);
+    //let msg2 = qlib::qmsg::Print { level: self::qlib::config::DebugLevel::Error, str: "enter rust_main, hehe"};
+    //HyperCall64(qlib::HYPERCALL_PRINT, &msg2 as *const _ as u64, 0, 0, 0);
+    //Kernel::HostSpace::SyncPrint(self::qlib::config::DebugLevel::Info, "enter rust_main, haha");
+    //let msg3 = qlib::qmsg::Print { level: self::qlib::config::DebugLevel::Error, str: "deliberately exit"};
+    //HyperCall64(qlib::HYPERCALL_EXIT, 0, 0, 0, 0);
+    //Kernel::HostSpace::SyncPrint(self::qlib::config::DebugLevel::Error, "enter rust_main");
+    //HyperCall64(qlib::HYPERCALL_MSG, 0x240, id, vcpuCnt, 1);
     self::qlib::kernel::asm::fninit();
     if id == 0 {
+        let msg = "init global allocator";
+        Kernel::HostSpace::SyncPrint(self::qlib::config::DebugLevel::Debug, msg);
+        let msg2 = "init global allocator2";
+        Kernel::HostSpace::SyncPrint(self::qlib::config::DebugLevel::Debug, msg2);
+        raw!(0x240, id, vcpuCnt, 2);
         GLOBAL_ALLOCATOR.Init(heapStart);
+        //let msg = format!("[INFO] cpu{} {}", id, "init sharespace");
+        Kernel::HostSpace::SyncPrint(self::qlib::config::DebugLevel::Trace, "init sharespace");
+        raw!(0x240, id, vcpuCnt, 3);
         SHARESPACE.SetValue(shareSpaceAddr);
         SingletonInit();
 
