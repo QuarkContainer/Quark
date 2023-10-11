@@ -247,7 +247,7 @@ pub struct PageOpts(PageTableFlags);
 impl PageOpts {
     //const Empty : PageTableFlags = PageTableFlags::PRESENT & PageTableFlags::WRITABLE; //set 0
     pub fn New(user: bool, write: bool, exec: bool) -> Self {
-        let mut flags = PageTableFlags::VALID;
+        let mut flags = PageTableFlags::VALID | PageTableFlags::MT_NORMAL;
         if !write {
             flags |= PageTableFlags::READ_ONLY;
         }
@@ -334,6 +334,21 @@ impl PageOpts {
 
     pub fn SetGlobal(&mut self) -> &mut Self {
         self.0 &= !PageTableFlags::NON_GLOBAL;
+        return self;
+    }
+
+    pub fn SetMtNormal(&mut self) -> &mut Self {
+        self.0 |= PageTableFlags::MT_NORMAL;
+        return self;
+    }
+
+    pub fn SetDirty(&mut self) -> &mut Self {
+        self.0 |= PageTableFlags::DIRTY;
+        return self;
+    }
+
+    pub fn SetAccessed(&mut self) -> &mut Self {
+        self.0 |= PageTableFlags::ACCESSED;
         return self;
     }
 
