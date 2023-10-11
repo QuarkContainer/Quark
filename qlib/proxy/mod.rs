@@ -11,11 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod nvgpu;
-pub mod classes;
-pub mod frontend;
-pub mod uvm;
-
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u64)]
 pub enum Command {

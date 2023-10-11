@@ -62,7 +62,7 @@ impl HostAllocator {
     pub fn Init(&self) {
         let heapSize = MemoryDef::HEAP_SIZE as usize + MemoryDef::IO_HEAP_SIZE as usize;
         let addr = unsafe {
-            let mut flags = libc::MAP_PRIVATE | libc::MAP_ANON | libc::MAP_FIXED;
+            let mut flags = libc::MAP_SHARED | libc::MAP_ANON | libc::MAP_FIXED;
             if ENABLE_HUGEPAGE {
                 flags |= libc::MAP_HUGE_2MB;
             }

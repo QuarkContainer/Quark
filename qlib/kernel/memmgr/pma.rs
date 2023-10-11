@@ -105,6 +105,10 @@ impl PageMgr {
         self.pagepool.Deref(addr).unwrap();
     }
 
+    pub fn RefPage(&self, addr: u64) {
+        self.pagepool.Ref(addr).unwrap();
+    }
+
     pub fn Deref(&self, addr: u64) -> Result<u64> {
         self.pagepool.Deref(addr)
     }

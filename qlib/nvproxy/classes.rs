@@ -14,42 +14,42 @@
 use super::nvgpu::*;
 
 // Class handles, from src/nvidia/generated/g_allclasses.h.
-pub const NV01_ROOT                        : u64 = 0x00000000;
-pub const NV01_ROOT_NON_PRIV               : u64 = 0x00000001;
-pub const NV01_MEMORY_SYSTEM               : u64 = 0x0000003e;
-pub const NV01_ROOT_CLIENT                 : u64 = 0x00000041;
-pub const NV01_MEMORY_SYSTEM_OS_DESCRIPTOR : u64 = 0x00000071;
-pub const NV01_EVENT_OS_EVENT              : u64 = 0x00000079;
-pub const NV01_DEVICE_0                    : u64 = 0x00000080;
-pub const NV_MEMORY_FABRIC                 : u64 = 0x000000f8;
-pub const NV20_SUBDEVICE_0                 : u64 = 0x00002080;
-pub const NV50_THIRD_PARTY_P2P             : u64 = 0x0000503c;
-pub const GT200_DEBUGGER                   : u64 = 0x000083de;
-pub const GF100_SUBDEVICE_MASTER           : u64 = 0x000090e6;
-pub const FERMI_CONTEXT_SHARE_A            : u64 = 0x00009067;
-pub const FERMI_VASPACE_A                  : u64 = 0x000090f1;
-pub const KEPLER_CHANNEL_GROUP_A           : u64 = 0x0000a06c;
-pub const VOLTA_USERMODE_A                 : u64 = 0x0000c361;
-pub const VOLTA_CHANNEL_GPFIFO_A           : u64 = 0x0000c36f;
-pub const TURING_USERMODE_A                : u64 = 0x0000c461;
-pub const TURING_CHANNEL_GPFIFO_A          : u64 = 0x0000c46f;
-pub const AMPERE_CHANNEL_GPFIFO_A          : u64 = 0x0000c56f;
-pub const TURING_DMA_COPY_A                : u64 = 0x0000c5b5;
-pub const TURING_COMPUTE_A                 : u64 = 0x0000c5c0;
-pub const HOPPER_USERMODE_A                : u64 = 0x0000c661;
-pub const AMPERE_DMA_COPY_A                : u64 = 0x0000c6b5;
-pub const AMPERE_COMPUTE_A                 : u64 = 0x0000c6c0;
-pub const AMPERE_DMA_COPY_B                : u64 = 0x0000c7b5;
-pub const AMPERE_COMPUTE_B                 : u64 = 0x0000c7c0;
-pub const HOPPER_DMA_COPY_A                : u64 = 0x0000c8b5;
-pub const ADA_COMPUTE_A                    : u64 = 0x0000c9c0;
-pub const HOPPER_COMPUTE_A                 : u64 = 0x0000cbc0;
+pub const NV01_ROOT                        : u32 = 0x00000000;
+pub const NV01_ROOT_NON_PRIV               : u32 = 0x00000001;
+pub const NV01_MEMORY_SYSTEM               : u32 = 0x0000003e;
+pub const NV01_ROOT_CLIENT                 : u32 = 0x00000041;
+pub const NV01_MEMORY_SYSTEM_OS_DESCRIPTOR : u32 = 0x00000071;
+pub const NV01_EVENT_OS_EVENT              : u32 = 0x00000079;
+pub const NV01_DEVICE_0                    : u32 = 0x00000080;
+pub const NV_MEMORY_FABRIC                 : u32 = 0x000000f8;
+pub const NV20_SUBDEVICE_0                 : u32 = 0x00002080;
+pub const NV50_THIRD_PARTY_P2P             : u32 = 0x0000503c;
+pub const GT200_DEBUGGER                   : u32 = 0x000083de;
+pub const GF100_SUBDEVICE_MASTER           : u32 = 0x000090e6;
+pub const FERMI_CONTEXT_SHARE_A            : u32 = 0x00009067;
+pub const FERMI_VASPACE_A                  : u32 = 0x000090f1;
+pub const KEPLER_CHANNEL_GROUP_A           : u32 = 0x0000a06c;
+pub const VOLTA_USERMODE_A                 : u32 = 0x0000c361;
+pub const VOLTA_CHANNEL_GPFIFO_A           : u32 = 0x0000c36f;
+pub const TURING_USERMODE_A                : u32 = 0x0000c461;
+pub const TURING_CHANNEL_GPFIFO_A          : u32 = 0x0000c46f;
+pub const AMPERE_CHANNEL_GPFIFO_A          : u32 = 0x0000c56f;
+pub const TURING_DMA_COPY_A                : u32 = 0x0000c5b5;
+pub const TURING_COMPUTE_A                 : u32 = 0x0000c5c0;
+pub const HOPPER_USERMODE_A                : u32 = 0x0000c661;
+pub const AMPERE_DMA_COPY_A                : u32 = 0x0000c6b5;
+pub const AMPERE_COMPUTE_A                 : u32 = 0x0000c6c0;
+pub const AMPERE_DMA_COPY_B                : u32 = 0x0000c7b5;
+pub const AMPERE_COMPUTE_B                 : u32 = 0x0000c7c0;
+pub const HOPPER_DMA_COPY_A                : u32 = 0x0000c8b5;
+pub const ADA_COMPUTE_A                    : u32 = 0x0000c9c0;
+pub const HOPPER_COMPUTE_A                 : u32 = 0x0000cbc0;
 
 // Class handles for older generations that are not supported by the open source
 // driver. Volta was the last such generation. These are defined in files under
 // src/common/sdk/nvidia/inc/class/.
-pub const VOLTA_COMPUTE_A  : u64 = 0x0000c3c0;
-pub const VOLTA_DMA_COPY_A : u64 = 0x0000c3b5;
+pub const VOLTA_COMPUTE_A  : u32 = 0x0000c3c0;
+pub const VOLTA_DMA_COPY_A : u32 = 0x0000c3b5;
 
 // Nv0005AllocParameters NV0005_ALLOC_PARAMETERS is the alloc params type for NV01_EVENT_OS_EVENT,
 // from src/common/sdk/nvidia/inc/class/cl0005.h.
@@ -89,7 +89,7 @@ pub struct Nv2080AllocParameters {
     pub subDeviceID : u32,
 }
 
-// Nv503cAllocParameters is the alloc params type for NV50_THIRD_PARTY_P2P,
+// Nv503cAllocParameters NV503C_ALLOC_PARAMETERS is the alloc params type for NV50_THIRD_PARTY_P2P,
 // from src/common/sdk/nvidia/inc/class/cl503c.h.
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]

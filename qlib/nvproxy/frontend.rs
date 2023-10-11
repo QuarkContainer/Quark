@@ -18,8 +18,8 @@ use crate::qlib::kernel::task::Task;
 use crate::qlib::common::*;
 use crate::qlib::linux::ioctl::*;
 use crate::qlib::linux_def::SysErr;
-use crate::qlib::proxy::frontend::*;
-use crate::qlib::proxy::nvgpu::*;
+use crate::qlib::nvproxy::frontend_type::*;
+use crate::qlib::nvproxy::nvgpu::*;
 
 use super::frontendfd::*;
 
@@ -38,12 +38,17 @@ pub struct FrontendIoctlState {
 
 pub fn FrontendIoctlInvoke<Params: Sized>(
     fi: &FrontendIoctlState, 
-    params: &Params
+    params: Option<&Params>
 ) -> Result<u64> {
+    let paramsAddr = match params {
+        None => 0,
+        Some(p) => p as * const _ as u64
+    };
+
     let n = HostSpace::IoCtl(
         fi.fd.fd, 
         FrontendIoctlCmd(fi.nr, fi.ioctlParamsSize), 
-        params as * const _ as u64
+        paramsAddr
     ); 
     if n < 0 {
         return Err(Error::SysError(n as i32));
@@ -55,12 +60,15 @@ pub fn FrontendIoctlInvoke<Params: Sized>(
 pub fn RMControlInvoke<Params: Sized>(
     fi: &FrontendIoctlState, 
     ioctlParams: &NVOS54Parameters, 
-    ctrlParams: &Params
+    ctrlParams: Option<&Params>
 ) -> Result<u64> {
     let mut ioctlParamsTmp = *ioctlParams;
-    ioctlParamsTmp.params = ctrlParams as * const _ as P64;
+    ioctlParamsTmp.params = match ctrlParams {
+        None => 0,
+        Some(c) => c as * const _ as P64
+    };
 
-    let n = FrontendIoctlInvoke(fi, &ioctlParamsTmp)?;
+    let n = FrontendIoctlInvoke(fi, Some(&ioctlParamsTmp))?;
     let mut outIoctlParams = ioctlParamsTmp;
     outIoctlParams.params = ioctlParams.params;
     fi.task.CopyOutObj(&outIoctlParams, fi.ioctlParamsAddr)?;
@@ -71,15 +79,15 @@ pub fn CtrlClientSystemGetBuildVersionInvoke(
     fi: &FrontendIoctlState,
     ioctlParams: &NVOS54Parameters,
     ctrlParams: &Nv0000CtrlSystemGetBuildVersionParams, 
-    driverVersionBuf: &u8, 
-    versionBuf: &u8,
-    titleBuf: &u8
+    driverVersionBuf: P64, 
+    versionBuf: P64,
+    titleBuf: P64
 ) -> Result<u64> {
     let mut ctrlParamsTmp = *ctrlParams;
-    ctrlParamsTmp.driverVersionBuffer = driverVersionBuf as * const _ as P64;
-    ctrlParamsTmp.versionBuffer = versionBuf as * const _ as P64;
-    ctrlParamsTmp.titleBuffer = titleBuf as * const _ as P64;
-    let n = RMControlInvoke(fi, ioctlParams, &ctrlParamsTmp)?;
+    ctrlParamsTmp.driverVersionBuffer = driverVersionBuf; // as * const _ as P64;
+    ctrlParamsTmp.versionBuffer = versionBuf;// as * const _ as P64;
+    ctrlParamsTmp.titleBuffer = titleBuf;// as * const _ as P64;
+    let n = RMControlInvoke(fi, ioctlParams, Some(&ctrlParamsTmp))?;
     let mut outCtrlParams = ctrlParamsTmp;
     outCtrlParams.driverVersionBuffer = ctrlParams.driverVersionBuffer;
     outCtrlParams.versionBuffer = ctrlParams.versionBuffer;
@@ -111,7 +119,7 @@ pub fn CtrlDevFIFOGetChannelList(
     ctrlParamsTmp.channelHandleList = &channelHandleList[0] as * const _ as u64;
     ctrlParamsTmp.channelList = &channelList[0] as * const _ as u64;
 
-    let n = RMControlInvoke(fi, ioctlParams, &ctrlParamsTmp)?;
+    let n = RMControlInvoke(fi, ioctlParams, Some(&ctrlParamsTmp))?;
 
     fi.task.CopyOutSlice(&channelHandleList, ctrlParams.channelHandleList, ctrlParams.numChannels as usize)?;
     fi.task.CopyOutSlice(&channelList, ctrlParams.channelList, ctrlParams.numChannels as usize)?;
@@ -141,7 +149,7 @@ pub fn CtrlSubdevGRGetInfo(
     let mut ctrlParamsTmp = ctrlParams;
     ctrlParamsTmp.GRInfoList = &infoList[0] as * const _ as u64;
 
-    let n = RMControlInvoke(fi, ioctlParams, &ctrlParamsTmp)?;
+    let n = RMControlInvoke(fi, ioctlParams, Some(&ctrlParamsTmp))?;
 
     fi.task.CopyOutSlice(&infoList, ctrlParams.GRInfoList, len)?;
 
@@ -169,7 +177,7 @@ pub fn RMAllocInvoke <Params: Sized> (
             RsAccessMask::default()
         };
 
-        let n = FrontendIoctlInvoke(fi, &ioctlParamsTmp)?;
+        let n = FrontendIoctlInvoke(fi, Some(&ioctlParamsTmp))?;
 
         if ioctlParams.rightsRequested != 0 {
             fi.task.CopyOutObj(&rightsRequested, ioctlParams.rightsRequested)?;
@@ -191,7 +199,7 @@ pub fn RMAllocInvoke <Params: Sized> (
         status: ioctlParams.status
     };
 
-    let n = FrontendIoctlInvoke(fi, &ioctlParamsTmp)?;
+    let n = FrontendIoctlInvoke(fi, Some(&ioctlParamsTmp))?;
 
     let outIoctlParams = NVOS21Parameters {
         root: ioctlParamsTmp.root,
@@ -212,12 +220,12 @@ pub fn RMVidHeapControlAllocSize (
     ioctlParams: &NVOS32Parameters
 ) -> Result<u64> {
     let allocSizeParams = unsafe {
-        &*(&ioctlParams.Data[0] as * const _ as u64 as * const NVOS32AllocSize)
+        &*(&ioctlParams.data[0] as * const _ as u64 as * const NVOS32AllocSize)
     };
 
     let mut ioctlParamsTmp = *ioctlParams;
     let mut allocSizeParamsTmp = unsafe {
-        &mut *(&mut ioctlParamsTmp.Data[0] as * mut _ as u64 as * mut NVOS32AllocSize)
+        &mut *(&mut ioctlParamsTmp.data[0] as * mut _ as u64 as * mut NVOS32AllocSize)
     };
 
     let mut addr: u64= 0;
@@ -226,11 +234,11 @@ pub fn RMVidHeapControlAllocSize (
         allocSizeParamsTmp.address = &addr as * const _ as u64;
     }
 
-    let n = FrontendIoctlInvoke(fi, &ioctlParamsTmp)?;
+    let n = FrontendIoctlInvoke(fi, Some(&ioctlParamsTmp))?;
 
     let mut outIoctlParams = ioctlParamsTmp;
     let outAllocSizeParams = unsafe {
-        &mut *(&mut outIoctlParams.Data[0] as * mut _ as u64 as * mut NVOS32AllocSize)
+        &mut *(&mut outIoctlParams.data[0] as * mut _ as u64 as * mut NVOS32AllocSize)
     };
 
     if allocSizeParams.address != 0 {
