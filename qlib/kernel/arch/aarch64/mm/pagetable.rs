@@ -127,10 +127,13 @@ bitflags! {
         const DBM             = 1 << 51;
         const PXN             = 1 << 53;
         const UXN             = 1 << 54;
+        const DIRTY           = 1 << 55;
 
-        const HUGE_PAGE       = 1 << 1;
         const ZERO            = 0;
         const PRESENT         = 1;
+
+        const MT_DEGICE_NGNRE = 0x1 << 2;
+        const MT_NORMAL       = 0x4 << 2;
     }
 }
 

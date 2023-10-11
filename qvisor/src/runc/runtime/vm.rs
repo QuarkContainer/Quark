@@ -331,27 +331,31 @@ impl VirtualMachine {
                 MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
             vms.pageTables = PageTables::New(&vms.allocator)?;
 
+            let mut opts = addr::PageOpts::Zero();
+            opts.SetPresent().SetWrite().SetGlobal();
+            #[cfg(target_arch = "aarch64")]
+            opts.SetMtNormal().SetDirty().SetAccessed();
+
             vms.KernelMap(
                 addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
                 addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR + MemoryDef::PAGE_SIZE),
                 addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
-                addr::PageOpts::Zero()
-                    .SetPresent()
-                    .SetWrite()
-                    .SetGlobal()
-                    .Val(),
+                opts.Val(),
             )?;
 
             vms.KernelMapHugeTable(
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR),
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR),
-                addr::PageOpts::Zero()
-                    .SetPresent()
-                    .SetWrite()
-                    .SetGlobal()
-                    .Val(),
+                opts.Val(),
             )?;
+
+            // vms.KernelMap(
+            //     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+            //     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE + 0x1000),
+            //     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+            //     opts.Val(),
+            // )?;
             autoStart = args.AutoStart;
             vms.pivot = args.Pivot;
             vms.args = Some(args);
@@ -381,9 +385,10 @@ impl VirtualMachine {
 
         #[cfg(target_arch = "aarch64")]
         {
-            unsafe {
+
+            let mem = unsafe {
                 libc::mmap(
-                    0x10000000 as *mut libc::c_void,
+                    std::ptr::null_mut(),
                     0x1000,
                     libc::PROT_READ | libc::PROT_WRITE,
                     libc::MAP_SHARED | libc::MAP_FIXED | libc::MAP_ANONYMOUS,
@@ -393,10 +398,10 @@ impl VirtualMachine {
             };
             let mem_region = kvm_userspace_memory_region {
                 slot: 2,
-                guest_phys_addr: 0x10000000,
+                guest_phys_addr: MemoryDef::HYPERCALL_MMIO_BASE,
                 memory_size: 0x1000,
-                userspace_addr: 0x10000000,
-                flags: 0x2,
+                userspace_addr: mem as u64,
+                flags: 0x1 << 1,
             };
     
             unsafe {

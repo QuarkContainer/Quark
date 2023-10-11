@@ -45,6 +45,10 @@ cfg_aarch64! {
    pub fn default_table_user() -> PageTableFlags {
        return PageTableFlags::VALID | PageTableFlags::TABLE | PageTableFlags::ACCESSED | PageTableFlags::USER_ACCESSIBLE;
    }
+
+   pub fn default_table_kernel() -> PageTableFlags {
+    return PageTableFlags::VALID | PageTableFlags::TABLE;
+   }
 }
 
 
@@ -547,6 +551,12 @@ impl PageTables {
             panic!("start/end address not 1G aligned")
         }
 
+        #[cfg(target_arch = "aarch64")]
+        let hugepage_flags = flags & (!PageTableFlags::TABLE);
+
+        #[cfg(target_arch = "x86_64")]
+        let hugepage_flags = flags | PageTableFlags::HUGE_PAGE;
+
         let mut res = false;
 
         let mut curAddr = start;
@@ -580,7 +590,7 @@ impl PageTables {
 
                     pudEntry.set_addr(
                         PhysAddr::new(newphysAddr),
-                        flags | PageTableFlags::HUGE_PAGE,
+                        hugepage_flags,
                     );
                     curAddr = curAddr.AddLen(MemoryDef::HUGE_PAGE_SIZE_1G)?;
 
