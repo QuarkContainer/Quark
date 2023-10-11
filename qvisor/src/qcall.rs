@@ -117,6 +117,12 @@ impl KVMVcpu {
             Msg::OpenAt(msg) => {
                 ret = super::VMSpace::OpenAt(msg.dirfd, msg.name, msg.flags, msg.addr) as u64;
             }
+            Msg::RemapGuestMemRanges(msg) => {
+                ret = super::VMSpace::RemapGuestMemRanges(msg.len, msg.ranges) as u64;
+            }
+            Msg::UnmapGuestMemRange(msg) => {
+                ret = super::VMSpace::UnmapGuestMemRange(msg.start, msg.len) as u64;
+            }
             Msg::OpenDevFile(msg) => {
                 ret = super::VMSpace::OpenDevFile(msg.dirfd, msg.name, msg.flags) as u64;
             }

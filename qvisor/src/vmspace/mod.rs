@@ -40,6 +40,7 @@ use std::str;
 use uuid::Uuid;
 
 use crate::qlib::fileinfo::*;
+use crate::qlib::range::Range;
 use crate::vmspace::kernel::GlobalIOMgr;
 use crate::vmspace::kernel::GlobalRDMASvcCli;
 
@@ -516,6 +517,54 @@ impl VMSpace {
 
         let hostfd = GlobalIOMgr().AddFile(fd);
         return Self::GetRet(hostfd as i64);
+    }
+
+    pub fn RemapGuestMemRanges(len: u64, ranges: &[Range]) -> i64 {
+        let flags = libc::MAP_PRIVATE | libc::MAP_ANON;
+        let ret = unsafe {
+            libc::mmap(
+                0 as _,
+                len as usize,
+                libc::PROT_NONE,
+                flags,
+                -1,
+                0,
+            ) as i64
+        };
+
+        if ret < 0 {
+            return -errno::errno().0 as i64;
+        }
+
+        let mut addr = ret as u64;
+        let flags = libc::MREMAP_MAYMOVE | libc::MREMAP_FIXED;
+        for r in ranges {
+            let ret = unsafe {
+                libc::mremap(
+                    r.Start() as _,
+                    0, 
+                    r.len as usize, 
+                    flags,
+                    addr
+                ) as i32
+            };
+
+            if ret < 0 {
+                return -errno::errno().0 as i64;
+            }
+
+            addr += r.len;
+        }
+
+        return ret;
+    }
+
+    pub fn UnmapGuestMemRange(start: u64, len: u64) -> i64 {
+        let ret = unsafe {
+            libc::munmap(start as _, len as usize) as i64
+        };
+
+        return Self::GetRet(ret as i64);
     }
 
     pub fn CreateAt(

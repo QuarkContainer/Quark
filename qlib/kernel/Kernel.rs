@@ -20,6 +20,7 @@ use super::super::qmsg::*;
 use super::super::socket_buf::*;
 use super::super::*;
 use crate::kernel_def::HyperCall64;
+use crate::qlib::range::Range;
 
 extern "C" {
     pub fn rdtsc() -> i64;
@@ -647,6 +648,26 @@ impl HostSpace {
         let ret = Self::HCall(&mut msg, false) as i64;
         return ret;
         //return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn RemapGuestMemRanges(len: u64, ranges: &'static [Range]) -> i64 {
+        let mut msg = Msg::RemapGuestMemRanges(RemapGuestMemRanges {
+            len: len,
+            ranges: ranges,
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn UnmapGuestMemRange(start: u64, len: u64) -> i64 {
+        let mut msg = Msg::UnmapGuestMemRange(UnmapGuestMemRange {
+            start: start,
+            len: len,
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
     }
 
     pub fn CreateAt(

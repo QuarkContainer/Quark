@@ -16,5 +16,6 @@ pub mod nvproxy;
 pub mod frontend_type;
 pub mod frontendfd;
 pub mod uvm;
+pub mod uvmfd;
 pub mod nvgpu;
 pub mod classes;

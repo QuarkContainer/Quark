@@ -300,7 +300,7 @@ pub struct NVOS56Parameters {
 // NVOS64Parameters is NVOS64_PARAMETERS, one possible parameter type for
 // NV_ESC_RM_ALLOC.
 //
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 #[repr(C)]
 pub struct NVOS64Parameters {
     pub root            : Handle,

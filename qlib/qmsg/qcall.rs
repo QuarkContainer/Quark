@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::qlib::fileinfo::*;
+use crate::qlib::range::Range;
 
 use super::super::config::*;
 use super::super::kernel::util::cstring::*;
@@ -123,6 +124,31 @@ pub enum Msg {
     SwapOut(SwapOut),
     SwapIn(SwapIn),
     Proxy(Proxy),
+    RemapGuestMemRanges(RemapGuestMemRanges),
+    UnmapGuestMemRange(UnmapGuestMemRange),
+}
+
+#[derive(Clone, Debug)]
+pub struct RemapGuestMemRanges {
+    pub len: u64,
+    pub ranges: &'static [Range]
+}
+
+impl Default for RemapGuestMemRanges {
+    fn default() -> Self {
+        return Self {
+            len: 0,
+            ranges: unsafe {
+                &*(0 as * const &[Range])
+            }
+        }
+    }
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct UnmapGuestMemRange {
+    pub start: u64,
+    pub len: u64,
 }
 
 #[derive(Clone, Default, Debug)]

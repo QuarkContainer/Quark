@@ -13,10 +13,14 @@
 
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::ops::Deref;
 
+use crate::qlib::kernel::PAGE_MGR;
+use crate::qlib::linux_def::MemoryDef;
 use crate::qlib::mutex::QMutex;
 use crate::qlib::nvproxy::nvgpu;
+use crate::qlib::range::Range;
 
 pub struct NVProxyInner {
     pub objs: BTreeMap<nvgpu::Handle, NVObject>
@@ -33,6 +37,28 @@ impl Deref for NVProxy {
     }
 }
 
-pub struct NVObject {
+pub struct OSDescMem {
+    pub pinnedRange: Vec<Range>
+}
 
+impl Drop for OSDescMem {
+    fn drop(&mut self) {
+        for r in &self.pinnedRange {
+            let mut paddr = r.start;
+            while paddr < r.End() {
+                PAGE_MGR.DerefPage(paddr);
+                paddr += MemoryDef::PAGE_SIZE;
+            }
+        }
+    }
+}
+
+pub enum NVObject {
+    OSDescMem(OSDescMem)
+}
+
+impl From<OSDescMem> for NVObject {
+    fn from(o: OSDescMem) -> Self {
+        NVObject::OSDescMem(o)
+    }
 }

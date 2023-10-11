@@ -1280,6 +1280,52 @@ impl MemoryManager {
         self.FixPermissionLocked(task, &rl, vAddr, len, writeReq, allowPartial)
     }
 
+    pub fn Pin(&self, 
+        task: &Task,         
+        vAddr: u64,
+        len: u64
+    ) -> Result<Vec<Range>> {
+        let rl = self.MappingReadLock();
+        return self.PinLocked(task, &rl, vAddr, len)
+    }
+
+    pub fn PinLocked(
+        &self, 
+        task: &Task,         
+        rlock: &QUpgradableLockGuard,
+        vAddr: u64,
+        len: u64
+    ) -> Result<Vec<Range>> {
+        self.FixPermissionLocked(task, rlock, vAddr, len, false, false)?;
+
+        let startAddr = vAddr;
+        let mut vaddr = vAddr;
+        let mut lastAddr = 0;
+        let mut lastLen = 0;
+        let mut ranges = Vec::new();
+        while vaddr < startAddr + len {
+            let (paddr, _) = self.VirtualToPhyLocked(vaddr)?;
+            super::super::PAGE_MGR.RefPage(paddr);
+            if paddr != lastAddr + lastLen + MemoryDef::PAGE_SIZE {
+                if lastAddr != 0 {
+                    ranges.push(Range::New(lastAddr, lastLen));
+                }
+                
+                lastAddr = paddr;
+                lastLen = MemoryDef::PAGE_SIZE;
+            } else {
+                lastLen += MemoryDef::PAGE_SIZE;
+            }
+
+            vaddr += MemoryDef::PAGE_SIZE;
+        }
+
+        assert!(lastAddr!= 0 && lastLen != 0);
+        ranges.push(Range::New(lastAddr, lastLen));
+        return Ok(ranges)
+    }
+
+
     // check whether the address range is legal.
     // 1. whether the range belong to user's space
     // 2. Whether the read/write permission meet requirement
