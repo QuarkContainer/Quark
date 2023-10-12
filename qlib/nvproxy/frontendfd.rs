@@ -453,6 +453,37 @@ impl FileOperations for NvFrontendFileOptions {
             NV_ESC_REGISTER_FD => {
                 return FrontendRegisterFD(&fi);
             }
+            NV_ESC_ALLOC_OS_EVENT => {
+                return RMAllocOSEvent(&fi);
+            }
+            NV_ESC_FREE_OS_EVENT => {
+                return RMFreeOSEvent(&fi);
+            }
+            NV_ESC_NUMA_INFO => {
+                // The CPU topology seen by the host driver differs from the CPU
+                // topology presented by the sentry to the application, so reject this
+                // ioctl; doing so is non-fatal.
+                warn!("nvproxy: ignoring NV_ESC_NUMA_INFO");
+                return Err(Error::SysError(SysErr::EINVAL));
+            }
+            NV_ESC_RM_ALLOC_MEMORY => {
+                return RMAllocMemory(&fi);
+            }
+            NV_ESC_RM_FREE => {
+                return RMFree(&fi);
+            }
+            NV_ESC_RM_CONTROL => {
+                return RMControl(&fi);
+            }
+            NV_ESC_RM_ALLOC => {
+                return RMAlloc(&fi);
+            }
+            NV_ESC_RM_VID_HEAP_CONTROL => {
+                return RMVidHeapControl(&fi);
+            }
+            NV_ESC_RM_MAP_MEMORY => {
+                return RMMapMemory(&fi);
+            }
             _ => {
                 warn!("nvproxy: unknown frontend ioctl {} == {:x?} (argSize={}, cmd={:x?})", nr, nr, argSize, cmd);
                 return Err(Error::SysError(SysErr::EINVAL));
