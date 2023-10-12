@@ -336,6 +336,19 @@ impl PageOpts {
         self.0 &= !PageTableFlags::NON_GLOBAL;
         return self;
     }
+	
+	// Set a collection of PT flags to configure 
+	// device memory for MMIO.
+    pub fn SetDeviceMMIO(&mut self) -> &mut Self {
+		self.0 |= PageTableFlags::DEVICE_FLAGS;
+		info!("set device mmio flags {}", self.0.bits());
+        return self;
+    }
+
+    pub fn SetBlock(&mut self) -> &mut Self {
+		self.0 &= !PageTableFlags::TABLE;
+        return self;
+    }
 
     pub fn SetMtNormal(&mut self) -> &mut Self {
         self.0 |= PageTableFlags::MT_NORMAL;

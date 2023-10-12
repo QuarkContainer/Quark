@@ -349,13 +349,17 @@ impl VirtualMachine {
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR),
                 opts.Val(),
             )?;
+ 
+            let mut opts = addr::PageOpts::Zero();
 
-            // vms.KernelMap(
-            //     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
-            //     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE + 0x1000),
-            //     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
-            //     opts.Val(),
-            // )?;
+			opts.SetWrite().SetGlobal().SetPresent().SetAccessed();
+			opts.SetDeviceMMIO();
+            vms.KernelMap(
+                addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+                addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE + 0x1000),
+                addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+				opts.Val(),
+            )?;
             autoStart = args.AutoStart;
             vms.pivot = args.Pivot;
             vms.args = Some(args);

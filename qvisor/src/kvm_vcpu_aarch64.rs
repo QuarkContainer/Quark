@@ -242,27 +242,26 @@ impl KVMVcpu {
     }
 
     fn setup_registers(&self) -> Result<()> {
-        // // tcr_el1
-        // let data = _TCR_TXSZ_VA48 |  _TCR_CACHE_FLAGS | _TCR_SHARED | _TCR_TG_FLAGS |  _TCR_ASID16 |  _TCR_IPS_40BITS;
-        // //let data = _TCR_TXSZ_VA48 | _TCR_TG_FLAGS | _TCR_IPS_40BITS;
-        // self.vcpu.set_one_reg(_KVM_ARM64_REGS_TCR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
-        // // mair_el1
-        // let data = _MT_EL1_INIT;
-        // self.vcpu.set_one_reg(_KVM_ARM64_REGS_MAIR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
-        // // ttbr0_el1
-        // let data = VMS.lock().pageTables.GetRoot();
-        // self.vcpu.set_one_reg(_KVM_ARM64_REGS_TTBR0_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
-        // // TODO set ttbr1_el1
-        // // cntkctl_el1
-        // let data = _CNTKCTL_EL1_DEFAULT;
-        // self.vcpu.set_one_reg(_KVM_ARM64_REGS_CNTKCTL_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
-        // // cpacr_el1
-        // let data = 0;
-        // self.vcpu.set_one_reg(_KVM_ARM64_REGS_CPACR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
-        // // sctlr_el1
-        // let data = _SCTLR_EL1_DEFAULT;
-        // //let data = _SCTLR_M;
-        // self.vcpu.set_one_reg(_KVM_ARM64_REGS_SCTLR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
+        // tcr_el1
+        let data = _TCR_TXSZ_VA48 |  _TCR_CACHE_FLAGS | _TCR_SHARED | _TCR_TG_FLAGS |  _TCR_ASID16 |  _TCR_IPS_40BITS;
+        self.vcpu.set_one_reg(_KVM_ARM64_REGS_TCR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
+        // mair_el1
+        //
+        let data = _MT_EL1_INIT;
+        self.vcpu.set_one_reg(_KVM_ARM64_REGS_MAIR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
+        // ttbr0_el1
+        let data = VMS.lock().pageTables.GetRoot();
+        self.vcpu.set_one_reg(_KVM_ARM64_REGS_TTBR0_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
+        // TODO set ttbr1_el1
+        // cntkctl_el1
+        let data = _CNTKCTL_EL1_DEFAULT;
+        self.vcpu.set_one_reg(_KVM_ARM64_REGS_CNTKCTL_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
+        // cpacr_el1
+        let data = 0;
+        self.vcpu.set_one_reg(_KVM_ARM64_REGS_CPACR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
+        // sctlr_el1
+        let data = _SCTLR_EL1_DEFAULT;
+        self.vcpu.set_one_reg(_KVM_ARM64_REGS_SCTLR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
         // tpidr_el1 has to be set in kernel
         // sp_el1
         let data = self.topStackAddr;

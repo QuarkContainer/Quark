@@ -3014,8 +3014,9 @@ impl MemoryDef {
     pub const KERNEL_START_P2_ENTRY: usize = (Self::PHY_LOWER_ADDR / Self::ONE_GB) as usize; //256
     pub const KERNEL_END_P2_ENTRY: usize = (Self::PHY_UPPER_ADDR / Self::ONE_GB) as usize; //512
                                                                                            //
+    // use 2 pages below PHY_LOWER_ADDR as MMIO base.
     #[cfg(target_arch = "aarch64")]
-    pub const HYPERCALL_MMIO_BASE: u64 = 0x1000_0000; // TODO use proper address
+    pub const HYPERCALL_MMIO_BASE: u64 = Self::KVM_IOEVENTFD_BASEADDR - Self::PAGE_SIZE;
 }
 
 //mmap prot
