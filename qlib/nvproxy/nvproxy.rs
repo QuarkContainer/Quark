@@ -22,11 +22,12 @@ use crate::qlib::mutex::QMutex;
 use crate::qlib::nvproxy::nvgpu;
 use crate::qlib::range::Range;
 
+#[derive(Clone, Debug, Default)]
 pub struct NVProxyInner {
     pub objs: BTreeMap<nvgpu::Handle, NVObject>
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct NVProxy(Arc<QMutex<NVProxyInner>>);
 
 impl Deref for NVProxy {
@@ -37,6 +38,7 @@ impl Deref for NVProxy {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct OSDescMem {
     pub pinnedRange: Vec<Range>
 }
@@ -53,6 +55,7 @@ impl Drop for OSDescMem {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum NVObject {
     OSDescMem(OSDescMem)
 }

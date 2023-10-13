@@ -12,8 +12,8 @@
 // limitations under the License.
 
 pub const NV_MAJOR_DEVICE_NUMBER          : u16 = 195; // from kernel-open/common/inc/nv.h
-pub const NV_CONTROL_DEVICE_MINOR         : u16 = 255; // from kernel-open/common/inc/nv-linux.h
-pub const NVIDIA_UVM_PRIMARY_MINOR_NUMBER : u16 = 0;   // from kernel-open/nvidia-uvm/uvm_common.h
+pub const NV_CONTROL_DEVICE_MINOR         : u32 = 255; // from kernel-open/common/inc/nv-linux.h
+pub const NVIDIA_UVM_PRIMARY_MINOR_NUMBER : u32 = 0;   // from kernel-open/nvidia-uvm/uvm_common.h
 
 
 // Handle is NvHandle, from src/common/sdk/nvidia/inc/nvtypes.h.

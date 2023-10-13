@@ -20,7 +20,6 @@ use core::ops::Deref;
 use crate::qlib::cstring::CString;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::fs::file::*;
-use crate::qlib::kernel::fs::inode::*;
 use crate::qlib::kernel::guestfdnotifier::NonBlockingPoll;
 use crate::qlib::kernel::guestfdnotifier::UpdateFD;
 use crate::qlib::mutex::*;
@@ -43,14 +42,31 @@ use crate::qlib::kernel::fs::fsutil::inode::*;
 use crate::qlib::kernel::fs::mount::*;
 use crate::qlib::path;
 use crate::qlib::nvproxy::nvproxy::NVProxy;
+use crate::qlib::kernel::fs::inode::*;
 
 use super::uvm::*;
 
+#[derive(Debug, Clone)]
 pub struct UvmDevice {
     pub nvp: NVProxy,
     pub attr: Arc<QRwLock<InodeSimpleAttributesInternal>>,
 }
 
+impl UvmDevice {
+    pub fn New(task: &Task, nvp: &NVProxy, owner: &FileOwner, mode: &FileMode) -> Self {
+        let attr = InodeSimpleAttributesInternal::New(
+            task,
+            owner,
+            &FilePermissions::FromMode(*mode),
+            FSMagic::TMPFS_MAGIC,
+        );
+
+        return UvmDevice {
+            nvp: nvp.clone(),
+            attr: Arc::new(QRwLock::new(attr)),
+        }
+    }
+}
 
 impl InodeOperations for UvmDevice {
     fn as_any(&self) -> &Any {

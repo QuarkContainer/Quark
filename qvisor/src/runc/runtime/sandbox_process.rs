@@ -436,6 +436,52 @@ impl SandboxProcess {
             }
         }
 
+        let m = Mount {
+            destination: "/dev/nvidiactl".to_owned(),
+            typ: "bind".to_owned(),
+            source: "/dev/nvidiactl".to_owned(),
+            options: Vec::new()
+        };
+
+        MountFrom(
+            &m,
+            &self.Rootfs,
+            MsFlags::MS_BIND,
+            "",
+            "",
+        )?;
+
+        let m = Mount {
+            destination: "/dev/nvidia-uvm".to_owned(),
+            typ: "bind".to_owned(),
+            source: "/dev/nvidia-uvm".to_owned(),
+            options: Vec::new()
+        };
+
+        MountFrom(
+            &m,
+            &self.Rootfs,
+            MsFlags::MS_BIND,
+            "",
+            "",
+        )?;
+
+        let m = Mount {
+            destination: "/dev/nvidia0".to_owned(),
+            typ: "bind".to_owned(),
+            source: "/dev/nvidia0".to_owned(),
+            options: Vec::new()
+        };
+
+        MountFrom(
+            &m,
+            &self.Rootfs,
+            MsFlags::MS_BIND,
+            "",
+            "",
+        )?;
+
+
         // chdir into the rootfs so we can make devices with simpler paths
         let olddir = getcwd().map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
 
@@ -728,14 +774,14 @@ pub fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &st
     let dest = format! {"{}{}", rootfs, &m.destination};
 
     debug!(
-        "mounting {} to {} as {} with data '{}'",
-        &m.source, &m.destination, &m.typ, &d
+        "mounting \n {} to \n {} as {} with data '{}'",
+        &m.source, &dest, &m.typ, &d
     );
 
     let src = if m.typ == "bind" {
         let src =
             canonicalize(&m.source).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
-        let dir = if src.is_file() {
+        let dir = if !src.is_dir() {
             Path::new(&dest).parent().unwrap()
         } else {
             Path::new(&dest)
@@ -744,7 +790,7 @@ pub fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &st
             debug!("ignoring create dir fail of {:?}: {}", &dir, e)
         }
         // make sure file exists so we can bind over it
-        if src.is_file() {
+        if !src.is_dir() {
             if let Err(e) = OpenOptions::new().create(true).write(true).open(&dest) {
                 debug!("ignoring touch fail of {:?}: {}", &dest, e)
             }
