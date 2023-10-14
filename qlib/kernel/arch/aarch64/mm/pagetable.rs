@@ -118,35 +118,43 @@ impl fmt::Debug for PageTableEntry {
 bitflags! {
     /// Possible flags for a page table entry.
     pub struct PageTableFlags: u64 {
+        const ZERO            = 0;
+        const PRESENT         = 1;
         const VALID           = 1;
         const TABLE           = 1 << 1;
+        // [11:2] Lower page/block attributes
+        // [4:2] Memory Attributes
+        // TODO avoid setting multiple bits
         const PAGE            = 3;      // 4k granule
-        const DEVICE          = 1 << 2; // device mmio
+        const MEM_DEVICE      = 0x1 << 2; // device mmio
+        const MEM_NORMAL      = 0x4 << 2;
         const NC              = 1 << 3; // non cachable
+        const NS              = 1 << 5; // non secure
+        // [7:6] Access permissions (AP)
         const USER_ACCESSIBLE = 1 << 6; // allow EL0 access
         const READ_ONLY       = 1 << 7;
-        const OUTTER_SHARABLE = 2 << 8;
-        const SHARED          = 3 << 8; // *INNER SHARABLE
+        // [9:8] Shareability (SH)
+        const OUTER_SHAREABLE = 2 << 8;
+        const INNER_SHAREABLE = 3 << 8;
         const ACCESSED        = 1 << 10;
         const NON_GLOBAL      = 1 << 11;
+
+        // Upper page/block attributes
         const DBM             = 1 << 51;
+        const CONTIGUOUS      = 1 << 52;
         const PXN             = 1 << 53;
         const UXN             = 1 << 54;
         const DIRTY           = 1 << 55;
 
-        const ZERO            = 0;
-        const PRESENT         = 1;
-
-        const MT_DEVICE_NGNRE = 0x1 << 2;
-        const MT_NORMAL       = 0x4 << 2;
         // A handy collection of flags that specify device memory
-        const DEVICE_FLAGS    = Self::DEVICE.bits|
-                                Self::UXN.bits|
+        // TODO remove this composition from PageTableFlags and
+        // add a function set all individual flags in addr.rs
+        const DEVICE_FLAGS    = Self::MEM_DEVICE.bits|
                                 Self::PAGE.bits|
                                 Self::NC.bits|
-                                Self::SHARED.bits;
-        // TODO complete this section see 
-        // https://rcore-os.cn/arceos/src/page_table_entry/arch/aarch64.rs.html#12 
+                                Self::INNER_SHAREABLE.bits|
+                                Self::PXN.bits|
+                                Self::UXN.bits;
     }
 }
 
