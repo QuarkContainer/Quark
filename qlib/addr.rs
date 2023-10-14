@@ -247,7 +247,7 @@ pub struct PageOpts(PageTableFlags);
 impl PageOpts {
     //const Empty : PageTableFlags = PageTableFlags::PRESENT & PageTableFlags::WRITABLE; //set 0
     pub fn New(user: bool, write: bool, exec: bool) -> Self {
-        let mut flags = PageTableFlags::VALID | PageTableFlags::MT_NORMAL;
+        let mut flags = PageTableFlags::VALID | PageTableFlags::MEM_NORMAL;
         if !write {
             flags |= PageTableFlags::READ_ONLY;
         }
@@ -340,18 +340,18 @@ impl PageOpts {
 	// Set a collection of PT flags to configure 
 	// device memory for MMIO.
     pub fn SetDeviceMMIO(&mut self) -> &mut Self {
-		self.0 |= PageTableFlags::DEVICE_FLAGS;
-		info!("set device mmio flags {}", self.0.bits());
+        self.0 |= PageTableFlags::DEVICE_FLAGS;
         return self;
     }
 
     pub fn SetBlock(&mut self) -> &mut Self {
-		self.0 &= !PageTableFlags::TABLE;
+        self.0 &= !PageTableFlags::TABLE;
         return self;
     }
 
     pub fn SetMtNormal(&mut self) -> &mut Self {
-        self.0 |= PageTableFlags::MT_NORMAL;
+        self.0 &= !PageTableFlags::MEM_DEVICE;
+        self.0 |= PageTableFlags::MEM_NORMAL;
         return self;
     }
 
