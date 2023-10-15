@@ -99,7 +99,11 @@ pub fn IRet(kernelRsp: u64) -> ! {
 
 #[inline]
 pub fn GetRsp() -> u64 {
-    return 0;
+    let rsp: u64;
+    unsafe {
+        asm!("mov {0}, sp", out(reg) rsp);
+    };
+    return rsp;
 }
 
 #[inline]

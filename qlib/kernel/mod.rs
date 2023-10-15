@@ -174,7 +174,7 @@ impl Tsc {
     }
 
     pub fn Rdtsc(&self) -> i64 {
-        return Self::RawRdtsc() - self.offset.load(Ordering::Relaxed);
+        return Self::RawRdtsc() - self.offset.load(Ordering::SeqCst);
     }
 }
 

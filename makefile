@@ -3,10 +3,12 @@ all: release debug
 release:
 	make -C ./qvisor release
 	make -C ./qkernel release
+	make -C ./vdso
 
 debug:
 	make -C ./qvisor debug
 	make -C ./qkernel debug
+	make -C ./vdso
 
 clean:
 	rm -rf target build

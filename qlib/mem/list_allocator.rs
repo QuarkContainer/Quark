@@ -255,11 +255,11 @@ pub struct HostAllocator {
 
 impl HostAllocator {
     pub fn Allocator(&self) -> &mut ListAllocator {
-        return unsafe { &mut *(self.listHeapAddr.load(Ordering::Relaxed) as *mut ListAllocator) };
+        return unsafe { &mut *(self.listHeapAddr.load(Ordering::SeqCst) as *mut ListAllocator) };
     }
 
     pub fn IOAllocator(&self) -> &mut ListAllocator {
-        return unsafe { &mut *(self.ioHeapAddr.load(Ordering::Relaxed) as *mut ListAllocator) };
+        return unsafe { &mut *(self.ioHeapAddr.load(Ordering::SeqCst) as *mut ListAllocator) };
     }
 
     pub fn IsHeapAddr(addr: u64) -> bool {

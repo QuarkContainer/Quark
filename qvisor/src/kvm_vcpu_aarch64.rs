@@ -9,6 +9,7 @@ use super::qlib::common::{Result, Error};
 use crate::qlib::kernel::IOURING;
 use crate::qlib::linux::time::Timespec;
 use crate::qlib::qmsg::{Print, QMsg};
+use crate::vmspace::VMSpace;
 use crate::{KVMVcpu, VMS, kvm_vcpu::SetExitSignal};
 use crate::qlib::singleton::Singleton;
 use crate::kvm_vcpu::KVMVcpuState;
@@ -143,7 +144,6 @@ impl KVMVcpu {
             }
             self.state
                 .store(KVMVcpuState::GUEST as u64, Ordering::Release);
-            info!("enter vcpu run");
             let kvmRet = match self.vcpu.run() {
                 Ok(ret) => ret,
                 Err(e) => {
@@ -164,7 +164,6 @@ impl KVMVcpu {
                 }
             };
             self.state.store(KVMVcpuState::HOST as u64, Ordering::Release);
-            info!("kvmRet: {:?}", kvmRet);
             match kvmRet {
                 VcpuExit::MmioRead(addr, data) => {
                     self.backtrace()?;
@@ -174,7 +173,6 @@ impl KVMVcpu {
                     );
                 }
                 VcpuExit::MmioWrite(addr, data) => {
-                    info!("handle hypercall {}", addr);
                     {
                         let mut interrupting = self.interrupting.lock();
                         interrupting.0 = false;
@@ -189,11 +187,11 @@ impl KVMVcpu {
                     let para2 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R3).map_err(|e| Error::SysError(e.errno()))?;
                     let para3 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R4).map_err(|e| Error::SysError(e.errno()))?;
                     let para4 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R5).map_err(|e| Error::SysError(e.errno()))?;
-                    info!("paras:{:x} {:x} {:x} {:x}", para1, para2, para3, para4); 
                     let hypercall_id = (addr - MemoryDef::HYPERCALL_MMIO_BASE) as u16;
                     if hypercall_id > u16::MAX {
-                        panic!("cpu[{}] Received hypercall id max than 255");
+                        panic!("cpu[{}] Received hypercall id max than 255", self.id);
                     }
+                    info!("hypecall: {}, paras: {} {} {} {}", hypercall_id, para1, para2, para3, para4);
                     self.handle_hypercall(hypercall_id, data, para1, para2, para3, para4)?;
                 }
                 VcpuExit::Hlt => {
@@ -239,6 +237,11 @@ impl KVMVcpu {
 
     pub fn dump(&self) -> Result<()> {
         Ok(())
+    }
+
+    pub fn get_frequency(&self) -> Result<u64> {
+        //self.vcpu.get_one_reg(_KVM_ARM64_REGS_CNTFRQ_EL0).map_err(|e| Error::SysError(e.errno()))
+        Ok(VMSpace::get_cpu_frequency())
     }
 
     fn setup_registers(&self) -> Result<()> {
@@ -369,7 +372,7 @@ impl KVMVcpu {
             qlib::HYPERCALL_PRINT => {
                 let addr = para1;
                 let msg = unsafe { &*(addr as *const Print) };
-                log!("{:p} {:p}: {}", msg.str, &msg.level,  msg.str);
+                log!("{}", msg.str);
             }
 
             qlib::HYPERCALL_MSG => {
