@@ -21,6 +21,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::path::PathBuf;
 
 use fs2::FileExt;
 use regex::Regex;
@@ -460,6 +461,8 @@ impl Container {
 
         let _unlockRoot = maybeLockRootContainer(bundleDir, &spec, &conf.RootDir)?;
 
+        NVProxyHostSetup()?;
+
         // Lock the container metadata file to prevent concurrent creations of
         // containers with the same id.
         let containerRoot = Join(&conf.RootDir, id);
@@ -481,7 +484,7 @@ impl Container {
                 Ok(s) => s.to_string(),
             };
 
-            let mut c = Self {
+            let mut c: Container = Self {
                 ID: id.to_string(),
                 Spec: spec,
                 ConsoleSocket: consoleSocket.to_string(),
@@ -560,7 +563,9 @@ impl Container {
                         c.Destroy()?;
                         return Err(e);
                     }
-                    Ok(s) => Some(s),
+                    Ok(s) => {
+                        Some(s)
+                    }
                 };
 
                 match restore {
@@ -1197,4 +1202,115 @@ impl FileDescriptors for ExecArgs {
             self.Fds.push(*fd)
         }
     }
+}
+
+fn FindIt<P>(exe_name: P) -> Option<PathBuf>
+    where P: AsRef<Path>,
+{
+    env::var_os("PATH").and_then(|paths| {
+        env::split_paths(&paths).filter_map(|dir| {
+            let full_path = dir.join(&exe_name);
+            if full_path.is_file() {
+                Some(full_path)
+            } else {
+                None
+            }
+        }).next()
+    })
+}
+
+pub fn NVProxyHostSetup() -> Result<()> {
+    // Locate binaries. For security reasons, unlike
+	// nvidia-container-runtime-hook, we don't add the container's filesystem
+	// to the search path. We also don't support
+	// /etc/nvidia-container-runtime/config.toml to avoid importing a TOML
+	// parser.
+    
+    let cliPath = match FindIt("nvidia-container-cli") {
+        None => {
+            error!("failed to locate nvidia-container-cli in PATH");
+            return Err(Error::Common("failed to locate nvidia-container-cli in PATH".to_owned()));
+        }
+        Some(p) => p,
+    };
+
+    // nvidia-container-cli --load-kmods seems to be a noop; load kernel modules ourselves.
+	NVProxyLoadKernelModules()?;
+
+    let cli = cliPath.into_os_string().into_string().unwrap();
+
+    error!("cliPath ... {:?}", cli);
+    if !Path::new("/dev/nvidiactl").exists() {
+        let output = std::process::Command::new(&cli)
+                    .arg("--load-kmods info")
+                    .output()
+                    .expect("failed to execute process /sbin/modprobe");
+        
+        if !output.status.success() {
+            warn!("nvidia-container-cli info failed, \nstdout: {:?}\nstderr: {:?}", &output.stdout, &output.stderr);
+        }
+    }
+
+    return Ok(())
+}
+
+// nvproxyLoadKernelModules loads NVIDIA-related kernel modules with modprobe.
+pub fn NVProxyLoadKernelModules() -> Result<()> {
+    for m in [
+        "nvidia",
+		"nvidia-uvm",
+    ] {
+        let output = std::process::Command::new("/sbin/modprobe")
+                    .arg(m)
+                    .output()
+                    .expect("failed to execute process /sbin/modprobe");
+        
+        if !output.status.success() {
+            warn!("modprobe {} failed, \nstdout: {:?}\nstderr: {:?}", m, &output.stdout, &output.stderr);
+        }
+    }
+
+    return Ok(())
+}
+
+pub fn NVProxySetupInUserns(rootPath: &str) -> Result<()> {
+    error!("NVProxySetupInUserns root is {}", rootPath);
+
+    let nvidiaProc = rootPath.to_owned() + "/proc/driver/nvidia";
+    fs::create_dir_all(&nvidiaProc).expect(&format!("can not create {}", &nvidiaProc));
+
+    let cliPath = match FindIt("nvidia-container-cli") {
+        None => {
+            error!("failed to locate nvidia-container-cli in PATH");
+            return Err(Error::Common("failed to locate nvidia-container-cli in PATH".to_owned()));
+        }
+        Some(p) => p,
+    };
+    let cli = cliPath.into_os_string().into_string().unwrap();
+
+    let ldconfigPath = if Path::new("/sbin/ldconfig.real").exists() {
+        "/sbin/ldconfig.real"
+    } else {
+        "/sbin/ldconfig"
+    };
+
+    let devices = "all";
+    
+    let args = format!(
+        "--load-kmods configure --ldconfig=@{} --no-cgroups --utility --compute --device={} {}", 
+        ldconfigPath, 
+        devices, 
+        rootPath
+    );
+
+    let output = std::process::Command::new(&cli)
+        .arg(&args)
+        .output()
+        .expect("failed to execute process /sbin/modprobe");
+
+    if !output.status.success() {
+        warn!("'{} {}' failed, \nstdout: {:?}\nstderr: {:?}", &cli, &args, &output.stdout, &output.stderr);
+    }
+
+    return Ok(())
 }

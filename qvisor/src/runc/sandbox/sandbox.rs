@@ -217,6 +217,8 @@ pub struct Sandbox {
 
     #[serde(skip_serializing, skip_deserializing)]
     pub console: Console,
+
+    pub sandboxRootDir: String,
 }
 
 impl Sandbox {
@@ -250,6 +252,7 @@ impl Sandbox {
         s.console = console;
         s.child = true;
         s.Pid = pid;
+        s.sandboxRootDir = process.SandboxRootDir.clone();
 
         return Ok(s);
     }

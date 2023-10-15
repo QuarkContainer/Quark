@@ -706,6 +706,7 @@ impl SandboxProcess {
         }
         self.MakeSandboxRootDirectory()?;
         self.EnableNamespace()?;
+        NVProxySetupInUserns(&self.SandboxRootDir)?;
         if taskSockFd != 0 {
             // It seems control socket should be created in the same net ns
             controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");

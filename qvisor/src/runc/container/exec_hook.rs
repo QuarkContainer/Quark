@@ -176,7 +176,17 @@ fn wait_for_pipe_sig(rfd: RawFd, timeout: i32) -> Result<Option<Signal>> {
 }
 
 pub fn execute_hook(hook: &oci::Hook, state: &oci::State) -> Result<()> {
-    debug!("executing hook {:?}", hook);
+    debug!("executing hook ddd {:?}", hook);
+
+    // Don't invoke nvidia-container-runtime-hook at prestart, which may be
+	// configured by e.g. Docker's --gpus flag,
+    if hook.path.ends_with("/nvidia-container-runtime-hook") {
+        error!("Skipping nvidia-container-runtime-hook");
+        return Ok(())
+    } else {
+        error!("Skipping xxx nvidia-container-runtime-hook");
+    }
+
     let (rfd, wfd) = pipe2(NixOFlag::O_CLOEXEC)
         .map_err(|_| Error::Common("failed to create pipe".to_string()))?;
     match unsafe { fork() }.map_err(|_| Error::Common("for fail".to_string()))? {
