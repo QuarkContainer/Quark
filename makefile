@@ -39,6 +39,7 @@ qvisor_release:
 	
 qkernel_release:
 	make -C ./qkernel release
+	make -C ./vdso
 
 debug:: qvisor_debug qkernel_debug 
 
@@ -47,6 +48,7 @@ qvisor_debug:
 
 qkernel_debug:
 	make -C ./qkernel debug
+	make -C ./vdso
 
 clean:
 	rm -rf target build

@@ -167,7 +167,7 @@ impl KernelELF {
         return Ok(entry);
     }
 
-    pub fn LoadVDSO(&mut self, fileName: &String) -> Result<()> {
+    pub fn LoadVDSO(&mut self, fileName: &str) -> Result<()> {
         let f =
             File::open(fileName).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
         let mmap =

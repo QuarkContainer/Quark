@@ -42,6 +42,7 @@ pub struct PageMgr {
 }
 
 impl PageMgr {
+    #[cfg(target_arch = "x86_64")]
     pub fn Clear(&self) {
         let mut pages = self.vsyscallPages.lock();
         for p in pages.iter() {
@@ -49,6 +50,9 @@ impl PageMgr {
         }
         *pages = Arc::new(Vec::new());
     }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn Clear(&self) {}
 }
 
 impl RefMgr for PageMgr {
@@ -117,6 +121,7 @@ impl PageMgr {
         return self.pagepool.FreePage(addr);
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn VsyscallPages(&self) -> Arc<Vec<u64>> {
         let pages = {
             let mut pages = self.vsyscallPages.lock();
@@ -255,6 +260,7 @@ impl PageTables {
             }
         }
 
+        #[cfg(target_arch = "x86_64")]
         {
             let vsyscallPages = pagePool.VsyscallPages();
             ret.MapVsyscall(vsyscallPages);
