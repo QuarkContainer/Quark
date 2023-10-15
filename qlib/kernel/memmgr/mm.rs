@@ -662,7 +662,10 @@ impl MemoryManager {
             seg = seg.NextSeg();
         }
 
-        ret += Self::VSYSCALL_MAPS_ENTRY;
+        #[cfg(target_arch = "x86_64")]
+        {
+            ret += Self::VSYSCALL_MAPS_ENTRY;
+        }
 
         return ret;
     }

@@ -168,6 +168,8 @@ impl VirtualMachine {
     #[cfg(not(debug_assertions))]
     pub const KERNEL_IMAGE: &'static str = "/usr/local/bin/qkernel.bin";
 
+    pub const VDSO_PATH: &str = "/usr/local/bin/vdso.so";
+
     pub fn InitShareSpace(
         vmfd: &VmFd,
         cpuCount: usize,
@@ -370,8 +372,8 @@ impl VirtualMachine {
         info!("before loadKernel");
 
         let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
-        //elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
-        //VMS.lock().vdsoAddr = elf.vdsoStart;
+        elf.LoadVDSO(Self::VDSO_PATH)?;
+        VMS.lock().vdsoAddr = elf.vdsoStart;
 
         let p = entry as *const u8;
         let p1 = (entry+1) as *const u8;

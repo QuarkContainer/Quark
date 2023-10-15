@@ -7,3 +7,6 @@ test/c/*
 test/go/*
 test/go/*.go
 .idea/
+vdso/*.d
+vdso/*.o
+vdso/*.so

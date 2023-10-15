@@ -17,7 +17,7 @@ release: $(kernel)
 debug: $(kernel_debug)
 
 $(kernel): kernel $(assembly_object_files)
-	@ld -n --gc-sections -T $(linker_script) -o $(kernel) \
+	@ld --gc-sections -T $(linker_script) -o $(kernel) \
 		$(assembly_object_files) $(qkernel)
 
 $(kernel_debug): kernel_debug $(assembly_object_files)

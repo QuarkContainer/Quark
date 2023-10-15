@@ -1701,15 +1701,8 @@ impl VMSpace {
         );
     }
 
-    #[cfg(target_arch = "x86_64")]
     pub fn GetVcpuFreq(&self) -> i64 {
-        let freq = self.vcpus[0].vcpu.get_tsc_khz().unwrap() * 1000;
-        return freq as i64;
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    pub fn GetVcpuFreq(&self) -> i64 {
-        return 0;
+        self.vcpus[0].get_frequency().unwrap() as i64
     }
 
     pub fn Membarrier(cmd: i32) -> i32 {
@@ -1788,6 +1781,15 @@ impl VMSpace {
             haveMembarrierGlobal: haveMembarrierGlobal,
             haveMembarrierPrivateExpedited: haveMembarrierPrivateExpedited,
         };
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn get_cpu_frequency() -> u64 {
+        let freq: u64;
+        unsafe {
+            asm!("mrs {0}, cntfrq_el0", out(reg) freq);
+        };
+        return freq;
     }
 }
 
