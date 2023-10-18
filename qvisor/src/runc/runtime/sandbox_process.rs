@@ -246,6 +246,7 @@ impl SandboxProcess {
             let devPath = Join(&self.SandboxRootDir, "dev");
             create_dir_all(&devPath)
                 .map_err(|e| Error::IOError(format!("failed to create dir {}, {}", devPath, e)))?;
+            
             let pts_path = Join(&devPath, "pts");
             create_dir_all(&pts_path)
                 .map_err(|e| Error::IOError(format!("failed to create dir {}, {}", pts_path, e)))?;
@@ -257,6 +258,7 @@ impl SandboxProcess {
                 None::<&str>,
             )
             .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+
             let olddir =
                 getcwd().map_err(|e| Error::IOError(format!("failed to get cwd {:?}", e)))?;
             chdir(&*self.SandboxRootDir)
@@ -265,6 +267,7 @@ impl SandboxProcess {
             for dev in DEFAULT_DEVICES.iter() {
                 mknod_dev(dev)?;
             }
+        
             mknod_dev(&LinuxDevice {
                 path: "/dev/ptmx".to_string(),
                 typ: LinuxDeviceType::c,
@@ -278,6 +281,7 @@ impl SandboxProcess {
             chdir(&olddir).map_err(|e| Error::IOError(format!("failed to chdir {:?}", e)))?;
             return Ok(());
         }
+
         let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
         match create_dir_all(&rootContainerPath) {
             Ok(()) => (),
@@ -435,52 +439,6 @@ impl SandboxProcess {
                 //continue;
             }
         }
-
-        let m = Mount {
-            destination: "/dev/nvidiactl".to_owned(),
-            typ: "bind".to_owned(),
-            source: "/dev/nvidiactl".to_owned(),
-            options: Vec::new()
-        };
-
-        MountFrom(
-            &m,
-            &self.Rootfs,
-            MsFlags::MS_BIND,
-            "",
-            "",
-        )?;
-
-        let m = Mount {
-            destination: "/dev/nvidia-uvm".to_owned(),
-            typ: "bind".to_owned(),
-            source: "/dev/nvidia-uvm".to_owned(),
-            options: Vec::new()
-        };
-
-        MountFrom(
-            &m,
-            &self.Rootfs,
-            MsFlags::MS_BIND,
-            "",
-            "",
-        )?;
-
-        let m = Mount {
-            destination: "/dev/nvidia0".to_owned(),
-            typ: "bind".to_owned(),
-            source: "/dev/nvidia0".to_owned(),
-            options: Vec::new()
-        };
-
-        MountFrom(
-            &m,
-            &self.Rootfs,
-            MsFlags::MS_BIND,
-            "",
-            "",
-        )?;
-
 
         // chdir into the rootfs so we can make devices with simpler paths
         let olddir = getcwd().map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
@@ -677,6 +635,55 @@ impl SandboxProcess {
         .unwrap();
     }
 
+    pub fn MountNvidia(&self) -> Result<()> {
+        let m = Mount {
+            destination: "/dev/nvidiactl".to_owned(),
+            typ: "bind".to_owned(),
+            source: "/dev/nvidiactl".to_owned(),
+            options: Vec::new()
+        };
+
+        MountFrom(
+            &m,
+            &self.SandboxRootDir,
+            MsFlags::MS_BIND | MsFlags::MS_SHARED,
+            "",
+            "",
+        )?;
+
+        let m = Mount {
+            destination: "/dev/nvidia-uvm".to_owned(),
+            typ: "bind".to_owned(),
+            source: "/dev/nvidia-uvm".to_owned(),
+            options: Vec::new()
+        };
+
+        MountFrom(
+            &m,
+            &self.SandboxRootDir,
+            MsFlags::MS_BIND ,
+            "",
+            "",
+        )?;
+
+        let m = Mount {
+            destination: "/dev/nvidia0".to_owned(),
+            typ: "bind".to_owned(),
+            source: "/dev/nvidia0".to_owned(),
+            options: Vec::new()
+        };
+
+        MountFrom(
+            &m,
+            &self.SandboxRootDir,
+            MsFlags::MS_BIND,
+            "",
+            "",
+        )?;
+
+        return Ok(())
+    }
+
     pub fn Child(&self) -> Result<()> {
         // set rlimits (before entering user ns)
         for rlimit in &self.RLimits {
@@ -705,8 +712,13 @@ impl SandboxProcess {
             controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");
         }
         self.MakeSandboxRootDirectory()?;
+
+        self.MountNvidia()?;
+        
         self.EnableNamespace()?;
-        NVProxySetupInUserns(&self.SandboxRootDir)?;
+        let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
+        
+        NVProxySetupInUserns(&rootContainerPath)?;
         if taskSockFd != 0 {
             // It seems control socket should be created in the same net ns
             controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");
@@ -846,6 +858,7 @@ pub fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &st
                 | MsFlags::MS_SLAVE),
         )
     {
+        error!("MountFrom remount...");
         let ret = Util::Mount(&dest, &dest, "", (flags | MsFlags::MS_REMOUNT).bits(), "");
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));

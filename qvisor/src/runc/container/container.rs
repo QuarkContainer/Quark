@@ -1294,22 +1294,37 @@ pub fn NVProxySetupInUserns(rootPath: &str) -> Result<()> {
         "/sbin/ldconfig"
     };
 
-    let devices = "all";
+    let _devices = "all";
+    let ldconfig = format!("--ldconfig=@{}", ldconfigPath);
     
-    let args = format!(
-        "--load-kmods configure --ldconfig=@{} --no-cgroups --utility --compute --device={} {}", 
-        ldconfigPath, 
-        devices, 
+    let args = [
+        "--load-kmods",
+        "configure",
+        &ldconfig, 
+        "--no-cgroups",
+        "--utility",
+        "--compute",
+        "--device=all",
         rootPath
-    );
+    ];
 
     let output = std::process::Command::new(&cli)
-        .arg(&args)
+        .args(args)
         .output()
         .expect("failed to execute process /sbin/modprobe");
 
+    let stderr = match std::str::from_utf8(&output.stderr) {
+        Ok(v) => v,
+        Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+    };
+
+    let stdout = match std::str::from_utf8(&output.stdout) {
+        Ok(v) => v,
+        Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+    };
+
     if !output.status.success() {
-        warn!("'{} {}' failed, \nstdout: {:?}\nstderr: {:?}", &cli, &args, &output.stdout, &output.stderr);
+        warn!("NVProxySetupInUserns '{} {:?}' failed, \nstdout: {:?}\nstderr: {:?}", &cli, &args, stdout, stderr);
     }
 
     return Ok(())

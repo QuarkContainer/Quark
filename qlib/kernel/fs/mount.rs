@@ -424,6 +424,26 @@ impl MountNs {
                             current = next;
                         }
                     }
+
+                    match self.ResolvePath(task, &current, remainingTraversals)? {
+                        ResolveResult::Dirent(d) => current = d,
+                        ResolveResult::Path(context) => {
+                            contexts.push(remain.to_string());
+
+                            remainStr = context.path;
+                            remain = &remainStr;
+
+                            match self.InitPath(root, &context.wd, remain) {
+                                None => (),
+                                Some((tnext, tfirst, tremain)) => {
+                                    current = tnext;
+                                    first = tfirst;
+                                    remain = tremain;
+                                    continue;
+                                }
+                            };
+                        }
+                    }
                 }
             } else {
                 match self.ResolvePath(task, &next, remainingTraversals)? {
