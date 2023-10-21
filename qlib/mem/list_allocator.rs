@@ -82,7 +82,7 @@ impl GlobalVcpuAllocator {
     }
 
     pub fn Initializated(&self) {
-        self.init.store(true, Ordering::Relaxed)
+        self.init.store(true, Ordering::Release)
     }
 }
 

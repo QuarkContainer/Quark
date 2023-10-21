@@ -1196,7 +1196,7 @@ impl Task {
         let signo = info.Signo as u64;
         let rsp = userStack.PushU64(self, sigAct.restorer)?;
         info!(
-            "=========start enter user, the address is {:?}, rsp is {:x}, signo is {}",
+            "start enter user, the address is {:?}, rsp is {:x}, signo is {}",
             sigAct, rsp, signo
         );
         let currTask = Task::Current();
