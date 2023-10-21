@@ -936,7 +936,9 @@ pub fn RMAlloc(fi: &FrontendIoctlState) -> Result<u64> {
     let isNVOS64;
     if isV535 {
         match fi.ioctlParamsSize {
-            SIZEOF_NVOS21_PARAMETERS_V535 |
+            SIZEOF_NVOS21_PARAMETERS_V535 => {
+                isNVOS64 = false;
+            }
             SIZEOF_NVOS64_PARAMETERS_V535 => {
                 isNVOS64 = true;
             }
@@ -944,7 +946,9 @@ pub fn RMAlloc(fi: &FrontendIoctlState) -> Result<u64> {
         }
     } else {
         match fi.ioctlParamsSize {
-            SIZEOF_NVOS21_PARAMETERS |
+            SIZEOF_NVOS21_PARAMETERS => {
+                isNVOS64 = false;
+            }
             SIZEOF_NVOS64_PARAMETERS => {
                 isNVOS64 = true;
             }
@@ -970,16 +974,17 @@ pub fn RMAlloc(fi: &FrontendIoctlState) -> Result<u64> {
         }
     };
 
-    debug!("nvproxy: allocation class {:x}", ioctlParams.class);
-    match fi.fd.nvp.lock().allocationClass.get(&ioctlParams.class) {
-        Some(handle) => {
-            return handle(fi, &ioctlParams, isNVOS64);
+    let handler = match fi.fd.nvp.lock().allocationClass.get(&ioctlParams.class) {
+        Some(handler) => {
+            handler.clone()
         }
         None => {
             warn!("nvproxy: unknown allocation class {:x}", ioctlParams.class);
             return Err(Error::SysError(SysErr::EINVAL));
         }
-    }
+    };
+
+    return handler(fi, &ioctlParams, isNVOS64);
 }
 
 // Unlike frontendIoctlSimple and rmControlSimple, rmAllocSimple requires the
