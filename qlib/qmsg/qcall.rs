@@ -126,6 +126,12 @@ pub enum Msg {
     Proxy(Proxy),
     RemapGuestMemRanges(RemapGuestMemRanges),
     UnmapGuestMemRange(UnmapGuestMemRange),
+    NividiaDriverVersion(NividiaDriverVersion),
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct NividiaDriverVersion {
+    pub ioctlParamsAddr: u64
 }
 
 #[derive(Clone, Debug)]

@@ -40,6 +40,7 @@ pub const UVM_MAP_DYNAMIC_PARALLELISM_REGION : u32 = 65;
 pub const UVM_ALLOC_SEMAPHORE_POOL           : u32 = 68;
 pub const UVM_VALIDATE_VA_RANGE              : u32 = 72;
 pub const UVM_CREATE_EXTERNAL_RANGE          : u32 = 73;
+pub const UVM_MM_INITIALIZE          		 : u32 = 75;
 
 // UVM_INITIALIZE_PARAMS
 #[derive(Debug, Clone, Copy)]
@@ -91,6 +92,14 @@ impl HasRMCtrlFD  for UvmRegisterGpuVaspaceParams {
 	fn SetRMCtrlFD (&mut self, fd: i32) {
         self.RMCtrlFD  = fd;
     }
+}
+
+// UVM_UNREGISTER_GPU_VASPACE_PARAMS
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct UvmUnregisterGpuVaspaceParams {
+    pub GPUUUID  : [u8; 16],
+	pub rMStatus : u32,
 }
 
 // UVM_REGISTER_CHANNEL_PARAMS
@@ -245,6 +254,14 @@ pub struct UvmCreateExternalRangeParams {
 	pub length   : u64,
 	pub RMStatus : u32,
 	// pub Pad0     : [u8; 4],
+}
+
+// UVM_MM_INITIALIZE_PARAMS
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct UvmMmInitializeParams {
+	pub uvmFD: i32,
+	pub status: u32,
 }
 
 // From kernel-open/nvidia-uvm/uvm_types.h:

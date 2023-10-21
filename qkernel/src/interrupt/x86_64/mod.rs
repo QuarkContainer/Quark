@@ -162,9 +162,12 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u
             ptRegs, ev
         );
 
+        let mut frameCount =  10;
+
         backtracer::trace(ptRegs.rip, ptRegs.rsp, ptRegs.rbp, &mut |frame| {
             print!("ExceptionHandler frame is {:#x?}", frame);
-            true
+            frameCount -= 1;
+            return frameCount > 0;
         });
         panic!("Get on page fault exception from kernel");
     };

@@ -39,7 +39,11 @@ use std::slice;
 use std::str;
 use uuid::Uuid;
 
+use crate::qlib::cstring::CString;
 use crate::qlib::fileinfo::*;
+use crate::qlib::nvproxy::frontend::FrontendIoctlCmd;
+use crate::qlib::nvproxy::frontend_type::NV_ESC_CHECK_VERSION_STR;
+use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
 use crate::qlib::range::Range;
 use crate::vmspace::kernel::GlobalIOMgr;
 use crate::vmspace::kernel::GlobalRDMASvcCli;
@@ -53,7 +57,6 @@ use super::namespace::MountNs;
 use super::qlib::addr::Addr;
 use super::qlib::common::{Error, Result};
 use super::qlib::control_msg::*;
-use super::qlib::kernel::util::cstring::*;
 use super::qlib::kernel::SignalProcess;
 use super::qlib::linux::membarrier::*;
 use super::qlib::linux_def::*;
@@ -517,6 +520,43 @@ impl VMSpace {
 
         let hostfd = GlobalIOMgr().AddFile(fd);
         return Self::GetRet(hostfd as i64);
+    }
+
+    pub fn NividiaDriverVersion(ioctlParamsAddr: u64) -> i64 {
+        let ioctlParams = unsafe {
+            &mut *(ioctlParamsAddr as * mut RMAPIVersion) 
+        };
+        
+        let drvName = CString::New("/dev/nvidiactl");
+
+        let ret = unsafe { 
+            libc::openat(
+                -1, 
+                drvName.Ptr() as *const c_char, 
+                O_RDONLY | O_NOFOLLOW, 
+                0
+            ) 
+        };
+        let fd = Self::GetRet(ret as i64) as i32;
+        if fd < 0 {
+            return fd as i64;
+        }
+
+        // From src/nvidia/arch/nvalloc/unix/include/nv-ioctl.h:
+	    const NV_RM_API_VERSION_REPLY_RECOGNIZED : u32 = 1;
+        ioctlParams.cmd = '2' as _;
+
+        let req = FrontendIoctlCmd(NV_ESC_CHECK_VERSION_STR, core::mem::size_of::<RMAPIVersion>() as _);
+
+        let ret = unsafe {
+            ioctl(fd, req, ioctlParamsAddr)
+        };
+
+        unsafe {
+            close(fd);
+        }
+
+        return Self::GetRet(ret as i64);
     }
 
     pub fn RemapGuestMemRanges(len: u64, ranges: &[Range]) -> i64 {

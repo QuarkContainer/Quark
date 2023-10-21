@@ -458,55 +458,15 @@ impl FileOperations for NvFrontendFileOptions {
         // - Add symbol and parameter type definitions to //pkg/abi/nvgpu.
         // - Add filter to seccomp_filters.go.
         // - Add handling below.
-        match nr {
-            NV_ESC_CARD_INFO |                     // nv_ioctl_card_info_t
-            NV_ESC_CHECK_VERSION_STR |             // nv_rm_api_version_t
-            NV_ESC_SYS_PARAMS |                    // nv_ioctl_sys_params_t
-            NV_ESC_RM_DUP_OBJECT |                 // NVOS55_PARAMETERS
-            NV_ESC_RM_SHARE |                      // NVOS57_PARAMETERS
-            NV_ESC_RM_UNMAP_MEMORY |               // NVOS34_PARAMETERS
-            NV_ESC_RM_UPDATE_DEVICE_MAPPING_INFO => { // NVOS56_PARAMETERS
-                return FrontendIoctlSimple(&fi);
-            }
-            NV_ESC_REGISTER_FD => {
-                return FrontendRegisterFD(&fi);
-            }
-            NV_ESC_ALLOC_OS_EVENT => {
-                return RMAllocOSEvent(&fi);
-            }
-            NV_ESC_FREE_OS_EVENT => {
-                return RMFreeOSEvent(&fi);
-            }
-            NV_ESC_NUMA_INFO => {
-                // The CPU topology seen by the host driver differs from the CPU
-                // topology presented by the sentry to the application, so reject this
-                // ioctl; doing so is non-fatal.
-                warn!("nvproxy: ignoring NV_ESC_NUMA_INFO");
+        let handler = match self.nvp.lock().frontendIoctl.get(&nr) {
+            Some(h) => h.clone(),
+            None => {
+                error!("nvproxy: unknown frontend ioctl {} == {:x?} (argSize={}, cmd={:x?})", nr, nr, argSize, cmd);
                 return Err(Error::SysError(SysErr::EINVAL));
             }
-            NV_ESC_RM_ALLOC_MEMORY => {
-                return RMAllocMemory(&fi);
-            }
-            NV_ESC_RM_FREE => {
-                return RMFree(&fi);
-            }
-            NV_ESC_RM_CONTROL => {
-                return RMControl(&fi);
-            }
-            NV_ESC_RM_ALLOC => {
-                return RMAlloc(&fi);
-            }
-            NV_ESC_RM_VID_HEAP_CONTROL => {
-                return RMVidHeapControl(&fi);
-            }
-            NV_ESC_RM_MAP_MEMORY => {
-                return RMMapMemory(&fi);
-            }
-            _ => {
-                warn!("nvproxy: unknown frontend ioctl {} == {:x?} (argSize={}, cmd={:x?})", nr, nr, argSize, cmd);
-                return Err(Error::SysError(SysErr::EINVAL));
-            }
-        }
+        };
+
+        return handler(&fi);
     }
 
     fn IterateDir(
@@ -542,6 +502,14 @@ pub fn FrontendIoctlSimple(fi: &FrontendIoctlState) -> Result<u64> {
     return Ok(n)
 }
 
+pub fn RMNumaInfo(_fi: &FrontendIoctlState) -> Result<u64> {
+    // The CPU topology seen by the host driver differs from the CPU
+	// topology presented by the sentry to the application, so reject this
+	// ioctl; doing so is non-fatal.
+    debug!("nvproxy: ignoring NV_ESC_NUMA_INFO");
+    return Err(Error::SysError(SysErr::EINVAL));
+}
+
 pub fn FrontendRegisterFD(fi: &FrontendIoctlState) -> Result<u64> {
     if fi.ioctlParamsSize as usize != core::mem::size_of::<IoctlRegisterFD>() {
         return Err(Error::SysError(SysErr::EINVAL));
@@ -557,6 +525,16 @@ pub fn FrontendRegisterFD(fi: &FrontendIoctlState) -> Result<u64> {
     let ctlFile = match &ctlFileGeneric.FileOp {
         FileOps::NvFrontendFileOptions(nvfops) => {
             nvfops.clone()
+        }
+        FileOps::OverlayFileOperations(of) => {
+            match of.FileOps() {
+                FileOps::NvFrontendFileOptions(nvfops) => {
+                    nvfops.clone()
+                }
+                _ => {
+                    return Err(Error::SysError(SysErr::EINVAL))
+                }
+            }
         }
         _ => {
             return Err(Error::SysError(SysErr::EINVAL))
@@ -874,12 +852,13 @@ pub fn RMControl(fi: &FrontendIoctlState) -> Result<u64> {
 }
 
 pub fn RMControlSimple(fi: &FrontendIoctlState, ioctlParams: &NVOS54Parameters) -> Result<u64> {
+    error!("RMControlSimple is {:x?}", ioctlParams);
     if ioctlParams.paramsSize == 0 {
         if ioctlParams.params != 0 {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        return RMControlInvoke::<u8>(fi, ioctlParams, None);
+        return RMControlInvoke(fi, ioctlParams, 0);
     }
 
     if ioctlParams.params == 0 {
@@ -887,8 +866,8 @@ pub fn RMControlSimple(fi: &FrontendIoctlState, ioctlParams: &NVOS54Parameters) 
     }
 
     let ctrlParams: Vec<u8> = fi.task.CopyInVec(ioctlParams.params, ioctlParams.paramsSize as usize)?;
-    let n = RMControlInvoke(fi, &ioctlParams, Some(&ctrlParams))?;
-
+    let n = RMControlInvoke(fi, &ioctlParams, &ctrlParams[0] as * const _ as u64)?;
+    
     fi.task.CopyOutSlice(&ctrlParams, ioctlParams.params, ioctlParams.paramsSize as usize)?;
     return Ok(n)
 }
@@ -947,111 +926,57 @@ pub fn CtrlSubdevFIFODisableChannels(fi: &FrontendIoctlState, ioctlParams: &NVOS
     if ctrlParams.runlistPreemptEvent != 0 {
         return Err(Error::SysError(SysErr::EINVAL));
     }
-    let n = RMControlInvoke(fi, ioctlParams, Some(&ctrlParams))?;
+    let n = RMControlInvoke(fi, ioctlParams, &ctrlParams as * const _ as u64)?;
     fi.task.CopyOutObj(&ctrlParams, ioctlParams.params)?;
     return Ok(n)
 }
 
 pub fn RMAlloc(fi: &FrontendIoctlState) -> Result<u64> {
-    let ioctlParams: NVOS64Parameters;
-    let mut isNVOS64 = false;
-    match fi.ioctlParamsSize {
-        SIZEOF_NVOS21_PARAMETERS => {
-            let buf : NVOS21Parameters = fi.task.CopyInObj(fi.ioctlParamsAddr)?;
-            ioctlParams = NVOS64Parameters {
-                root: buf.root,
-                objectParent: buf.objectParent,
-                objectNew: buf.objectNew,
-                class: buf.class,
-                allocParms: buf.allocParms,
-                status: buf.status,
-                rightsRequested: 0,
-                flags: 0,
-            };
+    let isV535 = fi.fd.nvp.lock().useRmAllocParamsV535;
+    let isNVOS64;
+    if isV535 {
+        match fi.ioctlParamsSize {
+            SIZEOF_NVOS21_PARAMETERS_V535 |
+            SIZEOF_NVOS64_PARAMETERS_V535 => {
+                isNVOS64 = true;
+            }
+            _ => return Err(Error::SysError(SysErr::EINVAL)), 
         }
-        SIZEOF_NVOS64_PARAMETERS => {
-            ioctlParams = fi.task.CopyInObj(fi.ioctlParamsAddr)?;
-            isNVOS64 = true;
-        }
-        _ => {
-            return Err(Error::SysError(SysErr::EINVAL));
+    } else {
+        match fi.ioctlParamsSize {
+            SIZEOF_NVOS21_PARAMETERS |
+            SIZEOF_NVOS64_PARAMETERS => {
+                isNVOS64 = true;
+            }
+            _ => return Err(Error::SysError(SysErr::EINVAL)), 
         }
     }
 
-    // hClass determines the type of pAllocParms.
-    debug!("nvproxy: allocation class {:#?}", ioctlParams.class);
+    let ioctlParams = if isNVOS64 {
+        if isV535 {
+            let p : NVOS64ParametersV535 = fi.task.CopyInObj(fi.ioctlParamsAddr)?;
+            p.ToOS64V535()
+        } else {
+            let p : NVOS64Parameters = fi.task.CopyInObj(fi.ioctlParamsAddr)?;
+            p.ToOS64V535()
+        }
+    } else {
+        if isV535 {
+            let p : NVOS21ParametersV535 = fi.task.CopyInObj(fi.ioctlParamsAddr)?;
+            p.ToOS64V535()
+        } else {
+            let p : NVOS21Parameters = fi.task.CopyInObj(fi.ioctlParamsAddr)?;
+            p.ToOS64V535()
+        }
+    };
 
-    // Implementors:
-	// - To map hClass to a symbol, look in
-	// src/nvidia/generated/g_allclasses.h.
-	// - See src/nvidia/src/kernel/rmapi/resource_list.h for table mapping class
-	// ("External Class") to the type of pAllocParms ("Alloc Param Info") and
-	// the class whose constructor interprets it ("Internal Class").
-	// - Add symbol and parameter type definitions to //pkg/abi/nvgpu.
-	// - Add handling below.
-    match ioctlParams.class {
-        NV01_ROOT |
-        NV01_ROOT_NON_PRIV |
-        NV01_ROOT_CLIENT => {
-            return RMAllocSimple::<Handle>(fi, &ioctlParams, isNVOS64);
+    debug!("nvproxy: allocation class {:x}", ioctlParams.class);
+    match fi.fd.nvp.lock().allocationClass.get(&ioctlParams.class) {
+        Some(handle) => {
+            return handle(fi, &ioctlParams, isNVOS64);
         }
-        NV01_EVENT_OS_EVENT => {
-            return RMAllocEventOSEvent(fi, &ioctlParams, isNVOS64);
-        }
-        NV01_DEVICE_0 => {
-            return RMAllocSimple::<Nv0080AllocParameters>(fi, &ioctlParams, isNVOS64);
-        }
-        NV20_SUBDEVICE_0 => {
-            return RMAllocSimple::<Nv2080AllocParameters>(fi, &ioctlParams, isNVOS64);
-        }
-        NV50_THIRD_PARTY_P2P => {
-            return RMAllocSimple::<Nv503cAllocParameters>(fi, &ioctlParams, isNVOS64);
-        }
-        GT200_DEBUGGER => {
-            return RMAllocSimple::<Nv83deAllocParameters>(fi, &ioctlParams, isNVOS64);
-        }
-        FERMI_CONTEXT_SHARE_A => {
-            return RMAllocSimple::<NvCtxshareAllocationParameters>(fi, &ioctlParams, isNVOS64);
-        }
-        FERMI_VASPACE_A => {
-            return RMAllocSimple::<NvVaspaceAllocationParameters>(fi, &ioctlParams, isNVOS64);
-        }
-        KEPLER_CHANNEL_GROUP_A => {
-            return RMAllocSimple::<NvChannelGroupAllocationParameters>(fi, &ioctlParams, isNVOS64);
-        }
-        VOLTA_CHANNEL_GPFIFO_A |
-        TURING_CHANNEL_GPFIFO_A |
-        AMPERE_CHANNEL_GPFIFO_A => {
-            return RMAllocSimple::<NvChannelAllocParams>(fi, &ioctlParams, isNVOS64);
-        }
-        VOLTA_DMA_COPY_A |
-        TURING_DMA_COPY_A |
-        AMPERE_DMA_COPY_A |
-        AMPERE_DMA_COPY_B |
-        HOPPER_DMA_COPY_A => {
-            return RMAllocSimple::<Nvb0b5AllocationParameters>(fi, &ioctlParams, isNVOS64);
-        }
-        VOLTA_COMPUTE_A |
-        TURING_COMPUTE_A |
-        AMPERE_COMPUTE_A |
-        AMPERE_COMPUTE_B |
-        ADA_COMPUTE_A |
-        HOPPER_COMPUTE_A => {
-            return RMAllocSimple::<NvGrAllocationParameters>(fi, &ioctlParams, isNVOS64);
-        }
-        HOPPER_USERMODE_A => {
-            return RMAllocSimple::<NvHopperUsermodeAParams>(fi, &ioctlParams, isNVOS64);
-        }
-        GF100_SUBDEVICE_MASTER |
-        VOLTA_USERMODE_A |
-        TURING_USERMODE_A => {
-            return RMAllocNoParams(fi, &ioctlParams, isNVOS64);
-        }
-        NV_MEMORY_FABRIC => {
-            return RMAllocSimple::<Nv00f8AllocationParameters>(fi, &ioctlParams, isNVOS64);
-        }
-        _ => {
-            warn!("nvproxy: unknown allocation class {:#?}", ioctlParams.class);
+        None => {
+            warn!("nvproxy: unknown allocation class {:x}", ioctlParams.class);
             return Err(Error::SysError(SysErr::EINVAL));
         }
     }
@@ -1061,16 +986,16 @@ pub fn RMAlloc(fi: &FrontendIoctlState) -> Result<u64> {
 // parameter type since the parameter's size is otherwise unknown.
 pub fn RMAllocSimple<Params: Sized + Clone + Copy>(
     fi: &FrontendIoctlState, 
-    ioctlParams: &NVOS64Parameters,
+    ioctlParams: &NVOS64ParametersV535,
     isNVOS64: bool
 ) -> Result<u64> {
     if ioctlParams.allocParms == 0 {
-        return RMAllocInvoke::<u8>(fi, ioctlParams, None, isNVOS64)
+        return RMAllocInvoke(fi, ioctlParams, 0, isNVOS64)
     }
 
     let allocParams: Params = fi.task.CopyInObj(ioctlParams.allocParms)?;
 
-    let n = RMAllocInvoke::<Params>(fi, ioctlParams, Some(&allocParams), isNVOS64)?;
+    let n = RMAllocInvoke(fi, ioctlParams, &allocParams as * const _ as u64, isNVOS64)?;
 
     fi.task.CopyOutObj(&allocParams, ioctlParams.allocParms)?;
 
@@ -1079,15 +1004,15 @@ pub fn RMAllocSimple<Params: Sized + Clone + Copy>(
 
 pub fn RMAllocNoParams(
     fi: &FrontendIoctlState, 
-    ioctlParams: &NVOS64Parameters,
+    ioctlParams: &NVOS64ParametersV535,
     isNVOS64: bool
 ) -> Result<u64> {
-    return RMAllocInvoke::<u8>(fi, ioctlParams, None, isNVOS64);
+    return RMAllocInvoke(fi, ioctlParams, 0, isNVOS64);
 }
 
 pub fn RMAllocEventOSEvent(
     fi: &FrontendIoctlState, 
-    ioctlParams: &NVOS64Parameters,
+    ioctlParams: &NVOS64ParametersV535,
     isNVOS64: bool
 ) -> Result<u64> {
     let allocParams : Nv0005AllocParameters = fi.task.CopyInObj(ioctlParams.allocParms)?;
@@ -1108,7 +1033,7 @@ pub fn RMAllocEventOSEvent(
     let mut allocParamsTmp = allocParams;
     allocParamsTmp.data = eventFile.fd as u64;
 
-    let n = RMAllocInvoke(fi, ioctlParams, Some(&allocParamsTmp), isNVOS64)?;
+    let n = RMAllocInvoke(fi, ioctlParams, &allocParamsTmp as * const _ as u64, isNVOS64)?;
 
     let mut outAllocParams = allocParamsTmp;
     outAllocParams.data = allocParams.data;

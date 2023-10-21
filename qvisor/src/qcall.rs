@@ -123,6 +123,9 @@ impl KVMVcpu {
             Msg::UnmapGuestMemRange(msg) => {
                 ret = super::VMSpace::UnmapGuestMemRange(msg.start, msg.len) as u64;
             }
+            Msg::NividiaDriverVersion(msg) => {
+                ret = super::VMSpace::NividiaDriverVersion(msg.ioctlParamsAddr) as u64;
+            }
             Msg::OpenDevFile(msg) => {
                 ret = super::VMSpace::OpenDevFile(msg.dirfd, msg.name, msg.flags) as u64;
             }

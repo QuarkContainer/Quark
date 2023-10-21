@@ -105,7 +105,7 @@ pub const NV0080_CTRL_CMD_FB_GET_CAPS_V2 : u32 = 0x801307;
 // From src/common/sdk/nvidia/inc/ctrl/ctrl0080/ctrl0080fifo.h:
 pub const NV0080_CTRL_CMD_FIFO_GET_CHANNELLIST : u32 = 0x80170d;
 
-// NV0000_CTRL_SYSTEM_GET_BUILD_VERSION_PARAMS
+// NV0080_CTRL_FIFO_GET_CHANNELLIST_PARAMS
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Nv0080CtrlFifoGetChannellistParams {
@@ -250,7 +250,11 @@ pub const NVA06C_CTRL_CMD_GPFIFO_SCHEDULE : u32 = 0xa06c0101;
 pub const NVA06C_CTRL_CMD_SET_TIMESLICE   : u32 = 0xa06c0103;
 pub const NVA06C_CTRL_CMD_PREEMPT         : u32 = 0xa06c0105;
 
+// From src/common/sdk/nvidia/inc/ctrl/ctrlcb33.h:
+pub const NV_CONF_COMPUTE_CTRL_CMD_SYSTEM_GET_CAPABILITIES         : u32 = 0xcb330101;
+
 // Status codes, from src/common/sdk/nvidia/inc/nvstatuscodes.h.
 pub const NV_ERR_INVALID_ADDRESS : u32 = 0x0000001e;
+pub const NV_ERR_INVALID_ARGUMENT: u32 = 0x0000001f;
 pub const NV_ERR_INVALID_LIMIT   : u32 = 0x0000002e;
 pub const NV_ERR_NOT_SUPPORTED   : u32 = 0x00000056;

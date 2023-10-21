@@ -11,6 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::string::String;
+
+use alloc::borrow::ToOwned;
+
 use super::nvgpu::*;
 
 // NV_IOCTL_MAGIC is the "canonical" IOC_TYPE for frontend ioctls.
@@ -89,6 +93,17 @@ pub struct RMAPIVersion {
 	pub versionString : [u8; 64]
 }
 
+impl RMAPIVersion {
+	pub fn Version(&self) -> String {
+		match self.versionString.iter().position(|&x| x == 0) {
+			None => return "".to_owned(),
+			Some(i) => {
+				return String::from_utf8(self.versionString[0..i].to_vec()).expect("Our bytes should be valid utf8");
+			}
+		}
+	}
+}
+
 // IoctlSysParams is nv_ioctl_sys_params_t, the parameter type for
 // NV_ESC_SYS_PARAMS.
 #[derive(Debug, Copy, Clone)]
@@ -133,21 +148,6 @@ pub struct NVOS00Parameters {
 	pub objectParent : Handle,
 	pub objectOld    : Handle,
 	pub status        : u32,
-}
-
-// NVOS21Parameters is NVOS21_PARAMETERS, one possible parameter type for
-// NV_ESC_RM_ALLOC.
-//
-#[derive(Debug, Copy, Clone)]
-#[repr(C)]
-pub struct NVOS21Parameters {
-    pub root         : Handle,
-	pub objectParent : Handle,
-	pub objectNew    : Handle,
-	pub class        : u32,
-	pub allocParms   : P64,
-	pub status        : u32,
-	// pub Pad0          : u32,
 }
 
 // NVOS55Parameters is NVOS55_PARAMETERS, the parameter type for
@@ -297,6 +297,132 @@ pub struct NVOS56Parameters {
 	//pub Pad1           : u32,
 }
 
+pub trait RmAllocParamType {
+	fn GetPAllocParms(&self) -> P64;
+	fn GetPRightsRequested(&self) -> P64;
+	fn SetPAllocParms(&mut self, p: P64);
+	fn SetPRightsRequested(&mut self, p: P64);
+	fn FromOS64V535(other: &NVOS64ParametersV535) -> Self;
+	fn ToOS64V535(&self) -> NVOS64ParametersV535;
+}
+
+// NVOS21Parameters is NVOS21_PARAMETERS, one possible parameter type for
+// NV_ESC_RM_ALLOC.
+//
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+pub struct NVOS21Parameters {
+    pub root         : Handle,
+	pub objectParent : Handle,
+	pub objectNew    : Handle,
+	pub class        : u32,
+	pub allocParms   : P64,
+	pub status        : u32,
+	// pub Pad0          : u32,
+}
+
+impl RmAllocParamType for NVOS21Parameters {
+	fn GetPAllocParms(&self) -> P64 {
+		return self.allocParms;
+	}
+
+	fn GetPRightsRequested(&self) -> P64 {
+		return 0;
+	}
+
+	fn SetPAllocParms(&mut self, p: P64) {
+		self.allocParms = p;
+	}
+
+	fn SetPRightsRequested(&mut self, _p: P64) {
+		panic!("NVOS21Parameters::SetPRightsRequested impossible")
+	}
+
+	fn FromOS64V535(other: &NVOS64ParametersV535) -> Self {
+		return Self {
+			root: other.root,
+			objectParent: other.objectParent,
+			objectNew: other.objectNew,
+			class: other.class,
+			allocParms: other.allocParms,
+			status: other.status
+		}
+	}
+
+	fn ToOS64V535(&self) -> NVOS64ParametersV535 {
+		return NVOS64ParametersV535 {
+			root: self.root,
+			objectParent: self.objectParent,
+			objectNew: self.objectNew,
+			class: self.class,
+			allocParms: self.allocParms,
+			rightsRequested: 0,
+			paramsSize: 0,
+			flags: 0,
+			status: self.status
+		}
+	}
+}
+
+// NVOS21ParametersV535 is the updated version of NVOS21Parameters starting
+// from 535.43.02.
+
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+pub struct NVOS21ParametersV535 {
+    pub root         : Handle,
+	pub objectParent : Handle,
+	pub objectNew    : Handle,
+	pub class        : u32,
+	pub allocParms   : P64,
+	pub paramsSize	 : u32,
+	pub status        : u32,
+}
+
+impl RmAllocParamType for NVOS21ParametersV535 {
+	fn GetPAllocParms(&self) -> P64 {
+		return self.allocParms;
+	}
+
+	fn GetPRightsRequested(&self) -> P64 {
+		return 0;
+	}
+
+	fn SetPAllocParms(&mut self, p: P64) {
+		self.allocParms = p;
+	}
+
+	fn SetPRightsRequested(&mut self, _p: P64) {
+		panic!("NVOS21Parameters::SetPRightsRequested impossible")
+	}
+
+	fn FromOS64V535(other: &NVOS64ParametersV535) -> Self {
+		return Self {
+			root: other.root,
+			objectParent: other.objectParent,
+			objectNew: other.objectNew,
+			class: other.class,
+			allocParms: other.allocParms,
+			paramsSize: other.paramsSize, 
+			status: other.status
+		}
+	}
+
+	fn ToOS64V535(&self) -> NVOS64ParametersV535 {
+		return NVOS64ParametersV535 {
+			root: self.root,
+			objectParent: self.objectParent,
+			objectNew: self.objectNew,
+			class: self.class,
+			allocParms: self.allocParms,
+			rightsRequested: 0,
+			paramsSize: self.paramsSize,
+			flags: 0,
+			status: self.status
+		}
+	}
+}
+
 // NVOS64Parameters is NVOS64_PARAMETERS, one possible parameter type for
 // NV_ESC_RM_ALLOC.
 //
@@ -311,6 +437,91 @@ pub struct NVOS64Parameters {
 	pub rightsRequested : P64,
 	pub flags            : u32,
 	pub status           : u32,
+}
+
+impl RmAllocParamType for NVOS64Parameters {
+	fn GetPAllocParms(&self) -> P64 {
+		return self.allocParms;
+	}
+
+	fn GetPRightsRequested(&self) -> P64 {
+		return self.rightsRequested;
+	}
+
+	fn SetPAllocParms(&mut self, p: P64) {
+		self.allocParms = p;
+	}
+
+	fn SetPRightsRequested(&mut self, p: P64) {
+		self.rightsRequested = p;
+	}
+
+	fn FromOS64V535(other: &NVOS64ParametersV535) -> Self {
+		return NVOS64Parameters {
+			root: other.root,
+			objectParent: other.objectParent,
+			objectNew: other.objectNew,
+			class: other.class,
+			allocParms: other.allocParms,
+			rightsRequested: other.rightsRequested,
+			flags: other.flags,
+			status: other.status
+		}
+	}
+
+	fn ToOS64V535(&self) -> NVOS64ParametersV535 {
+		return NVOS64ParametersV535 {
+			root: self.root,
+			objectParent: self.objectParent,
+			objectNew: self.objectNew,
+			class: self.class,
+			allocParms: self.allocParms,
+			rightsRequested: self.rightsRequested,
+			paramsSize: 0,
+			flags: self.flags,
+			status: self.status
+		}
+	}
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+#[repr(C)]
+pub struct NVOS64ParametersV535 {
+	pub root            : Handle,
+	pub objectParent    : Handle,
+	pub objectNew       : Handle,
+	pub class           : u32,
+	pub allocParms      : P64,
+	pub rightsRequested : P64,
+	pub paramsSize		: u32,
+	pub flags           : u32,
+	pub status          : u32,
+}
+
+impl RmAllocParamType for NVOS64ParametersV535 {
+	fn GetPAllocParms(&self) -> P64 {
+		return self.allocParms;
+	}
+
+	fn GetPRightsRequested(&self) -> P64 {
+		return self.rightsRequested;
+	}
+
+	fn SetPAllocParms(&mut self, p: P64) {
+		self.allocParms = p;
+	}
+
+	fn SetPRightsRequested(&mut self, p: P64) {
+		self.rightsRequested = p;
+	}
+
+	fn FromOS64V535(other: &NVOS64ParametersV535) -> Self {
+		return *other
+	}
+
+	fn ToOS64V535(&self) -> NVOS64ParametersV535 {
+		return *self;
+	}
 }
 
 pub const SIZEOF_IOCTL_REGISTER_FD                  : u32 = core::mem::size_of::<IoctlRegisterFD>() as u32;
@@ -329,3 +540,5 @@ pub const SIZEOF_NVOS34_PARAMETERS                  : u32 = core::mem::size_of::
 pub const SIZEOF_NVOS54_PARAMETERS                  : u32 = core::mem::size_of::<NVOS54Parameters>() as u32;
 pub const SIZEOF_NVOS56_PARAMETERS                  : u32 = core::mem::size_of::<NVOS56Parameters>() as u32;
 pub const SIZEOF_NVOS64_PARAMETERS                  : u32 = core::mem::size_of::<NVOS64Parameters>() as u32;
+pub const SIZEOF_NVOS21_PARAMETERS_V535				: u32 = core::mem::size_of::<NVOS21ParametersV535>() as u32;
+pub const SIZEOF_NVOS64_PARAMETERS_V535 			: u32 = core::mem::size_of::<NVOS64ParametersV535>() as u32;

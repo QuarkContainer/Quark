@@ -43,6 +43,7 @@ use crate::qlib::kernel::fs::mount::*;
 use crate::qlib::path;
 use crate::qlib::nvproxy::nvproxy::NVProxy;
 use crate::qlib::kernel::fs::inode::*;
+use crate::qlib::nvproxy::nvgpu::*;
 
 use super::uvm::*;
 
@@ -414,65 +415,18 @@ impl FileOperations for UvmFileOptions {
             cmd: cmd,
             ioctlParamsAddr: argPtr,
         };
-
-        match cmd {
-            UVM_INITIALIZE => {
-                return UvmInitialize(task, &ui);
+        
+        let handler = match self.nvp.lock().uvmIoctl.get(&cmd) {
+            Some(h) => {
+                h.clone()
             }
-            UVM_DEINITIALIZE => {
-                return UvmIoctlInvoke::<u8>(&ui, None);
-            }
-            UVM_CREATE_RANGE_GROUP => {
-                return UvmIoctlSimple::<UvmCreateRangeGroupParams>(task, &ui);
-            }
-            UVM_DESTROY_RANGE_GROUP => {
-                return UvmIoctlSimple::<UvmDestroyRangeGroupParams>(task, &ui);
-            }
-            UVM_REGISTER_GPU_VASPACE => {
-                return UvmIoctlSimple::<UvmRegisterGpuVaspaceParams>(task, &ui);
-            }
-            UVM_UNREGISTER_GPU_VASPACE => {
-                return UvmIoctlSimple::<UvmRegisterChannelParams>(task, &ui);
-            }
-            UVM_REGISTER_CHANNEL => {
-                return UvmIoctlSimple::<UvmRegisterChannelParams>(task, &ui);
-            }
-            UVM_UNREGISTER_CHANNEL => {
-                return UvmIoctlSimple::<UvmUnregisterChannelParams>(task, &ui);
-            }
-            UVM_MAP_EXTERNAL_ALLOCATION => {
-                return UvmIoctlSimple::<UvmMapExternalAllocationParams>(task, &ui);
-            }
-            UVM_FREE => {
-                return UvmIoctlSimple::<UvmFreeParams>(task, &ui);
-            }
-            UVM_REGISTER_GPU => {
-                return UvmIoctlSimple::<UvmRegisterGpuParams>(task, &ui);
-            }
-            UVM_UNREGISTER_GPU => {
-                return UvmIoctlSimple::<UvmUnregisterGpuParams>(task, &ui);
-            }
-            UVM_PAGEABLE_MEM_ACCESS => {
-                return UvmIoctlSimple::<UvmPageableMemAccessParams>(task, &ui);
-            }
-            UVM_MAP_DYNAMIC_PARALLELISM_REGION => {
-                return UvmIoctlSimple::<UvmMapDynamicParallelismRegionParams>(task, &ui);
-            }
-            UVM_ALLOC_SEMAPHORE_POOL => {
-                return UvmIoctlSimple::<UvmAllocSemaphorePoolParams>(task, &ui);
-            }
-            UVM_VALIDATE_VA_RANGE => {
-                return UvmIoctlSimple::<UvmValidateVaRangeParams>(task, &ui);
-            }
-            UVM_CREATE_EXTERNAL_RANGE => {
-                return UvmIoctlSimple::<UvmCreateExternalRangeParams>(task, &ui);
-            }
-            
-            _ => {
+            None => {
                 warn!("nvproxy: unknown uvm ioctl {}", cmd);
                 return Err(Error::SysError(SysErr::EINVAL));
             }
-        }
+        };
+
+        return handler(task, &ui);
     }
 
     fn IterateDir(
@@ -522,6 +476,10 @@ pub fn UvmIoctlSimple<Params: Sized + Copy>(task: &Task, ui: &UvmIoctlState) -> 
     return Ok(n);
 }
 
+pub fn UvmIoctlNoParams(_task: &Task, ui: &UvmIoctlState) -> Result<u64> {
+    return UvmIoctlInvoke::<u8>(ui, None);
+}
+
 pub fn UvmInitialize(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
     let ioctlParams : UvmInitializeParams = task.CopyInObj(ui.ioctlParamsAddr)?;
 
@@ -534,6 +492,44 @@ pub fn UvmInitialize(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
     let mut outIoctlParams = ioctlParamsTmp;
     outIoctlParams.flags &= ioctlParams.flags | UVM_INIT_FLAGS_MULTI_PROCESS_SHARING_MODE;
     task.CopyOutObj(&outIoctlParams, ui.ioctlParamsAddr)?;
+    return Ok(n)
+}
+
+pub fn UvmMMInitialize(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
+    let ioctlParams : UvmMmInitializeParams = task.CopyInObj(ui.ioctlParamsAddr)?;
+
+    let FailWithStatus = |status: u32| -> Result<u64> {
+        let mut outIoctlParams = ioctlParams;
+        outIoctlParams.status = status;
+        task.CopyOutObj(&outIoctlParams, ui.ioctlParamsAddr)?;
+        return Ok(0)
+    };
+
+    let uvmFileGeneric = match task.GetFile(ioctlParams.uvmFD) {
+        Err(_) => {
+            return FailWithStatus(NV_ERR_INVALID_ARGUMENT);
+        }
+        Ok(f) => f
+    };
+
+    let uvmFile = match &uvmFileGeneric.FileOp {
+        FileOps::UvmFileOptions(ops) => {
+            ops.clone()
+        }
+        _ => {
+            return FailWithStatus(NV_ERR_INVALID_ARGUMENT);
+        }
+    };
+
+    let mut ioctlParamsTmp = ioctlParams;
+    ioctlParamsTmp.uvmFD = uvmFile.fd;
+    let n = UvmIoctlInvoke(ui, Some(&ioctlParamsTmp))?;
+
+    let mut outIoctlParams = ioctlParamsTmp;
+    outIoctlParams.uvmFD = ioctlParams.uvmFD;
+
+    task.CopyOutObj(&outIoctlParams, ui.ioctlParamsAddr)?;
+
     return Ok(n)
 }
 

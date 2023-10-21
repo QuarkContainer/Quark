@@ -20,6 +20,7 @@ use super::super::qmsg::*;
 use super::super::socket_buf::*;
 use super::super::*;
 use crate::kernel_def::HyperCall64;
+use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
 use crate::qlib::range::Range;
 
 extern "C" {
@@ -664,6 +665,15 @@ impl HostSpace {
         let mut msg = Msg::UnmapGuestMemRange(UnmapGuestMemRange {
             start: start,
             len: len,
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn NividiaDriverVersion(version: &RMAPIVersion) -> i64 {
+        let mut msg = Msg::NividiaDriverVersion(NividiaDriverVersion {
+            ioctlParamsAddr: version as * const _ as u64
         });
 
         let ret = Self::Call(&mut msg, false) as i64;
