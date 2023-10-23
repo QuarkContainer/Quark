@@ -38,10 +38,11 @@ pub fn SwapGs() {
 
 pub fn GetVcpuId() -> usize {
     let ret: u64;
-    let tls = unsafe { tpidr_el1() };
     unsafe {
-        asm!("ldr {1}, [{0}, #16]",
-        in(reg) tls,
+        asm!("\
+        mrs {0}, tpidr_el1
+        ldr {1}, [{0}, #16]",
+        out(reg) _,
         out(reg) ret);
     };
     return ret as usize;
@@ -107,19 +108,31 @@ pub fn IRet(kernelRsp: u64) -> ! {
 }
 
 #[inline]
-pub fn GetRsp() -> u64 {
-    let rsp: u64;
+pub fn GetCurrentKernelSp() -> u64 {
+    // we can only mrs sp_el1 in EL2 and EL3
+    // so we can only get sp_el1 by move
+    let ret: u64;
     unsafe {
-        asm!("mov {0}, sp", out(reg) rsp);
-    };
-    return rsp;
+        asm!("\
+        mrs {1}, spsel
+        msr spsel, #1
+        mov {0}, sp
+        msr spsel, {1}
+        ",
+        out(reg) ret,
+        out(reg) _);
+    }
+    ret
+}
+
+#[inline]
+pub fn GetCurrentUserSp() -> u64 {
+    unsafe { return sp_el0(); }
 }
 
 #[inline]
 pub fn Clflush(addr: u64) {
 }
-
-
 
 // HostID executes a native CPUID instruction.
 // return (ax, bx, cx, dx)
@@ -428,118 +441,197 @@ bitflags! {
 }
 
 #[inline]
-pub unsafe fn ttbr0_el1() -> u64 {
+pub fn ttbr0_el1() -> u64 {
     let ret: u64;
-    asm!("mrs {0}, ttbr0_el1", out(reg) ret);
+    unsafe {
+        asm!("mrs {0}, ttbr0_el1", out(reg) ret);
+    }
     ret
 }
 
 #[inline]
-pub unsafe fn ttbr0_el1_write(val: u64) {
-    asm!("msr ttbr0_el1, {0}", in(reg) val);
+pub fn ttbr0_el1_write(val: u64) {
+    unsafe {
+        asm!("msr ttbr0_el1, {0}", in(reg) val);
+    }
 }
 
 #[inline]
-pub unsafe fn ttbr1_el1() -> u64 {
+pub fn ttbr1_el1() -> u64 {
     let ret: u64;
-    asm!("mrs {0}, ttbr1_el1", out(reg) ret);
+    unsafe {
+        asm!("mrs {0}, ttbr1_el1", out(reg) ret);
+    }
     ret
 }
 
 #[inline]
-pub unsafe fn ttbr1_el1_write(val: u64) {
-    asm!("msr ttbr1_el1, {0}", in(reg) val);
+pub fn ttbr1_el1_write(val: u64) {
+    unsafe {
+        asm!("msr ttbr1_el1, {0}", in(reg) val);
+    }
 }
 
 #[inline]
-pub unsafe fn mair_el1() -> MairEl1 {
+pub fn mair_el1() -> MairEl1 {
     let ret: u64;
-    asm!("mrs {0}, mair_el1", out(reg) ret);
+    unsafe {
+        asm!("mrs {0}, mair_el1", out(reg) ret);
+    }
     MairEl1::from_bits_truncate(ret)
 }
 
 #[inline]
-pub unsafe fn mair_el1_write(val: MairEl1) {
-    asm!("msr mair_el1, {0}", in(reg) val.bits());
+pub fn mair_el1_write(val: MairEl1) {
+    unsafe {
+        asm!("msr mair_el1, {0}", in(reg) val.bits());
+    }
 }
 
 #[inline]
-pub unsafe fn tpidr_el0() -> u64 {
+pub fn tpidr_el0() -> u64 {
     let ret: u64;
-    asm!("mrs {0}, tpidr_el0", out(reg) ret);
+    unsafe {
+        asm!("mrs {0}, tpidr_el0", out(reg) ret);
+    }
     ret
 }
 
 #[inline]
-pub unsafe fn tpidr_el0_write(val: u64) {
-    asm!("msr tpidr_el0, {0}", in(reg) val);
+pub fn tpidr_el0_write(val: u64) {
+    unsafe {
+        asm!("msr tpidr_el0, {0}", in(reg) val);
+    }
 }
 
 #[inline]
-pub unsafe fn tpidr_el1() -> u64 {
+pub fn tpidr_el1() -> u64 {
     let ret: u64;
-    asm!("mrs {0}, tpidr_el1", out(reg) ret);
+    unsafe {
+        asm!("mrs {0}, tpidr_el1", out(reg) ret);
+    }
     ret
 }
 
 #[inline]
-pub unsafe fn tpidr_el1_write(val: u64) {
-    asm!("msr tpidr_el1, {0}", in(reg) val);
+pub fn tpidr_el1_write(val: u64) {
+    unsafe {
+        asm!("msr tpidr_el1, {0}", in(reg) val);
+    }
 }
 
 #[inline]
-pub unsafe fn tpidrro_el0() -> u64 {
+pub fn tpidrro_el0() -> u64 {
     let ret: u64;
-    asm!("mrs {0}, tpidrro_el0", out(reg) ret);
+    unsafe {
+        asm!("mrs {0}, tpidrro_el0", out(reg) ret);
+    }
     ret
 }
 
 #[inline]
-pub unsafe fn tpidrro_el0_write(val: u64) {
-    asm!("msr tpidrro_el0, {0}", in(reg) val);
+pub fn tpidrro_el0_write(val: u64) {
+    unsafe {
+        asm!("msr tpidrro_el0, {0}", in(reg) val);
+    }
 }
 
 #[inline]
-pub unsafe fn esr_el1() -> u64 {
+pub fn esr_el1() -> u64 {
     let ret: u64;
-    asm!("mrs {0}, esr_el1", out(reg) ret);
+    unsafe {
+        asm!("mrs {0}, esr_el1", out(reg) ret);
+    }
     ret
 }
 
 #[inline]
-pub unsafe fn cntfreq_el0() -> u64 {
+pub fn cntfreq_el0() -> u64 {
     let ret: u64;
-    asm!("mrs {0}, cntfrq_el0", out(reg) ret);
+    unsafe {
+        asm!("mrs {0}, cntfrq_el0", out(reg) ret);
+    }
     ret
 }
 
 #[inline]
-pub unsafe fn tmr_ctrl() -> u64 {
+pub fn tmr_ctrl() -> u64 {
     let ret: u64;
-    asm!("mrs {0}, cntp_ctl_el0", out(reg) ret);
+    unsafe {
+        asm!("mrs {0}, cntp_ctl_el0", out(reg) ret);
+    }
     ret
 }
 
 #[inline]
-pub unsafe fn tmr_ctrl_write(val: u64) {
-    asm!("msr cntp_ctl_el0, {0}", in(reg) val);
+pub fn tmr_ctrl_write(val: u64) {
+    unsafe {
+        asm!("msr cntp_ctl_el0, {0}", in(reg) val);
+    }
 }
 
 #[inline]
-pub unsafe fn tmr_tval() -> u64 {
+pub fn tmr_tval() -> u64 {
     let ret: u64;
-    asm!("mrs {0}, cntp_tval_el0", out(reg) ret);
+    unsafe {
+        asm!("mrs {0}, cntp_tval_el0", out(reg) ret);
+    }
     ret
 }
 
 #[inline]
-pub unsafe fn tmr_tval_write(val: u64) {
-    asm!("msr cntp_tval_el0, {0}", in(reg) val);
+pub fn tmr_tval_write(val: u64) {
+    unsafe {
+        asm!("msr cntp_tval_el0, {0}", in(reg) val);
+    }
 }
 
 #[inline]
-pub unsafe fn midr() -> u64 {
+pub fn midr() -> u64 {
     let ret: u64;
-    asm!("mrs {0}, midr_el1", out(reg) ret);
+    unsafe {
+        asm!("mrs {0}, midr_el1", out(reg) ret);
+    }
+    ret
+}
+
+#[inline]
+pub fn sp_el0() -> u64 {
+    let ret: u64;
+    unsafe {
+        asm!("mrs {0}, sp_el0", out(reg) ret);
+    }
+    ret
+}
+
+#[inline]
+pub fn sp_el0_write(val: u64) {
+    unsafe {
+        asm!("msr sp_el0, {0}", in(reg) val);
+    }
+}
+
+#[inline]
+pub fn sp_el1() -> u64 {
+    let ret: u64;
+    unsafe {
+        asm!("mrs {0}, sp_el1", out(reg) ret);
+    }
+    ret
+}
+
+#[inline]
+pub fn sp_el1_write(val: u64) {
+    unsafe {
+        asm!("msr sp_el1, {0}", in(reg) val);
+    }
+}
+
+#[inline]
+pub fn spsel() -> u64 {
+    let ret: u64;
+    unsafe {
+        asm!("mrs {0}, spsel", out(reg) ret);
+    }
     ret
 }
