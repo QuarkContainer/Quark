@@ -264,7 +264,7 @@ impl Task {
 
     #[inline(always)]
     pub fn TaskAddress() -> u64 {
-        let rsp = GetRsp();
+        let rsp = GetCurrentKernelSp();
         let task = rsp & DEFAULT_STACK_MAST;
         if rsp - task < 0x2000 {
             raw!(0x238, rsp, task, 0);
@@ -377,7 +377,7 @@ impl Task {
     }
 
     pub fn StackOverflowCheck() {
-        let rsp = GetRsp();
+        let rsp = GetCurrentKernelSp();
         let task = rsp & DEFAULT_STACK_MAST;
         if rsp - task < 0x2000 {
             raw!(0x237, rsp, task, 0);
@@ -527,7 +527,7 @@ impl Task {
 
     #[inline(always)]
     pub fn TaskId() -> TaskId {
-        let rsp = GetRsp();
+        let rsp = GetCurrentKernelSp();
         return TaskId::New(rsp & DEFAULT_STACK_MAST);
     }
 
@@ -597,7 +597,7 @@ impl Task {
 
     #[inline(always)]
     pub fn Current() -> &'static mut Task {
-        let rsp = GetRsp();
+        let rsp = GetCurrentKernelSp();
 
         return Self::GetTask(rsp);
     }
