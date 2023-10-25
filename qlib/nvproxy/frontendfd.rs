@@ -444,6 +444,8 @@ impl FileOperations for NvFrontendFileOptions {
             ioctlParamsSize: argSize,
         };
 
+        error!("frontendfd ioctl nr is {:x}", nr);
+
         // nr determines the argument type.
         // Don't log nr since it's already visible as the last byte of cmd in
         // strace logging.
@@ -480,6 +482,7 @@ impl FileOperations for NvFrontendFileOptions {
     }
 
     fn Mappable(&self) -> Result<MMappable> {
+        error!("frontend mmap...");
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }
@@ -564,6 +567,16 @@ pub fn RMAllocOSEvent(fi: &FrontendIoctlState) -> Result<u64> {
         FileOps::NvFrontendFileOptions(nvfops) => {
             nvfops.clone()
         }
+        FileOps::OverlayFileOperations(of) => {
+            match of.FileOps() {
+                FileOps::NvFrontendFileOptions(nvfops) => {
+                    nvfops.clone()
+                }
+                _ => {
+                    return Err(Error::SysError(SysErr::EINVAL))
+                }
+            }
+        }
         _ => {
             return Err(Error::SysError(SysErr::EINVAL))
         }
@@ -597,6 +610,16 @@ pub fn RMFreeOSEvent(fi: &FrontendIoctlState) -> Result<u64> {
     let eventFile = match &eventFileGeneric.FileOp {
         FileOps::NvFrontendFileOptions(nvfops) => {
             nvfops.clone()
+        }
+        FileOps::OverlayFileOperations(of) => {
+            match of.FileOps() {
+                FileOps::NvFrontendFileOptions(nvfops) => {
+                    nvfops.clone()
+                }
+                _ => {
+                    return Err(Error::SysError(SysErr::EINVAL))
+                }
+            }
         }
         _ => {
             return Err(Error::SysError(SysErr::EINVAL))
@@ -727,7 +750,7 @@ pub fn RMControl(fi: &FrontendIoctlState) -> Result<u64> {
     }
 
     let ioctlParams: NVOS54Parameters = fi.task.CopyInObj(fi.ioctlParamsAddr)?;
-    debug!("nvproxy: control command {:#?}", ioctlParams.cmd);
+    debug!("nvproxy: control command {:#x?}", ioctlParams);
 
     if ioctlParams.cmd & RM_GSS_LEGACY_MASK != 0 {
         // This is a "legacy GSS control" that is implemented by the GPU System
@@ -759,100 +782,19 @@ pub fn RMControl(fi: &FrontendIoctlState) -> Result<u64> {
 	// - Add symbol definition to //pkg/abi/nvgpu. Parameter type definition is
 	// only required for non-simple commands.
 	// - Add handling below.
-    match ioctlParams.cmd {
-        NV0000_CTRL_CMD_CLIENT_GET_ADDR_SPACE_TYPE |
-		NV0000_CTRL_CMD_CLIENT_SET_INHERITED_SHARE_POLICY |
-		NV0000_CTRL_CMD_GPU_GET_ATTACHED_IDS |
-		NV0000_CTRL_CMD_GPU_GET_ID_INFO |
-		NV0000_CTRL_CMD_GPU_GET_ID_INFO_V2 |
-		NV0000_CTRL_CMD_GPU_GET_PROBED_IDS |
-		NV0000_CTRL_CMD_GPU_ATTACH_IDS |
-		NV0000_CTRL_CMD_GPU_DETACH_IDS |
-		NV0000_CTRL_CMD_GPU_GET_PCI_INFO |
-		NV0000_CTRL_CMD_GPU_QUERY_DRAIN_STATE |
-		NV0000_CTRL_CMD_GPU_GET_MEMOP_ENABLE |
-		NV0000_CTRL_CMD_SYNC_GPU_BOOST_GROUP_INFO |
-		NV0000_CTRL_CMD_SYSTEM_GET_P2P_CAPS |
-		NV0000_CTRL_CMD_SYSTEM_GET_FABRIC_STATUS |
-		NV0000_CTRL_CMD_SYSTEM_GET_P2P_CAPS_MATRIX |
-		NV0080_CTRL_CMD_FB_GET_CAPS_V2 |
-		NV0080_CTRL_CMD_GPU_GET_NUM_SUBDEVICES |
-		NV0080_CTRL_CMD_GPU_QUERY_SW_STATE_PERSISTENCE |
-		NV0080_CTRL_CMD_GPU_GET_VIRTUALIZATION_MODE |
-		0x80028b | // unknown | paramsSize == 1
-		NV0080_CTRL_CMD_GPU_GET_CLASSLIST_V2 |
-		NV0080_CTRL_CMD_HOST_GET_CAPS_V2 |
-		NV2080_CTRL_CMD_BUS_GET_PCI_INFO |
-		NV2080_CTRL_CMD_BUS_GET_PCI_BAR_INFO |
-		NV2080_CTRL_CMD_BUS_GET_INFO_V2 |
-		NV2080_CTRL_CMD_BUS_GET_PCIE_SUPPORTED_GPU_ATOMICS |
-		NV2080_CTRL_CMD_CE_GET_ALL_CAPS |
-		NV2080_CTRL_CMD_FB_GET_INFO_V2 |
-		NV2080_CTRL_CMD_GPU_GET_INFO_V2 |
-		NV2080_CTRL_CMD_GPU_GET_NAME_STRING |
-		NV2080_CTRL_CMD_GPU_GET_SHORT_NAME_STRING |
-		NV2080_CTRL_CMD_GPU_GET_SIMULATION_INFO |
-		NV2080_CTRL_CMD_GPU_QUERY_ECC_STATUS |
-		NV2080_CTRL_CMD_GPU_QUERY_COMPUTE_MODE_RULES |
-		NV2080_CTRL_CMD_GPU_ACQUIRE_COMPUTE_MODE_RESERVATION |
-		NV2080_CTRL_CMD_GPU_RELEASE_COMPUTE_MODE_RESERVATION |
-		NV2080_CTRL_CMD_GPU_GET_GID_INFO |
-		NV2080_CTRL_CMD_GPU_GET_ENGINES_V2 |
-		NV2080_CTRL_CMD_GPU_GET_ACTIVE_PARTITION_IDS |
-		NV2080_CTRL_CMD_GPU_GET_COMPUTE_POLICY_CONFIG |
-		NV2080_CTRL_CMD_GET_GPU_FABRIC_PROBE_INFO |
-		NV2080_CTRL_CMD_GR_SET_CTXSW_PREEMPTION_MODE |
-		NV2080_CTRL_CMD_GR_GET_CTX_BUFFER_SIZE |
-		NV2080_CTRL_CMD_GR_GET_GLOBAL_SM_ORDER |
-		NV2080_CTRL_CMD_GR_GET_CAPS_V2 |
-		NV2080_CTRL_CMD_GR_GET_GPC_MASK |
-		NV2080_CTRL_CMD_GR_GET_TPC_MASK |
-		NV2080_CTRL_CMD_GSP_GET_FEATURES |
-		NV2080_CTRL_CMD_MC_GET_ARCH_INFO |
-		NV2080_CTRL_CMD_MC_SERVICE_INTERRUPTS |
-		NV2080_CTRL_CMD_NVLINK_GET_NVLINK_STATUS |
-		NV2080_CTRL_CMD_PERF_BOOST |
-		NV2080_CTRL_CMD_RC_GET_WATCHDOG_INFO |
-		NV2080_CTRL_CMD_RC_RELEASE_WATCHDOG_REQUESTS |
-		NV2080_CTRL_CMD_RC_SOFT_DISABLE_WATCHDOG |
-		NV2080_CTRL_CMD_TIMER_GET_GPU_CPU_TIME_CORRELATION_INFO |
-		NV503C_CTRL_CMD_REGISTER_VA_SPACE |
-		NV503C_CTRL_CMD_REGISTER_VIDMEM |
-		NV503C_CTRL_CMD_UNREGISTER_VIDMEM |
-		NV83DE_CTRL_CMD_DEBUG_SET_EXCEPTION_MASK |
-		NV83DE_CTRL_CMD_DEBUG_READ_ALL_SM_ERROR_STATES |
-		NV83DE_CTRL_CMD_DEBUG_CLEAR_ALL_SM_ERROR_STATES |
-		NV906F_CTRL_CMD_RESET_CHANNEL |
-		NV90E6_CTRL_CMD_MASTER_GET_ERROR_INTR_OFFSET_MASK |
-		NV90E6_CTRL_CMD_MASTER_GET_VIRTUAL_FUNCTION_ERROR_CONT_INTR_MASK |
-		NVC36F_CTRL_GET_CLASS_ENGINEID |
-		NVC36F_CTRL_CMD_GPFIFO_GET_WORK_SUBMIT_TOKEN |
-		NVA06C_CTRL_CMD_GPFIFO_SCHEDULE |
-		NVA06C_CTRL_CMD_SET_TIMESLICE |
-		NVA06C_CTRL_CMD_PREEMPT => {
-            return RMControlSimple(fi, &ioctlParams);
-        }
-        NV0000_CTRL_CMD_SYSTEM_GET_BUILD_VERSION => {
-            return CtrlClientSystemGetBuildVersion(fi, &ioctlParams);
-        }
-        NV0080_CTRL_CMD_FIFO_GET_CHANNELLIST => {
-            return CtrlDevFIFOGetChannelList(fi, &ioctlParams);
-        }
-        NV2080_CTRL_CMD_FIFO_DISABLE_CHANNELS => {
-            return CtrlSubdevFIFODisableChannels(fi, &ioctlParams);
-        }
-        NV2080_CTRL_CMD_GR_GET_INFO => {
-            return CtrlSubdevGRGetInfo(fi, &ioctlParams);
-        }
-        _ => {
+    let handler = match fi.fd.nvp.lock().controlCmd.get(&ioctlParams.cmd) {
+        Some(handler) => handler.clone(),
+        None => {
             warn!("nvproxy: unknown control command {:x?} (paramsSize={})", ioctlParams.cmd, ioctlParams.paramsSize);
             return Err(Error::SysError(SysErr::EINVAL));
         }
-    }
+    };
+
+    return handler(fi, &ioctlParams);
 }
 
 pub fn RMControlSimple(fi: &FrontendIoctlState, ioctlParams: &NVOS54Parameters) -> Result<u64> {
-    error!("RMControlSimple is {:x?}", ioctlParams);
+    error!("RMControlSimple is {:#x?}", ioctlParams);
     if ioctlParams.paramsSize == 0 {
         if ioctlParams.params != 0 {
             return Err(Error::SysError(SysErr::EINVAL));
@@ -873,11 +815,13 @@ pub fn RMControlSimple(fi: &FrontendIoctlState, ioctlParams: &NVOS54Parameters) 
 }
 
 pub fn CtrlClientSystemGetBuildVersion(fi: &FrontendIoctlState, ioctlParams: &NVOS54Parameters) -> Result<u64> {
-    if fi.ioctlParamsSize as usize != core::mem::size_of::<Nv0000CtrlSystemGetBuildVersionParams>() {
-        return Err(Error::SysError(SysErr::EINVAL));
-    }
+    error!("fi.ioctlParamsSize is {}, expect {}", fi.ioctlParamsSize, core::mem::size_of::<Nv0000CtrlSystemGetBuildVersionParams>());
+    // if fi.ioctlParamsSize as usize != core::mem::size_of::<Nv0000CtrlSystemGetBuildVersionParams>() {
+    //     return Err(Error::SysError(SysErr::EINVAL));
+    // }
 
-    let ctrlParams: Nv0000CtrlSystemGetBuildVersionParams = fi.task.CopyInObj(fi.ioctlParamsAddr)?;
+    let ctrlParams: Nv0000CtrlSystemGetBuildVersionParams = fi.task.CopyInObj(ioctlParams.params)?;
+    error!("ctrlParams is {:#x?}", &ctrlParams);
     if ctrlParams.driverVersionBuffer == 0 || ctrlParams.versionBuffer == 0 || ctrlParams.titleBuffer == 0 {
         // No strings are written if any are null. See
 		// src/nvidia/interface/deprecated/rmapi_deprecated_control.c:V2_CONVERTER(_NV0000_CTRL_CMD_SYSTEM_GET_BUILD_VERSION).
@@ -904,6 +848,10 @@ pub fn CtrlClientSystemGetBuildVersion(fi: &FrontendIoctlState, ioctlParams: &NV
         &versionBuf[0] as * const _ as u64,  
         &titleBuf[0] as * const _ as u64
     )?;
+
+    error!("CtrlClientSystemGetBuildVersion driverVersionBuf is {:?}", &driverVersionBuf);
+    error!("CtrlClientSystemGetBuildVersion versionBuf is {:?}", &versionBuf);
+    error!("CtrlClientSystemGetBuildVersion titleBuf is {:?}", &titleBuf);
 
     fi.task.CopyOutSlice(&driverVersionBuf, ctrlParams.driverVersionBuffer, ctrlParams.sizeOfStrings as usize)?;
     fi.task.CopyOutSlice(&versionBuf, ctrlParams.versionBuffer, ctrlParams.sizeOfStrings as usize)?;
@@ -1030,6 +978,16 @@ pub fn RMAllocEventOSEvent(
         FileOps::NvFrontendFileOptions(nvfops) => {
             nvfops.clone()
         }
+        FileOps::OverlayFileOperations(of) => {
+            match of.FileOps() {
+                FileOps::NvFrontendFileOptions(nvfops) => {
+                    nvfops.clone()
+                }
+                _ => {
+                    return Err(Error::SysError(SysErr::EINVAL))
+                }
+            }
+        }
         _ => {
             return Err(Error::SysError(SysErr::EINVAL))
         }
@@ -1083,17 +1041,29 @@ pub fn RMMapMemory(fi: &FrontendIoctlState) -> Result<u64> {
         FileOps::NvFrontendFileOptions(nvfops) => {
             nvfops.clone()
         }
+        FileOps::OverlayFileOperations(of) => {
+            match of.FileOps() {
+                FileOps::NvFrontendFileOptions(nvfops) => {
+                    nvfops.clone()
+                }
+                _ => {
+                    return Err(Error::SysError(SysErr::EINVAL))
+                }
+            }
+        }
         _ => {
             return Err(Error::SysError(SysErr::EINVAL))
         }
     };
 
+    error!("RMMapMemory 1 {} {}", mapfile.fd, mapfile.hasMmapContext.load(Ordering::Relaxed));
     if mapfile.hasMmapContext.load(Ordering::Relaxed) ||
-        !mapfile.hasMmapContext.compare_and_swap(false, true, Ordering::SeqCst) {
+        mapfile.hasMmapContext.compare_and_swap(false, true, Ordering::SeqCst) {
         warn!("nvproxy: attempted to reuse FD {} for NV_ESC_RM_MAP_MEMORY", ioctlParams.fd);
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
+    error!("RMMapMemory 2 {}", mapfile.fd);
     let mut ioctlParamsTmp = ioctlParams;
     ioctlParamsTmp.fd = mapfile.fd;
 

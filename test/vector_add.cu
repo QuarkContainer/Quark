@@ -29,22 +29,30 @@ int main(){
         b[i] = 2.0f;
     }
 
+    printf("testcuda 1");
     // Allocate device memory
     cudaMalloc((void**)&d_a, sizeof(float) * N);
+    printf("testcuda 2");
     cudaMalloc((void**)&d_b, sizeof(float) * N);
+    printf("testcuda 3");
     cudaMalloc((void**)&d_out, sizeof(float) * N);
 
     // Transfer data from host to device memory
+    printf("testcuda 4");
     cudaMemcpy(d_a, a, sizeof(float) * N, cudaMemcpyHostToDevice);
+    printf("testcuda 5");
     cudaMemcpy(d_b, b, sizeof(float) * N, cudaMemcpyHostToDevice);
 
     // Executing kernel 
+    printf("testcuda 6");
     vector_add<<<1,1>>>(d_out, d_a, d_b, N);
     
     // Transfer data back to host memory
+    printf("testcuda 7");
     cudaMemcpy(out, d_out, sizeof(float) * N, cudaMemcpyDeviceToHost);
 
     // Verification
+    printf("testcuda 8");
     for(int i = 0; i < N; i++){
         assert(fabs(out[i] - a[i] - b[i]) < MAX_ERR);
     }
