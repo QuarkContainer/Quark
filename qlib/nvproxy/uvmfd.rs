@@ -22,6 +22,7 @@ use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::fs::file::*;
 use crate::qlib::kernel::guestfdnotifier::NonBlockingPoll;
 use crate::qlib::kernel::guestfdnotifier::UpdateFD;
+use crate::qlib::kernel::memmgr::mm::MemoryManager;
 use crate::qlib::mutex::*;
 use crate::qlib::auth::*;
 use crate::qlib::common::*;
@@ -44,6 +45,7 @@ use crate::qlib::path;
 use crate::qlib::nvproxy::nvproxy::NVProxy;
 use crate::qlib::kernel::fs::inode::*;
 use crate::qlib::nvproxy::nvgpu::*;
+use crate::qlib::range::Range;
 
 use super::uvm::*;
 
@@ -202,6 +204,7 @@ impl InodeOperations for UvmDevice {
             fd: fd,
             queue: Queue::default(),
             nvp: self.nvp.clone(),
+            mapRange: QMutex::new(None),
         };
 
         let fops = UvmFileOptions(Arc::new(inner));
@@ -290,14 +293,87 @@ impl InodeOperations for UvmDevice {
     }
 
     fn Mappable(&self) -> Result<MMappable> {
+        error!("UvmDevice Mappable 1");
         return Err(Error::SysError(SysErr::ENODEV));
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct UvmMapRange {
+    pub fileOffset: u64,
+    pub phyAddr: u64,
+    pub len: u64,
 }
 
 pub struct UvmFileOptionsInner {
     pub fd: i32,
     pub queue: Queue,
     pub nvp: NVProxy, 
+    pub mapRange: QMutex<Option<UvmMapRange>>,
+}
+
+impl UvmFileOptionsInner {
+    pub fn MapInternal(&self, _task: &Task, addr: u64, fr: &Range, writeable: bool) -> Result<IoVec> {
+        error!("uvmMapInternal 1 addr is {:x} writeable {}", addr, writeable);
+
+        
+        let prot = if writeable {
+            (MmapProt::PROT_WRITE | MmapProt::PROT_READ) as i32
+        } else {
+            MmapProt::PROT_READ as i32
+        };
+
+        let ret = if MemoryDef::NVIDIA_START_ADDR <= addr && addr < MemoryDef::NVIDIA_START_ADDR + MemoryDef::NVIDIA_ADDR_SIZE {
+            error!("uvmMapInternal 2"); 
+            let _flags = (MmapFlags::MAP_FIXED | MmapFlags::MAP_SHARED) as i32;
+            HostSpace::NvidiaMMap(addr, fr.len, prot, 0x11, self.fd, fr.start)
+        } else {
+            error!("uvmMapInternal 3"); 
+            HostSpace::MMapFile(fr.len, self.fd, fr.start, prot)
+        };
+
+        error!("uvmMapInternal 4 {:x}", ret); 
+        if ret < 0 {
+            return Err(Error::SysError(-ret as i32));
+        }
+
+        let phyAddr = ret as u64;
+
+        assert!(self.mapRange.lock().is_none());
+
+        error!("uvmMapInternal 5 {:x}", phyAddr);
+        *self.mapRange.lock() = Some(UvmMapRange {
+            fileOffset: fr.start,
+            phyAddr: phyAddr,
+            len: fr.len
+        });
+        error!("uvmMapInternal 5 ");
+        
+        return Ok(IoVec { start: phyAddr, len: fr.len as usize });
+    }
+
+    pub fn Unmap( 
+        &self,
+        _ms: &MemoryManager,
+        ar: &Range,
+        offset: u64
+    ) -> Result<()> {
+        error!("uvm Unmap 1");
+        let mapRange = match self.mapRange.lock().take() {
+            None => return Ok(()),
+            Some(mr) => mr,
+        };
+
+        error!("uvm Unmap 2 {:x?} {:x?} {:x}", &mapRange, ar, offset);
+        assert!(mapRange.fileOffset == offset);
+        error!("uvm Unmap 3");
+        assert!(mapRange.len == ar.len);
+        error!("uvm Unmap 4");
+        HostSpace::MUnmap(mapRange.phyAddr, mapRange.len);
+        error!("uvm Unmap 1");
+        
+        return Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -416,7 +492,7 @@ impl FileOperations for UvmFileOptions {
             ioctlParamsAddr: argPtr,
         };
 
-        error!("nvmfd ioctl cmd is {:x}", cmd);
+        error!("nvmfd ioctl cmd is {:x}/{}", cmd, cmd);
         
         let handler = match self.nvp.lock().uvmIoctl.get(&cmd) {
             Some(h) => {
@@ -428,7 +504,15 @@ impl FileOperations for UvmFileOptions {
             }
         };
 
-        return handler(task, &ui);
+        match handler(task, &ui) {
+            Err(e) => {
+                error!("uvm ioctl error {:?}", &e);
+                return Err(e);
+            }
+            Ok(v) => {
+                return Ok(v);
+            }
+        }
     }
 
     fn IterateDir(
@@ -443,7 +527,13 @@ impl FileOperations for UvmFileOptions {
 
     fn Mappable(&self) -> Result<MMappable> {
         error!("uvm mmap...");
-        return Err(Error::SysError(SysErr::EINVAL));
+        return Ok(MMappable::FromUvmFops(self.clone()));
+    }
+}
+
+impl PartialEq for UvmFileOptions {
+    fn eq(&self, other: &Self) -> bool {
+        return Arc::ptr_eq(&self.0, &other.0);
     }
 }
 
@@ -470,9 +560,10 @@ pub fn UvmIoctlInvoke<Params: Sized>(
     return Ok(n as u64)
 }
 
-pub fn UvmIoctlSimple<Params: Sized + Copy>(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
+pub fn UvmIoctlSimple<Params: Sized + Copy + alloc::fmt::Debug>(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
     let ioctlParams: Params = task.CopyInObj(ui.ioctlParamsAddr)?;
 
+    error!("UvmIoctlSimple {:x?}", &ioctlParams);
     let n = UvmIoctlInvoke(ui, Some(&ioctlParams))?;
     
 	task.CopyOutObj(&ioctlParams, ui.ioctlParamsAddr)?;

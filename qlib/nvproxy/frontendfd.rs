@@ -28,6 +28,7 @@ use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::fs::file::*;
 use crate::qlib::kernel::guestfdnotifier::NonBlockingPoll;
 use crate::qlib::kernel::guestfdnotifier::UpdateFD;
+use crate::qlib::kernel::memmgr::mm::MemoryManager;
 use crate::qlib::mutex::*;
 use crate::qlib::auth::*;
 use crate::qlib::common::*;
@@ -224,6 +225,7 @@ impl InodeOperations for NvFrontendDevice {
             isControl: self.minor == NV_CONTROL_DEVICE_MINOR,
             hasMmapContext: AtomicBool::new(false),
             nvp: self.nvp.clone(),
+            mapRange: QMutex::new(None),
         };
 
         let fops = NvFrontendFileOptions(Arc::new(inner));
@@ -316,12 +318,81 @@ impl InodeOperations for NvFrontendDevice {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct NvFrontendMapRange {
+    pub fileOffset: u64,
+    pub phyAddr: u64,
+    pub len: u64,
+}
+
 pub struct NvFrontendFileOptionsInner {
     pub fd: i32,
     pub queue: Queue,
     pub isControl: bool,
     pub hasMmapContext: AtomicBool,
     pub nvp: NVProxy, 
+    pub mapRange: QMutex<Option<NvFrontendMapRange>>,
+}
+
+impl NvFrontendFileOptionsInner {
+    pub fn MapInternal(&self, _task: &Task, fr: &Range) -> Result<IoVec> {
+        assert!(fr.start == 0);
+
+        error!("MapInternal 1");
+        // todo: get it from mmap
+        let writeable = true;
+
+        let prot = if writeable {
+            (MmapProt::PROT_WRITE | MmapProt::PROT_READ) as i32
+        } else {
+            MmapProt::PROT_READ as i32
+        };
+
+        error!("MapInternal 2 fr is {:x?} fd {} proto {}", &fr, self.fd, prot);
+        let ret = HostSpace::MMapFile(fr.len, self.fd, fr.start, prot);
+        error!("MapInternal 3 {:x}", ret);
+        
+        if ret < 0 {
+            return Err(Error::SysError(-ret as i32));
+        }
+
+        let phyAddr = ret as u64;
+
+        assert!(self.mapRange.lock().is_none());
+
+        error!("MapInternal 4 {:x}", ret);
+        *self.mapRange.lock() = Some(NvFrontendMapRange {
+            fileOffset: fr.start,
+            phyAddr: phyAddr,
+            len: fr.len
+        });
+        error!("MapInternal 5 ");
+        
+        return Ok(IoVec { start: phyAddr, len: fr.len as usize });
+    }
+
+    pub fn Unmap( 
+        &self,
+        _ms: &MemoryManager,
+        ar: &Range,
+        offset: u64
+    ) -> Result<()> {
+        error!("frontendfd Unmap 1");
+        let mapRange = match self.mapRange.lock().take() {
+            None => return Err(Error::SysError(SysErr::EINVAL)),
+            Some(mr) => mr,
+        };
+
+        error!("frontendfd Unmap 2 {:x?} {:x?} {:x}", &mapRange, ar, offset);
+        assert!(mapRange.fileOffset == offset);
+        error!("frontendfd Unmap 3");
+        assert!(mapRange.len == ar.len);
+        error!("frontendfd Unmap 4");
+        HostSpace::MUnmap(mapRange.phyAddr, mapRange.len);
+        error!("frontendfd Unmap 1");
+        
+        return Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -482,8 +553,13 @@ impl FileOperations for NvFrontendFileOptions {
     }
 
     fn Mappable(&self) -> Result<MMappable> {
-        error!("frontend mmap...");
-        return Err(Error::SysError(SysErr::ENODEV));
+        return Ok(MMappable::FromNvFrontendFops(self.clone()));
+    }
+}
+
+impl PartialEq for NvFrontendFileOptions {
+    fn eq(&self, other: &Self) -> bool {
+        return Arc::ptr_eq(&self.0, &other.0);
     }
 }
 

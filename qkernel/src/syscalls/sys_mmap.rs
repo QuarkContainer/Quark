@@ -40,6 +40,9 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let anon = flags & MmapFlags::MAP_ANONYMOUS != 0;
     let map32bit = flags & MmapFlags::MAP_32BIT != 0;
 
+
+    error!("SysMmap 1 {:x?}", args);
+
     // Require exactly one of MAP_PRIVATE and MAP_SHARED.
     if private == shared {
         return Err(Error::SysError(SysErr::EINVAL));
@@ -125,6 +128,7 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         opts.Mappable = MMappable::FromHostIops(memfdIops);
     }
 
+    error!("SysMmap 2");
     match task.mm.MMap(task, &mut opts) {
         Ok(addr) => Ok(addr as i64),
         Err(e) => Err(e),

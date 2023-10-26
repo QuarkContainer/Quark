@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::qlib::nvproxy::frontendfd::NvFrontendFileOptions;
+use crate::qlib::nvproxy::uvmfd::UvmFileOptions;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -231,6 +233,42 @@ impl PageTables {
         at: &AccessType,
     ) -> Result<()> {
         return self.MapFile(task, addr, f, fr, at, false);
+    }
+
+    pub fn MapNvFrontendFile(
+        &self,
+        task: &Task,
+        addr: u64,
+        f: &NvFrontendFileOptions,
+        fr: &Range,
+        at: &AccessType
+    ) -> Result<()> {
+        error!("MapNvFrontendFile 1");
+        let bs = f.MapInternal(task, fr)?;
+        
+        error!("MapNvFrontendFile 2");
+        self.MapHost(task, addr, &bs, at, true)?;
+        error!("MapNvFrontendFile 3");
+        
+        return Ok(());
+    }
+
+    pub fn MapUvmFile(
+        &self,
+        task: &Task,
+        addr: u64,
+        f: &UvmFileOptions,
+        fr: &Range,
+        at: &AccessType
+    ) -> Result<()> {
+        error!("MapUvmFile 1");
+        let bs = f.MapInternal(task, addr, fr, at.Write())?;
+        
+        error!("MapUvmFile 2");
+        self.MapHost(task, addr, &bs, at, true)?;
+        error!("MapUvmFile 3");
+        
+        return Ok(());
     }
 
     pub fn MapFile(

@@ -559,6 +559,17 @@ impl VMSpace {
         return Self::GetRet(ret as i64);
     }
 
+    pub fn NvidiaMMap(addr: u64, len: u64, prot: i32, flags: i32, fd: i32, offset: u64) -> i64 {
+        error!("NvidiaMMap addr {:x} len {:x} prot {:x} flags {:x} fd {} offset {:x}",
+            addr, len, prot, flags, fd, offset);
+        let ret = unsafe {
+            libc::mmap(addr as _, len as usize, prot, flags, fd, offset as i64) as i64
+        };
+
+        let ret: i64 = Self::GetRet(ret);
+        return ret;
+    }
+
     pub fn RemapGuestMemRanges(len: u64, ranges: &[Range]) -> i64 {
         let flags = libc::MAP_PRIVATE | libc::MAP_ANON;
         let ret = unsafe {

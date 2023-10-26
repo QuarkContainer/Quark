@@ -126,6 +126,9 @@ impl KVMVcpu {
             Msg::NividiaDriverVersion(msg) => {
                 ret = super::VMSpace::NividiaDriverVersion(msg.ioctlParamsAddr) as u64;
             }
+            Msg::NvidiaMMap(msg) => {
+                ret = super::VMSpace::NvidiaMMap(msg.addr, msg.len, msg.prot, msg.flags, msg.fd, msg.offset) as u64;
+            }
             Msg::OpenDevFile(msg) => {
                 ret = super::VMSpace::OpenDevFile(msg.dirfd, msg.name, msg.flags) as u64;
             }
@@ -330,6 +333,7 @@ impl KVMVcpu {
                 ) as u64;
             }
             Msg::MMapFile(msg) => {
+                error!("MMapFile 1");
                 ret = match super::PMA_KEEPER.MapFile(msg.len, msg.prot, msg.fd, msg.offset) {
                     Err(Error::SysError(e)) => -e as u64,
                     Ok(phyAddr) => phyAddr,
