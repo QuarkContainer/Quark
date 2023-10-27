@@ -14,6 +14,7 @@
 
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
+use core::arch::asm;
 
 use super::asm::*;
 //use super::IOURING;
@@ -69,9 +70,17 @@ pub fn RegisterSysCall(addr: u64) {
     WriteMsr(MSR::MSR_LSTAR as u32, addr);
 }
 
-#[cfg(target_arch = "aarch64")]
-pub fn RegisterSysCall(addr: u64) {
+// this replaces RegisterSysCall
+#[cfg(target_arch="aarch64")]
+pub fn RegisterExceptionTable(addr: u64) {
+    unsafe{
+        asm!(
+            "MSR VBAR_EL1, {}",
+            in(reg) addr,
+            );
+    }
 }
+
 
 #[cfg(target_arch = "x86")]
 #[inline]

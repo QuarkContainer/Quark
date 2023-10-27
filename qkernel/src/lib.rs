@@ -194,8 +194,15 @@ pub fn SingletonInit() {
     }
 }
 
+#[cfg(target_arch="x86_64")]
 extern "C" {
     pub fn syscall_entry();
+}
+
+
+#[cfg(target_arch="aarch64")]
+extern "C" {
+    pub fn vector_table();
 }
 
 pub fn Init() {
@@ -205,6 +212,7 @@ pub fn Init() {
 }
 
 #[no_mangle]
+#[cfg(target_arch = "x86_64")]
 pub extern "C" fn syscall_handler(
     arg0: u64,
     arg1: u64,
@@ -274,16 +282,6 @@ pub extern "C" fn syscall_handler(
             };
         }
 
-        #[cfg(target_arch = "aarch64")]
-        {
-            callId = if nr < SysCallID::UnknowSyscall as u64 {
-                unsafe { mem::transmute(nr as u64) }
-            } else {
-                nr = SysCallID::UnknowSyscall as _;
-                SysCallID::UnknowSyscall
-            };
-        }
-
         if llevel == LogLevel::Complex {
             tid = currTask.Thread().lock().id;
             pid = currTask.Thread().ThreadGroup().ID();
@@ -345,6 +343,116 @@ pub extern "C" fn syscall_handler(
     } else {
         SyscallRet(kernelRsp)
     }
+}
+
+// syscall_handler implementation for aarch64:
+// Unlike x86, this function is NOT directly called 
+// from the asm code (vector). The C calling convention
+// is not necessary here.
+// TODO move this function to a proper place.
+#[no_mangle]
+#[cfg(target_arch = "aarch64")]
+pub fn syscall_dispatch_aarch64(
+    call_no: u32,
+    _arg0: u64,
+    _arg1: u64,
+    _arg2: u64,
+    _arg3: u64,
+    _arg4: u64,
+    _arg5: u64,
+) -> u64 {
+    CPULocal::Myself().SetMode(VcpuMode::Kernel);
+
+    let currTask = task::Task::Current();
+    currTask.AccountTaskLeave(SchedState::RunningApp);
+
+    let mut nr = call_no as u64;
+
+    let startTime = TSC.Rdtsc();
+    let enterAppTimestamp = CPULocal::Myself().ResetEnterAppTimestamp() as i64;
+    let worktime = Tsc::Scale(startTime - enterAppTimestamp) * 1000; // the thread has used up time slot
+    if worktime > CLOCK_TICK {
+        taskMgr::Yield();
+    }
+
+    let res;
+    let args = SyscallArguments {
+        arg0: _arg0,
+        arg1: _arg1,
+        arg2: _arg2,
+        arg3: _arg3,
+        arg4: _arg4,
+        arg5: _arg5,
+    };
+
+    let mut tid = 0;
+    let mut pid = 0;
+    let mut callId: SysCallID = SysCallID::UnknowSyscall;
+
+    let debugLevel = SHARESPACE.config.read().DebugLevel;
+
+    if debugLevel > DebugLevel::Error {
+        let llevel = SHARESPACE.config.read().LogLevel;
+        callId = if nr < SysCallID::UnknowSyscall as u64 {
+            unsafe { mem::transmute(nr as u64) }
+        } else {
+            nr = SysCallID::UnknowSyscall as _;
+            SysCallID::UnknowSyscall
+        };
+
+        if llevel == LogLevel::Complex {
+            tid = currTask.Thread().lock().id;
+            pid = currTask.Thread().ThreadGroup().ID();
+            use qlib::kernel::arch::__arch::arch_def::Context;
+            unsafe{
+                info!("({}/{})------get call id {:?} arg0:{:x}, 1:{:x}, 2:{:x}, 3:{:x}, 4:{:x}, 5:{:x}, userstack:{:x}, return address:{:x}, fs:{:x}",
+                    tid, pid, callId, _arg0, _arg1, _arg2, _arg3, _arg4, _arg5, currTask.GetPtRegs().get_stack_pointer(),  (*(currTask.GetContext() as *const Context)).pc, GetFs());
+            }
+        } else if llevel == LogLevel::Simple {
+            tid = currTask.Thread().lock().id;
+            pid = currTask.Thread().ThreadGroup().ID();
+            info!(
+                "({}/{})------get call id {:?} arg0:{:x}",
+                tid, pid, callId, _arg0
+            );
+        }
+    }
+
+    let currTask = task::Task::Current();
+
+    let state = SysCall(currTask, nr, &args);
+    MainRun(currTask, state);
+    res = currTask.Return();
+    currTask.DoStop();
+    
+    // not needed because user stack not used here
+    // CPULocal::SetUserStack(pt.rsp);
+    
+    // TODO not implemented?
+    // CPULocal::SetKernelStack(currTask.GetKernelSp());
+    // currTask.AccountTaskEnter(SchedState::RunningApp);
+    // currTask.RestoreFp();
+
+    if debugLevel > DebugLevel::Error {
+        let gap = if self::SHARESPACE.config.read().PerfDebug {
+            TSC.Rdtsc() - startTime
+        } else {
+            0
+        };
+        info!(
+            "({}/{})------Return[{}] res is {:x}: call id {:?} ",
+            tid,
+            pid,
+            Scale(gap),
+            res,
+            callId
+        );
+    }
+
+    CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
+    CPULocal::Myself().SetMode(VcpuMode::User);
+    currTask.mm.HandleTlbShootdown();
+    return res;
 }
 
 #[inline]
@@ -500,7 +608,15 @@ pub extern "C" fn rust_main(
 
     SHARESPACE.IncrVcpuSearching();
     taskMgr::AddNewCpu();
-    RegisterSysCall(syscall_entry as u64);
+
+    #[cfg(target_arch="x86_64")]{
+        RegisterSysCall(syscall_entry as u64);
+    }
+
+    #[cfg(target_arch="aarch64")]{
+        RegisterExceptionTable(vector_table as u64);
+    }
+
 
     //interrupts::init_idt();
     interrupt::init();
