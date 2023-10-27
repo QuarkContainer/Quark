@@ -1,8 +1,10 @@
-.globl syscall_entry, CopyPageUnsafe
+.globl CopyPageUnsafe
 .globl context_swap, __vsyscall_page
 
-syscall_entry:
-    ret
+// For aarch64 this file does not serve as the actuall syscall entry
+// The actuall syscall is caused by SVC exception and the entry is vector_table
+// with offset 0x200, see exception.s and exception.rs
+// TODO rename this file
 __vsyscall_page:
 CopyPageUnsafe:
     ret
