@@ -117,7 +117,7 @@ impl Loader {
         let utsns = UTSNamespace::New(hostName.to_string(), hostName.to_string(), userns.clone());
         let ipcns = IPCNamespace::New(&userns);
 
-        let kernalArgs = InitKernalArgs {
+        let kernelArgs = InitKernelArgs {
             FeatureSet: Arc::new(QMutex::new(HostFeatureSet())),
             RootUserNamespace: userns.clone(),
             ApplicationCores: process.NumCpu,
@@ -126,7 +126,7 @@ impl Loader {
             RootIPCNamespace: ipcns,
         };
 
-        let kernel = Kernel::Init(kernalArgs);
+        let kernel = Kernel::Init(kernelArgs);
         *SHARESPACE.kernel.lock() = Some(kernel.clone());
         let task = Task::Current();
         self.Lock(task)?.kernel = kernel;
@@ -477,7 +477,7 @@ impl LoaderInternal {
         let utsns = UTSNamespace::New(hostName.to_string(), hostName.to_string(), userns.clone());
         let ipcns = IPCNamespace::New(&userns);
 
-        let kernalArgs = InitKernalArgs {
+        let kernelArgs = InitKernelArgs {
             FeatureSet: Arc::new(QMutex::new(HostFeatureSet())),
             RootUserNamespace: userns.clone(),
             ApplicationCores: process.NumCpu,
@@ -486,7 +486,7 @@ impl LoaderInternal {
             RootIPCNamespace: ipcns,
         };
 
-        let kernel = Kernel::Init(kernalArgs);
+        let kernel = Kernel::Init(kernelArgs);
         *SHARESPACE.kernel.lock() = Some(kernel.clone());
 
         let rootMounts =
