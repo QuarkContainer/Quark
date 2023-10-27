@@ -17,6 +17,8 @@
 use core::arch::asm;
 use core::sync::atomic::Ordering;
 
+use bitflags::bitflags;
+
 use crate::qlib::kernel::task;
 use crate::qlib::vcpu_mgr::CPULocal;
 
@@ -35,7 +37,14 @@ pub fn SwapGs() {
 }
 
 pub fn GetVcpuId() -> usize {
-    return 0;
+    let ret: u64;
+    let tls = unsafe { tpidr_el1() };
+    unsafe {
+        asm!("ldr {1}, [{0}, #16]",
+        in(reg) tls,
+        out(reg) ret);
+    };
+    return ret as usize;
 }
 
 #[inline]
@@ -408,4 +417,129 @@ pub fn xgetbv() -> u64 {
 //    };
     let val = ((val_h as u64) << 32) | ((val_l as u64) & 0xffff);
     return val;
+}
+
+bitflags! {
+    pub struct MairEl1: u64 {
+        const DEVICE_MEMORY = 0x00 << 16;
+        const NORMAL_UNCACHED_MEMORY = 0x44 << 8;
+        const NORMAL_WRITEBACK_MEMORY = 0xff;
+    }
+}
+
+#[inline]
+pub unsafe fn ttbr0_el1() -> u64 {
+    let ret: u64;
+    asm!("mrs {0}, ttbr0_el1", out(reg) ret);
+    ret
+}
+
+#[inline]
+pub unsafe fn ttbr0_el1_write(val: u64) {
+    asm!("msr ttbr0_el1, {0}", in(reg) val);
+}
+
+#[inline]
+pub unsafe fn ttbr1_el1() -> u64 {
+    let ret: u64;
+    asm!("mrs {0}, ttbr1_el1", out(reg) ret);
+    ret
+}
+
+#[inline]
+pub unsafe fn ttbr1_el1_write(val: u64) {
+    asm!("msr ttbr1_el1, {0}", in(reg) val);
+}
+
+#[inline]
+pub unsafe fn mair_el1() -> MairEl1 {
+    let ret: u64;
+    asm!("mrs {0}, mair_el1", out(reg) ret);
+    MairEl1::from_bits_truncate(ret)
+}
+
+#[inline]
+pub unsafe fn mair_el1_write(val: MairEl1) {
+    asm!("msr mair_el1, {0}", in(reg) val.bits());
+}
+
+#[inline]
+pub unsafe fn tpidr_el0() -> u64 {
+    let ret: u64;
+    asm!("mrs {0}, tpidr_el0", out(reg) ret);
+    ret
+}
+
+#[inline]
+pub unsafe fn tpidr_el0_write(val: u64) {
+    asm!("msr tpidr_el0, {0}", in(reg) val);
+}
+
+#[inline]
+pub unsafe fn tpidr_el1() -> u64 {
+    let ret: u64;
+    asm!("mrs {0}, tpidr_el1", out(reg) ret);
+    ret
+}
+
+#[inline]
+pub unsafe fn tpidr_el1_write(val: u64) {
+    asm!("msr tpidr_el1, {0}", in(reg) val);
+}
+
+#[inline]
+pub unsafe fn tpidrro_el0() -> u64 {
+    let ret: u64;
+    asm!("mrs {0}, tpidrro_el0", out(reg) ret);
+    ret
+}
+
+#[inline]
+pub unsafe fn tpidrro_el0_write(val: u64) {
+    asm!("msr tpidrro_el0, {0}", in(reg) val);
+}
+
+#[inline]
+pub unsafe fn esr_el1() -> u64 {
+    let ret: u64;
+    asm!("mrs {0}, esr_el1", out(reg) ret);
+    ret
+}
+
+#[inline]
+pub unsafe fn cntfreq_el0() -> u64 {
+    let ret: u64;
+    asm!("mrs {0}, cntfrq_el0", out(reg) ret);
+    ret
+}
+
+#[inline]
+pub unsafe fn tmr_ctrl() -> u64 {
+    let ret: u64;
+    asm!("mrs {0}, cntp_ctl_el0", out(reg) ret);
+    ret
+}
+
+#[inline]
+pub unsafe fn tmr_ctrl_write(val: u64) {
+    asm!("msr cntp_ctl_el0, {0}", in(reg) val);
+}
+
+#[inline]
+pub unsafe fn tmr_tval() -> u64 {
+    let ret: u64;
+    asm!("mrs {0}, cntp_tval_el0", out(reg) ret);
+    ret
+}
+
+#[inline]
+pub unsafe fn tmr_tval_write(val: u64) {
+    asm!("msr cntp_tval_el0, {0}", in(reg) val);
+}
+
+#[inline]
+pub unsafe fn midr() -> u64 {
+    let ret: u64;
+    asm!("mrs {0}, midr_el1", out(reg) ret);
+    ret
 }

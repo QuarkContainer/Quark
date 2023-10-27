@@ -476,14 +476,14 @@ impl IOMgr {
 
 unsafe impl GlobalAlloc for GlobalVcpuAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        if !self.init.load(Ordering::Relaxed) {
+        if !self.init.load(Ordering::Acquire) {
             return GLOBAL_ALLOCATOR.alloc(layout);
         }
         return CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout);
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        if !self.init.load(Ordering::Relaxed) {
+        if !self.init.load(Ordering::Acquire) {
             return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
         }
         return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout);

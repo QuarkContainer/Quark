@@ -45,7 +45,6 @@ impl TimeKeeper {
             let mut internal = self.write();
             internal.Init(vdsoParamPageAddr);
         }
-
         let timer = Timer::Period(
             &MONOTONIC_CLOCK,
             TimerListener::TimerUpdater(TimerUpdater {}),
@@ -158,7 +157,7 @@ impl TimeKeeperInternal {
         assert!(self.inited.load(Ordering::Relaxed), "TimeKeeper not inited");
         let (monotonicParams, monotonicOk, realtimeParams, realtimeOk) = self.clocks.Update();
 
-        let mut p = VdsoParams::default();
+        let mut p: VdsoParams = VdsoParams::default();
         if monotonicOk {
             p.monotonicReady = 1;
             p.monotonicBaseCycles = monotonicParams.BaseCycles;
