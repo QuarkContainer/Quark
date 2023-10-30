@@ -55,7 +55,11 @@ pub fn Hlt() {
 #[inline]
 pub fn LoadUserTable(table: u64) {
     unsafe {
-        asm!("msr ttbr0_el1, {0}", in(reg) table);
+        asm!("msr ttbr0_el1, {0}
+        ic iallu
+        dsb nsh
+        isb",
+        in(reg) table);
     };
 }
 
@@ -127,7 +131,7 @@ pub fn GetCurrentKernelSp() -> u64 {
 
 #[inline]
 pub fn GetCurrentUserSp() -> u64 {
-    unsafe { return sp_el0(); }
+    return sp_el0();
 }
 
 #[inline]
@@ -143,14 +147,14 @@ pub fn AsmHostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
 #[inline(always)]
 pub fn ReadBarrier() {
     unsafe {
-        asm!("dmb ish")
+        asm!("dsb ishld")
     };
 }
 
 #[inline(always)]
 pub fn WriteBarrier() {
     unsafe {
-        asm!("dsb ish")
+        asm!("dsb ishst")
     };
 }
 
@@ -326,7 +330,7 @@ pub fn sfence() {
     unsafe {
         asm!(
             "
-            dsb ish
+            dsb ishst
         "
         )
     }
@@ -337,7 +341,7 @@ pub fn lfence() {
     unsafe {
         asm!(
             "
-            dmb ish
+            dmb ishld
         "
         )
     }

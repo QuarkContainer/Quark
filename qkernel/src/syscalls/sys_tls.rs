@@ -47,8 +47,8 @@ pub fn SysArchPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             if !IsValidSegmentBase(addr) {
                 return Err(Error::SysError(SysErr::EPERM));
             }
-            SetFs(addr);
-            task.context.fs = addr;
+            SetTLS(addr);
+            task.context.set_tls(addr);
             //info!("ARCH_SET_FS: the val is {:x}", unsafe {*(addr as * const u64)});
             //info!("after ARCH_SET_FS, the input value is {:x}, the get fs result is {:x}", addr, ReadMsr(MSR::MSR_FS_BASE as u32));
         }

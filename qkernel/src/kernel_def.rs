@@ -217,7 +217,7 @@ pub fn switch(from: TaskId, to: TaskId) {
     if !SHARESPACE.config.read().KernelPagetable {
         toCtx.SwitchPageTable();
     }
-    toCtx.SetFS();
+    toCtx.SetTLS();
 
     fromCtx.mm.VcpuLeave();
     toCtx.mm.VcpuEnter();

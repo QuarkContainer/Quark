@@ -61,6 +61,7 @@ pub enum PrCtlEnum {
     ARCH_GET_GS = 0x1004,
 }
 
+#[cfg(target_arch = "x86_64")]
 pub fn RegisterSysCall(addr: u64) {
     //WriteMsr(MSR::MSR_STAR as u32, 0x00200008<<32);
     WriteMsr(MSR::MSR_STAR as u32, 0x00100008 << 32);
@@ -68,11 +69,22 @@ pub fn RegisterSysCall(addr: u64) {
     WriteMsr(MSR::MSR_LSTAR as u32, addr);
 }
 
+#[cfg(target_arch = "aarch64")]
+pub fn RegisterSysCall(addr: u64) {
+}
+
+#[cfg(target_arch = "x86")]
 #[inline]
-pub fn SetFs(addr: u64) {
+pub fn SetTLS(addr: u64) {
     //println!("SetFs from {:x} to {:x}", GetFs(), addr);
     WriteMsr(MSR::MSR_FS_BASE as u32, addr);
     //println!("the input value is {:x}, the get fs result is {:x}", addr, ReadMsr(MSR::MSR_FS_BASE as u32));
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+pub fn SetTLS(addr: u64) {
+    tpidr_el0_write(addr);
 }
 
 #[inline]

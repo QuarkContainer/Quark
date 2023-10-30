@@ -334,10 +334,10 @@ pub fn Execvat(
 
             t.UnstopVforkParent();
 
-            SetFs(0);
+            SetTLS(0);
             task.tidInfo = TidInfo::default();
-            task.context.fs = 0;
-            task.context.archfpstate = Some(Box::new(ArchFPState::default()));
+            task.context.set_tls(0);
+            task.archfpstate = Some(Box::new(ArchFPState::default()));
 
             let newMM = MemoryManager::Init(false);
             let oldMM = task.mm.clone();
