@@ -198,7 +198,7 @@ impl Deref for Kernel {
 }
 
 impl Kernel {
-    pub fn Init(args: InitKernalArgs) -> Self {
+    pub fn Init(args: InitKernelArgs) -> Self {
         let cpuTicker = Arc::new(KernelCPUClockTicker::New());
         let internal = KernelInternal {
             extMu: QMutex::new(()),
@@ -550,7 +550,7 @@ impl<'a> Context for CreateProcessContext<'a> {
 }
 
 #[derive(Default)]
-pub struct InitKernalArgs {
+pub struct InitKernelArgs {
     // FeatureSet is the emulated CPU feature set.
     pub FeatureSet: Arc<QMutex<FeatureSet>>,
 

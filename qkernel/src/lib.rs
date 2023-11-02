@@ -360,7 +360,7 @@ pub extern "C" fn syscall_handler(
         );
     }
 
-    let kernalRsp = pt as *const _ as u64;
+    let kernelRsp = pt as *const _ as u64;
 
     /*if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();
@@ -372,9 +372,9 @@ pub extern "C" fn syscall_handler(
     currTask.mm.HandleTlbShootdown();
     if !(pt.rip == pt.rcx && pt.r11 == pt.eflags) {
         //error!("iret *****, pt is {:x?}", pt);
-        IRet(kernalRsp)
+        IRet(kernelRsp)
     } else {
-        SyscallRet(kernalRsp)
+        SyscallRet(kernelRsp)
     }
 }
 

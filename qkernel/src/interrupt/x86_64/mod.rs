@@ -339,8 +339,8 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u
 }
 
 pub fn ReturnToApp(pt: &mut PtRegs) -> ! {
-    let kernalRsp = pt as *const _ as u64;
-    SyscallRet(kernalRsp);
+    let kernelRsp = pt as *const _ as u64;
+    SyscallRet(kernelRsp);
 }
 
 #[no_mangle]
@@ -743,14 +743,14 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
         currTask.RestoreFp();
         CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
         CPULocal::SetKernelStack(currTask.GetKernelSp());
-        let kernalRsp = ptRegs as *const _ as u64;
+        let kernelRsp = ptRegs as *const _ as u64;
         CPULocal::Myself().SetMode(VcpuMode::User);
         //currTask.mm.VcpuEnter();
         currTask.mm.HandleTlbShootdown();
         if !(ptRegs.rip == ptRegs.rcx && ptRegs.r11 == ptRegs.eflags) {
-            IRet(kernalRsp)
+            IRet(kernelRsp)
         } else {
-            SyscallRet(kernalRsp)
+            SyscallRet(kernelRsp)
         }
 
         // won't reach hear
