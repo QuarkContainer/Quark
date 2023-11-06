@@ -397,11 +397,16 @@ impl VirtualMachine {
                     std::ptr::null_mut(),
                     0x1000,
                     libc::PROT_READ | libc::PROT_WRITE,
-                    libc::MAP_SHARED | libc::MAP_FIXED | libc::MAP_ANONYMOUS,
-                    0,
-                    0,
+                    libc::MAP_SHARED | libc::MAP_ANONYMOUS,
+                    -1,
+                     0,
                 )
             };
+
+            if mem == libc::MAP_FAILED {
+                panic!("VMM: Failed to map area for MMIO, error - {}", std::io::Error::last_os_error());
+            }
+
             let mem_region = kvm_userspace_memory_region {
                 slot: 2,
                 guest_phys_addr: MemoryDef::HYPERCALL_MMIO_BASE,
