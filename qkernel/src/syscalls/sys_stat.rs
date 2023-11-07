@@ -262,15 +262,25 @@ fn copyOutStat(task: &Task, statAddr: u64, sattr: &StableAttr, uattr: &UnstableA
     let creds = task.creds.clone();
     let ns = creds.lock().UserNamespace.clone();
 
+    #[cfg(target_arch = "aarch64")]
+    let st_nlink = uattr.Links as u32;
+    #[cfg(target_arch = "x86_64")]
+    let st_nlink = uattr.Links;
+
+    #[cfg(target_arch = "aarch64")]
+    let st_blksize = uattr.Links as i32;
+    #[cfg(target_arch = "x86_64")]
+    let st_blksize = uattr.Links;
+
     s.st_dev = sattr.DeviceId as u64;
     s.st_ino = sattr.InodeId;
-    s.st_nlink = uattr.Links;
+    s.st_nlink = st_nlink;
     s.st_mode = sattr.Type.LinuxType() as u32 | uattr.Perms.LinuxMode();
     s.st_uid = uattr.Owner.UID.In(&ns).OrOverflow().0;
     s.st_gid = uattr.Owner.GID.In(&ns).OrOverflow().0;
     s.st_rdev = MakeDeviceID(sattr.DeviceFileMajor, sattr.DeviceFileMinor) as u64;
     s.st_size = uattr.Size;
-    s.st_blksize = sattr.BlockSize;
+    s.st_blksize = st_blksize;
     s.st_blocks = uattr.Usage / 512;
 
     let atime = uattr.AccessTime.Timespec();

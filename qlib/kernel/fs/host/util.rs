@@ -185,12 +185,15 @@ impl LibcStat {
         ));*/
 
         let (major, minor) = DecodeDeviceId(self.st_rdev as u32);
-
+        #[cfg(target_arch = "aarch64")]
+        let st_blksize = self.st_blksize as i64;
+        #[cfg(target_arch = "x86_64")]
+        let st_blksize = self.st_blksize;
         return StableAttr {
             Type: self.InodeType(),
             DeviceId: deviceId,
             InodeId: InodeId,
-            BlockSize: self.st_blksize,
+            BlockSize: st_blksize,
             DeviceFileMajor: major,
             DeviceFileMinor: minor,
         };
@@ -235,6 +238,10 @@ impl LibcStat {
     }
 
     pub fn UnstableAttr(&self, mo: &Arc<QMutex<MountSourceOperations>>) -> UnstableAttr {
+        #[cfg(target_arch = "aarch64")]
+        let st_nlink = self.st_nlink as u64;
+        #[cfg(target_arch = "x86_64")]
+        let st_nlink = self.st_nlink;
         return UnstableAttr {
             Size: self.st_size,
             Usage: self.st_blocks * 512,
@@ -243,7 +250,7 @@ impl LibcStat {
             AccessTime: Time::FromUnix(self.st_atime, self.st_atime_nsec),
             ModificationTime: Time::FromUnix(self.st_mtime, self.st_mtime_nsec),
             StatusChangeTime: Time::FromUnix(self.st_ctime, self.st_ctime_nsec),
-            Links: self.st_nlink,
+            Links: st_nlink,
         };
     }
 }
