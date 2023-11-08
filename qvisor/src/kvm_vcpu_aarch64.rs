@@ -191,7 +191,7 @@ impl KVMVcpu {
                     if hypercall_id > u16::MAX {
                         panic!("cpu[{}] Received hypercall id max than 255", self.id);
                     }
-                    info!("hypecall: {}, paras: {} {} {} {}", hypercall_id, para1, para2, para3, para4);
+                    info!("hypecall: {}, paras: {:x} {:x} {:x} {:x}", hypercall_id, para1, para2, para3, para4);
                     self.handle_hypercall(hypercall_id, data, para1, para2, para3, para4)?;
                 }
                 VcpuExit::Hlt => {
@@ -262,6 +262,7 @@ impl KVMVcpu {
         // cpacr_el1
         // NOTE: FPEN[21:20] - Do not cause instructions related
         //                     to FP registers to be trapped.
+
         let data = (3 << 20);
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_CPACR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
         // sctlr_el1

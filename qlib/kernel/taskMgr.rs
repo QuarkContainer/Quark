@@ -68,7 +68,7 @@ fn switch_to(to: TaskId) {
     if !SHARESPACE.config.read().KernelPagetable {
         toCtx.SwitchPageTable();
     }
-    toCtx.SetFS();
+    toCtx.SetTLS();
     unsafe {
         context_swap_to(0, toCtx.GetContext(), 1, 0);
     }
@@ -121,9 +121,7 @@ pub fn WaitFn() -> ! {
             None => {
                 SHARESPACE.scheduler.IncreaseHaltVcpuCnt();
 
-                //debug!("vcpu sleep");
                 let addr = HostSpace::VcpuWait();
-                //debug!("vcpu wakeup {:x}", addr);
                 assert!(addr >= 0);
                 task = TaskId::New(addr as u64);
 
@@ -133,9 +131,7 @@ pub fn WaitFn() -> ! {
             Some(newTask) => {
                 let current = TaskId::New(CPULocal::CurrentTask());
                 CPULocal::Myself().SwitchToRunning();
-                if !Task::Current().context.savefpsate {
-                    Task::Current().SaveFp();
-                }
+                Task::Current().SaveFp();
                 switch(current, newTask);
 
                 let pendingFreeStack = CPULocal::PendingFreeStack();
@@ -143,7 +139,7 @@ pub fn WaitFn() -> ! {
                     //(*PAGE_ALLOCATOR).Free(pendingFreeStack, DEFAULT_STACK_PAGES).unwrap();
                     let task = TaskId::New(pendingFreeStack).GetTask();
                     //free FPstate
-                    task.context.archfpstate.take();
+                    task.archfpstate.take();
 
                     KERNEL_STACK_ALLOCATOR.Free(pendingFreeStack).unwrap();
                     CPULocal::SetPendingFreeStack(0);
@@ -201,9 +197,7 @@ pub fn Wait() {
 
             CPULocal::Myself().SwitchToRunning();
             if current.data != newTask.data {
-                if !Task::Current().context.savefpsate {
-                    Task::Current().SaveFp();
-                }
+                Task::Current().SaveFp();
                 switch(current, newTask);
             }
 
@@ -220,9 +214,7 @@ pub fn Wait() {
 
             match oldTask {
                 None => {
-                    if !Task::Current().context.savefpsate {
-                        Task::Current().SaveFp();
-                    }
+                    Task::Current().SaveFp();
                     switch(current, waitTask);
                     break;
                 }
