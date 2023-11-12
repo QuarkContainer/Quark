@@ -451,7 +451,9 @@ impl Task {
             cTask.CopyOutObjManual(&pid, cTid)?;
         }
 
-        cTask.context.set_tls(tls);
+        if opts.SetTLS == true {
+            cTask.context.set_tls(tls);
+        }
 
         taskMgr::NewTask(TaskId::New(cTask.taskId));
 
