@@ -15,11 +15,11 @@
 use crate::qlib as qlib;
 use qlib::limits::{LimitSet, LimitType, INFINITY};
 use qlib::{linux_def::SysErr, MemoryDef, addr::Addr};
-use qlib::kernel::{arch, memmgr, kernel_util::RandU64};
-use memmgr::arch::{MmapLayout, MMAP_BOTTOM_UP, MMAP_TOP_DOWN};
+use qlib::kernel::memmgr::arch::{MmapLayout, MMAP_BOTTOM_UP, MMAP_TOP_DOWN};
 use qlib::common::*;
 
-use arch::__arch::arch_def::{Aarch64Regs, State};
+use super::arch_def::{Aarch64Regs, State};
+use super::super::utils::MMapRand;
 
 // MAX_ADDR64 is the maximum userspace address. It is TASK_SIZE in Linux
 // for a 64-bit process.
@@ -96,13 +96,8 @@ impl Context64 {
             pref_base = (l.TopDownBase * 2) / 3;
         }
 
-        Ok(Addr(pref_base + Self::MMapRand(MAX_MMAP_RAND64).unwrap())
+        Ok(Addr(pref_base + MMapRand(MAX_MMAP_RAND64).unwrap())
            .RoundDown().unwrap().0)
-    }
-
-    pub fn MMapRand(max: u64) -> Result<u64> {
-        let _new_addr: u64 = RandU64().unwrap() % max;
-        Ok(Addr(_new_addr).RoundDown().unwrap().0)
     }
 
     pub fn NewMmapLayout(min: u64, max: u64, r: &LimitSet) -> Result<MmapLayout> {
@@ -142,7 +137,7 @@ impl Context64 {
             }
         }
 
-        let rand: u64 = Self::MMapRand(max_rand)?;
+        let rand: u64 = MMapRand(max_rand)?;
 
         let layout = MmapLayout {
             MinAddr: min_addr,

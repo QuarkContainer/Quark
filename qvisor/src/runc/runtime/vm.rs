@@ -28,7 +28,7 @@ use crate::qlib::MAX_VCPU_COUNT;
 use super::super::super::elf_loader::*;
 use super::super::super::kvm_vcpu::*;
 use super::super::super::print::LOG;
-use super::super::super::qlib::addr;
+use super::super::super::qlib::addr::{PageOpts, PageEntryType, Addr};
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::kernel::kernel::futex;
 use super::super::super::qlib::kernel::kernel::timer;
@@ -288,7 +288,7 @@ impl VirtualMachine {
             .create_vm()
             .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
         
-        #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
+        #[cfg(target_arch = "x86_64")]
         {
             let mut cap: kvm_enable_cap = Default::default();
             cap.cap = KVM_CAP_X86_DISABLE_EXITS;
@@ -333,35 +333,27 @@ impl VirtualMachine {
                 MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
             vms.pageTables = PageTables::New(&vms.allocator)?;
 
-            let mut opts = addr::PageOpts::Zero();
-            opts.SetPresent().SetWrite().SetGlobal();
-            #[cfg(target_arch = "aarch64")]
-            opts.SetMtNormal().SetDirty().SetAccessed();
-
+            let opts: PageOpts = PageEntryType::page_options(PageEntryType::Kernel).unwrap();
             vms.KernelMap(
-                addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
-                addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR + MemoryDef::PAGE_SIZE),
-                addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
+                Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
+                Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR + MemoryDef::PAGE_SIZE),
+                Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
                 opts.Val(),
             )?;
 
             vms.KernelMapHugeTable(
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR),
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR),
+                Addr(MemoryDef::PHY_LOWER_ADDR),
+                Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
+                Addr(MemoryDef::PHY_LOWER_ADDR),
                 opts.Val(),
             )?;
-
-            #[cfg(target_arch = "aarch64")]
-            {
-                let mut opts = addr::PageOpts::Zero();
-
-                opts.SetWrite().SetGlobal().SetPresent().SetAccessed();
-                opts.SetDeviceMMIO();
+ 
+            #[cfg(target_arch = "aarch64")] {
+                let opts_dev_page: PageOpts = PageEntryType::page_options(PageEntryType::Device).unwrap();
                 vms.KernelMap(
-                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
-                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE + 0x1000),
-                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+                    Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+                    Addr(MemoryDef::HYPERCALL_MMIO_BASE + 0x1000),
+                    Addr(MemoryDef::HYPERCALL_MMIO_BASE),
                     opts.Val(),
                 )?;
             }
@@ -431,12 +423,9 @@ impl VirtualMachine {
             super::super::super::URING_MGR.lock();
         }
 
-        #[cfg(target_arch = "aarch64")]
-        let kvi = get_kvm_vcpu_init(&vm_fd)?;
-
         let mut vcpus = Vec::with_capacity(cpuCount);
         for i in 0..cpuCount
-        /*args.NumCPU*/
+      /*args.NumCPU*/
         {
             let vcpu = Arc::new(KVMVcpu::Init(
                 i as usize,
@@ -455,8 +444,12 @@ impl VirtualMachine {
         }
         
         #[cfg(target_arch = "aarch64")]
-        for vcpu in vcpus.iter() {
-            vcpu.vcpu.vcpu_init(&kvi).map_err(|e| Error::SysError(e.errno()))?;
+        {
+            let kvi = get_kvm_vcpu_init(&vm_fd)?;
+            info!("kvm_vcpu_init {:?}", kvi);
+            for vcpu in vcpus.iter() {
+                vcpu.vcpu.vcpu_init(&kvi).map_err(|e| Error::SysError(e.errno()))?;
+            }
         }
 
         let vm = Self {

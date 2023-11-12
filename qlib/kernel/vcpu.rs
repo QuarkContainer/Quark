@@ -73,8 +73,7 @@ pub fn RegisterSysCall(addr: u64) {
 pub fn RegisterSysCall(addr: u64) {
 }
 
-#[cfg(target_arch = "x86")]
-#[inline]
+#[cfg(target_arch = "x86_64")]
 pub fn SetTLS(addr: u64) {
     //println!("SetFs from {:x} to {:x}", GetFs(), addr);
     WriteMsr(MSR::MSR_FS_BASE as u32, addr);
@@ -82,7 +81,6 @@ pub fn SetTLS(addr: u64) {
 }
 
 #[cfg(target_arch = "aarch64")]
-#[inline]
 pub fn SetTLS(addr: u64) {
     tpidr_el0_write(addr);
 }

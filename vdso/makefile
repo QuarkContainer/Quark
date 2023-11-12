@@ -1,4 +1,10 @@
-arch = $(shell uname -m)
+_arch = $(shell uname -m)
+
+ifneq (,$(filter $(_arch), x86_64 amd64))
+	arch = amd64
+else
+	arch = $(_arch)
+endif
 
 # Specify extensions of files to delete when cleaning
 CLEANEXTS   = o so

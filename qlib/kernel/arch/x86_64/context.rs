@@ -20,6 +20,7 @@ use super::super::super::kernel_util::*;
 use super::super::super::memmgr::arch::*;
 use super::super::super::SignalDef::*;
 use super::arch_def::*;
+use super::super::utils::MMapRand;
 
 // These constants come directly from Linux.
 
@@ -233,10 +234,4 @@ impl Context64 {
 
         return Ok(Addr(addr).RoundDown().unwrap().0);
     }
-}
-
-// mmapRand returns a random adjustment for randomizing an mmap layout.
-pub fn MMapRand(max: u64) -> Result<u64> {
-    let addr = RandU64()? % max;
-    return Ok(Addr(addr).RoundDown().unwrap().0);
 }

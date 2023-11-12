@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use super::super::super::addr::*;
-use super::super::arch::__arch::context::Context64;
+use super::super::arch::{utils::MMapRand,
+                         __arch::context::Context64};
 
 pub type MmapDirection = i32;
 
@@ -80,7 +81,7 @@ impl MmapLayout {
     }
 
     pub fn MapStackAddr(&self) -> u64 {
-        return Addr(self.MaxAddr - Context64::MMapRand(self.MaxStackRand).expect("MapStackAddr fail"))
+        return Addr(self.MaxAddr - MMapRand(self.MaxStackRand).expect("MapStackAddr fail"))
             .RoundDown()
             .unwrap()
             .0;

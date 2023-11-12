@@ -816,13 +816,13 @@ impl Task {
     #[cfg(target_arch="x86_64")]
     #[inline]
     pub fn SetTLS(&self) {
-        SetTLS(self.context.fs);
+        vcpu::SetTLS(self.context.fs);
     }
 
     #[cfg(target_arch="aarch64")]
     #[inline]
     pub fn SetTLS(&self) {
-        SetTLS(self.context.tls);
+        vcpu::SetTLS(self.context.tls);
     }
 
     #[inline]

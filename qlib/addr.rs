@@ -243,6 +243,7 @@ impl AccessType {
 
 pub struct PageOpts(PageTableFlags);
 
+
 #[cfg(target_arch = "aarch64")]
 impl PageOpts {
     //const Empty : PageTableFlags = PageTableFlags::PRESENT & PageTableFlags::WRITABLE; //set 0
@@ -368,6 +369,16 @@ impl PageOpts {
     pub fn Val(&self) -> PageTableFlags {
         return self.0;
     }
+
+    pub(self) fn __kernel_opts(&mut self) {
+        self.SetPresent().SetWrite().SetGlobal()
+            .SetMtNormal().SetDirty().SetAccessed();
+    }
+
+    pub(self) fn __device_opts(&mut self) {
+		self.SetWrite().SetGlobal().SetPresent().SetAccessed()
+		.SetDeviceMMIO();
+    }
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -467,7 +478,49 @@ impl PageOpts {
     pub fn Val(&self) -> PageTableFlags {
         return self.0;
     }
+
+    pub(self) fn __kernel_opts(&mut self) {
+        self.SetPresent().SetWrite().SetGlobal();
+    }
 }
+
+//
+// Interface over common flags set for a memory type.
+// Should be preferred over individual setting flags,
+// as that my cause faulty initialization.
+//
+pub enum PageEntryType {
+    User,
+    Kernel,
+    Device
+}
+
+impl PageEntryType {
+    pub fn page_options(page_type: PageEntryType) -> Option<PageOpts> {
+        let mut opts = PageOpts::Zero();
+        match page_type {
+            PageEntryType::User   => {
+                error!("PageEntryType::User - Not implemented.");
+                None
+            },
+            PageEntryType::Kernel => {
+                opts.__kernel_opts();
+                Some(opts)
+            }
+            PageEntryType::Device => {
+                #[cfg(target_arch = "aarch64")] {
+                    opts.__device_opts();
+                    Some(opts)
+                } 
+                #[cfg(target_arch = "x86_64")] {
+                    error!("PageEntryType::Device - Not implemented for x86_64.");
+                    None
+                }
+            }
+        }
+    }
+}
+
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct Addr(pub u64);

@@ -18,4 +18,23 @@ pub mod __arch;
 #[path = "./aarch64/mod.rs"]
 pub mod __arch;
 
+//
+// Cluster of helper functions that can be used in each "__arch"
+// indiscriminately.
+// NOTE: Other placement alternative, kernel_utils!
+//
+pub mod utils{
+    use crate::qlib as qlib;
+    use qlib::common::Error;
+    use qlib::addr::Addr;
+    use qlib::kernel::kernel_util::RandU64;
 
+    //
+    // MMapRand returns a random adjustment for randomizing an mmap layout.
+    //
+    pub fn MMapRand(max: u64) -> Result<u64, Error> {
+        let addr = RandU64()? % max;
+        return Ok(Addr(addr).RoundDown().unwrap().0);
+    }
+
+}

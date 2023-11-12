@@ -947,5 +947,3 @@ pub const fn align_up(addr: u64, align: u64) -> u64 {
         (addr | align_mask) + 1
     }
 }
-
-
