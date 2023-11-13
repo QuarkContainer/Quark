@@ -639,3 +639,22 @@ pub fn spsel() -> u64 {
     }
     ret
 }
+
+// Setting or clearing the (hardware) privilege access never bit. If set, the
+// CPU will be trapped when trying to access EL0(user) memory from EL1 or above.
+// This is to prevent the kernel from accessing user memory accidentally,
+#[cfg(target_arch = "aarch64")]
+#[inline]
+pub fn SetPAN() {
+    unsafe {
+        asm!("msr PAN, #1");
+    };
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+pub fn ClearPAN() {
+    unsafe {
+        asm!("msr PAN, #0");
+    };
+}
