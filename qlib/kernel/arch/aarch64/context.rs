@@ -31,7 +31,7 @@ pub const MAX_ADDR64: u64 = 1 << VA_BITS_4KB_4L_PT;
 const STACK_RND_MASK: u64 = 0x3ffff;
 pub const MAX_STACK_RAND64: u64 = STACK_RND_MASK << MemoryDef::PAGE_SHIFT;
 // MAX_MMAP_RAND64 is the maximum randomization to apply to the mmap layout.
-const MMAP_RND_BITS: u64 = 33;
+const MMAP_RND_BITS: u64 = 28;
 pub const MAX_MMAP_RAND64: u64 = (1u64 << MMAP_RND_BITS) << MemoryDef::PAGE_SHIFT;
 // MIN_GAP64 is the minimum gap to leave at the top of the address space for the stack.
 const SIZE_128M: u64 = 0x8000000;
