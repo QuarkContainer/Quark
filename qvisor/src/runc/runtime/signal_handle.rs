@@ -97,15 +97,21 @@ extern "C" fn handle_sigintAct(
 
             error!("get signal context is {:#x?}", ucontext);
 
+            #[cfg(target_arch = "x86_64")]
+            let (ip, sp, bp) = (ucontext.MContext.rip,ucontext.MContext.rsp,ucontext.MContext.rbp);
+            #[cfg(target_arch = "aarch64")]
+            let (ip, sp, bp) = (ucontext.MContext.pc,ucontext.MContext.sp,ucontext.MContext.regs[29]);
             backtracer::trace(
-                ucontext.MContext.rip,
-                ucontext.MContext.rsp,
-                ucontext.MContext.rbp,
+                ip,
+                sp,
+                bp,
                 &mut |frame| {
                     print!("panic frame is {:#x?}", frame);
                     true
                 },
             );
+
+
             panic!("get signal 11");
         }
 

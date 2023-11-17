@@ -428,7 +428,7 @@ impl Task {
 
         let mut userSp = cStack;
         if opts.sharingOption.NewAddressSpace || cStack == 0 {
-            userSp = Self::Current().GetPtRegs().rsp;
+            userSp = Self::Current().GetPtRegs().get_stack_pointer();
         }
 
         info!("Clone opts is {:x?}", &opts);
@@ -664,14 +664,22 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
 
         toTask.SetReady(1);
         toTask.context.set_tls(fromTask.context.get_tls());
+        // TODO, what is this?
         toTask.context.set_sp(toTask.GetPtRegs() as *const _ as u64 - 8);
         toTask.context.set_para(userSp);
         toTask.savefpsate = true;
         toTask.archfpstate = Some(Box::new(
             fromTask.archfpstate.as_ref().unwrap().Fork(),
         ));
-        toPtRegs.rax = 0;
-        toPtRegs.rsp = userSp;
+        
+        // TODO what is this?
+        #[cfg(target_arch = "x86_64")]
+        {
+            toPtRegs.rax = 0;
+        }
+        toPtRegs.set_stack_pointer(userSp);
+        
+        
         toTask.context.set_sp(child_clone as u64);
     }
 }

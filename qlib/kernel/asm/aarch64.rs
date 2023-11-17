@@ -22,6 +22,28 @@ use bitflags::bitflags;
 use crate::qlib::kernel::task;
 use crate::qlib::vcpu_mgr::CPULocal;
 
+pub const _PSR_D_BIT:u64      = 0x00000200;
+pub const _PSR_A_BIT:u64      = 0x00000100;
+pub const _PSR_I_BIT:u64      = 0x00000080;
+pub const _PSR_F_BIT:u64      = 0x00000040;
+pub const _PSR_DAIF_SHIFT:u64 = 6;
+pub const _PSR_DAIF_MASK:u64  = 0xf << _PSR_DAIF_SHIFT;
+
+// PSR bits.
+pub const _PSR_MODE_EL0t:u64 = 0x00000000;
+pub const _PSR_MODE_EL1t:u64 = 0x00000004;
+pub const _PSR_MODE_EL1h:u64 = 0x00000005;
+pub const _PSR_MODE_MASK:u64 = 0x0000000f;
+
+pub const PsrFlagsClear:u64 = _PSR_MODE_MASK | _PSR_DAIF_MASK;
+pub const PsrModeMask:u64   = _PSR_MODE_MASK;
+
+// KernelFlagsSet should always be set in the kernel.
+pub const KernelFlagsSet:u64 = _PSR_MODE_EL1h | _PSR_D_BIT | _PSR_A_BIT | _PSR_I_BIT | _PSR_F_BIT;
+
+// UserFlagsSet are always set in userspace.
+pub const UserFlagsSet:u64 = _PSR_MODE_EL0t;
+
 #[inline]
 pub fn WriteMsr(msr: u32, value: u64) {
 
@@ -83,12 +105,17 @@ pub fn CurrentKernelTable() -> u64 {
 
 #[inline]
 pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) -> ! {
-    unsafe {
-        asm!(
-            "nop"
-        );
-        panic!("won't reach");
-    }
+    let currTask = task::Task::Current();
+    let pt = currTask.GetPtRegs();
+    CPULocal::SetKernelStack(kernelStackAddr);
+    CPULocal::SetUserStack(userStackAddr);
+    *pt = Default::default();
+
+    pt.pc = entry;
+    pt.sp = userStackAddr;
+    pt.pstate &= !PsrFlagsClear;
+    pt.pstate |= UserFlagsSet;
+    IRet(pt as *const _ as u64);
 }
 
 #[inline]
@@ -104,9 +131,32 @@ pub fn SyscallRet(kernelRsp: u64) -> ! {
 #[inline]
 pub fn IRet(kernelRsp: u64) -> ! {
     unsafe {
-        asm!(
-            "nop"
-        );
+        asm!("\
+              mov sp, x0
+              ldp x30, x23, [sp, #16*15]
+              ldp x21, x22, [sp, #16*16]
+              msr sp_el0, x23
+              msr elr_el1, x21
+              msr spsr_el1, x22
+              ldp  x0,  x1,  [sp, #16*0]
+              ldp  x2,  x3,  [sp, #16*1]
+              ldp  x4,  x5,  [sp, #16*2]
+              ldp  x6,  x7,  [sp, #16*3]
+              ldp  x8,  x9,  [sp, #16*4]
+              ldp x10, x11,  [sp, #16*5]
+              ldp x12, x13,  [sp, #16*6]
+              ldp x14, x15,  [sp, #16*7]
+              ldp x16, x17,  [sp, #16*8]
+              ldp x18, x19,  [sp, #16*9]
+              ldp x20, x21, [sp, #16*10]
+              ldp x22, x23, [sp, #16*11]
+              ldp x24, x25, [sp, #16*12]
+              ldp x26, x27, [sp, #16*13]
+              ldp x28, x29, [sp, #16*14]
+              add sp, sp, #16*17
+              eret
+            ",
+            in("x0") kernelRsp);
         panic!("won't reach");
     }
 }

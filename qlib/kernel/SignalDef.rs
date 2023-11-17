@@ -20,11 +20,8 @@ use super::super::common::*;
 use super::super::linux_def::*;
 use super::kernel::posixtimer::*;
 use super::task::*;
-//
-// ARM port
-// Rename / Refactor
-//
-//#[cfg(target_arch = "x86_64")]
+
+#[cfg(target_arch = "x86_64")]
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 //copy from https://elixir.bootlin.com/linux/latest/source/arch/x86/include/uapi/asm/ptrace.h#L18
@@ -65,6 +62,7 @@ pub struct PtRegs {
     /* top of stack page */
 }
 
+#[cfg(target_arch = "x86_64")]
 impl PtRegs {
     pub fn Set(&mut self, ctx: &SigContext) {
         self.r15 = ctx.r15;
@@ -88,6 +86,45 @@ impl PtRegs {
         self.eflags = ctx.eflags;
         self.rsp = ctx.rsp;
         self.ss = ctx.ss as u64;
+    }
+
+    pub fn get_stack_pointer(&self) -> u64 {
+        return self.rsp;
+    }
+
+    pub fn set_stack_pointer(&mut self, sp: u64) {
+        self.rsp = sp;
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct PtRegs {
+    pub regs: [u64; 31],
+    pub sp: u64,
+    pub pc: u64,
+    pub pstate: u64,
+    pub orig_x0: u64,
+    pub __pad: u64,
+}
+
+#[cfg(target_arch = "aarch64")]
+impl PtRegs {
+    pub fn Set(&mut self, ctx: &SigContext) {
+        self.regs = ctx.regs.clone();
+        self.sp = ctx.sp;
+        self.pc = ctx.pc;
+        self.pstate = ctx.pstate;
+        self.orig_x0 = ctx.regs[0];
+    }
+
+    pub fn get_stack_pointer(&self) -> u64 {
+        return self.sp;
+    }
+
+    pub fn set_stack_pointer(&mut self, sp: u64) {
+        self.sp = sp;
     }
 }
 
@@ -320,6 +357,7 @@ impl UContext {
 }
 
 // https://elixir.bootlin.com/linux/latest/source/arch/x86/include/uapi/asm/sigcontext.h#L284
+#[cfg(target_arch = "x86_64")]
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SigContext {
@@ -357,6 +395,21 @@ pub struct SigContext {
     pub reserved: [u64; 8],
 }
 
+#[cfg(target_arch = "aarch64")]
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct SigContext {
+	pub fault_address: u64,
+	/* AArch64 registers */
+	pub regs: [u64; 31],
+	pub sp: u64,
+	pub pc: u64,
+	pub pstate: u64,
+	/* 4K reserved for FP/SIMD state and future expansion */
+	pub __reserved: [u8; 4096],
+}
+
+#[cfg(target_arch = "x86_64")]
 impl SigContext {
     pub fn New(ptRegs: &PtRegs, oldMask: u64, cr2: u64, fpstate: u64) -> Self {
         return Self {
@@ -387,6 +440,31 @@ impl SigContext {
             oldmask: oldMask,
             cr2: cr2,
             fpstate: fpstate,
+            ..Default::default()
+        };
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+impl Default for SigContext {
+    fn default() -> Self {
+        Self {
+            __reserved: [0u8;4096],
+            ..Default::default()
+        }
+    }
+}
+
+//TODO  how to set sigcontext
+#[cfg(target_arch = "aarch64")]
+impl SigContext {
+    pub fn New(ptRegs: &PtRegs, oldMask: u64, cr2: u64, fpstate: u64) -> Self {
+        return Self {
+            fault_address: 0,
+            regs: ptRegs.regs.clone(),
+            pc: ptRegs.pc,
+            sp: ptRegs.sp,
+            pstate: ptRegs.pstate,
             ..Default::default()
         };
     }
