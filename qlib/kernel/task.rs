@@ -564,18 +564,38 @@ impl Task {
         return unsafe { &mut *(addr as *mut PtRegs) };
     }
 
+    #[cfg(target_arch = "aarch64")]
+    #[inline(always)]
+    pub fn SetReturn(&self, val: u64) {
+        let pt = self.GetPtRegs();
+        pt.regs[0] = val;
+    }
+
+    #[cfg(target_arch = "x86_64")]
     #[inline(always)]
     pub fn SetReturn(&self, val: u64) {
         let pt = self.GetPtRegs();
         pt.rax = val;
     }
 
+    #[cfg(target_arch = "aarch64")]
+    #[inline(always)]
+    pub fn Return(&self) -> u64 {
+        return self.GetPtRegs().regs[0];
+    }
+
+    #[cfg(target_arch = "x86_64")]
     #[inline(always)]
     pub fn Return(&self) -> u64 {
         return self.GetPtRegs().rax;
     }
 
+    #[cfg(target_arch = "x86_64")]
     const SYSCALL_WIDTH: u64 = 2;
+    #[cfg(target_arch = "aarch64")]
+    const SYSCALL_WIDTH: u64 = 4;
+
+    #[cfg(target_arch = "x86_64")]
     pub fn RestartSyscall(&self) {
         let pt = self.GetPtRegs();
         pt.rcx -= Self::SYSCALL_WIDTH;
@@ -583,11 +603,28 @@ impl Task {
         pt.rax = pt.orig_rax;
     }
 
+    #[cfg(target_arch = "aarch64")]
+    pub fn RestartSyscall(&self) {
+        let pt = self.GetPtRegs();
+        pt.pc -= Self::SYSCALL_WIDTH;
+        pt.regs[0] = pt.orig_x0;
+    }
+
+
+    #[cfg(target_arch = "x86_64")]
     pub fn RestartSyscallWithRestartBlock(&self) {
         let pt = self.GetPtRegs();
         pt.rcx -= Self::SYSCALL_WIDTH;
         pt.rip = pt.rcx;
         pt.rax = SysCallID::sys_restart_syscall as u64;
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn RestartSyscallWithRestartBlock(&self) {
+        let pt = self.GetPtRegs();
+        pt.pc -= Self::SYSCALL_WIDTH;
+        pt.regs[0] = pt.orig_x0;
+        pt.regs[8] = SysCallID::sys_restart_syscall as u64;
     }
 
     #[inline]
@@ -850,7 +887,7 @@ impl Task {
     }
 
     pub fn OnSignalStack(&self, alt: &SignalStack) -> bool {
-        let sp = self.GetPtRegs().rsp;
+        let sp = self.GetPtRegs().get_stack_pointer();
         return alt.Contains(sp);
     }
 
