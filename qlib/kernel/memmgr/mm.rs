@@ -1462,11 +1462,9 @@ impl MemoryManager {
         if vma.private & vma.mappable.HostIops().is_some() {
             perms.ClearWrite();
         }
-        error!("PopulateVMALocked 1");
-
+        
         self.pagetable.write().pt.MUnmap(ar.Start(), ar.Len())?;
         let segAr = vmaSeg.Range();
-        error!("PopulateVMALocked 2");
         let iops = match &vma.mappable {
             MMappable::None => {
                 //anonymous mapping
@@ -1486,7 +1484,6 @@ impl MemoryManager {
                 return Ok(()); 
             }
             MMappable::NvFrontend(iops) => {
-                error!("PopulateVMALocked 3");
                 self.AddRssLock(ar);
                 self.pagetable.write().pt.MapNvFrontendFile(
                     task,
@@ -1495,11 +1492,9 @@ impl MemoryManager {
                     &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()),
                     &perms
                 )?;
-                error!("PopulateVMALocked 4");
                 return Ok(()); 
             }
             MMappable::Uvm(iops) => {
-                error!("PopulateVMALocked 3.1 vma.offset {:x} ar.Start() {:x} segAr.Start() {:x}", vma.offset, ar.Start(), segAr.Start());
                 self.AddRssLock(ar);
                 self.pagetable.write().pt.MapUvmFile(
                     task,
@@ -1508,7 +1503,6 @@ impl MemoryManager {
                     &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()),
                     &perms
                 )?;
-                error!("PopulateVMALocked 4.1");
                 return Ok(()); 
             }
             MMappable::HostIops(iops) => {

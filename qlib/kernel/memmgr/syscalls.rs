@@ -89,15 +89,13 @@ impl MemoryManager {
         if opts.GrowsDown && opts.Mappable.HostIops().is_some() {
             return Err(Error::SysError(SysErr::EINVAL));
         }
-        error!("MMap 2");
-
+        
         let (vseg, ar) = self.CreateVMAlocked(task, opts)?;
-        error!("MMap 3");
-
+        
         self.PopulateVMALocked(task, &vseg, &ar, opts.Precommit, opts.VDSO)?;
-        error!("MMap 4");
-
+        
         self.TlbShootdown();
+        error!("MMap 5");
         return Ok(ar.Start());
     }
 

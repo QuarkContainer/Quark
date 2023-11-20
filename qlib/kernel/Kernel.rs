@@ -883,21 +883,18 @@ impl HostSpace {
     }
 
     pub fn MMapFile(len: u64, fd: i32, offset: u64, prot: i32) -> i64 {
-        error!("MMapFile dd 1");
         // assert!(
         //     len % MemoryDef::PMD_SIZE == 0,
         //     "offset is {:x}, len is {:x}",
         //     offset,
         //     len
         // );
-        error!("MMapFile dd 2");
         // assert!(
         //     offset % MemoryDef::PMD_SIZE == 0,
         //     "offset is {:x}, len is {:x}",
         //     offset,
         //     len
         // );
-        error!("MMapFile dd 3");
         let mut msg = Msg::MMapFile(MMapFile {
             len,
             fd,

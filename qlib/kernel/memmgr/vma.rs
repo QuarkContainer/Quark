@@ -247,7 +247,6 @@ impl MemoryManager {
     }
 
     pub fn CreateVMAlocked(&self, task: &Task, opts: &MMapOpts) -> Result<(AreaSeg<VMA>, Range)> {
-        error!("CreateVMAlocked 1");
         if opts.MaxPerms != opts.MaxPerms.Effective() {
             panic!(
                 "Non-effective MaxPerms {:?} cannot be enforced",
@@ -255,7 +254,6 @@ impl MemoryManager {
             );
         }
 
-        error!("CreateVMAlocked 2");
         // Find a useable range.
         let mut findopts = FindAvailableOpts {
             Addr: opts.Addr,
@@ -266,7 +264,6 @@ impl MemoryManager {
         };
         let addr = self.FindAvailableLocked(opts.Length, &mut findopts)?;
 
-        error!("CreateVMAlocked 3");
         let ar = Range::New(addr, opts.Length);
 
         let mut newUsageAS = self.mapping.lock().usageAS + opts.Length;
@@ -297,14 +294,12 @@ impl MemoryManager {
             }
         }
 
-        error!("CreateVMAlocked 4");
         // Remove overwritten mappings. This ordering is consistent with Linux:
         // compare Linux's mm/mmap.c:mmap_region() => do_munmap(),
         // file->f_op->mmap().
         if opts.Unmap {
             self.RemoveVMAsLocked(&ar)?;
         }
-        error!("CreateVMAlocked 5");
         
         let mut mapping = self.mapping.lock();
         let gap = mapping.vmas.FindGap(ar.Start());
@@ -315,7 +310,6 @@ impl MemoryManager {
             opts.Offset,
             !opts.Private && opts.MaxPerms.Write(),
         )?;
-        error!("CreateVMAlocked 6");
         
         let vma = VMA {
             mappable: opts.Mappable.clone(),
@@ -340,7 +334,6 @@ impl MemoryManager {
             mapping.lockedAS += opts.Length;
         }
 
-        error!("CreateVMAlocked 7");
         let vseg = mapping.vmas.Insert(&gap, &ar, vma);
         let nextvseg = vseg.NextSeg();
         assert!(
