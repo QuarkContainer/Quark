@@ -24,6 +24,9 @@ log = { version = "0.4", features = ["max_level_trace", "release_max_level_trace
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 x86_64 = "0.14.7"
 
+[package.metadata.cargo-xbuild]
+sysroot_path = "../target/sysroot"
+
 [dependencies.lazy_static]
 version = "1.0"
 features = ["spin_no_std"]
