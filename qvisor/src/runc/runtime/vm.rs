@@ -183,7 +183,6 @@ impl VirtualMachine {
             .lock()
             .Init(cpuCount, controlSock, rdmaSvcCliSock, podId);
 
-        error!("VM::InitShareSpace, after call init 1");
         let spAddr = &(*SHARE_SPACE_STRUCT.lock()) as *const _ as u64;
         SHARE_SPACE.SetValue(spAddr);
         SHARESPACE.SetValue(spAddr);
@@ -235,14 +234,12 @@ impl VirtualMachine {
 
         let syncPrint = sharespace.config.read().SyncPrint();
         super::super::super::print::SetSyncPrint(syncPrint);
-        error!("VM::InitShareSpace, after call init 2");
     }
 
     pub fn Init(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
         PerfGoto(PerfType::Other);
 
         *ROOT_CONTAINER_ID.lock() = args.ID.clone();
-        error!("ContainerId: {}", args.ID.clone());
         if QUARK_CONFIG.lock().PerSandboxLog {
             LOG.Reset(&args.ID[0..12]);
         }

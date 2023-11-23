@@ -465,7 +465,6 @@ impl MemoryManager {
 
     //Remove virtual memory to the phy mem mapping
     pub fn RemoveVMAsLocked(&self, ar: &Range) -> Result<()> {
-        error!("RemoveVMAsLocked 1 {:x?}", ar);
         let mut mapping = self.mapping.lock();
         let (mut vseg, vgap) = mapping.vmas.Find(ar.Start());
         if vgap.Ok() {
@@ -478,11 +477,9 @@ impl MemoryManager {
             let vma = vseg.Value();
 
             if !vma.kernel {
-                error!("RemoveVMAsLocked 2 {:x?}", ar);
                 vma.mappable
                     .RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
 
-                error!("RemoveVMAsLocked 3 {:x?}", ar);
                 mapping.usageAS -= r.Len();
                 if vma.mlockMode != MLockMode::MlockNone {
                     mapping.lockedAS -= r.Len();
@@ -1309,7 +1306,7 @@ impl MemoryManager {
         while vaddr < startAddr + len {
             let (paddr, _) = self.VirtualToPhyLocked(vaddr)?;
             super::super::PAGE_MGR.RefPage(paddr);
-            if paddr != lastAddr + lastLen + MemoryDef::PAGE_SIZE {
+            if paddr != lastAddr + lastLen { //+ MemoryDef::PAGE_SIZE {
                 if lastAddr != 0 {
                     ranges.push(Range::New(lastAddr, lastLen));
                 }

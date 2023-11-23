@@ -69,8 +69,7 @@ impl Default for NVProxyInner {
             versionString: [0; 64]
         };
         HostSpace::NividiaDriverVersion(&version);
-        error!("NVProxyInner is {:?}", version.Version());
-
+        
         let mut inner = Self {
             objs: BTreeMap::default(),
             frontendIoctl: BTreeMap::default(),

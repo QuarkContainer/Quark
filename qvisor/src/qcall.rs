@@ -118,7 +118,7 @@ impl KVMVcpu {
                 ret = super::VMSpace::OpenAt(msg.dirfd, msg.name, msg.flags, msg.addr) as u64;
             }
             Msg::RemapGuestMemRanges(msg) => {
-                ret = super::VMSpace::RemapGuestMemRanges(msg.len, msg.ranges) as u64;
+                ret = super::VMSpace::RemapGuestMemRanges(msg.len, msg.addr, msg.count) as u64;
             }
             Msg::UnmapGuestMemRange(msg) => {
                 ret = super::VMSpace::UnmapGuestMemRange(msg.start, msg.len) as u64;
@@ -333,7 +333,6 @@ impl KVMVcpu {
                 ) as u64;
             }
             Msg::MMapFile(msg) => {
-                error!("MMapFile 1");
                 ret = match super::PMA_KEEPER.MapFile(msg.len, msg.prot, msg.fd, msg.offset) {
                     Err(Error::SysError(e)) => -e as u64,
                     Ok(phyAddr) => phyAddr,
@@ -394,7 +393,6 @@ impl KVMVcpu {
             Msg::SetTscOffset(msg) => {
                 TSC.SetOffset(msg.offset);
                 VcpuFreqInit();
-                error!("Host Vcpu Print timestamp init ...");
                 ret = 0;
             }
             Msg::TlbShootdown(msg) => {

@@ -21,7 +21,6 @@ use super::super::socket_buf::*;
 use super::super::*;
 use crate::kernel_def::HyperCall64;
 use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
-use crate::qlib::range::Range;
 
 extern "C" {
     pub fn rdtsc() -> i64;
@@ -651,10 +650,11 @@ impl HostSpace {
         //return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn RemapGuestMemRanges(len: u64, ranges: &'static [Range]) -> i64 {
+    pub fn RemapGuestMemRanges(len: u64, addr: u64, count: usize) -> i64 {
         let mut msg = Msg::RemapGuestMemRanges(RemapGuestMemRanges {
             len: len,
-            ranges: ranges,
+            addr: addr,
+            count: count
         });
 
         let ret = Self::Call(&mut msg, false) as i64;
@@ -902,9 +902,7 @@ impl HostSpace {
             prot,
         });
 
-        error!("MMapFile dd 4");
         let res = HostSpace::HCall(&mut msg, true) as i64;
-        error!("MMapFile dd 5 {}", res);
         //assert!(res as u64 % MemoryDef::PMD_SIZE == 0, "res {:x}", res);
         return res;
     }

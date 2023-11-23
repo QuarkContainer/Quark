@@ -243,13 +243,8 @@ impl PageTables {
         fr: &Range,
         at: &AccessType
     ) -> Result<()> {
-        error!("MapNvFrontendFile 1");
-        let bs = f.MapInternal(task, fr)?;
-        
-        error!("MapNvFrontendFile 2");
+        let bs = f.MapInternal(task, fr, at.Write())?;
         self.MapHost(task, addr, &bs, at, true)?;
-        error!("MapNvFrontendFile 3");
-        
         return Ok(());
     }
 
@@ -261,12 +256,9 @@ impl PageTables {
         fr: &Range,
         at: &AccessType
     ) -> Result<()> {
-        error!("MapUvmFile 1");
         let bs = f.MapInternal(task, addr, fr, at.Write())?;
         
-        error!("MapUvmFile 2");
         self.MapHost(task, addr, &bs, at, true)?;
-        error!("MapUvmFile 3");
         
         return Ok(());
     }

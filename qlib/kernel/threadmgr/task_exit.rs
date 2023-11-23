@@ -981,7 +981,7 @@ impl Thread {
             tglock.liveTasks -= 1;
             tglock.liveThreads.Add(-1);
 
-            error!("living task count:{}", tglock.liveTasks);
+            info!("living task count:{}", tglock.liveTasks);
             // Check if this completes a sibling's execve.
             if tglock.execing.Upgrade().is_some() && tglock.liveTasks == 1 {
                 // execing blocks the addition of new tasks to the thread group, so
@@ -1018,13 +1018,13 @@ impl Thread {
                 .remove(&ExecID { cid: cid, pid: tid });
         }
         let taskCnt = owner.write().DecrTaskCount1();
-        error!(
-            "ExitNotify 4 [{:x}], taskcnt is {}",
-            self.lock().taskId,
-            taskCnt
-        );
+        // error!(
+        //     "ExitNotify 4 [{:x}], taskcnt is {}",
+        //     self.lock().taskId,
+        //     taskCnt
+        // );
         if taskCnt == 0 {
-            error!("ExitNotify shutdown");
+            info!("ExitNotify shutdown");
             PAGE_MGR.Clear();
             super::super::SHARESPACE.StoreShutdown();
             //PerfStop();

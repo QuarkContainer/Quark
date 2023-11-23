@@ -216,7 +216,7 @@ impl VMSpace {
         process.Envs.append(&mut spec.process.env);
 
         //todo: credential fix.
-        error!("LoadProcessKernel: need to study the user mapping handling...");
+        //error!("LoadProcessKernel: need to study the user mapping handling...");
         process.UID = spec.process.user.uid;
         process.GID = spec.process.user.gid;
         process
@@ -560,8 +560,6 @@ impl VMSpace {
     }
 
     pub fn NvidiaMMap(addr: u64, len: u64, prot: i32, flags: i32, fd: i32, offset: u64) -> i64 {
-        error!("NvidiaMMap addr {:x} len {:x} prot {:x} flags {:x} fd {} offset {:x}",
-            addr, len, prot, flags, fd, offset);
         let ret = unsafe {
             libc::mmap(addr as _, len as usize, prot, flags, fd, offset as i64) as i64
         };
@@ -570,7 +568,9 @@ impl VMSpace {
         return ret;
     }
 
-    pub fn RemapGuestMemRanges(len: u64, ranges: &[Range]) -> i64 {
+    pub fn RemapGuestMemRanges(len: u64, addr: u64, count: usize) -> i64 {
+        let ptr = addr as *const Range;
+        let ranges = unsafe { slice::from_raw_parts(ptr, count) };
         let flags = libc::MAP_PRIVATE | libc::MAP_ANON;
         let ret = unsafe {
             libc::mmap(
@@ -588,7 +588,7 @@ impl VMSpace {
         }
 
         let mut addr = ret as u64;
-        let flags = libc::MREMAP_MAYMOVE | libc::MREMAP_FIXED;
+        let flags = libc::MREMAP_MAYMOVE | libc::MREMAP_FIXED;// | libc::MREMAP_DONTUNMAP;
         for r in ranges {
             let ret = unsafe {
                 libc::mremap(
@@ -598,9 +598,9 @@ impl VMSpace {
                     flags,
                     addr
                 ) as i32
-            };
+            } as i64;
 
-            if ret < 0 {
+            if ret == -1 {
                 return -errno::errno().0 as i64;
             }
 
@@ -1376,7 +1376,6 @@ impl VMSpace {
     pub fn RandomVcpuMapping(&mut self) {
         let delta = self.GetRandomU8() as usize;
         self.vcpuMappingDelta = delta % Self::VCPUCount();
-        error!("RandomVcpuMapping {}", self.vcpuMappingDelta);
     }
 
     pub fn ComputeVcpuCoreId(&self, threadId: usize) -> usize {
@@ -1671,7 +1670,7 @@ impl VMSpace {
         physical: Addr,
         flags: PageTableFlags,
     ) -> Result<bool> {
-        error!("KernelMap start is {:x}, end is {:x}", start.0, end.0);
+        info!("KernelMap start is {:x}, end is {:x}", start.0, end.0);
         return self
             .pageTables
             .Map(start, end, physical, flags, &mut self.allocator, true);
@@ -1684,7 +1683,7 @@ impl VMSpace {
         physical: Addr,
         flags: PageTableFlags,
     ) -> Result<bool> {
-        error!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
+        info!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
         return self
             .pageTables
             .MapWith1G(start, end, physical, flags, &mut self.allocator, true);

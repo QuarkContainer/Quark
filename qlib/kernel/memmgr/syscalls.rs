@@ -40,8 +40,7 @@ impl MemoryManager {
     // MMap establishes a memory mapping.
     pub fn MMap(&self, task: &Task, opts: &mut MMapOpts) -> Result<u64> {
         let _ml = self.MappingWriteLock();
-        error!("MMap 1");
-
+        
         if opts.Length == 0 {
             return Err(Error::SysError(SysErr::EINVAL));
         }
@@ -95,7 +94,6 @@ impl MemoryManager {
         self.PopulateVMALocked(task, &vseg, &ar, opts.Precommit, opts.VDSO)?;
         
         self.TlbShootdown();
-        error!("MMap 5");
         return Ok(ar.Start());
     }
 

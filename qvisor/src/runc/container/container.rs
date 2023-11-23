@@ -1239,7 +1239,6 @@ pub fn NVProxyHostSetup() -> Result<()> {
 
     let cli = cliPath.into_os_string().into_string().unwrap();
 
-    error!("cliPath ... {:?}", cli);
     if !Path::new("/dev/nvidiactl").exists() {
         let output = std::process::Command::new(&cli)
                     .arg("--load-kmods info")
@@ -1274,7 +1273,7 @@ pub fn NVProxyLoadKernelModules() -> Result<()> {
 }
 
 pub fn NVProxySetupInUserns(rootPath: &str) -> Result<()> {
-    error!("NVProxySetupInUserns root is {}", rootPath);
+    info!("NVProxySetupInUserns root is {}", rootPath);
 
     let nvidiaProc = rootPath.to_owned() + "/proc/driver/nvidia";
     fs::create_dir_all(&nvidiaProc).expect(&format!("can not create {}", &nvidiaProc));

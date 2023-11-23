@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::qlib::fileinfo::*;
-use crate::qlib::range::Range;
 
 use super::super::config::*;
 use super::super::kernel::util::cstring::*;
@@ -145,21 +144,11 @@ pub struct NvidiaMMap {
     pub offset: u64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct RemapGuestMemRanges {
     pub len: u64,
-    pub ranges: &'static [Range]
-}
-
-impl Default for RemapGuestMemRanges {
-    fn default() -> Self {
-        return Self {
-            len: 0,
-            ranges: unsafe {
-                &*(0 as * const &[Range])
-            }
-        }
-    }
+    pub addr: u64,
+    pub count: usize,
 }
 
 #[derive(Clone, Default, Debug)]

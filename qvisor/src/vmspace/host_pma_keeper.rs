@@ -154,7 +154,6 @@ impl HostPMAKeeper {
     }
 
     pub fn MapFile(&self, len: u64, prot: i32, fd: i32, offset: u64) -> Result<u64> {
-        error!("MMapFile xxx 1");
         let osfd = fd;
         let mut mo = &mut MapOption::New();
 
@@ -171,13 +170,9 @@ impl HostPMAKeeper {
         
         //mo.MapLocked();
 
-        error!("MMapFile xxx 2 fd is {} offset is {} proto is {:x}", 
-            fd, offset, prot);
         let start = self.Allocate(len, MemoryDef::PMD_SIZE)?;
-        error!("MMapFile xxx 3 {:x}", start);
         mo.Addr(start);
         let ret = self.Map(&mut mo, &Range::New(start, len));
-        error!("MMapFile xxx 4 {:?}", ret);
         return ret;
     }
 
@@ -194,9 +189,9 @@ impl HostPMAKeeper {
     }
 
     fn Allocate(&self, len: u64, alignment: u64) -> Result<u64> {
-        if len != MemoryDef::PAGE_SIZE_2M {
-            error!("Allocate len is {:x} alignment {:x}", len, alignment);
-        }
+        // if len != MemoryDef::PAGE_SIZE_2M {
+        //     error!("Allocate len is {:x} alignment {:x}", len, alignment);
+        // }
 
         if len <= MemoryDef::PAGE_SIZE_2M {
             assert!(

@@ -347,7 +347,7 @@ impl SandboxProcess {
             SetID(0, 0)?;
         }
 
-        error!("EnableNamespace ToEnterNS is {:?}", &self.ToEnterNS);
+        info!("EnableNamespace ToEnterNS is {:?}", &self.ToEnterNS);
 
         for &(space, fd) in &self.ToEnterNS {
             if space == LinuxNamespaceType::mount as i32 {

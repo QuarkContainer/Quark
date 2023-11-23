@@ -335,12 +335,8 @@ pub struct NvFrontendFileOptionsInner {
 }
 
 impl NvFrontendFileOptionsInner {
-    pub fn MapInternal(&self, _task: &Task, fr: &Range) -> Result<IoVec> {
+    pub fn MapInternal(&self, _task: &Task, fr: &Range, writeable: bool) -> Result<IoVec> {
         assert!(fr.start == 0);
-
-        error!("MapInternal 1");
-        // todo: get it from mmap
-        let writeable = true;
 
         let prot = if writeable {
             (MmapProt::PROT_WRITE | MmapProt::PROT_READ) as i32
@@ -348,9 +344,7 @@ impl NvFrontendFileOptionsInner {
             MmapProt::PROT_READ as i32
         };
 
-        error!("MapInternal 2 fr is {:x?} fd {} proto {}", &fr, self.fd, prot);
         let ret = HostSpace::MMapFile(fr.len, self.fd, fr.start, prot);
-        error!("MapInternal 3 {:x}", ret);
         
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
@@ -360,13 +354,11 @@ impl NvFrontendFileOptionsInner {
 
         assert!(self.mapRange.lock().is_none());
 
-        error!("MapInternal 4 {:x}", ret);
         *self.mapRange.lock() = Some(NvFrontendMapRange {
             fileOffset: fr.start,
             phyAddr: phyAddr,
             len: fr.len
         });
-        error!("MapInternal 5 ");
         
         return Ok(IoVec { start: phyAddr, len: fr.len as usize });
     }
@@ -377,19 +369,14 @@ impl NvFrontendFileOptionsInner {
         ar: &Range,
         offset: u64
     ) -> Result<()> {
-        error!("frontendfd Unmap 1");
         let mapRange = match self.mapRange.lock().take() {
             None => return Err(Error::SysError(SysErr::EINVAL)),
             Some(mr) => mr,
         };
 
-        error!("frontendfd Unmap 2 {:x?} {:x?} {:x}", &mapRange, ar, offset);
         assert!(mapRange.fileOffset == offset);
-        error!("frontendfd Unmap 3");
         assert!(mapRange.len == ar.len);
-        error!("frontendfd Unmap 4");
         HostSpace::MUnmap(mapRange.phyAddr, mapRange.len);
-        error!("frontendfd Unmap 1");
         
         return Ok(())
     }
@@ -515,8 +502,7 @@ impl FileOperations for NvFrontendFileOptions {
             ioctlParamsSize: argSize,
         };
 
-        error!("frontendfd ioctl nr is {:x}", nr);
-
+        
         // nr determines the argument type.
         // Don't log nr since it's already visible as the last byte of cmd in
         // strace logging.
@@ -722,16 +708,12 @@ pub fn RMAllocMemory(fi: &FrontendIoctlState) -> Result<u64> {
 
     let ioctlParams: IoctlNVOS02ParametersWithFD = fi.task.CopyInObj(fi.ioctlParamsAddr)?;
 
-    error!("nvproxy: NV_ESC_RM_ALLOC_MEMORY class {}", ioctlParams.params.class);
-
     // See src/nvidia/arch/nvalloc/unix/src/escape.c:RmIoctl() and
 	// src/nvidia/interface/deprecated/rmapi_deprecated_allocmemory.c:rmAllocMemoryTable
 	// for implementation.
     if ioctlParams.params.class == NV01_MEMORY_SYSTEM_OS_DESCRIPTOR {
         return RMAllocOSDescriptor(fi, &ioctlParams)
     }
-
-    warn!("nvproxy: unknown NV_ESC_RM_ALLOC_MEMORY class {:#?}", ioctlParams.params.class);
 
     return Err(Error::SysError(SysErr::EINVAL))
 }
@@ -763,7 +745,8 @@ pub fn RMAllocOSDescriptor(fi: &FrontendIoctlState, ioctlParams: &IoctlNVOS02Par
     let prs = fi.task.mm.Pin(fi.task, appAddr, arLen)?;
     let ret = HostSpace::RemapGuestMemRanges(
         arLen, 
-        unsafe { &*(&prs as * const _ as u64 as * const &[Range])}
+        &prs[0] as * const _ as u64,
+        prs.len()
     );
     if ret < 0 {
         return Err(Error::SysError(ret as i32));
@@ -789,7 +772,6 @@ pub fn RMAllocOSDescriptor(fi: &FrontendIoctlState, ioctlParams: &IoctlNVOS02Par
         inner.objs.insert(ioctlParamsTmp.params.objectNew, o.into());
     }
 
-    info!("nvproxy: pinned pages for OS descriptor with handle {:x?}", ioctlParamsTmp.params.objectNew);
     // Unmap the reserved range, which is no longer required.
 	HostSpace::UnmapGuestMemRange(hostAddr, arLen);
     
@@ -870,7 +852,6 @@ pub fn RMControl(fi: &FrontendIoctlState) -> Result<u64> {
 }
 
 pub fn RMControlSimple(fi: &FrontendIoctlState, ioctlParams: &NVOS54Parameters) -> Result<u64> {
-    error!("RMControlSimple is {:#x?}", ioctlParams);
     if ioctlParams.paramsSize == 0 {
         if ioctlParams.params != 0 {
             return Err(Error::SysError(SysErr::EINVAL));
@@ -891,13 +872,11 @@ pub fn RMControlSimple(fi: &FrontendIoctlState, ioctlParams: &NVOS54Parameters) 
 }
 
 pub fn CtrlClientSystemGetBuildVersion(fi: &FrontendIoctlState, ioctlParams: &NVOS54Parameters) -> Result<u64> {
-    error!("fi.ioctlParamsSize is {}, expect {}", fi.ioctlParamsSize, core::mem::size_of::<Nv0000CtrlSystemGetBuildVersionParams>());
     // if fi.ioctlParamsSize as usize != core::mem::size_of::<Nv0000CtrlSystemGetBuildVersionParams>() {
     //     return Err(Error::SysError(SysErr::EINVAL));
     // }
 
     let ctrlParams: Nv0000CtrlSystemGetBuildVersionParams = fi.task.CopyInObj(ioctlParams.params)?;
-    error!("ctrlParams is {:#x?}", &ctrlParams);
     if ctrlParams.driverVersionBuffer == 0 || ctrlParams.versionBuffer == 0 || ctrlParams.titleBuffer == 0 {
         // No strings are written if any are null. See
 		// src/nvidia/interface/deprecated/rmapi_deprecated_control.c:V2_CONVERTER(_NV0000_CTRL_CMD_SYSTEM_GET_BUILD_VERSION).
@@ -925,9 +904,9 @@ pub fn CtrlClientSystemGetBuildVersion(fi: &FrontendIoctlState, ioctlParams: &NV
         &titleBuf[0] as * const _ as u64
     )?;
 
-    error!("CtrlClientSystemGetBuildVersion driverVersionBuf is {:?}", &driverVersionBuf);
-    error!("CtrlClientSystemGetBuildVersion versionBuf is {:?}", &versionBuf);
-    error!("CtrlClientSystemGetBuildVersion titleBuf is {:?}", &titleBuf);
+    // error!("CtrlClientSystemGetBuildVersion driverVersionBuf is {:?}", &driverVersionBuf);
+    // error!("CtrlClientSystemGetBuildVersion versionBuf is {:?}", &versionBuf);
+    // error!("CtrlClientSystemGetBuildVersion titleBuf is {:?}", &titleBuf);
 
     fi.task.CopyOutSlice(&driverVersionBuf, ctrlParams.driverVersionBuffer, ctrlParams.sizeOfStrings as usize)?;
     fi.task.CopyOutSlice(&versionBuf, ctrlParams.versionBuffer, ctrlParams.sizeOfStrings as usize)?;
@@ -1132,14 +1111,12 @@ pub fn RMMapMemory(fi: &FrontendIoctlState) -> Result<u64> {
         }
     };
 
-    error!("RMMapMemory 1 {} {}", mapfile.fd, mapfile.hasMmapContext.load(Ordering::Relaxed));
     if mapfile.hasMmapContext.load(Ordering::Relaxed) ||
         mapfile.hasMmapContext.compare_and_swap(false, true, Ordering::SeqCst) {
         warn!("nvproxy: attempted to reuse FD {} for NV_ESC_RM_MAP_MEMORY", ioctlParams.fd);
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    error!("RMMapMemory 2 {}", mapfile.fd);
     let mut ioctlParamsTmp = ioctlParams;
     ioctlParamsTmp.fd = mapfile.fd;
 

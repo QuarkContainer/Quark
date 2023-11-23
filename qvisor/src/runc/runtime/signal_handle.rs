@@ -83,7 +83,7 @@ extern "C" fn handle_sigintAct(
     if SIGNAL_HANDLE_ENABLE.load(Ordering::Relaxed) {
         let sigfault: &SignalFaultInfo = unsafe { &*(signInfo as u64 as *const SignalFaultInfo) };
 
-        error!("get signal {}, action is {:x?}", signal, sigfault);
+        info!("get signal {}, action is {:x?}", signal, sigfault);
 
         if signal == 11 {
             let ucontext = unsafe { &*(addr as *const UContext) };
@@ -95,7 +95,7 @@ extern "C" fn handle_sigintAct(
                 true
             });*/
 
-            error!("get signal context is {:#x?}", ucontext);
+            info!("get signal context is {:#x?}", ucontext);
 
             backtracer::trace(
                 ucontext.MContext.rip,

@@ -293,7 +293,6 @@ impl InodeOperations for UvmDevice {
     }
 
     fn Mappable(&self) -> Result<MMappable> {
-        error!("UvmDevice Mappable 1");
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }
@@ -314,9 +313,6 @@ pub struct UvmFileOptionsInner {
 
 impl UvmFileOptionsInner {
     pub fn MapInternal(&self, _task: &Task, addr: u64, fr: &Range, writeable: bool) -> Result<IoVec> {
-        error!("uvmMapInternal 1 addr is {:x} writeable {}", addr, writeable);
-
-        
         let prot = if writeable {
             (MmapProt::PROT_WRITE | MmapProt::PROT_READ) as i32
         } else {
@@ -324,15 +320,12 @@ impl UvmFileOptionsInner {
         };
 
         let ret = if MemoryDef::NVIDIA_START_ADDR <= addr && addr < MemoryDef::NVIDIA_START_ADDR + MemoryDef::NVIDIA_ADDR_SIZE {
-            error!("uvmMapInternal 2"); 
             let _flags = (MmapFlags::MAP_FIXED | MmapFlags::MAP_SHARED) as i32;
             HostSpace::NvidiaMMap(addr, fr.len, prot, 0x11, self.fd, fr.start)
         } else {
-            error!("uvmMapInternal 3"); 
             HostSpace::MMapFile(fr.len, self.fd, fr.start, prot)
         };
 
-        error!("uvmMapInternal 4 {:x}", ret); 
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }
@@ -341,13 +334,11 @@ impl UvmFileOptionsInner {
 
         assert!(self.mapRange.lock().is_none());
 
-        error!("uvmMapInternal 5 {:x}", phyAddr);
         *self.mapRange.lock() = Some(UvmMapRange {
             fileOffset: fr.start,
             phyAddr: phyAddr,
             len: fr.len
         });
-        error!("uvmMapInternal 5 ");
         
         return Ok(IoVec { start: phyAddr, len: fr.len as usize });
     }
@@ -358,19 +349,14 @@ impl UvmFileOptionsInner {
         ar: &Range,
         offset: u64
     ) -> Result<()> {
-        error!("uvm Unmap 1");
         let mapRange = match self.mapRange.lock().take() {
             None => return Ok(()),
             Some(mr) => mr,
         };
 
-        error!("uvm Unmap 2 {:x?} {:x?} {:x}", &mapRange, ar, offset);
         assert!(mapRange.fileOffset == offset);
-        error!("uvm Unmap 3");
         assert!(mapRange.len == ar.len);
-        error!("uvm Unmap 4");
         HostSpace::MUnmap(mapRange.phyAddr, mapRange.len);
-        error!("uvm Unmap 1");
         
         return Ok(())
     }
@@ -492,8 +478,6 @@ impl FileOperations for UvmFileOptions {
             ioctlParamsAddr: argPtr,
         };
 
-        error!("nvmfd ioctl cmd is {:x}/{}", cmd, cmd);
-        
         let handler = match self.nvp.lock().uvmIoctl.get(&cmd) {
             Some(h) => {
                 h.clone()
@@ -526,7 +510,6 @@ impl FileOperations for UvmFileOptions {
     }
 
     fn Mappable(&self) -> Result<MMappable> {
-        error!("uvm mmap...");
         return Ok(MMappable::FromUvmFops(self.clone()));
     }
 }
@@ -563,7 +546,6 @@ pub fn UvmIoctlInvoke<Params: Sized>(
 pub fn UvmIoctlSimple<Params: Sized + Copy + alloc::fmt::Debug>(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
     let ioctlParams: Params = task.CopyInObj(ui.ioctlParamsAddr)?;
 
-    error!("UvmIoctlSimple {:x?}", &ioctlParams);
     let n = UvmIoctlInvoke(ui, Some(&ioctlParams))?;
     
 	task.CopyOutObj(&ioctlParams, ui.ioctlParamsAddr)?;
@@ -592,7 +574,6 @@ pub fn UvmInitialize(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
 pub fn UvmMMInitialize(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
     let ioctlParams : UvmMmInitializeParams = task.CopyInObj(ui.ioctlParamsAddr)?;
 
-    error!("UvmMMInitialize 0 {}", ioctlParams.uvmFD);
     let FailWithStatus = |status: u32| -> Result<u64> {
         let mut outIoctlParams = ioctlParams;
         outIoctlParams.status = status;
@@ -600,7 +581,6 @@ pub fn UvmMMInitialize(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
         return Ok(0)
     };
 
-    error!("UvmMMInitialize 0.1"); 
     let uvmFileGeneric = match task.GetFile(ioctlParams.uvmFD) {
         Err(_) => {
             return FailWithStatus(NV_ERR_INVALID_ARGUMENT);
@@ -608,7 +588,6 @@ pub fn UvmMMInitialize(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
         Ok(f) => f
     };
 
-    error!("UvmMMInitialize 0.2"); 
     let uvmFile = match &uvmFileGeneric.FileOp {
         FileOps::UvmFileOptions(ops) => {
             ops.clone()
@@ -629,14 +608,11 @@ pub fn UvmMMInitialize(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
     };
     
     let mut ioctlParamsTmp = ioctlParams;
-    error!("UvmMMInitialize 1 ioctlParamsTmp is {:?}", &ioctlParamsTmp);
     ioctlParamsTmp.uvmFD = uvmFile.fd;
     let n = UvmIoctlInvoke(ui, Some(&ioctlParamsTmp))?;
 
     let mut outIoctlParams = ioctlParamsTmp;
     outIoctlParams.uvmFD = ioctlParams.uvmFD;
-
-    error!("UvmMMInitialize 2 outIoctlParams is {:?}", &outIoctlParams);
 
     task.CopyOutObj(&outIoctlParams, ui.ioctlParamsAddr)?;
 
