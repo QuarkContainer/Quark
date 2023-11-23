@@ -17,6 +17,8 @@ use alloc::vec::Vec;
 use spin::*;
 //use alloc::string::ToString;
 use crate::qlib::mutex::*;
+use crate::qlib::nvproxy::frontendfd::NvFrontendDevice;
+use crate::qlib::nvproxy::uvmfd::UvmDevice;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 use core::any::Any;
@@ -183,6 +185,8 @@ pub enum Iops {
     SlaveInodeOperations(SlaveInodeOperations),
     PipeIops(PipeIops),
     UnixSocketInodeOps(UnixSocketInodeOps),
+    NvFrontendDevice(NvFrontendDevice),
+    UvmDevice(UvmDevice)
 }
 
 impl Iops {

@@ -1306,7 +1306,7 @@ impl MemoryManager {
         while vaddr < startAddr + len {
             let (paddr, _) = self.VirtualToPhyLocked(vaddr)?;
             super::super::PAGE_MGR.RefPage(paddr);
-            if paddr != lastAddr + lastLen + MemoryDef::PAGE_SIZE {
+            if paddr != lastAddr + lastLen { //+ MemoryDef::PAGE_SIZE {
                 if lastAddr != 0 {
                     ranges.push(Range::New(lastAddr, lastLen));
                 }
@@ -1459,11 +1459,11 @@ impl MemoryManager {
         if vma.private & vma.mappable.HostIops().is_some() {
             perms.ClearWrite();
         }
-
+        
         self.pagetable.write().pt.MUnmap(ar.Start(), ar.Len())?;
         let segAr = vmaSeg.Range();
-        match &vma.mappable.HostIops() {
-            None => {
+        let iops = match &vma.mappable {
+            MMappable::None => {
                 //anonymous mapping
                 self.AddRssLock(ar);
                 if !vdso {
@@ -1478,31 +1478,62 @@ impl MemoryManager {
                         true,
                     )?;
                 }
+                return Ok(()); 
             }
-            Some(iops) => {
-                //host file mapping
-                // the map file mapfile cost is high. Only pre-commit it when the size < 4MB.
-                // todo: improve that later
-                let currPerm = if !vma.private {
-                    perms
-                } else {
-                    // disable write for private range, so that it could trigger cow in pagefault
-                    AccessType(perms.0 & !MmapProt::PROT_WRITE)
-                };
-
-                if precommit && segAr.Len() < 0x200000 {
-                    self.pagetable.write().pt.MapFile(
-                        task,
-                        ar.Start(),
-                        &iops,
-                        &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()),
-                        &currPerm,
-                        precommit,
-                    )?;
-                }
+            MMappable::NvFrontend(iops) => {
                 self.AddRssLock(ar);
+                self.pagetable.write().pt.MapNvFrontendFile(
+                    task,
+                    ar.Start(),
+                    iops,
+                    &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()),
+                    &perms
+                )?;
+                return Ok(()); 
             }
+            MMappable::Uvm(iops) => {
+                self.AddRssLock(ar);
+                self.pagetable.write().pt.MapUvmFile(
+                    task,
+                    ar.Start(),
+                    iops,
+                    &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()),
+                    &perms
+                )?;
+                return Ok(()); 
+            }
+            MMappable::HostIops(iops) => {
+                iops.clone()
+            }
+            MMappable::Shm(shm)=> {
+                shm.HostIops()
+            }
+            _ => {
+                return Err(Error::SysError(SysErr::EINVAL));
+            }
+        };
+
+        //host file mapping
+        // the map file mapfile cost is high. Only pre-commit it when the size < 4MB.
+        // todo: improve that later
+        let currPerm = if !vma.private {
+            perms
+        } else {
+            // disable write for private range, so that it could trigger cow in pagefault
+            AccessType(perms.0 & !MmapProt::PROT_WRITE)
+        };
+
+        if precommit && segAr.Len() < 0x200000 {
+            self.pagetable.write().pt.MapFile(
+                task,
+                ar.Start(),
+                &iops,
+                &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()),
+                &currPerm,
+                precommit,
+            )?;
         }
+        self.AddRssLock(ar);
 
         return Ok(());
     }

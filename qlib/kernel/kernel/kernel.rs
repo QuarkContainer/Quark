@@ -405,7 +405,7 @@ impl Kernel {
         envs: &Vec<String>,
         args: &mut Vec<String>,
     ) -> Result<(u64, u64, u64)> {
-        error!(
+        info!(
             "LoadProcess filename: {:?} envs: {:?}, args: {:?}",
             fileName, envs, args
         );

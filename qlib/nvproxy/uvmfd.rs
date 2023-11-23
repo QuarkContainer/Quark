@@ -20,9 +20,9 @@ use core::ops::Deref;
 use crate::qlib::cstring::CString;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::fs::file::*;
-use crate::qlib::kernel::fs::inode::*;
 use crate::qlib::kernel::guestfdnotifier::NonBlockingPoll;
 use crate::qlib::kernel::guestfdnotifier::UpdateFD;
+use crate::qlib::kernel::memmgr::mm::MemoryManager;
 use crate::qlib::mutex::*;
 use crate::qlib::auth::*;
 use crate::qlib::common::*;
@@ -43,14 +43,33 @@ use crate::qlib::kernel::fs::fsutil::inode::*;
 use crate::qlib::kernel::fs::mount::*;
 use crate::qlib::path;
 use crate::qlib::nvproxy::nvproxy::NVProxy;
+use crate::qlib::kernel::fs::inode::*;
+use crate::qlib::nvproxy::nvgpu::*;
+use crate::qlib::range::Range;
 
 use super::uvm::*;
 
+#[derive(Debug, Clone)]
 pub struct UvmDevice {
     pub nvp: NVProxy,
     pub attr: Arc<QRwLock<InodeSimpleAttributesInternal>>,
 }
 
+impl UvmDevice {
+    pub fn New(task: &Task, nvp: &NVProxy, owner: &FileOwner, mode: &FileMode) -> Self {
+        let attr = InodeSimpleAttributesInternal::New(
+            task,
+            owner,
+            &FilePermissions::FromMode(*mode),
+            FSMagic::TMPFS_MAGIC,
+        );
+
+        return UvmDevice {
+            nvp: nvp.clone(),
+            attr: Arc::new(QRwLock::new(attr)),
+        }
+    }
+}
 
 impl InodeOperations for UvmDevice {
     fn as_any(&self) -> &Any {
@@ -185,6 +204,7 @@ impl InodeOperations for UvmDevice {
             fd: fd,
             queue: Queue::default(),
             nvp: self.nvp.clone(),
+            mapRange: QMutex::new(None),
         };
 
         let fops = UvmFileOptions(Arc::new(inner));
@@ -277,10 +297,69 @@ impl InodeOperations for UvmDevice {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct UvmMapRange {
+    pub fileOffset: u64,
+    pub phyAddr: u64,
+    pub len: u64,
+}
+
 pub struct UvmFileOptionsInner {
     pub fd: i32,
     pub queue: Queue,
     pub nvp: NVProxy, 
+    pub mapRange: QMutex<Option<UvmMapRange>>,
+}
+
+impl UvmFileOptionsInner {
+    pub fn MapInternal(&self, _task: &Task, addr: u64, fr: &Range, writeable: bool) -> Result<IoVec> {
+        let prot = if writeable {
+            (MmapProt::PROT_WRITE | MmapProt::PROT_READ) as i32
+        } else {
+            MmapProt::PROT_READ as i32
+        };
+
+        let ret = if MemoryDef::NVIDIA_START_ADDR <= addr && addr < MemoryDef::NVIDIA_START_ADDR + MemoryDef::NVIDIA_ADDR_SIZE {
+            let _flags = (MmapFlags::MAP_FIXED | MmapFlags::MAP_SHARED) as i32;
+            HostSpace::NvidiaMMap(addr, fr.len, prot, 0x11, self.fd, fr.start)
+        } else {
+            HostSpace::MMapFile(fr.len, self.fd, fr.start, prot)
+        };
+
+        if ret < 0 {
+            return Err(Error::SysError(-ret as i32));
+        }
+
+        let phyAddr = ret as u64;
+
+        assert!(self.mapRange.lock().is_none());
+
+        *self.mapRange.lock() = Some(UvmMapRange {
+            fileOffset: fr.start,
+            phyAddr: phyAddr,
+            len: fr.len
+        });
+        
+        return Ok(IoVec { start: phyAddr, len: fr.len as usize });
+    }
+
+    pub fn Unmap( 
+        &self,
+        _ms: &MemoryManager,
+        ar: &Range,
+        offset: u64
+    ) -> Result<()> {
+        let mapRange = match self.mapRange.lock().take() {
+            None => return Ok(()),
+            Some(mr) => mr,
+        };
+
+        assert!(mapRange.fileOffset == offset);
+        assert!(mapRange.len == ar.len);
+        HostSpace::MUnmap(mapRange.phyAddr, mapRange.len);
+        
+        return Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -399,62 +478,23 @@ impl FileOperations for UvmFileOptions {
             ioctlParamsAddr: argPtr,
         };
 
-        match cmd {
-            UVM_INITIALIZE => {
-                return UvmInitialize(task, &ui);
+        let handler = match self.nvp.lock().uvmIoctl.get(&cmd) {
+            Some(h) => {
+                h.clone()
             }
-            UVM_DEINITIALIZE => {
-                return UvmIoctlInvoke::<u8>(&ui, None);
-            }
-            UVM_CREATE_RANGE_GROUP => {
-                return UvmIoctlSimple::<UvmCreateRangeGroupParams>(task, &ui);
-            }
-            UVM_DESTROY_RANGE_GROUP => {
-                return UvmIoctlSimple::<UvmDestroyRangeGroupParams>(task, &ui);
-            }
-            UVM_REGISTER_GPU_VASPACE => {
-                return UvmIoctlSimple::<UvmRegisterGpuVaspaceParams>(task, &ui);
-            }
-            UVM_UNREGISTER_GPU_VASPACE => {
-                return UvmIoctlSimple::<UvmRegisterChannelParams>(task, &ui);
-            }
-            UVM_REGISTER_CHANNEL => {
-                return UvmIoctlSimple::<UvmRegisterChannelParams>(task, &ui);
-            }
-            UVM_UNREGISTER_CHANNEL => {
-                return UvmIoctlSimple::<UvmUnregisterChannelParams>(task, &ui);
-            }
-            UVM_MAP_EXTERNAL_ALLOCATION => {
-                return UvmIoctlSimple::<UvmMapExternalAllocationParams>(task, &ui);
-            }
-            UVM_FREE => {
-                return UvmIoctlSimple::<UvmFreeParams>(task, &ui);
-            }
-            UVM_REGISTER_GPU => {
-                return UvmIoctlSimple::<UvmRegisterGpuParams>(task, &ui);
-            }
-            UVM_UNREGISTER_GPU => {
-                return UvmIoctlSimple::<UvmUnregisterGpuParams>(task, &ui);
-            }
-            UVM_PAGEABLE_MEM_ACCESS => {
-                return UvmIoctlSimple::<UvmPageableMemAccessParams>(task, &ui);
-            }
-            UVM_MAP_DYNAMIC_PARALLELISM_REGION => {
-                return UvmIoctlSimple::<UvmMapDynamicParallelismRegionParams>(task, &ui);
-            }
-            UVM_ALLOC_SEMAPHORE_POOL => {
-                return UvmIoctlSimple::<UvmAllocSemaphorePoolParams>(task, &ui);
-            }
-            UVM_VALIDATE_VA_RANGE => {
-                return UvmIoctlSimple::<UvmValidateVaRangeParams>(task, &ui);
-            }
-            UVM_CREATE_EXTERNAL_RANGE => {
-                return UvmIoctlSimple::<UvmCreateExternalRangeParams>(task, &ui);
-            }
-            
-            _ => {
+            None => {
                 warn!("nvproxy: unknown uvm ioctl {}", cmd);
                 return Err(Error::SysError(SysErr::EINVAL));
+            }
+        };
+
+        match handler(task, &ui) {
+            Err(e) => {
+                error!("uvm ioctl error {:?}", &e);
+                return Err(e);
+            }
+            Ok(v) => {
+                return Ok(v);
             }
         }
     }
@@ -470,7 +510,13 @@ impl FileOperations for UvmFileOptions {
     }
 
     fn Mappable(&self) -> Result<MMappable> {
-        return Err(Error::SysError(SysErr::ENODEV));
+        return Ok(MMappable::FromUvmFops(self.clone()));
+    }
+}
+
+impl PartialEq for UvmFileOptions {
+    fn eq(&self, other: &Self) -> bool {
+        return Arc::ptr_eq(&self.0, &other.0);
     }
 }
 
@@ -497,13 +543,17 @@ pub fn UvmIoctlInvoke<Params: Sized>(
     return Ok(n as u64)
 }
 
-pub fn UvmIoctlSimple<Params: Sized + Copy>(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
+pub fn UvmIoctlSimple<Params: Sized + Copy + alloc::fmt::Debug>(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
     let ioctlParams: Params = task.CopyInObj(ui.ioctlParamsAddr)?;
 
     let n = UvmIoctlInvoke(ui, Some(&ioctlParams))?;
     
 	task.CopyOutObj(&ioctlParams, ui.ioctlParamsAddr)?;
     return Ok(n);
+}
+
+pub fn UvmIoctlNoParams(_task: &Task, ui: &UvmIoctlState) -> Result<u64> {
+    return UvmIoctlInvoke::<u8>(ui, None);
 }
 
 pub fn UvmInitialize(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
@@ -518,6 +568,54 @@ pub fn UvmInitialize(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
     let mut outIoctlParams = ioctlParamsTmp;
     outIoctlParams.flags &= ioctlParams.flags | UVM_INIT_FLAGS_MULTI_PROCESS_SHARING_MODE;
     task.CopyOutObj(&outIoctlParams, ui.ioctlParamsAddr)?;
+    return Ok(n)
+}
+
+pub fn UvmMMInitialize(task: &Task, ui: &UvmIoctlState) -> Result<u64> {
+    let ioctlParams : UvmMmInitializeParams = task.CopyInObj(ui.ioctlParamsAddr)?;
+
+    let FailWithStatus = |status: u32| -> Result<u64> {
+        let mut outIoctlParams = ioctlParams;
+        outIoctlParams.status = status;
+        task.CopyOutObj(&outIoctlParams, ui.ioctlParamsAddr)?;
+        return Ok(0)
+    };
+
+    let uvmFileGeneric = match task.GetFile(ioctlParams.uvmFD) {
+        Err(_) => {
+            return FailWithStatus(NV_ERR_INVALID_ARGUMENT);
+        }
+        Ok(f) => f
+    };
+
+    let uvmFile = match &uvmFileGeneric.FileOp {
+        FileOps::UvmFileOptions(ops) => {
+            ops.clone()
+        }
+        FileOps::OverlayFileOperations(of) => {
+            match of.FileOps() {
+                FileOps::UvmFileOptions(ops) => {
+                    ops.clone()
+                }
+                _ => {
+                    return FailWithStatus(NV_ERR_INVALID_ARGUMENT);
+                }
+            }
+        }
+        _ => {
+            return FailWithStatus(NV_ERR_INVALID_ARGUMENT);
+        }
+    };
+    
+    let mut ioctlParamsTmp = ioctlParams;
+    ioctlParamsTmp.uvmFD = uvmFile.fd;
+    let n = UvmIoctlInvoke(ui, Some(&ioctlParamsTmp))?;
+
+    let mut outIoctlParams = ioctlParamsTmp;
+    outIoctlParams.uvmFD = ioctlParams.uvmFD;
+
+    task.CopyOutObj(&outIoctlParams, ui.ioctlParamsAddr)?;
+
     return Ok(n)
 }
 

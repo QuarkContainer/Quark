@@ -39,7 +39,7 @@ impl Frame {
 
 #[inline(always)]
 pub fn trace_from(mut curframe: Frame, cb: &mut dyn FnMut(&Frame) -> bool) {
-    loop {
+    for _ in 0..20 {
         let ctxt = curframe.clone();
 
         let keep_going = cb(&ctxt);

@@ -40,7 +40,7 @@ impl MemoryManager {
     // MMap establishes a memory mapping.
     pub fn MMap(&self, task: &Task, opts: &mut MMapOpts) -> Result<u64> {
         let _ml = self.MappingWriteLock();
-
+        
         if opts.Length == 0 {
             return Err(Error::SysError(SysErr::EINVAL));
         }
@@ -52,7 +52,7 @@ impl MemoryManager {
 
         opts.Length = length;
 
-        if opts.Mappable.HostIops().is_some() {
+        if opts.Mappable.HasFileMap() {
             // Offset must be aligned.
             if Addr(opts.Offset).RoundDown()?.0 != opts.Offset {
                 return Err(Error::SysError(SysErr::EINVAL));
@@ -88,11 +88,11 @@ impl MemoryManager {
         if opts.GrowsDown && opts.Mappable.HostIops().is_some() {
             return Err(Error::SysError(SysErr::EINVAL));
         }
-
+        
         let (vseg, ar) = self.CreateVMAlocked(task, opts)?;
-
+        
         self.PopulateVMALocked(task, &vseg, &ar, opts.Precommit, opts.VDSO)?;
-
+        
         self.TlbShootdown();
         return Ok(ar.Start());
     }

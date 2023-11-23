@@ -40,6 +40,7 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let anon = flags & MmapFlags::MAP_ANONYMOUS != 0;
     let map32bit = flags & MmapFlags::MAP_32BIT != 0;
 
+
     // Require exactly one of MAP_PRIVATE and MAP_SHARED.
     if private == shared {
         return Err(Error::SysError(SysErr::EINVAL));

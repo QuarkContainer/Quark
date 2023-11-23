@@ -209,7 +209,6 @@ fn main() {
                 ::std::process::exit(-1);
             }
             Ok(()) => {
-                error!("exit successfully ...");
                 ::std::process::exit(0);
             }
         }

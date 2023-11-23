@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::qlib::fileinfo::*;
-use crate::qlib::range::Range;
 
 use super::super::config::*;
 use super::super::kernel::util::cstring::*;
@@ -126,23 +125,30 @@ pub enum Msg {
     Proxy(Proxy),
     RemapGuestMemRanges(RemapGuestMemRanges),
     UnmapGuestMemRange(UnmapGuestMemRange),
+    NividiaDriverVersion(NividiaDriverVersion),
+    NvidiaMMap(NvidiaMMap),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Default, Debug)]
+pub struct NividiaDriverVersion {
+    pub ioctlParamsAddr: u64
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct NvidiaMMap {
+    pub addr: u64,
+    pub len: u64,
+    pub prot: i32,
+    pub flags: i32,
+    pub fd: i32,
+    pub offset: u64,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct RemapGuestMemRanges {
     pub len: u64,
-    pub ranges: &'static [Range]
-}
-
-impl Default for RemapGuestMemRanges {
-    fn default() -> Self {
-        return Self {
-            len: 0,
-            ranges: unsafe {
-                &*(0 as * const &[Range])
-            }
-        }
-    }
+    pub addr: u64,
+    pub count: usize,
 }
 
 #[derive(Clone, Default, Debug)]

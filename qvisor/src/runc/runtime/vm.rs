@@ -183,7 +183,6 @@ impl VirtualMachine {
             .lock()
             .Init(cpuCount, controlSock, rdmaSvcCliSock, podId);
 
-        error!("VM::InitShareSpace, after call init 1");
         let spAddr = &(*SHARE_SPACE_STRUCT.lock()) as *const _ as u64;
         SHARE_SPACE.SetValue(spAddr);
         SHARESPACE.SetValue(spAddr);
@@ -235,14 +234,12 @@ impl VirtualMachine {
 
         let syncPrint = sharespace.config.read().SyncPrint();
         super::super::super::print::SetSyncPrint(syncPrint);
-        error!("VM::InitShareSpace, after call init 2");
     }
 
     pub fn Init(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
         PerfGoto(PerfType::Other);
 
         *ROOT_CONTAINER_ID.lock() = args.ID.clone();
-        error!("ContainerId: {}", args.ID.clone());
         if QUARK_CONFIG.lock().PerSandboxLog {
             LOG.Reset(&args.ID[0..12]);
         }
@@ -315,6 +312,14 @@ impl VirtualMachine {
             MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB,
         )?;
 
+        Self::SetMemRegion(
+            2,
+            &vm_fd,
+            MemoryDef::NVIDIA_START_ADDR,
+            MemoryDef::NVIDIA_START_ADDR,
+            MemoryDef::NVIDIA_ADDR_SIZE,
+        )?;
+
         let heapStartAddr = MemoryDef::HEAP_OFFSET;
 
         PMA_KEEPER.Init(MemoryDef::FILE_MAP_OFFSET, MemoryDef::FILE_MAP_SIZE);
@@ -363,6 +368,17 @@ impl VirtualMachine {
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR),
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR),
+                addr::PageOpts::Zero()
+                    .SetPresent()
+                    .SetWrite()
+                    .SetGlobal()
+                    .Val(),
+            )?;
+
+            vms.KernelMapHugeTable(
+                addr::Addr(MemoryDef::NVIDIA_START_ADDR),
+                addr::Addr(MemoryDef::NVIDIA_START_ADDR + MemoryDef::NVIDIA_ADDR_SIZE),
+                addr::Addr(MemoryDef::NVIDIA_START_ADDR),
                 addr::PageOpts::Zero()
                     .SetPresent()
                     .SetWrite()

@@ -95,13 +95,13 @@ impl IOCBits {
     // IOC_NR outputs the result of IOC_NR macro in
     // include/uapi/asm-generic/ioctl.h.
     pub const fn IOC_NR(nr: u32) -> u32 {
-        return (nr << Self::IOC_NRSHIFT) & ((1<< Self::IOC_NRBITS) - 1)
+        return (nr >> Self::IOC_NRSHIFT) & ((1<< Self::IOC_NRBITS) - 1)
     }
 
     // IOC_SIZE outputs the result of IOC_SIZE macro in
     // include/uapi/asm-generic/ioctl.h.
     pub const fn IOC_SIZE(nr: u32) -> u32 {
-        return (nr << Self::IOC_SIZESHIFT) & ((1<< Self::IOC_SIZEBITS) - 1)
+        return (nr >> Self::IOC_SIZESHIFT) & ((1<< Self::IOC_SIZEBITS) - 1)
     }
 
     // Kcov ioctls from include/uapi/linux/kcov.h.

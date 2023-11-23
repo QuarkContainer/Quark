@@ -36,6 +36,19 @@ pub struct FrontendIoctlState <'a> {
 	pub ioctlParamsSize: u32,
 }
 
+pub fn FrontendIoctlInvokePtr(fi: &FrontendIoctlState, paramsAddr: u64) -> Result<u64> {
+    let n = HostSpace::IoCtl(
+        fi.fd.fd, 
+        FrontendIoctlCmd(fi.nr, fi.ioctlParamsSize), 
+        paramsAddr
+    ); 
+    if n < 0 {
+        return Err(Error::SysError(n as i32));
+    }
+
+    return Ok(n as u64)
+}
+
 pub fn FrontendIoctlInvoke<Params: Sized>(
     fi: &FrontendIoctlState, 
     params: Option<&Params>
@@ -57,16 +70,13 @@ pub fn FrontendIoctlInvoke<Params: Sized>(
     return Ok(n as u64)
 }
 
-pub fn RMControlInvoke<Params: Sized>(
+pub fn RMControlInvoke(
     fi: &FrontendIoctlState, 
     ioctlParams: &NVOS54Parameters, 
-    ctrlParams: Option<&Params>
+    ctrlParamsAddr: P64
 ) -> Result<u64> {
     let mut ioctlParamsTmp = *ioctlParams;
-    ioctlParamsTmp.params = match ctrlParams {
-        None => 0,
-        Some(c) => c as * const _ as P64
-    };
+    ioctlParamsTmp.params = ctrlParamsAddr;
 
     let n = FrontendIoctlInvoke(fi, Some(&ioctlParamsTmp))?;
     let mut outIoctlParams = ioctlParamsTmp;
@@ -87,7 +97,7 @@ pub fn CtrlClientSystemGetBuildVersionInvoke(
     ctrlParamsTmp.driverVersionBuffer = driverVersionBuf; // as * const _ as P64;
     ctrlParamsTmp.versionBuffer = versionBuf;// as * const _ as P64;
     ctrlParamsTmp.titleBuffer = titleBuf;// as * const _ as P64;
-    let n = RMControlInvoke(fi, ioctlParams, Some(&ctrlParamsTmp))?;
+    let n = RMControlInvoke(fi, ioctlParams, &ctrlParamsTmp as * const _ as u64)?;
     let mut outCtrlParams = ctrlParamsTmp;
     outCtrlParams.driverVersionBuffer = ctrlParams.driverVersionBuffer;
     outCtrlParams.versionBuffer = ctrlParams.versionBuffer;
@@ -119,7 +129,7 @@ pub fn CtrlDevFIFOGetChannelList(
     ctrlParamsTmp.channelHandleList = &channelHandleList[0] as * const _ as u64;
     ctrlParamsTmp.channelList = &channelList[0] as * const _ as u64;
 
-    let n = RMControlInvoke(fi, ioctlParams, Some(&ctrlParamsTmp))?;
+    let n = RMControlInvoke(fi, ioctlParams, &ctrlParamsTmp as * const _ as u64)?;
 
     fi.task.CopyOutSlice(&channelHandleList, ctrlParams.channelHandleList, ctrlParams.numChannels as usize)?;
     fi.task.CopyOutSlice(&channelList, ctrlParams.channelList, ctrlParams.numChannels as usize)?;
@@ -149,14 +159,64 @@ pub fn CtrlSubdevGRGetInfo(
     let mut ctrlParamsTmp = ctrlParams;
     ctrlParamsTmp.GRInfoList = &infoList[0] as * const _ as u64;
 
-    let n = RMControlInvoke(fi, ioctlParams, Some(&ctrlParamsTmp))?;
+    let n = RMControlInvoke(fi, ioctlParams, &ctrlParamsTmp as * const _ as u64)?;
 
     fi.task.CopyOutSlice(&infoList, ctrlParams.GRInfoList, len)?;
 
     return Ok(n)
 }
 
-pub fn RMAllocInvoke <Params: Sized> (
+pub fn RMAllocInvokeInner<AllocParams: RmAllocParamType + Copy + Clone>(
+    fi: &FrontendIoctlState,
+    ioctlParams: &NVOS64ParametersV535,
+    allocParams: P64
+) -> Result<u64> {
+    let mut ioctlParamsTmp = AllocParams::FromOS64V535(ioctlParams);
+    ioctlParamsTmp.SetPAllocParms(allocParams);
+
+    let mut rightsRequested : RsAccessMask = RsAccessMask::default();
+    if ioctlParams.rightsRequested != 0 {
+        rightsRequested = fi.task.CopyInObj(ioctlParams.rightsRequested)?;
+        ioctlParamsTmp.SetPRightsRequested(&rightsRequested as * const _ as u64);
+    }
+
+    let n = FrontendIoctlInvokePtr(fi, &ioctlParamsTmp as * const _ as u64)?;
+    if ioctlParams.rightsRequested != 0 {
+        fi.task.CopyOutObj(&rightsRequested, ioctlParams.rightsRequested)?;
+    }
+
+    ioctlParamsTmp.SetPAllocParms(ioctlParams.allocParms);
+    if ioctlParams.rightsRequested != 0 {
+        ioctlParamsTmp.SetPRightsRequested(ioctlParams.rightsRequested);
+    }
+
+    fi.task.CopyOutObj(&ioctlParamsTmp, fi.ioctlParamsAddr)?;
+    return Ok(n)
+}
+
+pub fn RMAllocInvoke(
+    fi: &FrontendIoctlState,
+    ioctlParams: &NVOS64ParametersV535,
+    allocParams: P64,
+    isNVOS64: bool
+) -> Result<u64> {
+    let isV535 = fi.fd.nvp.lock().useRmAllocParamsV535;
+    if isNVOS64 {
+        if isV535 {
+            return RMAllocInvokeInner::<NVOS64ParametersV535>(fi, ioctlParams, allocParams);
+        } else {
+            return RMAllocInvokeInner::<NVOS64Parameters>(fi, ioctlParams, allocParams);
+        }
+    } else {
+        if isV535 {
+            return RMAllocInvokeInner::<NVOS21ParametersV535>(fi, ioctlParams, allocParams);
+        } else {
+            return RMAllocInvokeInner::<NVOS21Parameters>(fi, ioctlParams, allocParams);
+        }
+    }
+}
+
+pub fn RMAllocInvoke1 <Params: Sized> (
     fi: &FrontendIoctlState,
     ioctlParams: &NVOS64Parameters,
     allocParams: Option<&Params>,

@@ -43,6 +43,7 @@ pub const AMPERE_DMA_COPY_B                : u32 = 0x0000c7b5;
 pub const AMPERE_COMPUTE_B                 : u32 = 0x0000c7c0;
 pub const HOPPER_DMA_COPY_A                : u32 = 0x0000c8b5;
 pub const ADA_COMPUTE_A                    : u32 = 0x0000c9c0;
+pub const NV_CONFIDENTIAL_COMPUTE		   : u32 = 0x0000cb33;
 pub const HOPPER_COMPUTE_A                 : u32 = 0x0000cbc0;
 
 // Class handles for older generations that are not supported by the open source
@@ -241,6 +242,13 @@ pub struct Nv00f8AllocationParameters {
 	pub Map        : Nv00f8Map,
 }
 
+// NV_CONFIDENTIAL_COMPUTE_ALLOC_PARAMS is the alloc param type for
+// NV_CONFIDENTIAL_COMPUTE, from src/common/sdk/nvidia/inc/class/clcb33.h.
 
-
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct NvConfidentialComputeAllocParams {
+	pub handler: Handle,
+	//pub pad: u32,
+}
 
