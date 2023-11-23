@@ -672,7 +672,8 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
         ));
         toPtRegs.rax = 0;
         toPtRegs.rsp = userSp;
-        toTask.context.set_sp(child_clone as u64);
+
+        *(toTask.context.get_sp() as *mut u64) = child_clone as u64;
     }
 }
 
