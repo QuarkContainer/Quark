@@ -19,6 +19,7 @@ pub mod hook;
 pub mod mounts;
 pub mod nix_ext;
 pub mod status;
+pub mod nvidia;
 
 use lazy_static;
 use nix::sched::CloneFlags;

@@ -37,6 +37,7 @@ use procfs;
 use serde_json;
 use simplelog::*;
 
+use crate::runc::container::nvidia::*;
 use crate::runc::shim::shim_task::ShimTask;
 
 use super::super::super::console::pty::*;
@@ -636,6 +637,12 @@ impl SandboxProcess {
     }
 
     pub fn MountNvidia(&self) -> Result<()> {
+        let nvidiaList = FindAllGPUDevices()?;
+        info!("MountNvidia nvidia devices are {:?}", &nvidiaList);
+        if nvidiaList.len() == 0 {
+            return Ok(());
+        }
+
         let m = Mount {
             destination: "/dev/nvidiactl".to_owned(),
             typ: "bind".to_owned(),
@@ -666,20 +673,22 @@ impl SandboxProcess {
             "",
         )?;
 
-        let m = Mount {
-            destination: "/dev/nvidia0".to_owned(),
-            typ: "bind".to_owned(),
-            source: "/dev/nvidia0".to_owned(),
-            options: Vec::new()
-        };
+        for idx in &nvidiaList {
+            let m = Mount {
+                destination: format!("/dev/nvidia{}", idx),
+                typ: "bind".to_owned(),
+                source: "/dev/nvidia0".to_owned(),
+                options: Vec::new()
+            };
 
-        MountFrom(
-            &m,
-            &self.SandboxRootDir,
-            MsFlags::MS_BIND,
-            "",
-            "",
-        )?;
+            MountFrom(
+                &m,
+                &self.SandboxRootDir,
+                MsFlags::MS_BIND,
+                "",
+                "",
+            )?;
+        }
 
         return Ok(())
     }
@@ -713,7 +722,10 @@ impl SandboxProcess {
         }
         self.MakeSandboxRootDirectory()?;
 
-        self.MountNvidia()?;
+        let nvidiaDeviceList = NvidiaDeviceList(&self.spec)?;
+        if &nvidiaDeviceList !=  "" {
+            self.MountNvidia()?;
+        }
         
         self.EnableNamespace()?;
         let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
