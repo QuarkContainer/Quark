@@ -1287,6 +1287,22 @@ impl SockOperations for UringSocketOperations {
 
     fn GetPeerName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
         let len = socketaddr.len() as i32;
+
+        {
+            let peerName = self.remoteAddr.lock();
+            match &*peerName {
+                None => (),
+                Some(addr) => {
+                    let v = addr.ToVec()?;
+                    for i in 0..v.len() {
+                        socketaddr[i] = v[i];
+                    }
+    
+                    return Ok(v.len() as i64);
+                }
+            }    
+        }
+        
         let res = Kernel::HostSpace::GetPeerName(
             self.fd,
             &socketaddr[0] as *const _ as u64,
