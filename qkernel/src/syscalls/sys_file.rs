@@ -264,6 +264,23 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
         &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
             let mut inode = d.Inode();
 
+            // if needs write to file, check whether the inode is opened as writable
+            if inode.StableAttr().IsRegular() && fileFlags.Write {
+                let iops = inode.lock().InodeOp.clone();
+                match iops.HostInodeOp() {
+                    Some(iops) => {
+                        let mut lkiops = iops.lock();
+                        if lkiops.SkipRw() {
+                            let dirfd = d.Parent().unwrap().Inode().lock().InodeOp.HostInodeOp().unwrap().HostFd();
+                            let name = d.Name();
+                            let cstr = CString::New(&name);
+                            lkiops.TryOpenWrite(dirfd, cstr.Ptr())?;
+                        }
+                    }
+                    None => (),
+                }
+            }
+
             if !fileFlags.Path {
                 inode.CheckPermission(task, &PermMask::FromFlags(flags))?;
             }
@@ -271,6 +288,7 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
             if inode.StableAttr().IsSymlink() && !resolve && !fileFlags.Path {
                 return Err(Error::SysError(SysErr::ELOOP));
             }
+
 
             // Linux always adds the O_LARGEFILE flag when running in 64-bit mode.
             if !fileFlags.Path {
@@ -530,6 +548,22 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
                 if flags & Flags::O_TRUNC as u32 != 0 {
                     if foundInode.StableAttr().IsDir() {
                         return Err(Error::SysError(SysErr::EISDIR))
+                    }
+                    
+
+                    if foundInode.StableAttr().IsRegular() {
+                        let iops = foundInode.lock().InodeOp.clone();
+                        match iops.HostInodeOp() {
+                            Some(iops) => {
+                                let mut lkiops = iops.lock();
+                                let dirfd = parent.Inode().lock().InodeOp.HostDirOp().unwrap().HostFd();
+                                if lkiops.SkipRw() {
+                                    let cstr = CString::New(&name);
+                                    lkiops.TryOpenWrite(dirfd, cstr.Ptr())?;
+                                }
+                            }
+                            None => (),
+                        }
                     }
 
                     foundInode.Truncate(task, &found, 0)?;

@@ -203,7 +203,7 @@ impl Filesystem for WhitelistFileSystem {
             options.remove(&ROOT_PATH_KEY.to_string());
         }
 
-        let (fd, writable, _) = TryOpenAt(-100, &rootPath)?;
+        let (fd, writable, _) = TryOpenAt(-100, &rootPath, false)?;
 
         if fd < 0 {
             return Err(Error::SysError(-fd));
@@ -242,6 +242,7 @@ impl Filesystem for WhitelistFileSystem {
             fd,
             &fstat,
             writable,
+            false,
             false,
         )?;
 

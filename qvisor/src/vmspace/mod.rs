@@ -392,21 +392,47 @@ impl VMSpace {
         return (len + 1) as i64;
     }
 
-    pub unsafe fn TryOpenHelper(dirfd: i32, name: u64) -> (i32, bool) {
+    pub fn TryOpenWrite(dirfd: i32, name: u64) -> i64 {
         let flags = Flags::O_NOFOLLOW;
-        let ret = libc::openat(
-            dirfd,
-            name as *const c_char,
-            (flags | Flags::O_RDWR) as i32,
-            0,
-        );
-        if ret > 0 {
-            return (ret, true);
+
+        let fd = unsafe {
+            libc::openat(
+                dirfd,
+                name as *const c_char,
+                (flags | Flags::O_RDWR) as i32,
+                0,
+            )
+        };
+
+        if fd < 0 {
+            return fd as i64;
         }
 
-        let err = Self::GetRet(ret as i64) as i32;
-        if err == -SysErr::ENOENT {
-            return (-SysErr::ENOENT, false);
+        let hostfd = GlobalIOMgr().AddFile(fd);
+
+        URING_MGR.lock().Addfd(hostfd).unwrap();
+
+        return hostfd as i64;
+    }
+
+    pub unsafe fn TryOpenHelper(dirfd: i32, name: u64, skiprw: bool) -> (i32, bool) {
+        let flags = Flags::O_NOFOLLOW;
+
+        if !skiprw {
+            let ret = libc::openat(
+                dirfd,
+                name as *const c_char,
+                (flags | Flags::O_RDWR) as i32,
+                0,
+            );
+            if ret > 0 {
+                return (ret, true);
+            }
+
+            let err = Self::GetRet(ret as i64) as i32;
+            if err == -SysErr::ENOENT {
+                return (-SysErr::ENOENT, false);
+            }
         }
 
         let ret = libc::openat(
@@ -417,6 +443,13 @@ impl VMSpace {
         );
         if ret > 0 {
             return (ret, false);
+        }
+
+        if skiprw {
+            let err = Self::GetRet(ret as i64) as i32;
+            if err == -SysErr::ENOENT {
+                return (-SysErr::ENOENT, false);
+            }
         }
 
         let ret = libc::openat(
@@ -442,8 +475,8 @@ impl VMSpace {
         return (Self::GetRet(ret as i64) as i32, false);
     }
 
-    pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64) -> i64 {
-        //info!("TryOpenAt: the filename is {}", Self::GetStr(name));
+    pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64, skiprw: bool) -> i64 {
+        //info!("TryOpenAt1: the filename is {}", Self::GetStr(name));
         let dirfd = if dirfd < 0 {
             dirfd
         } else {
@@ -454,23 +487,33 @@ impl VMSpace {
         };
 
         let tryOpenAt = unsafe { &mut *(addr as *mut TryOpenStruct) };
+        let ret =
+            unsafe { 
+                libc::fstatat(
+                    dirfd, 
+                    name as *const c_char,
+                    tryOpenAt.fstat as *const _ as u64 as *mut stat,
+                    libc::AT_SYMLINK_NOFOLLOW
 
-        let (fd, writeable) = unsafe { Self::TryOpenHelper(dirfd, name) };
+                ) as i64 
+            };
 
+        if ret < 0 {
+            return Self::GetRet(ret as i64);
+        }
+        
+        let (fd, writeable) = unsafe { 
+            Self::TryOpenHelper(
+                dirfd, 
+                name, 
+                skiprw && tryOpenAt.fstat.IsRegularFile()
+            ) 
+        };
+        
         //error!("TryOpenAt dirfd {}, name {} ret {}", dirfd, Self::GetStr(name), fd);
 
         if fd < 0 {
             return fd as i64;
-        }
-
-        let ret =
-            unsafe { libc::fstat(fd, tryOpenAt.fstat as *const _ as u64 as *mut stat) as i64 };
-
-        if ret < 0 {
-            unsafe {
-                libc::close(fd);
-            }
-            return Self::GetRet(ret as i64);
         }
 
         tryOpenAt.writeable = writeable;

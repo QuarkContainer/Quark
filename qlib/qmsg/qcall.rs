@@ -47,6 +47,7 @@ pub enum Msg {
     Fstatfs(Fstatfs),
 
     TryOpenAt(TryOpenAt),
+    TryOpenWrite(TryOpenWrite),
     OpenAt(OpenAt),
     OpenDevFile(OpenDevFile),
     CreateAt(CreateAt),
@@ -465,6 +466,13 @@ pub struct TryOpenAt {
     pub dirfd: i32,
     pub name: u64,
     pub addr: u64,
+    pub skiprw: bool,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TryOpenWrite {
+    pub dirfd: i32,
+    pub name: u64, 
 }
 
 #[derive(Clone, Default, Debug)]

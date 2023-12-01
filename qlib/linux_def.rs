@@ -2998,7 +2998,7 @@ impl MemoryDef {
         + Self::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB
         - Self::HEAP_SIZE
         - Self::IO_HEAP_SIZE;
-    pub const HEAP_SIZE: u64 = 8 * Self::ONE_GB;
+    pub const HEAP_SIZE: u64 = 10 * Self::ONE_GB;
     pub const HEAP_END: u64 = Self::HEAP_OFFSET + Self::HEAP_SIZE;
     pub const IO_HEAP_SIZE: u64 = 1 * Self::ONE_GB;
     pub const IO_HEAP_END: u64 = Self::HEAP_END + Self::IO_HEAP_SIZE;

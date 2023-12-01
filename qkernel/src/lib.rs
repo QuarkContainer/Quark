@@ -350,6 +350,12 @@ pub extern "C" fn syscall_handler(
         } else {
             0
         };
+
+        // if tid == 2 {
+        //     use crate::qlib::kernel::threadmgr::task_exit::SYS_CALL_TIME;
+        //     SYS_CALL_TIME[nr as usize].fetch_add(gap as u64, Ordering::SeqCst);
+        // }
+
         info!(
             "({}/{})------Return[{}] res is {:x}: call id {:?} ",
             tid,

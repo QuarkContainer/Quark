@@ -339,7 +339,8 @@ impl InodeOperations for HostDirOp {
     }
 
     fn Lookup(&self, task: &Task, parent: &Inode, name: &str) -> Result<Dirent> {
-        let (fd, writeable, fstat) = match TryOpenAt(self.HostFd(), name) {
+        let skiprw = true;
+        let (fd, writeable, fstat) = match TryOpenAt(self.HostFd(), name, skiprw) {
             Err(Error::SysError(SysErr::ENOENT)) => {
                 let inode = match self.lock().overrides.get(name) {
                     None => return Err(Error::SysError(SysErr::ENOENT)),
@@ -353,8 +354,8 @@ impl InodeOperations for HostDirOp {
         };
 
         let ms = parent.lock().MountSource.clone();
-        let inode = Inode::NewHostInode(task, &ms, fd, &fstat, writeable, false)?;
-
+        let inode = Inode::NewHostInode(task, &ms, fd, &fstat, writeable, skiprw, false)?;
+        
         let ret = Ok(Dirent::New(&inode, name));
         return ret;
     }
@@ -390,7 +391,7 @@ impl InodeOperations for HostDirOp {
 
         let mountSource = dir.lock().MountSource.clone();
 
-        let inode = Inode::NewHostInode(task, &mountSource, fd, &fstat, true, false)?;
+        let inode = Inode::NewHostInode(task, &mountSource, fd, &fstat, true, false, false)?;
         let dirent = Dirent::New(&inode, name);
 
         let file = inode.GetFile(task, &dirent, flags)?;

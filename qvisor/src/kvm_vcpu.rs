@@ -146,8 +146,8 @@ impl KVMVcpu {
         )
         .unwrap();
 
-        info!("the tssIntStackStart is {:x}, tssAddr address is {:x}, idt addr is {:x}, gdt addr is {:x}",
-            tssIntStackStart, tssAddr, idtAddr, gdtAddr);
+        // info!("the tssIntStackStart is {:x}, tssAddr address is {:x}, idt addr is {:x}, gdt addr is {:x}",
+        //     tssIntStackStart, tssAddr, idtAddr, gdtAddr);
 
         let vcpu = vm_fd
             .create_vcpu(id as u64)

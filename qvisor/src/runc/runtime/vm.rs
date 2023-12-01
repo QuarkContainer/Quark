@@ -392,20 +392,18 @@ impl VirtualMachine {
 
         Self::InitShareSpace(&vm_fd, cpuCount, controlSock, rdmaSvcCliSock, podId);
 
-        info!("before loadKernel");
-
         let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
         //let vdsoMap = VDSOMemMap::Init(&"/home/brad/rust/quark/vdso/vdso.so".to_string()).unwrap();
         elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
         VMS.lock().vdsoAddr = elf.vdsoStart;
 
-        let p = entry as *const u8;
-        info!(
-            "entry is 0x{:x}, data at entry is {:x}, heapStartAddr is {:x}",
-            entry,
-            unsafe { *p },
-            heapStartAddr
-        );
+        // let p = entry as *const u8;
+        // info!(
+        //     "entry is 0x{:x}, data at entry is {:x}, heapStartAddr is {:x}",
+        //     entry,
+        //     unsafe { *p },
+        //     heapStartAddr
+        // );
 
         {
             super::super::super::URING_MGR.lock();

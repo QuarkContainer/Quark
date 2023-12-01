@@ -12,10 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::sync::atomic::AtomicU64;
+
 use alloc::boxed::Box;
+// use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
+// use crate::qlib::SysCallID;
 use crate::qlib::kernel::PAGE_MGR;
+// use crate::qlib::kernel::Scale;
 
 use super::super::super::auth::id::*;
 use super::super::super::common::*;
@@ -32,6 +37,16 @@ use super::super::super::perf_tunning::*;
 use super::super::task::*;
 use super::super::SignalDef::*;
 use super::task_stop::*;
+
+lazy_static! {
+    pub static ref SYS_CALL_TIME: Vec<AtomicU64> = {
+        let mut tbl = Vec::with_capacity(500);
+        for _ in 0..500 {
+            tbl.push(AtomicU64::new(0));
+        }
+        tbl
+    };
+}
 
 // An ExitStatus is a value communicated from an exiting task or thread group
 // to the party that reaps it.
@@ -1026,6 +1041,15 @@ impl Thread {
         if taskCnt == 0 {
             info!("ExitNotify shutdown");
             PAGE_MGR.Clear();
+
+            // let mut map = BTreeMap::new();
+            // for nr in 0..450 {
+            //     let callId : SysCallID = unsafe { core::mem::transmute(nr as u64) };
+            //     if SYS_CALL_TIME[nr].load(core::sync::atomic::Ordering::Relaxed) > 0 {
+            //         map.insert(callId, Scale(SYS_CALL_TIME[nr].load(core::sync::atomic::Ordering::Relaxed) as _));
+            //     }
+            // }
+            // error!("syscall time is {:#?}", &map);
             super::super::SHARESPACE.StoreShutdown();
             //PerfStop();
             PerfPrint();

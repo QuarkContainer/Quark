@@ -173,6 +173,7 @@ pub struct HostInodeOpIntern {
     pub HostFd: i32,
     pub WouldBlock: bool,
     pub Writeable: bool,
+    pub skiprw: bool,
     pub sattr: StableAttr,
     pub queue: Queue,
     pub errorcode: i64,
@@ -196,6 +197,7 @@ impl Default for HostInodeOpIntern {
             HostFd: -1,
             WouldBlock: false,
             Writeable: false,
+            skiprw: true,
             sattr: StableAttr::default(),
             queue: Queue::default(),
             errorcode: 0,
@@ -243,6 +245,7 @@ impl HostInodeOpIntern {
         wouldBlock: bool,
         fstat: &LibcStat,
         writeable: bool,
+        skiprw: bool,
         isMemfd: bool,
     ) -> Self {
         let mut ret = Self {
@@ -250,6 +253,7 @@ impl HostInodeOpIntern {
             HostFd: fd,
             WouldBlock: wouldBlock,
             Writeable: writeable,
+            skiprw: skiprw,
             sattr: fstat.StableAttr(),
             queue: Queue::default(),
             errorcode: 0,
@@ -265,6 +269,31 @@ impl HostInodeOpIntern {
         }
 
         return ret;
+    }
+
+    pub fn SkipRw(&self) -> bool {
+        return self.skiprw;
+    }
+
+    pub fn TryOpenWrite(&mut self, dirfd: i32, name: u64) -> Result<()> {
+        if !self.skiprw {
+            if !self.Writeable {
+                return Err(Error::SysError(SysErr::EPERM));
+            }
+
+            return Ok(())
+        }
+        let ret = HostSpace::TryOpenWrite(dirfd, name);
+        self.skiprw = false;
+        if ret < 0 {
+            return Err(Error::SysError(SysErr::EPERM));
+        }
+
+        // close the readonly fd
+        HostSpace::Close(self.HostFd);
+
+        self.HostFd = ret as i32;
+        return Ok(())
     }
 
     /*********************************start of mappable****************************************************************/
@@ -492,10 +521,11 @@ impl HostInodeOp {
         wouldBlock: bool,
         fstat: &LibcStat,
         writeable: bool,
+        skiprw: bool,
         isMemfd: bool,
     ) -> Self {
         let intern = Arc::new(QMutex::new(HostInodeOpIntern::New(
-            mops, fd, wouldBlock, fstat, writeable, isMemfd,
+            mops, fd, wouldBlock, fstat, writeable, skiprw, isMemfd,
         )));
 
         let ret = Self(intern);
@@ -529,6 +559,7 @@ impl HostInodeOp {
             false,
             &fstat,
             true,
+            false,
             true,
         )));
 
@@ -1256,7 +1287,7 @@ impl InodeOperations for HostInodeOp {
         }
 
         let ret = Ftruncate(self.HostFd(), size);
-
+        
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }

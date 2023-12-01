@@ -9,7 +9,7 @@
   "EnableAIO"     : true,
   "PrintException": false,
   "KernelPagetable": false,
-  "PerfDebug"     : false,
+  "PerfDebug"     : true,
   "UringStatx"    : false,
   "FileBufWrite"  : true,
   "MmapRead"      : false,
