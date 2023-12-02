@@ -283,16 +283,14 @@ impl HostInodeOpIntern {
 
             return Ok(())
         }
-        let ret = HostSpace::TryOpenWrite(dirfd, name);
+        let ret = HostSpace::TryOpenWrite(dirfd, self.HostFd, name);
         self.skiprw = false;
+        self.Writeable = true;
         if ret < 0 {
+            // assume the user has no write permission
             return Err(Error::SysError(SysErr::EPERM));
         }
 
-        // close the readonly fd
-        HostSpace::Close(self.HostFd);
-
-        self.HostFd = ret as i32;
         return Ok(())
     }
 
@@ -761,7 +759,12 @@ impl HostInodeOp {
         offset: i64,
         _blocking: bool,
     ) -> Result<i64> {
-        let hostIops = self.clone();
+        let hostIops: HostInodeOp = self.clone();
+        if !hostIops.lock().Writeable {
+            error!("writeat {}", hostIops.lock().HostFd);
+        }
+        
+        assert!(hostIops.lock().Writeable);
 
         let size = IoVec::NumBytes(srcs);
         if size == 0 {

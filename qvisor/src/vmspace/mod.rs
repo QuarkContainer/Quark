@@ -392,7 +392,7 @@ impl VMSpace {
         return (len + 1) as i64;
     }
 
-    pub fn TryOpenWrite(dirfd: i32, name: u64) -> i64 {
+    pub fn TryOpenWrite(dirfd: i32, oldfd: i32, name: u64) -> i64 {
         let flags = Flags::O_NOFOLLOW;
 
         let fd = unsafe {
@@ -408,11 +408,23 @@ impl VMSpace {
             return fd as i64;
         }
 
-        let hostfd = GlobalIOMgr().AddFile(fd);
+        let ret = unsafe {
+            libc::dup2(fd, oldfd)
+        };
 
-        URING_MGR.lock().Addfd(hostfd).unwrap();
+        if ret < 0 {
+            error!("TryOpenWrite can't dup new fd to old fd with error {}", errno::errno().0);
+            unsafe {
+                libc::close(fd);
+            }
+            return ret as i64;
+        }
 
-        return hostfd as i64;
+        unsafe {
+            libc::close(fd);
+        }
+
+        return 0;
     }
 
     pub unsafe fn TryOpenHelper(dirfd: i32, name: u64, skiprw: bool) -> (i32, bool) {

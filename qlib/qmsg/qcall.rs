@@ -472,6 +472,7 @@ pub struct TryOpenAt {
 #[derive(Clone, Default, Debug)]
 pub struct TryOpenWrite {
     pub dirfd: i32,
+    pub oldfd: i32,
     pub name: u64, 
 }
 

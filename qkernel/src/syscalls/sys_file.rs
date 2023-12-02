@@ -271,7 +271,10 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
                     Some(iops) => {
                         let mut lkiops = iops.lock();
                         if lkiops.SkipRw() {
-                            let dirfd = d.Parent().unwrap().Inode().lock().InodeOp.HostInodeOp().unwrap().HostFd();
+                            let parent = d.Parent().unwrap();
+                            let parentIops = parent.Inode().lock().InodeOp.clone();
+                            
+                            let dirfd = parentIops.HostDirOp().expect(&format!("inodeop type is {:?}", parentIops.InodeType())).HostFd();
                             let name = d.Name();
                             let cstr = CString::New(&name);
                             lkiops.TryOpenWrite(dirfd, cstr.Ptr())?;
@@ -545,26 +548,28 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
             Error::None => {
                 let mut foundInode = found.Inode();
 
+                if foundInode.StableAttr().IsRegular() {
+                    let iops = foundInode.lock().InodeOp.clone();
+                    match iops.HostInodeOp() {
+                        Some(iops) => {
+                            let mut lkiops = iops.lock();
+                            let dirfd = parent.Inode().lock().InodeOp.HostDirOp().unwrap().HostFd();
+                            if lkiops.SkipRw() {
+                                let cstr = CString::New(&name);
+                                lkiops.TryOpenWrite(dirfd, cstr.Ptr())?;
+                            }
+                        }
+                        None => (),
+                    }
+                }
+
                 if flags & Flags::O_TRUNC as u32 != 0 {
                     if foundInode.StableAttr().IsDir() {
                         return Err(Error::SysError(SysErr::EISDIR))
                     }
                     
 
-                    if foundInode.StableAttr().IsRegular() {
-                        let iops = foundInode.lock().InodeOp.clone();
-                        match iops.HostInodeOp() {
-                            Some(iops) => {
-                                let mut lkiops = iops.lock();
-                                let dirfd = parent.Inode().lock().InodeOp.HostDirOp().unwrap().HostFd();
-                                if lkiops.SkipRw() {
-                                    let cstr = CString::New(&name);
-                                    lkiops.TryOpenWrite(dirfd, cstr.Ptr())?;
-                                }
-                            }
-                            None => (),
-                        }
-                    }
+
 
                     foundInode.Truncate(task, &found, 0)?;
                 }
