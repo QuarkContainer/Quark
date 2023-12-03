@@ -346,10 +346,13 @@ pub extern "C" fn syscall_handler(
 
     if debugLevel > DebugLevel::Error {
         let gap = if self::SHARESPACE.config.read().PerfDebug {
-            TSC.Rdtsc() - startTime
+            let gap = TSC.Rdtsc() - startTime;
+            crate::qlib::kernel::threadmgr::task_exit::SYS_CALL_TIME[nr as usize].fetch_add(gap as u64, Ordering::SeqCst);
+            gap
         } else {
             0
         };
+
         info!(
             "({}/{})------Return[{}] res is {:x}: call id {:?} ",
             tid,

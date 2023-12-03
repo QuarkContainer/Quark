@@ -204,6 +204,13 @@ impl Iops {
         }
     }
 
+    pub fn HostDirOp(&self) -> Option<HostDirOp> {
+        match self {
+            Self::HostDirOp(inner) => Some(inner.clone()),
+            _ => None,
+        }
+    }
+
     pub fn TTYDevice(&self) -> Option<TTYDevice> {
         match self {
             Self::TTYDevice(inner) => Some(inner.clone()),
@@ -452,6 +459,7 @@ impl Inode {
             &fstat,
             true,
             false,
+            false,
         )?;
         return Ok(inode);
     }
@@ -462,6 +470,7 @@ impl Inode {
         fd: i32,
         fstat: &LibcStat,
         writeable: bool,
+        skiprw: bool,
         isMemfd: bool,
     ) -> Result<Self> {
         //info!("after fstat: {:?}", fstat.StableAttr());
@@ -520,6 +529,7 @@ impl Inode {
                     fstat.WouldBlock(),
                     &fstat,
                     writeable,
+                    skiprw,
                     isMemfd,
                 );
 
@@ -560,6 +570,7 @@ impl Inode {
                     fstat.WouldBlock(),
                     &fstat,
                     writeable,
+                    false,
                     false,
                 );
 

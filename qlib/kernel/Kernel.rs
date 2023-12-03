@@ -613,11 +613,23 @@ impl HostSpace {
         HyperCall64(HYPERCALL_PANIC, &msg as *const _ as u64, 0, 0, 0);
     }
 
-    pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64) -> i64 {
+    pub fn TryOpenWrite(dirfd: i32, oldfd: i32, name: u64) -> i64 {
+        let mut msg = Msg::TryOpenWrite(TryOpenWrite {
+            dirfd: dirfd,
+            oldfd: oldfd,
+            name: name,
+        });
+
+        let ret = Self::HCall(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64, skiprw: bool) -> i64 {
         let mut msg = Msg::TryOpenAt(TryOpenAt {
             dirfd: dirfd,
             name: name,
             addr: addr,
+            skiprw: skiprw,
         });
 
         let ret = Self::HCall(&mut msg, false) as i64;
