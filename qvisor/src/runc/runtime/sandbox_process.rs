@@ -730,7 +730,10 @@ impl SandboxProcess {
         self.EnableNamespace()?;
         let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
         
-        NVProxySetupInUserns(&rootContainerPath)?;
+        if &nvidiaDeviceList !=  "" {
+            NVProxySetupInUserns(&rootContainerPath)?;
+        }
+        
         if taskSockFd != 0 {
             // It seems control socket should be created in the same net ns
             controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");
