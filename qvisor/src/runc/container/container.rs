@@ -26,6 +26,8 @@ use std::path::PathBuf;
 use fs2::FileExt;
 use regex::Regex;
 
+use crate::runc::container::nvidia::NvidiaDeviceList;
+
 use super::hook::*;
 use super::status::*;
 //use super::super::super::qlib::util::*;
@@ -461,8 +463,12 @@ impl Container {
 
         let _unlockRoot = maybeLockRootContainer(bundleDir, &spec, &conf.RootDir)?;
 
-        NVProxyHostSetup()?;
-
+        let nvidiaDeviceList = NvidiaDeviceList(&spec)?;
+        if &nvidiaDeviceList !=  "" {
+            NVProxyHostSetup()?;
+        }
+    
+    
         // Lock the container metadata file to prevent concurrent creations of
         // containers with the same id.
         let containerRoot = Join(&conf.RootDir, id);
@@ -1275,9 +1281,6 @@ pub fn NVProxyLoadKernelModules() -> Result<()> {
 pub fn NVProxySetupInUserns(rootPath: &str) -> Result<()> {
     info!("NVProxySetupInUserns root is {}", rootPath);
 
-    let nvidiaProc = rootPath.to_owned() + "/proc/driver/nvidia";
-    fs::create_dir_all(&nvidiaProc).expect(&format!("can not create {}", &nvidiaProc));
-
     let cliPath = match FindIt("nvidia-container-cli") {
         None => {
             error!("failed to locate nvidia-container-cli in PATH");
@@ -1285,6 +1288,10 @@ pub fn NVProxySetupInUserns(rootPath: &str) -> Result<()> {
         }
         Some(p) => p,
     };
+
+    let nvidiaProc = rootPath.to_owned() + "/proc/driver/nvidia";
+    fs::create_dir_all(&nvidiaProc).expect(&format!("can not create {}", &nvidiaProc));
+
     let cli = cliPath.into_os_string().into_string().unwrap();
 
     let ldconfigPath = if Path::new("/sbin/ldconfig.real").exists() {
