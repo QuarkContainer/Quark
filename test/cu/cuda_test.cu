@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 /*
-To test, go to repo's root dir, then execute following cmd:
+To test, go to repo's root dir, then execute following script:
 
 (cd test/rust/cuda_hook; cargo build)
 nvcc -cudart shared -o target/cuda_test test/cu/cuda_test.cu
@@ -19,7 +19,8 @@ int main(int argc,char **argv)
   cudaSetDevice(dev);
 
   printf("Hello from the CPU!\n");
-  hello_kernel<<<1, 1>>>();
+  hello_kernel<<<2, 3>>>();
+  cudaDeviceReset();
   cudaDeviceSynchronize();
 
   return 0;

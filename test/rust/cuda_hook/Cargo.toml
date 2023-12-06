@@ -8,3 +8,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 libc = "0.2.94"
+cuda-runtime-sys = "0.3.0-alpha.1"
