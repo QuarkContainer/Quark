@@ -577,11 +577,64 @@ impl VMSpace {
         return Self::GetRet(hostfd as i64);
     }
 
+    pub fn NvidiaTestRun() {
+        // use container image's nvidia libraries. 
+        // limitation: one quark sandbox could have only one nvidia container
+        // and there might be security hole
+        // should we prepare multiple nvidia versions libraries, and switch to different version based container iamge nvidia version?
+        // let usrpath = format!("/{}/usr/", NIVIDIA_CONTAINER_NAME.lock());
+        // fs::soft_link(&usrpath, "/usr").unwrap();
+
+        // let etcpath = format!("/{}/etc/", NIVIDIA_CONTAINER_NAME.lock());
+        // fs::soft_link(&etcpath, "/etc").unwrap();
+        
+        let cudart = format!("/usr/local/cuda/targets/x86_64-linux/lib/libcudart.so");
+        //let cudart = format!("libcudart.so");
+        use std::ffi::CString;
+        let lib = CString::new(&*cudart).unwrap();
+        unsafe {
+            libc::dlerror();
+        }
+
+        error!("NividiaDriverVersion 1");
+
+        let handle = unsafe { libc::dlopen(lib.as_ptr(), libc::RTLD_LAZY) }; 
+
+
+        error!("NividiaDriverVersion 2");
+        // use std::ffi::CStr;
+        // let c_str: &CStr = unsafe { CStr::from_ptr(err) };
+        // let str_slice: &str = c_str.to_str().unwrap();
+
+        // error!("error is {}", str_slice);
+        error!("handler is {:x}", handle as u64);
+
+        use cuda_driver_sys::*;
+        //use std::ptr;
+
+        let handle = unsafe { libc::dlopen(lib.as_ptr(), libc::RTLD_LAZY) };    
+        let func_name = CString::new("cudaSetDevice").unwrap();
+        let orig_func: extern "C" fn(c_int) -> i32 = unsafe {
+            std::mem::transmute(libc::dlsym(handle, func_name.as_ptr()))
+        };
+        let ret = orig_func(0);
+        error!("cudaSetDevice ret is {}", ret);
+
+        let mut ret: cudaError_enum = unsafe { cuInit(0) };
+        error!("cuInit, ret is {:?}", ret);
+
+        let mut dev: CUdevice = 2; 
+        ret = unsafe { cuDeviceGet(&mut dev, 0) };
+        error!("cuDeviceGet, ret is {:?}/{:?}", ret, dev);
+    }
+
     pub fn NividiaDriverVersion(ioctlParamsAddr: u64) -> i64 {
         let ioctlParams = unsafe {
             &mut *(ioctlParamsAddr as * mut RMAPIVersion) 
         };
-        
+
+        //Self::NvidiaTestRun();
+
         let drvName = CString::New("/dev/nvidiactl");
 
         let ret = unsafe { 

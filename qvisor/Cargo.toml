@@ -55,6 +55,8 @@ time = { version = "0.3.7", features = ["serde", "std"] }
 uuid = { version = "0.8.2", features = ["serde", "v4"] }
 hashbrown = "0.12.3"
 enum_dispatch = { git = "https://github.com/QuarkContainer/enum_dispatch_clone.git" }
+cuda-driver-sys = "0.3.0"
+cuda-runtime-sys = "0.3.0-alpha.1"
 
 [dependencies.lazy_static]
 version = "1.4"
