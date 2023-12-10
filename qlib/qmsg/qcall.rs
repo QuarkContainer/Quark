@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use crate::qlib::fileinfo::*;
+use crate::qlib::proxy::ProxyCommand;
+use crate::qlib::proxy::ProxyParameters;
 
 use super::super::config::*;
 use super::super::kernel::util::cstring::*;
@@ -160,9 +162,8 @@ pub struct UnmapGuestMemRange {
 
 #[derive(Clone, Default, Debug)]
 pub struct Proxy {
-    pub cmd: u64,
-    pub addrIn: u64,
-    pub addrOut: u64,
+    pub cmd: ProxyCommand,
+    pub parameters: ProxyParameters
 }
 
 #[derive(Clone, Default, Debug)]

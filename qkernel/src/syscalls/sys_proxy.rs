@@ -15,6 +15,7 @@ use super::super::qlib::common::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::linux_def::SysErr;
 use crate::qlib::proxy::*;
 
 // arg0: command id
@@ -22,24 +23,46 @@ use crate::qlib::proxy::*;
 // arg2: data out address
 pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let commandId = args.arg0 as u64;
-    let addrIn = args.arg1 as u64;
-    let addrOut = args.arg2 as u64;
+    let cmd: ProxyCommand = unsafe { core::mem::transmute(commandId as u64) };
+    let mut parameters = ProxyParameters {
+        para1: args.arg1,
+        para2: args.arg2,
+        para3: args.arg3,
+        para4: args.arg4,
+        para5: args.arg5,
+        para6: 0,
+        para7: 0,
+    };
 
-    let cmd: Command = unsafe { core::mem::transmute(commandId as u64) };
     match cmd {
-        Command::Cmd1 => {
-            let dataIn: Cmd1In = task.CopyInObj(addrIn)?;
-            let dataOut = Cmd1Out::default();
+        ProxyCommand::None => {
+            return Err(Error::SysError(SysErr::EINVAL));
+        }
+        ProxyCommand::CudaSetDevice |
+        ProxyCommand::CudaDeviceSynchronize => {
             let ret = HostSpace::Proxy(
-                commandId,
-                &dataIn as *const _ as u64,
-                &dataOut as *const _ as u64,
+                cmd,
+                parameters,
             );
-            task.CopyOutObj(&dataOut, addrOut)?;
             return Ok(ret);
         }
-        Command::Cmd2 => {}
-    }
+        ProxyCommand::CudaMalloc => {
+            let addr : u64 = 0;
+            parameters.para1 = &addr as * const _ as u64;
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
 
-    return Ok(0);
+            if ret == 0 {
+                task.CopyOutObj(&addr, args.arg1 as u64)?;
+            }
+
+            return Ok(ret);
+        }
+        ProxyCommand::CudaMemcpy => {
+            unimplemented!()
+            
+        }
+    }
 }

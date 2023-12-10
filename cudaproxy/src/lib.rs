@@ -11,22 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-#[repr(u64)]
-pub enum Command {
-    Cmd1 = 1 as u64,
-    Cmd2,
-}
+#![allow(dead_code)]
+#![allow(non_snake_case)]
 
-#[derive(Copy, Clone)]
-#[repr(C)]
-pub struct Cmd1In {
-    pub val: u64,
-}
-
-#[derive(Default, Copy, Clone)]
-#[repr(C)]
-pub struct Cmd1Out {
-    pub val1: u64,
-    pub val2: u64,
-}
+mod cudaproxy;
+mod syscall;
+mod proxy;

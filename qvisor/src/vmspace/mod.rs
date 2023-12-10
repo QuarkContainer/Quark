@@ -24,6 +24,7 @@ pub mod random;
 pub mod syscall;
 pub mod time;
 pub mod uringMgr;
+pub mod nvidia;
 
 use core::arch::asm;
 use core::sync::atomic;
@@ -45,10 +46,12 @@ use crate::qlib::nvproxy::frontend::FrontendIoctlCmd;
 use crate::qlib::nvproxy::frontend_type::NV_ESC_CHECK_VERSION_STR;
 use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
 use crate::qlib::range::Range;
+use crate::qlib::proxy::*;
 use crate::vmspace::kernel::GlobalIOMgr;
 use crate::vmspace::kernel::GlobalRDMASvcCli;
 
 use self::limits::*;
+use self::nvidia::NvidiaProxy;
 use self::random::*;
 use self::syscall::*;
 use super::kvm_vcpu::HostPageAllocator;
@@ -588,44 +591,29 @@ impl VMSpace {
         // let etcpath = format!("/{}/etc/", NIVIDIA_CONTAINER_NAME.lock());
         // fs::soft_link(&etcpath, "/etc").unwrap();
         
-        let cudart = format!("/usr/local/cuda/targets/x86_64-linux/lib/libcudart.so");
-        //let cudart = format!("libcudart.so");
-        use std::ffi::CString;
-        let lib = CString::new(&*cudart).unwrap();
-        unsafe {
-            libc::dlerror();
-        }
+        // let cudart = format!("/usr/local/cuda/targets/x86_64-linux/lib/libcudart.so");
+        // //let cudart = format!("libcudart.so");
+        // use std::ffi::CString;
+        // let lib = CString::new(&*cudart).unwrap();
+        // unsafe {
+        //     libc::dlerror();
+        // }
 
-        error!("NividiaDriverVersion 1");
-
-        let handle = unsafe { libc::dlopen(lib.as_ptr(), libc::RTLD_LAZY) }; 
-
-
-        error!("NividiaDriverVersion 2");
-        // use std::ffi::CStr;
-        // let c_str: &CStr = unsafe { CStr::from_ptr(err) };
-        // let str_slice: &str = c_str.to_str().unwrap();
-
-        // error!("error is {}", str_slice);
-        error!("handler is {:x}", handle as u64);
+        // let handle = unsafe { libc::dlopen(lib.as_ptr(), libc::RTLD_LAZY) };    
+        // let func_name = CString::new("cudaSetDevice").unwrap();
+        // let orig_func: extern "C" fn(c_int) -> i32 = unsafe {
+        //     std::mem::transmute(libc::dlsym(handle, func_name.as_ptr()))
+        // };
+        // let ret = orig_func(0);
+        // error!("cudaSetDevice handler is {:x} ret is {}", handle as u64, ret);
 
         use cuda_driver_sys::*;
-        //use std::ptr;
-
-        let handle = unsafe { libc::dlopen(lib.as_ptr(), libc::RTLD_LAZY) };    
-        let func_name = CString::new("cudaSetDevice").unwrap();
-        let orig_func: extern "C" fn(c_int) -> i32 = unsafe {
-            std::mem::transmute(libc::dlsym(handle, func_name.as_ptr()))
-        };
-        let ret = orig_func(0);
-        error!("cudaSetDevice ret is {}", ret);
-
-        let mut ret: cudaError_enum = unsafe { cuInit(0) };
+        let ret: cudaError_enum = unsafe { cuInit(0) };
         error!("cuInit, ret is {:?}", ret);
 
-        let mut dev: CUdevice = 2; 
-        ret = unsafe { cuDeviceGet(&mut dev, 0) };
-        error!("cuDeviceGet, ret is {:?}/{:?}", ret, dev);
+        // let mut dev: CUdevice = 2; 
+        // ret = unsafe { cuDeviceGet(&mut dev, 0) };
+        // error!("cuDeviceGet, ret is {:?}/{:?}", ret, dev);
     }
 
     pub fn NividiaDriverVersion(ioctlParamsAddr: u64) -> i64 {
@@ -1813,23 +1801,14 @@ impl VMSpace {
         }
     }
 
-    pub fn Proxy(cmd: u64, addrIn: u64, addrOut: u64) -> i64 {
-        use super::qlib::proxy::*;
-        let cmd: Command = unsafe { core::mem::transmute(cmd as u64) };
-        match cmd {
-            Command::Cmd1 => {
-                let dataIn = unsafe { &*(addrIn as *const Cmd1In) };
-
-                let dataOut = unsafe { &mut *(addrOut as *mut Cmd1Out) };
-
-                error!("get proxy cmd1 with val1 {}", dataIn.val);
-                dataOut.val1 = 1;
-                dataOut.val2 = 2;
+    pub fn Proxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> i64 {
+        match NvidiaProxy(cmd, parameters) {
+            Ok(v) => return v,
+            Err(e) => {
+                error!("nvidia proxy get error {:?}", e);
+                return 0;
             }
-            Command::Cmd2 => {}
         }
-
-        return 0;
     }
 
     pub fn SwapInPage(addr: u64) -> i64 {

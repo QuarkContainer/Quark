@@ -14,7 +14,13 @@ __global__ void vector_add(float *out, float *a, float *b, int n) {
     }
 }
 
-int main(){
+void cuda_test() {
+    int dev = 0;
+    int ret = cudaSetDevice(dev);
+    printf("cudaSetDevice ret is %d", ret);
+}
+
+void cuda_add() {
     float *a, *b, *out;
     float *d_a, *d_b, *d_out; 
 
@@ -72,4 +78,9 @@ int main(){
     free(a); 
     free(b); 
     free(out);
+}
+
+int main(){
+    cuda_test();
+    //cuda_add();
 }

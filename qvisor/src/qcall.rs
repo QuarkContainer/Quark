@@ -276,7 +276,7 @@ impl KVMVcpu {
                 ret = 0;
             }
             Msg::Proxy(msg) => {
-                ret = super::VMSpace::Proxy(msg.cmd, msg.addrIn, msg.addrOut) as u64;
+                ret = super::VMSpace::Proxy(msg.cmd, &msg.parameters) as u64;
             }
             Msg::SymLinkAt(msg) => {
                 ret = super::VMSpace::SymLinkAt(msg.oldpath, msg.newdirfd, msg.newpath) as u64;

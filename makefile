@@ -2,7 +2,7 @@ MAKEFLAGS += -j4
 
 all:: release debug
 
-release:: qvisor_release qkernel_release
+release:: qvisor_release qkernel_release 
 
 qvisor_release:
 	make -C ./qvisor release
@@ -10,7 +10,7 @@ qvisor_release:
 qkernel_release:
 	make -C ./qkernel release
 
-debug:: qvisor_debug qkernel_debug
+debug:: qvisor_debug qkernel_debug 
 
 qvisor_debug:
 	make -C ./qvisor debug
@@ -35,3 +35,7 @@ install:
 	sudo mkdir -p /etc/quark/
 	sudo cp -f ./config.json /etc/quark/
 
+cuda:
+	make -C ./cudaproxy release
+	sudo cp -f ./target/release/libcudaproxy.so /usr/local/libcudaproxy.so
+	sudo cp -f ./target/release/libcudaproxy.so ./test
