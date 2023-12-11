@@ -154,6 +154,7 @@ pub const HYPERCALL_RELEASE_VCPU: u16 = 24;
 pub const DUMMY_TASKID: TaskId = TaskId::New(0xffff_ffff);
 
 pub const MAX_VCPU_COUNT: usize = 64;
+pub const MIN_VCPU_COUNT: usize = 2;
 
 #[cfg(target_arch = "x86_64")]
 #[allow(non_camel_case_types)]

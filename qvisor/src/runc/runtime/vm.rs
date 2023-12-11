@@ -24,7 +24,7 @@ use kvm_ioctls::{Cap, Kvm, VmFd};
 use lazy_static::lazy_static;
 use nix::sys::signal;
 
-use crate::qlib::MAX_VCPU_COUNT;
+use crate::qlib::{MAX_VCPU_COUNT, MIN_VCPU_COUNT};
 //use crate::vmspace::hibernate::HiberMgr;
 
 use super::super::super::elf_loader::*;
@@ -256,20 +256,37 @@ impl VirtualMachine {
         }*/
 
         let reserveCpuCount = QUARK_CONFIG.lock().ReserveCpuCount;
+        let some_qconf_vcpu_count = QUARK_CONFIG.lock().get_config_vcpu_amount();
+        let max_vcpu_amount = VMSpace::VCPUCount() - reserveCpuCount;
+        
+        //
+        // We take the value suggested in config.json if it is
+        // in between [MIN_VCPU_COUNT, max available vCPUs].
+        // Otherwise we take the value in the bundle/config.json
+        // if it is in between [MIN_VCPU_COUNT, max available vCPUs].
+        //
+        let cpuCount = if some_qconf_vcpu_count.is_some() {
+            some_qconf_vcpu_count.unwrap().min(max_vcpu_amount)
+        } else if cpuCount < MIN_VCPU_COUNT {
+            max_vcpu_amount
+        } else {
+            cpuCount.min(max_vcpu_amount)
+        };
+
         let cpuCount = if cpuCount == 0 {
             VMSpace::VCPUCount() - reserveCpuCount
         } else {
             cpuCount.min(VMSpace::VCPUCount() - reserveCpuCount)
         };
 
-        if cpuCount < 2 {
+        info!("VMM: VM is assigned {}-vCPUs.", cpuCount);
+
+        if cpuCount < MIN_VCPU_COUNT {
             // only do cpu affinit when there more than 2 cores
             VMS.lock().cpuAffinit = false;
         } else {
             VMS.lock().cpuAffinit = true;
         }
-
-        let cpuCount = cpuCount.max(2); // minimal 2 cpus
 
         VMS.lock().vcpuCount = cpuCount; //VMSpace::VCPUCount();
         VMS.lock().RandomVcpuMapping();
