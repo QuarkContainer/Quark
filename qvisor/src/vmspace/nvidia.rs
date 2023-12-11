@@ -19,19 +19,28 @@ use std::ffi::CString;
 use crate::qlib::common::*;
 use crate::qlib::linux_def::SysErr;
 use crate::qlib::proxy::*;
+use crate::qlib::range::Range;
 
 lazy_static! {
     pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
+    pub static ref FUNC_MAP: BTreeMap<ProxyCommand, &'static str> = BTreeMap::from(
+        [
+            (ProxyCommand::CudaSetDevice, "cudaSetDevice"),
+            (ProxyCommand::CudaDeviceSynchronize, "cudaDeviceSynchronize"),
+            (ProxyCommand::CudaMalloc, "cudaMalloc"),
+            (ProxyCommand::CudaMemcpy, "cudaMemcpy"),
+        ]
+    );
 }
 
-pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i64> {
+pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i64> {
     let handler = NVIDIA_HANDLERS.GetFuncHandler(cmd)?;
     match cmd {
         ProxyCommand::None => {
             panic!("get impossible proxy command");
         }
         ProxyCommand::CudaSetDevice => {
-            let func: extern "C" fn(libc::c_int) -> u32 = unsafe {
+            let func: extern "C" fn(libc::c_int) -> i32 = unsafe {
                 std::mem::transmute(handler)
             }; 
 
@@ -45,6 +54,73 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
 
             let ret = func();
             return Ok(ret as i64);
+        }
+        ProxyCommand::CudaMalloc => {
+            let func: extern "C" fn(u64, usize) -> i32 = unsafe {
+                std::mem::transmute(handler)
+            }; 
+
+            let ret = func(parameters.para1, parameters.para2 as usize);
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaMemcpy => {
+            return CudaMemcpy(handler, parameters);
+        }
+        //_ => todo!()
+    }
+}
+
+pub fn CudaMemcpy(handle: u64, parameters: &ProxyParameters) -> Result<i64> {
+    let func: extern "C" fn(u64, u64, u64, u64) -> u32 = unsafe {
+        std::mem::transmute(handle)
+    };
+
+    let kind = parameters.para5;
+    
+    match kind {
+        CUDA_MEMCPY_HOST_TO_HOST => todo!(),
+        CUDA_MEMCPY_HOST_TO_DEVICE => {
+            let dst = parameters.para1;
+            let ptr = parameters.para2 as *const Range;
+            let len = parameters.para3 as usize;
+            let count = parameters.para4;
+
+            let ranges = unsafe { std::slice::from_raw_parts(ptr, len) };
+            let mut offset = 0;
+            for r in ranges {
+                let ret = func(dst + offset, r.start, r.len, kind);
+                if ret != 0 {
+                    error!(
+                        "CUDA_MEMCPY_HOST_TO_DEVICE ret is {:x}/{:x}/{:x}/{} {}", 
+                        dst+offset, r.start, r.len, kind, ret);
+                    return Ok(ret as i64);
+                }
+                offset += r.len;
+            }
+
+            assert!(offset == count);
+
+            return Ok(0)   
+        }
+        CUDA_MEMCPY_DEVICE_TO_HOST => {
+            let ptr = parameters.para1 as *const Range;
+            let len = parameters.para2 as usize;
+            let src = parameters.para3;
+            let count = parameters.para4;
+
+            let ranges = unsafe { std::slice::from_raw_parts(ptr, len) };
+            let mut offset = 0;
+            for r in ranges {
+                let ret = func(r.start, src + offset, r.len, kind);
+                if ret != 0 {
+                    return Ok(ret as i64);
+                }
+                offset += r.len;
+            }
+
+            assert!(offset == count);
+
+            return Ok(0)   
         }
         _ => todo!()
     }
@@ -70,17 +146,17 @@ impl NvidiaHandlersInner {
     }
 
     pub fn DLSym(&self, cmd: ProxyCommand) -> Result<u64> {
-        match cmd {
-            ProxyCommand::CudaSetDevice => {
-                let func_name = CString::new("cudaSetDevice").unwrap();
-                let handler: extern "C" fn(libc::c_int) -> i32 = unsafe {
+        match FUNC_MAP.get(&cmd) {
+            Some(&name) => {
+                let func_name = CString::new(name).unwrap();
+                let handler: u64 = unsafe {
                     std::mem::transmute(libc::dlsym(self.cudaRuntimeHandler as *mut libc::c_void, func_name.as_ptr()))
                 };
-                if handler as u64 != 0 {
+                if handler != 0 {
                     return Ok(handler as u64)
                 }
             }
-            _ => ()
+            None => (),
         }
 
         return Err(Error::SysError(SysErr::ENOTSUP))

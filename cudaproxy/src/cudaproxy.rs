@@ -60,16 +60,9 @@ pub extern "C" fn cudaMemcpy(
         count: usize, 
         kind: cudaMemcpyKind
     ) -> usize {
-    println!("Hijacked cudaMemcpy(count:{})", count);
+    println!("Hijacked cudaMemcpy(size:{})", count);
 
     return unsafe {
-        syscall5(
-            SYS_PROXY, 
-            ProxyCommand::CudaMemcpy as usize, 
-            dst as * const _ as usize, 
-            src as * const _ as usize, 
-            count, 
-            kind as usize
-        ) 
+        syscall5(SYS_PROXY, ProxyCommand::CudaMemcpy as usize, dst as * const _ as usize, src as usize, count as usize, kind as usize) 
     };
 }

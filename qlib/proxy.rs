@@ -39,3 +39,22 @@ pub struct ProxyParameters {
     pub para7: u64,
 }
 
+// from https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html#group__CUDART__TYPES_1g18fa99055ee694244a270e4d5101e95b
+// cudaMemcpyHostToHost = 0
+// Host -> Host
+// cudaMemcpyHostToDevice = 1
+// Host -> Device
+// cudaMemcpyDeviceToHost = 2
+// Device -> Host
+// cudaMemcpyDeviceToDevice = 3
+// Device -> Device
+// cudaMemcpyDefault = 4
+// Direction of the transfer is inferred from the pointer values. Requires unified virtual addressing
+
+pub type CudaMemcpyKind = u64;
+
+pub const CUDA_MEMCPY_HOST_TO_HOST: u64 = 0;
+pub const CUDA_MEMCPY_HOST_TO_DEVICE: u64 = 1;
+pub const CUDA_MEMCPY_DEVICE_TO_HOST: u64 = 2;
+pub const CUDA_MEMCPY_DEVICE_TO_DEVICE: u64 = 3;
+pub const CUDA_MEMCPY_DEFAULT: u64 = 4;

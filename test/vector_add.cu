@@ -5,7 +5,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-#define N 100//000
+#define N 100000
 #define MAX_ERR 1e-6
 
 __global__ void vector_add(float *out, float *a, float *b, int n) {
@@ -17,7 +17,42 @@ __global__ void vector_add(float *out, float *a, float *b, int n) {
 void cuda_test() {
     int dev = 0;
     int ret = cudaSetDevice(dev);
-    printf("cudaSetDevice ret is %d", ret);
+    printf("cudaSetDevice ret is %d\n", ret);
+    ret = cudaDeviceSynchronize();
+    printf("cudaDeviceSynchronize ret is %d\n", ret);
+
+    float *a, *b;
+    float *d_a;
+
+    a   = (float*)malloc(sizeof(float) * N);
+    b   = (float*)malloc(sizeof(float) * N);
+
+    ret = cudaMalloc((void**)&d_a, sizeof(float) * N);
+    printf("cudaMalloc ret is %d\n", ret);
+    printf("cudaMalloc addr is %llx\n", (unsigned long long)&d_a);
+
+    for(int i = 0; i < N; i++){
+        a[i] = (float)i;
+    }
+
+    cudaMemcpy(d_a, a, sizeof(float) * N, cudaMemcpyHostToDevice);
+    for(int i = 0; i < N; i++){
+        if (a[i]!=float(i)) {
+            printf("a[%d] is %f\n", i, a[i]);
+        }
+        
+        assert(a[i]==float(i));
+    }
+    
+    cudaMemcpy(b, d_a, sizeof(float) * N, cudaMemcpyDeviceToHost);
+    
+    for(int i = 0; i < N; i++){
+        if (b[i]!=float(i)) {
+            printf("b[%d] is %f a[%d] is %f\n", i, b[i], i, a[i]);
+        }
+        
+        assert(b[i]==float(i));
+    }
 }
 
 void cuda_add() {
