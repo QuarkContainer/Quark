@@ -62,6 +62,14 @@ pub extern "C" fn cudaMemcpy(
     ) -> usize {
     println!("Hijacked cudaMemcpy(size:{})", count);
 
+    if kind == cudaMemcpyKind::cudaMemcpyHostToHost {
+        unsafe {
+            std::ptr::copy_nonoverlapping(src as * const u8, dst as * mut u8, count);
+        }
+        
+        return 0;
+    }
+
     return unsafe {
         syscall5(SYS_PROXY, ProxyCommand::CudaMemcpy as usize, dst as * const _ as usize, src as usize, count as usize, kind as usize) 
     };
