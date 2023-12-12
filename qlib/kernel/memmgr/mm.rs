@@ -1303,13 +1303,13 @@ impl MemoryManager {
         let mut lastAddr = 0;
         let mut lastLen = 0;
         let mut ranges = Vec::new();
-        while vaddr < startAddr + len {
+                while vaddr < startAddr + len {
             let (paddr, _) = self.VirtualToPhyLocked(vaddr)?;
             super::super::PAGE_MGR.RefPage(paddr);
             if paddr != lastAddr + lastLen { //+ MemoryDef::PAGE_SIZE {
                 if lastAddr != 0 {
                     ranges.push(Range::New(lastAddr, lastLen));
-                }
+                                    }
                 
                 lastAddr = paddr;
                 lastLen = MemoryDef::PAGE_SIZE;

@@ -24,6 +24,7 @@ pub mod random;
 pub mod syscall;
 pub mod time;
 pub mod uringMgr;
+pub mod nvidia;
 
 use core::arch::asm;
 use core::sync::atomic;
@@ -45,10 +46,12 @@ use crate::qlib::nvproxy::frontend::FrontendIoctlCmd;
 use crate::qlib::nvproxy::frontend_type::NV_ESC_CHECK_VERSION_STR;
 use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
 use crate::qlib::range::Range;
+use crate::qlib::proxy::*;
 use crate::vmspace::kernel::GlobalIOMgr;
 use crate::vmspace::kernel::GlobalRDMASvcCli;
 
 use self::limits::*;
+use self::nvidia::NvidiaProxy;
 use self::random::*;
 use self::syscall::*;
 use super::kvm_vcpu::HostPageAllocator;
@@ -581,7 +584,7 @@ impl VMSpace {
         let ioctlParams = unsafe {
             &mut *(ioctlParamsAddr as * mut RMAPIVersion) 
         };
-        
+
         let drvName = CString::New("/dev/nvidiactl");
 
         let ret = unsafe { 
@@ -1760,23 +1763,14 @@ impl VMSpace {
         }
     }
 
-    pub fn Proxy(cmd: u64, addrIn: u64, addrOut: u64) -> i64 {
-        use super::qlib::proxy::*;
-        let cmd: Command = unsafe { core::mem::transmute(cmd as u64) };
-        match cmd {
-            Command::Cmd1 => {
-                let dataIn = unsafe { &*(addrIn as *const Cmd1In) };
-
-                let dataOut = unsafe { &mut *(addrOut as *mut Cmd1Out) };
-
-                error!("get proxy cmd1 with val1 {}", dataIn.val);
-                dataOut.val1 = 1;
-                dataOut.val2 = 2;
+    pub fn Proxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> i64 {
+        match NvidiaProxy(cmd, parameters) {
+            Ok(v) => return v,
+            Err(e) => {
+                error!("nvidia proxy get error {:?}", e);
+                return 0;
             }
-            Command::Cmd2 => {}
         }
-
-        return 0;
     }
 
     pub fn SwapInPage(addr: u64) -> i64 {

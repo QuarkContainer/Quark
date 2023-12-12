@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use alloc::vec::Vec;
+use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::fs::{canonicalize, create_dir_all};
@@ -24,6 +25,7 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 
+use crate::NIVIDIA_CONTAINER_NAME;
 use containerd_shim::protos::create_task;
 use containerd_shim::protos::ttrpc::Server;
 use containerd_shim::ExitSignal;
@@ -643,51 +645,145 @@ impl SandboxProcess {
             return Ok(());
         }
 
-        let m = Mount {
-            destination: "/dev/nvidiactl".to_owned(),
-            typ: "bind".to_owned(),
-            source: "/dev/nvidiactl".to_owned(),
-            options: Vec::new()
-        };
-
-        MountFrom(
-            &m,
-            &self.SandboxRootDir,
-            MsFlags::MS_BIND | MsFlags::MS_SHARED,
-            "",
-            "",
-        )?;
-
-        let m = Mount {
-            destination: "/dev/nvidia-uvm".to_owned(),
-            typ: "bind".to_owned(),
-            source: "/dev/nvidia-uvm".to_owned(),
-            options: Vec::new()
-        };
-
-        MountFrom(
-            &m,
-            &self.SandboxRootDir,
-            MsFlags::MS_BIND ,
-            "",
-            "",
-        )?;
+        let mut nvidiafiles = vec![
+            "/dev/nvidiactl".to_owned(),
+            "/dev/nvidia-uvm-tools".to_owned(),
+            "/dev/nvidia-uvm".to_owned(),
+        ];
 
         for idx in &nvidiaList {
+            nvidiafiles.push(format!("/dev/nvidia{}", idx));
+        }
+
+        for f in &nvidiafiles {
             let m = Mount {
-                destination: format!("/dev/nvidia{}", idx),
+                destination: f.to_owned(),
                 typ: "bind".to_owned(),
-                source: "/dev/nvidia0".to_owned(),
+                source: f.to_owned(),
                 options: Vec::new()
             };
 
             MountFrom(
                 &m,
                 &self.SandboxRootDir,
-                MsFlags::MS_BIND,
+                MsFlags::MS_BIND | MsFlags::MS_SHARED,
                 "",
                 "",
             )?;
+        }
+
+        return Ok(())
+    }
+
+
+    pub fn CopyFile(sandboxPath: &str, file: &str) -> Result<()> {
+        let folder = Dir(file);
+
+        let targetFolder = Join(sandboxPath, &folder);
+        match fs::create_dir_all(&targetFolder) {
+            Ok(()) => (),
+            Err(e) => return Err(Error::Common(format!("failed creating directory {targetFolder} error {e}"))),
+        }
+
+        let targetfile = Join(sandboxPath, file);
+
+        match fs::copy(file, &targetfile) {
+            Ok(_) => (),
+            Err(e) => return Err(Error::Common(format!("failed copy file source {file} target {targetfile} error {e}"))),
+        }
+        
+        return Ok(())
+    }
+
+    pub fn MountFile(sandboxPath: &str, file: &str) -> Result<()> {
+        let folder = Dir(file);
+
+        let targetFolder = Join(sandboxPath, &folder);
+        match fs::create_dir_all(&targetFolder) {
+            Ok(()) => (),
+            Err(e) => return Err(Error::Common(format!("failed creating directory {targetFolder} error {e}"))),
+        }
+
+        let targetfile = Join(sandboxPath, file);
+        match File::create(&targetfile) {
+            Ok(_) => (),
+            Err(_e) => panic!("failed to create file {}", &targetfile),
+        };
+
+        let ret = Util::Mount(
+            file,
+            &targetfile,
+            "",
+            libc::MS_REC | libc::MS_BIND | libc::MS_SHARED,
+            "",
+        );
+
+        if ret < 0 {
+            panic!("InitRootfs: mount libcuda.so fail, error is {}", ret);
+        }
+        
+        return Ok(())
+    }
+
+    // danger! it will crash the dev box and have to reinstall OS. 
+    // todo: RCA this
+    pub fn MountFolder(sandboxPath: &str, folder: &str) -> Result<()> {
+        let targetFolder = Join(sandboxPath, &folder);
+        match fs::create_dir_all(&targetFolder) {
+            Ok(()) => (),
+            Err(e) => return Err(Error::Common(format!("failed creating directory {targetFolder} error {e}"))),
+        }
+
+        let ret = Util::Mount(
+            folder,
+            &targetFolder,
+            "",
+            libc::MS_REC | libc::MS_BIND | libc::MS_SHARED,
+            "",
+        );
+
+        if ret < 0 {
+            panic!("InitRootfs: mount libcuda.so fail, error is {}", ret);
+        }
+        
+        return Ok(())
+    }
+
+    pub fn MountNvidiaFiles(&self) -> Result<()> {
+        let files = [
+            "/usr/lib/x86_64-linux-gnu/libcuda.so",
+            "/usr/lib/x86_64-linux-gnu/libnvidia-ml.so",
+            "/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so",
+            //"/usr/lib/x86_64-linux-gnu/libnvidia-compiler.so",
+            "/usr/lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so",
+            "/usr/local/cuda/targets/x86_64-linux/lib/libcudart.so",
+            //"/lib/firmware/nvidia/535.129.03/gsp_ga10x.bin",
+            //"/lib/firmware/nvidia/535.129.03/gsp_tu10x.bin"
+        ];
+
+        for f in files {
+            // Self::MountFile(&self.SandboxRootDir, f)?;
+            Self::CopyFile(&self.SandboxRootDir, f)?;
+        }
+
+        return Ok(())
+    }
+
+    pub fn MountProc(&self) -> Result<()> {
+        let procPath = Join(&self.SandboxRootDir, "proc");
+        match create_dir_all(&procPath) {
+            Ok(()) => (),
+            Err(_e) => panic!("failed to create dir to mount proc"),
+        };
+        let ret = Util::Mount(
+            &"proc".to_string(),
+            &procPath,
+            &"proc".to_string(),
+            0,
+            &"".to_string(),
+        );
+        if ret < 0 {
+            panic!("InitRootfs: mount proc fail, error is {}", ret);
         }
 
         return Ok(())
@@ -724,6 +820,10 @@ impl SandboxProcess {
 
         let nvidiaDeviceList = NvidiaDeviceList(&self.spec)?;
         if &nvidiaDeviceList !=  "" {
+            self.MountProc()?;
+
+            // use host nvidia libraries? 
+            self.MountNvidiaFiles()?;
             self.MountNvidia()?;
         }
         
@@ -731,6 +831,7 @@ impl SandboxProcess {
         let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
         
         if &nvidiaDeviceList !=  "" {
+            *NIVIDIA_CONTAINER_NAME.lock() = self.containerId.clone();
             NVProxySetupInUserns(&rootContainerPath)?;
         }
         

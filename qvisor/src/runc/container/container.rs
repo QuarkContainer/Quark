@@ -468,7 +468,6 @@ impl Container {
             NVProxyHostSetup()?;
         }
     
-    
         // Lock the container metadata file to prevent concurrent creations of
         // containers with the same id.
         let containerRoot = Join(&conf.RootDir, id);

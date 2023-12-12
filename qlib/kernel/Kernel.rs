@@ -21,6 +21,7 @@ use super::super::socket_buf::*;
 use super::super::*;
 use crate::kernel_def::HyperCall64;
 use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
+use crate::qlib::proxy::*;
 
 extern "C" {
     pub fn rdtsc() -> i64;
@@ -347,11 +348,10 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
-    pub fn Proxy(cmd: u64, addrIn: u64, addrOut: u64) -> i64 {
+    pub fn Proxy(cmd: ProxyCommand, parameters: ProxyParameters) -> i64 {
         let mut msg = Msg::Proxy(Proxy {
             cmd,
-            addrIn,
-            addrOut,
+            parameters
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
