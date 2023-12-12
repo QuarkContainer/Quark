@@ -77,7 +77,10 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 pub fn CudaMemcpy(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyKind) -> Result<i64> {
     match kind {
-        CUDA_MEMCPY_HOST_TO_HOST => todo!(),
+        CUDA_MEMCPY_HOST_TO_HOST => {
+            error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
+            return Ok(1);
+        }
         CUDA_MEMCPY_HOST_TO_DEVICE => {
             // src is the virtual addr
             let mut prs = Vec::new();
@@ -120,6 +123,23 @@ pub fn CudaMemcpy(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyK
 
             return Ok(ret);
             
+        }
+        CUDA_MEMCPY_DEVICE_TO_DEVICE => {
+            let parameters = ProxyParameters {
+                para1: dst,
+                para2: 0,
+                para3: src,
+                para4: count as u64,
+                para5: kind,
+                ..Default::default()
+            };
+
+            let ret = HostSpace::Proxy(
+                ProxyCommand::CudaMemcpy,
+                parameters,
+            );
+
+            return Ok(ret);
         }
         _ => todo!()
     }

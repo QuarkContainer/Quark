@@ -34,17 +34,21 @@ lazy_static! {
 }
 
 pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i64> {
+    error!("NvidiaProxy 0");
     let handler = NVIDIA_HANDLERS.GetFuncHandler(cmd)?;
     match cmd {
         ProxyCommand::None => {
             panic!("get impossible proxy command");
         }
         ProxyCommand::CudaSetDevice => {
+            error!("CudaSetDevice 1");
             let func: extern "C" fn(libc::c_int) -> i32 = unsafe {
                 std::mem::transmute(handler)
             }; 
 
+            error!("CudaSetDevice 2");
             let ret = func(parameters.para1 as i32);
+            error!("CudaSetDevice 3");
             return Ok(ret as i64);
         }
         ProxyCommand::CudaDeviceSynchronize => {
@@ -122,6 +126,13 @@ pub fn CudaMemcpy(handle: u64, parameters: &ProxyParameters) -> Result<i64> {
 
             return Ok(0)   
         }
+        CUDA_MEMCPY_DEVICE_TO_DEVICE => {
+            let dst = parameters.para1;
+            let src = parameters.para3;
+            let count = parameters.para4;
+            let ret = func(dst, src, count, kind);
+            return Ok(ret as i64);
+        }
         _ => todo!()
     }
 }
@@ -153,6 +164,7 @@ impl NvidiaHandlersInner {
                 let handler: u64 = unsafe {
                     std::mem::transmute(libc::dlsym(self.cudaRuntimeHandler as *mut libc::c_void, func_name.as_ptr()))
                 };
+                
                 if handler != 0 {
                     return Ok(handler as u64)
                 }
@@ -176,8 +188,8 @@ impl Deref for NvidiaHandlers {
 
 impl NvidiaHandlers {
     pub fn New() -> Self {
-        //unsafe { cuda_driver_sys::cuInit(0) };
-        let cuda = format!("libcuda.so");
+        unsafe { cuda_driver_sys::cuInit(0) };
+        let cuda = format!("/usr/lib/x86_64-linux-gnu/libcuda.so");
         let cudalib = CString::new(&*cuda).unwrap();
         let cudaHandler = unsafe {
             libc::dlopen(
@@ -186,11 +198,15 @@ impl NvidiaHandlers {
             )
         } as u64;
 
+        assert!(cudaHandler != 0, "can't open libcuda.so");
+
         let func_name = CString::new("cuInit").unwrap();
         let cuInitFunc: extern "C" fn(i32) -> i32 = unsafe {
             std::mem::transmute(libc::dlsym(cudaHandler as _, func_name.as_ptr()))
         };
 
+        assert!(cuInitFunc as u64 != 0, "can't open func cuInit");
+        
         let mut handlers = BTreeMap::new();
         handlers.insert(ProxyCommand::CuInit, cuInitFunc as u64);
 
@@ -204,6 +220,8 @@ impl NvidiaHandlers {
             libc::RTLD_LAZY
             )
         } as u64;
+
+        assert!(cudaRuntimeHandler != 0, "/usr/local/cuda/targets/x86_64-linux/lib/libcudart.so");
 
         let inner = NvidiaHandlersInner {
             cudaHandler: cudaHandler,
