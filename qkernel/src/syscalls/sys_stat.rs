@@ -133,10 +133,14 @@ pub fn SysStatx(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let flags = args.arg2 as i32;
     let mask = args.arg3 as u32;
     let statxAddr = args.arg4 as u64;
-
-    if mask & StatxMask::STATX__RESERVED != 0 {
+    
+        if mask & StatxMask::STATX__RESERVED != 0 {
         return Err(Error::SysError(SysErr::EINVAL));
     }
+
+    // does not yet support automount, so
+	// AT_NO_AUTOMOUNT flag is a no-op.
+	let flags = flags & !(StatxFlags::AT_NO_AUTOMOUNT as i32);
 
     if flags
         & !(ATType::AT_SYMLINK_NOFOLLOW
@@ -147,20 +151,20 @@ pub fn SysStatx(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    if flags as u32 & StatxFlags::AT_STATX_SYNC_TYPE == StatxFlags::AT_STATX_SYNC_TYPE {
+        if flags as u32 & StatxFlags::AT_STATX_SYNC_TYPE == StatxFlags::AT_STATX_SYNC_TYPE {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let (path, dirPath) = copyInPath(task, pathAddr, flags & ATType::AT_EMPTY_PATH != 0)?;
-
+    
     if path.len() == 0 {
         let file = task.GetFile(fd)?;
 
         let uattr = file.UnstableAttr(task)?;
         let inode = file.Dirent.Inode();
         let sattr = inode.StableAttr();
-        statx(task, &sattr, &uattr, statxAddr)?;
-        return Ok(0);
+                statx(task, &sattr, &uattr, statxAddr)?;
+                return Ok(0);
     }
 
     let resolve = dirPath || flags & ATType::AT_SYMLINK_NOFOLLOW == 0;
