@@ -66,7 +66,7 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
         ProxyCommand::CudaMemcpy => {
             return CudaMemcpy(handler, parameters);
         }
-        //_ => todo!()
+        _ => todo!()
     }
 }
 
@@ -127,6 +127,7 @@ pub fn CudaMemcpy(handle: u64, parameters: &ProxyParameters) -> Result<i64> {
 }
 
 pub struct NvidiaHandlersInner {
+    pub cudaHandler: u64,
     pub cudaRuntimeHandler: u64, //*mut libc::c_void,
     pub handlers: BTreeMap<ProxyCommand, u64>,
 }
@@ -175,8 +176,26 @@ impl Deref for NvidiaHandlers {
 
 impl NvidiaHandlers {
     pub fn New() -> Self {
-        unsafe { cuda_driver_sys::cuInit(0) };
+        //unsafe { cuda_driver_sys::cuInit(0) };
+        let cuda = format!("libcuda.so");
+        let cudalib = CString::new(&*cuda).unwrap();
+        let cudaHandler = unsafe {
+            libc::dlopen(
+                cudalib.as_ptr(), 
+            libc::RTLD_LAZY
+            )
+        } as u64;
 
+        let func_name = CString::new("cuInit").unwrap();
+        let cuInitFunc: extern "C" fn(i32) -> i32 = unsafe {
+            std::mem::transmute(libc::dlsym(cudaHandler as _, func_name.as_ptr()))
+        };
+
+        let mut handlers = BTreeMap::new();
+        handlers.insert(ProxyCommand::CuInit, cuInitFunc as u64);
+
+        cuInitFunc(0);
+        
         let cudart = format!("/usr/local/cuda/targets/x86_64-linux/lib/libcudart.so");
         let cudartlib = CString::new(&*cudart).unwrap();
         let cudaRuntimeHandler = unsafe {
@@ -187,8 +206,9 @@ impl NvidiaHandlers {
         } as u64;
 
         let inner = NvidiaHandlersInner {
+            cudaHandler: cudaHandler,
             cudaRuntimeHandler: cudaRuntimeHandler,
-            handlers: BTreeMap::new(),
+            handlers: handlers,
         };
 
         return Self(Mutex::new(inner));  

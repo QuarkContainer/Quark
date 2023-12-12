@@ -71,6 +71,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
             
         }
+        _ => todo!()
     }
 }
 

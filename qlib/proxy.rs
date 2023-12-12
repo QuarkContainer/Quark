@@ -19,6 +19,8 @@ pub enum ProxyCommand {
     CudaDeviceSynchronize,
     CudaMalloc,
     CudaMemcpy,
+
+    CuInit,
 }
 
 impl Default for ProxyCommand {

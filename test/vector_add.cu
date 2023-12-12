@@ -53,6 +53,8 @@ void cuda_test() {
         
         assert(b[i]==float(i));
     }
+
+    printf("cudaMemcpy passed ...\n");
 }
 
 void cuda_add() {
