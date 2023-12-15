@@ -97,6 +97,7 @@ sudo systemctl restart docker
 The helloworld docker sample application can be executed as below:
 ```sh
 sudo systemctl restart docker
+sudo systemctl restart docker.service
 docker run --rm --runtime=quark hello-world
 ```      
     
