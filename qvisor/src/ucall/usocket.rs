@@ -59,12 +59,7 @@ impl USocket {
 
         let cstr = CString::New(path);
         let slice = cstr.Slice();
-        #[cfg(target_arch = "x86_64")]
-        for i in 0..slice.len() {
-            server.sun_path[i] = slice[i] as i8;
-        }
-        #[cfg(target_arch = "aarch64")]
-        server.sun_path.copy_from_slice(slice);
+        server.sun_path[0..slice.len()].copy_from_slice(slice);
 
         let sock = unsafe { socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0) };
 
@@ -104,12 +99,7 @@ impl USocket {
 
         let cstr = CString::New(path);
         let slice = cstr.Slice();
-        #[cfg(target_arch = "x86_64")]
-        for i in 0..slice.len() {
-            server.sun_path[i] = slice[i] as i8;
-        }
-        #[cfg(target_arch = "aarch64")]
-        server.sun_path.copy_from_slice(slice);
+        server.sun_path[0..slice.len()].copy_from_slice(slice);
 
         let sock = unsafe { socket(AF_UNIX, SOCK_STREAM, 0) };
 
