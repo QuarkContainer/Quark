@@ -3243,6 +3243,7 @@ pub fn CopyPage(to: u64, from: u64) {
     }
 }
 
+#[cfg(target_arch = "x86_64")]
 #[derive(Debug, Default, Copy, Clone)]
 #[repr(C)]
 pub struct LibcStat {
@@ -3264,6 +3265,31 @@ pub struct LibcStat {
     pub st_ctime: i64,
     pub st_ctime_nsec: i64,
     pub pad: [i64; 3],
+}
+
+#[cfg(target_arch = "aarch64")]
+#[derive(Debug, Default, Copy, Clone)]
+#[repr(C)]
+pub struct LibcStat {
+    pub st_dev: u64,
+    pub st_ino: u64,
+    pub st_mode: u32,
+    pub st_nlink: u32,
+    pub st_uid: u32,
+    pub st_gid: u32,
+    pub st_rdev: u64,
+    pub pad0: u64,
+    pub st_size: i64,
+    pub st_blksize: i32,
+    pub pad1: i32,
+    pub st_blocks: i64,
+    pub st_atime: i64,
+    pub st_atime_nsec: i64,
+    pub st_mtime: i64,
+    pub st_mtime_nsec: i64,
+    pub st_ctime: i64,
+    pub st_ctime_nsec: i64,
+    pub pad: [i32; 2],
 }
 
 impl LibcStat {
