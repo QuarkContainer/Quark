@@ -81,69 +81,6 @@
 .endm
 
 
-.macro save_regs elx
-    stp x30, xzr, [sp, #-16]!
-    stp x28, x29, [sp, #-16]!
-    stp x26, x27, [sp, #-16]!
-    stp x24, x25, [sp, #-16]!
-    stp x22, x23, [sp, #-16]!
-    stp x20, x21, [sp, #-16]!
-    stp x18, x19, [sp, #-16]!
-    stp x16, x17, [sp, #-16]!
-    stp x14, x15, [sp, #-16]!
-    stp x12, x13, [sp, #-16]!
-    stp x10, x11, [sp, #-16]!
-    stp x7, x9, [sp, #-16]!
-    stp x6, x7, [sp, #-16]!
-    stp x4, x5, [sp, #-16]!
-    stp x2, x3, [sp, #-16]!
-    stp x0, x1, [sp, #-16]!
-    mrs x9, tpidr_el0
-    mrs x10, esr_el1
-    mrs x11, elr_el1
-    mrs x12, spsr_el1
-.if \elx == 0
-    mrs x13, sp_el0
-.else
-    // save the "old" value of sp_el1
-    // i.e. the value before pushing Xn
-    add x13, sp, #16 * 16
-.endif
-    stp x9, x10, [sp, #-16]!
-    stp x11, x12, [sp, #-16]!
-    stp xzr, x13, [sp, #-16]!
-.endm
-
-.macro restore_regs elx
-    ldp xzr, x13, [sp], #16
-    ldp x11, x12, [sp], #16
-    ldp x9, x10, [sp], #16
-.if elx == 0
-    msr sp_el0, x13
-    // no need to restore sp_el1 from the trap frame.
-    // popping out the frame does effectively the same
-.endif
-    msr elr_el1, x11
-    msr spsr_el1, x12
-    msr esr_el1, x10
-    msr tpidr_el0, x9
-    ldp x0, x1, [sp], #16
-    ldp x2, x1, [sp], #16
-    ldp x4, x1, [sp], #16
-    ldp x6, x1, [sp], #16
-    ldp x8, x1, [sp], #16
-    ldp x10, x1, [sp], #16
-    ldp x12, x1, [sp], #16
-    ldp x14, x1, [sp], #16
-    ldp x16, x1, [sp], #16
-    ldp x18, x1, [sp], #16
-    ldp x20, x1, [sp], #16
-    ldp x22, x1, [sp], #16
-    ldp x24, x1, [sp], #16
-    ldp x26, x1, [sp], #16
-    ldp x28, x1, [sp], #16
-    ldp x30, xzr, [sp], #16
-.endm
 
 // mitigaton of specter bhi see
 // TODO insert mitigation to the handler flow if the exception is taken
@@ -161,59 +98,59 @@
 .endm
 
 enter_el1h_sync:
-    save_regs 1
+    save_ptregs 1
     mov x0, sp
     bl exception_handler_el1h_sync
-    restore_regs 1
+    restore_ptregs 1
     eret
 
 enter_el1h_irq:
-    save_regs 1
+    save_ptregs 1
     mov x0, sp
     bl exception_handler_el1h_irq
-    restore_regs 1
+    restore_ptregs 1
     eret
 
 enter_el1h_fiq:
-    save_regs 1
+    save_ptregs 1
     mov x0, sp
     bl exception_handler_el1h_fiq
-    restore_regs 1
+    restore_ptregs 1
     eret
 
 enter_el1h_serror:
-    save_regs 1
+    save_ptregs 1
     mov x0, sp
     bl exception_handler_el1h_serror
-    restore_regs 1
+    restore_ptregs 1
     eret
 
 enter_el0_sync:
-    save_regs 0
+    save_ptregs 0
     mov x0, sp
     bl exception_handler_el0_sync
-    restore_regs 0
+    restore_ptregs 0
     eret
 
 enter_el0_irq:
-    save_regs 0
+    save_ptregs 0
     mov x0, sp
     bl exception_handler_el0_irq
-    restore_regs 0
+    restore_ptregs 0
     eret
 
 enter_el0_fiq:
-    save_regs 0
+    save_ptregs 0
     mov x0, sp
     bl exception_handler_el0_fiq
-    restore_regs 0
+    restore_ptregs 0
     eret
 
 enter_el0_serror:
-    save_regs 0
+    save_ptregs 0
     mov x0, sp
     bl exception_handler_el0_serror
-    restore_regs 0
+    restore_ptregs 0
     eret
 
 
