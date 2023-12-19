@@ -451,7 +451,9 @@ impl Task {
             cTask.CopyOutObjManual(&pid, cTid)?;
         }
 
-        cTask.context.set_tls(tls);
+        if opts.SetTLS {
+            cTask.context.set_tls(tls);
+        }
 
         taskMgr::NewTask(TaskId::New(cTask.taskId));
 
@@ -680,7 +682,7 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
         toPtRegs.set_stack_pointer(userSp);
         
         
-        toTask.context.set_sp(child_clone as u64);
+        *(toTask.context.get_sp() as *mut u64) = child_clone as u64;
     }
 }
 

@@ -163,7 +163,7 @@ pub fn MapSegment(
         .RoundUp()?;
 
     let fileOffset = Addr(header.offset).RoundDown()?;
-    //info!("MapSegment fileoffset is {:x}, size is {:x}, filesize is {:x}", fileOffset.0, size, filesize);
+    info!("MapSegment fileoffset is {:x}, size is {:x}, filesize is {:x}", fileOffset.0, size, filesize);
     if fileOffset.0 + size > filesize as u64 {
         return Err(Error::SysError(SysErr::ENOEXEC));
     }
@@ -171,8 +171,9 @@ pub fn MapSegment(
     let addr = if endMem.0 - startMem.0 == 0 {
         offset + startMem.0
     } else {
-        //info!("virtual address is {:x}, fileoffset is {:x}, delta is {:x}, offset is {:x}, len is {:x}",
-        //    header.virtual_addr, header.offset, header.virtual_addr - header.offset, offset, endMem.0 - startMem.0);
+        info!("virtual address is {:x}, fileoffset is {:x}, delta is {:x}, offset is {:x}, len is {:x}",
+            header.virtual_addr, header.offset, header.virtual_addr - header.offset, offset, endMem.0 - startMem.0);
+
         let mut moptions = MMapOpts::NewFileOptions(file)?;
         moptions.Length = endMem.0 - startMem.0;
         moptions.Addr = offset + startMem.0;

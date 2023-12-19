@@ -410,27 +410,16 @@ impl Kernel {
             fileName, envs, args
         );
 
+
         if self.globalInit.lock().is_none() {
             panic!("kernel contains no tasks");
         }
 
         let tasks = self.tasks.clone();
         let _r = tasks.ReadLock();
-        /*let root = tasks.read().root.clone().unwrap();
-
-        assert!(root.lock().tids.len() == 1, "Kernel::Start tids count is more than 1");
-
-        let mut threads: Vec<Thread> = Vec::new();
-        for (t, _tid) in &root.lock().tids {
-            threads.push(t.clone());
-        };
-
-        assert!(threads.len() == 1, "ThreadGroup start has multiple threads");*/
 
         let task = Task::Current();
         return Load(task, fileName, args, envs, &Vec::new());
-
-        //return Thread::Start(fileName, envs, args);
     }
 
     // Pause requests that all tasks in k temporarily stop executing, and blocks

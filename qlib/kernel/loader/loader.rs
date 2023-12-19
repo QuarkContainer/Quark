@@ -236,8 +236,6 @@ pub fn LoadExecutable(
             argv = newargv;
 
             error!("the interrupt is forced to /bin/sh, argv is {:?}", &argv);
-
-            //return Err(Error::SysError(SysErr::ENOEXEC));
         }
     }
 

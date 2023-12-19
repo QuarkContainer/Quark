@@ -1,16 +1,32 @@
+// Copyright (c) 2021 Quark Container Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+pub mod fault;
+
+use core::arch::asm;
 use super::super::syscall_dispatch_aarch64;
 use crate::qlib::linux_def::MmapProt;
 use crate::qlib::addr::AccessType;
 use crate::qlib::kernel::SignalDef::PtRegs;
+use self::fault::{PageFaultHandler, PageFaultErrorCode};
+
 pub unsafe fn InitSingleton() {
 }
 
 pub fn init() {
     // TODO set up GIC
 }
-
-use core::arch::asm;
-
 
 pub struct EsrDefs{}
 pub struct ISSDataAbort {}
@@ -157,8 +173,6 @@ pub fn GetException() -> u64{
     return EsrDefs::GetExceptionFromESR(esr);
 }
 
-
-
 #[no_mangle]
 pub extern "C" fn exception_handler_unhandled(_ptregs_addr:usize, exception_type:usize){
     // MUST CHECK ptr!=0 before dereferencing
@@ -285,9 +299,29 @@ pub fn MemAbortUser(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool){
     let dfsc = esr & EsrDefs::ISS_DFSC_MASK;
     let access_type = GetFaultAccessType(esr, is_instr);
     match dfsc {
+        EsrDefs::DFSC_TF_L3 => {
+            info!("DFSC/IFSC == {:#X}, FAR == {:#X}, acces-type fault == {}, \
+                  during address translation == {}.", dfsc, far,
+                  access_type.String(), EsrDefs::IsCM(esr));
+            let ptregs_ptr = ptregs_addr as *mut PtRegs;
+            let ptregs = unsafe {
+                &mut *ptregs_ptr  
+            };
+            //
+            //TODO: on work
+            //
+            let error_code = PageFaultErrorCode::new(true, esr);
+            PageFaultHandler(ptregs , far, error_code);
+            return;
+        },
         _ => {
             // TODO insert proper handler
-            panic!("DFSC/IFSC == 0x{:02x}, FAR == {}, faulty access type = {}",  dfsc, far, access_type.String());
+            panic!("DFSC/IFSC == 0x{:02x}, FAR == {}, acces-type fault = {},\
+                   during address translation: {} ",  dfsc, far, access_type.String(),
+                   match EsrDefs::IsCM(esr) {
+                       true => "Yes",
+                       false => "No",
+                   });
         },
     }
 }
@@ -303,7 +337,12 @@ pub fn MemAbortKernel(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool){
     match dfsc {
         _ => {
             // TODO insert proper handler
-            panic!("DFSC/IFSC == 0x{:02x}, FAR == {}, faulty access type = {}",  dfsc, far, access_type.String());
+            panic!("DFSC/IFSC == 0x{:02x}, FAR == {:#x}, acces-type fault = {},\
+                   during address translation: {} ",  dfsc, far, access_type.String(),
+                   match EsrDefs::IsCM(esr) {
+                       true => "Yes",
+                       false => "No",
+                   });
         },
     }
 }
