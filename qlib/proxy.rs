@@ -19,6 +19,7 @@ pub enum ProxyCommand {
     CudaDeviceSynchronize,
     CudaMalloc,
     CudaMemcpy,
+    CudaRegisterFatBinary,
 
     CuInit,
 }
@@ -60,3 +61,34 @@ pub const CUDA_MEMCPY_HOST_TO_DEVICE: u64 = 1;
 pub const CUDA_MEMCPY_DEVICE_TO_HOST: u64 = 2;
 pub const CUDA_MEMCPY_DEVICE_TO_DEVICE: u64 = 3;
 pub const CUDA_MEMCPY_DEFAULT: u64 = 4;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct FatHeader {
+    magic: u32,
+    version: u32,
+    pub text: &'static FatTextHeader, 
+    data: u64,
+    unknown: u64,
+    text2: u64,
+    zero: u64
+}
+
+#[repr(C)]
+#[derive(Default, Debug)]
+pub struct FatTextHeader {
+    kind: u16,
+    unknown1: u16,
+    header_size: u32,
+    pub size: u64,
+    compressed_size: u32,
+    unknown2: u32,
+    minor: u16,
+    major: u16,
+    arch: u32,
+    obj_name_offset: u32,
+    obj_name_len: u32,
+    flags:u64,
+    zero: u64,
+    decompressed_size: u64
+}

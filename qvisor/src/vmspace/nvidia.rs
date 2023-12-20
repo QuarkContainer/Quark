@@ -15,40 +15,45 @@ use std::collections::BTreeMap;
 use spin::Mutex;
 use core::ops::Deref;
 use std::ffi::CString;
+use std::os::raw::*;
 
 use crate::qlib::common::*;
 use crate::qlib::linux_def::SysErr;
 use crate::qlib::proxy::*;
 use crate::qlib::range::Range;
 
+use cuda_driver_sys::*;
+
 lazy_static! {
     pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
-    pub static ref FUNC_MAP: BTreeMap<ProxyCommand, &'static str> = BTreeMap::from(
+    pub static ref FUNC_MAP: BTreeMap<ProxyCommand,(u64, &'static str)> = BTreeMap::from(
         [
-            (ProxyCommand::CudaSetDevice, "cudaSetDevice"),
-            (ProxyCommand::CudaDeviceSynchronize, "cudaDeviceSynchronize"),
-            (ProxyCommand::CudaMalloc, "cudaMalloc"),
-            (ProxyCommand::CudaMemcpy, "cudaMemcpy"),
+            (ProxyCommand::CudaSetDevice, (0, "cudaSetDevice")),
+            (ProxyCommand::CudaDeviceSynchronize, (0, "cudaDeviceSynchronize")),
+            (ProxyCommand::CudaMalloc, (0, "cudaMalloc")),
+            (ProxyCommand::CudaMemcpy, (0, "cudaMemcpy")),
+            (ProxyCommand::CudaRegisterFatBinary, (1, "cuModuleLoadData")),
         ]
     );
 }
 
 pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i64> {
-    error!("NvidiaProxy 0");
+    error!("NvidiaProxy 0 cmd {:?}", cmd);
     let handler = NVIDIA_HANDLERS.GetFuncHandler(cmd)?;
+    error!("NvidiaProxy 0 cmd {:?} After getting handler", cmd);
     match cmd {
         ProxyCommand::None => {
             panic!("get impossible proxy command");
         }
         ProxyCommand::CudaSetDevice => {
-            error!("CudaSetDevice 1");
+            error!("hochan CudaSetDevice 1");
             let func: extern "C" fn(libc::c_int) -> i32 = unsafe {
                 std::mem::transmute(handler)
             }; 
 
-            error!("CudaSetDevice 2");
+            error!("hochan CudaSetDevice 2");
             let ret = func(parameters.para1 as i32);
-            error!("CudaSetDevice 3");
+            error!("hochan CudaSetDevice 3");
             return Ok(ret as i64);
         }
         ProxyCommand::CudaDeviceSynchronize => {
@@ -69,6 +74,39 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
         }
         ProxyCommand::CudaMemcpy => {
             return CudaMemcpy(handler, parameters);
+        }
+        ProxyCommand::CudaRegisterFatBinary => {
+            error!("hochan ProxyCommand::CudaRegisterFatBinary parameters: {:x?}", parameters);
+
+            let addr=parameters.para2 as *const u8;
+            let len = parameters.para1 as usize;
+            let bytes:_= unsafe{            
+                std::slice::from_raw_parts(addr, len)
+            };
+            error!("hochan !!!2 {:x?}", &bytes);
+
+            let flags:*mut std::os::raw::c_uint= std::ptr::null_mut();
+            let active:*mut std::os::raw::c_int= std::ptr::null_mut();
+            let retContextState = unsafe{ cuda_driver_sys::cuDevicePrimaryCtxGetState(0,flags,active)};
+            error!("hochan retContextState {:?}",retContextState);
+            error!("hochan active {:?}",active);
+
+            let pctx   :*mut CUcontext= std::ptr::null_mut();
+            let retContextCreate = unsafe{ cuda_driver_sys::cuCtxCreate_v2(pctx, 0, 0)};
+            error!("hochan retContextCreate {:?}",retContextCreate);
+
+            let module:*mut CUmodule = std::ptr::null_mut();
+            let p=std::ptr::addr_of!(parameters.para2);
+            let ret = unsafe{ cuda_driver_sys::cuModuleLoadData(module, p as *const c_void)};
+
+            // let func: extern "C" fn(*mut CUmodule, *const c_void) -> CUresult = unsafe {
+            //     std::mem::transmute(handler)
+            // };
+            
+            // let ret = func(module, p as *const c_void);
+            error!("hochan called func ret {:?}",ret);
+            return Ok(ret as i64);
+            // Ok(0)
         }
         _ => todo!()
     }
@@ -159,13 +197,15 @@ impl NvidiaHandlersInner {
 
     pub fn DLSym(&self, cmd: ProxyCommand) -> Result<u64> {
         match FUNC_MAP.get(&cmd) {
-            Some(&name) => {
-                let func_name = CString::new(name).unwrap();
+            Some(&pair) => {
+                let func_name = CString::new(pair.1).unwrap();
+                let handler = if pair.0 ==0 { self.cudaRuntimeHandler } else { self.cudaHandler };
                 let handler: u64 = unsafe {
-                    std::mem::transmute(libc::dlsym(self.cudaRuntimeHandler as *mut libc::c_void, func_name.as_ptr()))
+                    std::mem::transmute(libc::dlsym(handler as *mut libc::c_void, func_name.as_ptr()))
                 };
                 
                 if handler != 0 {
+                    error!("hochan got handler {:x}", handler);
                     return Ok(handler as u64)
                 }
             }
@@ -188,7 +228,8 @@ impl Deref for NvidiaHandlers {
 
 impl NvidiaHandlers {
     pub fn New() -> Self {
-        unsafe { cuda_driver_sys::cuInit(0) };
+        let initResult = unsafe { cuda_driver_sys::cuInit(0) };
+        error!("hochan initResult {:?}", initResult);
         let cuda = format!("/usr/lib/x86_64-linux-gnu/libcuda.so");
         let cudalib = CString::new(&*cuda).unwrap();
         let cudaHandler = unsafe {
@@ -212,7 +253,7 @@ impl NvidiaHandlers {
 
         cuInitFunc(0);
         
-        let cudart = format!("/usr/local/cuda/targets/x86_64-linux/lib/libcudart.so");
+        let cudart = format!("/usr/lib/x86_64-linux-gnu/libcudart.so");
         let cudartlib = CString::new(&*cudart).unwrap();
         let cudaRuntimeHandler = unsafe {
             libc::dlopen(
@@ -221,7 +262,7 @@ impl NvidiaHandlers {
             )
         } as u64;
 
-        assert!(cudaRuntimeHandler != 0, "/usr/local/cuda/targets/x86_64-linux/lib/libcudart.so");
+        assert!(cudaRuntimeHandler != 0, "/usr/lib/x86_64-linux-gnu/libcudart.so");
 
         let inner = NvidiaHandlersInner {
             cudaHandler: cudaHandler,

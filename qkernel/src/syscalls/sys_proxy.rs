@@ -39,6 +39,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
         ProxyCommand::CudaSetDevice |
         ProxyCommand::CudaDeviceSynchronize => {
+            error!("hochan SysProxy CudaSetDevice");
             let ret = HostSpace::Proxy(
                 cmd,
                 parameters,
@@ -71,8 +72,26 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
             
         }
+        ProxyCommand::CudaRegisterFatBinary => {            
+            let data: Vec<u8> = task.CopyInVec(parameters.para2, parameters.para1 as usize)?;
+            error!("hochan !!!1 {:x?}", data);
+            parameters.para2 = &data[0] as *const _ as u64;
+            let ret = CudaRegisterFatBinary(parameters)?;
+
+            return Ok(ret);
+            
+        }
         _ => todo!()
     }
+}
+
+pub fn CudaRegisterFatBinary(parameters:ProxyParameters )-> Result<i64>{
+    error!("hochan CudaRegisterFatBinary");
+    let ret = HostSpace::Proxy(
+        ProxyCommand::CudaRegisterFatBinary,
+        parameters,
+    );
+    return Ok(ret);
 }
 
 pub fn CudaMemcpy(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyKind) -> Result<i64> {

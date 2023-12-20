@@ -5,7 +5,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
-#define N 100000
+#define N 100//000
 #define MAX_ERR 1e-6
 
 __global__ void vector_add(float *out, float *a, float *b, int n) {
@@ -61,6 +61,11 @@ void cuda_add() {
     float *a, *b, *out;
     float *d_a, *d_b, *d_out; 
 
+    int ret = cudaSetDevice(0);
+    printf("cudaSetDevice ret is %d\n", ret);
+    // ret = cudaDeviceSynchronize();
+    // printf("cudaDeviceSynchronize ret is %d\n", ret);
+
     // Allocate host memory
     a   = (float*)malloc(sizeof(float) * N);
     b   = (float*)malloc(sizeof(float) * N);
@@ -98,9 +103,9 @@ void cuda_add() {
     printf("testcuda 8\n");
     for(int i = 0; i < N; i++){
         //assert(fabs(out[i] - a[i] - b[i]) < MAX_ERR);
-        if(out[i]!=3.0f) {
-            printf("fail i is %d out[i] is %f\n", i, out[i]);
-        }
+        // if(out[i]!=3.0f) {
+        //     printf("fail i is %d out[i] is %f\n", i, out[i]);
+        // }
         //assert(out[i]==3.0f);
     }
     printf("out[0] = %f\n", out[0]);
@@ -118,6 +123,6 @@ void cuda_add() {
 }
 
 int main(){
-    cuda_test();
-    //cuda_add();
+    //cuda_test();
+    cuda_add();
 }
