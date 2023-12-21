@@ -340,24 +340,28 @@ impl PageTables {
         unsafe {
             let pgdEntry = &(*pt)[p4Idx];
             if pgdEntry.is_unused() {
+                debug!("VM: V2PTE pgdEntry not mapped - VA:{:#x}.", vaddr);
                 return Err(Error::AddressNotMap(addr));
             }
 
             let pudTbl = pgdEntry.addr().as_u64() as *const PageTable;
             let pudEntry = &(*pudTbl)[p3Idx];
             if pudEntry.is_unused() {
+                debug!("VM: V2PTE pudEntry not mapped - VA:{:#x}.", vaddr);
                 return Err(Error::AddressNotMap(addr));
             }
 
             let pmdTbl = pudEntry.addr().as_u64() as *const PageTable;
             let pmdEntry = &(*pmdTbl)[p2Idx];
             if pmdEntry.is_unused() {
+                debug!("VM: V2PTE pmdEntry not mapped - VA:{:#x}.", vaddr);
                 return Err(Error::AddressNotMap(addr));
             }
 
             let pteTbl = pmdEntry.addr().as_u64() as *mut PageTable;
             let pteEntry = &mut (*pteTbl)[p1Idx];
             if pteEntry.is_unused() {
+                debug!("VM: V2PTE pteEntry not mapped - VA:{:#x}.", vaddr);
                 return Err(Error::AddressNotMap(addr));
             }
 
@@ -474,7 +478,11 @@ impl PageTables {
                 res = true;
             }
 
-            pteEntry.set_addr(PhysAddr::new(phyAddr.0), flags);
+            let mut _f = flags;
+            _f |= PageTableFlags::PAGE;
+            debug!("VM: Map UPage VA-{:#x}, PH-{:#x}, flags-{:b}",
+                   vaddr.0, phyAddr.0, _f);
+            pteEntry.set_addr(PhysAddr::new(phyAddr.0), _f);
             Invlpg(vaddr.0);
         }
 
@@ -1306,8 +1314,6 @@ impl PageTables {
             }
 
             self.HandlingSwapInPage(vaddr.0, pteEntry);
-            debug!("VM: vaddr:{:#x} in PTE:{:?} is swapped-in.",
-                   vaddr.0, pteEntry);
 
             // the page might be swapping in by another vcpu
             let addr = pteEntry.addr().as_u64();
@@ -1375,14 +1381,9 @@ impl PageTables {
     #[cfg(target_arch = "aarch64")]
     pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
         let flags = pteEntry.flags();
+
         // bit56 : whether the page is swapped-out
         // bit57: whether there is thread is working on swapping the page
-        debug!("VM: vaddr:{:#x} in PTE:{:?} might be swapped-in.",
-                   vaddr, pteEntry);
-        let mut flags = pteEntry.flags();
-        flags |= PageTableFlags::ACCESSED;
-        pteEntry.set_flags(flags);
-
         if is_pte_swapped(flags) {
             let needSwapin = {
                 let _l = crate::GLOBAL_LOCK.lock();
@@ -1391,7 +1392,7 @@ impl PageTables {
 
                 // Has another thread swapped in the page?
                 if !is_pte_swapped(flags) {
-                    info!("VM: vaddr:{:#x} in PTE:{:?} is has the swapped bit not set.",
+                    info!("VM: vaddr:{:#x} in PTE:{:?} has the swapped bit not set.",
                    vaddr, pteEntry);
                     return;
                 }
@@ -1410,11 +1411,12 @@ impl PageTables {
                 info!("VM: vaddr:{:#x} in PTE:{:?} needs swapped.",
                    vaddr, pteEntry);
                 let addr = pteEntry.addr().as_u64();
+                //
+                // NOTE: How can we detect if it succeeded or not?
+                //
                 let _ret = HostSpace::SwapInPage(addr);
+                debug!("VM: HS-SiP return:{}", _ret);
                 let mut flags = pteEntry.flags();
-
-                flags |= PageTableFlags::PAGE
-                         | PageTableFlags::ACCESSED;
                 unset_pte_swapped(&mut flags);
                 unset_pte_taken(&mut flags);
                 pteEntry.set_flags(flags);
@@ -1545,8 +1547,12 @@ impl PageTables {
                                 res = self.freeEntry(pteEntry, pagePool)?;
                             }
 
-                            //info!("set addr: vaddr is {:x}, paddr is {:x}, flags is {:b}", curAddr.0, phyAddr.0, flags.bits());
-                            pteEntry.set_addr(PhysAddr::new(newAddr), flags);
+                            let mut _f = flags;
+                            _f |= PageTableFlags::PAGE;
+                            debug!("VM: MapCanonical VA-{:#x}, PH-{:#x}, flags-{:b}",
+                                   curAddr.0, phyAddr.0, _f);
+
+                            pteEntry.set_addr(PhysAddr::new(newAddr), _f);
                             Invlpg(curAddr.0);
                             curAddr = curAddr.AddLen(MemoryDef::PAGE_SIZE_4K)?;
 

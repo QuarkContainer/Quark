@@ -19,6 +19,7 @@ use super::super::syscall_dispatch_aarch64;
 use crate::qlib::linux_def::MmapProt;
 use crate::qlib::addr::AccessType;
 use crate::qlib::kernel::SignalDef::PtRegs;
+use crate::qlib::vcpu_mgr::*;
 use self::fault::{PageFaultHandler, PageFaultErrorCode};
 
 pub unsafe fn InitSingleton() {
@@ -269,6 +270,7 @@ pub extern "C" fn exception_handler_el0_sync(ptregs_addr:usize){
         // TODO (default case) for a unhandled exception from user,
         // the kill the user process instead of panicing
     }
+    CPULocal::Myself().SetMode(VcpuMode::User);
 }
 
 #[no_mangle]

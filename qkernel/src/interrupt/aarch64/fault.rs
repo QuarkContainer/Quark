@@ -27,6 +27,8 @@ use crate::interrupt::aarch64::{EsrDefs, GetFaultAccessType};
 use crate::qlib::addr::{Addr, AccessType};
 use crate::qlib::linux_def::MemoryDef;
 use crate::qlib::linux_def::{MmapProt, Signal};
+use crate::qlib::pagetable::PageTables;
+use crate::qlib::kernel::arch::__arch::mm::pagetable::{PageTableEntry, PageTableFlags};
 
 
 //use crate::task::*;
@@ -160,6 +162,16 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
     // NOTE: ATM only 0x0000xx...x address-space is used.
     //
     let ttbr = CurrentUserTable();
+    {
+        let bind = currTask
+            .mm
+            .pagetable
+            .write();
+        let pte =  bind.pt
+            .VirtualToEntry(fault_address).unwrap();
+        debug!("VM: FAR - {:#x}; PTE - {:?}", fault_address, *pte);
+    }
+
 
     //
     //TODO: What is the meaning of this condition???
@@ -238,6 +250,7 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
         // triggered because pagetable not mapping
         if error_code.is_flag_set(PageFaultErrorFlags::FaultTranslation)
         {
+
             info!("VM: InstallPage 1, range is {:x?}, address is {:x}, vma.growsDown is {}",
                &range, pageAddr, vma.growsDown);
             //let startTime = TSC.Rdtsc();
@@ -252,10 +265,17 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
             if addr > 0 {
                 //use crate::qlib::kernel::Tsc;
                 info!("VM: Swap in page {:x?}/{:x}", Addr(pageAddr).RoundDown().unwrap(), addr/*, Tsc::Scale(endtime - startTime)*/);
-                CPULocal::Myself().SetMode(VcpuMode::User);
+                {
+                    let bind = currTask
+                        .mm
+                        .pagetable
+                        .write();
+                    let pte = bind.pt
+                        .VirtualToEntry(pageAddr).unwrap();
+                    debug!("VM: Found virt-addr - {:#x}; PTE - {:?}", pageAddr, *pte);
+                }
                 return;
             }
-
             //
             // Could not swap in page
             //
