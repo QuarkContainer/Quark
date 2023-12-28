@@ -67,7 +67,7 @@ pub const CUDA_MEMCPY_DEFAULT: u64 = 4;
 pub struct FatHeader {
     magic: u32,
     version: u32,
-    pub text: &'static FatTextHeader, 
+    pub text: &'static FatElfHeader, 
     data: u64,
     unknown: u64,
     text2: u64,
@@ -76,10 +76,19 @@ pub struct FatHeader {
 
 #[repr(C)]
 #[derive(Default, Debug)]
+pub struct FatElfHeader {
+    magic: u32,
+    version: u16,
+    pub header_size: u16,
+    pub size: u64
+}
+
+#[repr(C)]
+#[derive(Default, Debug)]
 pub struct FatTextHeader {
     kind: u16,
     unknown1: u16,
-    header_size: u32,
+    pub header_size: u32,
     pub size: u64,
     compressed_size: u32,
     unknown2: u32,

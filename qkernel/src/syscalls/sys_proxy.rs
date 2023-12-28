@@ -72,9 +72,9 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
             
         }
-        ProxyCommand::CudaRegisterFatBinary => {            
+        ProxyCommand::CudaRegisterFatBinary => {
             let data: Vec<u8> = task.CopyInVec(parameters.para2, parameters.para1 as usize)?;
-            error!("hochan !!!1 {:x?}", data);
+            // error!("hochan !!!1 {:x?}", data);
             parameters.para2 = &data[0] as *const _ as u64;
             let ret = CudaRegisterFatBinary(parameters)?;
 

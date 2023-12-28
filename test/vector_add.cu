@@ -61,11 +61,6 @@ void cuda_add() {
     float *a, *b, *out;
     float *d_a, *d_b, *d_out; 
 
-    int ret = cudaSetDevice(0);
-    printf("cudaSetDevice ret is %d\n", ret);
-    // ret = cudaDeviceSynchronize();
-    // printf("cudaDeviceSynchronize ret is %d\n", ret);
-
     // Allocate host memory
     a   = (float*)malloc(sizeof(float) * N);
     b   = (float*)malloc(sizeof(float) * N);

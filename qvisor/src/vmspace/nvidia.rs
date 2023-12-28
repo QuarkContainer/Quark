@@ -16,6 +16,7 @@ use spin::Mutex;
 use core::ops::Deref;
 use std::ffi::CString;
 use std::os::raw::*;
+use std::alloc::{alloc, dealloc, Layout};
 
 use crate::qlib::common::*;
 use crate::qlib::linux_def::SysErr;
@@ -76,37 +77,16 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
             return CudaMemcpy(handler, parameters);
         }
         ProxyCommand::CudaRegisterFatBinary => {
+            for (n,v) in std::env::vars() {
+                error!("hochan enviornment variable {}: {}", n,v);
+            }
             error!("hochan ProxyCommand::CudaRegisterFatBinary parameters: {:x?}", parameters);
-
-            let addr=parameters.para2 as *const u8;
-            let len = parameters.para1 as usize;
-            let bytes:_= unsafe{            
-                std::slice::from_raw_parts(addr, len)
-            };
-            error!("hochan !!!2 {:x?}", &bytes);
-
-            let flags:*mut std::os::raw::c_uint= std::ptr::null_mut();
-            let active:*mut std::os::raw::c_int= std::ptr::null_mut();
-            let retContextState = unsafe{ cuda_driver_sys::cuDevicePrimaryCtxGetState(0,flags,active)};
-            error!("hochan retContextState {:?}",retContextState);
-            error!("hochan active {:?}",active);
-
-            let pctx   :*mut CUcontext= std::ptr::null_mut();
-            let retContextCreate = unsafe{ cuda_driver_sys::cuCtxCreate_v2(pctx, 0, 0)};
-            error!("hochan retContextCreate {:?}",retContextCreate);
-
-            let module:*mut CUmodule = std::ptr::null_mut();
-            let p=std::ptr::addr_of!(parameters.para2);
-            let ret = unsafe{ cuda_driver_sys::cuModuleLoadData(module, p as *const c_void)};
-
-            // let func: extern "C" fn(*mut CUmodule, *const c_void) -> CUresult = unsafe {
-            //     std::mem::transmute(handler)
-            // };
             
-            // let ret = func(module, p as *const c_void);
+            let layout = Layout::new::<CUmodule>();
+            let ptr = unsafe { alloc(layout) };
+            let ret = unsafe{ cuda_driver_sys::cuModuleLoadData(ptr as *mut _ as u64 as *mut CUmodule, parameters.para2 as *const c_void)};
             error!("hochan called func ret {:?}",ret);
             return Ok(ret as i64);
-            // Ok(0)
         }
         _ => todo!()
     }
@@ -228,8 +208,23 @@ impl Deref for NvidiaHandlers {
 
 impl NvidiaHandlers {
     pub fn New() -> Self {
+        // This code piece is necessary. Otherwise cuModuleLoadData will return CUDA_ERROR_JIT_COMPILER_NOT_FOUND
+        let lib = CString::new("libnvidia-ptxjitcompiler.so").unwrap();
+        let handle = unsafe { libc::dlopen(lib.as_ptr(), libc::RTLD_LAZY) };  
+        error!("hochan libnvidia-ptxjitcompiler.so handle {:?}", handle);
+
         let initResult = unsafe { cuda_driver_sys::cuInit(0) };
         error!("hochan initResult {:?}", initResult);
+
+        let layout = Layout::new::<CUcontext>();
+        let  ptr = unsafe { alloc(layout) };
+        let ctx = ptr as *mut _ as u64 as *mut CUcontext;
+        let ret = unsafe { cuda_driver_sys::cuCtxCreate_v2(ctx,0,0) };
+        error!("hochan cuCtxCreate ret {:?}", ret);
+
+        let ret = unsafe { cuCtxPushCurrent_v2(*ctx) };
+        error!("hochan cuCtxPushCurrent ret {:?}", ret);
+
         let cuda = format!("/usr/lib/x86_64-linux-gnu/libcuda.so");
         let cudalib = CString::new(&*cuda).unwrap();
         let cudaHandler = unsafe {
@@ -238,20 +233,9 @@ impl NvidiaHandlers {
             libc::RTLD_LAZY
             )
         } as u64;
-
         assert!(cudaHandler != 0, "can't open libcuda.so");
-
-        let func_name = CString::new("cuInit").unwrap();
-        let cuInitFunc: extern "C" fn(i32) -> i32 = unsafe {
-            std::mem::transmute(libc::dlsym(cudaHandler as _, func_name.as_ptr()))
-        };
-
-        assert!(cuInitFunc as u64 != 0, "can't open func cuInit");
         
-        let mut handlers = BTreeMap::new();
-        handlers.insert(ProxyCommand::CuInit, cuInitFunc as u64);
-
-        cuInitFunc(0);
+        let handlers = BTreeMap::new();
         
         let cudart = format!("/usr/lib/x86_64-linux-gnu/libcudart.so");
         let cudartlib = CString::new(&*cudart).unwrap();

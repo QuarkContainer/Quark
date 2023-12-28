@@ -43,56 +43,51 @@ pub extern "C" fn cudaDeviceSynchronize() -> usize {
 
 #[no_mangle]
 pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) {
-    let retSetDevice = unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaSetDevice as usize, 0 as usize) 
-    };
-
-    println!("Hijacked retSetDevice({})", retSetDevice);
-    
     println!("Hijacked __cudaRegisterFatBinary(fatCubin:{:#x?})", fatCubin);
     let addrFatCubin = std::ptr::addr_of!(fatCubin.text);
     unsafe {
-        println!("hochan ProxyCommand::CudaRegisterFatBinary: {:x}, fatCubin.text.size: {:x}, addrFatCubin: {:x}", 
-        ProxyCommand::CudaRegisterFatBinary as usize, fatCubin.text.size as usize, addrFatCubin as usize);
-
+        println!("hochan ProxyCommand::CudaRegisterFatBinary: {:x}, fatCubin.text.header_size:{:x}, fatCubin.text.size: {:x}, addrFatCubin: {:x}", 
+        ProxyCommand::CudaRegisterFatBinary as usize, fatCubin.text.header_size as usize, fatCubin.text.size as usize, addrFatCubin as usize);
         let addr=addrFatCubin as *const u8;
-            let len = fatCubin.text.size as usize;
-            let bytes:_= std::slice::from_raw_parts(addr, len);
-            println!("hochan !!!0 {:x?}", &bytes);
-        syscall3(SYS_PROXY, ProxyCommand::CudaRegisterFatBinary as usize, fatCubin.text.size as usize, addrFatCubin as usize);
+        let len = fatCubin.text.header_size as usize + fatCubin.text.size as usize;
+        // let bytes = std::slice::from_raw_parts(fatCubin.text as *const _ as u64 as *const u8, len);
+        // println!("hochan fatCubin.text addr {:x}", fatCubin.text as *const _ as u64);
+        // println!("hochan !!!0 {:x?}", bytes);
+        println!("hochan addr {:x?}, addrFatCubin {:x?}",addr,addrFatCubin);
+        syscall3(SYS_PROXY, ProxyCommand::CudaRegisterFatBinary as usize, len, fatCubin.text as *const _ as usize);
     }
 }
 
-// #[no_mangle]
-// pub extern "C" fn cudaMalloc(
-//         dev_ptr: *mut *mut c_void, 
-//         size: usize
-//     ) -> usize {
-//     println!("Hijacked cudaMalloc(size:{})", size);
+#[no_mangle]
+pub extern "C" fn cudaMalloc(
+        dev_ptr: *mut *mut c_void, 
+        size: usize
+    ) -> usize {
+    println!("Hijacked cudaMalloc(size:{})", size);
 
-//     return unsafe {
-//         syscall3(SYS_PROXY, ProxyCommand::CudaMalloc as usize, dev_ptr as * const _ as usize, size) 
-//     };
-// }
+    return unsafe {
+        syscall3(SYS_PROXY, ProxyCommand::CudaMalloc as usize, dev_ptr as * const _ as usize, size) 
+    };
+}
 
-// #[no_mangle]
-// pub extern "C" fn cudaMemcpy(
-//         dst: *mut c_void, 
-//         src: *const c_void, 
-//         count: usize, 
-//         kind: cudaMemcpyKind
-//     ) -> usize {
-//     println!("Hijacked cudaMemcpy(size:{})", count);
+#[no_mangle]
+pub extern "C" fn cudaMemcpy(
+        dst: *mut c_void, 
+        src: *const c_void, 
+        count: usize, 
+        kind: cudaMemcpyKind
+    ) -> usize {
+    println!("Hijacked cudaMemcpy(size:{})", count);
 
-//     if kind == cudaMemcpyKind::cudaMemcpyHostToHost {
-//         unsafe {
-//             std::ptr::copy_nonoverlapping(src as * const u8, dst as * mut u8, count);
-//         }
+    if kind == cudaMemcpyKind::cudaMemcpyHostToHost {
+        unsafe {
+            std::ptr::copy_nonoverlapping(src as * const u8, dst as * mut u8, count);
+        }
         
-//         return 0;
-//     }
+        return 0;
+    }
 
-//     return unsafe {
-//         syscall5(SYS_PROXY, ProxyCommand::CudaMemcpy as usize, dst as * const _ as usize, src as usize, count as usize, kind as usize) 
-//     };
-// }
+    return unsafe {
+        syscall5(SYS_PROXY, ProxyCommand::CudaMemcpy as usize, dst as * const _ as usize, src as usize, count as usize, kind as usize) 
+    };
+}
