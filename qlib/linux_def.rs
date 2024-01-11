@@ -3008,8 +3008,8 @@ impl MemoryDef {
     pub const KERNEL_MEM_INIT_REGION_SIZE: u64 = 24; // 24 GB
 
     // start address for memmap and dynamic load address space, there is heap address space between PHY_UPPER_ADDR + VIR_MMAP_START
-    pub const VIR_MMAP_START: u64 = Self::PHY_UPPER_ADDR + 128 * Self::ONE_GB; // + 1 * Self::ONE_TB; //start from 1.5 TB
-    pub const SHARED_START: u64 = Self::VIR_MMAP_START + 1 * Self::ONE_TB; //start from 2.5 TB
+    pub const VIR_MMAP_START: u64 = Self::PHY_UPPER_ADDR + 128 * Self::ONE_GB; // 512GB + 128 GB
+    pub const SHARED_START: u64 = Self::VIR_MMAP_START + 1 * Self::ONE_TB; //512GB + 128 GB + 1TB
     pub const LOWER_TOP: u64 = 0x0000_8000_0000_0000;
     pub const UPPER_BOTTOM: u64 = 0xffff_8000_0000_0000;
     pub const ENTRY_COUNT: u16 = 512 as u16;
