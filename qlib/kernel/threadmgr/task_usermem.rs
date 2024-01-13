@@ -172,6 +172,8 @@ impl MemoryManager {
             return self.CopyDataWithPf(task, from, vaddr, len, allowPartial);
         }
 
+        debug!("VM: CopyDataWithPf: false -> CDOL: from:{:#x}, VA:{:#x}, size:{:#x}",
+               from, vaddr, len);
         let rl = self.MappingReadLock();
 
         return self.CopyDataOutLocked(task, &rl, from, vaddr, len, allowPartial);

@@ -237,13 +237,13 @@ pub extern "C" fn exception_handler_el0_sync(ptregs_addr:usize){
     if ptregs_addr == 0 {
         panic!("exception frame is null pointer\n")
     }
+    // arm64 linux syscall calling convention
+    // TODO maybe there is a better/safer way of this pointer cast
+    let ctx_p = ptregs_addr as *mut PtRegs;
+    let ctx_p = ctx_p.cast::<PtRegs>();
+    let ctx = unsafe { &mut *ctx_p };
     match ec {
         EsrDefs::EC_SVC => {
-            // arm64 linux syscall calling convention
-            // TODO maybe there is a better/safer way of this pointer cast
-            let ctx_p = ptregs_addr as *mut PtRegs;
-            let ctx_p = ctx_p.cast::<PtRegs>();
-            let ctx = unsafe { &mut *ctx_p };
             // syscall number from w8
             let call_no = ctx.regs[8] as u32;
             let arg0 = ctx.regs[0];
@@ -265,7 +265,7 @@ pub extern "C" fn exception_handler_el0_sync(ptregs_addr:usize){
             MemAbortUser(ptregs_addr, esr, far, true);
         },
         _ => {
-            panic!("unhandled sync exception from el0: {}\n", ec);
+            panic!("unhandled sync exception from el0: {},\n current-context: {:?}", ec, ctx);
         }
         // TODO (default case) for a unhandled exception from user,
         // the kill the user process instead of panicing
@@ -318,7 +318,7 @@ pub fn MemAbortUser(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool){
         },
         _ => {
             // TODO insert proper handler
-            panic!("DFSC/IFSC == 0x{:02x}, FAR == {}, acces-type fault = {},\
+            panic!("DFSC/IFSC == 0x{:02x}, FAR == {:#x}, acces-type fault = {},\
                    during address translation: {} ",  dfsc, far, access_type.String(),
                    match EsrDefs::IsCM(esr) {
                        true => "Yes",

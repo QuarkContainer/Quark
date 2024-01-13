@@ -164,6 +164,8 @@ pub fn LoadExecutable(
 ) -> Result<(LoadedElf, Dirent, Vec<String>)> {
     let mut filename = filename.to_string();
 
+    debug!("VM: LExec - fname:{:?}.", filename);
+
     let mut tmp = Vec::new();
     tmp.append(argv);
     let mut argv = tmp;
@@ -280,6 +282,9 @@ pub fn Load(
 
     let (loaded, executable, tmpArgv) = LoadExecutable(task, filename, argv)?;
     let argv = tmpArgv;
+    debug!("VM: Load - loaded:{:?},\ntmpArgv:{:?}.",
+            loaded, argv);
+
 
     let e = Addr(loaded.end).RoundUp()?.0;
 
@@ -302,6 +307,36 @@ pub fn Load(
     )?;
     let kernelsp = Task::TaskId().Addr() + MemoryDef::DEFAULT_STACK_SIZE - 0x10;
     let entry = loaded.entry;
+    
+    // test only! remove later
+    // test VA with AT 
+    // dump loaded memory
+    
+    let par:u64;
+    unsafe {
+        core::arch::asm!(
+        "AT s1e0r, {}
+        MRS {}, PAR_EL1",
+        in(reg) loaded.entry,
+        out(reg) par
+        );
+    }
+    debug!("VM: Load elf Loaded-Entry:{:#x} -> res:{:#x}",
+        loaded.entry, par);
+
+    unsafe {
+        core::arch::asm!("msr PAN, #0");
+    }
+
+    let start_va_ptr = 0x400000 as *const u8; // Load-Address of PT_LOAD-01
+    let start_va02_ptr = 0x411000 as *const u8; // Load-Address of PT_LOAD-02
+
+    unsafe {
+        let mem_slice = core::slice::from_raw_parts(start_va_ptr, 4096);
+        debug!("VM: Loaded Mem - 0x400000:\n{:x?}", unsafe {&*mem_slice});
+        let mem02_slice = core::slice::from_raw_parts(start_va02_ptr, 4096);
+        debug!("VM: Loaded Mem - 0x411000:\n{:x?}", unsafe {&*mem02_slice});
+    }
 
     return Ok((entry, usersp, kernelsp));
 }

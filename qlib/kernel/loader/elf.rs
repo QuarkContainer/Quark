@@ -20,6 +20,7 @@ use xmas_elf::program::ProgramHeader::Ph64;
 use xmas_elf::program::ProgramHeader64;
 use xmas_elf::program::Type;
 use xmas_elf::*;
+use core::convert::TryInto;
 
 use super::super::super::addr::*;
 use super::super::super::auxv::*;
@@ -41,6 +42,7 @@ pub const LINUX_OS: OS = 0;
 
 pub type Arch = i32;
 pub const AMD64: Arch = 0;
+pub const AARCH64: Arch = 0xB7;
 
 // elfInfo contains the metadata needed to load an ELF binary.
 pub struct ElfHeadersInfo {
@@ -84,15 +86,17 @@ pub fn ParseHeader(task: &mut Task, file: &File) -> Result<ElfHeadersInfo> {
     let elfFile = ElfFile::new(&buf.buf[0..n])
         .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
 
-    let phdrAddr;
-    let phdrSize;
-    let phdrNum;
+    let phdrAddr; //Program header table offset.
+    let phdrSize; //Program header e_phentsize.
+    let phdrNum;  //Program header e_phnum.
+    let _arch;
 
     let isSharedObject = match &elfFile.header.pt2 {
         HeaderPt2::Header64(pt2) => {
             phdrAddr = pt2.ph_offset;
             phdrSize = pt2.ph_entry_size;
             phdrNum = pt2.ph_count;
+            _arch = pt2.machine;
             match pt2.type_.as_type() {
                 xmas_elf::header::Type::SharedObject => true,
                 xmas_elf::header::Type::Executable => false,
@@ -117,10 +121,25 @@ pub fn ParseHeader(task: &mut Task, file: &File) -> Result<ElfHeadersInfo> {
             }
         }
     }
+    //
+    //NOTE: Refactor - add check for correct e_machine value.
+    //
+    debug!("VM: Read Elf-Header - Arch:{:?}, ph_off:{:#x}, phentsize:{:#x},
+    ph_count:{}, Entry:{:#x}, IsExec:{:?}.",
+            _arch, phdrAddr, phdrSize, phdrNum, entry, !isSharedObject);
+    let __arch = match _arch.as_machine() {
+        header::Machine::AArch64 => 0xB7,
+        _ => 0,
+    };
+    if __arch == 0 { panic!("VM: ELF wrong arch.");}
 
     return Ok(ElfHeadersInfo {
         os: LINUX_OS,
-        arch: AMD64,
+        //
+        //NOTE: What the actually fuck.....
+        //
+        //arch: AMD64,
+        arch: __arch,
         entry: entry,
         phdrAddr: phdrAddr,
         phdrSize: phdrSize as usize,
@@ -150,7 +169,7 @@ pub fn PHFlagsAsPerms(header: &ProgramHeader64) -> AccessType {
 }
 
 pub fn MapSegment(
-    task: &Task,
+    task: &mut Task,
     file: &File,
     header: &ProgramHeader64,
     offset: u64,
@@ -174,6 +193,9 @@ pub fn MapSegment(
         info!("virtual address is {:x}, fileoffset is {:x}, delta is {:x}, offset is {:x}, len is {:x}",
             header.virtual_addr, header.offset, header.virtual_addr - header.offset, offset, endMem.0 - startMem.0);
 
+        //
+        //TODO: inspect....
+        //
         let mut moptions = MMapOpts::NewFileOptions(file)?;
         moptions.Length = endMem.0 - startMem.0;
         moptions.Addr = offset + startMem.0;
@@ -190,7 +212,21 @@ pub fn MapSegment(
 
     if adjust + header.file_size < endMem.0 - startMem.0 {
         let cnt = (endMem.0 - startMem.0 - (adjust + header.file_size)) as usize;
-        let buf: [u8; 4096] = [0; 4096];
+        //let mut buf: [u8; 4096] = [0; 4096];
+        let mut buffered_file = DataBuff::New(0x1000);
+        let read_lenght = match ReadAll(task, &file, &mut buffered_file.buf, header.offset) {
+            Err(e) => {
+                debug!("VM: MapSegment - failed to copy segment to buffer.");
+                return Err(Error::SysError(SysErr::ENOEXEC));
+            }
+            Ok(n) => n,
+        };
+        //let n = file.read(&mut buf[..]).unwrap();
+        if read_lenght != 0 {
+            debug!("VM: Fill buffer from Executable - {}Bytes, from offset:{:#x}", read_lenght, header.offset);
+        } else {
+            panic!("VM: Fill buffer from Executable failed.");
+        }
         let vaddr = addr + adjust + header.file_size;
         task.mm
             .MProtect(
@@ -200,7 +236,8 @@ pub fn MapSegment(
                 false,
             )
             .unwrap();
-        task.CopyOutSlice(&buf[0..cnt], vaddr, cnt)?;
+        debug!("VM: Copy-Out-Slice buffer from Executable - {}Bytes", read_lenght);
+        task.CopyOutSlice(&buffered_file.buf[0..header.file_size.try_into().unwrap()], header.virtual_addr, header.file_size.try_into().unwrap())?;
     }
 
     if header.mem_size > size {
@@ -222,7 +259,7 @@ pub fn MapSegment(
 }
 
 // loadedELF describes an ELF that has been successfully loaded.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct LoadedElf {
     // os is the target OS of the ELF.
     pub os: OS,
@@ -361,12 +398,15 @@ pub fn LoadParseElf(
                     }
                     Ok(a) => a.0,
                 };
+                debug!("VM: LoadParseElf - Type:PT_LOAD, sVA:{:#x}, eVA:{:#x}",
+                    start, end);
             }
             t => {
                 panic!("find unexpect type {:?}", t)
             }
         }
     }
+
 
     // Shared objects don't have fixed load addresses. We need to pick a
     // base address big enough to fit all segments, so we first create a
@@ -503,6 +543,7 @@ pub fn LoadElf(task: &mut Task, file: &File) -> Result<LoadedElf> {
         }
         Ok(b) => b,
     };
+    debug!("VM: parsed elf - bin:{:?}", bin);
 
     let mut interp = LoadedElf::default();
     if bin.interpreter.as_str() != "" {

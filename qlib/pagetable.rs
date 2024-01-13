@@ -1549,8 +1549,6 @@ impl PageTables {
 
                             let mut _f = flags;
                             _f |= PageTableFlags::PAGE;
-                            debug!("VM: MapCanonical VA-{:#x}, PH-{:#x}, flags-{:b}",
-                                   curAddr.0, phyAddr.0, _f);
 
                             pteEntry.set_addr(PhysAddr::new(newAddr), _f);
                             Invlpg(curAddr.0);

@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -679,6 +679,28 @@ fn StartRootContainer(_para: *const u8) -> ! {
     };
 
     //CreateTask(StartExecProcess, ptr::null());
+
+    //
+    //NOTE: Extensive debugging - enable PAN if present
+    //                          - controll correctnes of
+    //                          loaded elf
+    let id_aa64mmfr1_el1: u64;
+    unsafe {
+        core::arch::asm!("mrs {0}, id_aa64mmfr1_el1", out(reg) id_aa64mmfr1_el1);
+    }
+    if (id_aa64mmfr1_el1 & (0xF << 20)) != 0 {
+        debug!("VM: PAN is supported - id_aa64mmfr1_el1:{:#x}.", (id_aa64mmfr1_el1 >> 20));
+        //
+        // Disable PAN
+        //
+        //unsafe {
+        //   core::arch::asm!("MSR PAN, #0");
+        //}
+        //debug!("VM: Unset PAN.");
+    } else {
+        debug!("VM: PAN is not supported.");
+    }
+
     let currTask = Task::Current();
     currTask.AccountTaskEnter(SchedState::RunningApp);
     debug!("===============enter user, entry: {:x}, userStackAddr: {:x}, kernelStackAddr: {:x}", entry, userStackAddr, kernelStackAddr);
