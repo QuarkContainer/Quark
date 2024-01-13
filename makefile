@@ -87,7 +87,7 @@ endif
 # endif
 
 # Always Install config for debug purpose
-sudo cp -f $(QROOT_DIR)/config.json $(QCONFIG_GLOBAL_DIR)
+	sudo cp -f $(QROOT_DIR)/config.json $(QCONFIG_GLOBAL_DIR)
 
 cuda:
 	make -C $(QROOT_DIR)/cudaproxy release
