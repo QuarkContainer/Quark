@@ -25,8 +25,19 @@ fn main() {
 
     // Iterate over clients, blocks if no client available
     for client in stream.incoming() {
-        let mut response = String::new();
-        client.unwrap().read_to_string(&mut response).unwrap();
-        println!("Client said: {}", response);
+        let mut client = client.unwrap();
+        let mut buff : [u8; 100]= [0; 100];
+        let count = client.read(&mut buff).unwrap();
+        let str = unsafe {
+            std::str::from_utf8_unchecked(&buff[0..count])
+        };
+        println!("Client said: {}", str);
+        
+        match client.write_all(b"serve message") {
+            Err(_) => panic!("couldn't send message"),
+            Ok(_) => {}
+        }
+        drop(client);
+        
     }
 }

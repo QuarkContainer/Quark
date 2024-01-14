@@ -14,6 +14,7 @@
 
 use core::sync::atomic::{AtomicI64, Ordering};
 use core::ptr;
+use core::ops::Deref;
 
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -28,7 +29,7 @@ use crate::qlib::kernel::fs::host::fs::WhitelistFileSystem;
 use crate::qlib::kernel::fs::host::hostinodeop::HostInodeOp;
 use crate::qlib::kernel::fs::host::util::Fstat;
 use crate::qlib::kernel::fs::mount::MountSource;
-use crate::qlib::kernel::guestfdnotifier::{NonBlockingPoll, UpdateFD, SetWaitInfo};
+use crate::qlib::kernel::guestfdnotifier::{NonBlockingPoll, UpdateFD};
 use crate::qlib::kernel::kernel::time::Time;
 use crate::qlib::kernel::kernel::waiter::{Queue, Waitable, WaitEntry};
 use crate::qlib::kernel::socket::hostinet::asyncsocket::SIZEOF_SOCKADDR;
@@ -76,6 +77,14 @@ use crate::qlib::mutex::QMutex;
 #[derive(Clone)]
 pub struct HostUnixSocketOperations(Arc<HostUnixSocketOperationsIntern>);
 
+impl Deref for HostUnixSocketOperations {
+    type Target = Arc<HostUnixSocketOperationsIntern>;
+
+    fn deref(&self) -> &Arc<HostUnixSocketOperationsIntern> {
+        &self.0
+    }
+}
+
 impl HostUnixSocketOperations {
     pub fn New(
         task: &Task,
@@ -97,8 +106,6 @@ impl HostUnixSocketOperations {
         }
         let msrc = Arc::new(QMutex::new(msrc));
 
-        let queue = Queue::default();
-
         let iops = HostInodeOp::New(
             &msrc.lock().MountSourceOperations.clone(),
             fd,
@@ -108,8 +115,8 @@ impl HostUnixSocketOperations {
             false,
             false,
         );
-        
-        SetWaitInfo(fd, queue.clone());
+        let queue = iops.Queue();
+
         let ret = HostUnixSocketOperationsIntern {
             send: AtomicI64::new(0),
             recv: AtomicI64::new(0),
@@ -133,7 +140,7 @@ pub struct HostUnixSocketOperationsIntern {
     pub iops: HostInodeOp,
 }
 
-impl Waitable for HostUnixSocketOperationsIntern {
+impl Waitable for HostUnixSocketOperations {
     fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
         let fd = self.fd;
         return NonBlockingPoll(fd, mask);
@@ -154,14 +161,11 @@ impl Waitable for HostUnixSocketOperationsIntern {
     }
 }
 
-impl HostUnixSocketOperationsIntern {
+impl HostUnixSocketOperations {
     pub fn ReadAt(
         &self,
         task: &Task,
-        _f: &File,
-        dsts: &mut [IoVec],
-        _offset: i64,
-        _blocking: bool,
+        dsts: &mut [IoVec]
     ) -> Result<i64> {
         let size = IoVec::NumBytes(dsts);
         let buf = DataBuff::New(size);
@@ -176,10 +180,7 @@ impl HostUnixSocketOperationsIntern {
     pub fn WriteAt(
         &self,
         task: &Task,
-        _f: &File,
-        srcs: &[IoVec],
-        _offset: i64,
-        _blocking: bool,
+        srcs: &[IoVec]
     ) -> Result<i64> {
         let size = IoVec::NumBytes(srcs);
         if size == 0 {
@@ -191,11 +192,6 @@ impl HostUnixSocketOperationsIntern {
         let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
         let iovs = buf.Iovs(len);
         return IOWrite(self.fd, &iovs);
-    }
-
-    pub fn Append(&self, task: &Task, f: &File, srcs: &[IoVec]) -> Result<(i64, i64)> {
-        let n = self.WriteAt(task, f, srcs, 0, false)?;
-        return Ok((n, 0));
     }
 
     pub fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<u64> {
@@ -357,10 +353,10 @@ impl HostUnixSocketOperationsIntern {
             false,
         ) as i32;
 
-        while res == -SysErr::EWOULDBLOCK
+                while res == -SysErr::EWOULDBLOCK
             && flags & (MsgType::MSG_DONTWAIT | MsgType::MSG_ERRQUEUE) == 0
         {
-            match task.blocker.BlockWithMonoTimer(true, deadline) {
+                        match task.blocker.BlockWithMonoTimer(true, deadline) {
                 Err(Error::ErrInterrupted) => {
                     return Err(Error::SysError(SysErr::ERESTARTSYS));
                 }
@@ -373,7 +369,7 @@ impl HostUnixSocketOperationsIntern {
                 _ => (),
             }
 
-            res = Kernel::HostSpace::IORecvMsg(
+                        res = Kernel::HostSpace::IORecvMsg(
                 self.fd,
                 &mut msgHdr as *mut _ as u64,
                 flags | MsgType::MSG_DONTWAIT,

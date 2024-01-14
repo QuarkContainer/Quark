@@ -70,7 +70,6 @@ use super::qlib::qmsg::*;
 use super::qlib::socket_buf::*;
 use super::qlib::task_mgr::*;
 use super::qlib::*;
-use super::runc::container::mounts::*;
 use super::runc::runtime::loader::*;
 use super::runc::runtime::signal_handle::*;
 use super::runc::specutils::specutils::*;
@@ -1260,7 +1259,7 @@ impl VMSpace {
         let blockedType = type_ & (!SocketFlags::SOCK_NONBLOCK);
 
         let fd = unsafe {
-            socket(
+            libc::socket(
                 AFType::AF_UNIX,
                 blockedType | SocketFlags::SOCK_CLOEXEC,
                 0
@@ -1279,16 +1278,16 @@ impl VMSpace {
         let slice = unsafe {
             slice::from_raw_parts_mut(addr as *mut i8, len)
         };
-        
+
         for i in 0..slice.len() {
             socketAddr.sun_path[i] = slice[i]
         };
 
-        let ret = unsafe {
-            libc::connect(fd, &socketAddr as * const _ as u64 as * const _, 108 + 4)
+                let ret = unsafe {
+            libc::connect(fd, &socketAddr as * const _ as u64 as * const _, 108 + 2)
         };
 
-        if ret < 0 {
+                if ret < 0 {
             unsafe {
                 libc::close(fd);
             }
@@ -1302,7 +1301,7 @@ impl VMSpace {
             assert!(ret == 0, "UnblockFd fail");
         }
 
-        let hostfd = GlobalIOMgr().AddSocket(fd);
+                let hostfd = GlobalIOMgr().AddSocket(fd);
         URING_MGR.lock().Addfd(fd).unwrap();
         return Self::GetRet(hostfd as i64);
     }

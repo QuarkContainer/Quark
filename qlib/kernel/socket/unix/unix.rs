@@ -199,6 +199,10 @@ impl UnixSocketOperations {
         return Self(Arc::new(ret));
     }
 
+    pub fn HostUnixSocket(&self) -> Option<HostUnixSocketOperations> {
+        return self.hostUnixSocket.lock().clone();
+    }
+
     pub fn SetSendBufferSize(&self, v: i64) -> i64 {
         let bep = self.ep.BaseEndpoint();
         if bep.Connected() {
@@ -370,7 +374,7 @@ impl UnixSocketOperations {
                         if iops.StableAttr().IsSocket() {
                             let cid = task.Thread().ContainerID();
                             let path = "/".to_string() + &cid + &path;
-                            if path.len() + 1 > 108 {
+                            if path.len() + 1 < 108 {
                                 // the max unix socket path is 108 with '\0'
                                 error!("the unix socket {} len > 108", &path);
                                 let str = path.as_bytes();
@@ -434,14 +438,32 @@ impl ConnectedPasscred for UnixSocketOperations {
 
 impl Waitable for UnixSocketOperations {
     fn Readiness(&self, task: &Task, mask: EventMask) -> EventMask {
+        match self.HostUnixSocket() {
+            Some(ops) => {
+                return ops.Readiness(task, mask);
+            }
+            None => (),
+        };
         self.ep.Readiness(task, mask)
     }
 
     fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
+        match self.HostUnixSocket() {
+            Some(ops) => {
+                return ops.EventRegister(task, e, mask);
+            }
+            None => (),
+        };
         self.ep.EventRegister(task, e, mask)
     }
 
     fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
+        match self.HostUnixSocket() {
+            Some(ops) => {
+                return ops.EventUnregister(task, e);
+            }
+            None => (),
+        };
         self.ep.EventUnregister(task, e)
     }
 }
@@ -506,12 +528,19 @@ impl FileOperations for UnixSocketOperations {
 
     fn ReadAt(
         &self,
-        _task: &Task,
+        task: &Task,
         _f: &File,
         dsts: &mut [IoVec],
         _offset: i64,
         _blocking: bool,
     ) -> Result<i64> {
+        match self.HostUnixSocket() {
+            Some(ops) => {
+                return ops.ReadAt(task, dsts);
+            }
+            None => (),
+        };
+
         let count = IoVec::NumBytes(dsts);
 
         if count == 0 {
@@ -539,6 +568,13 @@ impl FileOperations for UnixSocketOperations {
         _offset: i64,
         _blocking: bool,
     ) -> Result<i64> {
+        match self.HostUnixSocket() {
+            Some(ops) => {
+                return ops.WriteAt(task, srcs);
+            }
+            None => (),
+        };
+
         let ConnectedPasscred = self.ep.ConnectedPasscred();
         let Passcred = self.ep.Passcred();
         let ctrl = if ConnectedPasscred || Passcred {
@@ -1184,6 +1220,13 @@ impl SockOperations for UnixSocketOperations {
         senderRequested: bool,
         controlDataLen: usize,
     ) -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
+        match self.HostUnixSocket() {
+            Some(ops) => {
+                return ops.RecvMsg(task, dsts, flags, deadline, senderRequested, controlDataLen);
+            }
+            None => (),
+        };
+
         let trunc = flags & MsgType::MSG_TRUNC != 0;
         let peek = flags & MsgType::MSG_PEEK != 0;
         let dontWait = flags & MsgType::MSG_DONTWAIT != 0;
