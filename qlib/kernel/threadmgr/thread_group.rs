@@ -350,7 +350,7 @@ impl Drop for ThreadGroup {
 }
 
 impl ThreadGroup {
-    pub fn Downgrade(&self) -> ThreadGroupWeak {
+        pub fn Downgrade(&self) -> ThreadGroupWeak {
         return ThreadGroupWeak {
             uid: self.uid,
             data: Arc::downgrade(&self.data),

@@ -706,6 +706,17 @@ impl HostSpace {
         return ret;
     }
 
+    pub fn HostUnixConnect(type_: i32, addr: u64, len: usize) -> i64 {
+        let mut msg = Msg::HostUnixConnect(HostUnixConnect {
+            type_: type_,
+            addr: addr,
+            len: len,
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
     pub fn CreateAt(
         dirfd: i32,
         pathName: u64,

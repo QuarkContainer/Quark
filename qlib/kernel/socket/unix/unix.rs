@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::mutex::*;
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -54,6 +55,7 @@ use super::super::super::socket::control::*;
 use super::super::super::socket::epsocket::epsocket::*;
 use super::super::super::tcpip::tcpip::*;
 use super::super::socketopts::*;
+use super::host_unix::HostUnixSocketOperations;
 use super::transport::connectioned::*;
 use super::transport::connectionless::*;
 use super::transport::unix::*;
@@ -180,6 +182,7 @@ pub struct UnixSocketOperationsInner {
     pub send: AtomicI64,
     pub recv: AtomicI64,
     pub name: QMutex<Option<Vec<u8>>>,
+    pub hostUnixSocket: QMutex<Option<HostUnixSocketOperations>>,
 }
 
 impl UnixSocketOperations {
@@ -190,6 +193,7 @@ impl UnixSocketOperations {
             send: AtomicI64::new(0),
             recv: AtomicI64::new(0),
             name: QMutex::new(None),
+            hostUnixSocket: QMutex::new(None),
         };
 
         return Self(Arc::new(ret));
@@ -319,6 +323,83 @@ impl UnixSocketOperations {
         let new_size = controlDataLen - controlData.len();
         controlVec.resize(new_size, 0);
         return controlVec;
+    }
+
+    // extractEndpoint retrieves the transport.BoundEndpoint associated with a Unix
+    // socket path. The Release must be called on the transport.BoundEndpoint when
+    // the caller is done with it.
+    pub fn ExtractEndpoint(&self, task: &Task, sockAddr: &[u8]) -> Result<Option<BoundEndpoint>> {
+        let path = ExtractPath(sockAddr)?;
+
+        //info!("unix socket path is {}", String::from_utf8(path.to_vec()).unwrap());
+
+        // Is it abstract?
+        if path[0] == 0 {
+            let ep = match ABSTRACT_SOCKET.BoundEndpoint(&path) {
+                None => return Err(Error::SysError(SysErr::ECONNREFUSED)),
+                Some(ep) => ep,
+            };
+
+            return Ok(Some(ep));
+        }
+
+        let path = String::from_utf8(path).unwrap();
+
+        // Find the node in the filesystem.
+        let root = task.fsContext.RootDirectory();
+        let cwd = task.fsContext.WorkDirectory();
+        let mut remainingTraversals = 10; //DefaultTraversalLimit
+        let mns = task.mountNS.clone();
+        let d = mns.FindDirent(
+            task,
+            &root,
+            Some(cwd),
+            &path,
+            &mut remainingTraversals,
+            true,
+        )?;
+
+        // Extract the endpoint if one is there.
+        let inode = d.Inode();
+        let iops = inode.lock().InodeOp.clone();
+
+        match iops.UnixSocketInodeOps() {
+            None => {
+                match iops.HostInodeOp() {
+                    Some(iops) => {
+                        if iops.StableAttr().IsSocket() {
+                            let cid = task.Thread().ContainerID();
+                            let path = "/".to_string() + &cid + &path;
+                            if path.len() + 1 > 108 {
+                                // the max unix socket path is 108 with '\0'
+                                error!("the unix socket {} len > 108", &path);
+                                let str = path.as_bytes();
+                                let fd = HostSpace::HostUnixConnect(self.stype, &str[0] as * const _ as u64, str.len()) as i32;
+                                if fd < 0 {
+                                    return Err(Error::SysError(-fd));
+                                }
+
+                                let hostUnixSocket = HostUnixSocketOperations::New(
+                                    task, 
+                                    fd, 
+                                    self.stype
+                                )?;
+
+                                *self.hostUnixSocket.lock() = Some(hostUnixSocket);
+                                return Ok(None)
+                            }
+                        }
+                        return Err(Error::SysError(SysErr::ECONNREFUSED))
+                    }
+                    None => {
+                        return Err(Error::SysError(SysErr::ECONNREFUSED))
+                    }
+                }
+            }
+            Some(iops) => {
+                return Ok(Some(iops.ep.clone()));
+            }
+        }
     }
 }
 
@@ -524,55 +605,16 @@ impl FileOperations for UnixSocketOperations {
     }
 }
 
-// extractEndpoint retrieves the transport.BoundEndpoint associated with a Unix
-// socket path. The Release must be called on the transport.BoundEndpoint when
-// the caller is done with it.
-pub fn ExtractEndpoint(task: &Task, sockAddr: &[u8]) -> Result<BoundEndpoint> {
-    let path = ExtractPath(sockAddr)?;
-
-    //info!("unix socket path is {}", String::from_utf8(path.to_vec()).unwrap());
-
-    // Is it abstract?
-    if path[0] == 0 {
-        let ep = match ABSTRACT_SOCKET.BoundEndpoint(&path) {
-            None => return Err(Error::SysError(SysErr::ECONNREFUSED)),
-            Some(ep) => ep,
-        };
-
-        return Ok(ep);
-    }
-
-    let path = String::from_utf8(path).unwrap();
-
-    // Find the node in the filesystem.
-    let root = task.fsContext.RootDirectory();
-    let cwd = task.fsContext.WorkDirectory();
-    let mut remainingTraversals = 10; //DefaultTraversalLimit
-    let mns = task.mountNS.clone();
-    let d = mns.FindDirent(
-        task,
-        &root,
-        Some(cwd),
-        &path,
-        &mut remainingTraversals,
-        true,
-    )?;
-
-    // Extract the endpoint if one is there.
-    let inode = d.Inode();
-    let iops = inode.lock().InodeOp.clone();
-
-    match iops.UnixSocketInodeOps() {
-        None => return Err(Error::SysError(SysErr::ECONNREFUSED)),
-        Some(iops) => {
-            return Ok(iops.ep.clone());
-        }
-    }
-}
 
 impl SockOperations for UnixSocketOperations {
     fn Connect(&self, task: &Task, socketaddr: &[u8], _blocking: bool) -> Result<i64> {
-        let ep = ExtractEndpoint(task, socketaddr)?;
+        let ep = match self.ExtractEndpoint(task, socketaddr)? {
+            None => {
+                // the target socket address is host unix socket
+                return Ok(0)
+            }
+            Some(ep) => ep,
+        };
 
         // Connect the server endpoint.
         match self.ep.Connect(task, &ep) {
@@ -1404,7 +1446,14 @@ impl SockOperations for UnixSocketOperations {
         };
 
         let toEp = if to.len() > 0 {
-            let ep = ExtractEndpoint(task, &to)?;
+            let ep = match self.ExtractEndpoint(task, &to)? {
+                None => {
+                    let _s = self.hostUnixSocket.lock().take();
+                    error!("It is not allow for SendMsg to send to host unix socket");
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+                Some(ep) => ep,
+            };
             Some(ep)
         } else {
             None
