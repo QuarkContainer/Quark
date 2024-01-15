@@ -660,7 +660,7 @@ pub enum SysCallID {
 #[cfg(target_arch = "aarch64")]
 #[allow(non_camel_case_types)]
 #[repr(u64)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub enum SysCallID {
     sys_io_setup = 0 as u64,
     sys_io_destroy,
