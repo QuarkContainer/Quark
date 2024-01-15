@@ -135,6 +135,9 @@ impl KVMVcpu {
             Msg::HostUnixConnect(msg) => {
                 ret = super::VMSpace::HostUnixConnect(msg.type_, msg.addr, msg.len) as u64;
             }
+            Msg::HostUnixRecvMsg(msg) => {
+                ret = super::VMSpace::HostUnixRecvMsg(msg.fd, msg.msghdr, msg.flags) as u64;
+            }
             Msg::OpenDevFile(msg) => {
                 ret = super::VMSpace::OpenDevFile(msg.dirfd, msg.name, msg.flags) as u64;
             }

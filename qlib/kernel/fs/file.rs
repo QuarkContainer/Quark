@@ -347,7 +347,7 @@ pub enum FileOps {
     SocketOperations(SocketOperations),
     UringSocketOperations(UringSocketOperations),
     UnixSocketOperations(UnixSocketOperations),
-        RootProcFile(RootProcFile),
+    RootProcFile(RootProcFile),
     NvFrontendFileOptions(NvFrontendFileOptions),
     UvmFileOptions(UvmFileOptions)
 }

@@ -160,7 +160,7 @@ impl ScmCredentials {
 
 pub fn CopyBytes<'a, T: ?Sized>(src: &T, dst: &'a mut [u8]) -> &'a mut [u8] {
     let srclen = mem::size_of_val(src);
-    info!("CopyBytes srclen is {}", srclen);
+    // info!("CopyBytes srclen is {}", srclen);
     assert!(dst.len() >= core::mem::size_of_val(src));
     unsafe {
         ptr::copy_nonoverlapping(

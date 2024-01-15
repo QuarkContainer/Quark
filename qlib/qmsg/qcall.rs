@@ -131,6 +131,7 @@ pub enum Msg {
     NividiaDriverVersion(NividiaDriverVersion),
     NvidiaMMap(NvidiaMMap),
     HostUnixConnect(HostUnixConnect),
+    HostUnixRecvMsg(HostUnixRecvMsg),
 }
 
 #[derive(Clone, Default, Debug)]
@@ -153,6 +154,13 @@ pub struct HostUnixConnect {
     pub type_: i32, 
     pub addr: u64, 
     pub len: usize
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct HostUnixRecvMsg {
+    pub fd: i32,
+    pub msghdr: u64,
+    pub flags: i32,
 }
 
 #[derive(Clone, Debug, Default)]

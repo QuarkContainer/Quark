@@ -717,6 +717,17 @@ impl HostSpace {
         return ret;
     }
 
+    pub fn HostUnixRecvMsg(fd: i32, msghdr: u64, flags: i32) -> i64 {
+        let mut msg = Msg::HostUnixRecvMsg(HostUnixRecvMsg {
+            fd: fd,
+            msghdr: msghdr,
+            flags: flags
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
     pub fn CreateAt(
         dirfd: i32,
         pathName: u64,

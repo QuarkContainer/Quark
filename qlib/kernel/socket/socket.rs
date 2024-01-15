@@ -40,10 +40,16 @@ pub static SOCKET_DEVICE: Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMute
 pub static UNIX_SOCKET_DEVICE: Singleton<Arc<QMutex<Device>>> =
     Singleton::<Arc<QMutex<Device>>>::New();
 
+// for fd recieved from host unix socket
+pub static HOST_FILE_DEVICE: Singleton<Arc<QMutex<Device>>> =
+    Singleton::<Arc<QMutex<Device>>>::New();
+
+
 pub unsafe fn InitSingleton() {
     FAMILIAES.Init(QRwLock::new(Families::New()));
     SOCKET_DEVICE.Init(NewAnonDevice());
     UNIX_SOCKET_DEVICE.Init(NewAnonDevice());
+    HOST_FILE_DEVICE.Init(NewAnonDevice());
 }
 
 /*
@@ -160,6 +166,27 @@ pub fn NewSocketDirent(task: &Task, _d: Arc<QMutex<Device>>, fd: i32) -> Result<
     let inode = Inode::NewHostInode(task, &Arc::new(QMutex::new(msrc)), fd, &fstat, true, false, false)?;
 
     let name = format!("socket:[{}]", fd);
+    return Ok(Dirent::New(&inode, &name.to_string()));
+}
+
+// for fd recieved from host unix socket
+pub fn NewHostfileDirent(task: &Task, _d: Arc<QMutex<Device>>, fd: i32) -> Result<Dirent> {
+    let msrc = MountSource::NewHostMountSource(
+        &"/".to_string(),
+        &task.FileOwner(),
+        &WhitelistFileSystem::New(),
+        &MountSourceFlags::default(),
+        false,
+    );
+
+    let mut fstat = LibcStat::default();
+    let ret = Fstat(fd, &mut fstat);
+    if ret < 0 {
+        return Err(Error::SysError(-ret as i32));
+    }
+    let inode = Inode::NewHostInode(task, &Arc::new(QMutex::new(msrc)), fd, &fstat, true, false, false)?;
+
+    let name = format!("file:[{}]", fd);
     return Ok(Dirent::New(&inode, &name.to_string()));
 }
 
