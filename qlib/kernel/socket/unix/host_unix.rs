@@ -16,6 +16,7 @@ use core::sync::atomic::{AtomicI64, Ordering};
 use core::ptr;
 use core::ops::Deref;
 
+use alloc::slice;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -23,22 +24,25 @@ use alloc::vec::Vec;
 use crate::qlib::common::*;
 use crate::qlib::kernel::Kernel;
 use crate::qlib::kernel::fd::{IORead, IOWrite};
-use crate::qlib::kernel::fs::file::File;
+use crate::qlib::kernel::fs::file::{File, FileOps};
 use crate::qlib::kernel::fs::filesystems::MountSourceFlags;
+use crate::qlib::kernel::fs::flags::FileFlags;
 use crate::qlib::kernel::fs::host::fs::WhitelistFileSystem;
 use crate::qlib::kernel::fs::host::hostinodeop::HostInodeOp;
 use crate::qlib::kernel::fs::host::util::Fstat;
 use crate::qlib::kernel::fs::mount::MountSource;
 use crate::qlib::kernel::guestfdnotifier::{NonBlockingPoll, UpdateFD};
+use crate::qlib::kernel::kernel::fd_table::FDFlags;
 use crate::qlib::kernel::kernel::time::Time;
 use crate::qlib::kernel::kernel::waiter::{Queue, Waitable, WaitEntry};
-use crate::qlib::kernel::socket::hostinet::asyncsocket::SIZEOF_SOCKADDR;
+use crate::qlib::kernel::socket::control::*;
 use crate::qlib::kernel::socket::hostinet::socket::{HostIoctlIFReq, HostIoctlIFConf};
+use crate::qlib::kernel::socket::socket::{NewHostfileDirent, HOST_FILE_DEVICE};
 use crate::qlib::kernel::task::Task;
-use crate::qlib::kernel::tcpip::tcpip::{SockAddr, GetAddr};
+use crate::qlib::kernel::tcpip::tcpip::*;
 use crate::qlib::linux_def::*;
 use crate::qlib::mutex::QMutex;
-
+use crate::qlib::kernel::socket::control::ControlMessageRights;
 
 // pub fn NewHostUnixSocketFile(
 //     task: &Task,
@@ -298,14 +302,14 @@ impl HostUnixSocketOperations {
 
         return Ok(len as i64);
     }
-
+    
     pub fn RecvMsg(
         &self,
         task: &Task,
         dsts: &mut [IoVec],
         flags: i32,
         deadline: Option<Time>,
-        senderRequested: bool,
+        _senderRequested: bool,
         controlDataLen: usize,
     ) -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
         if flags
@@ -314,7 +318,9 @@ impl HostUnixSocketOperations {
                 | MsgType::MSG_TRUNC
                 | MsgType::MSG_ERRQUEUE
                 | MsgType::MSG_CTRUNC
-                | MsgType::MSG_WAITALL)
+                | MsgType::MSG_WAITALL
+                | MsgType::MSG_CMSG_CLOEXEC
+            )
             != 0
         {
             return Err(Error::SysError(SysErr::EINVAL));
@@ -328,11 +334,11 @@ impl HostUnixSocketOperations {
         msgHdr.iov = &iovs[0] as *const _ as u64;
         msgHdr.iovLen = iovs.len();
 
-        let mut addr: [u8; SIZEOF_SOCKADDR] = [0; SIZEOF_SOCKADDR];
-        if senderRequested {
-            msgHdr.msgName = &mut addr[0] as *mut _ as u64;
-            msgHdr.nameLen = SIZEOF_SOCKADDR as u32;
-        }
+        // let mut addr: [u8; SIZEOF_SOCKADDR_UNIX] = [0; SIZEOF_SOCKADDR_UNIX];
+        // if senderRequested {
+        //     msgHdr.msgName = &mut addr[0] as *mut _ as u64;
+        //     msgHdr.nameLen = SIZEOF_SOCKADDR_UNIX as u32;
+        // }
 
         let mut controlVec: Vec<u8> = vec![0; controlDataLen];
         msgHdr.msgControlLen = controlDataLen;
@@ -346,17 +352,16 @@ impl HostUnixSocketOperations {
         self.EventRegister(task, &general, EVENT_READ);
         defer!(self.EventUnregister(task, &general));
 
-        let mut res = Kernel::HostSpace::IORecvMsg(
+        let mut res = Kernel::HostSpace::HostUnixRecvMsg(
             self.fd,
             &mut msgHdr as *mut _ as u64,
-            flags | MsgType::MSG_DONTWAIT,
-            false,
+            flags | MsgType::MSG_DONTWAIT
         ) as i32;
 
-                while res == -SysErr::EWOULDBLOCK
+        while res == -SysErr::EWOULDBLOCK
             && flags & (MsgType::MSG_DONTWAIT | MsgType::MSG_ERRQUEUE) == 0
         {
-                        match task.blocker.BlockWithMonoTimer(true, deadline) {
+            match task.blocker.BlockWithMonoTimer(true, deadline) {
                 Err(Error::ErrInterrupted) => {
                     return Err(Error::SysError(SysErr::ERESTARTSYS));
                 }
@@ -369,7 +374,7 @@ impl HostUnixSocketOperations {
                 _ => (),
             }
 
-                        res = Kernel::HostSpace::IORecvMsg(
+            res = Kernel::HostSpace::IORecvMsg(
                 self.fd,
                 &mut msgHdr as *mut _ as u64,
                 flags | MsgType::MSG_DONTWAIT,
@@ -382,18 +387,52 @@ impl HostUnixSocketOperations {
         }
 
         let msgFlags = msgHdr.msgFlags & !MsgType::MSG_CTRUNC;
-        let senderAddr = if senderRequested
-            // for tcp connect, recvmsg get nameLen=0 msg
-            && msgHdr.nameLen >= 4
-        {
-            let addr = GetAddr(addr[0] as i16, &addr[0..msgHdr.nameLen as usize])?;
-            let l = addr.Len();
-            Some((addr, l))
-        } else {
-            None
-        };
+        // let senderAddr = if senderRequested
+        //     // for tcp connect, recvmsg get nameLen=0 msg
+        //     && msgHdr.nameLen >= 4
+        // {
+        //     let addr = GetAddr(addr[0] as i16, &addr[0..msgHdr.nameLen as usize])?;
+        //     let l = addr.Len();
+        //     Some((addr, l))
+        // } else {
+        //     None
+        // };
 
+        let senderAddr = None;
+        
         controlVec.resize(msgHdr.msgControlLen, 0);
+        let totalLen = controlVec.len();
+
+        if msgHdr.msgControlLen > 0 {
+            let ctrlMsg = Parse(&controlVec)?;
+            let mut fds = Vec::new();
+            match &ctrlMsg.Rights {
+                Some(right) => {
+                    for fd in &right.0 {
+                        let fd = *fd;
+                        let file = NewHostFile(task, fd)?;
+
+                        let newFd = task.NewFDFrom(
+                            0,
+                            &file,
+                            &FDFlags {
+                                CloseOnExec: true,
+                            },
+                        )?;
+        
+                        fds.push(newFd);
+                    }
+                }
+                None => ()
+            }
+
+            let controlData = &mut controlVec[..];
+            let (controlData, _) = ControlMessageRights(fds).EncodeInto(controlData, msgHdr.msgFlags);
+
+            let new_size = totalLen - controlData.len();
+            msgHdr.msgControlLen = new_size;
+            controlVec.resize(msgHdr.msgControlLen, 0);
+        }
 
         // todo: need to handle partial copy
         let count = if res < buf.buf.len() as i32 {
@@ -432,6 +471,59 @@ impl HostUnixSocketOperations {
         msgHdr.iov = &iovs[0] as *const _ as u64;
         msgHdr.iovLen = iovs.len();
         msgHdr.msgFlags = 0;
+
+        if msgHdr.msgControlLen > 0 {
+            let controlVec = unsafe {
+                slice::from_raw_parts_mut(msgHdr.msgControl as *mut u8, msgHdr.msgControlLen)
+            };
+
+            let ctrlMsg = Parse(controlVec)?;
+            let mut fds = Vec::new();
+            match &ctrlMsg.Rights {
+                Some(right) => {
+                    for fd in &right.0 {
+                        let file = task.GetFile(*fd)?;
+                        let fops = file.FileOp.clone();
+                        match fops {
+                            FileOps::OverlayFileOperations(h) => {
+                                match h.FileOps() {
+                                    FileOps::HostFileOp(h) => {
+                                        fds.push(h.InodeOp.HostFd());
+                                    }
+                                    FileOps::TTYFileOps(h) => {
+                                        let hfops = h.lock().fileOps.clone();
+                                        fds.push(hfops.InodeOp.HostFd());
+                                    }
+                                    _ => {
+                                        // we only support hostfile sending through host unix socket
+                                        return Err(Error::SysError(SysErr::EINVAL));
+                                    }
+                                }
+                            }
+                            FileOps::HostFileOp(h) => {
+                                fds.push(h.InodeOp.HostFd());
+                            }
+                            FileOps::TTYFileOps(h) => {
+                                let hfops = h.lock().fileOps.clone();
+                                fds.push(hfops.InodeOp.HostFd());
+                            }
+                            _ => {
+                                // we only support hostfile sending through host unix socket
+                                return Err(Error::SysError(SysErr::EINVAL));
+                            }
+                        }
+                    }
+                }
+                None => ()
+            }
+            
+            let totalLen = controlVec.len();
+            let controlData = &mut controlVec[..];
+            let (controlData, _) = ControlMessageRights(fds).EncodeInto(controlData, msgHdr.msgFlags);
+
+            let new_size = totalLen - controlData.len();
+            msgHdr.msgControlLen = new_size;
+        }
 
         let mut res = if msgHdr.msgControlLen > 0 {
             Kernel::HostSpace::IOSendMsg(
@@ -507,4 +599,30 @@ impl HostUnixSocketOperations {
     pub fn SendTimeout(&self) -> i64 {
         return self.send.load(Ordering::Relaxed);
     }
+}
+
+pub fn NewHostFile(
+    task: &Task,
+    fd: i32
+) -> Result<File> {
+    let dirent = NewHostfileDirent(task, HOST_FILE_DEVICE.clone(), fd)?;
+    let inode = dirent.Inode();
+    
+    let fileflags = FileFlags {
+        Read: true,
+        Write: true,
+        ..Default::default()
+    };
+    
+    let file = match inode.GetFile(task, &dirent, &fileflags) {
+        Ok(f) => f,
+        Err(Error::ErrInterrupted) => {
+            return Err(Error::SysError(SysErr::ERESTARTSYS));
+        }
+        Err(e) => {
+            return Err(e);
+        }
+    };
+    
+    return Ok(file);
 }

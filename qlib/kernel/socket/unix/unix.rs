@@ -375,8 +375,6 @@ impl UnixSocketOperations {
                             let cid = task.Thread().ContainerID();
                             let path = "/".to_string() + &cid + &path;
                             if path.len() + 1 < 108 {
-                                // the max unix socket path is 108 with '\0'
-                                error!("the unix socket {} len > 108", &path);
                                 let str = path.as_bytes();
                                 let fd = HostSpace::HostUnixConnect(self.stype, &str[0] as * const _ as u64, str.len()) as i32;
                                 if fd < 0 {
@@ -392,7 +390,10 @@ impl UnixSocketOperations {
                                 *self.hostUnixSocket.lock() = Some(hostUnixSocket);
                                 return Ok(None)
                             }
-                        }
+                        } 
+                        
+                        // the max unix socket path is 108 with '\0'
+                        error!("the unix socket {} len > 108", &path);
                         return Err(Error::SysError(SysErr::ECONNREFUSED))
                     }
                     None => {
@@ -1222,6 +1223,11 @@ impl SockOperations for UnixSocketOperations {
     ) -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
         match self.HostUnixSocket() {
             Some(ops) => {
+                if self.Passcred() {
+                    // we don't support passcred for host unix socket
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
                 return ops.RecvMsg(task, dsts, flags, deadline, senderRequested, controlDataLen);
             }
             None => (),
@@ -1466,6 +1472,19 @@ impl SockOperations for UnixSocketOperations {
         msgHdr: &mut MsgHdr,
         deadline: Option<Time>,
     ) -> Result<i64> {
+        match self.HostUnixSocket() {
+            Some(ops) => {
+                if self.Passcred() {
+                    // we don't support passcred for host unix socket
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                return ops.SendMsg(task, srcs, flags, msgHdr, deadline);
+            }
+            None => (),
+        };
+
+
         let to: Vec<u8> = if msgHdr.msgName != 0 {
             if self.stype == SockType::SOCK_SEQPACKET {
                 Vec::new()
@@ -1502,7 +1521,7 @@ impl SockOperations for UnixSocketOperations {
             None
         };
 
-        let ctrlMsg = if controlVec.len() > 0 {
+        let ctrlMsg: ControlMessages = if controlVec.len() > 0 {
             Parse(&controlVec)?
         } else {
             ControlMessages::default()

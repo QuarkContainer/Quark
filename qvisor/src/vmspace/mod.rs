@@ -42,6 +42,8 @@ use uuid::Uuid;
 
 use crate::qlib::cstring::CString;
 use crate::qlib::fileinfo::*;
+use crate::qlib::kernel::socket::control::*;
+use crate::qlib::kernel::socket::control::Parse;
 use crate::qlib::nvproxy::frontend::FrontendIoctlCmd;
 use crate::qlib::nvproxy::frontend_type::NV_ESC_CHECK_VERSION_STR;
 use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
@@ -1255,6 +1257,71 @@ impl VMSpace {
 
     ///////////start of network operation//////////////////////////////////////////////////////////////////
 
+    pub fn HostUnixRecvMsg(fd: i32, msghdr: u64, flags: i32) -> i64 {
+        match Self::HostUnixRecvMsgHelp(fd, msghdr, flags) {
+            Err(Error::SysError(errno)) => {
+                return -errno as i64
+            }
+            Ok(()) => return 0,
+            _ => panic!("HostUnixRecvMsg impossible"),
+        }
+    }
+
+    pub fn HostUnixRecvMsgHelp(fd: i32, msghdr: u64, flags: i32) -> Result<()> {
+        let ret = unsafe {
+            libc::recvmsg(fd, msghdr as * mut _, flags)
+        };
+
+        if ret < 0 {
+            return Err(Error::SysError(Self::GetRet(ret as i64) as i32));
+        }
+
+        let hdr = unsafe {
+            &mut *(msghdr as * mut MsgHdr)
+        };
+
+        if hdr.msgControlLen > 0 {
+            let controlVec = unsafe {
+                slice::from_raw_parts_mut(hdr.msgControl as *mut u8, hdr.msgControlLen)
+            };
+
+            let ctrlMsg = Parse(controlVec)?;
+            let mut fds = Vec::new();
+            match &ctrlMsg.Rights {
+                Some(right) => {
+                    for fd in &right.0 {
+                        let fd = *fd;
+                        let mut stat = LibcStat::default();
+                        unsafe { 
+                            libc::fstat(
+                                fd, 
+                                &mut stat as * mut _ as u64 as *mut _
+                            ) as i64 
+                        };
+    
+                        if true || stat.IsRegularFile() {
+                            let hostfd = GlobalIOMgr().AddFile(fd);
+                            URING_MGR.lock().Addfd(hostfd).unwrap();
+                            fds.push(hostfd);
+                        } else {
+                            error!("HostUnixRecvMsg get unsupport fd with state {:x?}", &stat);
+                        }
+                    }
+                }
+                None => ()
+            }
+
+            let totalLen = controlVec.len();
+            let controlData = &mut controlVec[..];
+            let (controlData, _) = ControlMessageRights(fds).EncodeInto(controlData, hdr.msgFlags);
+
+            let new_size = totalLen - controlData.len();
+            hdr.msgControlLen = new_size;
+        }
+
+        return Ok(())
+    }
+
     pub fn HostUnixConnect(type_: i32, addr: u64, len: usize) -> i64 {
         let blockedType = type_ & (!SocketFlags::SOCK_NONBLOCK);
 
@@ -1283,11 +1350,11 @@ impl VMSpace {
             socketAddr.sun_path[i] = slice[i]
         };
 
-                let ret = unsafe {
+        let ret = unsafe {
             libc::connect(fd, &socketAddr as * const _ as u64 as * const _, 108 + 2)
         };
 
-                if ret < 0 {
+        if ret < 0 {
             unsafe {
                 libc::close(fd);
             }
@@ -1301,7 +1368,7 @@ impl VMSpace {
             assert!(ret == 0, "UnblockFd fail");
         }
 
-                let hostfd = GlobalIOMgr().AddSocket(fd);
+        let hostfd = GlobalIOMgr().AddSocket(fd);
         URING_MGR.lock().Addfd(fd).unwrap();
         return Self::GetRet(hostfd as i64);
     }
