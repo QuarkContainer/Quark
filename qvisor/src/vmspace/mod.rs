@@ -70,7 +70,6 @@ use super::qlib::qmsg::*;
 use super::qlib::socket_buf::*;
 use super::qlib::task_mgr::*;
 use super::qlib::*;
-use super::runc::container::mounts::*;
 use super::runc::runtime::loader::*;
 use super::runc::runtime::signal_handle::*;
 use super::runc::specutils::specutils::*;
@@ -151,18 +150,9 @@ impl VMSpace {
         return fdInfo.IOReadDir(addr, len, reset);
     }
 
-    pub fn Mount(&self, id: &str, rootfs: &str) -> Result<()> {
-        let spec = &self.args.as_ref().unwrap().Spec;
-        //let rootfs : &str = &spec.root.path;
-        let cpath = format!("/{}", id);
-
-        init_rootfs(spec, rootfs, &cpath, false)?;
-        pivot_rootfs(&*rootfs)?;
-        return Ok(());
-    }
 
     pub fn PivotRoot(&self, rootfs: &str) {
-        let mns = MountNs::New(rootfs.to_string());
+                let mns = MountNs::New(rootfs.to_string());
         mns.PivotRoot();
     }
 
@@ -1264,6 +1254,57 @@ impl VMSpace {
     ///////////end of file operation//////////////////////////////////////////////
 
     ///////////start of network operation//////////////////////////////////////////////////////////////////
+
+    pub fn HostUnixConnect(type_: i32, addr: u64, len: usize) -> i64 {
+        let blockedType = type_ & (!SocketFlags::SOCK_NONBLOCK);
+
+        let fd = unsafe {
+            libc::socket(
+                AFType::AF_UNIX,
+                blockedType | SocketFlags::SOCK_CLOEXEC,
+                0
+            )
+        };
+
+        if fd < 0 {
+            return Self::GetRet(fd as i64);
+        }
+
+        let mut socketAddr = libc::sockaddr_un {
+            sun_family: libc::AF_UNIX as u16,
+            sun_path: [0; 108],
+        };
+
+        let slice = unsafe {
+            slice::from_raw_parts_mut(addr as *mut i8, len)
+        };
+
+        for i in 0..slice.len() {
+            socketAddr.sun_path[i] = slice[i]
+        };
+
+                let ret = unsafe {
+            libc::connect(fd, &socketAddr as * const _ as u64 as * const _, 108 + 2)
+        };
+
+                if ret < 0 {
+            unsafe {
+                libc::close(fd);
+            }
+            
+            return Self::GetRet(ret as i64);
+        }
+
+        unsafe {
+            let flags = fcntl(fd, Cmd::F_GETFL, 0);
+            let ret = fcntl(fd, Cmd::F_SETFL, flags | Flags::O_NONBLOCK);
+            assert!(ret == 0, "UnblockFd fail");
+        }
+
+                let hostfd = GlobalIOMgr().AddSocket(fd);
+        URING_MGR.lock().Addfd(fd).unwrap();
+        return Self::GetRet(hostfd as i64);
+    }
 
     pub fn Socket(domain: i32, type_: i32, protocol: i32) -> i64 {
         let fd = unsafe {

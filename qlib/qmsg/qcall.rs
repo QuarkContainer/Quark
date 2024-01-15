@@ -130,6 +130,7 @@ pub enum Msg {
     UnmapGuestMemRange(UnmapGuestMemRange),
     NividiaDriverVersion(NividiaDriverVersion),
     NvidiaMMap(NvidiaMMap),
+    HostUnixConnect(HostUnixConnect),
 }
 
 #[derive(Clone, Default, Debug)]
@@ -145,6 +146,13 @@ pub struct NvidiaMMap {
     pub flags: i32,
     pub fd: i32,
     pub offset: u64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct HostUnixConnect {
+    pub type_: i32, 
+    pub addr: u64, 
+    pub len: usize
 }
 
 #[derive(Clone, Debug, Default)]

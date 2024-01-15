@@ -132,6 +132,9 @@ impl KVMVcpu {
             Msg::NvidiaMMap(msg) => {
                 ret = super::VMSpace::NvidiaMMap(msg.addr, msg.len, msg.prot, msg.flags, msg.fd, msg.offset) as u64;
             }
+            Msg::HostUnixConnect(msg) => {
+                ret = super::VMSpace::HostUnixConnect(msg.type_, msg.addr, msg.len) as u64;
+            }
             Msg::OpenDevFile(msg) => {
                 ret = super::VMSpace::OpenDevFile(msg.dirfd, msg.name, msg.flags) as u64;
             }
