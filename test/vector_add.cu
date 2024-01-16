@@ -87,7 +87,7 @@ void cuda_add() {
     cudaMemcpy(d_b, b, sizeof(float) * N, cudaMemcpyHostToDevice);
 
     // Executing kernel 
-    printf("testcuda 6\n");
+    printf("testcuda 6 d_out %p d_a %p d_b %p\n", d_out, d_a, d_b);
     vector_add<<<1,1>>>(d_out, d_a, d_b, N);
     
     // Transfer data back to host memory
@@ -118,6 +118,6 @@ void cuda_add() {
 }
 
 int main(){
-    //cuda_test();
+    // cuda_test();
     cuda_add();
 }

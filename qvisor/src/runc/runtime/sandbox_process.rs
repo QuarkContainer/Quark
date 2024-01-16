@@ -757,6 +757,7 @@ impl SandboxProcess {
             //"/usr/lib/x86_64-linux-gnu/libnvidia-compiler.so",
             "/usr/lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so",
             "/usr/lib/x86_64-linux-gnu/libcudart.so",
+            "/usr/lib/x86_64-linux-gnu/libelf.so.1"
             //"/lib/firmware/nvidia/535.129.03/gsp_ga10x.bin",
             //"/lib/firmware/nvidia/535.129.03/gsp_tu10x.bin"
         ];
