@@ -74,7 +74,7 @@ pub extern "C" fn __cudaRegisterFunction(
     wSize:usize
 ) {
     println!("Hijacked __cudaRegisterFunction(fatCubinHandle:{:x}, hostFun:{:x}, deviceFun:{:x}, deviceName:{:x}, thread_limit: {}, tid: {:x}, bid: {:x}, bDim: {:x}, gDim: {:x}, wSize: {})", fatCubinHandle, hostFun, deviceFun, deviceName, thread_limit, tid, bid, bDim, gDim, wSize);    
-    let info = RegisterFactionInfo {
+    let info = RegisterFunctionInfo {
         fatCubinHandle: fatCubinHandle, 
         hostFun: hostFun, 
         deviceFun: deviceFun, 
@@ -86,7 +86,7 @@ pub extern "C" fn __cudaRegisterFunction(
         gDim: gDim, 
         wSize: wSize
     };
-    println!("hochan RegisterFactionInfo {:x?}", info);
+    println!("hochan RegisterFunctionInfo {:x?}", info);
     unsafe {
         syscall2(SYS_PROXY, ProxyCommand::CudaRegisterFunction as usize, &info as *const _ as usize);
     }

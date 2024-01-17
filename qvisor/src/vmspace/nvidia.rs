@@ -258,7 +258,7 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
         }
         ProxyCommand::CudaRegisterFunction => {
             unsafe {
-                let info = &*(parameters.para1 as *const u8 as *const RegisterFactionInfo);
+                let info = &*(parameters.para1 as *const u8 as *const RegisterFunctionInfo);
                 
                 let bytes = std::slice::from_raw_parts((*info).deviceName as *const u8, parameters.para2 as usize);
                 let deviceName = std::str::from_utf8(bytes).unwrap();      

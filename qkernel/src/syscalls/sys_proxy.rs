@@ -101,7 +101,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             
         }
         ProxyCommand::CudaRegisterFunction => {
-            let mut data = task.CopyInObj::<RegisterFactionInfo>(parameters.para1)?;
+            let mut data = task.CopyInObj::<RegisterFunctionInfo>(parameters.para1)?;
             error!("hochan CudaRegisterFunction data {:x?}, parameters {:x?}", data, parameters);
 
             let deviceName = CString::ToString(task, data.deviceName)?;
