@@ -447,27 +447,24 @@ fn CheckElf(elf: *mut Elf) -> Result<i64> {
         let idStr = QString::FromAddr(id as u64).Str().unwrap().to_string();
         error!("hochan id: {:?}, nbytes: {:?}, idStr: {}", id, nbytes, idStr);
 
-        let layout = Layout::new::<usize>();
-        let ptr = alloc(layout);
-        let sections_num = ptr as *mut _ as u64 as *mut usize;
+        let mut size:usize = 0;
+        let sections_num = &mut size as *mut _ as u64 as *mut usize;
         let ret = elf_getshdrnum(elf, sections_num);
         if ret != 0 {
-            return Err(Error::ELFLoadError("elf_getshdrnum failed"));    
+            return Err(Error::ELFLoadError("elf_getshdrnum failed"));
         }
         error!("hochan sections_num: {}", *sections_num);
         
-        let layout = Layout::new::<usize>();
-        let ptr = alloc(layout);
-        let program_header_num = ptr as *mut _ as u64 as *mut usize;
+        let mut size:usize = 0;
+        let program_header_num = &mut size as *mut _ as u64 as *mut usize;
         let ret = elf_getphdrnum(elf, program_header_num);
         if ret != 0 {
             return Err(Error::ELFLoadError("elf_getphdrnum failed"));    
         }
         error!("hochan program_header_num: {}", *program_header_num);
         
-        let layout = Layout::new::<usize>();
-        let ptr = alloc(layout);
-        let section_str_num = ptr as *mut _ as u64 as *mut usize;
+        let mut size:usize = 0;
+        let section_str_num = &mut size as *mut _ as u64 as *mut usize;
         let ret = elf_getshdrstrndx(elf, section_str_num);
         if ret != 0 {
             return Err(Error::ELFLoadError("elf_getshdrstrndx failed"));    
@@ -604,13 +601,12 @@ impl NvidiaHandlers {
         let initResult = unsafe { cuda_driver_sys::cuInit(0) };
         error!("hochan initResult {:?}", initResult);
 
-        let layout = Layout::new::<CUcontext>();
-        let  ptr = unsafe { alloc(layout) };
-        let ctx = ptr as *mut _ as u64 as *mut CUcontext;
-        let ret = unsafe { cuda_driver_sys::cuCtxCreate_v2(ctx,0,0) };
+        let mut ctx : MaybeUninit<CUcontext> = MaybeUninit::uninit();
+        let ptr_ctx = ctx.as_mut_ptr();
+        let ret = unsafe { cuda_driver_sys::cuCtxCreate_v2(ptr_ctx,0,0) };
         error!("hochan cuCtxCreate ret {:?}", ret);
 
-        let ret = unsafe { cuCtxPushCurrent_v2(*ctx) };
+        let ret = unsafe { cuCtxPushCurrent_v2(*ptr_ctx) };
         error!("hochan cuCtxPushCurrent ret {:?}", ret);
 
         let cuda = format!("/usr/lib/x86_64-linux-gnu/libcuda.so");
