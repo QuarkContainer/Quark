@@ -92,13 +92,10 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
 
             error!("hochan CudaMalloc before parameters:{:x?}", parameters);
             unsafe {
-                let layout = Layout::new::<*mut *mut ::std::os::raw::c_void>();
-                let ptr = alloc(layout);
-                let addr = ptr as *mut _ as u64 as *mut *mut ::std::os::raw::c_void;
+                let mut para1 = parameters.para1 as *mut ::std::os::raw::c_void;
+                let addr = &mut para1;
 
-                *addr = parameters.para1 as *mut ::std::os::raw::c_void;
-                error!("hochan before cuda_runtime_sys::cudaMalloc addr {:x}", *addr as u64);                
-                // let ret = cuda_runtime_sys::cudaMalloc(addr, parameters.para2 as usize);
+                error!("hochan before cuda_runtime_sys::cudaMalloc addr {:x}", *addr as u64);
                 let ret = func(addr, parameters.para2 as usize);
                 error!("hochan cuda_runtime_sys::cudaMalloc ret {:x?} addr {:x}", ret, *addr as u64);
 
@@ -108,11 +105,6 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
                 error!("hochan CudaMalloc after parameters:{:x?} ret {:x?}", parameters, ret);
                 return Ok(ret as i64);
             }
-
-            
-            // let ret = func(parameters.para1, parameters.para2 as usize);
-            // error!("hochan CudaMalloc after parameters:{:x?} ret {:x?}", parameters, ret);            
-            // return Ok(ret as i64);
         }
         ProxyCommand::CudaMemcpy => {
             return CudaMemcpy(handler, parameters);
