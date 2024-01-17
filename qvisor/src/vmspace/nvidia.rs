@@ -16,7 +16,6 @@ use spin::Mutex;
 use core::ops::Deref;
 use std::ffi::CString;
 use std::os::raw::*;
-use std::alloc::{alloc, dealloc, Layout};
 use std::mem::MaybeUninit;
 
 use crate::qlib::common::*;
@@ -137,16 +136,12 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
                         todo!()
                     }
                     
-                    let layout = Layout::new::<Elf_Scn>();
-                    let ptr = alloc(layout);
-                    let mut section = ptr as *mut _ as u64 as *mut Elf_Scn;
-
-
-                    let mut shdr : MaybeUninit<GElf_Shdr> = MaybeUninit::uninit();
+                    let mut section:MaybeUninit<Elf_Scn>  = MaybeUninit::uninit();
+                    let mut ptr_section = section.as_mut_ptr();
+                    let mut shdr:MaybeUninit<GElf_Shdr> = MaybeUninit::uninit();
                     let mut symtab_shdr = shdr.as_mut_ptr();
-                    let layout = Layout::new::<GElf_Sym>();
-                    let ptr = alloc(layout);
-                    let mut sym = ptr as *mut _ as u64 as *mut GElf_Sym;                    
+                    let mut sym:MaybeUninit<GElf_Sym> = MaybeUninit::uninit();
+                    let mut ptr_sym = sym.as_mut_ptr();
 
                     let memsize = (*fatTextHeader).size as usize;
                     let elf = elf_memory(inputPosition as *mut i8, memsize);
@@ -156,33 +151,33 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
                         Err(e) => return Err(e),
                     };
 
-                    match GetSectionByName(elf, String::from(".symtab"), &mut section) {
+                    match GetSectionByName(elf, String::from(".symtab"), &mut ptr_section) {
                         Ok(v) => v,
                         Err(e) => return Err(e),
                     };
-                    error!("hochan GetSectionByName(.symtab) got section: {:?}", *section);
+                    error!("hochan GetSectionByName(.symtab) got section: {:?}", *ptr_section);
 
-                    symtab_shdr = gelf_getshdr(section, symtab_shdr);
+                    symtab_shdr = gelf_getshdr(ptr_section, symtab_shdr);
                     error!("hochan symtab_shdr {:?}", *symtab_shdr);
 
                     if (*symtab_shdr).sh_type != SHT_SYMTAB {
                         return Err(Error::ELFLoadError("not a symbol table"));
                     }
 
-                    let symbol_table_data = elf_getdata(section, 0 as _);
+                    let symbol_table_data = elf_getdata(ptr_section, 0 as _);
                     error!("hochan symbol_table_data: {:?}", *symbol_table_data);
                     let symbol_table_size = (*symtab_shdr).sh_size / (*symtab_shdr).sh_entsize;
 
-                    match GetSectionByName(elf, String::from(".nv.info"), &mut section) {
+                    match GetSectionByName(elf, String::from(".nv.info"), &mut ptr_section) {
                         Ok(v) => v,
                         Err(_e) => {
                             error!("could not find .nv.info section. This means this binary does not contain any kernels.");
                             break;
                         },
                     };
-                    error!("hochan GetSectionByName(.symtab) got section: {:?}", *section);
+                    error!("hochan GetSectionByName(.symtab) got section: {:?}", *ptr_section);
 
-                    let data = elf_getdata(section, 0 as _);
+                    let data = elf_getdata(ptr_section, 0 as _);
                     error!("hochan data: {:?}", *data);
 
                     let mut secpos:usize = 0;
@@ -207,10 +202,10 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
                             continue;
                         }
 
-                        sym = gelf_getsym(symbol_table_data, (*entry).kernel_id as c_int, sym);
-                        error!("hochan sym: {:x?}", *sym);
+                        ptr_sym = gelf_getsym(symbol_table_data, (*entry).kernel_id as c_int, ptr_sym);
+                        error!("hochan sym: {:x?}", *ptr_sym);
 
-                        let kernel_str = QString::FromAddr(elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*sym).st_name as usize) as u64).Str().unwrap().to_string();
+                        let kernel_str = QString::FromAddr(elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*ptr_sym).st_name as usize) as u64).Str().unwrap().to_string();
                         error!("hochan kernel_str: {}", kernel_str);
 
                         if KERNEL_INFOS.lock().contains_key(&kernel_str) {
