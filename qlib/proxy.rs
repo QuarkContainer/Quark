@@ -26,6 +26,14 @@ pub enum ProxyCommand {
     CuInit,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]
+#[repr(u64)]
+pub enum XpuLibrary {
+    None = 0 as u64,
+    CudaRuntime,
+    CudaDriver,
+}
+
 impl Default for ProxyCommand {
     fn default() -> Self {
         return Self::None;

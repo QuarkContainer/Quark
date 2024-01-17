@@ -30,17 +30,18 @@ use libelf::raw::*;
 
 lazy_static! {
     pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
-    pub static ref FUNC_MAP: BTreeMap<ProxyCommand,(u64, &'static str)> = BTreeMap::from(
+    pub static ref FUNC_MAP: BTreeMap<ProxyCommand,(XpuLibrary, &'static str)> = BTreeMap::from(
         [
-            (ProxyCommand::CudaSetDevice, (0, "cudaSetDevice")),
-            (ProxyCommand::CudaDeviceSynchronize, (0, "cudaDeviceSynchronize")),
-            (ProxyCommand::CudaMalloc, (0, "cudaMalloc")),
-            (ProxyCommand::CudaMemcpy, (0, "cudaMemcpy")),
-            (ProxyCommand::CudaRegisterFatBinary, (1, "cuModuleLoadData")),
-            (ProxyCommand::CudaRegisterFunction, (1, "cuModuleGetFunction")),
-            (ProxyCommand::CudaLaunchKernel, (1, "cuLaunchKernel")),
+            (ProxyCommand::CudaSetDevice, (XpuLibrary::CudaRuntime, "cudaSetDevice")),
+            (ProxyCommand::CudaDeviceSynchronize, (XpuLibrary::CudaRuntime, "cudaDeviceSynchronize")),
+            (ProxyCommand::CudaMalloc, (XpuLibrary::CudaRuntime, "cudaMalloc")),
+            (ProxyCommand::CudaMemcpy, (XpuLibrary::CudaRuntime, "cudaMemcpy")),
+            (ProxyCommand::CudaRegisterFatBinary, (XpuLibrary::CudaDriver, "cuModuleLoadData")),
+            (ProxyCommand::CudaRegisterFunction, (XpuLibrary::CudaDriver, "cuModuleGetFunction")),
+            (ProxyCommand::CudaLaunchKernel, (XpuLibrary::CudaDriver, "cuLaunchKernel")),
         ]
     );
+    pub static ref XPU_LIBRARY_HANDLERS:Mutex<BTreeMap<XpuLibrary, u64>> = Mutex::new(BTreeMap::new());
     pub static ref KERNEL_INFOS:Mutex<BTreeMap<String, Arc<KernelInfo>>> = Mutex::new(BTreeMap::new());
     pub static ref MODULES:Mutex<BTreeMap<u64, u64>> = Mutex::new(BTreeMap::new());
     pub static ref FUNCTIONS:Mutex<BTreeMap<u64, u64>> = Mutex::new(BTreeMap::new());
@@ -551,7 +552,7 @@ impl NvidiaHandlersInner {
         match FUNC_MAP.get(&cmd) {
             Some(&pair) => {
                 let func_name = CString::new(pair.1).unwrap();
-                let handler = if pair.0 ==0 { self.cudaRuntimeHandler } else { self.cudaHandler };
+                let handler = XPU_LIBRARY_HANDLERS.lock().get(&pair.0).unwrap().clone();
                 let handler: u64 = unsafe {
                     std::mem::transmute(libc::dlsym(handler as *mut libc::c_void, func_name.as_ptr()))
                 };
@@ -605,6 +606,7 @@ impl NvidiaHandlers {
             )
         } as u64;
         assert!(cudaHandler != 0, "can't open libcuda.so");
+        XPU_LIBRARY_HANDLERS.lock().insert(XpuLibrary::CudaDriver, cudaHandler);
         
         let handlers = BTreeMap::new();
         
@@ -618,6 +620,7 @@ impl NvidiaHandlers {
         } as u64;
 
         assert!(cudaRuntimeHandler != 0, "/usr/lib/x86_64-linux-gnu/libcudart.so");
+        XPU_LIBRARY_HANDLERS.lock().insert(XpuLibrary::CudaRuntime, cudaRuntimeHandler);
 
         let inner = NvidiaHandlersInner {
             cudaHandler: cudaHandler,
