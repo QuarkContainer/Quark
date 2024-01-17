@@ -269,7 +269,7 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
                 let ret = cuda_driver_sys::cuModuleGetFunction(
                     &mut hfunc as *mut _ as u64 as *mut CUfunction, 
                     *(&mut module as *mut _ as u64 as *mut CUmodule), 
-                    CString::new(deviceName).unwrap().as_ptr());
+                    CString::new(deviceName).unwrap().clone().as_ptr());
                 FUNCTIONS.lock().insert(info.hostFun, hfunc);
                 error!("hochan cuModuleGetFunction ret {:x?}, hfunc {:x}, &hfunc {:x}, FUNCTIONS  {:x?}", ret, hfunc, &hfunc, FUNCTIONS.lock());
 
@@ -317,15 +317,13 @@ fn GetParmForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> {
         let sectionName = GetKernelSectionFromKernelName((*kernel).name.clone());
         error!("hochan kernel->name: {}, section_name: {}", (*kernel).name, sectionName);
 
-        let layout = Layout::new::<Elf_Scn>();
-        let ptr = alloc(layout);
-        let mut section = ptr as *mut _ as u64 as *mut Elf_Scn;
+        let mut section = &mut(0 as u64 as *mut Elf_Scn);
         match GetSectionByName(elf, sectionName.clone(), &mut section) {
             Ok(v) => v,
             Err(e) => return Err(e),
         };
-        error!("hochan GetSectionByName({}) got section: {:?}", sectionName, *section);
-        let data = elf_getdata(section, 0 as _);
+        error!("hochan GetSectionByName({}) got section: {:?}", sectionName, section);
+        let data = elf_getdata(*section, 0 as _);
         error!("hochan data: {:x?}", *data);
 
         let mut secpos:usize = 0;
@@ -386,14 +384,9 @@ fn GetKernelSectionFromKernelName(kernelName:String) -> String {
 
 fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn) -> Result<i64> {
     unsafe { 
-        let mut scn = std::ptr::null_mut() as *mut Elf_Scn;
-        // let ptr = alloc(layout);
-        // let shdr = ptr as *mut _ as u64 as *mut GElf_Shdr;
-
-        // let layout = Layout::new::<usize>();
-        // let ptr = alloc(layout);
+        let mut scn = 0 as u64 as *mut Elf_Scn;
         let mut size:usize = 0;
-        let str_section_index = &mut size as *mut _ as u64 as *mut usize;// ptr as *mut _ as u64 as *mut usize;
+        let str_section_index = &mut size as *mut _ as u64 as *mut usize;
         let ret = elf_getshdrstrndx(elf, str_section_index);
         if ret !=0 {
             return Err(Error::ELFLoadError("elf_getshstrndx failed"));
@@ -408,11 +401,10 @@ fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn) ->
                 break;
             }
             
-            let layout = Layout::new::<GElf_Shdr>();
-            let ptr = alloc(layout);
-            let mut shdr = ptr as *mut _ as u64 as *mut GElf_Shdr;
-            shdr = gelf_getshdr(scnNew, shdr);
-            let section_name = QString::FromAddr(elf_strptr(elf, *str_section_index, (*shdr).sh_name as usize) as u64).Str().unwrap().to_string();
+            let mut shdr : MaybeUninit<GElf_Shdr> = MaybeUninit::uninit();
+            let mut symtab_shdr = shdr.as_mut_ptr();
+            symtab_shdr = gelf_getshdr(scnNew, symtab_shdr);
+            let section_name = QString::FromAddr(elf_strptr(elf, *str_section_index, (*symtab_shdr).sh_name as usize) as u64).Str().unwrap().to_string();
             error!("hochan section_name {}", section_name);
             if name.eq(&section_name) {
                 error!("hochan Found section {}", section_name);
@@ -440,11 +432,10 @@ fn CheckElf(elf: *mut Elf) -> Result<i64> {
             return Err(Error::ELFLoadError("elf_kind is not ELF_K_ELF"));            
         }
 
-        let layout = Layout::new::<GElf_Ehdr>();
-        let ptr = alloc(layout);
-        let ehdr = ptr as *mut _ as u64 as *mut GElf_Ehdr;
-        gelf_getehdr(elf, ehdr);
-        error!("hochan ehdr {:?}", *ehdr);
+        let mut ehdr : MaybeUninit<GElf_Ehdr> = MaybeUninit::uninit();
+        let ptr_ehdr = ehdr.as_mut_ptr();
+        gelf_getehdr(elf, ptr_ehdr);
+        error!("hochan ehdr {:?}", *ptr_ehdr);
 
         let elfclass = gelf_getclass(elf);
         if elfclass == libelf::raw::ELFCLASSNONE as i32 {
@@ -453,7 +444,6 @@ fn CheckElf(elf: *mut Elf) -> Result<i64> {
 
         let nbytes = 0 as *mut usize;
         let id = elf_getident(elf, nbytes);
-        // let idStr = id as *const _ as &'static str;
         let idStr = QString::FromAddr(id as u64).Str().unwrap().to_string();
         error!("hochan id: {:?}, nbytes: {:?}, idStr: {}", id, nbytes, idStr);
 
