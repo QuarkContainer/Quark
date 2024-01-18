@@ -240,56 +240,49 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
             return Ok(ret as i64);
         }
         ProxyCommand::CudaRegisterFunction => {
-            unsafe {
-                let info = &*(parameters.para1 as *const u8 as *const RegisterFunctionInfo);
+                let info = unsafe { &*(parameters.para1 as *const u8 as *const RegisterFunctionInfo) };
                 
-                let bytes = std::slice::from_raw_parts((*info).deviceName as *const u8, parameters.para2 as usize);
-                let deviceName = std::str::from_utf8(bytes).unwrap();      
+                let bytes = unsafe { std::slice::from_raw_parts(info.deviceName as *const u8, parameters.para2 as usize) };
+                let deviceName = std::str::from_utf8(bytes).unwrap();       
                 let mut module = *MODULES.lock().get(&info.fatCubinHandle).unwrap();
                 error!("hochan deviceName {}, parameters {:x?} module {:x}", deviceName, parameters, module);
 
                 let mut hfunc:u64 = 0;
-                let ret = cuda_driver_sys::cuModuleGetFunction(
+                let ret = unsafe { cuda_driver_sys::cuModuleGetFunction(
                     &mut hfunc as *mut _ as u64 as *mut CUfunction, 
                     *(&mut module as *mut _ as u64 as *mut CUmodule), 
-                    CString::new(deviceName).unwrap().clone().as_ptr());
+                    CString::new(deviceName).unwrap().clone().as_ptr()) };
                 FUNCTIONS.lock().insert(info.hostFun, hfunc);
                 error!("hochan cuModuleGetFunction ret {:x?}, hfunc {:x}, &hfunc {:x}, FUNCTIONS  {:x?}", ret, hfunc, &hfunc, FUNCTIONS.lock());
 
                 let kernelInfo = KERNEL_INFOS.lock().get(&deviceName.to_string()).unwrap().clone();
-                let mut paramInfo = parameters.para3 as *const u8 as *mut ParamInfo;
-                (*paramInfo).paramNum = kernelInfo.paramNum;
-                for i in 0..(*paramInfo).paramNum {
-                    (*paramInfo).paramSizes[i] = kernelInfo.paramSizes[i];
+                let paramInfo = parameters.para3 as *const u8 as *mut ParamInfo;
+                unsafe {
+                    (*paramInfo).paramNum = kernelInfo.paramNum;
+                    for i in 0..(*paramInfo).paramNum {
+                        (*paramInfo).paramSizes[i] = kernelInfo.paramSizes[i];
+                    }
+                    error!("hochan paramInfo in nvidia {:x?}", (*paramInfo));
                 }
-                error!("hochan paramInfo in nvidia {:x?}", paramInfo);
-
                 return Ok(ret as i64);
-            }
         }
         ProxyCommand::CudaLaunchKernel => {
-            unsafe {
-                error!("hochan CudaLaunchKernel in host parameters {:x?}", parameters);
-                let info = &*(parameters.para1 as *const u8 as *const LaunchKernelInfo);
-                let func = FUNCTIONS.lock().get(&info.func).unwrap().clone();
-                error!("hochan CudaLaunchKernel in host info {:x?}, func {:x}", info, func);
+            error!("hochan CudaLaunchKernel in host parameters {:x?}", parameters);
+            let info = unsafe { &*(parameters.para1 as *const u8 as *const LaunchKernelInfo) };
+            let func = FUNCTIONS.lock().get(&info.func).unwrap().clone();
+            error!("hochan CudaLaunchKernel in host info {:x?}, func {:x}", info, func);
+                        
+            let ret = unsafe { cuda_driver_sys::cuLaunchKernel(
+                func as CUfunction,
+                info.gridDim.x, info.gridDim.y, info.gridDim.z,
+                info.blockDim.x, info.blockDim.y, info.blockDim.z,
+                info.sharedMem as u32,
+                info.stream as *mut CUstream_st,
+                info.args as *mut *mut ::std::os::raw::c_void,
+                0 as *mut *mut ::std::os::raw::c_void) };
+            error!("hochan cuLaunchKernel ret {:x?}", ret);
 
-                // let bytes = std::slice::from_raw_parts(info.args as *const u8, 8);
-                // println!("hochan info.args addr {:x}", info.args);
-                // println!("hochan !!!0 {:x?}", bytes);
-                            
-                let ret = cuda_driver_sys::cuLaunchKernel(
-                    func as CUfunction,
-                    info.gridDim.x, info.gridDim.y, info.gridDim.z,
-                    info.blockDim.x, info.blockDim.y, info.blockDim.z,
-                    info.sharedMem as u32,
-                    info.stream as *mut CUstream_st,
-                    info.args as *mut *mut ::std::os::raw::c_void,
-                    0 as *mut *mut ::std::os::raw::c_void);
-                error!("hochan cuLaunchKernel ret {:x?}", ret);
-
-                return Ok(0 as i64);
-            }
+            return Ok(0 as i64);
         }
         _ => todo!()
     }
