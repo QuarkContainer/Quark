@@ -55,23 +55,17 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
         }
         ProxyCommand::CudaMalloc => {
-            let addr : u64 = 0;
-            parameters.para1 = &addr as * const _ as u64;
+            let mut addr:u64 = 0;
+            parameters.para1 = &mut addr as *mut _ as u64;
 
-            // todo hochan temporarely using ParamInfo to set allocated address from CudaMalloc. Need to figure out how to define parameters.para1 as mut
-            let mut paramInfo = ParamInfo::default();
-            parameters.para3 = &mut paramInfo as *const _ as u64;
-
-            error!("hochan before CudaMalloc HostSpace::Proxy paramInfo {:x?}", paramInfo);    
             let ret = HostSpace::Proxy(
                 cmd,
                 parameters,
             );
-            error!("hochan after CudaMalloc HostSpace::Proxy paramInfo {:x?}", paramInfo);  
 
             if ret == 0 {
-                // task.CopyOutObj(&addr, args.arg1 as u64)?;
-                task.CopyOutObj(&(paramInfo.addr), args.arg1 as u64)?;
+                task.CopyOutObj(&addr, args.arg1 as u64)?;
+                // task.CopyOutObj(&(paramInfo.addr), args.arg1 as u64)?;
             }
 
             return Ok(ret);

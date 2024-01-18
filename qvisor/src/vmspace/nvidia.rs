@@ -98,8 +98,9 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
             let ret = func(addr, parameters.para2 as usize);
             error!("hochan cuda_runtime_sys::cudaMalloc ret {:x?} addr {:x}", ret, *addr as u64);
 
-            let mut paramInfo = parameters.para3 as *const u8 as *mut ParamInfo;
-            unsafe { (*paramInfo).addr = *addr as u64; }
+            unsafe { 
+                *(parameters.para1 as *mut u64) = *addr as u64; 
+            }
 
             error!("hochan CudaMalloc after parameters:{:x?} ret {:x?}", parameters, ret);
             return Ok(ret as i64);
