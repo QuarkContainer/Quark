@@ -394,57 +394,48 @@ fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn) ->
     }    
 }
 
-fn CheckElf(elf: *mut Elf) -> Result<i64> {
-    unsafe {
-        let ek = elf_kind(elf);
-        if ek != libelf::raw::Elf_Kind::ELF_K_ELF {
-            error!("elf_kind is not ELF_K_ELF, but {}", ek);
-            return Err(Error::ELFLoadError("elf_kind is not ELF_K_ELF"));            
-        }
-
-        let mut ehdr : MaybeUninit<GElf_Ehdr> = MaybeUninit::uninit();
-        let ptr_ehdr = ehdr.as_mut_ptr();
-        gelf_getehdr(elf, ptr_ehdr);
-        error!("hochan ehdr {:?}", *ptr_ehdr);
-
-        let elfclass = gelf_getclass(elf);
-        if elfclass == libelf::raw::ELFCLASSNONE as i32 {
-            return Err(Error::ELFLoadError("gelf_getclass failed"));            
-        }
-
-        let nbytes = 0 as *mut usize;
-        let id = elf_getident(elf, nbytes);
-        let idStr = QString::FromAddr(id as u64).Str().unwrap().to_string();
-        error!("hochan id: {:?}, nbytes: {:?}, idStr: {}", id, nbytes, idStr);
-
-        let mut size:usize = 0;
-        let sections_num = &mut size as *mut _ as u64 as *mut usize;
-        let ret = elf_getshdrnum(elf, sections_num);
-        if ret != 0 {
-            return Err(Error::ELFLoadError("elf_getshdrnum failed"));
-        }
-        error!("hochan sections_num: {}", *sections_num);
-        
-        let mut size:usize = 0;
-        let program_header_num = &mut size as *mut _ as u64 as *mut usize;
-        let ret = elf_getphdrnum(elf, program_header_num);
-        if ret != 0 {
-            return Err(Error::ELFLoadError("elf_getphdrnum failed"));    
-        }
-        error!("hochan program_header_num: {}", *program_header_num);
-        
-        let mut size:usize = 0;
-        let section_str_num = &mut size as *mut _ as u64 as *mut usize;
-        let ret = elf_getshdrstrndx(elf, section_str_num);
-        if ret != 0 {
-            return Err(Error::ELFLoadError("elf_getshdrstrndx failed"));    
-        }
-        error!("hochan section_str_num: {}", *section_str_num);
-        
-        error!("elf contains {} sections, {} program_headers, string table section: {}", *sections_num, *program_header_num, *section_str_num);
+fn CheckElf(elf: *mut Elf) -> Result<i64> {    
+    let ek = unsafe { elf_kind(elf) };
+    if ek != libelf::raw::Elf_Kind::ELF_K_ELF {
+        error!("elf_kind is not ELF_K_ELF, but {}", ek);
+        return Err(Error::ELFLoadError("elf_kind is not ELF_K_ELF"));            
     }
 
-    return Ok(0);
+    let mut ehdr : MaybeUninit<GElf_Ehdr> = MaybeUninit::uninit();
+    let ptr_ehdr = ehdr.as_mut_ptr();
+    unsafe { gelf_getehdr(elf, ptr_ehdr); }
+
+    let elfclass = unsafe { gelf_getclass(elf) };
+    if elfclass == libelf::raw::ELFCLASSNONE as i32 {
+        return Err(Error::ELFLoadError("gelf_getclass failed"));            
+    }
+
+    let nbytes = 0 as *mut usize;
+    let id = unsafe { elf_getident(elf, nbytes) };
+    let idStr = QString::FromAddr(id as u64).Str().unwrap().to_string();
+    error!("hochan id: {:?}, nbytes: {:?}, idStr: {}", id, nbytes, idStr);
+
+    let mut size:usize = 0;
+    let sections_num = &mut size as *mut _ as u64 as *mut usize;
+    let ret = unsafe { elf_getshdrnum(elf, sections_num) };
+    if ret != 0 {
+        return Err(Error::ELFLoadError("elf_getshdrnum failed"));
+    }
+    
+    let mut size:usize = 0;
+    let program_header_num = &mut size as *mut _ as u64 as *mut usize;
+    let ret = unsafe { elf_getphdrnum(elf, program_header_num) };
+    if ret != 0 {
+        return Err(Error::ELFLoadError("elf_getphdrnum failed"));    
+    }
+    
+    let mut size:usize = 0;
+    let section_str_num = &mut size as *mut _ as u64 as *mut usize;
+    let ret = unsafe { elf_getshdrstrndx(elf, section_str_num) };
+    if ret != 0 {
+        return Err(Error::ELFLoadError("elf_getshdrstrndx failed"));    
+    }
+    return Ok(ret as i64);
 }
 
 pub fn CudaMemcpy(handle: u64, parameters: &ProxyParameters) -> Result<i64> {
