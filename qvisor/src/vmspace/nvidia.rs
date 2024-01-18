@@ -91,152 +91,147 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
             }; 
 
             error!("hochan CudaMalloc before parameters:{:x?}", parameters);
-            unsafe {
-                let mut para1 = parameters.para1 as *mut ::std::os::raw::c_void;
-                let addr = &mut para1;
+            let mut para1 = parameters.para1 as *mut ::std::os::raw::c_void;
+            let addr = &mut para1;
 
-                error!("hochan before cuda_runtime_sys::cudaMalloc addr {:x}", *addr as u64);
-                let ret = func(addr, parameters.para2 as usize);
-                error!("hochan cuda_runtime_sys::cudaMalloc ret {:x?} addr {:x}", ret, *addr as u64);
+            error!("hochan before cuda_runtime_sys::cudaMalloc addr {:x}", *addr as u64);
+            let ret = func(addr, parameters.para2 as usize);
+            error!("hochan cuda_runtime_sys::cudaMalloc ret {:x?} addr {:x}", ret, *addr as u64);
 
-                let mut paramInfo = parameters.para3 as *const u8 as *mut ParamInfo;
-                (*paramInfo).addr = *addr as u64;
+            let mut paramInfo = parameters.para3 as *const u8 as *mut ParamInfo;
+            unsafe { (*paramInfo).addr = *addr as u64; }
 
-                error!("hochan CudaMalloc after parameters:{:x?} ret {:x?}", parameters, ret);
-                return Ok(ret as i64);
-            }
+            error!("hochan CudaMalloc after parameters:{:x?} ret {:x?}", parameters, ret);
+            return Ok(ret as i64);
         }
         ProxyCommand::CudaMemcpy => {
             return CudaMemcpy(handler, parameters);
         }
         ProxyCommand::CudaRegisterFatBinary => {
-            let fatElfHeader = parameters.para2 as *const u8 as *const FatElfHeader;
+            let fatElfHeader = unsafe { &*(parameters.para2 as *const u8 as *const FatElfHeader) };
             let moduleKey = parameters.para3;
             error!("hochan moduleKey:{:x}", moduleKey);
 
-            unsafe { 
-                let mut inputPosition = parameters.para2 + (*fatElfHeader).header_size as u64;
-                let endPosition = inputPosition + (*fatElfHeader).size as u64;
-                error!("hochan inputPosition:{:x} endPosition:{:x}", inputPosition, endPosition);
-                while inputPosition < endPosition {
-                    let fatTextHeader = inputPosition as *const u8 as *const FatTextHeader;
-                    error!("hochan fatTextHeader:{:x?}", *fatTextHeader);
-                    error!("hochan FATBIN_FLAG_COMPRESS:{:x}, (*fatTextHeader).flags:{:x}, result of &:{:x}", FATBIN_FLAG_COMPRESS, (*fatTextHeader).flags, (*fatTextHeader).flags & FATBIN_FLAG_COMPRESS);
-                    
-                    inputPosition += (*fatTextHeader).header_size as u64;
-                    if (*fatTextHeader).kind != 2 { // section does not cotain device code (but e.g. PTX)
-                        inputPosition += (*fatTextHeader).size;
+            let mut inputPosition = parameters.para2 + fatElfHeader.header_size as u64;
+            let endPosition = inputPosition + fatElfHeader.size as u64;
+            error!("hochan inputPosition:{:x} endPosition:{:x}", inputPosition, endPosition);
+            while inputPosition < endPosition {
+                let fatTextHeader = unsafe { &*(inputPosition as *const u8 as *const FatTextHeader) };
+                error!("hochan fatTextHeader:{:x?}", *fatTextHeader);
+                error!("hochan FATBIN_FLAG_COMPRESS:{:x}, fatTextHeader.flags:{:x}, result of &:{:x}", FATBIN_FLAG_COMPRESS, fatTextHeader.flags, fatTextHeader.flags & FATBIN_FLAG_COMPRESS);
+                
+                inputPosition += fatTextHeader.header_size as u64;
+                if fatTextHeader.kind != 2 { // section does not cotain device code (but e.g. PTX)
+                    inputPosition += fatTextHeader.size;
+                    continue;
+                }
+                if fatTextHeader.flags & FATBIN_FLAG_DEBUG > 0 {
+                    error!("fatbin contains debug information.");
+                }
+
+                if (fatTextHeader.flags & FATBIN_FLAG_COMPRESS) > 0 {
+                    error!("fatbin contains compressed device code. Decompressing...");
+                    todo!()
+                }
+                
+                let mut section:MaybeUninit<Elf_Scn>  = MaybeUninit::uninit();
+                let mut ptr_section = section.as_mut_ptr();
+                let mut shdr:MaybeUninit<GElf_Shdr> = MaybeUninit::uninit();
+                let mut symtab_shdr = shdr.as_mut_ptr();
+                let mut sym:MaybeUninit<GElf_Sym> = MaybeUninit::uninit();
+                let mut ptr_sym = sym.as_mut_ptr();
+
+                let memsize = fatTextHeader.size as usize;
+                let elf = unsafe { elf_memory(inputPosition as *mut i8, memsize) };
+                match CheckElf(elf) {
+                    Ok(v) => v,
+                    Err(e) => return Err(e),
+                };
+
+                match GetSectionByName(elf, String::from(".symtab"), &mut ptr_section) {
+                    Ok(v) => v,
+                    Err(e) => return Err(e),
+                };
+
+                symtab_shdr = unsafe { gelf_getshdr(ptr_section, symtab_shdr) };
+                let shdr = unsafe { *symtab_shdr };
+
+                if shdr.sh_type != SHT_SYMTAB {
+                    return Err(Error::ELFLoadError("not a symbol table"));
+                }
+
+                let symbol_table_data_p = unsafe { elf_getdata(ptr_section, 0 as _) };
+                let symbol_table_data = unsafe { &*symbol_table_data_p };
+                error!("hochan symbol_table_data: {:?}", symbol_table_data);
+                let symbol_table_size = shdr.sh_size / shdr.sh_entsize;
+
+                match GetSectionByName(elf, String::from(".nv.info"), &mut ptr_section) {
+                    Ok(v) => v,
+                    Err(_e) => {
+                        error!("could not find .nv.info section. This means this binary does not contain any kernels.");
+                        break;
+                    },
+                };
+
+                let data_p = unsafe { elf_getdata(ptr_section, 0 as _) };
+                let data = unsafe { &*data_p };
+                error!("hochan data: {:?}", data);
+
+                let mut secpos:usize = 0;
+                let infoSize = std::mem::size_of::<NvInfoEntry>();
+                while secpos < data.d_size {
+                    let position = data.d_buf as u64 + secpos as u64;
+                    let entry_p = position as *const u8 as *const NvInfoEntry;
+                    let entry = unsafe { *entry_p };
+                    error!("hochan entry: {:x?}", entry);
+                    if entry.values_size != 8 {
+                        error!("unexpected values_size: {:x}", entry.values_size);
+                        return Err(Error::ELFLoadError("unexpected values_size")); 
+                    }
+
+                    if entry.attribute as u64 != EIATTR_FRAME_SIZE {
+                        secpos += infoSize;
                         continue;
                     }
-                    if (*fatTextHeader).flags & FATBIN_FLAG_DEBUG > 0 {
-                        error!("fatbin contains debug information.");
-                    }
 
-                    if ((*fatTextHeader).flags & FATBIN_FLAG_COMPRESS) > 0 {
-                        error!("fatbin contains compressed device code. Decompressing...");
-                        todo!()
-                    }
-                    
-                    let mut section:MaybeUninit<Elf_Scn>  = MaybeUninit::uninit();
-                    let mut ptr_section = section.as_mut_ptr();
-                    let mut shdr:MaybeUninit<GElf_Shdr> = MaybeUninit::uninit();
-                    let mut symtab_shdr = shdr.as_mut_ptr();
-                    let mut sym:MaybeUninit<GElf_Sym> = MaybeUninit::uninit();
-                    let mut ptr_sym = sym.as_mut_ptr();
-
-                    let memsize = (*fatTextHeader).size as usize;
-                    let elf = elf_memory(inputPosition as *mut i8, memsize);
-                    error!("hochan elf:{:x?}", *elf);
-                    match CheckElf(elf) {
-                        Ok(v) => v,
-                        Err(e) => return Err(e),
-                    };
-
-                    match GetSectionByName(elf, String::from(".symtab"), &mut ptr_section) {
-                        Ok(v) => v,
-                        Err(e) => return Err(e),
-                    };
-                    error!("hochan GetSectionByName(.symtab) got section: {:?}", *ptr_section);
-
-                    symtab_shdr = gelf_getshdr(ptr_section, symtab_shdr);
-                    error!("hochan symtab_shdr {:?}", *symtab_shdr);
-
-                    if (*symtab_shdr).sh_type != SHT_SYMTAB {
-                        return Err(Error::ELFLoadError("not a symbol table"));
-                    }
-
-                    let symbol_table_data = elf_getdata(ptr_section, 0 as _);
-                    error!("hochan symbol_table_data: {:?}", *symbol_table_data);
-                    let symbol_table_size = (*symtab_shdr).sh_size / (*symtab_shdr).sh_entsize;
-
-                    match GetSectionByName(elf, String::from(".nv.info"), &mut ptr_section) {
-                        Ok(v) => v,
-                        Err(_e) => {
-                            error!("could not find .nv.info section. This means this binary does not contain any kernels.");
-                            break;
-                        },
-                    };
-                    error!("hochan GetSectionByName(.symtab) got section: {:?}", *ptr_section);
-
-                    let data = elf_getdata(ptr_section, 0 as _);
-                    error!("hochan data: {:?}", *data);
-
-                    let mut secpos:usize = 0;
-                    let infoSize = std::mem::size_of::<NvInfoEntry>();
-                    while secpos < (*data).d_size {
-                        let position = (*data).d_buf as u64 + secpos as u64;
-                        let entry = position as *const u8 as *const NvInfoEntry;
-                        error!("hochan entry: {:x?}", *entry);
-                        if (*entry).values_size != 8 {
-                            error!("unexpected values_size: {:x}", (*entry).values_size);
-                            return Err(Error::ELFLoadError("unexpected values_size")); 
-                        }
-
-                        if (*entry).attribute as u64 != EIATTR_FRAME_SIZE {
-                            secpos += infoSize;
-                            continue;
-                        }
-
-                        if (*entry).kernel_id as u64 >= symbol_table_size {
-                            error!("kernel_id {:x} out of bounds: {:x}", (*entry).kernel_id, symbol_table_size);
-                            secpos += infoSize;
-                            continue;
-                        }
-
-                        ptr_sym = gelf_getsym(symbol_table_data, (*entry).kernel_id as c_int, ptr_sym);
-                        error!("hochan sym: {:x?}", *ptr_sym);
-
-                        let kernel_str = QString::FromAddr(elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*ptr_sym).st_name as usize) as u64).Str().unwrap().to_string();
-                        error!("hochan kernel_str: {}", kernel_str);
-
-                        if KERNEL_INFOS.lock().contains_key(&kernel_str) {
-                            continue;
-                        }
-
-                        error!("found new kernel: {} (symbol table id: {:x})", kernel_str, (*entry).kernel_id);
-
-                        let mut ki = KernelInfo::default();
-                        ki.name = kernel_str.clone();
-                        
-                        if kernel_str.chars().next().unwrap() != '$' {
-                            match GetParmForKernel(elf, &mut ki){
-                                Ok(_) => {},
-                                Err(e) => {
-                                    return Err(e); 
-                                },
-                            }
-                        }
-                        error!("hochan ki: {:x?}", ki);
-
-                        KERNEL_INFOS.lock().insert(kernel_str.clone(), Arc::new(ki));
-                        
+                    if entry.kernel_id as u64 >= symbol_table_size {
+                        error!("kernel_id {:x} out of bounds: {:x}", entry.kernel_id, symbol_table_size);
                         secpos += infoSize;
+                        continue;
                     }
 
-                    inputPosition += (*fatTextHeader).size;
+                    ptr_sym = unsafe { gelf_getsym(symbol_table_data_p, entry.kernel_id as c_int, ptr_sym) };
+                    
+                    let kernel_str = unsafe { QString::FromAddr(elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*ptr_sym).st_name as usize) as u64).Str().unwrap().to_string() };
+                    error!("hochan kernel_str: {}", kernel_str);
+
+                    if KERNEL_INFOS.lock().contains_key(&kernel_str) {
+                        continue;
+                    }
+
+                    error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
+
+                    let mut ki = KernelInfo::default();
+                    ki.name = kernel_str.clone();
+                    
+                    if kernel_str.chars().next().unwrap() != '$' {
+                        match GetParmForKernel(elf, &mut ki){
+                            Ok(_) => {},
+                            Err(e) => {
+                                return Err(e); 
+                            },
+                        }
+                    }
+                    error!("hochan ki: {:x?}", ki);
+
+                    KERNEL_INFOS.lock().insert(kernel_str.clone(), Arc::new(ki));
+                    
+                    secpos += infoSize;
                 }
-                error!("hochan Complete handling FatTextHeader");
+
+                inputPosition += fatTextHeader.size;
             }
+            error!("hochan Complete handling FatTextHeader");
             
             let mut module:u64 = 0;
             let ret = unsafe{ cuda_driver_sys::cuModuleLoadData(&mut module as *mut _ as u64 as *mut CUmodule, parameters.para2 as *const c_void)};

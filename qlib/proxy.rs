@@ -204,7 +204,7 @@ impl NvInfoKParamInfo {
 }
 
 #[repr(C)]
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Copy, Clone)]
 pub struct NvInfoEntry {
     pub format: u8,
     pub attribute: u8,
