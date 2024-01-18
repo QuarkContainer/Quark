@@ -13,7 +13,7 @@
 
 use std::os::raw::*;
 
-use cuda_runtime_sys::{dim3, cudaStream_t, cudaError_t, cudaMemcpyKind};
+use cuda_runtime_sys::cudaMemcpyKind;
 
 use crate::syscall::*;
 use crate::proxy::*;

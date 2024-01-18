@@ -11,8 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::convert::TryInto;
-use core::mem::size_of;
 use spin::Mutex;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
