@@ -44,20 +44,20 @@ pub extern "C" fn cudaDeviceSynchronize() -> usize {
 pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) -> *mut u64 {
     println!("Hijacked __cudaRegisterFatBinary(fatCubin:{:#x?})", fatCubin);
     let addrFatCubin = fatCubin.text as *const _ as *const u64;
-    unsafe {
-        println!("hochan ProxyCommand::CudaRegisterFatBinary: {:x}, fatCubin.text.header_size:{:x}, fatCubin.text.size: {:x}, addrFatCubin: {:x}", 
-        ProxyCommand::CudaRegisterFatBinary as usize, fatCubin.text.header_size as usize, fatCubin.text.size as usize, addrFatCubin as usize);
-        let addr=addrFatCubin as *const u8;
-        let len = fatCubin.text.header_size as usize + fatCubin.text.size as usize;
-        // let bytes = std::slice::from_raw_parts(fatCubin.text as *const _ as u64 as *const u8, len);
-        println!("hochan fatCubin.text addr {:x}", fatCubin.text as *const _ as u64);
-        // println!("hochan !!!0 {:x?}", bytes);
-        println!("hochan addr {:x?}, addrFatCubin {:x?}",addr,addrFatCubin);
+    println!("hochan ProxyCommand::CudaRegisterFatBinary: {:x}, fatCubin.text.header_size:{:x}, fatCubin.text.size: {:x}, addrFatCubin: {:x}", 
+    ProxyCommand::CudaRegisterFatBinary as usize, fatCubin.text.header_size as usize, fatCubin.text.size as usize, addrFatCubin as usize);
+    let addr=addrFatCubin as *const u8;
+    let len = fatCubin.text.header_size as usize + fatCubin.text.size as usize;
+    // let bytes = std::slice::from_raw_parts(fatCubin.text as *const _ as u64 as *const u8, len);
+    println!("hochan fatCubin.text addr {:x}", fatCubin.text as *const _ as u64);
+    // println!("hochan !!!0 {:x?}", bytes);
+    println!("hochan addr {:x?}, addrFatCubin {:x?}",addr,addrFatCubin);
 
-        let result = 0 as *mut u64;
+    let result = 0 as *mut u64;
+    unsafe {
         syscall4(SYS_PROXY, ProxyCommand::CudaRegisterFatBinary as usize, len, fatCubin.text as *const _ as usize, result as usize);
-        return result;
     }
+    return result;
 }
 
 #[no_mangle]
@@ -112,10 +112,6 @@ pub extern "C" fn cudaLaunchKernel(
         stream: stream
     };
     unsafe {
-        let bytes = std::slice::from_raw_parts(args as *const u64, 4);
-        println!("hochan LaunchKernelInfo {:x?} args bytes {:x?}", info, bytes);
-
-    
         syscall2(SYS_PROXY, ProxyCommand::CudaLaunchKernel as usize, &info as *const _ as usize);
     }
 }
@@ -127,13 +123,10 @@ pub extern "C" fn cudaMalloc(
     ) -> usize {
     println!("Hijacked cudaMalloc(size:{})", size);
 
-    unsafe {
-        println!("hochan cudaMalloc before dev_ptr {:x?} *dev_ptr {:x?})", dev_ptr, *dev_ptr as u64);
-        let ret = syscall3(SYS_PROXY, ProxyCommand::CudaMalloc as usize, dev_ptr as * const _ as usize, size);
-        println!("hochan cudaMalloc after dev_ptr {:x?} *dev_ptr {:x?})", dev_ptr, *dev_ptr as u64);
-        println!("hochan cudaMalloc ret {:x}", ret);
-        return ret;
-    };    
+    let ret = unsafe {
+        syscall3(SYS_PROXY, ProxyCommand::CudaMalloc as usize, dev_ptr as * const _ as usize, size)
+    };
+    return ret;
 }
 
 #[no_mangle]
