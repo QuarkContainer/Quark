@@ -180,7 +180,7 @@ pub struct RegisterFunctionInfo {
 }
 
 #[repr(C)]
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Copy, Clone)]
 pub struct NvInfoKernelEntry {
     pub format: u8,
     pub attribute: u8,

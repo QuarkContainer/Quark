@@ -48,7 +48,7 @@ lazy_static! {
 }
 
 #[repr(C)]
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug)]
 pub struct KernelInfo {
     pub name: String,
     pub paramSize: usize,
@@ -289,35 +289,32 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
 }
 
 fn GetParmForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> {
-    unsafe {
-        let sectionName = GetKernelSectionFromKernelName((*kernel).name.clone());
-        error!("hochan kernel->name: {}, section_name: {}", (*kernel).name, sectionName);
+    let sectionName = GetKernelSectionFromKernelName(unsafe { (*kernel).name.clone() });
 
-        let mut section = &mut(0 as u64 as *mut Elf_Scn);
-        match GetSectionByName(elf, sectionName.clone(), &mut section) {
-            Ok(v) => v,
-            Err(e) => return Err(e),
-        };
-        error!("hochan GetSectionByName({}) got section: {:?}", sectionName, section);
-        let data = elf_getdata(*section, 0 as _);
-        error!("hochan data: {:x?}", *data);
+    let mut section = &mut(0 as u64 as *mut Elf_Scn);
+    match GetSectionByName(elf, sectionName.clone(), &mut section) {
+        Ok(v) => v,
+        Err(e) => return Err(e),
+    };
+    error!("hochan GetSectionByName({}) got section: {:?}", sectionName, section);
+    let data = unsafe { &*(elf_getdata(*section, 0 as _)) };
+    error!("hochan data: {:x?}", data);
 
-        let mut secpos:usize = 0;
-        while secpos < (*data).d_size {
-            let position = (*data).d_buf as u64 + secpos as u64;
-            let entry = position as *const u8 as *const NvInfoKernelEntry;
-            error!("hochan entry: {:x?}", *entry);
-            if (*entry).format as u64 == EIFMT_SVAL && (*entry).attribute as u64 == EIATTR_KPARAM_INFO {
-                if (*entry).values_size != 0xc {
-                    return Err(Error::ELFLoadError("EIATTR_KPARAM_INFO values size has not the expected value of 0xc"));
-                }
-                let kparam = &(*entry).values as *const _ as *const u8 as *const NvInfoKParamInfo;
-                error!("hochan kparam: {:x?}", *kparam);
-                let bytes = std::slice::from_raw_parts(kparam as *const _ as u64 as *const u8, 100);
-                error!("hochan kparam bytes {:x?}", bytes);
+    let mut secpos:usize = 0;
+    while secpos < data.d_size {
+        let position = data.d_buf as u64 + secpos as u64;
+        let entry = unsafe { &*(position as *const u8 as *const NvInfoKernelEntry) };
+        error!("hochan entry: {:x?}", entry);
+        if entry.format as u64 == EIFMT_SVAL && entry.attribute as u64 == EIATTR_KPARAM_INFO {
+            if entry.values_size != 0xc {
+                return Err(Error::ELFLoadError("EIATTR_KPARAM_INFO values size has not the expected value of 0xc"));
+            }
+            let kparam = unsafe { &*(&entry.values as *const _ as *const u8 as *const NvInfoKParamInfo) };
+            error!("hochan kparam: {:x?}", *kparam);
 
-                if (*kparam).ordinal as usize >= (*kernel).paramNum {
-                    (*kernel).paramNum = (*kparam).ordinal as usize + 1;
+            unsafe {
+                if kparam.ordinal as usize >= (*kernel).paramNum {
+                    (*kernel).paramNum = kparam.ordinal as usize + 1;
                     while (*kernel).paramOffsets.len() < (*kernel).paramNum {
                         (*kernel).paramOffsets.push(0);
                         (*kernel).paramSizes.push(0);
@@ -325,27 +322,29 @@ fn GetParmForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> {
                     }
                     error!("hochan end while kernel: {:x?}", *kernel);                    
                 }
-                (*kernel).paramOffsets[(*kparam).ordinal as usize] = (*kparam).offset;
-                (*kernel).paramSizes[(*kparam).ordinal as usize] = (*kparam).GetSize();
+                (*kernel).paramOffsets[kparam.ordinal as usize] = kparam.offset;
+                (*kernel).paramSizes[kparam.ordinal as usize] = kparam.GetSize();
                 error!("hochan changed value kernel: {:x?}, kparam: {:x?}", *kernel, *kparam);
+            }
 
-                secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4 + (*entry).values_size as usize;
-            } else if (*entry).format as u64 == EIFMT_HVAL && (*entry).attribute as u64 == EIATTR_CBANK_PARAM_SIZE {
-                (*kernel).paramSize = (*entry).values_size as usize;
-                error!("cbank_param_size: {:x}", (*entry).values_size);
-                secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
-            } else if (*entry).format as u64 == EIFMT_HVAL {
-                secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
-            } else if (*entry).format as u64 == EIFMT_SVAL {
-                secpos += std::mem::size_of::<NvInfoKernelEntry>() + (*entry).values_size as usize - 4;
-            } else if (*entry).format as u64 == EIFMT_NVAL {
-                secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
-            } else {
-                error!("unknown format: {:x}", (*entry).format);
-                secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
-            }            
-        }
-    }    
+            secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4 + entry.values_size as usize;
+        } else if entry.format as u64 == EIFMT_HVAL && entry.attribute as u64 == EIATTR_CBANK_PARAM_SIZE {
+            unsafe { 
+                (*kernel).paramSize = entry.values_size as usize; 
+            }
+            error!("cbank_param_size: {:x}", entry.values_size);
+            secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
+        } else if entry.format as u64 == EIFMT_HVAL {
+            secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
+        } else if entry.format as u64 == EIFMT_SVAL {
+            secpos += std::mem::size_of::<NvInfoKernelEntry>() + entry.values_size as usize - 4;
+        } else if entry.format as u64 == EIFMT_NVAL {
+            secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
+        } else {
+            error!("unknown format: {:x}", entry.format);
+            secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
+        }            
+    }
 
     Ok(0)
 }
@@ -359,45 +358,40 @@ fn GetKernelSectionFromKernelName(kernelName:String) -> String {
 }
 
 fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn) -> Result<i64> {
-    unsafe { 
-        let mut scn = 0 as u64 as *mut Elf_Scn;
-        let mut size:usize = 0;
-        let str_section_index = &mut size as *mut _ as u64 as *mut usize;
-        let ret = elf_getshdrstrndx(elf, str_section_index);
-        if ret !=0 {
-            return Err(Error::ELFLoadError("elf_getshstrndx failed"));
-        }
-        error!("hochan elf_getshdrstrndx: {}", *str_section_index);
-
-        let mut found = false;
-        loop {
-            let scnNew = elf_nextscn(elf, scn);
-            error!("hochan scn {:?}", *scnNew);
-            if scnNew == std::ptr::null_mut() {
-                break;
-            }
-            
-            let mut shdr : MaybeUninit<GElf_Shdr> = MaybeUninit::uninit();
-            let mut symtab_shdr = shdr.as_mut_ptr();
-            symtab_shdr = gelf_getshdr(scnNew, symtab_shdr);
-            let section_name = QString::FromAddr(elf_strptr(elf, *str_section_index, (*symtab_shdr).sh_name as usize) as u64).Str().unwrap().to_string();
-            error!("hochan section_name {}", section_name);
-            if name.eq(&section_name) {
-                error!("hochan Found section {}", section_name);
-                *section = scnNew;
-                found = true;
-                break;
-            }
-            scn = scnNew;
-        }
-
-        if found {
-            Ok(0)
-        } else {
-            Err(Error::ELFLoadError("Named section not found!"))
-        }
+    let mut scn = 0 as u64 as *mut Elf_Scn;
+    let mut size:usize = 0;
+    let str_section_index = &mut size as *mut _ as u64 as *mut usize;
+    let ret = unsafe { elf_getshdrstrndx(elf, str_section_index) };
+    if ret !=0 {
+        return Err(Error::ELFLoadError("elf_getshstrndx failed"));
     }
-    
+
+    let mut found = false;
+    loop {
+        let scnNew = unsafe { elf_nextscn(elf, scn) };
+        if scnNew == std::ptr::null_mut() {
+            break;
+        }
+        
+        let mut shdr : MaybeUninit<GElf_Shdr> = MaybeUninit::uninit();
+        let mut symtab_shdr = shdr.as_mut_ptr();
+        symtab_shdr = unsafe { gelf_getshdr(scnNew, symtab_shdr) };
+        let section_name = QString::FromAddr(unsafe { elf_strptr(elf, *str_section_index, (*symtab_shdr).sh_name as usize) as u64 }).Str().unwrap().to_string();
+        error!("hochan section_name {}", section_name);
+        if name.eq(&section_name) {
+            error!("hochan Found section {}", section_name);
+            *section = scnNew;
+            found = true;
+            break;
+        }
+        scn = scnNew;
+    }
+
+    if found {
+        Ok(0)
+    } else {
+        Err(Error::ELFLoadError("Named section not found!"))
+    }    
 }
 
 fn CheckElf(elf: *mut Elf) -> Result<i64> {
