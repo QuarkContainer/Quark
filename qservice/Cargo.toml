@@ -20,6 +20,12 @@ regex = "1.7.1"
 reqwest = { version = "0.11", features = ["blocking", "json"] }
 chrono = "0.4.24"
 tower = "0.4.13"
+k8s-openapi = { version = "0.18.0", features = ["v1_26"] }
+simple-logging = "2.0.2"
+log = "0.4.17"
+log4rs = "1"
+const_format = "0.2.30"
+local-ip-address = "0.5.1"
 
 [dependencies.lazy_static]
 version = "1.0"

@@ -12,7 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(dead_code)]
+#![allow(non_snake_case)]
+#![allow(non_upper_case_globals)]
+#![allow(non_camel_case_types)]
+
 pub mod common;
+pub mod config;
+pub mod consts;
+pub mod types;
+pub mod k8s_util;
 
 pub mod crictl {
     include!("pb_gen/runtime.v1alpha2.rs");
@@ -21,3 +30,6 @@ pub mod crictl {
 pub mod tsot {
     include!("pb_gen/tsot.rs");
 }
+
+pub use k8s_openapi::api::core::v1 as k8s;
+pub use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta as ObjectMeta;

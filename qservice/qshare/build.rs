@@ -19,6 +19,7 @@
 
 pub fn BuildProto(protoFile: &str) -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
+        .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
         .build_server(true)
         .build_client(true)
         .out_dir("./src/pb_gen")

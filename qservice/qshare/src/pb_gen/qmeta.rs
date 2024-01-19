@@ -1,3 +1,4 @@
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReadFuncLogReq {
@@ -10,6 +11,7 @@ pub struct ReadFuncLogReq {
     #[prost(uint32, tag = "4")]
     pub len: u32,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReadFuncLogResp {
@@ -18,6 +20,7 @@ pub struct ReadFuncLogResp {
     #[prost(string, tag = "2")]
     pub content: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PutObjReq {
@@ -28,12 +31,14 @@ pub struct PutObjReq {
     #[prost(bytes = "vec", tag = "3")]
     pub data: ::prost::alloc::vec::Vec<u8>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PutObjResp {
     #[prost(string, tag = "1")]
     pub error: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeleteObjReq {
@@ -42,12 +47,14 @@ pub struct DeleteObjReq {
     #[prost(string, tag = "2")]
     pub name: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeleteObjResp {
     #[prost(string, tag = "1")]
     pub error: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReadObjReq {
@@ -56,6 +63,7 @@ pub struct ReadObjReq {
     #[prost(string, tag = "2")]
     pub name: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReadObjResp {
@@ -64,6 +72,7 @@ pub struct ReadObjResp {
     #[prost(bytes = "vec", tag = "2")]
     pub data: ::prost::alloc::vec::Vec<u8>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ObjMeta {
@@ -72,6 +81,7 @@ pub struct ObjMeta {
     #[prost(int32, tag = "2")]
     pub size: i32,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListObjReq {
@@ -80,6 +90,7 @@ pub struct ListObjReq {
     #[prost(string, tag = "2")]
     pub prefix: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListObjResp {
@@ -88,15 +99,18 @@ pub struct ListObjResp {
     #[prost(message, repeated, tag = "2")]
     pub objs: ::prost::alloc::vec::Vec<ObjMeta>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VersionRequestMessage {}
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VersionResponseMessage {
     #[prost(string, tag = "1")]
     pub version: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Kv {
@@ -106,6 +120,7 @@ pub struct Kv {
     pub val: ::prost::alloc::string::String,
 }
 /// use for Etcd storage, no revision
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Object {
@@ -122,6 +137,7 @@ pub struct Object {
     #[prost(string, tag = "7")]
     pub data: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Obj {
@@ -140,6 +156,7 @@ pub struct Obj {
     #[prost(string, tag = "7")]
     pub data: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PutRequestMessage {
@@ -148,6 +165,7 @@ pub struct PutRequestMessage {
     #[prost(message, optional, tag = "2")]
     pub obj: ::core::option::Option<Object>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PutResponseMessage {
@@ -156,6 +174,7 @@ pub struct PutResponseMessage {
     #[prost(int64, tag = "2")]
     pub revision: i64,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResponseHeader {
@@ -164,6 +183,7 @@ pub struct ResponseHeader {
     #[prost(uint64, tag = "2")]
     pub server_id: u64,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateRequestMessage {
@@ -172,6 +192,7 @@ pub struct CreateRequestMessage {
     #[prost(message, optional, tag = "2")]
     pub obj: ::core::option::Option<Obj>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateResponseMessage {
@@ -180,6 +201,7 @@ pub struct CreateResponseMessage {
     #[prost(int64, tag = "2")]
     pub revision: i64,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetRequestMessage {
@@ -192,6 +214,7 @@ pub struct GetRequestMessage {
     #[prost(int64, tag = "4")]
     pub revision: i64,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetResponseMessage {
@@ -200,6 +223,7 @@ pub struct GetResponseMessage {
     #[prost(message, optional, tag = "2")]
     pub obj: ::core::option::Option<Obj>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeleteRequestMessage {
@@ -210,6 +234,7 @@ pub struct DeleteRequestMessage {
     #[prost(string, tag = "3")]
     pub name: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeleteResponseMessage {
@@ -218,6 +243,7 @@ pub struct DeleteResponseMessage {
     #[prost(int64, tag = "2")]
     pub revision: i64,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdateRequestMessage {
@@ -226,6 +252,7 @@ pub struct UpdateRequestMessage {
     #[prost(message, optional, tag = "2")]
     pub obj: ::core::option::Option<Obj>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdateResponseMessage {
@@ -234,6 +261,7 @@ pub struct UpdateResponseMessage {
     #[prost(int64, tag = "2")]
     pub revision: i64,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListRequestMessage {
@@ -248,6 +276,7 @@ pub struct ListRequestMessage {
     #[prost(string, tag = "5")]
     pub field_selector: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListResponseMessage {
@@ -258,6 +287,7 @@ pub struct ListResponseMessage {
     #[prost(message, repeated, tag = "3")]
     pub objs: ::prost::alloc::vec::Vec<Obj>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WatchRequestMessage {
@@ -272,6 +302,7 @@ pub struct WatchRequestMessage {
     #[prost(string, tag = "5")]
     pub field_selector: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WEvent {

@@ -18,6 +18,10 @@
 #![allow(non_upper_case_globals)]
 #![allow(deprecated)]
 
+#[macro_use]
+extern crate log;
+extern crate simple_logging;
+
 // mod tsot;
 mod pod_mgr;
 

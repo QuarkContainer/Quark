@@ -15,13 +15,12 @@
 use std::collections::BTreeMap;
 use tokio::sync::Mutex as TMutex;
 
-//use qobjs::core_types::{Container, PullPolicy};
-use qobjs::k8s;
-use qobjs::crictl;
-use qobjs::common::*;
-use qobjs::k8s_util::*;
+use qshare::crictl;
+use qshare::common::*;
+use qshare::k8s_util::*;
+use qshare::k8s;
 
-use crate::cri::client::CriClient;
+use crate::pod_mgr::cri::client::CriClient;
 
 #[derive(Debug)]
 pub struct ImageMgr {

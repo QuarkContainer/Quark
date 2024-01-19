@@ -31,7 +31,7 @@ use regex::Regex;
 
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 
-use qobjs::common::*;
+use qshare::common::*;
 
 // CPU, in cores. (500m = .5 cores)
 pub const ResourceCPU :&str = "cpu";

@@ -14,8 +14,8 @@
 
 //use std::collections::BTreeMap;
 
-use qobjs::k8s;
-use qobjs::common::*;
+use qshare::k8s;
+use qshare::common::*;
 
 use super::k8s_types::EnvVar;
 

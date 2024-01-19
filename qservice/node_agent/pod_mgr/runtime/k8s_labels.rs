@@ -20,9 +20,9 @@ use serde::Deserialize;
 
 use k8s_openapi::api::core::v1::{self as k8s, ContainerPort};
 
-use qobjs::common::*;
-use qobjs::k8s_util::*;
-use qobjs::types::*;
+use qshare::common::*;
+use qshare::consts::*;
+use qshare::k8s_util::*;
 
 pub struct LabeledPodSandboxInfo {
 	// Labels from v1.Pod

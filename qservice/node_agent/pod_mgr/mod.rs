@@ -14,4 +14,4 @@
 
 pub mod cadvisor;
 pub mod cri;
-// pub mod runtime;
+pub mod runtime;

@@ -18,18 +18,11 @@ use std::time::Duration;
 use tokio::sync::Semaphore;
 //use qobjs::v1alpha2::{self as cri};
 
-use crate::cri::client::*;
-use qobjs::crictl::*;
-use qobjs::runtime_types::*;
-use qobjs::common::Result;
-use qobjs::common::Error;
-
-/*pub type ContainerState = i32;
-
-pub const ContainerState_CONTAINER_CREATED: ContainerState = 0;
-pub const ContainerState_CONTAINER_RUNNING: ContainerState = 1;
-pub const ContainerState_CONTAINER_EXITED:  ContainerState = 2;
-pub const ContainerState_CONTAINER_UNKNOWN: ContainerState = 3;*/
+use qshare::crictl::*;
+use crate::pod_mgr::cri::client::*;
+use qshare::common::Result;
+use qshare::common::Error;
+use qshare::types::*;
 
 #[derive(Debug)]
 pub struct RuntimeMgr {

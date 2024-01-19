@@ -18,6 +18,10 @@ gethostname = "0.4.3"
 regex = "1.7.1"
 zip = { version = "0.5", feature = [ "deflate" ] }
 reqwest = { version = "0.11", features = ["blocking", "json"] }
+simple-logging = "2.0.2"
+log = "0.4.17"
+log4rs = "1"
+const_format = "0.2.30"
 
 k8s-openapi = { version = "0.18.0", features = ["v1_26"] }
 chrono = "0.4.24"

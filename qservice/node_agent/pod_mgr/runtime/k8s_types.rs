@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 
 //use qobjs::k8s;
-use qobjs::crictl;
+use qshare::crictl;
 
 pub struct ImageSpec {
     // ID of the image.

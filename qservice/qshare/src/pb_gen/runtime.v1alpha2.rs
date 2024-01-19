@@ -1,3 +1,4 @@
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VersionRequest {
@@ -5,6 +6,7 @@ pub struct VersionRequest {
     #[prost(string, tag = "1")]
     pub version: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VersionResponse {
@@ -24,6 +26,7 @@ pub struct VersionResponse {
     pub runtime_api_version: ::prost::alloc::string::String,
 }
 /// DNSConfig specifies the DNS servers and search domains of a sandbox.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DnsConfig {
@@ -39,6 +42,7 @@ pub struct DnsConfig {
     pub options: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// PortMapping specifies the port mapping configurations of a sandbox.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PortMapping {
@@ -56,6 +60,7 @@ pub struct PortMapping {
     pub host_ip: ::prost::alloc::string::String,
 }
 /// Mount specifies a host volume to mount into a container.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Mount {
@@ -78,6 +83,7 @@ pub struct Mount {
     pub propagation: i32,
 }
 /// IDMapping describes host to container ID mappings for a pod sandbox.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IdMapping {
@@ -92,6 +98,7 @@ pub struct IdMapping {
     pub length: u32,
 }
 /// UserNamespace describes the intended user namespace configuration for a pod sandbox.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UserNamespace {
@@ -107,6 +114,7 @@ pub struct UserNamespace {
     pub gids: ::prost::alloc::vec::Vec<IdMapping>,
 }
 /// NamespaceOption provides options for Linux namespaces.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NamespaceOption {
@@ -140,6 +148,7 @@ pub struct NamespaceOption {
     pub userns_options: ::core::option::Option<UserNamespace>,
 }
 /// Int64Value is the wrapper of int64.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Int64Value {
@@ -152,6 +161,7 @@ pub struct Int64Value {
 /// 1) It does not apply to containers in the pods.
 /// 2) It may not be applicable to a PodSandbox which does not contain any running
 ///     process.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LinuxSandboxSecurityContext {
@@ -200,6 +210,7 @@ pub struct LinuxSandboxSecurityContext {
     pub seccomp_profile_path: ::prost::alloc::string::String,
 }
 /// A security profile which can be used for sandboxes and containers.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SecurityProfile {
@@ -216,6 +227,7 @@ pub struct SecurityProfile {
 /// Nested message and enum types in `SecurityProfile`.
 pub mod security_profile {
     /// Available profile types.
+    #[derive(serde::Serialize, serde::Deserialize)]
     #[derive(
         Clone,
         Copy,
@@ -261,6 +273,7 @@ pub mod security_profile {
 }
 /// LinuxPodSandboxConfig holds platform-specific configurations for Linux
 /// host platforms and Linux-based containers.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LinuxPodSandboxConfig {
@@ -289,6 +302,7 @@ pub struct LinuxPodSandboxConfig {
 /// The container runtime is encouraged to expose the metadata associated with the
 /// PodSandbox in its user interface for better user experience. For example,
 /// the runtime can construct a unique PodSandboxName based on the metadata.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodSandboxMetadata {
@@ -307,6 +321,7 @@ pub struct PodSandboxMetadata {
 }
 /// PodSandboxConfig holds all the required and optional fields for creating a
 /// sandbox.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodSandboxConfig {
@@ -372,6 +387,7 @@ pub struct PodSandboxConfig {
     #[prost(message, optional, tag = "9")]
     pub windows: ::core::option::Option<WindowsPodSandboxConfig>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RunPodSandboxRequest {
@@ -386,6 +402,7 @@ pub struct RunPodSandboxRequest {
     #[prost(string, tag = "2")]
     pub runtime_handler: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RunPodSandboxResponse {
@@ -393,6 +410,7 @@ pub struct RunPodSandboxResponse {
     #[prost(string, tag = "1")]
     pub pod_sandbox_id: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StopPodSandboxRequest {
@@ -400,9 +418,11 @@ pub struct StopPodSandboxRequest {
     #[prost(string, tag = "1")]
     pub pod_sandbox_id: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StopPodSandboxResponse {}
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RemovePodSandboxRequest {
@@ -410,9 +430,11 @@ pub struct RemovePodSandboxRequest {
     #[prost(string, tag = "1")]
     pub pod_sandbox_id: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RemovePodSandboxResponse {}
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodSandboxStatusRequest {
@@ -424,6 +446,7 @@ pub struct PodSandboxStatusRequest {
     pub verbose: bool,
 }
 /// PodIP represents an ip of a Pod
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodIp {
@@ -433,6 +456,7 @@ pub struct PodIp {
 }
 /// PodSandboxNetworkStatus is the status of the network for a PodSandbox.
 /// Currently ignored for pods sharing the host networking namespace.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodSandboxNetworkStatus {
@@ -444,6 +468,7 @@ pub struct PodSandboxNetworkStatus {
     pub additional_ips: ::prost::alloc::vec::Vec<PodIp>,
 }
 /// Namespace contains paths to the namespaces.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Namespace {
@@ -452,6 +477,7 @@ pub struct Namespace {
     pub options: ::core::option::Option<NamespaceOption>,
 }
 /// LinuxSandboxStatus contains status specific to Linux sandboxes.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LinuxPodSandboxStatus {
@@ -460,6 +486,7 @@ pub struct LinuxPodSandboxStatus {
     pub namespaces: ::core::option::Option<Namespace>,
 }
 /// PodSandboxStatus contains the status of the PodSandbox.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodSandboxStatus {
@@ -500,6 +527,7 @@ pub struct PodSandboxStatus {
     #[prost(string, tag = "9")]
     pub runtime_handler: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodSandboxStatusResponse {
@@ -517,6 +545,7 @@ pub struct PodSandboxStatusResponse {
     >,
 }
 /// PodSandboxStateValue is the wrapper of PodSandboxState.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodSandboxStateValue {
@@ -526,6 +555,7 @@ pub struct PodSandboxStateValue {
 }
 /// PodSandboxFilter is used to filter a list of PodSandboxes.
 /// All those fields are combined with 'AND'
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodSandboxFilter {
@@ -544,6 +574,7 @@ pub struct PodSandboxFilter {
         ::prost::alloc::string::String,
     >,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListPodSandboxRequest {
@@ -552,6 +583,7 @@ pub struct ListPodSandboxRequest {
     pub filter: ::core::option::Option<PodSandboxFilter>,
 }
 /// PodSandbox contains minimal information about a sandbox.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodSandbox {
@@ -586,6 +618,7 @@ pub struct PodSandbox {
     #[prost(string, tag = "7")]
     pub runtime_handler: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListPodSandboxResponse {
@@ -593,6 +626,7 @@ pub struct ListPodSandboxResponse {
     #[prost(message, repeated, tag = "1")]
     pub items: ::prost::alloc::vec::Vec<PodSandbox>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodSandboxStatsRequest {
@@ -600,6 +634,7 @@ pub struct PodSandboxStatsRequest {
     #[prost(string, tag = "1")]
     pub pod_sandbox_id: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodSandboxStatsResponse {
@@ -608,6 +643,7 @@ pub struct PodSandboxStatsResponse {
 }
 /// PodSandboxStatsFilter is used to filter the list of pod sandboxes to retrieve stats for.
 /// All those fields are combined with 'AND'.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodSandboxStatsFilter {
@@ -623,6 +659,7 @@ pub struct PodSandboxStatsFilter {
         ::prost::alloc::string::String,
     >,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListPodSandboxStatsRequest {
@@ -630,6 +667,7 @@ pub struct ListPodSandboxStatsRequest {
     #[prost(message, optional, tag = "1")]
     pub filter: ::core::option::Option<PodSandboxStatsFilter>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListPodSandboxStatsResponse {
@@ -638,6 +676,7 @@ pub struct ListPodSandboxStatsResponse {
     pub stats: ::prost::alloc::vec::Vec<PodSandboxStats>,
 }
 /// PodSandboxAttributes provides basic information of the pod sandbox.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodSandboxAttributes {
@@ -665,6 +704,7 @@ pub struct PodSandboxAttributes {
 }
 /// PodSandboxStats provides the resource usage statistics for a pod.
 /// The linux or windows field will be populated depending on the platform.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PodSandboxStats {
@@ -679,6 +719,7 @@ pub struct PodSandboxStats {
     pub windows: ::core::option::Option<WindowsPodSandboxStats>,
 }
 /// LinuxPodSandboxStats provides the resource usage statistics for a pod sandbox on linux.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LinuxPodSandboxStats {
@@ -701,10 +742,12 @@ pub struct LinuxPodSandboxStats {
 /// WindowsPodSandboxStats provides the resource usage statistics for a pod sandbox on windows
 ///
 /// TODO: Add stats relevant to windows.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WindowsPodSandboxStats {}
 /// NetworkUsage contains data about network resources.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NetworkUsage {
@@ -719,6 +762,7 @@ pub struct NetworkUsage {
     pub interfaces: ::prost::alloc::vec::Vec<NetworkInterfaceUsage>,
 }
 /// NetworkInterfaceUsage contains resource value data about a network interface.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NetworkInterfaceUsage {
@@ -739,6 +783,7 @@ pub struct NetworkInterfaceUsage {
     pub tx_errors: ::core::option::Option<UInt64Value>,
 }
 /// ProcessUsage are stats pertaining to processes.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ProcessUsage {
@@ -750,6 +795,7 @@ pub struct ProcessUsage {
     pub process_count: ::core::option::Option<UInt64Value>,
 }
 /// ImageSpec is an internal representation of an image.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ImageSpec {
@@ -765,6 +811,7 @@ pub struct ImageSpec {
         ::prost::alloc::string::String,
     >,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KeyValue {
@@ -775,6 +822,7 @@ pub struct KeyValue {
 }
 /// LinuxContainerResources specifies Linux specific configuration for
 /// resources.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LinuxContainerResources {
@@ -816,6 +864,7 @@ pub struct LinuxContainerResources {
 }
 /// HugepageLimit corresponds to the file`hugetlb.<hugepagesize>.limit_in_byte` in container level cgroup.
 /// For example, `PageSize=1GB`, `Limit=1073741824` means setting `1073741824` bytes to hugetlb.1GB.limit_in_bytes.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HugepageLimit {
@@ -829,6 +878,7 @@ pub struct HugepageLimit {
     pub limit: u64,
 }
 /// SELinuxOption are the labels to be applied to the container.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SeLinuxOption {
@@ -849,6 +899,7 @@ pub struct SeLinuxOption {
 /// inheritable, effective, bounding and ambient sets.
 /// If a capability is added to add_capabilities and add_ambient_capabilities lists then it gets added to all sets, i.e.
 /// permitted, inheritable, effective, bounding and ambient sets.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Capability {
@@ -865,6 +916,7 @@ pub struct Capability {
     >,
 }
 /// LinuxContainerSecurityContext holds linux security configuration that will be applied to a container.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LinuxContainerSecurityContext {
@@ -957,6 +1009,7 @@ pub struct LinuxContainerSecurityContext {
 }
 /// LinuxContainerConfig contains platform-specific configuration for
 /// Linux-based containers.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LinuxContainerConfig {
@@ -970,6 +1023,7 @@ pub struct LinuxContainerConfig {
 /// WindowsSandboxSecurityContext holds platform-specific configurations that will be
 /// applied to a sandbox.
 /// These settings will only apply to the sandbox container.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WindowsSandboxSecurityContext {
@@ -987,6 +1041,7 @@ pub struct WindowsSandboxSecurityContext {
 }
 /// WindowsPodSandboxConfig holds platform-specific configurations for Windows
 /// host platforms and Windows-based containers.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WindowsPodSandboxConfig {
@@ -995,6 +1050,7 @@ pub struct WindowsPodSandboxConfig {
     pub security_context: ::core::option::Option<WindowsSandboxSecurityContext>,
 }
 /// WindowsContainerSecurityContext holds windows security configuration that will be applied to a container.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WindowsContainerSecurityContext {
@@ -1012,6 +1068,7 @@ pub struct WindowsContainerSecurityContext {
 }
 /// WindowsContainerConfig contains platform-specific configuration for
 /// Windows-based containers.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WindowsContainerConfig {
@@ -1024,6 +1081,7 @@ pub struct WindowsContainerConfig {
 }
 /// WindowsContainerResources specifies Windows specific configuration for
 /// resources.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WindowsContainerResources {
@@ -1048,6 +1106,7 @@ pub struct WindowsContainerResources {
 /// interface for better user experience. E.g., runtime can construct a unique
 /// container name based on the metadata. Note that (name, attempt) is unique
 /// within a sandbox for the entire lifetime of the sandbox.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerMetadata {
@@ -1059,6 +1118,7 @@ pub struct ContainerMetadata {
     pub attempt: u32,
 }
 /// Device specifies a host device to mount into a container.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Device {
@@ -1077,6 +1137,7 @@ pub struct Device {
 }
 /// ContainerConfig holds all the required and optional fields for creating a
 /// container.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerConfig {
@@ -1160,6 +1221,7 @@ pub struct ContainerConfig {
     #[prost(message, optional, tag = "16")]
     pub windows: ::core::option::Option<WindowsContainerConfig>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateContainerRequest {
@@ -1176,6 +1238,7 @@ pub struct CreateContainerRequest {
     #[prost(message, optional, tag = "3")]
     pub sandbox_config: ::core::option::Option<PodSandboxConfig>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateContainerResponse {
@@ -1183,6 +1246,7 @@ pub struct CreateContainerResponse {
     #[prost(string, tag = "1")]
     pub container_id: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StartContainerRequest {
@@ -1190,9 +1254,11 @@ pub struct StartContainerRequest {
     #[prost(string, tag = "1")]
     pub container_id: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StartContainerResponse {}
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StopContainerRequest {
@@ -1204,9 +1270,11 @@ pub struct StopContainerRequest {
     #[prost(int64, tag = "2")]
     pub timeout: i64,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StopContainerResponse {}
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RemoveContainerRequest {
@@ -1214,10 +1282,12 @@ pub struct RemoveContainerRequest {
     #[prost(string, tag = "1")]
     pub container_id: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RemoveContainerResponse {}
 /// ContainerStateValue is the wrapper of ContainerState.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerStateValue {
@@ -1227,6 +1297,7 @@ pub struct ContainerStateValue {
 }
 /// ContainerFilter is used to filter containers.
 /// All those fields are combined with 'AND'
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerFilter {
@@ -1248,6 +1319,7 @@ pub struct ContainerFilter {
         ::prost::alloc::string::String,
     >,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListContainersRequest {
@@ -1256,6 +1328,7 @@ pub struct ListContainersRequest {
 }
 /// Container provides the runtime information for a container, such as ID, hash,
 /// state of the container.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Container {
@@ -1298,6 +1371,7 @@ pub struct Container {
         ::prost::alloc::string::String,
     >,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListContainersResponse {
@@ -1305,6 +1379,7 @@ pub struct ListContainersResponse {
     #[prost(message, repeated, tag = "1")]
     pub containers: ::prost::alloc::vec::Vec<Container>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerStatusRequest {
@@ -1316,6 +1391,7 @@ pub struct ContainerStatusRequest {
     pub verbose: bool,
 }
 /// ContainerStatus represents the status of a container.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerStatus {
@@ -1379,6 +1455,7 @@ pub struct ContainerStatus {
     #[prost(message, optional, tag = "16")]
     pub resources: ::core::option::Option<ContainerResources>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerStatusResponse {
@@ -1396,6 +1473,7 @@ pub struct ContainerStatusResponse {
     >,
 }
 /// ContainerResources holds resource limits configuration for a container.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerResources {
@@ -1406,6 +1484,7 @@ pub struct ContainerResources {
     #[prost(message, optional, tag = "2")]
     pub windows: ::core::option::Option<WindowsContainerResources>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdateContainerResourcesRequest {
@@ -1427,9 +1506,11 @@ pub struct UpdateContainerResourcesRequest {
         ::prost::alloc::string::String,
     >,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdateContainerResourcesResponse {}
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecSyncRequest {
@@ -1443,6 +1524,7 @@ pub struct ExecSyncRequest {
     #[prost(int64, tag = "3")]
     pub timeout: i64,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecSyncResponse {
@@ -1456,6 +1538,7 @@ pub struct ExecSyncResponse {
     #[prost(int32, tag = "3")]
     pub exit_code: i32,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecRequest {
@@ -1484,6 +1567,7 @@ pub struct ExecRequest {
     #[prost(bool, tag = "6")]
     pub stderr: bool,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecResponse {
@@ -1491,6 +1575,7 @@ pub struct ExecResponse {
     #[prost(string, tag = "1")]
     pub url: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AttachRequest {
@@ -1517,6 +1602,7 @@ pub struct AttachRequest {
     #[prost(bool, tag = "5")]
     pub stderr: bool,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AttachResponse {
@@ -1524,6 +1610,7 @@ pub struct AttachResponse {
     #[prost(string, tag = "1")]
     pub url: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PortForwardRequest {
@@ -1534,6 +1621,7 @@ pub struct PortForwardRequest {
     #[prost(int32, repeated, tag = "2")]
     pub port: ::prost::alloc::vec::Vec<i32>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PortForwardResponse {
@@ -1541,6 +1629,7 @@ pub struct PortForwardResponse {
     #[prost(string, tag = "1")]
     pub url: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ImageFilter {
@@ -1548,6 +1637,7 @@ pub struct ImageFilter {
     #[prost(message, optional, tag = "1")]
     pub image: ::core::option::Option<ImageSpec>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListImagesRequest {
@@ -1556,6 +1646,7 @@ pub struct ListImagesRequest {
     pub filter: ::core::option::Option<ImageFilter>,
 }
 /// Basic information about a container image.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Image {
@@ -1589,6 +1680,7 @@ pub struct Image {
     #[prost(bool, tag = "8")]
     pub pinned: bool,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListImagesResponse {
@@ -1596,6 +1688,7 @@ pub struct ListImagesResponse {
     #[prost(message, repeated, tag = "1")]
     pub images: ::prost::alloc::vec::Vec<Image>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ImageStatusRequest {
@@ -1606,6 +1699,7 @@ pub struct ImageStatusRequest {
     #[prost(bool, tag = "2")]
     pub verbose: bool,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ImageStatusResponse {
@@ -1623,6 +1717,7 @@ pub struct ImageStatusResponse {
     >,
 }
 /// AuthConfig contains authorization information for connecting to a registry.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthConfig {
@@ -1642,6 +1737,7 @@ pub struct AuthConfig {
     #[prost(string, tag = "6")]
     pub registry_token: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PullImageRequest {
@@ -1655,6 +1751,7 @@ pub struct PullImageRequest {
     #[prost(message, optional, tag = "3")]
     pub sandbox_config: ::core::option::Option<PodSandboxConfig>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PullImageResponse {
@@ -1663,6 +1760,7 @@ pub struct PullImageResponse {
     #[prost(string, tag = "1")]
     pub image_ref: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RemoveImageRequest {
@@ -1670,9 +1768,11 @@ pub struct RemoveImageRequest {
     #[prost(message, optional, tag = "1")]
     pub image: ::core::option::Option<ImageSpec>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RemoveImageResponse {}
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NetworkConfig {
@@ -1681,18 +1781,21 @@ pub struct NetworkConfig {
     #[prost(string, tag = "1")]
     pub pod_cidr: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RuntimeConfig {
     #[prost(message, optional, tag = "1")]
     pub network_config: ::core::option::Option<NetworkConfig>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdateRuntimeConfigRequest {
     #[prost(message, optional, tag = "1")]
     pub runtime_config: ::core::option::Option<RuntimeConfig>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdateRuntimeConfigResponse {}
@@ -1709,6 +1812,7 @@ pub struct UpdateRuntimeConfigResponse {}
 /// will not rely on. Since condition type is an arbitrary string, all conditions
 /// not required are optional. These conditions will be exposed to users to help
 /// them understand the status of the system.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RuntimeCondition {
@@ -1726,6 +1830,7 @@ pub struct RuntimeCondition {
     pub message: ::prost::alloc::string::String,
 }
 /// RuntimeStatus is information about the current status of the runtime.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RuntimeStatus {
@@ -1733,6 +1838,7 @@ pub struct RuntimeStatus {
     #[prost(message, repeated, tag = "1")]
     pub conditions: ::prost::alloc::vec::Vec<RuntimeCondition>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StatusRequest {
@@ -1740,6 +1846,7 @@ pub struct StatusRequest {
     #[prost(bool, tag = "1")]
     pub verbose: bool,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StatusResponse {
@@ -1756,10 +1863,12 @@ pub struct StatusResponse {
         ::prost::alloc::string::String,
     >,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ImageFsInfoRequest {}
 /// UInt64Value is the wrapper of uint64.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UInt64Value {
@@ -1768,6 +1877,7 @@ pub struct UInt64Value {
     pub value: u64,
 }
 /// FilesystemIdentifier uniquely identify the filesystem.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FilesystemIdentifier {
@@ -1776,6 +1886,7 @@ pub struct FilesystemIdentifier {
     pub mountpoint: ::prost::alloc::string::String,
 }
 /// FilesystemUsage provides the filesystem usage information.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FilesystemUsage {
@@ -1796,6 +1907,7 @@ pub struct FilesystemUsage {
     #[prost(message, optional, tag = "4")]
     pub inodes_used: ::core::option::Option<UInt64Value>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ImageFsInfoResponse {
@@ -1803,6 +1915,7 @@ pub struct ImageFsInfoResponse {
     #[prost(message, repeated, tag = "1")]
     pub image_filesystems: ::prost::alloc::vec::Vec<FilesystemUsage>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerStatsRequest {
@@ -1810,6 +1923,7 @@ pub struct ContainerStatsRequest {
     #[prost(string, tag = "1")]
     pub container_id: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerStatsResponse {
@@ -1817,6 +1931,7 @@ pub struct ContainerStatsResponse {
     #[prost(message, optional, tag = "1")]
     pub stats: ::core::option::Option<ContainerStats>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListContainerStatsRequest {
@@ -1826,6 +1941,7 @@ pub struct ListContainerStatsRequest {
 }
 /// ContainerStatsFilter is used to filter containers.
 /// All those fields are combined with 'AND'
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerStatsFilter {
@@ -1844,6 +1960,7 @@ pub struct ContainerStatsFilter {
         ::prost::alloc::string::String,
     >,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListContainerStatsResponse {
@@ -1852,6 +1969,7 @@ pub struct ListContainerStatsResponse {
     pub stats: ::prost::alloc::vec::Vec<ContainerStats>,
 }
 /// ContainerAttributes provides basic information of the container.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerAttributes {
@@ -1878,6 +1996,7 @@ pub struct ContainerAttributes {
     >,
 }
 /// ContainerStats provides the resource usage statistics for a container.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ContainerStats {
@@ -1895,6 +2014,7 @@ pub struct ContainerStats {
     pub writable_layer: ::core::option::Option<FilesystemUsage>,
 }
 /// CpuUsage provides the CPU usage information.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CpuUsage {
@@ -1910,6 +2030,7 @@ pub struct CpuUsage {
     pub usage_nano_cores: ::core::option::Option<UInt64Value>,
 }
 /// MemoryUsage provides the memory usage information.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MemoryUsage {
@@ -1935,6 +2056,7 @@ pub struct MemoryUsage {
     #[prost(message, optional, tag = "7")]
     pub major_page_faults: ::core::option::Option<UInt64Value>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReopenContainerLogRequest {
@@ -1942,9 +2064,11 @@ pub struct ReopenContainerLogRequest {
     #[prost(string, tag = "1")]
     pub container_id: ::prost::alloc::string::String,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReopenContainerLogResponse {}
+#[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum Protocol {
@@ -1974,6 +2098,7 @@ impl Protocol {
         }
     }
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum MountPropagation {
@@ -2012,6 +2137,7 @@ impl MountPropagation {
 /// A NamespaceMode describes the intended namespace configuration for each
 /// of the namespaces (Network, PID, IPC) in NamespaceOption. Runtimes should
 /// map these modes as appropriate for the technology underlying the runtime.
+#[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum NamespaceMode {
@@ -2059,6 +2185,7 @@ impl NamespaceMode {
         }
     }
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum PodSandboxState {
@@ -2085,6 +2212,7 @@ impl PodSandboxState {
         }
     }
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum ContainerState {

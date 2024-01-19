@@ -15,11 +15,11 @@
 use std::collections::BTreeMap;
 use lazy_static::lazy_static;
 
-use qobjs::k8s;
-use qobjs::crictl;
+use qshare::k8s;
+use qshare::crictl;
 
-use crate::runtime::k8s_const;
-use crate::runtime::k8s_util;
+use crate::pod_mgr::runtime::k8s_const;
+use crate::pod_mgr::runtime::k8s_util;
 
 // SeccompProfileTypeUnconfined indicates no seccomp profile is applied (A.K.A. unconfined).
 pub const SeccompProfileTypeUnconfined: &str = "Unconfined";

@@ -14,6 +14,9 @@
 
 use serde_json::Error as SerdeJsonError;
 use tonic::Status as TonicStatus;
+use std::num::ParseIntError;
+use std::string::FromUtf8Error;
+use std::str::Utf8Error;
 
 #[derive(Debug)]
 pub enum Error {
@@ -25,6 +28,36 @@ pub enum Error {
     TonicStatus(TonicStatus),
     StdErr(Box<dyn std::error::Error>),
     TonicTransportErr(tonic::transport::Error),
+    ParseIntError(ParseIntError),
+    RegexError(regex::Error),
+    Utf8Error(Utf8Error),
+    FromUtf8Error(FromUtf8Error),
+    AcquireError(tokio::sync::AcquireError),
+    
+}
+
+impl From<tokio::sync::AcquireError> for Error {
+    fn from(item: tokio::sync::AcquireError) -> Self {
+        return Self::AcquireError(item)
+    }
+}
+
+impl From<Utf8Error> for Error {
+    fn from(item: Utf8Error) -> Self {
+        return Self::Utf8Error(item)
+    }
+}
+
+impl From<FromUtf8Error> for Error {
+    fn from(item: FromUtf8Error) -> Self {
+        return Self::FromUtf8Error(item)
+    }
+}
+
+impl From<regex::Error> for Error {
+    fn from(item: regex::Error) -> Self {
+        return Self::RegexError(item)
+    }
 }
 
 impl From<std::io::Error> for Error {
@@ -62,5 +95,11 @@ impl From<Box<dyn std::error::Error>> for Error {
 impl From<tonic::transport::Error> for Error {
     fn from(item: tonic::transport::Error) -> Self {
         return Self::TonicTransportErr(item)
+    }
+}
+
+impl From<ParseIntError> for Error {
+    fn from(item: ParseIntError) -> Self {
+        return Self::ParseIntError(item)
     }
 }
