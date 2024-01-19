@@ -18,20 +18,17 @@ use std::path::Path;
 use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
 use std::sync::RwLock;
-use qobjs::types::DefaultNodeFuncLogFolder;
+use qshare::consts::DefaultNodeFuncLogFolder;
 use rand::prelude::*;
 use std::fs::Permissions;
 
-use qobjs::k8s;
-use qobjs::crictl;
-use qobjs::common::*;
+use qshare::k8s;
+use qshare::crictl;
+use qshare::common::*;
 
-use qobjs::config::*;
-use crate::FUNCDIR_MGR;
-use crate::NODEAGENT_CONFIG;
-use crate::pod::PodType;
-use crate::runtime::k8s_quantity::*;
-use crate::runtime::security_context::*;
+use qshare::config::*;
+use crate::pod_mgr::runtime::k8s_quantity::*;
+use crate::pod_mgr::runtime::security_context::*;
 
 use super::k8s_types::RunContainerOptions;
 
@@ -508,7 +505,7 @@ pub fn MakeDevice(opts: &RunContainerOptions) -> Vec<crictl::Device> {
 }
 
 
-pub async fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container, namespace: &str, podType: &PodType) -> Result<Vec<crictl::Mount>> {
+pub async fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container, namespace: &str) -> Result<Vec<crictl::Mount>> {
     let mut volumeMounts = Vec::new();
 
     for v in &opts.mounts {
@@ -523,13 +520,13 @@ pub async fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container, 
         volumeMounts.push(mount);
     }
 
-    let mount = crictl::Mount {
-        host_path: NODEAGENT_CONFIG.FuncAgentSvcSocketAddr(),
-        container_path: NODEAGENT_CONFIG.FuncAgentSvcSocketLocalAddr(),
-        selinux_relabel: false,
-        ..Default::default()
-    };
-    volumeMounts.push(mount);
+    // let mount = crictl::Mount {
+    //     host_path: NODEAGENT_CONFIG.FuncAgentSvcSocketAddr(),
+    //     container_path: NODEAGENT_CONFIG.FuncAgentSvcSocketLocalAddr(),
+    //     selinux_relabel: false,
+    //     ..Default::default()
+    // };
+    // volumeMounts.push(mount);
 
     let logfolder = format!("{}/func/{}", DefaultNodeFuncLogFolder, namespace);
     std::fs::create_dir_all(&logfolder).unwrap();
@@ -542,21 +539,7 @@ pub async fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container, 
     };
     volumeMounts.push(mount);
 
-    match podType {
-        PodType::Normal => (),
-        PodType::Python(objName) => {
-            let funcDir = FUNCDIR_MGR.get().unwrap().GetFuncDir(namespace, objName).await?;
-            let mount = crictl::Mount {
-                host_path: funcDir.to_owned(),
-                container_path: "/app/src/qserverless/func".to_string(),
-                selinux_relabel: false,
-                ..Default::default()
-            };
-            volumeMounts.push(mount);
-        }
-    }
-
-    // The reason we create and mount the log file in here (not in kubelet) is because
+    // The reason we create and mount the log file in here is because
 	// the file's location depends on the ID of the container, and we need to create and
 	// mount the file before actually starting the container.
     if opts.podContainerDir.len() != 0 && container.termination_message_path.as_ref().unwrap().len() != 0 {
@@ -593,3 +576,4 @@ pub fn MakeUID() -> String {
     let n: u64 = rng.gen();
     return format!("{:0<8}", n);
 }
+

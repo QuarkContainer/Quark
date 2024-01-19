@@ -17,7 +17,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_upper_case_globals)]
 #![allow(deprecated)]
-#![feature(map_first_last)]
+// #![feature(map_first_last)]
 
 #[macro_use]
 extern crate log;

@@ -1,0 +1,211 @@
+/*
+Copyright 2023 Quark Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+package qmeta;
+
+service QMetaService {
+  rpc Version (VersionRequestMessage) returns (VersionResponseMessage) {}
+  rpc Create (CreateRequestMessage) returns (CreateResponseMessage) {}
+  rpc Get (GetRequestMessage) returns (GetResponseMessage) {}
+  rpc Delete (DeleteRequestMessage) returns (DeleteResponseMessage) {}
+  rpc Update (UpdateRequestMessage) returns (UpdateResponseMessage) {}
+  rpc List (ListRequestMessage) returns (ListResponseMessage) {}
+  rpc Watch (WatchRequestMessage) returns (stream WEvent) {}
+  rpc PutObj (PutObjReq) returns (PutObjResp) {}
+  rpc DeleteObj (DeleteObjReq) returns (DeleteObjResp) {}
+  rpc ReadObj (ReadObjReq) returns (ReadObjResp) {}
+  rpc ListObj (ListObjReq) returns (ListObjResp) {}
+  rpc ReadFuncLog(ReadFuncLogReq) returns (ReadFuncLogResp) {}
+}
+
+message ReadFuncLogReq {
+  string namespace = 1;
+  string funcName = 2;
+  uint64 offset = 3;
+  uint32 len = 4;
+}
+
+message ReadFuncLogResp {
+  string error = 1;
+  string content = 2;
+}
+
+
+message PutObjReq {
+    string namespace = 1;
+    string name = 2;
+    bytes data = 3;
+}
+
+message PutObjResp {
+    string error = 1;
+}
+
+message DeleteObjReq {
+    string namespace = 1;
+    string name = 2;
+}
+
+message DeleteObjResp {
+    string error = 1;
+}
+
+message ReadObjReq {
+    string namespace = 1;
+    string name = 2;
+}
+
+message ReadObjResp {
+    string error = 1;
+    bytes data = 2;
+}
+
+message ObjMeta {
+    string name = 1;
+    int32 size = 2;
+}
+
+message ListObjReq {
+    string namespace = 1;
+    string prefix = 2;
+}
+
+message ListObjResp {
+    string error = 1;
+    repeated ObjMeta objs = 2;
+}
+
+message VersionRequestMessage {
+}
+
+
+message VersionResponseMessage {
+    string version = 1;
+}
+
+message KV {
+    string key = 1;
+    string val = 2;
+} 
+
+// use for Etcd storage, no revision 
+message Object {
+    string kind = 1;
+    string namespace = 2;
+    string name = 3;
+    repeated KV labels = 5;
+    repeated KV annotations = 6;
+
+    string data = 7;
+}
+
+message Obj {
+    string kind = 1;
+    string namespace = 2;
+    string name = 3;
+    int64 revision = 4;
+    repeated KV labels = 5;
+    repeated KV annotations = 6;
+    
+    string data = 7;
+}
+
+message PutRequestMessage {
+    string ObjectType = 1;
+    Object obj = 2;
+}
+
+message PutResponseMessage {
+    string error = 1;
+    int64 revision = 2;
+}
+
+message ResponseHeader {
+    string error = 1;
+    uint64 server_id = 2;
+}
+
+message CreateRequestMessage {
+    string obj_type = 1;
+    Obj obj = 2;
+}
+
+message CreateResponseMessage {
+    string error = 1;
+    int64 revision = 2;
+}
+
+message GetRequestMessage {
+    string obj_type = 1;
+    string namespace = 2;
+    string name = 3;
+    int64 revision = 4;
+}
+
+message GetResponseMessage {
+    string error = 1;
+    Obj obj = 2;
+}
+
+message DeleteRequestMessage {
+    string obj_type = 1;
+    string namespace = 2;
+    string name = 3;
+}
+
+message DeleteResponseMessage {
+    string error = 1;
+    int64 revision = 2;
+}
+
+message UpdateRequestMessage {
+    string obj_type = 1;
+    Obj obj = 2;
+}
+
+message UpdateResponseMessage {
+    string error = 1;
+    int64 revision = 2;
+}
+
+
+message ListRequestMessage {
+    string obj_type = 1;
+    string namespace = 2;
+    int64 revision = 3;
+    string label_selector = 4;
+    string field_selector = 5;
+}
+
+message ListResponseMessage {
+    string error = 1;
+    int64 revision = 2;
+    repeated Obj objs = 3;
+}
+
+message WatchRequestMessage {
+    string obj_type = 1;
+    string namespace = 2;
+    int64 revision = 3;
+    string label_selector = 4;
+    string field_selector = 5;
+}
+
+message WEvent {
+    int64 event_type = 2;
+    Obj obj = 3;
+}
