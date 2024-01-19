@@ -1156,6 +1156,7 @@ dependencies = [
  "local-ip-address",
  "log",
  "log4rs",
+ "once_cell",
  "prost",
  "regex",
  "reqwest",
