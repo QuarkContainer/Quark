@@ -35,6 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     BuildProto("./proto/v1.proto")?;
     BuildProto("./proto/v1alpha2.proto")?;
     BuildProto("./proto/qobjs.proto")?;
+    BuildProto("./proto/na.proto")?;
 
     return Ok(());
 }

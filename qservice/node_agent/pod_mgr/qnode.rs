@@ -138,3 +138,64 @@ impl QuarkNode {
     }
 
 }
+
+
+pub struct ContainerWorldSummary {
+    pub runningPods: Vec<QuarkPod>,
+    pub terminatedPods: Vec<QuarkPod>,
+}
+
+pub fn NodeSpecPodCidrChanged(old: &k8s::Node, new: &k8s::Node) -> bool {
+    match ValidateNodeSpec(new) {
+        Err(e) => {
+            error!("api node spec is not valid, errors {:?}", e);
+            return false;
+        }
+        Ok(()) => ()
+    }
+
+    let oldspec = old.spec.as_ref().unwrap();
+    let newspec = new.spec.as_ref().unwrap();
+
+    if oldspec.pod_cidr.as_ref().unwrap().len() == 0 
+    || oldspec.pod_cidr != newspec.pod_cidr 
+    || oldspec.pod_cidrs.as_ref().unwrap().len() != newspec.pod_cidrs.as_ref().unwrap().len() {
+        return true;
+    }
+
+    let mut oldcidrs = oldspec.pod_cidrs.as_ref().unwrap().to_vec();
+    let mut newcidrs = newspec.pod_cidrs.as_ref().unwrap().to_vec();
+
+    oldcidrs.sort();
+    newcidrs.sort();
+    
+    for i in 0..oldcidrs.len() {
+        if oldcidrs[i] != newcidrs[i] {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+pub fn ValidateNodeSpec(node: &k8s::Node) -> Result<()> {
+    use ipnetwork::IpNetwork;
+
+    let spec = node.spec.as_ref().unwrap();
+    if spec.pod_cidr.is_none() {
+        return Err(Error::CommonError(format!("api node spec pod cidr is nil")));
+    } else {
+        let _network = spec.pod_cidr.as_ref().unwrap().parse::<IpNetwork>()?;
+    }
+
+    for cidr in spec.pod_cidrs.as_ref().unwrap() {
+        let _network = cidr.parse::<IpNetwork>()?;
+    }
+
+    if spec.pod_cidr.is_some() && &spec.pod_cidrs.as_ref().unwrap()[0] != spec.pod_cidr.as_ref().unwrap() {
+        return Err(Error::CommonError(format!("node spec podcidrs[0] {} does not match podcidr {}",
+            spec.pod_cidrs.as_ref().unwrap()[0], spec.pod_cidr.as_ref().unwrap())));
+    }
+
+    return Ok(())
+}

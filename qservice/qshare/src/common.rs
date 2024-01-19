@@ -33,10 +33,18 @@ pub enum Error {
     Utf8Error(Utf8Error),
     FromUtf8Error(FromUtf8Error),
     AcquireError(tokio::sync::AcquireError),
-    
+    TokioChannFull,
+    TokioChannClose,
+    IpNetworkError(ipnetwork::IpNetworkError),
 }
 
 unsafe impl core::marker::Send for Error {}
+
+impl From<ipnetwork::IpNetworkError> for Error {
+    fn from(item: ipnetwork::IpNetworkError) -> Self {
+        return Self::IpNetworkError(item)
+    }
+}
 
 impl From<tokio::sync::AcquireError> for Error {
     fn from(item: tokio::sync::AcquireError) -> Self {
