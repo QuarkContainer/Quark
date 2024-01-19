@@ -430,3 +430,4 @@ pub fn GetPodContainerDir(rootPath: &str, podUID: &str, ctrName: &str) -> String
 pub fn GetPodResourcesDir(rootPath: &str) -> String {
 	return format!("{}/{}", rootPath, DefaultPodResourcesDirName)
 }
+

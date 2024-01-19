@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::common::*;
+use super::k8s;
 
 pub const QMETASVC_PORT : u16 = 8890; 
 pub const GATEWAY_PORT : u16 = 8889;
@@ -63,3 +65,65 @@ pub const BLOB_LOCAL_HOST                     : &str = "local";
 
 pub const ERROR_SOURCE_SYSTEM: i32 = 1;
 pub const ERROR_SOURCE_USER: i32 = 2;
+
+
+
+pub const DefaultNodeMgrNodeNameSpace: &str = "qserverless.quarksoft.io";
+pub const DefaultDomainName: &str = "qserverless.quarksoft.io";
+
+// NodePending means the node has been created/added by the system, but not configured.
+pub const NodePending : &str = "Pending";
+// NodeRunning means the node has been configured and has Kubernetes components running.
+pub const NodeRunning : &str = "Running";
+// NodeTerminated means the node has been removed from the cluster.
+pub const NodeTerminated : &str = "Terminated";
+
+
+// NodeReady means kubelet is healthy and ready to accept pods.
+pub const NodeReady: &str = "Ready";
+// NodeMemoryPressure means the kubelet is under pressure due to insufficient available memory.
+pub const NodeMemoryPressure: &str = "MemoryPressure";
+// NodeDiskPressure means the kubelet is under pressure due to insufficient available disk.
+pub const NodeDiskPressure: &str = "DiskPressure";
+// NodePIDPressure means the kubelet is under pressure due to insufficient available PID.
+pub const NodePIDPressure: &str = "PIDPressure";
+// NodeNetworkUnavailable means that network for the node is not correctly configured.
+pub const NodeNetworkUnavailable: &str = "NetworkUnavailable";
+
+// These are valid condition statuses. "ConditionTrue" means a resource is in the condition.
+// "ConditionFalse" means a resource is not in the condition. "ConditionUnknown" means kubernetes
+// can't decide if a resource is in the condition or not. In the future, we could add other
+// intermediate conditions, e.g. ConditionDegraded.
+pub const ConditionTrue    : &str = "True";
+pub const ConditionFalse   : &str = "False";
+pub const ConditionUnknown : &str = "Unknown";
+
+pub fn PodToString(pod: &k8s::Pod) -> Result<String> {
+    let s = serde_json::to_string(pod)?;
+    return Ok(s);
+}
+
+pub fn PodFromString(s: &str) -> Result<k8s::Pod> {
+    let p: k8s::Pod = serde_json::from_str(s)?;
+    return Ok(p);
+}
+
+pub fn ConfigMapToString(o: &k8s::ConfigMap) -> Result<String> {
+    let s = serde_json::to_string(o)?;
+    return Ok(s);
+}
+
+pub fn ConfigMapFromString(s: &str) -> Result<k8s::ConfigMap> {
+    let p: k8s::ConfigMap = serde_json::from_str(s)?;
+    return Ok(p);
+}
+
+pub fn NodeToString(o: &k8s::Node) -> Result<String> {
+    let s = serde_json::to_string(o)?;
+    return Ok(s);
+}
+
+pub fn NodeFromString(s: &str) -> Result<k8s::Node> {
+    let p: k8s::Node = serde_json::from_str(s)?;
+    return Ok(p);
+}
