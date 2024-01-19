@@ -15,3 +15,6 @@
 pub mod cadvisor;
 pub mod cri;
 pub mod runtime;
+pub mod qcontainer;
+pub mod qpod;
+//pub mod podMgr;
