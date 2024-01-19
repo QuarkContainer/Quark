@@ -63,100 +63,12 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:FatElfHeader) -> Result<i64> {
             todo!()
         }
         
-        let mut section:MaybeUninit<Elf_Scn>  = MaybeUninit::uninit();
-        let mut ptr_section = section.as_mut_ptr();
-        let mut shdr:MaybeUninit<GElf_Shdr> = MaybeUninit::uninit();
-        let mut symtab_shdr = shdr.as_mut_ptr();
-        let mut sym:MaybeUninit<GElf_Sym> = MaybeUninit::uninit();
-        let mut ptr_sym = sym.as_mut_ptr();
+        
 
-        let memsize = fatTextHeader.size as usize;
-        let elf = unsafe { elf_memory(inputPosition as *mut i8, memsize) };
-        match CheckElf(elf) {
+        match GetParameterInfo(fatTextHeader, inputPosition) {
             Ok(v) => v,
             Err(e) => return Err(e),
         };
-
-        match GetSectionByName(elf, String::from(".symtab"), &mut ptr_section) {
-            Ok(v) => v,
-            Err(e) => return Err(e),
-        };
-
-        symtab_shdr = unsafe { gelf_getshdr(ptr_section, symtab_shdr) };
-        let shdr = unsafe { *symtab_shdr };
-
-        if shdr.sh_type != SHT_SYMTAB {
-            return Err(Error::ELFLoadError("not a symbol table"));
-        }
-
-        let symbol_table_data_p = unsafe { elf_getdata(ptr_section, 0 as _) };
-        let symbol_table_data = unsafe { &*symbol_table_data_p };
-        error!("hochan symbol_table_data: {:?}", symbol_table_data);
-        let symbol_table_size = shdr.sh_size / shdr.sh_entsize;
-
-        match GetSectionByName(elf, String::from(".nv.info"), &mut ptr_section) {
-            Ok(v) => v,
-            Err(_e) => {
-                error!("could not find .nv.info section. This means this binary does not contain any kernels.");
-                break;
-            },
-        };
-
-        let data_p = unsafe { elf_getdata(ptr_section, 0 as _) };
-        let data = unsafe { &*data_p };
-        error!("hochan data: {:?}", data);
-
-        let mut secpos:usize = 0;
-        let infoSize = std::mem::size_of::<NvInfoEntry>();
-        while secpos < data.d_size {
-            let position = data.d_buf as u64 + secpos as u64;
-            let entry_p = position as *const u8 as *const NvInfoEntry;
-            let entry = unsafe { *entry_p };
-            error!("hochan entry: {:x?}", entry);
-            if entry.values_size != 8 {
-                error!("unexpected values_size: {:x}", entry.values_size);
-                return Err(Error::ELFLoadError("unexpected values_size")); 
-            }
-
-            if entry.attribute as u64 != EIATTR_FRAME_SIZE {
-                secpos += infoSize;
-                continue;
-            }
-
-            if entry.kernel_id as u64 >= symbol_table_size {
-                error!("kernel_id {:x} out of bounds: {:x}", entry.kernel_id, symbol_table_size);
-                secpos += infoSize;
-                continue;
-            }
-
-            ptr_sym = unsafe { gelf_getsym(symbol_table_data_p, entry.kernel_id as libc::c_int, ptr_sym) };
-            
-            let kernel_str = unsafe { QString::FromAddr(elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*ptr_sym).st_name as usize) as u64).Str().unwrap().to_string() };
-            error!("hochan kernel_str: {}", kernel_str);
-
-            if KERNEL_INFOS.lock().contains_key(&kernel_str) {
-                continue;
-            }
-
-            error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
-
-            let mut ki = KernelInfo::default();
-            ki.name = kernel_str.clone();
-            
-            if kernel_str.chars().next().unwrap() != '$' {
-                match GetParmForKernel(elf, &mut ki){
-                    Ok(_) => {},
-                    Err(e) => {
-                        return Err(e); 
-                    },
-                }
-            }
-            error!("hochan ki: {:x?}", ki);
-
-            KERNEL_INFOS.lock().insert(kernel_str.clone(), Arc::new(ki));
-            
-            secpos += infoSize;
-        }
 
         inputPosition += fatTextHeader.size;
     }
@@ -164,7 +76,105 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:FatElfHeader) -> Result<i64> {
     Ok(0)
 }
 
-pub fn GetParmForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> {
+fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i64> {
+    let mut section:MaybeUninit<Elf_Scn>  = MaybeUninit::uninit();
+    let mut ptr_section = section.as_mut_ptr();
+    let mut shdr:MaybeUninit<GElf_Shdr> = MaybeUninit::uninit();
+    let mut symtab_shdr = shdr.as_mut_ptr();
+    let mut sym:MaybeUninit<GElf_Sym> = MaybeUninit::uninit();
+    let mut ptr_sym = sym.as_mut_ptr();
+
+    let memsize = fatTextHeader.size as usize;
+    let elf = unsafe { elf_memory(inputPosition as *mut i8, memsize) };
+    match CheckElf(elf) {
+        Ok(v) => v,
+        Err(e) => return Err(e),
+    };
+
+    match GetSectionByName(elf, String::from(".symtab"), &mut ptr_section) {
+        Ok(v) => v,
+        Err(e) => return Err(e),
+    };
+
+    symtab_shdr = unsafe { gelf_getshdr(ptr_section, symtab_shdr) };
+    let shdr = unsafe { *symtab_shdr };
+
+    if shdr.sh_type != SHT_SYMTAB {
+        return Err(Error::ELFLoadError("not a symbol table"));
+    }
+
+    let symbol_table_data_p = unsafe { elf_getdata(ptr_section, 0 as _) };
+    let symbol_table_data = unsafe { &*symbol_table_data_p };
+    error!("hochan symbol_table_data: {:?}", symbol_table_data);
+    let symbol_table_size = shdr.sh_size / shdr.sh_entsize;
+
+    match GetSectionByName(elf, String::from(".nv.info"), &mut ptr_section) {
+        Ok(v) => v,
+        Err(_e) => {
+            return Err(Error::ELFLoadError("could not find .nv.info section. This means this binary does not contain any kernels."));
+        },
+    };
+
+    let data_p = unsafe { elf_getdata(ptr_section, 0 as _) };
+    let data = unsafe { &*data_p };
+    error!("hochan data: {:?}", data);
+
+    let mut secpos:usize = 0;
+    let infoSize = std::mem::size_of::<NvInfoEntry>();
+    while secpos < data.d_size {
+        let position = data.d_buf as u64 + secpos as u64;
+        let entry_p = position as *const u8 as *const NvInfoEntry;
+        let entry = unsafe { *entry_p };
+        error!("hochan entry: {:x?}", entry);
+        if entry.values_size != 8 {
+            error!("unexpected values_size: {:x}", entry.values_size);
+            return Err(Error::ELFLoadError("unexpected values_size")); 
+        }
+
+        if entry.attribute as u64 != EIATTR_FRAME_SIZE {
+            secpos += infoSize;
+            continue;
+        }
+
+        if entry.kernel_id as u64 >= symbol_table_size {
+            error!("kernel_id {:x} out of bounds: {:x}", entry.kernel_id, symbol_table_size);
+            secpos += infoSize;
+            continue;
+        }
+
+        ptr_sym = unsafe { gelf_getsym(symbol_table_data_p, entry.kernel_id as libc::c_int, ptr_sym) };
+        
+        let kernel_str = unsafe { QString::FromAddr(elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*ptr_sym).st_name as usize) as u64).Str().unwrap().to_string() };
+        error!("hochan kernel_str: {}", kernel_str);
+
+        if KERNEL_INFOS.lock().contains_key(&kernel_str) {
+            continue;
+        }
+
+        error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
+
+        let mut ki = KernelInfo::default();
+        ki.name = kernel_str.clone();
+        
+        if kernel_str.chars().next().unwrap() != '$' {
+            match GetParamForKernel(elf, &mut ki){
+                Ok(_) => {},
+                Err(e) => {
+                    return Err(e); 
+                },
+            }
+        }
+        error!("hochan ki: {:x?}", ki);
+
+        KERNEL_INFOS.lock().insert(kernel_str.clone(), Arc::new(ki));
+        
+        secpos += infoSize;
+    }
+
+    Ok(0)
+}
+
+pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> {
     let sectionName = GetKernelSectionFromKernelName(unsafe { (*kernel).name.clone() });
 
     let mut section = &mut(0 as u64 as *mut Elf_Scn);
