@@ -299,7 +299,7 @@ pub fn ApplySandboxResources(nodeConfig: &NodeConfigurationInner, pod: &k8s::Pod
         return Ok(());
     }
 
-    let mut linux = psc.linux.as_mut().unwrap();
+    let linux = psc.linux.as_mut().unwrap();
     linux.resources = Some(CalculateSandboxResources(nodeConfig, pod));
     linux.overhead = Some(ConvertOverheadToLinuxResources(nodeConfig, pod));
     return Ok(())

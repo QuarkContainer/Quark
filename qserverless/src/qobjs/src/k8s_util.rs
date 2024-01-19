@@ -62,11 +62,11 @@ pub struct PullPolicy {}
 
 impl PullPolicy {
     // PullAlways means that kubelet always attempts to pull the latest image. Container will fail If the pull fails.
-	pub const PullAlways: &str = "Always";
+	pub const PullAlways: &'static str = "Always";
 
     // PullNever means that kubelet never pulls an image, but only uses a local image. Container will fail if the image isn't present
-	pub const PullNever: &str = "Never";
+	pub const PullNever: &'static str = "Never";
 	
     // PullIfNotPresent means that kubelet pulls if the image isn't present on disk. Container will fail if the image isn't present and the pull fails.
-	pub const PullIfNotPresent: &str = "IfNotPresent";
+	pub const PullIfNotPresent: &'static str = "IfNotPresent";
 }
