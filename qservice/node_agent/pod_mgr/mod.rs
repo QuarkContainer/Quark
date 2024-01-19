@@ -17,4 +17,19 @@ pub mod cri;
 pub mod runtime;
 pub mod qcontainer;
 pub mod qpod;
-//pub mod podMgr;
+pub mod qnode;
+pub mod container_agent;
+pub mod pod_agent;
+pub mod pm_msg;
+
+// pub mod podMgr;
+
+use once_cell::sync::OnceCell;
+
+use runtime::runtime::*;
+use runtime::image_mgr::*;
+use cadvisor::provider::CadvisorInfoProvider;
+
+pub static RUNTIME_MGR: OnceCell<RuntimeMgr> = OnceCell::new();
+pub static IMAGE_MGR: OnceCell<ImageMgr> = OnceCell::new();
+pub static CADVISOR_PROVIDER: OnceCell<CadvisorInfoProvider> = OnceCell::new();

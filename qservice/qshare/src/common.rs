@@ -36,6 +36,8 @@ pub enum Error {
     
 }
 
+unsafe impl core::marker::Send for Error {}
+
 impl From<tokio::sync::AcquireError> for Error {
     fn from(item: tokio::sync::AcquireError) -> Self {
         return Self::AcquireError(item)

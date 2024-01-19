@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use qshare::types::RuntimePod;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 use std::collections::BTreeMap;
@@ -23,11 +24,25 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
 use chrono::Utc;
 use chrono::DateTime;
 
-use qshare::crictl;
+use qshare::common::*;
 use qshare::k8s;
 use qshare::k8s_util::K8SUtil;
+use qshare::consts::*;
 
 use super::qcontainer::*;
+
+pub fn ValidatePodSpec(_pod: &k8s::Pod) -> Result<()> {
+    return Ok(());
+}
+
+pub fn ValidateConfigMap(_configMap: &k8s::ConfigMap) -> Result<()> {
+    return Ok(());
+}
+
+pub fn ValidateSecret(_secret: &k8s::Secret) -> Result<()> {
+    return Ok(());
+}
+
 
 // PodInitialized means that all init containers in the pod have started successfully.
 pub const PodInitialized: &str = "Initialized";
@@ -36,15 +51,6 @@ pub const PodInitialized: &str = "Initialized";
 pub const PodReady: &str = "Ready";
 // PodScheduled represents status of the scheduling process for this pod.
 pub const PodScheduled: &str = "PodScheduled";
-
-// These are valid condition statuses. "ConditionTrue" means a resource is in the condition.
-// "ConditionFalse" means a resource is not in the condition. "ConditionUnknown" means kubernetes
-// can't decide if a resource is in the condition or not. In the future, we could add other
-// intermediate conditions, e.g. ConditionDegraded.
-pub const ConditionTrue    : &str = "True";
-pub const ConditionFalse   : &str = "False";
-pub const ConditionUnknown : &str = "Unknown";
-
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum PodState {
@@ -76,14 +82,6 @@ pub struct QuarkPodJson {
     pub runtimePod: Option<RuntimePod>,
     pub containers: BTreeMap<String, QuarkContainerInner>,
     pub lastTransitionTime: SystemTime,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct RuntimePod {
-    pub id: String,
-    pub IPs: Vec<String>,
-    pub sandboxConfig: Option<crictl::PodSandboxConfig>,
-    pub sandbox: Option<crictl::PodSandbox>,
 }
 
 #[derive(Debug)]

@@ -19,7 +19,7 @@ use core::ops::Deref;
 
 use qshare::crictl;
 use qshare::k8s;
-
+use qshare::types::*;
 
 // ContainersReady indicates whether all containers in the pod are ready.
 pub const ContainersReady: &str = "ContainersReady";
@@ -28,26 +28,6 @@ pub const ContainersReady: &str = "ContainersReady";
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RuntimeContainerStatus {
     pub status: crictl::ContainerStatus,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RuntimeContainerState {
-    Creating,
-    Created,
-    Stopping,
-    Stopped,
-    Terminated,
-    Terminating,
-    Running,
-    Started,
-}
-
-// Pod is a sandbox container and a group of containers.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct RuntimeContainer {
-    pub id: String,
-    pub containerConfig: Option<crictl::ContainerConfig>,
-    pub container: crictl::Container,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
