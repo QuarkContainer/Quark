@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use crate::qlib::common::*;
 use crate::qlib::proxy::*;
-use crate::qlib::kernel::util::cstring::CString as QString;
+use crate::qlib::kernel::util::cstring::CString;
 
 use libelf::raw::*;
 
@@ -62,8 +62,6 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:FatElfHeader) -> Result<i64> {
             error!("fatbin contains compressed device code. Decompressing...");
             todo!()
         }
-        
-        
 
         match GetParameterInfo(fatTextHeader, inputPosition) {
             Ok(v) => v,
@@ -144,7 +142,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
 
         ptr_sym = unsafe { gelf_getsym(symbol_table_data_p, entry.kernel_id as libc::c_int, ptr_sym) };
         
-        let kernel_str = unsafe { QString::FromAddr(elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*ptr_sym).st_name as usize) as u64).Str().unwrap().to_string() };
+        let kernel_str = unsafe { CString::FromAddr(elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*ptr_sym).st_name as usize) as u64).Str().unwrap().to_string() };
         error!("hochan kernel_str: {}", kernel_str);
 
         if KERNEL_INFOS.lock().contains_key(&kernel_str) {
@@ -262,7 +260,7 @@ pub fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn
         let mut shdr : MaybeUninit<GElf_Shdr> = MaybeUninit::uninit();
         let mut symtab_shdr = shdr.as_mut_ptr();
         symtab_shdr = unsafe { gelf_getshdr(scnNew, symtab_shdr) };
-        let section_name = QString::FromAddr(unsafe { elf_strptr(elf, *str_section_index, (*symtab_shdr).sh_name as usize) as u64 }).Str().unwrap().to_string();
+        let section_name = CString::FromAddr(unsafe { elf_strptr(elf, *str_section_index, (*symtab_shdr).sh_name as usize) as u64 }).Str().unwrap().to_string();
         error!("hochan section_name {}", section_name);
         if name.eq(&section_name) {
             error!("hochan Found section {}", section_name);
@@ -298,7 +296,7 @@ pub fn CheckElf(elf: *mut Elf) -> Result<i64> {
 
     let nbytes = 0 as *mut usize;
     let id = unsafe { elf_getident(elf, nbytes) };
-    let idStr = QString::FromAddr(id as u64).Str().unwrap().to_string();
+    let idStr = CString::FromAddr(id as u64).Str().unwrap().to_string();
     error!("hochan id: {:?}, nbytes: {:?}, idStr: {}", id, nbytes, idStr);
 
     let mut size:usize = 0;
