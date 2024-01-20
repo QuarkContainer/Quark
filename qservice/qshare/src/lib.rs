@@ -31,5 +31,9 @@ pub mod tsot {
     include!("pb_gen/tsot.rs");
 }
 
+pub mod na {
+    include!("pb_gen/na.rs");
+}
+
 pub use k8s_openapi::api::core::v1 as k8s;
 pub use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta as ObjectMeta;

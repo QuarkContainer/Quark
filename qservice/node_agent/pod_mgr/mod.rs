@@ -20,15 +20,56 @@ pub mod qpod;
 pub mod qnode;
 pub mod container_agent;
 pub mod pod_agent;
+pub mod nodeagent_store;
 pub mod pm_msg;
+pub mod node_status;
+pub mod podmgr_agent;
 
 // pub mod podMgr;
 
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
 use once_cell::sync::OnceCell;
 
+use qshare::config::NodeAgentConfig;
+use qshare::config::SYSTEM_CONFIGS;
+use qshare::config::SystemConfig;
 use runtime::runtime::*;
 use runtime::image_mgr::*;
 use cadvisor::provider::CadvisorInfoProvider;
+use nodeagent_store::NodeAgentStore;
+use tokio::sync::Notify;
+
+lazy_static::lazy_static! {
+    pub static ref NODEAGENT_STORE: NodeAgentStore = {
+        NodeAgentStore::New().unwrap()
+    };
+
+    pub static ref NODE_READY_NOTIFY : Arc<Notify> = Arc::new(Notify::new());
+
+    pub static ref NODEAGENT_CONFIG: NodeAgentConfig = {
+        let systemConfigs: BTreeMap<String, SystemConfig> = serde_json::from_str(SYSTEM_CONFIGS).unwrap();
+
+        let configName = ConfigName();
+
+        let systemConfig = match systemConfigs.get(&configName) {
+            None => panic!("there is no system config named {}", configName),
+            Some(c) => c,
+        };
+    
+        systemConfig.nodeAgentConfig.clone()
+    };
+}
+
+pub fn ConfigName() -> String {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 2 {
+        args[1].clone()
+    } else {
+        "product".to_string()
+    }
+}
 
 pub static RUNTIME_MGR: OnceCell<RuntimeMgr> = OnceCell::new();
 pub static IMAGE_MGR: OnceCell<ImageMgr> = OnceCell::new();
