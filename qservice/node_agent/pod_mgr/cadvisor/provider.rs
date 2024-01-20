@@ -82,7 +82,7 @@ impl CadvisorInfoProvider {
 	pub async fn CollectCAdvisorInfo() -> Result<NodeCAdvisorInfo> {
 		let machineInfo = CADVISOR_CLI.MachineInfo().await?;
 		let versionInfo = CADVISOR_CLI.VersionInfo().await?;
-
+		
 		let info = NodeCAdvisorInfo {
 			machineInfo: machineInfo,
 			versionInfo: versionInfo,

@@ -26,7 +26,9 @@ extern crate simple_logging;
 mod pod_mgr;
 
 use crate::pod_mgr::cadvisor::client as CadvisorClient;
+use crate::pod_mgr::podMgr::PodMgr;
 
+use qshare::common::*;
 
 lazy_static::lazy_static! {
     pub static ref CADVISOR_CLI: CadvisorClient::Client = {
@@ -34,6 +36,14 @@ lazy_static::lazy_static! {
     };
 }
 
-fn main() {
-    println!("Hello, world!");
+#[tokio::main]
+async fn main() -> Result<()> {
+    log4rs::init_file("na_logging_config.yaml", Default::default()).unwrap();
+     
+    let podMgr = PodMgr::New();
+    tokio::select! {
+        _ = podMgr => (),
+    }
+
+    return Ok(())
 }

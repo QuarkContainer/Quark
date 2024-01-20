@@ -252,7 +252,7 @@ impl NodeConfigurationInner {
 
         return Ok(Self {
             ReservedMem:  4 * 1024 * 1024 * 1024,
-            ReservedCpuCores: 4, 
+            ReservedCpuCores:         4, 
             ContainerRuntime:         "remote".to_string(),
             ContainerRuntimeEndpoint: DefaultContainerRuntimeEndpoint.to_string(),
             CgroupRoot:               DefaultCgroupRoot.to_string(),
