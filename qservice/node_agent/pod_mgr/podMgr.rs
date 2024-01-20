@@ -12,103 +12,122 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use once_cell::sync::OnceCell;
-use uuid::Uuid;
-use std::collections::BTreeMap;
-use std::sync::{Arc, RwLock, Mutex};
-use std::time::SystemTime;
+use std::result::Result as SResult;
 
-use qshare::common::*;
+use podMgr::podmgr_agent::PmAgent;
+use qshare::consts::ConfigMapFromString;
+use qshare::consts::NodeFromString;
+use qshare::consts::PodFromString;
+use qshare::na;
 use qshare::crictl;
-use qshare::k8s;
-use qshare::k8s_util::*;
+use qshare::common::*;
+
+use crate::pod_mgr::*;
 
 use super::qnode::QuarkNode;
-use super::runtime::runtime::RuntimeMgr;
-use super::runtime::image_mgr::ImageMgr;
+use super::{CADVISOR_PROVIDER, RUNTIME_MGR};
 use super::cadvisor::provider::CadvisorInfoProvider;
-use super::qpod::*;
-use super::qcontainer::*;
+
 
 
 pub struct PodMgr {
-    pub cadviceProvider: CadvisorInfoProvider,
-    pub runtimeMgr: RuntimeMgr,
-    pub imageMgr: ImageMgr,
-
-    pub node: QuarkNode,
-    
+    pub pmAgent: PmAgent,
 }
 
 impl PodMgr {
-    // pub async fn New() -> Result<Self> {
-    //     let cadviceProvider = CadvisorInfoProvider::New().await?;
-    //     let runtimeMgr = RuntimeMgr::New(10).await?;
-    //     let imageMgr = ImageMgr::New(crictl::AuthConfig::default()).await?;
+    pub async fn New() -> Result<Self> {
+        CADVISOR_PROVIDER.set(CadvisorInfoProvider::New().await.unwrap()).unwrap();
+        RUNTIME_MGR.set(RuntimeMgr::New(10).await.unwrap()).unwrap();
+        IMAGE_MGR.set(ImageMgr::New(crictl::AuthConfig::default()).await.unwrap()).unwrap();
+    
+        let config = &NODE_CONFIG;
+        let nodename = &NODEAGENT_CONFIG.NodeName();
 
-    //     return Ok(Self {
-    //         cadviceProvider: cadviceProvider,
-    //         runtimeMgr: runtimeMgr,
-    //         imageMgr: imageMgr
-    //     });
-    // }
+        PmAgent::CleanPods(nodename).await?;
+    
+        let quarkNode = QuarkNode::NewQuarkNode(nodename, &config)?;
+        let pmAgent = PmAgent::New(&quarkNode)?;
+        pmAgent.Start().await?;
+        return Ok(Self {
+            pmAgent: pmAgent
+        });
+    }
 
-    pub fn BuildAQuarkPod(&self, state: PodState, pod: &k8s::Pod, configMap: &Option<k8s::ConfigMap>, isDaemon: bool) -> Result<QuarkPod> {
-        ValidatePodSpec(pod)?;
+    pub fn CreatePod(&self, req: na::CreatePodReq) -> Result<()> {
+        let pod = PodFromString(&req.pod)?;
+        let configMap = ConfigMapFromString(&req.config_map)?;
+        self.pmAgent.CreatePod(&pod, &configMap)?;
+        return Ok(())
+    }
+}
 
-        let mut pod = pod.clone();
-        if pod.metadata.uid.is_none() {
-            pod.metadata.uid = Some(Uuid::new_v4().to_string());
+#[tonic::async_trait]
+impl na::node_agent_service_server::NodeAgentService for PodMgr {
+    async fn create_pod(
+        &self,
+        request: tonic::Request<na::CreatePodReq>,
+    ) -> SResult<tonic::Response<na::CreatePodResp>, tonic::Status> {
+        let req = request.into_inner();
+        match self.CreatePod(req) {
+            Ok(()) => (),
+            Err(e) => {
+                return Ok(tonic::Response::new(na::CreatePodResp {
+                    error: format!("fail: {:?}", e),
+                }))
+            }
         }
-
-        if pod.metadata.annotations.is_none() {
-            pod.metadata.annotations = Some(BTreeMap::new());
+        return Ok(tonic::Response::new(na::CreatePodResp {
+            error: "".to_owned()
+        }))
+    }
+    
+    async fn terminate_pod(
+        &self,
+        request: tonic::Request<na::TerminatePodReq>,
+    ) -> SResult<tonic::Response<na::TerminatePodResp>, tonic::Status> {
+        let req = request.into_inner();
+        let podId = &req.pod_id;
+        match self.pmAgent.TerminatePod(podId) {
+            Err(e) => {
+                return Ok(tonic::Response::new(na::TerminatePodResp {
+                    error: format!("fail: {:?}", e),
+                }))
+            }
+            Ok(()) => {
+                return Ok(tonic::Response::new(na::TerminatePodResp {
+                    error: "".to_owned()
+                }));
+            }
         }
-        
-        let inner = QuarkPodInner {
-            id: K8SUtil::PodId(&pod),
-            podState: state,
-            isDaemon: isDaemon,
-            pod: Arc::new(RwLock::new(pod)),
-            configMap: configMap.clone(),
-            runtimePod: None,
-            containers: BTreeMap::new(),
-            lastTransitionTime: SystemTime::now(), 
+    }
+
+    async fn node_config(
+        &self,
+        request: tonic::Request<na::NodeConfigReq>,
+    ) -> SResult<tonic::Response<na::NodeConfigResp>, tonic::Status> {
+        let req = request.into_inner();
+        let node = match NodeFromString(&req.node) {
+            Err(e) => {
+                return Ok(tonic::Response::new(na::NodeConfigResp {
+                    error: format!("fail: {:?}", e),
+                }))
+            }
+            Ok(n) => {
+                n
+            }
         };
-
-        let annotationsNone = inner.pod.read().unwrap().metadata.annotations.is_none();
-        if annotationsNone {
-            inner.pod.write().unwrap().metadata.annotations = Some(BTreeMap::new());
-        }
-
-        //let nodeId = K8SUtil::NodeId(&(*self.node.node.lock().unwrap()));
-        //inner.pod.write().unwrap().metadata.annotations.as_mut().unwrap().insert(AnnotationNodeMgrNode.to_string(), nodeId);
-
-        let qpod = QuarkPod(Arc::new(Mutex::new(inner)));
-        let k8snode = self.node.node.lock().unwrap().clone();
-        qpod.SetPodStatus(Some(&k8snode));
         
-        return Ok(qpod);
+        match self.pmAgent.NodeConfigure(node).await {
+            Err(e) => {
+                return Ok(tonic::Response::new(na::NodeConfigResp {
+                    error: format!("fail: {:?}", e),
+                }))
+            }
+            Ok(()) => {
+                return Ok(tonic::Response::new(na::NodeConfigResp {
+                    error: "".to_owned()
+                }))
+            }
+        }
     }
-
-    pub fn StartPodAgent(&self, qpod: &QuarkPod) -> Result<PodAgent> {
-        qpod.Pod().write().unwrap().status.as_mut().unwrap().host_ip = Some(self.node.node.lock().unwrap().status.as_ref().unwrap().addresses.as_ref().unwrap()[0].address.clone());
-        qpod.Pod().write().unwrap().metadata.annotations.as_mut().unwrap().insert(AnnotationNodeMgrNode.to_string(), K8SUtil::NodeId(&(*self.node.node.lock().unwrap())));
-
-        let podAgent = PodAgent::New(self.agentChann.clone(), qpod, &self.node.nodeConfig);
-        let podId = qpod.lock().unwrap().id.clone();
-        self.node.pods.lock().unwrap().insert(podId.clone(), qpod.clone());
-        self.pods.lock().unwrap().insert(podId, podAgent.clone());
-        return Ok(podAgent);
-    }
-
-    pub fn CreatePodAgent(&self, pod: &k8s::Pod, configMap: &Option<k8s::ConfigMap>, isDaemon: bool) -> Result<PodAgent> {
-        let qpod = self.BuildAQuarkPod(PodState::Creating, pod, configMap, isDaemon)?;
-
-        let podAgent = self.StartPodAgent(&qpod)?;
-        return Ok(podAgent);
-    }
-
-    // pub async fn CreatePod(&self, pod: &k8s::Pod, configMap: &k8s::ConfigMap) -> Result<()> {
-    // }
 }

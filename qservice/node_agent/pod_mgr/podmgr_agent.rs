@@ -42,7 +42,7 @@ use super::qpod::{QuarkPod, PodState, QuarkPodInner};
 use super::NODE_READY_NOTIFY;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum NodeAgentState {
+pub enum PmAgentState {
     Initializing,
     Initialized,
     Registering,
@@ -50,11 +50,11 @@ pub enum NodeAgentState {
     Ready,
 }
 
-pub struct NodeAgentInner {
+pub struct PmAgentInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
 
-    pub state: Mutex<NodeAgentState>,
+    pub state: Mutex<PmAgentState>,
 
     pub node: QuarkNode,
     pub agentChann: mpsc::Sender<NodeAgentMsg>,
@@ -64,17 +64,17 @@ pub struct NodeAgentInner {
 }
 
 #[derive(Clone)]
-pub struct NodeAgent(pub Arc<NodeAgentInner>);
+pub struct PmAgent(pub Arc<PmAgentInner>);
 
-impl Deref for NodeAgent {
-    type Target = Arc<NodeAgentInner>;
+impl Deref for PmAgent {
+    type Target = Arc<PmAgentInner>;
 
-    fn deref(&self) -> &Arc<NodeAgentInner> {
+    fn deref(&self) -> &Arc<PmAgentInner> {
         &self.0
     }
 }
 
-impl NodeAgent {
+impl PmAgent {
     pub fn Send(&self, msg: NodeAgentMsg) -> Result<()> {
         match self.agentChann.try_send(msg) {
             Ok(()) => return Ok(()),
@@ -85,21 +85,21 @@ impl NodeAgent {
     }
 }
 
-impl NodeAgent {
+impl PmAgent {
     pub fn New(node: &QuarkNode) -> Result<Self> {
         let (tx, rx) = mpsc::channel::<NodeAgentMsg>(30);
         
-        let inner = NodeAgentInner {
+        let inner = PmAgentInner {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
-            state: Mutex::new(NodeAgentState::Initializing),
+            state: Mutex::new(PmAgentState::Initializing),
             node: node.clone(),
             agentChann: tx,
             agentRx: Mutex::new(Some(rx)),
             pods: Mutex::new(BTreeMap::new()),
         };
 
-        let agent = NodeAgent(Arc::new(inner));
+        let agent = PmAgent(Arc::new(inner));
         return Ok(agent);
     }
 
@@ -144,7 +144,7 @@ impl NodeAgent {
     pub async fn Start(&self) -> Result<()> {
         let rx = self.agentRx.lock().unwrap().take().unwrap();
         let clone = self.clone();
-        *self.state.lock().unwrap() = NodeAgentState::Registering;
+        *self.state.lock().unwrap() = PmAgentState::Registering;
         SetNodeStatus(&self.node).await?;
         NODEAGENT_STORE.CreateNode(&*self.node.node.lock().unwrap())?;
 
@@ -160,7 +160,7 @@ impl NodeAgent {
         self.closeNotify.notify_one();
     }
 
-    pub fn State(&self) -> NodeAgentState {
+    pub fn State(&self) -> PmAgentState {
         return *self.state.lock().unwrap();
     }
 
@@ -183,11 +183,11 @@ impl NodeAgent {
                     break;
                 }
                 _ = interval.tick() => {
-                    if self.State() == NodeAgentState::Registered {
+                    if self.State() == PmAgentState::Registered {
                         if IsNodeStatusReady(&self.node) {
                             NODE_READY_NOTIFY.notify_waiters();
                             info!("Node {} is ready", NODEAGENT_CONFIG.NodeName());
-                            *self.state.lock().unwrap() = NodeAgentState::Ready;
+                            *self.state.lock().unwrap() = PmAgentState::Ready;
                             SetNodeStatus(&self.node).await?;
                             self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodeRunning));
                             NODEAGENT_STORE.UpdateNode(&self.node)?;
@@ -252,7 +252,7 @@ impl NodeAgent {
     }
 
     pub async fn NodeConfigure(&self, node: k8s::Node) -> Result<()> {
-        if *self.state.lock().unwrap() == NodeAgentState::Registering {
+        if *self.state.lock().unwrap() == PmAgentState::Registering {
             //return Err(Error::CommonError(format!("node is not in registering state, it does not expect configuration change after registering")));
          
 
@@ -267,7 +267,7 @@ impl NodeAgent {
                 // TODO, set up pod cidr
             }
 
-            *self.state.lock().unwrap() = NodeAgentState::Registered;
+            *self.state.lock().unwrap() = PmAgentState::Registered;
             SetNodeStatus(&self.node).await?;
             self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodePending));
         }
@@ -279,7 +279,7 @@ impl NodeAgent {
 
      pub fn CreatePod(&self, pod: &k8s::Pod, configMap: &k8s::ConfigMap) -> Result<()> {
         let podId =  K8SUtil::PodId(&pod);
-        if self.State() != NodeAgentState::Ready {
+        if self.State() != PmAgentState::Ready {
             let inner = QuarkPodInner {
                 id: K8SUtil::PodId(&pod),
                 podState: PodState::Cleanup,

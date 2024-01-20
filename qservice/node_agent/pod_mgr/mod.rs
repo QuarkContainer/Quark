@@ -25,7 +25,7 @@ pub mod pm_msg;
 pub mod node_status;
 pub mod podmgr_agent;
 
-// pub mod podMgr;
+pub mod podMgr;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -33,6 +33,7 @@ use std::sync::Arc;
 use once_cell::sync::OnceCell;
 
 use qshare::config::NodeAgentConfig;
+use qshare::config::NodeConfiguration;
 use qshare::config::SYSTEM_CONFIGS;
 use qshare::config::SystemConfig;
 use runtime::runtime::*;
@@ -59,6 +60,10 @@ lazy_static::lazy_static! {
         };
     
         systemConfig.nodeAgentConfig.clone()
+    };
+
+    pub static ref NODE_CONFIG : NodeConfiguration = {
+        NodeConfiguration::Default().unwrap()
     };
 }
 

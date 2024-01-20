@@ -17,7 +17,9 @@ syntax = "proto3";
 package na;
 
 service NodeAgentService {
-  rpc StreamProcess(stream NodeAgentRespMsg) returns (stream NodeAgentReq);
+  rpc CreatePod(CreatePodReq) returns (CreatePodResp) {}
+  rpc TerminatePod(TerminatePodReq) returns (TerminatePodResp) {}
+  rpc NodeConfig(NodeConfigReq) returns (NodeConfigResp) {}
 }
 ///////////////////////////////////////////////////////////////////////
 
@@ -70,6 +72,7 @@ message NodeConfigReq {
 }
 
 message NodeConfigResp {
+  string error = 1;
 }
 
 message CreatePodReq {
@@ -78,6 +81,7 @@ message CreatePodReq {
 }
 
 message CreatePodResp {
+    string error = 1;
 }
 
 message TerminatePodReq {
@@ -85,6 +89,7 @@ message TerminatePodReq {
 }
 
 message TerminatePodResp {
+    string error = 1;
 }
 
 message NodeAgentStreamMsg {

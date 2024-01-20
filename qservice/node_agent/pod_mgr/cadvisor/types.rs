@@ -62,7 +62,7 @@ mod go_date_format {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MachineInfo {
     // The time of this information point.
-    #[serde(rename = "timestamp", with = "go_date_format")]
+    #[serde(default, rename = "timestamp", with = "go_date_format")]
 	pub Timestamp: DateTime<Utc>, // `json:"timestamp"`
 
 	// Vendor id of CPU.
@@ -74,11 +74,11 @@ pub struct MachineInfo {
 	pub NumCores: i32, // `json:"num_cores"`
 
 	// The number of physical cores in this machine.
-	#[serde(rename = "num_physical_cores")]
+	#[serde(default, rename = "num_physical_cores")]
 	pub NumPhysicalCores: i32, // `json:"num_physical_cores"`
 
 	// The number of cpu sockets in this machine.
-	#[serde(rename = "num_sockets")]
+	#[serde(default, rename = "num_sockets")]
 	pub NumSockets: i32, // `json:"num_sockets"`
 
 	// Maximum clock speed for the cores, in KHz.
@@ -94,11 +94,11 @@ pub struct MachineInfo {
 	pub SwapCapacity : u64, //`json:"swap_capacity"`
 
 	// Memory capacity and number of DIMMs by memory type
-	#[serde(rename = "memory_by_type")]
+	#[serde(default, rename = "memory_by_type")]
 	pub MemoryByType: BTreeMap<String, MemoryInfo>, //`json:"memory_by_type"`
 
-	#[serde(rename = "nvm")]
-	pub NVMInfo: NVMInfo, // `json:"nvm"`
+	// #[serde(rename = "nvm")]
+	// pub NVMInfo: NVMInfo, // `json:"nvm"`
 
 	// HugePages on this machine.
 	#[serde(rename = "hugepages")]
@@ -130,8 +130,8 @@ pub struct MachineInfo {
 
 	// Machine Topology
 	// Describes cpu/memory layout and hierarchy.
-	#[serde(rename = "topology")]
-	pub Topology: Vec<Node>, // `json:"topology"`
+	// #[serde(default, rename = "topology")]
+	// pub Topology: Vec<Node>, // `json:"topology"`
 
 	// Cloud provider the machine belongs to.
 	#[serde(rename = "cloud_provider")]
@@ -226,7 +226,7 @@ pub struct Core {
 	pub Caches: Vec<Cache>, // `json:"caches"`
 	#[serde(default, rename = "uncore_caches")]
 	pub UncoreCaches: Vec<Cache>, // `json:"uncore_caches"`
-	#[serde(rename = "socket_id")]
+	#[serde(default, rename = "socket_id")]
 	pub SocketID: i32, //     `json:"socket_id"`
 }
 

@@ -42,5 +42,5 @@ features = [
 ]
 
 [[bin]]
-name = "node_agent"
+name = "na"
 path = "node_agent/na_main.rs"
