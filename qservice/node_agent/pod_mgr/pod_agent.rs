@@ -631,10 +631,15 @@ impl PodAgent {
         let perms = Permissions::from_mode(0o755);
         fs::set_permissions(&podsandboxConfig.log_directory, perms)?;
 
-        let runtimehandler = &self.nodeConfig.RuntimeHandler;
-        info!("Call runtime to create sandbox pod {} sandboxConfig is {:?}", &podIp, &podsandboxConfig);
+        let runtime = self.pod.Pod().read().unwrap().spec.as_ref().unwrap().runtime_class_name.clone();
+        let runtimehandler = match runtime {
+            None => self.nodeConfig.RuntimeHandler.clone(),
+            Some(runtime) => runtime.clone(),
+        };
+        
+        info!("Call runtime to create sandbox runtimehandler is {} pod {} sandboxConfig is {:?}", &runtimehandler, &podIp, &podsandboxConfig);
 
-        let runtimePod = RUNTIME_MGR.get().unwrap().CreateSandbox(Some(podsandboxConfig), runtimehandler).await?;
+        let runtimePod = RUNTIME_MGR.get().unwrap().CreateSandbox(Some(podsandboxConfig), &runtimehandler).await?;
 
         return Ok(runtimePod)
     }

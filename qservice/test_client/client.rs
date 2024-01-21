@@ -114,9 +114,14 @@ async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
     // ];
 
     let commands = vec![
-        "/usr/bin/sleep".to_owned(),
+        "/test/unixsocket/client/target/debug/client".to_owned(),
         "200".to_owned()
     ];
+
+    // let commands = vec![
+    //     "/usr/bin/sleep".to_owned(),
+    //     "200".to_owned()
+    // ];
 
     let envs = vec![
         na::Env {

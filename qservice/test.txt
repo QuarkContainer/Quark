@@ -60,3 +60,16 @@ cat << EOF | sudo tee /etc/cni/net.d/10-containerd-net.conflist
 EOF
 sudo systemctl restart containerd
 sudo chmod 777 /run/containerd/containerd.sock
+
+
+cat <<EOF | sudo tee /etc/containerd/config.toml
+version = 2
+[plugins."io.containerd.runtime.v1.linux"]
+  shim_debug = false
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+  runtime_type = "io.containerd.runc.v2"
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quark]
+  runtime_type = "io.containerd.quark.v1"
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quarkd]
+  runtime_type = "io.containerd.quarkd.v1"
+EOF

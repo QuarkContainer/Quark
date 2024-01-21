@@ -182,7 +182,7 @@ pub const DefaultSessionServicePort         : i32 = 1022;
 pub const DefaultNodePortStartingNum        : i32 = 1024;
 pub const KubeletPluginsDirSELinuxLabel     : &str = "system_u:object_r:container_file_t:s0";
 pub const DefaultPodCgroupName              : &str = "containers";
-pub const DefaultRuntimeHandler             : &str = "runc";
+pub const DefaultRuntimeHandler             : &str = "quark"; // "runc";
 pub const DefaultPodConcurrency             : i32 = 5;
 
 #[derive(Debug, PartialEq, Eq)]
