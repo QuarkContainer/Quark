@@ -183,7 +183,7 @@ impl PmAgent {
                     break;
                 }
                 _ = interval.tick() => {
-                    if self.State() == PmAgentState::Registered {
+                    if self.State() == PmAgentState::Registered || self.State() == PmAgentState::Registering {
                         if IsNodeStatusReady(&self.node) {
                             NODE_READY_NOTIFY.notify_waiters();
                             info!("Node {} is ready", NODEAGENT_CONFIG.NodeName());
