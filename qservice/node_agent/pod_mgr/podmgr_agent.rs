@@ -326,6 +326,7 @@ impl PmAgent {
             }))?;
         } else {
             error!("Pod: {} already exist", podId);
+            return Err(Error::CommonError(format!("Pod: {} already exist", podId)));
         }
         return Ok(())
     }

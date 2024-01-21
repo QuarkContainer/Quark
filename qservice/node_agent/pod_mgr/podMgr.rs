@@ -157,6 +157,10 @@ impl PodMgr {
         self.pmAgent.CreatePod(&pod, &configMap)?;
         return Ok(())
     }
+
+    pub fn PodId(&self, namespace: &str, name: &str) -> String {
+        return format!("{}/{}", namespace, name);
+    }
 }
 
 #[tonic::async_trait]
@@ -166,7 +170,7 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
         request: tonic::Request<na::CreatePodReq>,
     ) -> SResult<tonic::Response<na::CreatePodResp>, tonic::Status> {
         let req = request.into_inner();
-        match self.CreatePod(req) {
+        match self.CreatePod(req) {  
             Ok(()) => (),
             Err(e) => {
                 return Ok(tonic::Response::new(na::CreatePodResp {
@@ -178,13 +182,38 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
             error: "".to_owned()
         }))
     }
+
+    async fn get_pod(
+        &self,
+        request: tonic::Request<na::GetPodReq>,
+    ) -> SResult<tonic::Response<na::GetPodResp>, tonic::Status> {
+        let req = request.into_inner();
+        let podId = &Self::PodId(&self, &req.namespace, &req.name);
+        match NODEAGENT_STORE.GetPod(podId) {  
+            Ok((rev, pod)) => {
+                error!("pod is {:?}", serde_json::to_string_pretty(&pod).unwrap());
+                return Ok(tonic::Response::new(na::GetPodResp {
+                    error: "".to_owned(),
+                    pod: serde_json::to_string_pretty(&pod).unwrap(),
+                    revision: rev,
+                }))
+            }
+            Err(e) => {
+                return Ok(tonic::Response::new(na::GetPodResp {
+                    error: format!("fail: {:?}", e),
+                    ..Default::default()
+                }))
+            }
+        }
+
+    }
     
     async fn terminate_pod(
         &self,
         request: tonic::Request<na::TerminatePodReq>,
     ) -> SResult<tonic::Response<na::TerminatePodResp>, tonic::Status> {
         let req = request.into_inner();
-        let podId = &req.pod_id;
+        let podId = &Self::PodId(&self, &req.namespace, &req.name);
         match self.pmAgent.TerminatePod(podId) {
             Err(e) => {
                 return Ok(tonic::Response::new(na::TerminatePodResp {

@@ -286,6 +286,17 @@ impl NodeAgentStoreInner {
         return Ok(())
     }
 
+    pub fn GetPod(&self, id: &str) -> Result<(i64, k8s::Pod)> {
+        match self.podCache.get(id) {
+            None => {
+                return Err(Error::CommonError(format!("The pod {} doesn't exist", id)));
+            }
+            Some(pod) => {
+                return Ok((self.revision, pod.clone()));
+            }
+        }
+    }
+
     pub fn UpdatePod(&mut self, obj: &QuarkPod) -> Result<()> {
         let key = obj.lock().unwrap().id.clone();
         self.revision += 1;
@@ -485,6 +496,10 @@ impl NodeAgentStore {
 
     pub fn UpdateNode(&self, node: &QuarkNode) -> Result<()> {
         return self.lock().unwrap().UpdateNode(node);
+    }
+
+    pub fn GetPod(&self, podId: &str) -> Result<(i64, k8s::Pod)> {
+        return self.lock().unwrap().GetPod(podId);
     }
 
     pub fn CreatePod(&self, obj: &QuarkPod) -> Result<()> {

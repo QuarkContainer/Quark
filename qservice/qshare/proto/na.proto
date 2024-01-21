@@ -18,6 +18,7 @@ package na;
 
 service NodeAgentService {
   rpc CreatePod(CreatePodReq) returns (CreatePodResp) {}
+  rpc GetPod(GetPodReq) returns (GetPodResp) {}
   rpc TerminatePod(TerminatePodReq) returns (TerminatePodResp) {}
   rpc NodeConfig(NodeConfigReq) returns (NodeConfigResp) {}
   rpc CreateFuncPod(CreateFuncPodReq) returns (CreateFuncPodResp) {}
@@ -115,11 +116,23 @@ message CreatePodResp {
 }
 
 message TerminatePodReq {
-  string podId = 1;
+  string namespace = 1;
+  string name = 2;
 }
 
 message TerminatePodResp {
     string error = 1;
+}
+
+message GetPodReq {
+  string namespace = 1;
+  string name = 2;
+}
+
+message GetPodResp {
+  string error = 1;
+  string pod = 2;
+  int64 revision = 3;
 }
 
 message NodeAgentStreamMsg {

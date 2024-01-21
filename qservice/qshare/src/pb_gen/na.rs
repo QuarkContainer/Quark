@@ -185,7 +185,9 @@ pub struct CreatePodResp {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TerminatePodReq {
     #[prost(string, tag = "1")]
-    pub pod_id: ::prost::alloc::string::String,
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -193,6 +195,26 @@ pub struct TerminatePodReq {
 pub struct TerminatePodResp {
     #[prost(string, tag = "1")]
     pub error: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetPodReq {
+    #[prost(string, tag = "1")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetPodResp {
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub pod: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub revision: i64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -368,6 +390,25 @@ pub mod node_agent_service_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
+        pub async fn get_pod(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetPodReq>,
+        ) -> Result<tonic::Response<super::GetPodResp>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/na.NodeAgentService/GetPod",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
         pub async fn terminate_pod(
             &mut self,
             request: impl tonic::IntoRequest<super::TerminatePodReq>,
@@ -438,6 +479,10 @@ pub mod node_agent_service_server {
             &self,
             request: tonic::Request<super::CreatePodReq>,
         ) -> Result<tonic::Response<super::CreatePodResp>, tonic::Status>;
+        async fn get_pod(
+            &self,
+            request: tonic::Request<super::GetPodReq>,
+        ) -> Result<tonic::Response<super::GetPodResp>, tonic::Status>;
         async fn terminate_pod(
             &self,
             request: tonic::Request<super::TerminatePodReq>,
@@ -537,6 +582,43 @@ pub mod node_agent_service_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = CreatePodSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/na.NodeAgentService/GetPod" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetPodSvc<T: NodeAgentService>(pub Arc<T>);
+                    impl<
+                        T: NodeAgentService,
+                    > tonic::server::UnaryService<super::GetPodReq> for GetPodSvc<T> {
+                        type Response = super::GetPodResp;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetPodReq>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).get_pod(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = GetPodSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
