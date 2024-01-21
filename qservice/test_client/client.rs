@@ -12,23 +12,96 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use qshare::na::{self, CreateFuncPodReq};
+#![allow(non_snake_case)]
+
+use std::env;
+
+use qshare::na::{self, CreateFuncPodReq, TerminatePodReq, GetPodReq};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
+    
+    let mut args = Vec::new();
+    for arg in env::args() {
+        args.push(arg);
+    }
 
+    let cmd = if args.len() < 2 {
+        "new"
+    } else {
+        &args[1]
+    };
+
+    match cmd {
+        "new" => {
+            return NewPod().await;
+        }
+        "remove" => {
+            return RemovePod().await;
+        }
+        "get" => {
+            return GetPod().await;
+        }
+        _ => {
+            panic!("doesn't support the command {:?}", cmd);
+        }
+    }
+
+}
+
+async fn RemovePod() -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
+    
+    let request = tonic::Request::new(TerminatePodReq {
+        namespace: "ns1".into(),
+        name: "name1".into()
+    });
+    let response = client.terminate_pod(request).await?;
+
+    println!("RESPONSE={:?}", response);
+
+    Ok(())
+}
+
+async fn GetPod() -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
+    
+    let request = tonic::Request::new(GetPodReq {
+        namespace: "ns1".into(),
+        name: "name1".into()
+    });
+    let response = client.get_pod(request).await?;
+
+    let resp = response.into_inner();
+
+    println!("revision={:?}", resp.revision);
+    println!("pod=");
+    let lines = resp.pod.split("\n");
+    for l in lines {
+        println!("{}", l);
+    }
+
+    // let json = serde_json::json!(&resp.pod);
+    // print!("resp1={}", serde_json::to_string_pretty(&json).unwrap()); // &'\n'.to_string()));
+    println!("err={:?}", resp.error);
+
+
+    Ok(())
+}
+
+async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
     // let commands = vec![
     //     "/usr/bin/echo".to_owned(),
     //     "asdf >".to_owned(),
     //     "/test/a.txt".to_owned()
     // ];
 
-    let commands = vec![
-        "/usr/bin/cp".to_owned(),
-        "/test/a.txt".to_owned(),
-        "/test/b.txt".to_owned()
-    ];
+    // let commands = vec![
+    //     "/usr/bin/cp".to_owned(),
+    //     "/test/a.txt".to_owned(),
+    //     "/test/b.txt".to_owned()
+    // ];
 
     // let commands = vec![
     //     "/usr/bin/rm".to_owned(),
@@ -40,10 +113,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     "/test/a.txt".to_owned()
     // ];
 
-    // let commands = vec![
-    //     "/usr/bin/sleep".to_owned(),
-    //     "200".to_owned()
-    // ];
+    let commands = vec![
+        "/usr/bin/sleep".to_owned(),
+        "200".to_owned()
+    ];
 
     let envs = vec![
         na::Env {
