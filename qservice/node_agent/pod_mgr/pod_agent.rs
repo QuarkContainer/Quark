@@ -46,7 +46,6 @@ use super::qpod::*;
 use super::qcontainer::*;
 use super::runtime::k8s_helper::*;
 use super::runtime::k8s_labels::*;
-use super::runtime::k8s_types::RunContainerOptions;
 use super::runtime::k8s_util::*;
 use super::container_agent::PodContainerAgent;
 
@@ -808,7 +807,7 @@ impl PodAgent {
             labels: NewContainerLabels(container, &pod),
             annotations: NewContainerAnnotations(container, &pod, 0, &BTreeMap::new()),
             //devices:
-            mounts: MakeMounts(&&RunContainerOptions::default(), container, namespace).await?,
+            mounts: MakeMounts(&pod, container, namespace).await?,
             log_path: containerLogsPath,
             stdin: *container.stdin.as_ref().unwrap_or(&false),
             stdin_once: *container.stdin_once.as_ref().unwrap_or(&false),

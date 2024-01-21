@@ -20,7 +20,6 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use qshare::consts::DefaultNodeFuncLogFolder;
 use rand::prelude::*;
-use std::fs::Permissions;
 
 use qshare::k8s;
 use qshare::crictl;
@@ -505,19 +504,44 @@ pub fn MakeDevice(opts: &RunContainerOptions) -> Vec<crictl::Device> {
 }
 
 
-pub async fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container, namespace: &str) -> Result<Vec<crictl::Mount>> {
+pub async fn MakeMounts(pod: &Arc<RwLock<k8s::Pod>>, container: &k8s::Container, namespace: &str) -> Result<Vec<crictl::Mount>> {
+    let pod = pod.read().unwrap();
     let mut volumeMounts = Vec::new();
 
-    for v in &opts.mounts {
-        let mount = crictl::Mount {
-            host_path: v.hostPath.clone(),
-            container_path: v.containerPath.clone(),
-            readonly: v.readOnly,
-            selinux_relabel: v.SELinuxRelabel,
-            propagation: v.Propagation as i32,
-        };
+    let mut volumes = BTreeMap::new();
+    match &pod.spec.as_ref().unwrap().volumes {
+        Some(vs) => {
+            for v in vs {
+                // todo: we only support hostpath so far. Add other support later
+                match &v.host_path {
+                    Some(h) => {
+                        volumes.insert(v.name.clone(), h.path.clone());
+                    }
+                    None => (),
+                } 
+            }
+        }
+        None => ()
+    }
 
-        volumeMounts.push(mount);
+    match &container.volume_mounts {
+        Some(ms) => {
+            for mount in ms {
+                match volumes.get(&mount.name) {
+                    Some(hostpath) => {
+                        let mount = crictl::Mount {
+                            host_path: hostpath.clone(),
+                            container_path: mount.mount_path.clone(),
+                            ..Default::default()
+                        };
+                        
+                        volumeMounts.push(mount);
+                    }
+                    None => ()
+                }
+            }
+        }
+        None => ()
     }
 
     // let mount = crictl::Mount {
@@ -542,26 +566,26 @@ pub async fn MakeMounts(opts: &RunContainerOptions, container: &k8s::Container, 
     // The reason we create and mount the log file in here is because
 	// the file's location depends on the ID of the container, and we need to create and
 	// mount the file before actually starting the container.
-    if opts.podContainerDir.len() != 0 && container.termination_message_path.as_ref().unwrap().len() != 0 {
-        // Because the PodContainerDir contains pod uid and container name which is unique enough,
-		// here we just add a random id to make the path unique for different instances
-		// of the same container.
-		let cid = MakeUID();
-        let containerLogPath = format!("{}/{}", &opts.podContainerDir, cid);
-        fs::create_dir_all(&containerLogPath).unwrap();
-        let perms = Permissions::from_mode(0o666);
-        fs::set_permissions(&containerLogPath, perms).unwrap();
+    // if opts.podContainerDir.len() != 0 && container.termination_message_path.as_ref().unwrap().len() != 0 {
+    //     // Because the PodContainerDir contains pod uid and container name which is unique enough,
+	// 	// here we just add a random id to make the path unique for different instances
+	// 	// of the same container.
+	// 	let cid = MakeUID();
+    //     let containerLogPath = format!("{}/{}", &opts.podContainerDir, cid);
+    //     fs::create_dir_all(&containerLogPath).unwrap();
+    //     let perms = Permissions::from_mode(0o666);
+    //     fs::set_permissions(&containerLogPath, perms).unwrap();
 
-        let containerLogPath = containerLogPath;
-        let terminationMessagePath = container.termination_message_path.clone();
-        let selinuxRelabel = false; //selinux.GetEnabled()
-        volumeMounts.push(crictl::Mount {
-            host_path: containerLogPath,
-            container_path: terminationMessagePath.as_deref().unwrap_or("").to_string(),
-            selinux_relabel: selinuxRelabel,
-            ..Default::default()
-        });
-    }
+    //     let containerLogPath = containerLogPath;
+    //     let terminationMessagePath = container.termination_message_path.clone();
+    //     let selinuxRelabel = false; //selinux.GetEnabled()
+    //     volumeMounts.push(crictl::Mount {
+    //         host_path: containerLogPath,
+    //         container_path: terminationMessagePath.as_deref().unwrap_or("").to_string(),
+    //         selinux_relabel: selinuxRelabel,
+    //         ..Default::default()
+    //     });
+    // }
 
     return Ok(volumeMounts);
 }

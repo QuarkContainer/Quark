@@ -13,6 +13,15 @@
 // limitations under the License.
 
 use std::result::Result as SResult;
+use qshare::consts::NODEMGRSVC_ADDR;
+use qshare::k8s::ConfigMap;
+use qshare::k8s::Container;
+use qshare::k8s::ContainerPort;
+use qshare::k8s::EnvVar;
+use qshare::k8s::HostPathVolumeSource;
+use qshare::k8s::Volume;
+use qshare::k8s::VolumeMount;
+use tonic::transport::Server;
 
 use podMgr::podmgr_agent::PmAgent;
 use qshare::consts::ConfigMapFromString;
@@ -23,6 +32,7 @@ use qshare::crictl;
 use qshare::common::*;
 
 use crate::pod_mgr::*;
+
 
 use super::qnode::QuarkNode;
 use super::{CADVISOR_PROVIDER, RUNTIME_MGR};
@@ -51,6 +61,94 @@ impl PodMgr {
         return Ok(Self {
             pmAgent: pmAgent
         });
+    }
+
+    pub fn CreateFuncPod(
+        &self, 
+        req: na::CreateFuncPodReq,
+    ) -> Result<()> {
+        let template = r#"{
+            "metadata": {
+                "name": "pypackage1",
+                "namespace": "ns1"
+            },
+            "spec": {
+                "template": {
+                    "containers": [],
+                    "hostNetwork": true
+                }
+            }
+        }"#;
+        
+        let mut pod = PodFromString(template)?;
+
+        pod.metadata.uid = Some(uuid::Uuid::new_v4().to_string());
+
+        pod.metadata.name = Some(req.name.to_owned());
+        pod.metadata.namespace = Some(req.namespace.to_owned());
+
+        error!("pod id is {:?}", &pod.metadata.uid);
+
+        let podSpec = pod.spec.as_mut().unwrap();
+
+        let mut volumes = Vec::new();
+        let mut volumeMounts: Vec<VolumeMount> = Vec::new();
+        
+        for mount in &req.mounts {
+            let volume = Volume {
+                name: mount.host_path.clone(), // "/home/brad/rust/Quark/test".to_owned(),
+                host_path: Some(HostPathVolumeSource{
+                    path: mount.host_path.clone(),// "/home/brad/rust/Quark/test".to_owned(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+
+            volumes.push(volume);
+
+            volumeMounts.push(VolumeMount {
+                name: mount.host_path.clone(), // "/home/brad/rust/Quark/test".to_owned(),
+                mount_path: mount.mount_path.clone(), // "/test".to_owned(),
+                ..Default::default()
+            });
+        }
+
+        podSpec.volumes = Some(volumes);
+
+        let mut containerPods = Vec::new();
+        for p in &req.ports {
+            containerPods.push(ContainerPort {
+                container_port: p.container_port,
+                host_port: Some(p.host_port),
+                ..Default::default()
+            })
+        }
+
+        let mut containerEnvs = Vec::new();
+        for env in req.envs {
+            containerEnvs.push(EnvVar {
+                name: env.name.clone(),
+                value: Some(env.value.clone()),
+                ..Default::default()
+            })
+        }
+
+        let container = Container {
+            image: Some(req.image.to_owned()),
+            command: Some(req.commands),
+            env: Some(containerEnvs),
+            volume_mounts: Some(volumeMounts),
+            ports: Some(containerPods),
+            ..Default::default()
+        };
+
+        podSpec.containers.push(container);
+
+        let configMap = ConfigMap::default();
+
+        self.pmAgent.CreatePod(&pod, &configMap)?;
+        return Ok(())
+        
     }
 
     pub fn CreatePod(&self, req: na::CreatePodReq) -> Result<()> {
@@ -101,6 +199,28 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
         }
     }
 
+    async fn create_func_pod(
+        &self,
+        request: tonic::Request<na::CreateFuncPodReq>,
+    ) -> SResult<tonic::Response<na::CreateFuncPodResp>, tonic::Status> {
+        let req = request.into_inner();
+
+        match self.CreateFuncPod(
+            req
+        ) {
+            Err(e) => {
+                return Ok(tonic::Response::new(na::CreateFuncPodResp {
+                    error: format!("fail: {:?}", e),
+                }))
+            }
+            Ok(()) => {
+                return Ok(tonic::Response::new(na::CreateFuncPodResp {
+                    error: "".to_owned()
+                }));
+            }
+        }
+    }
+
     async fn node_config(
         &self,
         request: tonic::Request<na::NodeConfigReq>,
@@ -130,4 +250,19 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
             }
         }
     }
+}
+
+pub async fn PodMgrSvc() -> Result<()> {
+    let podMgr = PodMgr::New().await?;
+
+    let podMgrSvcFuture = Server::builder()
+        .add_service(na::node_agent_service_server::NodeAgentServiceServer::new(podMgr))
+        .serve(NODEMGRSVC_ADDR.parse().unwrap());
+
+    info!("func service start ...");
+    tokio::select! {
+        _ = podMgrSvcFuture => {}
+    }
+
+    return Ok(())
 }

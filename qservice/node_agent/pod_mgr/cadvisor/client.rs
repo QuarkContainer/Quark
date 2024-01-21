@@ -37,7 +37,7 @@ impl Client
 {
     pub fn Init() -> Self {
         return Self {
-            baseURL: "http://localhost:8080/api/v2.1".to_owned(),
+            baseURL: "http://127.0.0.1:8080/api/v2.1".to_owned(),
         }
     }
 

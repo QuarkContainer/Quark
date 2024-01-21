@@ -31,4 +31,4 @@ cat << EOF | sudo tee /etc/cni/net.d/10-containerd-net.conflist
 }
 EOF
 sudo systemctl restart containerd
-chmod 777 /run/containerd/containerd.sock
+sudo chmod 777 /run/containerd/containerd.sock

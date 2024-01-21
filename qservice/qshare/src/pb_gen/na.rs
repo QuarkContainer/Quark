@@ -72,6 +72,59 @@ pub mod node_agent_resp {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Env {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub value: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Mount {
+    #[prost(string, tag = "1")]
+    pub host_path: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub mount_path: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ContainerPort {
+    #[prost(int32, tag = "1")]
+    pub host_port: i32,
+    #[prost(int32, tag = "2")]
+    pub container_port: i32,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateFuncPodReq {
+    #[prost(string, tag = "1")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub image: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "4")]
+    pub commands: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(message, repeated, tag = "5")]
+    pub envs: ::prost::alloc::vec::Vec<Env>,
+    #[prost(message, repeated, tag = "6")]
+    pub mounts: ::prost::alloc::vec::Vec<Mount>,
+    #[prost(message, repeated, tag = "7")]
+    pub ports: ::prost::alloc::vec::Vec<ContainerPort>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateFuncPodResp {
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReadFuncLogReq {
     #[prost(string, tag = "1")]
     pub namespace: ::prost::alloc::string::String,
@@ -353,6 +406,25 @@ pub mod node_agent_service_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
+        pub async fn create_func_pod(
+            &mut self,
+            request: impl tonic::IntoRequest<super::CreateFuncPodReq>,
+        ) -> Result<tonic::Response<super::CreateFuncPodResp>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/na.NodeAgentService/CreateFuncPod",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -374,6 +446,10 @@ pub mod node_agent_service_server {
             &self,
             request: tonic::Request<super::NodeConfigReq>,
         ) -> Result<tonic::Response<super::NodeConfigResp>, tonic::Status>;
+        async fn create_func_pod(
+            &self,
+            request: tonic::Request<super::CreateFuncPodReq>,
+        ) -> Result<tonic::Response<super::CreateFuncPodResp>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct NodeAgentServiceServer<T: NodeAgentService> {
@@ -539,6 +615,46 @@ pub mod node_agent_service_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = NodeConfigSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/na.NodeAgentService/CreateFuncPod" => {
+                    #[allow(non_camel_case_types)]
+                    struct CreateFuncPodSvc<T: NodeAgentService>(pub Arc<T>);
+                    impl<
+                        T: NodeAgentService,
+                    > tonic::server::UnaryService<super::CreateFuncPodReq>
+                    for CreateFuncPodSvc<T> {
+                        type Response = super::CreateFuncPodResp;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::CreateFuncPodReq>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).create_func_pod(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = CreateFuncPodSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

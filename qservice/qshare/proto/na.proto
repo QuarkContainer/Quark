@@ -20,6 +20,7 @@ service NodeAgentService {
   rpc CreatePod(CreatePodReq) returns (CreatePodResp) {}
   rpc TerminatePod(TerminatePodReq) returns (TerminatePodResp) {}
   rpc NodeConfig(NodeConfigReq) returns (NodeConfigResp) {}
+  rpc CreateFuncPod(CreateFuncPodReq) returns (CreateFuncPodResp) {}
 }
 ///////////////////////////////////////////////////////////////////////
 
@@ -49,6 +50,35 @@ message NodeAgentResp {
     TerminatePodResp terminatePodResp = 300;
     ReadFuncLogResp readFuncLogResp = 400;
   }
+}
+
+message Env {
+  string name = 1;
+  string value = 2;
+}
+
+message Mount {
+  string host_path = 1;
+  string mount_path = 2;
+}
+
+message ContainerPort {
+  int32 host_port = 1;
+  int32 container_port = 2;
+}
+
+message CreateFuncPodReq {
+  string namespace = 1;
+  string name = 2;
+  string image = 3;
+  repeated string commands = 4;
+  repeated Env envs = 5;
+  repeated Mount mounts = 6;
+  repeated ContainerPort ports = 7;
+}
+
+message CreateFuncPodResp {
+  string error = 1;
 }
 
 message ReadFuncLogReq {
