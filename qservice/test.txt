@@ -31,32 +31,72 @@ cat << EOF | sudo tee /etc/cni/net.d/10-containerd-net.conflist
   "cniVersion": "1.0.0",
     "name": "containerd-net",
     "plugins": [
-    {
-      "type": "bridge",
-      "bridge": "cni0",
-      "isGateway": true,
-      "ipMasq": true,
-      "promiscMode": true,
-      "ipam": {
-        "type": "host-local",
-        "ranges": [
-          [{
-            "subnet": "10.22.0.0/16"
+      {
+        "type": "bridge",
+        "bridge": "cni0",
+        "isGateway": true,
+        "ipMasq": true,
+        "promiscMode": true,
+        "ipam": {
+          "type": "host-local",
+          "ranges": [
+            [{
+              "subnet": "10.22.0.0/16"
 
-          }]
+            }]
 
-        ],
-        "routes": [
-        { "dst": "0.0.0.0/0" }
-        ]
+          ],
+          "routes": [
+          { "dst": "0.0.0.0/0" }
+          ]
+        }
+      },
+      {
+        "type": "portmap",
+        "capabilities": {"portMappings": true}
       }
-    },
-    {
-      "type": "portmap",
-      "capabilities": {"portMappings": true}
-    }
   ]
 }
 EOF
 sudo systemctl restart containerd
 sudo chmod 777 /run/containerd/containerd.sock
+
+
+
+cat << EOF | sudo tee /etc/cni/net.d/10-containerd-net.conflist
+{
+  "cniVersion": "1.0.0",
+    "name": "containerd-net",
+    "plugins": [
+      {
+        "type": "tsot"
+      }
+  ]
+}
+EOF
+sudo systemctl restart containerd
+sudo chmod 777 /run/containerd/containerd.sock
+
+
+cat << EOF | sudo tee /etc/cni/net.d/10-containerd-net.conflist
+{
+    "cniVersion": "0.2.0",
+    "name": "my_dummy_network",
+    "type": "tsot"
+}
+EOF
+sudo systemctl restart containerd
+sudo chmod 777 /run/containerd/containerd.sock
+
+
+cat <<EOF | sudo tee /etc/containerd/config.toml
+version = 2
+[plugins."io.containerd.runtime.v1.linux"]
+  shim_debug = false
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+  runtime_type = "io.containerd.runc.v2"
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quark]
+  runtime_type = "io.containerd.quark.v1"
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quarkd]
+  runtime_type = "io.containerd.quarkd.v1"
+EOF
