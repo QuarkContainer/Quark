@@ -165,7 +165,7 @@ lazy_static! {
     pub static ref SANDBOX: Mutex<Sandbox> = Mutex::new(Sandbox::default());
 }
 
-pub const LOG_FILE: &'static str = "/var/log/quark/quark.log";
+pub const LOG_FILE: &'static str = "/var/log/quark/quark1.log";
 
 pub fn InitSingleton() {
     self::qlib::InitSingleton();

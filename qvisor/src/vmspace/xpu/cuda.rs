@@ -146,10 +146,10 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
         error!("hochan kernel_str: {}", kernel_str);
 
         if KERNEL_INFOS.lock().contains_key(&kernel_str) {
-            continue;
+             error!("found already exsited kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
+        }else{
+             error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
         }
-
-        error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
 
         let mut ki = KernelInfo::default();
         ki.name = kernel_str.clone();
@@ -164,7 +164,10 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
         }
         error!("hochan ki: {:x?}", ki);
 
-        KERNEL_INFOS.lock().insert(kernel_str.clone(), Arc::new(ki));
+        if !KERNEL_INFOS.lock().contains_key(&kernel_str) {
+
+            KERNEL_INFOS.lock().insert(kernel_str.clone(), Arc::new(ki));
+        }
         
         secpos += infoSize;
     }

@@ -43,8 +43,8 @@ pub fn SetSyncPrint(syncPrint: bool) {
     LOG.SetSyncPrint(syncPrint);
 }
 
-pub const LOG_FILE_DEFAULT: &str = "/var/log/quark/quark.log";
-pub const RAWLOG_FILE_DEFAULT: &str = "/var/log/quark/raw.log";
+pub const LOG_FILE_DEFAULT: &str = "/var/log/quark/quark1.log";
+pub const RAWLOG_FILE_DEFAULT: &str = "/var/log/quark/raw1.log";
 pub const LOG_FILE_FORMAT: &str = "/var/log/quark/{}.log";
 pub const TIME_FORMAT: &str = "%H:%M:%S%.3f";
 
