@@ -140,13 +140,9 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 paramAddrs[i] = &(paramValues[i][0]) as *const _ as u64;
                 error!("hochan i {} paramAddrs[i] {:x} paramValues[i] {:x?}",i, paramAddrs[i], paramValues[i]);
             }
-            // paramAddrs[3] = 0x64;
             error!("hochan paramAddrs after set {:x?}", paramAddrs);
             data.args = &paramAddrs[0] as * const _ as u64;
             error!("hochan data.args {:x?}", data.args);
-
-            // let v = task.CopyInObj::<u32>(paramAddrs[3])?;
-            // error!("hochan v {}", v);
 
             parameters.para1 = &data as * const _ as u64;
             let ret = HostSpace::Proxy(
@@ -157,15 +153,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
         _ => todo!()
     }
-}
-
-pub fn CudaRegisterFunction(parameters:ProxyParameters )-> Result<i64>{
-    error!("hochan CudaRegisterFunction");
-    let ret = HostSpace::Proxy(
-        ProxyCommand::CudaRegisterFunction,
-        parameters,
-    );
-    return Ok(ret);
 }
 
 pub fn CudaMemcpy(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyKind) -> Result<i64> {

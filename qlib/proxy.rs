@@ -110,7 +110,7 @@ pub struct FatHeader {
 }
 
 #[repr(C)]
-#[derive(Default, Debug, Copy, Clone)]
+#[derive(Default, Debug)]
 pub struct FatElfHeader {
     magic: u32,
     version: u16,

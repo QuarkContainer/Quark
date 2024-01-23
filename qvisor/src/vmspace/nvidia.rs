@@ -97,7 +97,7 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
             let fatElfHeader = unsafe { &*(parameters.para2 as *const u8 as *const FatElfHeader) };
             let moduleKey = parameters.para3;
             error!("hochan moduleKey:{:x}", moduleKey);
-            match GetFatbinInfo(parameters.para2, *fatElfHeader){
+            match GetFatbinInfo(parameters.para2, fatElfHeader){
                 Ok(_) => {},
                 Err(e) => {
                     return Err(e); 
@@ -105,7 +105,7 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
             }
             
             let mut module:u64 = 0;
-            let ret = unsafe{ cuda_driver_sys::cuModuleLoadData(&mut module as *mut _ as u64 as *mut CUmodule, parameters.para2 as *const c_void)};
+            let ret = unsafe{ cuda_driver_sys::cuModuleLoadData(&mut module as *mut _ as u64 as *mut CUmodule, fatElfHeader as *const _ as u64 as *const c_void)};
             MODULES.lock().insert(moduleKey, module);            
             error!("hochan called func ret {:?} module ptr {:x?} MODULES {:x?}", ret,  module, MODULES.lock());            
             return Ok(ret as i64);
@@ -127,14 +127,14 @@ pub fn  NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i
                 error!("hochan cuModuleGetFunction ret {:x?}, hfunc {:x}, &hfunc {:x}, FUNCTIONS  {:x?}", ret, hfunc, &hfunc, FUNCTIONS.lock());
 
                 let kernelInfo = KERNEL_INFOS.lock().get(&deviceName.to_string()).unwrap().clone();
-                let paramInfo = parameters.para3 as *const u8 as *mut ParamInfo;
-                unsafe {
-                    (*paramInfo).paramNum = kernelInfo.paramNum;
-                    for i in 0..(*paramInfo).paramNum {
-                        (*paramInfo).paramSizes[i] = kernelInfo.paramSizes[i];
-                    }
-                    error!("hochan paramInfo in nvidia {:x?}", (*paramInfo));
+                let paramInfo = unsafe { &mut* (parameters.para3 as *mut ParamInfo) };
+                
+                paramInfo.paramNum = kernelInfo.paramNum;
+                for i in 0..paramInfo.paramNum {
+                    paramInfo.paramSizes[i] = kernelInfo.paramSizes[i];
                 }
+                error!("hochan paramInfo in nvidia {:x?}", paramInfo);
+                
                 return Ok(ret as i64);
         }
         ProxyCommand::CudaLaunchKernel => {
@@ -224,7 +224,7 @@ pub fn CudaMemcpy(handle: u64, parameters: &ProxyParameters) -> Result<i64> {
 
 pub struct NvidiaHandlersInner {
     pub cudaHandler: u64,
-    pub cudaRuntimeHandler: u64, //*mut libc::c_void,
+    pub cudaRuntimeHandler: u64,
     pub handlers: BTreeMap<ProxyCommand, u64>,
 }
 
