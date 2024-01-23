@@ -98,7 +98,7 @@ pub const EIFMT_HVAL: u64 = 0x3;
 pub const EIFMT_SVAL: u64 = 0x4;
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 pub struct FatHeader {
     magic: u32,
     version: u32,
@@ -180,7 +180,7 @@ pub struct RegisterFunctionInfo {
 }
 
 #[repr(C)]
-#[derive(Default, Debug, Copy, Clone)]
+#[derive(Default, Debug)]
 pub struct NvInfoKernelEntry {
     pub format: u8,
     pub attribute: u8,
@@ -204,7 +204,7 @@ impl NvInfoKParamInfo {
 }
 
 #[repr(C)]
-#[derive(Default, Debug, Copy, Clone)]
+#[derive(Default, Debug)]
 pub struct NvInfoEntry {
     pub format: u8,
     pub attribute: u8,

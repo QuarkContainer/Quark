@@ -126,7 +126,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
     while secpos < data.d_size {
         let position = data.d_buf as u64 + secpos as u64;
         let entry_p = position as *const u8 as *const NvInfoEntry;
-        let entry = unsafe { *entry_p };
+        let entry = unsafe { &*entry_p };
         error!("hochan entry: {:x?}", entry);
         if entry.values_size != 8 {
             error!("unexpected values_size: {:x}", entry.values_size);
