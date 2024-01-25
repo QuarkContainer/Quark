@@ -53,11 +53,12 @@ pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) -> *mut u64 {
     // println!("hochan !!!0 {:x?}", bytes);
     println!("hochan addr {:x?}, addrFatCubin {:x?}",addr,addrFatCubin);
 
-    let result = 0 as *mut u64;
+    let result = &(0 as *mut u64) as *const _ as u64;
+    println!("hochan result {:x}", result);
     unsafe {
         syscall4(SYS_PROXY, ProxyCommand::CudaRegisterFatBinary as usize, len, fatCubin.text as *const _ as usize, result as usize);
     }
-    return result;
+    return result as *mut u64;
 }
 
 #[no_mangle]

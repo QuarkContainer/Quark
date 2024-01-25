@@ -121,13 +121,13 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             let fatElfHeader = unsafe { &*(parameters.para2 as *const u8 as *const FatElfHeader) };
             let moduleKey = parameters.para3;
             error!("hochan moduleKey:{:x}", moduleKey);
+
             match GetFatbinInfo(parameters.para2, *fatElfHeader) {
                 Ok(_) => {}
                 Err(e) => {
                     return Err(e);
                 }
             }
-
             let mut module: u64 = 0;
             let ret = unsafe {
                 cuda_driver_sys::cuModuleLoadData(
@@ -326,7 +326,7 @@ pub fn CudaMemcpy(handle: u64, parameters: &ProxyParameters) -> Result<i64> {
 
 pub struct NvidiaHandlersInner {
     pub cudaHandler: u64,
-    pub cudaRuntimeHandler: u64, //*mut libc::c_void,
+    pub cudaRuntimeHandler: u64,
     pub handlers: BTreeMap<ProxyCommand, u64>,
 }
 

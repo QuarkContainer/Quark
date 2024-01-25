@@ -23,11 +23,15 @@ use crate::qlib::kernel::util::cstring::CString;
 use libelf::raw::*;
 
 lazy_static! {
-    pub static ref XPU_LIBRARY_HANDLERS:Mutex<BTreeMap<XpuLibrary, u64>> = Mutex::new(BTreeMap::new());
+    pub static ref XPU_LIBRARY_HANDLERS:Mutex<BTreeMap<XpuLibrary, HandlerAddr>> = Mutex::new(BTreeMap::new());
     pub static ref KERNEL_INFOS:Mutex<BTreeMap<String, Arc<KernelInfo>>> = Mutex::new(BTreeMap::new());
-    pub static ref MODULES:Mutex<BTreeMap<u64, u64>> = Mutex::new(BTreeMap::new());
-    pub static ref FUNCTIONS:Mutex<BTreeMap<u64, u64>> = Mutex::new(BTreeMap::new());
+    pub static ref MODULES:Mutex<BTreeMap<u64, CUmoduleAddr>> = Mutex::new(BTreeMap::new());
+    pub static ref FUNCTIONS:Mutex<BTreeMap<u64, CUfunctionAddr>> = Mutex::new(BTreeMap::new());
 }
+
+pub type HandlerAddr = u64;
+pub type CUmoduleAddr = u64;
+pub type CUfunctionAddr = u64;
 
 #[repr(C)]
 #[derive(Default, Debug)]
@@ -40,7 +44,7 @@ pub struct KernelInfo {
     pub hostFun: u64
 }
 
-pub fn GetFatbinInfo(addr:u64, fatElfHeader:FatElfHeader) -> Result<i64> {
+pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
     let mut inputPosition = addr + fatElfHeader.header_size as u64;
     let endPosition = inputPosition + fatElfHeader.size as u64;
     error!("hochan inputPosition:{:x} endPosition:{:x}", inputPosition, endPosition);
@@ -122,7 +126,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
     while secpos < data.d_size {
         let position = data.d_buf as u64 + secpos as u64;
         let entry_p = position as *const u8 as *const NvInfoEntry;
-        let entry = unsafe { *entry_p };
+        let entry = unsafe { &*entry_p };
         error!("hochan entry: {:x?}", entry);
         if entry.values_size != 8 {
             error!("unexpected values_size: {:x}", entry.values_size);
@@ -146,9 +150,8 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
         error!("hochan kernel_str: {}", kernel_str);
 
         if KERNEL_INFOS.lock().contains_key(&kernel_str) {
-             error!("found already exsited kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
-        }else{
-             error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
+            secpos += infoSize;
+            continue;
         }
 
         let mut ki = KernelInfo::default();
