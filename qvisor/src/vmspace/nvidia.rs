@@ -136,7 +136,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             let mut module = match MODULES.lock().get(&info.fatCubinHandle){
                  Some(module) => {
                      error!("yiwang module: {:x} for this fatCubinHandle:{} has been found", module, info.fatCubinHandle);
-                     *module// as *const _ as u8 as u64
+                     *module
                  }
                  None => {
                      error!("yiwang no module found with this fatCubin"); 
