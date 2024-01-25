@@ -153,7 +153,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
             secpos += infoSize;
             continue;
         }
-
+        
         error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
 
         let mut ki = KernelInfo::default();
@@ -170,7 +170,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
         error!("hochan ki: {:x?}", ki);
 
         KERNEL_INFOS.lock().insert(kernel_str.clone(), Arc::new(ki));
-        
+
         secpos += infoSize;
     }
 
