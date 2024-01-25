@@ -151,7 +151,20 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 std::slice::from_raw_parts(info.deviceName as *const u8, parameters.para2 as usize)
             };
             let deviceName = std::str::from_utf8(bytes).unwrap();
-            let mut module = *MODULES.lock().get(&info.fatCubinHandle).unwrap();
+             // yiwang
+            //  let mut module = *MODULES.lock().get(&info.fatCubinHandle).unwrap();
+
+           
+             let mut module = match MODULES.lock().get(&info.fatCubinHandle){
+                 Some(module) => {
+                     error!("yiwang module: {:x} for this fatCubinHandle:{} has been found", module, info.fatCubinHandle);
+                     *module// as *const _ as u8 as u64
+                 }
+                 None => {
+                     error!("yiwang no module found with this fatCubin"); 
+                     0
+                 }
+             };
             error!(
                 "hochan deviceName {}, parameters {:x?} module {:x}",
                 deviceName, parameters, module
@@ -206,7 +219,17 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 parameters
             );
             let info = unsafe { &*(parameters.para1 as *const u8 as *const LaunchKernelInfo) };
-            let func = FUNCTIONS.lock().get(&info.func).unwrap().clone();
+            // let func = FUNCTIONS.lock().get(&info.func).unwrap().clone();
+            let func =  match FUNCTIONS.lock().get(&info.func){
+                Some(func) => {
+                    error!("yiwang func has been found: {:x}",func);
+                    func.clone()
+                }
+                None => {
+                    error!("yiwang no CUfunction has been found");
+                    0 
+                }
+            };
             error!(
                 "hochan CudaLaunchKernel in host info {:x?}, func {:x}",
                 info, func
@@ -334,7 +357,7 @@ impl NvidiaHandlersInner {
                     }
                     None => {
                         error!("hochan no function handler found");
-                        (0)
+                        0
                     }
                 };
 
