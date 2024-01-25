@@ -14,14 +14,6 @@ __global__ void vector_add(float *out, float *a, float *b, int n) {
     }
 }
 
-// __global__ void print_kernel(float *out, int n) {
-//     if(threadIdx.x==0 && blockIdx.x==0){
-//     for(int i = 0; i < n; i ++){
-//         printf("out: %f\n", *out);
-//     }
-//     }
-// }
-
 void cuda_test() {
     int dev = 0;
     int ret = cudaSetDevice(dev);
@@ -97,9 +89,7 @@ void cuda_add() {
     // Executing kernel 
     printf("testcuda 6 d_out %p d_a %p d_b %p\n", d_out, d_a, d_b);
     vector_add<<<1,1>>>(d_out, d_a, d_b, N);
-
-    // print_kernel<<<1,1>>>(d_out, N);
-    
+ 
     // Transfer data back to host memory
     printf("testcuda 7\n");
     cudaMemcpy(out, d_out, sizeof(float) * N, cudaMemcpyDeviceToHost);

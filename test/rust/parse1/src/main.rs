@@ -23,8 +23,8 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
 
-pub const RAWLOG_FILE_DEFAULT: &str = "/var/log/quark/raw1.log";
-pub const LOG_FILE_DEFAULT: &str = "/var/log/quark/quark1.log";
+pub const RAWLOG_FILE_DEFAULT: &str = "/var/log/quark/raw.log";
+pub const LOG_FILE_DEFAULT: &str = "/var/log/quark/quark.log";
 
 #[derive(Default, Debug)]
 pub struct Line {
