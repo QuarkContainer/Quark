@@ -31,34 +31,15 @@ use std::sync::Arc;
 
 lazy_static! {
     pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
-    pub static ref FUNC_MAP: BTreeMap<ProxyCommand, (XpuLibrary, &'static str)> = BTreeMap::from([
-        (
-            ProxyCommand::CudaSetDevice,
-            (XpuLibrary::CudaRuntime, "cudaSetDevice")
-        ),
-        (
-            ProxyCommand::CudaDeviceSynchronize,
-            (XpuLibrary::CudaRuntime, "cudaDeviceSynchronize")
-        ),
-        (
-            ProxyCommand::CudaMalloc,
-            (XpuLibrary::CudaRuntime, "cudaMalloc")
-        ),
-        (
-            ProxyCommand::CudaMemcpy,
-            (XpuLibrary::CudaRuntime, "cudaMemcpy")
-        ),
-        (
-            ProxyCommand::CudaRegisterFatBinary,
-            (XpuLibrary::CudaDriver, "cuModuleLoadData")
-        ),
-        (
-            ProxyCommand::CudaRegisterFunction,
-            (XpuLibrary::CudaDriver, "cuModuleGetFunction")
-        ),
-        (
-            ProxyCommand::CudaLaunchKernel,
-            (XpuLibrary::CudaDriver, "cuLaunchKernel")
+    pub static ref FUNC_MAP: BTreeMap<ProxyCommand, (XpuLibrary, &'static str)> = BTreeMap::from(
+        [
+        (ProxyCommand::CudaSetDevice,(XpuLibrary::CudaRuntime, "cudaSetDevice")),
+        (ProxyCommand::CudaDeviceSynchronize,(XpuLibrary::CudaRuntime, "cudaDeviceSynchronize")),
+        (ProxyCommand::CudaMalloc,(XpuLibrary::CudaRuntime, "cudaMalloc")),
+        (ProxyCommand::CudaMemcpy,(XpuLibrary::CudaRuntime, "cudaMemcpy")),
+        (ProxyCommand::CudaRegisterFatBinary,(XpuLibrary::CudaDriver, "cuModuleLoadData")),
+        (ProxyCommand::CudaRegisterFunction,(XpuLibrary::CudaDriver, "cuModuleGetFunction")),
+        (ProxyCommand::CudaLaunchKernel,(XpuLibrary::CudaDriver, "cuLaunchKernel")
         ),
     ]);
 }
@@ -122,7 +103,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             let moduleKey = parameters.para3;
             error!("hochan moduleKey:{:x}", moduleKey);
 
-            match GetFatbinInfo(parameters.para2, *fatElfHeader) {
+            match GetFatbinInfo(parameters.para2, fatElfHeader) {
                 Ok(_) => {}
                 Err(e) => {
                     return Err(e);
@@ -151,11 +132,8 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 std::slice::from_raw_parts(info.deviceName as *const u8, parameters.para2 as usize)
             };
             let deviceName = std::str::from_utf8(bytes).unwrap();
-             // yiwang
-            //  let mut module = *MODULES.lock().get(&info.fatCubinHandle).unwrap();
-
            
-             let mut module = match MODULES.lock().get(&info.fatCubinHandle){
+            let mut module = match MODULES.lock().get(&info.fatCubinHandle){
                  Some(module) => {
                      error!("yiwang module: {:x} for this fatCubinHandle:{} has been found", module, info.fatCubinHandle);
                      *module// as *const _ as u8 as u64
@@ -187,8 +165,6 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 FUNCTIONS.lock()
             );
 
-            
-            //  let kernelInfo = KERNEL_INFOS.lock().get(&deviceName.to_string()).unwrap().clone();
             let kernelInfo = match KERNEL_INFOS.lock().get(&deviceName.to_string()) {
                 Some(kernelInformations) => {
                     error!("yiwang found kernel {:?}", kernelInformations);
@@ -219,7 +195,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 parameters
             );
             let info = unsafe { &*(parameters.para1 as *const u8 as *const LaunchKernelInfo) };
-            // let func = FUNCTIONS.lock().get(&info.func).unwrap().clone();
+          
             let func =  match FUNCTIONS.lock().get(&info.func){
                 Some(func) => {
                     error!("yiwang func has been found: {:x}",func);
@@ -348,8 +324,7 @@ impl NvidiaHandlersInner {
         match FUNC_MAP.get(&cmd) {
             Some(&pair) => {
                 let func_name = CString::new(pair.1).unwrap();
-                //yw
-                // let handler = XPU_LIBRARY_HANDLERS.lock().get(&pair.0).unwrap().clone();
+             
                 let handler = match XPU_LIBRARY_HANDLERS.lock().get(&pair.0) {
                     Some(functionHandler) => {
                         error!("hochan function handler got {:?}", functionHandler);
