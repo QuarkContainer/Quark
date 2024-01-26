@@ -1131,6 +1131,7 @@ pub struct Str {
 
 pub type ShareSpaceRef = ObjectRef<ShareSpace>;
 
+
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 // io_uring complete entry
@@ -1168,41 +1169,53 @@ impl Default for UringQueue {
 #[repr(align(128))]
 #[derive(Default)]
 pub struct ShareSpace {
+
+    // Qcall specific
     pub QOutput: QRingQueue<HostOutputMsg>, //QMutex<VecDeque<HostInputMsg>>,
 
-    // add this pad can decrease the mariadb start time 25 sec to 12 sec
-    //todo: root cause this. False share?
-    //pub pad: [u64; 8],
-    pub hostEpollProcessing: CachePadded<QMutex<()>>,
 
-    pub scheduler: task_mgr::Scheduler,
-    pub guestMsgCount: CachePadded<AtomicU64>,
+    
+    // scheduler specific 
+    pub scheduler: task_mgr::Scheduler,               
     pub hostProcessor: CachePadded<AtomicU64>,
     pub VcpuSearchingCnt: CachePadded<AtomicU64>,
 
+    //system wide
     pub shutdown: CachePadded<AtomicBool>,
+
+    // Uring specific 
     pub pendingWrite: CachePadded<AtomicU64>,
     pub ioUring: CachePadded<QUring>,
-    pub timerkeeper: CachePadded<TimeKeeper>,
+
+    // Timer specific
+    pub timerkeeper: CachePadded<TimeKeeper>,   
     pub timerStore: CachePadded<TimerStore>,
-    pub signalArgs: CachePadded<QMutex<Option<SignalArgs>>>,
+
+    
+    pub signalArgs: CachePadded<QMutex<Option<SignalArgs>>>,   // for compatibility
+    
     pub futexMgr: CachePadded<FutexMgr>,
+
+    // page handler specific
     pub pageMgr: CachePadded<PageMgr>,
+
+
     pub ioMgr: CachePadded<IOMgr>,
     pub config: CachePadded<QRwLock<Config>>,
+
+
+    // rdma specific
     pub rdmaSvcCli: CachePadded<RDMASvcClient>,
 
+    // log specific
     pub logBuf: CachePadded<QMutex<Option<ByteStream>>>,
-    pub logLock: CachePadded<QMutex<()>>,
-    pub logfd: CachePadded<AtomicI32>,
-    pub signalHandlerAddr: CachePadded<AtomicU64>,
-    pub virtualizationHandlerAddr: CachePadded<AtomicU64>,
-    pub kernel: CachePadded<QMutex<Option<Kernel>>>,
-    pub tlbShootdownLock: CachePadded<QMutex<()>>,
-    pub tlbShootdownMask: CachePadded<AtomicU64>,
-    pub uid: CachePadded<AtomicU64>,
-    pub inotifyCookie: CachePadded<AtomicU32>,
-    pub waitMask: CachePadded<AtomicU64>,
+    pub logLock: CachePadded<QMutex<()>>,   // only used on host
+    pub logfd: CachePadded<AtomicI32>,   
+
+
+
+
+    // serverless specific
     pub reapFileAvaiable: CachePadded<AtomicBool>,
     pub hibernatePause: CachePadded<AtomicBool>,
     pub hiberMgr: CachePadded<HiberMgr>,
@@ -1216,6 +1229,12 @@ pub struct ShareSpace {
     pub uringQueue: UringQueue,
 
     pub values: Vec<[AtomicU64; 2]>,
+    pub signalHandlerAddr: CachePadded<AtomicU64>,
+    pub kernel: CachePadded<QMutex<Option<Kernel>>>,
+    pub uid: CachePadded<AtomicU64>,
+
+    // only used in qkernel
+    pub inotifyCookie: CachePadded<AtomicU32>,   
 }
 
 impl ShareSpace {
@@ -1247,27 +1266,6 @@ impl ShareSpace {
         return self.inotifyCookie.fetch_add(1, Ordering::SeqCst) + 1;
     }
 
-    pub fn MaskTlbShootdown(&self, vcpuId: u64) {
-        self.tlbShootdownMask
-            .fetch_or(1 << vcpuId, Ordering::SeqCst);
-    }
-
-    pub fn UnmaskTlbShootdown(&self, vcpuId: u64) {
-        self.tlbShootdownMask
-            .fetch_and(!(1 << vcpuId), Ordering::SeqCst);
-    }
-
-    pub fn TlbShootdownMask(&self) -> u64 {
-        return self.tlbShootdownMask.load(Ordering::SeqCst);
-    }
-
-    pub fn ClearTlbShootdownMask(&self) {
-        self.tlbShootdownMask.store(0, Ordering::SeqCst);
-    }
-
-    pub fn SetTlbShootdownMask(&self, mask: u64) {
-        self.tlbShootdownMask.store(mask, Ordering::SeqCst);
-    }
 
     pub fn SetSignalHandlerAddr(&self, addr: u64) {
         self.signalHandlerAddr.store(addr, Ordering::SeqCst);
@@ -1276,14 +1274,6 @@ impl ShareSpace {
     pub fn SignalHandlerAddr(&self) -> u64 {
         return self.signalHandlerAddr.load(Ordering::Relaxed);
     }
-
-    // pub fn SetvirtualizationHandlerAddr(&self, addr: u64) {
-    //     self.virtualizationHandlerAddr.store(addr, Ordering::SeqCst);
-    // }
-
-    // pub fn VirtualizationHandlerAddr(&self) -> u64 {
-    //     return self.virtualizationHandlerAddr.load(Ordering::Relaxed);
-    // }
 
     pub fn StoreShutdown(&self) {
         self.shutdown.store(true, Ordering::SeqCst);
@@ -1333,20 +1323,8 @@ impl ShareSpace {
         return self as *const _ as u64;
     }
 
-    pub fn TryLockEpollProcess(&self) -> Option<QMutexGuard<()>> {
-        return self.hostEpollProcessing.try_lock();
-    }
-
     pub fn HostHostEpollfd(&self) -> i32 {
         return self.hostEpollfd.load(Ordering::Relaxed);
-    }
-
-    pub fn SetValue(&self, cpuId: usize, idx: usize, val: u64) {
-        self.values[cpuId][idx].store(val, Ordering::Relaxed);
-    }
-
-    pub fn GetValue(&self, cpuId: usize, idx: usize) -> u64 {
-        return self.values[cpuId][idx].load(Ordering::Relaxed);
     }
 
     #[inline]

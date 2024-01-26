@@ -36,7 +36,6 @@ use super::super::super::fs::file::*;
 use super::super::super::fs::flags::*;
 use super::super::super::fs::host::hostinodeop::*;
 use super::super::super::guestfdnotifier::*;
-use super::super::super::kernel::async_wait::*;
 use super::super::super::kernel::fd_table::*;
 use super::super::super::kernel::kernel::GetKernel;
 use super::super::super::kernel::time::*;
@@ -45,7 +44,6 @@ use super::super::super::task::*;
 use super::super::super::tcpip::tcpip::*;
 use super::super::super::Kernel;
 use super::super::super::Kernel::HostSpace;
-use super::super::super::IOURING;
 use super::super::control::*;
 use super::super::socket::*;
 use super::socket::*;
@@ -244,12 +242,6 @@ impl AsyncSocketOperations {
 pub const SIZEOF_SOCKADDR: usize = SocketSize::SIZEOF_SOCKADDR_INET6;
 
 impl Waitable for AsyncSocketOperations {
-    fn AsyncReadiness(&self, _task: &Task, mask: EventMask, wait: &MultiWait) -> Future<EventMask> {
-        let fd = self.fd;
-        let future = IOURING.UnblockPollAdd(fd, mask as u32, wait);
-        return future;
-    }
-
     fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
         let fd = self.fd;
         return NonBlockingPoll(fd, mask);

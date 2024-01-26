@@ -30,9 +30,6 @@ pub use self::queue::*;
 pub use self::waiter::*;
 use super::super::super::linux_def::*;
 use super::super::task::*;
-use super::async_wait::*;
-
-use super::super::fs::file::File;
 use crate::qlib::kernel::fs::file::FileOps;
 
 // EventMaskFromLinux returns an EventMask representing the supported events
@@ -51,15 +48,6 @@ pub fn ToLinux(e: EventMask) -> u32 {
 // default:: Alway readable
 #[enum_dispatch(FileOps)]
 pub trait Waitable {
-    fn AsyncReadiness(&self, task: &Task, mask: EventMask, _wait: &MultiWait) -> Future<EventMask> {
-        //wait.AddWait();
-        let future = Future::New(0 as EventMask);
-        let ret = self.Readiness(task, mask);
-        future.Set(Ok(ret));
-        //wait.Done();
-        return future;
-    }
-
     // Readiness returns what the object is currently ready for. If it's
     // not ready for a desired purpose, the caller may use EventRegister and
     // EventUnregister to get notifications once the object becomes ready.
@@ -78,41 +66,4 @@ pub trait Waitable {
     // EventUnregister unregisters a waiter entry previously registered with
     // EventRegister().
     fn EventUnregister(&self, _task: &Task, _e: &WaitEntry) {}
-}
-
-pub struct PollStruct {
-    pub f: File,
-    pub event: EventMask,
-    pub revent: EventMask,
-    pub future: Option<Future<EventMask>>,
-}
-
-impl PollStruct {
-    pub fn PollMulti(task: &Task, polls: &mut [PollStruct]) -> usize {
-        let mw = MultiWait::New(task.GetTaskId());
-
-        for i in 0..polls.len() {
-            let poll = &mut polls[i];
-            let future = poll.f.AsyncReadiness(task, poll.event, &mw);
-            poll.future = Some(future)
-        }
-
-        mw.Wait();
-
-        let mut cnt = 0;
-        for i in 0..polls.len() {
-            let poll = &mut polls[i];
-            match poll.future.take().unwrap().Wait() {
-                Err(_) => (),
-                Ok(revent) => {
-                    if revent > 0 {
-                        poll.revent = revent;
-                        cnt += 1;
-                    }
-                }
-            };
-        }
-
-        return cnt;
-    }
 }

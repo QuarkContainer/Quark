@@ -1,4 +1,3 @@
-use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use std::fmt;
 use std::sync::mpsc::channel;
@@ -129,10 +128,6 @@ impl ShareSpace {
         podId: [u8; 64],
     ) {
         *self.config.write() = *QUARK_CONFIG.lock();
-        let mut values = Vec::with_capacity(vcpuCount);
-        for _i in 0..vcpuCount {
-            values.push([AtomicU64::new(0), AtomicU64::new(0)])
-        }
 
         if self.config.read().EnableRDMA {
             self.rdmaSvcCli = CachePadded::new(RDMASvcClient::initialize(
@@ -150,7 +145,6 @@ impl ShareSpace {
         }
 
         self.scheduler = Scheduler::New(vcpuCount);
-        self.values = values;
 
         self.scheduler.Init();
         self.SetLogfd(super::print::LOG.Logfd());

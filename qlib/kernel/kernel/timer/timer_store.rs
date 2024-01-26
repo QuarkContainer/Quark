@@ -20,7 +20,6 @@ use core::cmp::Ordering;
 use core::ops::Bound::Included;
 use core::ops::Deref;
 
-use super::super::super::IOURING;
 use super::timer::*;
 use super::*;
 
@@ -191,31 +190,6 @@ impl TimerStoreIntern {
         self.timerSeq.insert(tl.TimerUnit(), timer.clone());
     }
 
-    pub fn RemoveUringTimer(&mut self) {
-        if self.uringExpire != 0 {
-            IOURING.AsyncTimerRemove(self.uringId);
-            self.uringExpire = 0;
-        }
-    }
-
-    pub fn SetUringTimer(&mut self, expire: i64) {
-        let now = MONOTONIC_CLOCK.Now().0;
-        let expire = if expire < now + Self::PROCESS_TIME {
-            now + Self::PROCESS_TIME
-        } else {
-            expire
-        };
-        assert!(self.uringExpire == 0);
-        assert!(
-            expire > now,
-            "Expire {}, now {}, expire - now {}",
-            expire,
-            now,
-            expire - now
-        );
-        self.uringExpire = expire;
-        self.uringId = IOURING.Timeout(expire, expire - now) as u64;
-    }
 
     // return (Expire, Timer)
     pub fn GetFirst(&mut self, now: i64) -> Option<Timer> {

@@ -67,23 +67,12 @@ pub trait AsyncOpsTrait {
 #[repr(align(128))]
 #[derive(Clone)]
 pub enum AsyncOps {
-    AsyncTimeout(AsyncTimeout),
-    AsyncTimerRemove(AsyncTimerRemove),
-    AsyncTTYWrite(AsyncTTYWrite),
-    AsyncWrite(AsyncWritev),
-    AsyncEventfdWrite(AsyncEventfdWrite),
-    AsycnSendMsg(AsycnSendMsg),
-    AsycnRecvMsg(AsycnRecvMsg),
     AsyncFiletWrite(AsyncFiletWrite),
     AsyncFileRead(AsyncFileRead),
     AIOWrite(AIOWrite),
     AIORead(AIORead),
     AIOFsync(AIOFsync),
-    AsyncRawTimeout(AsyncRawTimeout),
     AsyncLogFlush(AsyncLogFlush),
-    AsyncStatx(AsyncStatx),
-    AsyncLinkTimeout(AsyncLinkTimeout),
-    UnblockBlockPollAdd(UnblockBlockPollAdd),
     AsyncBufWrite(AsyncBufWrite),
     AsyncAccept(AsyncAccept),
     AsyncEpollCtl(AsyncEpollCtl),
@@ -110,23 +99,12 @@ impl AsyncOps {
 
     pub fn Type(&self) -> usize {
         match self {
-            AsyncOps::AsyncTimeout(_) => return 1,
-            AsyncOps::AsyncTimerRemove(_) => return 2,
-            AsyncOps::AsyncTTYWrite(_) => return 3,
-            AsyncOps::AsyncWrite(_) => return 4,
-            AsyncOps::AsyncEventfdWrite(_) => return 5,
-            AsyncOps::AsycnSendMsg(_) => return 6,
-            AsyncOps::AsycnRecvMsg(_) => return 7,
             AsyncOps::AsyncFiletWrite(_) => return 8,
             AsyncOps::AsyncFileRead(_) => return 9,
             AsyncOps::AIOWrite(_) => return 10,
             AsyncOps::AIORead(_) => return 11,
             AsyncOps::AIOFsync(_) => return 12,
-            AsyncOps::AsyncRawTimeout(_) => return 13,
             AsyncOps::AsyncLogFlush(_) => return 14,
-            AsyncOps::AsyncStatx(_) => return 15,
-            AsyncOps::AsyncLinkTimeout(_) => return 16,
-            AsyncOps::UnblockBlockPollAdd(_) => return 17,
             AsyncOps::AsyncBufWrite(_) => return 18,
             AsyncOps::AsyncAccept(_) => return 19,
             AsyncOps::AsyncEpollCtl(_) => return 20,
@@ -1506,18 +1484,6 @@ impl AsyncOpsTrait for PollHostEpollWait {
         if result < 0 {
             error!("PollHostEpollWait::Process result {}", result);
         }
-
-        // we don't handle the host epollwait in kernel.
-        // todo: fix this when merge kernel IO CPU and host IO thread
-        // check whether there is vcpu waiting in the host can process this
-        /*match SHARESPACE.TryLockEpollProcess() {
-            None => (),
-            Some(_) => {
-                GUEST_NOTIFIER.ProcessHostEpollWait();
-            }
-        }
-
-        return false;*/
 
         return false;
     }
