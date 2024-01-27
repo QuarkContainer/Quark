@@ -22,11 +22,12 @@
 extern crate log;
 extern crate simple_logging;
 
-// mod tsot;
+mod tsot;
 mod pod_mgr;
 
 use crate::pod_mgr::cadvisor::client as CadvisorClient;
 use crate::pod_mgr::podMgr::PodMgrSvc;
+use crate::tsot::tsot_svc::TsotCniSvc;
 
 use qshare::common::*;
 
@@ -39,9 +40,12 @@ lazy_static::lazy_static! {
 #[tokio::main]
 async fn main() -> Result<()> {
     log4rs::init_file("/etc/quark/na_logging_config.yaml", Default::default()).unwrap();
+
     let podMgrFuture = PodMgrSvc();
+    let tostSvcFuture = TsotCniSvc();
     tokio::select! {
         _ = podMgrFuture => (),
+        _ = tostSvcFuture => ()
     }
     
     return Ok(())

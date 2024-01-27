@@ -27,6 +27,7 @@ pub const SYSTEM_CONFIGS : &str = r#"
     "product": {
         "nodeAgentConfig" : {
             "rootPath"      : "/var/lib/quark/nodeagent",
+            "cidr"          : "10.1.1.0/8",
             "nodeName"      : "",
             "hostIP"        : "127.0.0.1",
             "blobSvcPort"   : 8892,
@@ -40,6 +41,7 @@ pub const SYSTEM_CONFIGS : &str = r#"
     "node1": {
         "nodeAgentConfig" : {
             "rootPath"      : "/var/lib/quark/nodeagent",
+            "cidr"          : "10.1.2.0/8",
             "nodeName"      : "node1",
             "hostIP"        : "127.0.0.1",
             "blobSvcPort"   : 8892,
@@ -53,6 +55,7 @@ pub const SYSTEM_CONFIGS : &str = r#"
     "node2": {
         "nodeAgentConfig" : {
             "rootPath"      : "/var/lib/quark/nodeagent",
+            "cidr"          : "10.1.3.0/8",
             "nodeName"      : "node2",
             "hostIP"        : "127.0.0.1",
             "blobSvcPort"   : 8893,
@@ -68,6 +71,7 @@ pub const SYSTEM_CONFIGS : &str = r#"
 pub const TEST_CONFIG_NAME : &str = "node1";
 //pub const SYSTEM_CONFIG : &str = SYSTEM_CONFIG_SIMPLE;
 
+pub const TSOT_CNI_PORT: u16 = 1234;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SystemConfig {
@@ -88,6 +92,7 @@ impl SystemConfig {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct NodeAgentConfig {
     pub rootPath: String,
+    pub cidr: String,
     pub nodeName: String,
     pub hostIP: String,
     pub blobSvcPort: i32,

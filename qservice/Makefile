@@ -1,4 +1,4 @@
-All: na test
+All: na test cni
 
 na: 
 	cargo build --bin na

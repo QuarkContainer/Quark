@@ -31,7 +31,7 @@ use qshare::k8s_util::K8SUtil;
 //use qobjs::runtime_types::QuarkNode;
 use qshare::common::*;
 
-use crate::pod_mgr::{RUNTIME_MGR, NODEAGENT_CONFIG};
+use crate::pod_mgr::{NAMESPACE_MGR, NODEAGENT_CONFIG, RUNTIME_MGR};
 use crate::pod_mgr::node_status::{SetNodeStatus, IsNodeStatusReady};
 
 use super::pm_msg::{NodeAgentMsg, PodCreate};
@@ -317,6 +317,22 @@ impl PmAgent {
                     return Err(e);
                 }
             };
+
+            let uid = match pod.metadata.uid.clone() {
+                None => return Err(Error::CommonError(format!("CreatePod are missing uid"))),
+                Some(uid) => uid
+            };
+            let namespace = match pod.metadata.namespace.clone() {
+                None => return Err(Error::CommonError(format!("CreatePod are missing namespace"))),
+                Some(namespace) => namespace
+            };
+            let podname = match pod.metadata.name.clone() {
+                None => return Err(Error::CommonError(format!("CreatePod are missing podname"))),
+                Some(podname) => podname
+            };
+            error!("create pod with uid {:?}", &uid);
+
+            NAMESPACE_MGR.NewPodSandbox(&namespace, &uid, &podname)?;
 
             podAgent.Start()?;
             let qpod = podAgent.pod.clone();
