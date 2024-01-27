@@ -30,6 +30,7 @@ pub const SYSTEM_CONFIGS : &str = r#"
             "cidr"          : "10.1.1.0/8",
             "nodeName"      : "",
             "hostIP"        : "127.0.0.1",
+            "nodeAgentPort" : 1235,
             "blobSvcPort"   : 8892,
             "funcSvcAddr"   : "http://127.0.0.1:8891",
             "nodeMgrAddrs"  : ["http://127.0.0.1:8888"]
@@ -44,6 +45,7 @@ pub const SYSTEM_CONFIGS : &str = r#"
             "cidr"          : "10.1.2.0/8",
             "nodeName"      : "node1",
             "hostIP"        : "127.0.0.1",
+            "nodeAgentPort" : 1235,
             "blobSvcPort"   : 8892,
             "funcSvcAddr"   : "http://127.0.0.1:8891",
             "nodeMgrAddrs"  : ["http://127.0.0.1:8888"]
@@ -58,6 +60,7 @@ pub const SYSTEM_CONFIGS : &str = r#"
             "cidr"          : "10.1.3.0/8",
             "nodeName"      : "node2",
             "hostIP"        : "127.0.0.1",
+            "nodeAgentPort" : 1236,
             "blobSvcPort"   : 8893,
             "funcSvcAddr"   : "http://127.0.0.1:8891",
             "nodeMgrAddrs"  : ["http://127.0.0.1:8888"]
@@ -95,6 +98,7 @@ pub struct NodeAgentConfig {
     pub cidr: String,
     pub nodeName: String,
     pub hostIP: String,
+    pub nodeAgentPort: u16,
     pub blobSvcPort: i32,
     pub funcSvcAddr: String,
     pub nodeMgrAddrs: Vec<String>,

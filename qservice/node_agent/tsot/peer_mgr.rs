@@ -1,0 +1,126 @@
+// Copyright (c) 2021 Quark Container Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use std::collections::HashMap;
+use std::sync::Arc; 
+use std::sync::RwLock;
+use core::ops::Deref;
+use std::str::FromStr;
+
+use qshare::common::*;
+
+use crate::pod_mgr::NODEAGENT_CONFIG;
+
+lazy_static::lazy_static! {
+    pub static ref PEER_MGR: PeerMgr = {
+        let cidrStr = NODEAGENT_CONFIG.cidr.clone();
+        let ipv4 = ipnetwork::Ipv4Network::from_str(&cidrStr).unwrap();
+        //let localIp = local_ip_address::local_ip().unwrap();
+        let localIp : u32 = ipnetwork::Ipv4Network::from_str(&NODEAGENT_CONFIG.hostIP).unwrap().ip().into();
+        let localPort = NODEAGENT_CONFIG.nodeAgentPort;
+        PeerMgr::New(localIp, localPort, ipv4.ip().into(), ipv4.prefix() as _)
+    };
+}
+
+#[derive(Debug)]
+pub struct PeerInner {
+    pub hostIp: u32,
+    pub port: u16,
+    pub cidrAddr: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct Peer(Arc<PeerInner>);
+
+impl Peer {
+    pub fn New(hostIp: u32, port: u16, cidrAddr: u32) -> Self {
+        let inner = PeerInner {
+            hostIp: hostIp,
+            port: port,
+            cidrAddr: cidrAddr
+        };
+
+        return Self(Arc::new(inner));
+    }
+}
+
+impl Deref for Peer {
+    type Target = Arc<PeerInner>;
+
+    fn deref(&self) -> &Arc<PeerInner> {
+        &self.0
+    }
+}
+
+#[derive(Debug)]
+pub struct PeerMgrInner {
+    // map cidrAddr --> Peer
+    pub peers: HashMap<u32, Peer>,
+    pub maskbits: usize,
+    pub mask: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct PeerMgr(Arc<RwLock<PeerMgrInner>>);
+
+impl Deref for PeerMgr {
+    type Target = Arc<RwLock<PeerMgrInner>>;
+
+    fn deref(&self) -> &Arc<RwLock<PeerMgrInner>> {
+        &self.0
+    }
+}
+
+impl PeerMgr {
+    pub fn New(localHostIp: u32, localPort: u16, localCidrAddr: u32, maskbits: usize) -> Self {
+        assert!(maskbits < 32);
+        let mask = !((1 << maskbits) - 1);
+        let inner = PeerMgrInner {
+            peers: HashMap::new(),
+            maskbits: maskbits,
+            mask: mask,
+        };
+
+        let mgr = Self(Arc::new(RwLock::new(inner)));
+        mgr.AddPeer(localHostIp, localPort, localCidrAddr).unwrap();
+        return mgr;
+    }
+
+    pub fn AddPeer(&self, hostIp: u32, port: u16, cidrAddr: u32) -> Result<()> {
+        let peer = Peer::New(hostIp, port, cidrAddr);
+        let mut inner = self.write().unwrap();
+        if inner.peers.contains_key(&cidrAddr) {
+            return Err(Error::Exist(format!("PeerMgr::AddPeer get existing peer {:?}", peer)));
+        }
+
+        inner.peers.insert(cidrAddr, peer);
+        return Ok(())
+    }
+
+    pub fn RemovePeer(&self, cidrAddr: u32) -> Result<()> {
+        let mut inner = self.write().unwrap();
+        match inner.peers.remove(&cidrAddr) {
+            None => return Err(Error::NotExist(format!("PeerMgr::RemovePeer peer {:?} not existing", cidrAddr))),
+            Some(_peer) => {
+                return Ok(())
+            }
+        }
+    }
+
+    pub fn LookforPeer(&self, targetIp: u32) -> Option<Peer> {
+        let inner = self.read().unwrap();
+        let cidrAddr = targetIp & inner.mask;
+        return inner.peers.get(&cidrAddr).cloned();
+    }
+}
