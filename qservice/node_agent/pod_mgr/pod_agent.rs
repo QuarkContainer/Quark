@@ -265,7 +265,12 @@ impl PodAgent {
                 }
                 msg = rx.recv() => {
                     if let Some(msg) = msg {
-                        self.PodHandler(msg).await?;
+                        match self.PodHandler(msg).await {
+                            Ok(()) => (),
+                            Err(e) => {
+                                error!("PodHandler get failure {:?}", e);
+                            }
+                        }
                     } else {
                         break;
                     }

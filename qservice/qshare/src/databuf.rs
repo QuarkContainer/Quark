@@ -12,5 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under
 
-pub mod tsot_svc;
-mod tsot_agent;
+pub struct TsotMsg {}

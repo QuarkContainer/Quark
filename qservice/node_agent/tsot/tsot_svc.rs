@@ -15,11 +15,18 @@
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::*;
+use std::result::Result as SResult;
 
+use qshare::config::TSOT_CNI_PORT;
 use tokio::net::UnixListener;
 use tokio::sync::Notify;
 
 use qshare::common::*;
+use qshare::tsot_cni;
+use tonic::transport::Server;
+
+use crate::pod_mgr::pod_sandbox::IpAddress;
+use crate::pod_mgr::NAMESPACE_MGR;
 
 pub static SOCKET_PATH: &'static str = "/var/quarksvc-socket";
 
@@ -53,4 +60,78 @@ impl TsotSvc {
         self.stop.store(true, Ordering::SeqCst);
         self.closeNotify.notify_waiters();
     }
+
+
+}
+
+pub struct TostCniSvc {}
+
+
+impl TostCniSvc {
+    pub fn GetPodSandboxAddr(&self, namespace: &str, uid: &str) -> Result<IpAddress> {
+        return NAMESPACE_MGR.GetPodSandboxAddr(namespace, uid);
+    }
+
+    pub fn RemovePodSandbox(&self, namespace: &str, uid: &str) -> Result<()> {
+        return NAMESPACE_MGR.RemovePodSandbox(namespace, uid);
+    }
+}
+
+#[tonic::async_trait]
+impl tsot_cni::tsot_cni_service_server::TsotCniService for TostCniSvc {
+    async fn get_pod_sandbox_addr(
+        &self,
+        request: tonic::Request<tsot_cni::GetPodSandboxAddrReq>,
+    ) -> SResult<tonic::Response<tsot_cni::GetPodSandboxAddrResp>, tonic::Status> {
+        let req = request.into_inner();
+        match self.GetPodSandboxAddr(&req.namespace, &req.pod_uid) {
+            Ok(addr) => {
+                return Ok(tonic::Response::new(tsot_cni::GetPodSandboxAddrResp {
+                    error: "".to_owned(),
+                    ip_addr: addr.0
+                }))
+            }
+            Err(e) => {
+                return Ok(tonic::Response::new(tsot_cni::GetPodSandboxAddrResp {
+                    error: format!("fail: {:?}", e),
+                    ip_addr: 0,
+                }))
+            }
+        }
+    }
+    async fn remove_pod_sandbox(
+        &self,
+        request: tonic::Request<tsot_cni::RemovePodSandboxReq>,
+    ) -> SResult<tonic::Response<tsot_cni::RemovePodSandboxResp>, tonic::Status> {
+        let req = request.into_inner();
+        match self.RemovePodSandbox(&req.namespace, &req.pod_uid) {
+            Ok(()) => {
+                return Ok(tonic::Response::new(tsot_cni::RemovePodSandboxResp {
+                    error: "".to_owned()
+                }))
+            }
+            Err(e) => {
+                return Ok(tonic::Response::new(tsot_cni::RemovePodSandboxResp {
+                    error: format!("fail: {:?}", e)
+                }))
+            }
+        }
+    }
+}
+
+pub async fn TsotCniSvc() -> Result<()>{
+    let tsotCniSvc = TostCniSvc{};
+    let addr = format!("127.0.0.1:{}", TSOT_CNI_PORT);
+   
+
+    let tostSvcFuture = Server::builder()
+        .add_service(tsot_cni::tsot_cni_service_server::TsotCniServiceServer::new(tsotCniSvc))
+        .serve(addr.parse().unwrap());
+
+
+    info!("TsotCni service start ...");
+    tokio::select! {
+        _ = tostSvcFuture => {}
+    }
+    return Ok(())
 }

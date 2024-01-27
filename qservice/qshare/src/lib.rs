@@ -22,6 +22,7 @@ pub mod config;
 pub mod consts;
 pub mod types;
 pub mod k8s_util;
+pub mod databuf;
 
 pub mod crictl {
     include!("pb_gen/runtime.v1alpha2.rs");
@@ -33,6 +34,10 @@ pub mod tsot {
 
 pub mod na {
     include!("pb_gen/na.rs");
+}
+
+pub mod tsot_cni {
+    include!("pb_gen/tsot_cni.rs");
 }
 
 pub use k8s_openapi::api::core::v1 as k8s;

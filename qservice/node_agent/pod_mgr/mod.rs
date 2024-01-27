@@ -24,8 +24,10 @@ pub mod nodeagent_store;
 pub mod pm_msg;
 pub mod node_status;
 pub mod podmgr_agent;
-
 pub mod podMgr;
+pub mod pod_sandbox;
+pub mod cidr;
+pub mod namespaceMgr;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -41,6 +43,8 @@ use runtime::image_mgr::*;
 use cadvisor::provider::CadvisorInfoProvider;
 use nodeagent_store::NodeAgentStore;
 use tokio::sync::Notify;
+
+use self::namespaceMgr::NamespaceMgr;
 
 lazy_static::lazy_static! {
     pub static ref NODEAGENT_STORE: NodeAgentStore = {
@@ -61,6 +65,8 @@ lazy_static::lazy_static! {
     
         systemConfig.nodeAgentConfig.clone()
     };
+
+    pub static ref NAMESPACE_MGR : NamespaceMgr = NamespaceMgr::New();
 
     pub static ref NODE_CONFIG : NodeConfiguration = {
         NodeConfiguration::Default().unwrap()

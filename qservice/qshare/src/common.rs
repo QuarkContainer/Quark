@@ -21,6 +21,8 @@ use std::str::Utf8Error;
 #[derive(Debug)]
 pub enum Error {
     None,
+    NotExist(String),
+    Exist(String),
     CommonError(String),
     StdIOErr(std::io::Error),
     SerdeJsonError(SerdeJsonError),
