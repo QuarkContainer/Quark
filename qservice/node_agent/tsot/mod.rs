@@ -13,4 +13,5 @@
 // limitations under
 
 pub mod tsot_svc;
+pub mod peer_mgr;
 mod tsot_agent;
