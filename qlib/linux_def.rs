@@ -426,6 +426,7 @@ impl SocketSize {
 pub struct StatxFlags {}
 
 impl StatxFlags {
+    pub const AT_NO_AUTOMOUNT: u32 = 0x800;
     pub const AT_STATX_SYNC_TYPE: u32 = 0x6000;
     pub const AT_STATX_SYNC_AS_STAT: u32 = 0x0000;
     pub const AT_STATX_FORCE_SYNC: u32 = 0x2000;
