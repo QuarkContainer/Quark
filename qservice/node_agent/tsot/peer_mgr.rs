@@ -118,9 +118,12 @@ impl PeerMgr {
         }
     }
 
-    pub fn LookforPeer(&self, targetIp: u32) -> Option<Peer> {
+    pub fn LookforPeer(&self, ip: u32) -> Result<Peer> {
         let inner = self.read().unwrap();
-        let cidrAddr = targetIp & inner.mask;
-        return inner.peers.get(&cidrAddr).cloned();
+        let cidrAddr = ip & inner.mask;
+        match inner.peers.get(&cidrAddr).cloned() {
+            None => return Err(Error::NotExist(format!("PeerMgr::LookforPeer peer {:x} doesn't exist", ip))),
+            Some(peer) => return Ok(peer.clone()),
+        }
     }
 }

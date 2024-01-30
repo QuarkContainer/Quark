@@ -17,9 +17,15 @@
 #![allow(non_camel_case_types)]
 #![allow(non_upper_case_globals)]
 #![allow(deprecated)]
+#![feature(ip_bits)]
+#![feature(unix_socket_ancillary_data)]
 
 #[macro_use]
 extern crate log;
+
+#[macro_use]
+extern crate scopeguard;
+
 extern crate simple_logging;
 
 mod tsot;
@@ -39,6 +45,7 @@ lazy_static::lazy_static! {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    defer!(error!("node_agent finish"));
     log4rs::init_file("/etc/quark/na_logging_config.yaml", Default::default()).unwrap();
 
     let podMgrFuture = PodMgrSvc();

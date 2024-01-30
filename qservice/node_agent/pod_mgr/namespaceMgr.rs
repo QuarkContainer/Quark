@@ -31,8 +31,6 @@ pub struct NamespaceInner {
     pub namespace: String,
 
     pub cidr: Cidr,
-
-    pub podSandboxes: HashMap<String, PodSandbox>,
 }
 
 #[derive(Debug, Clone)]
@@ -51,57 +49,22 @@ impl Namespace {
         let inner = NamespaceInner {
             namespace: namespace.to_owned(),
             cidr: Cidr::New(addr, maskbits),
-            podSandboxes: HashMap::new(),
         };
 
         return Self(Arc::new(Mutex::new(inner)));
     }
 
-    pub fn NewPodSandbox(&self, uid: &str, namespace: &str, name: &str) -> Result<()> {
-        let mut inner = self.lock().unwrap();
+    pub fn NewPodSandboxAddr(&self) -> Result<IpAddress> {
+        let inner = self.lock().unwrap();
         let addr = inner.cidr.Allocate()?;
 
-        let podsandbox = PodSandbox::New(uid, namespace, name, addr);
-        match inner.podSandboxes.insert(uid.to_owned(), podsandbox) {
-            None => (),
-            Some(_) => {
-                return Err(Error::Exist(format!("NewPodSandbox exist podsandbox with uid {uid}")))
-            }
-        }
-        return Ok(())
+        return Ok(addr)
     }
 
-    pub fn GetPodSandbox(&self, uid: &str) -> Result<PodSandbox> {
+    pub fn RemovePodSandboxAddr(&self, addr: IpAddress) -> Result<()> {
         let inner = self.lock().unwrap();
-        match inner.podSandboxes.get(uid) {
-            None => return Err(Error::NotExist(format!("the podsandbox with uid {uid} not exist"))),
-            Some(podsandbox) => {
-                return Ok(podsandbox.clone())
-            }
-        }
-    }
-
-    pub fn GetPodSandboxAddr(&self, uid: &str) -> Result<IpAddress> {
-        let podSandbox = self.GetPodSandbox(uid)?;
-        return Ok(podSandbox.lock().unwrap().addr);
-    }
-
-    // return whether there are more podsandbox in the namespace 
-    pub fn RemovePodSandbox(&self, uid: &str) -> Result<bool> {
-        let mut inner = self.lock().unwrap();
-        error!("RemovePodSandbox keys is {:?}", inner.podSandboxes.keys());
-        match inner.podSandboxes.remove(uid) {
-            Some(podsandbox) => {
-                let addr = podsandbox.lock().unwrap().addr;
-                inner.cidr.Free(addr)?;
-                return Ok(inner.podSandboxes.len() != 0);
-            }
-            None => {
-                // container might call cni delete multiple time, ignore this failure
-                return Ok(inner.podSandboxes.len() != 0);
-                // return Err(Error::NotExist(format!("the podsandbox with uid {uid} not exist")));
-            }
-        }
+        inner.cidr.Free(addr)?;
+        return Ok(())
     }
 }
 
@@ -110,6 +73,8 @@ pub struct NamespaceMgrInner {
     pub namespaces: HashMap<String, Namespace>,
     pub addr: u32,
     pub maskbits: usize,
+
+    pub podSandboxes: HashMap<String, PodSandbox>,
 }
 
 #[derive(Debug, Clone)]
@@ -132,6 +97,7 @@ impl NamespaceMgr {
             namespaces: HashMap::new(),
             addr: ipv4.ip().into(),
             maskbits: ipv4.prefix() as _,
+            podSandboxes: HashMap::new(),
         };
 
         return Self(Arc::new(Mutex::new(inner)))
@@ -151,27 +117,62 @@ impl NamespaceMgr {
         }
     }
 
+    pub fn GetNamespace(&self, namespace: &str) -> Result<Namespace> {
+        let inner = self.lock().unwrap();
+        match inner.namespaces.get(namespace) {
+            None => {
+                return Err(Error::NotExist(format!("NamespaceMgr namespace {namespace} doesn't exist")))
+            }
+            Some(ns) => {
+                return Ok(ns.clone());
+            }
+        }
+    }
+
     pub fn NewPodSandbox(&self, namespace: &str, uid: &str, name: &str) -> Result<()> {
         let ns = self.GetOrCreateNamespace(namespace);
-        ns.NewPodSandbox(uid, namespace, name)?;
+        let addr = ns.NewPodSandboxAddr()?;
+
+        let mut inner = self.lock().unwrap();
+        let podsandbox = PodSandbox::New(uid, namespace, name, addr);
+        match inner.podSandboxes.insert(uid.to_owned(), podsandbox) {
+            None => (),
+            Some(_) => {
+                return Err(Error::Exist(format!("NewPodSandbox exist podsandbox with uid {uid}")))
+            }
+        }
+
         return Ok(())
     }
 
-    pub fn RemovePodSandbox(&self, namespace: &str, uid: &str) -> Result<()> {
-        let ns = self.GetOrCreateNamespace(namespace);
-        let _hasmore = ns.RemovePodSandbox(uid)?;
-        // todo: do we need to remove the namespace when there is no more podsandbox left there?
-        return Ok(())
+    pub fn RemovePodSandbox(&self, uid: &str) -> Result<()> {
+        let mut inner = self.lock().unwrap();
+        match inner.podSandboxes.remove(uid) {
+            None => return Err(Error::NotExist(format!("RemovePodSandbox has no podsandbox with uid {uid}"))),
+            Some(sandbox) => {
+                let ns = sandbox.lock().unwrap().namespace.clone();
+                let addr = sandbox.lock().unwrap().ip.clone();
+                let namespace = self.GetNamespace(&ns)?;
+                namespace.RemovePodSandboxAddr(addr)?;
+                return Ok(())
+            }
+        }
     }
 
-    pub fn GetPodSandbox(&self, namespace: &str, uid: &str) -> Result<PodSandbox> {
-        let ns = self.GetOrCreateNamespace(namespace);
-        return ns.GetPodSandbox(uid);
+    pub fn GetPodSandbox(&self, uid: &str) -> Result<PodSandbox> {
+        let inner = self.lock().unwrap();
+        
+        match inner.podSandboxes.get(uid) {
+            None => return Err(Error::NotExist(format!("the podsandbox with uid {uid} not exist"))),
+            Some(podsandbox) => {
+                return Ok(podsandbox.clone())
+            }
+        }
     }
 
-    pub fn GetPodSandboxAddr(&self, namespace: &str, uid: &str) -> Result<IpAddress> {
-        let ns = self.GetOrCreateNamespace(namespace);
+    pub fn GetPodSandboxAddr(&self, uid: &str) -> Result<IpAddress> {
+        let ns = self.GetPodSandbox(uid)?;
 
-        return ns.GetPodSandboxAddr(uid);
+        return Ok(ns.lock().unwrap().ip);
     }
 }

@@ -16,15 +16,15 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use core::ops::Deref;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct IpAddress(pub u32);
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PodSandboxInner {
     pub podUid: String, 
     pub namespace: String,
     pub name: String,
-    pub addr: IpAddress,
+    pub ip: IpAddress,
 }
 
 #[derive(Debug, Clone)]
@@ -44,7 +44,7 @@ impl PodSandbox {
             podUid: uid.to_owned(),
             namespace: namespace.to_owned(),
             name: name.to_owned(),
-            addr: addr
+            ip: addr
         };
 
         return Self(Arc::new(Mutex::new(inner)));

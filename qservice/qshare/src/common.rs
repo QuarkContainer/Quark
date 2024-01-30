@@ -23,6 +23,7 @@ pub enum Error {
     None,
     NotExist(String),
     Exist(String),
+    MpscSendFull(String),
     CommonError(String),
     StdIOErr(std::io::Error),
     SerdeJsonError(SerdeJsonError),

@@ -14,4 +14,8 @@
 
 pub mod tsot_svc;
 pub mod peer_mgr;
+pub mod tsot_msg;
+pub mod pod_broker;
+pub mod conn_svc;
+pub mod pod_broker_mgr;
 mod tsot_agent;
