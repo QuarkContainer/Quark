@@ -131,6 +131,19 @@ pub extern "C" fn cudaMalloc(
 }
 
 #[no_mangle]
+pub extern "C" fn cudaFree(
+    dev_ptr: *mut c_void,
+) -> usize {
+    println!("Hijacked cudaFree at {:?}",dev_ptr);
+    
+    let ret = unsafe{
+        syscall2(SYS_PROXY, ProxyCommand::CudaFree as usize,dev_ptr as * const _ as usize )
+    };
+    return ret;
+}
+
+
+#[no_mangle]
 pub extern "C" fn cudaMemcpy(
         dst: *mut c_void, 
         src: *const c_void, 

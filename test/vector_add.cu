@@ -107,9 +107,12 @@ void cuda_add() {
     printf("PASSED\n");
 
     // Deallocate device memory
+    printf("Deallocating GPU memory\n");
+ 
     cudaFree(d_a);
     cudaFree(d_b);
     cudaFree(d_out);
+   
 
     // Deallocate host memory
     free(a); 

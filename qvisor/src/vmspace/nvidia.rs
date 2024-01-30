@@ -39,8 +39,8 @@ lazy_static! {
         (ProxyCommand::CudaMemcpy,(XpuLibrary::CudaRuntime, "cudaMemcpy")),
         (ProxyCommand::CudaRegisterFatBinary,(XpuLibrary::CudaDriver, "cuModuleLoadData")),
         (ProxyCommand::CudaRegisterFunction,(XpuLibrary::CudaDriver, "cuModuleGetFunction")),
-        (ProxyCommand::CudaLaunchKernel,(XpuLibrary::CudaDriver, "cuLaunchKernel")
-        ),
+        (ProxyCommand::CudaLaunchKernel,(XpuLibrary::CudaDriver, "cuLaunchKernel")),
+        (ProxyCommand::CudaFree,(XpuLibrary::CudaRuntime,"cudaFree")),
     ]);
 }
 
@@ -80,7 +80,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 *addr as u64
             );
             let ret = func(addr, parameters.para2 as usize);
-            error!(
+            error!( 
                 "hochan cuda_runtime_sys::cudaMalloc ret {:x?} addr {:x}",
                 ret, *addr as u64
             );
@@ -94,6 +94,17 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 parameters, ret
             );
             return Ok(ret as i64);
+        }
+
+        ProxyCommand::CudaFree => {
+            let func: extern "C" fn(*mut ::std::os::raw::c_void) -> i32 =
+                unsafe {std::mem::transmute(handler)};
+                  
+            let ret = func( parameters.para1 as *mut ::std::os::raw::c_void);
+            error!("yiwang, cuda free memory return value: {} at location: {:x}", ret, parameters.para1);
+
+            return Ok(ret as i64);
+
         }
         ProxyCommand::CudaMemcpy => {
             return CudaMemcpy(handler, parameters);
