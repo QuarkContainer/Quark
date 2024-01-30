@@ -59,7 +59,7 @@ fn CreateRootMount(
     };
 
     let rootStr = &config.RootDir;
-    let (fd, writeable, fstat) = TryOpenAt(-100, rootStr)?;
+    let (fd, writeable, fstat) = TryOpenAt(-100, rootStr, false)?;
 
     let ms = MountSource::NewHostMountSource(
         &rootStr,
@@ -74,6 +74,7 @@ fn CreateRootMount(
         fd,
         &fstat,
         writeable,
+        false,
         false,
     )?;
 

@@ -715,6 +715,7 @@ impl File {
                         &fstat,
                         fileFlags.Write,
                         false,
+                        false,
                     )?
                 };
 
@@ -773,6 +774,7 @@ impl File {
             fd,
             &fstat,
             fileFlags.Write,
+            false,
             true,
         )?;
         let name = format!("memfd:{}", name);

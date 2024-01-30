@@ -326,6 +326,7 @@ impl ProxyFileOperations {
             &fstat,
             true,
             false,
+            false,
         );
 
         return Ok(Self { InodeOp: iops });

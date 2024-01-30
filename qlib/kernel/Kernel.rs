@@ -21,6 +21,7 @@ use super::super::socket_buf::*;
 use super::super::*;
 use crate::kernel_def::HyperCall64;
 use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
+use crate::qlib::proxy::*;
 
 extern "C" {
     pub fn rdtsc() -> i64;
@@ -347,11 +348,10 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
-    pub fn Proxy(cmd: u64, addrIn: u64, addrOut: u64) -> i64 {
+    pub fn Proxy(cmd: ProxyCommand, parameters: ProxyParameters) -> i64 {
         let mut msg = Msg::Proxy(Proxy {
             cmd,
-            addrIn,
-            addrOut,
+            parameters
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
@@ -613,11 +613,23 @@ impl HostSpace {
         HyperCall64(HYPERCALL_PANIC, &msg as *const _ as u64, 0, 0, 0);
     }
 
-    pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64) -> i64 {
+    pub fn TryOpenWrite(dirfd: i32, oldfd: i32, name: u64) -> i64 {
+        let mut msg = Msg::TryOpenWrite(TryOpenWrite {
+            dirfd: dirfd,
+            oldfd: oldfd,
+            name: name,
+        });
+
+        let ret = Self::HCall(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64, skiprw: bool) -> i64 {
         let mut msg = Msg::TryOpenAt(TryOpenAt {
             dirfd: dirfd,
             name: name,
             addr: addr,
+            skiprw: skiprw,
         });
 
         let ret = Self::HCall(&mut msg, false) as i64;
@@ -688,6 +700,28 @@ impl HostSpace {
             flags: flags,
             fd: fd,
             offset: offset
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn HostUnixConnect(type_: i32, addr: u64, len: usize) -> i64 {
+        let mut msg = Msg::HostUnixConnect(HostUnixConnect {
+            type_: type_,
+            addr: addr,
+            len: len,
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn HostUnixRecvMsg(fd: i32, msghdr: u64, flags: i32) -> i64 {
+        let mut msg = Msg::HostUnixRecvMsg(HostUnixRecvMsg {
+            fd: fd,
+            msghdr: msghdr,
+            flags: flags
         });
 
         let ret = Self::Call(&mut msg, false) as i64;

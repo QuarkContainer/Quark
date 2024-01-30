@@ -1135,7 +1135,7 @@ impl SockOperations for UringSocketOperations {
                     if opt.len() < 4 {
                         return Err(Error::SysError(SysErr::EINVAL));
                     }
-                    error!("erro len is {}", opt.len());
+                    
                     if self.ConnErrno() != 0 {
                         let errno = self.ConnErrno();
                         self.SetConnErrno(0);

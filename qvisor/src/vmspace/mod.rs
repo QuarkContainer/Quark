@@ -24,6 +24,8 @@ pub mod random;
 pub mod syscall;
 pub mod time;
 pub mod uringMgr;
+pub mod nvidia;
+pub mod xpu;
 
 use core::arch::asm;
 use core::sync::atomic;
@@ -41,14 +43,18 @@ use uuid::Uuid;
 
 use crate::qlib::cstring::CString;
 use crate::qlib::fileinfo::*;
+use crate::qlib::kernel::socket::control::*;
+use crate::qlib::kernel::socket::control::Parse;
 use crate::qlib::nvproxy::frontend::FrontendIoctlCmd;
 use crate::qlib::nvproxy::frontend_type::NV_ESC_CHECK_VERSION_STR;
 use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
 use crate::qlib::range::Range;
+use crate::qlib::proxy::*;
 use crate::vmspace::kernel::GlobalIOMgr;
 use crate::vmspace::kernel::GlobalRDMASvcCli;
 
 use self::limits::*;
+use self::nvidia::NvidiaProxy;
 use self::random::*;
 use self::syscall::*;
 use super::kvm_vcpu::HostPageAllocator;
@@ -67,7 +73,6 @@ use super::qlib::qmsg::*;
 use super::qlib::socket_buf::*;
 use super::qlib::task_mgr::*;
 use super::qlib::*;
-use super::runc::container::mounts::*;
 use super::runc::runtime::loader::*;
 use super::runc::runtime::signal_handle::*;
 use super::runc::specutils::specutils::*;
@@ -148,18 +153,9 @@ impl VMSpace {
         return fdInfo.IOReadDir(addr, len, reset);
     }
 
-    pub fn Mount(&self, id: &str, rootfs: &str) -> Result<()> {
-        let spec = &self.args.as_ref().unwrap().Spec;
-        //let rootfs : &str = &spec.root.path;
-        let cpath = format!("/{}", id);
-
-        init_rootfs(spec, rootfs, &cpath, false)?;
-        pivot_rootfs(&*rootfs)?;
-        return Ok(());
-    }
 
     pub fn PivotRoot(&self, rootfs: &str) {
-        let mns = MountNs::New(rootfs.to_string());
+                let mns = MountNs::New(rootfs.to_string());
         mns.PivotRoot();
     }
 
@@ -392,21 +388,59 @@ impl VMSpace {
         return (len + 1) as i64;
     }
 
-    pub unsafe fn TryOpenHelper(dirfd: i32, name: u64) -> (i32, bool) {
+    pub fn TryOpenWrite(dirfd: i32, oldfd: i32, name: u64) -> i64 {
         let flags = Flags::O_NOFOLLOW;
-        let ret = libc::openat(
-            dirfd,
-            name as *const c_char,
-            (flags | Flags::O_RDWR) as i32,
-            0,
-        );
-        if ret > 0 {
-            return (ret, true);
+
+        let fd = unsafe {
+            libc::openat(
+                dirfd,
+                name as *const c_char,
+                (flags | Flags::O_RDWR) as i32,
+                0,
+            )
+        };
+
+        if fd < 0 {
+            return fd as i64;
         }
 
-        let err = Self::GetRet(ret as i64) as i32;
-        if err == -SysErr::ENOENT {
-            return (-SysErr::ENOENT, false);
+        let ret = unsafe {
+            libc::dup2(fd, oldfd)
+        };
+
+        if ret < 0 {
+            error!("TryOpenWrite can't dup new fd to old fd with error {}", errno::errno().0);
+            unsafe {
+                libc::close(fd);
+            }
+            return ret as i64;
+        }
+
+        unsafe {
+            libc::close(fd);
+        }
+
+        return 0;
+    }
+
+    pub unsafe fn TryOpenHelper(dirfd: i32, name: u64, skiprw: bool) -> (i32, bool) {
+        let flags = Flags::O_NOFOLLOW;
+
+        if !skiprw {
+            let ret = libc::openat(
+                dirfd,
+                name as *const c_char,
+                (flags | Flags::O_RDWR) as i32,
+                0,
+            );
+            if ret > 0 {
+                return (ret, true);
+            }
+
+            let err = Self::GetRet(ret as i64) as i32;
+            if err == -SysErr::ENOENT {
+                return (-SysErr::ENOENT, false);
+            }
         }
 
         let ret = libc::openat(
@@ -417,6 +451,13 @@ impl VMSpace {
         );
         if ret > 0 {
             return (ret, false);
+        }
+
+        if skiprw {
+            let err = Self::GetRet(ret as i64) as i32;
+            if err == -SysErr::ENOENT {
+                return (-SysErr::ENOENT, false);
+            }
         }
 
         let ret = libc::openat(
@@ -442,8 +483,8 @@ impl VMSpace {
         return (Self::GetRet(ret as i64) as i32, false);
     }
 
-    pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64) -> i64 {
-        //info!("TryOpenAt: the filename is {}", Self::GetStr(name));
+    pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64, skiprw: bool) -> i64 {
+        //info!("TryOpenAt1: the filename is {}", Self::GetStr(name));
         let dirfd = if dirfd < 0 {
             dirfd
         } else {
@@ -454,23 +495,33 @@ impl VMSpace {
         };
 
         let tryOpenAt = unsafe { &mut *(addr as *mut TryOpenStruct) };
+        let ret =
+            unsafe { 
+                libc::fstatat(
+                    dirfd, 
+                    name as *const c_char,
+                    tryOpenAt.fstat as *const _ as u64 as *mut stat,
+                    libc::AT_SYMLINK_NOFOLLOW
 
-        let (fd, writeable) = unsafe { Self::TryOpenHelper(dirfd, name) };
+                ) as i64 
+            };
 
+        if ret < 0 {
+            return Self::GetRet(ret as i64);
+        }
+        
+        let (fd, writeable) = unsafe { 
+            Self::TryOpenHelper(
+                dirfd, 
+                name, 
+                skiprw && tryOpenAt.fstat.IsRegularFile()
+            ) 
+        };
+        
         //error!("TryOpenAt dirfd {}, name {} ret {}", dirfd, Self::GetStr(name), fd);
 
         if fd < 0 {
             return fd as i64;
-        }
-
-        let ret =
-            unsafe { libc::fstat(fd, tryOpenAt.fstat as *const _ as u64 as *mut stat) as i64 };
-
-        if ret < 0 {
-            unsafe {
-                libc::close(fd);
-            }
-            return Self::GetRet(ret as i64);
         }
 
         tryOpenAt.writeable = writeable;
@@ -526,7 +577,7 @@ impl VMSpace {
         let ioctlParams = unsafe {
             &mut *(ioctlParamsAddr as * mut RMAPIVersion) 
         };
-        
+
         let drvName = CString::New("/dev/nvidiactl");
 
         let ret = unsafe { 
@@ -1207,6 +1258,122 @@ impl VMSpace {
 
     ///////////start of network operation//////////////////////////////////////////////////////////////////
 
+    pub fn HostUnixRecvMsg(fd: i32, msghdr: u64, flags: i32) -> i64 {
+        match Self::HostUnixRecvMsgHelp(fd, msghdr, flags) {
+            Err(Error::SysError(errno)) => {
+                return -errno as i64
+            }
+            Ok(()) => return 0,
+            _ => panic!("HostUnixRecvMsg impossible"),
+        }
+    }
+
+    pub fn HostUnixRecvMsgHelp(fd: i32, msghdr: u64, flags: i32) -> Result<()> {
+        let ret = unsafe {
+            libc::recvmsg(fd, msghdr as * mut _, flags)
+        };
+
+        if ret < 0 {
+            return Err(Error::SysError(Self::GetRet(ret as i64) as i32));
+        }
+
+        let hdr = unsafe {
+            &mut *(msghdr as * mut MsgHdr)
+        };
+
+        if hdr.msgControlLen > 0 {
+            let controlVec = unsafe {
+                slice::from_raw_parts_mut(hdr.msgControl as *mut u8, hdr.msgControlLen)
+            };
+
+            let ctrlMsg = Parse(controlVec)?;
+            let mut fds = Vec::new();
+            match &ctrlMsg.Rights {
+                Some(right) => {
+                    for fd in &right.0 {
+                        let fd = *fd;
+                        let mut stat = LibcStat::default();
+                        unsafe { 
+                            libc::fstat(
+                                fd, 
+                                &mut stat as * mut _ as u64 as *mut _
+                            ) as i64 
+                        };
+    
+                        if true || stat.IsRegularFile() {
+                            let hostfd = GlobalIOMgr().AddFile(fd);
+                            URING_MGR.lock().Addfd(hostfd).unwrap();
+                            fds.push(hostfd);
+                        } else {
+                            error!("HostUnixRecvMsg get unsupport fd with state {:x?}", &stat);
+                        }
+                    }
+                }
+                None => ()
+            }
+
+            let totalLen = controlVec.len();
+            let controlData = &mut controlVec[..];
+            let (controlData, _) = ControlMessageRights(fds).EncodeInto(controlData, hdr.msgFlags);
+
+            let new_size = totalLen - controlData.len();
+            hdr.msgControlLen = new_size;
+        }
+
+        return Ok(())
+    }
+
+    pub fn HostUnixConnect(type_: i32, addr: u64, len: usize) -> i64 {
+        let blockedType = type_ & (!SocketFlags::SOCK_NONBLOCK);
+
+        let fd = unsafe {
+            libc::socket(
+                AFType::AF_UNIX,
+                blockedType | SocketFlags::SOCK_CLOEXEC,
+                0
+            )
+        };
+
+        if fd < 0 {
+            return Self::GetRet(fd as i64);
+        }
+
+        let mut socketAddr = libc::sockaddr_un {
+            sun_family: libc::AF_UNIX as u16,
+            sun_path: [0; 108],
+        };
+
+        let slice = unsafe {
+            slice::from_raw_parts_mut(addr as *mut i8, len)
+        };
+
+        for i in 0..slice.len() {
+            socketAddr.sun_path[i] = slice[i]
+        };
+
+        let ret = unsafe {
+            libc::connect(fd, &socketAddr as * const _ as u64 as * const _, 108 + 2)
+        };
+
+        if ret < 0 {
+            unsafe {
+                libc::close(fd);
+            }
+            
+            return Self::GetRet(ret as i64);
+        }
+
+        unsafe {
+            let flags = fcntl(fd, Cmd::F_GETFL, 0);
+            let ret = fcntl(fd, Cmd::F_SETFL, flags | Flags::O_NONBLOCK);
+            assert!(ret == 0, "UnblockFd fail");
+        }
+
+        let hostfd = GlobalIOMgr().AddSocket(fd);
+        URING_MGR.lock().Addfd(fd).unwrap();
+        return Self::GetRet(hostfd as i64);
+    }
+
     pub fn Socket(domain: i32, type_: i32, protocol: i32) -> i64 {
         let fd = unsafe {
             socket(
@@ -1705,23 +1872,14 @@ impl VMSpace {
         }
     }
 
-    pub fn Proxy(cmd: u64, addrIn: u64, addrOut: u64) -> i64 {
-        use super::qlib::proxy::*;
-        let cmd: Command = unsafe { core::mem::transmute(cmd as u64) };
-        match cmd {
-            Command::Cmd1 => {
-                let dataIn = unsafe { &*(addrIn as *const Cmd1In) };
-
-                let dataOut = unsafe { &mut *(addrOut as *mut Cmd1Out) };
-
-                error!("get proxy cmd1 with val1 {}", dataIn.val);
-                dataOut.val1 = 1;
-                dataOut.val2 = 2;
+    pub fn Proxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> i64 {
+        match NvidiaProxy(cmd, parameters) {
+            Ok(v) => return v,
+            Err(e) => {
+                error!("nvidia proxy get error {:?}", e);
+                return 0;
             }
-            Command::Cmd2 => {}
         }
-
-        return 0;
     }
 
     pub fn SwapInPage(addr: u64) -> i64 {

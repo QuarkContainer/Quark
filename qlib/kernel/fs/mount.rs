@@ -385,7 +385,7 @@ impl MountNs {
 
             let next = match current.Walk(task, root, first) {
                 Err(e) => {
-                    current.ExtendReference();
+                    current.DropExtendedReference();
                     return Err(e);
                 }
                 Ok(n) => n,

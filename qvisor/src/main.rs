@@ -22,6 +22,7 @@
 //#![feature(asm)]
 #![recursion_limit = "256"]
 //#![allow(invalid_reference_casting)]
+#![feature(unix_socket_ancillary_data)]
 
 extern crate alloc;
 extern crate bit_field;
@@ -161,6 +162,7 @@ lazy_static! {
     };
     pub static ref KERNEL_IO_THREAD: KIOThread = KIOThread::New();
     pub static ref GLOCK: Mutex<()> = Mutex::new(());
+    pub static ref NIVIDIA_CONTAINER_NAME: Mutex<String> = Mutex::new(String::new());
     pub static ref SANDBOX: Mutex<Sandbox> = Mutex::new(Sandbox::default());
 }
 

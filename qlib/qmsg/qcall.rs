@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use crate::qlib::fileinfo::*;
+use crate::qlib::proxy::ProxyCommand;
+use crate::qlib::proxy::ProxyParameters;
 
 use super::super::config::*;
 use super::super::kernel::util::cstring::*;
@@ -47,6 +49,7 @@ pub enum Msg {
     Fstatfs(Fstatfs),
 
     TryOpenAt(TryOpenAt),
+    TryOpenWrite(TryOpenWrite),
     OpenAt(OpenAt),
     OpenDevFile(OpenDevFile),
     CreateAt(CreateAt),
@@ -127,6 +130,8 @@ pub enum Msg {
     UnmapGuestMemRange(UnmapGuestMemRange),
     NividiaDriverVersion(NividiaDriverVersion),
     NvidiaMMap(NvidiaMMap),
+    HostUnixConnect(HostUnixConnect),
+    HostUnixRecvMsg(HostUnixRecvMsg),
 }
 
 #[derive(Clone, Default, Debug)]
@@ -145,6 +150,20 @@ pub struct NvidiaMMap {
 }
 
 #[derive(Clone, Debug, Default)]
+pub struct HostUnixConnect {
+    pub type_: i32, 
+    pub addr: u64, 
+    pub len: usize
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct HostUnixRecvMsg {
+    pub fd: i32,
+    pub msghdr: u64,
+    pub flags: i32,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct RemapGuestMemRanges {
     pub len: u64,
     pub addr: u64,
@@ -159,9 +178,8 @@ pub struct UnmapGuestMemRange {
 
 #[derive(Clone, Default, Debug)]
 pub struct Proxy {
-    pub cmd: u64,
-    pub addrIn: u64,
-    pub addrOut: u64,
+    pub cmd: ProxyCommand,
+    pub parameters: ProxyParameters
 }
 
 #[derive(Clone, Default, Debug)]
@@ -465,6 +483,14 @@ pub struct TryOpenAt {
     pub dirfd: i32,
     pub name: u64,
     pub addr: u64,
+    pub skiprw: bool,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TryOpenWrite {
+    pub dirfd: i32,
+    pub oldfd: i32,
+    pub name: u64, 
 }
 
 #[derive(Clone, Default, Debug)]

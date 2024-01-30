@@ -17,7 +17,6 @@
 #![allow(non_snake_case)]
 #![allow(non_camel_case_types)]
 #![allow(non_upper_case_globals)]
-#![feature(map_first_last)]
 
 #[macro_use]
 extern crate scopeguard;

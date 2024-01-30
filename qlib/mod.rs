@@ -158,7 +158,7 @@ pub const MAX_VCPU_COUNT: usize = 64;
 #[cfg(target_arch = "x86_64")]
 #[allow(non_camel_case_types)]
 #[repr(u64)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub enum SysCallID {
     sys_read = 0 as u64,
     sys_write,

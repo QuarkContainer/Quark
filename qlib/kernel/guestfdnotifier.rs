@@ -107,7 +107,7 @@ impl IOMgr {
     }
 
     pub fn Notify(&self, fd: i32, mask: EventMask) {
-        let fi = match self.FdWaitInfo(fd) {
+                let fi = match self.FdWaitInfo(fd) {
             None => return,
             Some(fi) => fi,
         };

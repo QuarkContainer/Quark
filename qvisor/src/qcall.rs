@@ -111,8 +111,11 @@ impl KVMVcpu {
             Msg::Fstatfs(msg) => {
                 ret = super::VMSpace::Fstatfs(msg.fd, msg.buf) as u64;
             }
+            Msg::TryOpenWrite(msg) => {
+                ret = super::VMSpace::TryOpenWrite(msg.dirfd, msg.oldfd, msg.name) as u64;
+            }
             Msg::TryOpenAt(msg) => {
-                ret = super::VMSpace::TryOpenAt(msg.dirfd, msg.name, msg.addr) as u64;
+                ret = super::VMSpace::TryOpenAt(msg.dirfd, msg.name, msg.addr, msg.skiprw) as u64;
             }
             Msg::OpenAt(msg) => {
                 ret = super::VMSpace::OpenAt(msg.dirfd, msg.name, msg.flags, msg.addr) as u64;
@@ -128,6 +131,12 @@ impl KVMVcpu {
             }
             Msg::NvidiaMMap(msg) => {
                 ret = super::VMSpace::NvidiaMMap(msg.addr, msg.len, msg.prot, msg.flags, msg.fd, msg.offset) as u64;
+            }
+            Msg::HostUnixConnect(msg) => {
+                ret = super::VMSpace::HostUnixConnect(msg.type_, msg.addr, msg.len) as u64;
+            }
+            Msg::HostUnixRecvMsg(msg) => {
+                ret = super::VMSpace::HostUnixRecvMsg(msg.fd, msg.msghdr, msg.flags) as u64;
             }
             Msg::OpenDevFile(msg) => {
                 ret = super::VMSpace::OpenDevFile(msg.dirfd, msg.name, msg.flags) as u64;
@@ -273,7 +282,7 @@ impl KVMVcpu {
                 ret = 0;
             }
             Msg::Proxy(msg) => {
-                ret = super::VMSpace::Proxy(msg.cmd, msg.addrIn, msg.addrOut) as u64;
+                ret = super::VMSpace::Proxy(msg.cmd, &msg.parameters) as u64;
             }
             Msg::SymLinkAt(msg) => {
                 ret = super::VMSpace::SymLinkAt(msg.oldpath, msg.newdirfd, msg.newpath) as u64;

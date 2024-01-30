@@ -268,7 +268,7 @@ pub fn TimespecFromTimestamp(t: Time, omit: bool, setSysTime: bool) -> Timespec 
 
 //if dirfd ==-100, there is no parent
 //return (fd, writeable)
-pub fn TryOpenAt(dirfd: i32, name: &str) -> Result<(i32, bool, LibcStat)> {
+pub fn TryOpenAt(dirfd: i32, name: &str, skiprw: bool) -> Result<(i32, bool, LibcStat)> {
     if dirfd == -100 && !path::IsAbs(name) {
         return Err(Error::SysError(SysErr::EINVAL));
     }
@@ -281,7 +281,7 @@ pub fn TryOpenAt(dirfd: i32, name: &str) -> Result<(i32, bool, LibcStat)> {
     };
     let cstr = CString::New(&name);
 
-    let ret = HostSpace::TryOpenAt(dirfd, cstr.Ptr(), &mut tryopen as *mut TryOpenStruct as u64);
+    let ret = HostSpace::TryOpenAt(dirfd, cstr.Ptr(), &mut tryopen as *mut TryOpenStruct as u64, skiprw);
 
     if ret < 0 {
         return Err(Error::SysError(-ret as i32));

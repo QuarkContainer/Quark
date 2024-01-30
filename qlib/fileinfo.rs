@@ -56,7 +56,7 @@ impl fmt::Debug for SockInfo {
 
 impl SockInfo {
     pub fn Notify(&self, eventmask: EventMask, waitinfo: FdWaitInfo) {
-        match self {
+                match self {
             Self::File => {
                 waitinfo.Notify(eventmask);
             }
@@ -207,7 +207,7 @@ impl FdWaitInfo {
     }
 
     pub fn UpdateFDAsync(&self, fd: i32, epollfd: i32) -> Result<()> {
-        let op;
+                let op;
         let mask = {
             let mut fi = self.lock();
 
@@ -242,7 +242,7 @@ impl FdWaitInfo {
     }
 
     pub fn Notify(&self, mask: EventMask) {
-        let queue = self.lock().queue.clone();
+                let queue = self.lock().queue.clone();
         queue.Notify(EventMaskFromLinux(mask as u32));
     }
 }
