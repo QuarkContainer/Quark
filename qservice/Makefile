@@ -1,7 +1,7 @@
 All: na test cni
 
 na: 
-	cargo build --bin na
+	cargo +nightly-x86_64-unknown-linux-gnu build --bin na
 	cp -f na_logging_config.yaml /etc/quark/
 
 cni:

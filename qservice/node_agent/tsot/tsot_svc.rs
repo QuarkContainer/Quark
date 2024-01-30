@@ -17,18 +17,20 @@ use std::sync::Arc;
 use std::sync::atomic::*;
 use std::result::Result as SResult;
 
-use qshare::config::TSOT_CNI_PORT;
 use tokio::net::UnixListener;
 use tokio::sync::Notify;
+use tonic::transport::Server;
 
+use qshare::config::TSOT_CNI_PORT;
 use qshare::common::*;
 use qshare::tsot_cni;
-use tonic::transport::Server;
+
+use super::pod_broker::*;
 
 use crate::pod_mgr::pod_sandbox::IpAddress;
 use crate::pod_mgr::NAMESPACE_MGR;
 
-pub static SOCKET_PATH: &'static str = "/var/quarksvc-socket";
+pub static SOCKET_PATH: &'static str = "/var/run/quark/tsot-socket";
 
 pub struct TsotSvc {
     pub closeNotify: Arc<Notify>,
@@ -61,19 +63,45 @@ impl TsotSvc {
         self.closeNotify.notify_waiters();
     }
 
+    pub async fn Process(&self) -> Result<()> {
+        loop {
+            tokio::select! {
+                _ = self.closeNotify.notified() => {
+                    self.stop.store(false, Ordering::SeqCst);
+                    break;
+                }
+                res = self.listener.accept() => {
+                    match res {
+                        Err(e) => {
+                            error!("TsotSvc accept get error {:?}", e);
+                            continue;
+                        }
+                        Ok((stream, _addr)) => {
+                            tokio::spawn(async move {
+                                let podBroker = PodBroker::New(stream);
+                                podBroker.Process().await;
+                            });
+                        }
+                    }
+                    
+                }
+            }
+        }
 
+        return Ok(())
+    }
 }
 
 pub struct TostCniSvc {}
 
 
 impl TostCniSvc {
-    pub fn GetPodSandboxAddr(&self, namespace: &str, uid: &str) -> Result<IpAddress> {
-        return NAMESPACE_MGR.GetPodSandboxAddr(namespace, uid);
+    pub fn GetPodSandboxAddr(&self, _namespace: &str, uid: &str) -> Result<IpAddress> {
+        return NAMESPACE_MGR.GetPodSandboxAddr(uid);
     }
 
-    pub fn RemovePodSandbox(&self, namespace: &str, uid: &str) -> Result<()> {
-        return NAMESPACE_MGR.RemovePodSandbox(namespace, uid);
+    pub fn RemovePodSandbox(&self, _namespace: &str, uid: &str) -> Result<()> {
+        return NAMESPACE_MGR.RemovePodSandbox(uid);
     }
 }
 
