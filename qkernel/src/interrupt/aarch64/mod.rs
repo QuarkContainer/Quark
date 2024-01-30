@@ -1,6 +1,8 @@
 use super::super::syscall_dispatch_aarch64;
 use crate::qlib::linux_def::MmapProt;
 use crate::qlib::addr::AccessType;
+use crate::qlib::kernel::task;
+use crate::qlib::kernel::threadmgr::task_sched::SchedState;
 use crate::qlib::kernel::SignalDef::PtRegs;
 pub unsafe fn InitSingleton() {
 }
@@ -217,6 +219,8 @@ pub extern "C" fn exception_handler_el1h_serror(ptregs_addr:usize){
 // TODO implement el0_64_sync handler for syscalls
 #[no_mangle]
 pub extern "C" fn exception_handler_el0_sync(ptregs_addr:usize){
+    let currTask = task::Task::Current();
+    currTask.AccountTaskLeave(SchedState::RunningApp);
     let esr = GetEsrEL1();
     let ec = EsrDefs::GetExceptionFromESR(esr);
     if ptregs_addr == 0 {

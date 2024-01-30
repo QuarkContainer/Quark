@@ -364,7 +364,7 @@ pub fn syscall_dispatch_aarch64(
     CPULocal::Myself().SetMode(VcpuMode::Kernel);
 
     let currTask = task::Task::Current();
-    currTask.AccountTaskLeave(SchedState::RunningApp);
+    // No AccountTaskLeave here because it's called already in the exception handler
 
     let mut nr = call_no as u64;
 
@@ -424,10 +424,8 @@ pub fn syscall_dispatch_aarch64(
     MainRun(currTask, state);
     res = currTask.Return();
     currTask.DoStop();
-    
     // not needed because user stack not used here
     // CPULocal::SetUserStack(pt.rsp);
-    
     // TODO not implemented?
     // CPULocal::SetKernelStack(currTask.GetKernelSp());
     // currTask.AccountTaskEnter(SchedState::RunningApp);
