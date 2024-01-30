@@ -70,6 +70,18 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             return Ok(ret);
         }
+         ProxyCommand::CudaFree => {
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            if ret == 0{
+                error!("yiwang cuda free memory at {:x}", parameters.para1);
+            }
+
+            return Ok(ret);
+         }
         ProxyCommand::CudaMemcpy => {
             let ret = CudaMemcpy(
                 task, 
