@@ -44,17 +44,17 @@ pub extern "C" fn cudaDeviceSynchronize() -> usize {
 pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) -> *mut u64 {
     println!("Hijacked __cudaRegisterFatBinary(fatCubin:{:#x?})", fatCubin);
     let addrFatCubin = fatCubin.text as *const _ as *const u64;
-    println!("hochan ProxyCommand::CudaRegisterFatBinary: {:x}, fatCubin.text.header_size:{:x}, fatCubin.text.size: {:x}, addrFatCubin: {:x}", 
+    println!("ProxyCommand::CudaRegisterFatBinary: {:x}, fatCubin.text.header_size:{:x}, fatCubin.text.size: {:x}, addrFatCubin: {:x}", 
     ProxyCommand::CudaRegisterFatBinary as usize, fatCubin.text.header_size as usize, fatCubin.text.size as usize, addrFatCubin as usize);
     let addr=addrFatCubin as *const u8;
     let len = fatCubin.text.header_size as usize + fatCubin.text.size as usize;
     // let bytes = std::slice::from_raw_parts(fatCubin.text as *const _ as u64 as *const u8, len);
-    println!("hochan fatCubin.text addr {:x}", fatCubin.text as *const _ as u64);
-    // println!("hochan !!!0 {:x?}", bytes);
-    println!("hochan addr {:x?}, addrFatCubin {:x?}",addr,addrFatCubin);
+    println!("fatCubin.text addr {:x}", fatCubin.text as *const _ as u64);
+    // println!("!!!0 {:x?}", bytes);
+    println!("addr {:x?}, addrFatCubin {:x?}",addr,addrFatCubin);
 
     let result = &(0 as *mut u64) as *const _ as u64;
-    println!("hochan result {:x}", result);
+    println!("result {:x}", result);
     unsafe {
         syscall4(SYS_PROXY, ProxyCommand::CudaRegisterFatBinary as usize, len, fatCubin.text as *const _ as usize, result as usize);
     }
@@ -87,7 +87,7 @@ pub extern "C" fn __cudaRegisterFunction(
         gDim: gDim, 
         wSize: wSize
     };
-    println!("hochan RegisterFunctionInfo {:x?}", info);
+    println!("RegisterFunctionInfo {:x?}", info);
     unsafe {
         syscall2(SYS_PROXY, ProxyCommand::CudaRegisterFunction as usize, &info as *const _ as usize);
     }

@@ -47,11 +47,11 @@ pub struct KernelInfo {
 pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
     let mut inputPosition = addr + fatElfHeader.header_size as u64;
     let endPosition = inputPosition + fatElfHeader.size as u64;
-    error!("hochan inputPosition:{:x} endPosition:{:x}", inputPosition, endPosition);
+    error!("inputPosition:{:x} endPosition:{:x}", inputPosition, endPosition);
     while inputPosition < endPosition {
         let fatTextHeader = unsafe { &*(inputPosition as *const u8 as *const FatTextHeader) };
-        error!("hochan fatTextHeader:{:x?}", *fatTextHeader);
-        error!("hochan FATBIN_FLAG_COMPRESS:{:x}, fatTextHeader.flags:{:x}, result of &:{:x}", FATBIN_FLAG_COMPRESS, fatTextHeader.flags, fatTextHeader.flags & FATBIN_FLAG_COMPRESS);
+        error!("fatTextHeader:{:x?}", *fatTextHeader);
+        error!("FATBIN_FLAG_COMPRESS:{:x}, fatTextHeader.flags:{:x}, result of &:{:x}", FATBIN_FLAG_COMPRESS, fatTextHeader.flags, fatTextHeader.flags & FATBIN_FLAG_COMPRESS);
         
         inputPosition += fatTextHeader.header_size as u64;
         if fatTextHeader.kind != 2 { // section does not cotain device code (but e.g. PTX)
@@ -74,7 +74,7 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
 
         inputPosition += fatTextHeader.size;
     }
-    error!("hochan Complete handling FatTextHeader");
+    error!("Complete handling FatTextHeader");
     Ok(0)
 }
 
@@ -107,7 +107,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
 
     let symbol_table_data_p = unsafe { elf_getdata(ptr_section, 0 as _) };
     let symbol_table_data = unsafe { &*symbol_table_data_p };
-    error!("hochan symbol_table_data: {:?}", symbol_table_data);
+    error!("symbol_table_data: {:?}", symbol_table_data);
     let symbol_table_size = shdr.sh_size / shdr.sh_entsize;
 
     match GetSectionByName(elf, String::from(".nv.info"), &mut ptr_section) {
@@ -119,7 +119,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
 
     let data_p = unsafe { elf_getdata(ptr_section, 0 as _) };
     let data = unsafe { &*data_p };
-    error!("hochan data: {:?}", data);
+    error!("data: {:?}", data);
 
     let mut secpos:usize = 0;
     let infoSize = std::mem::size_of::<NvInfoEntry>();
@@ -127,7 +127,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
         let position = data.d_buf as u64 + secpos as u64;
         let entry_p = position as *const u8 as *const NvInfoEntry;
         let entry = unsafe { &*entry_p };
-        error!("hochan entry: {:x?}", entry);
+        error!("entry: {:x?}", entry);
         if entry.values_size != 8 {
             error!("unexpected values_size: {:x}", entry.values_size);
             return Err(Error::ELFLoadError("unexpected values_size")); 
@@ -147,7 +147,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
         ptr_sym = unsafe { gelf_getsym(symbol_table_data_p, entry.kernel_id as libc::c_int, ptr_sym) };
         
         let kernel_str = unsafe { CString::FromAddr(elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*ptr_sym).st_name as usize) as u64).Str().unwrap().to_string() };
-        error!("hochan kernel_str: {}", kernel_str);
+        error!("kernel_str: {}", kernel_str);
 
         if KERNEL_INFOS.lock().contains_key(&kernel_str) {
             secpos += infoSize;
@@ -167,7 +167,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
                 },
             }
         }
-        error!("hochan ki: {:x?}", ki);
+        error!("ki: {:x?}", ki);
 
         KERNEL_INFOS.lock().insert(kernel_str.clone(), Arc::new(ki));
 
@@ -185,21 +185,21 @@ pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> 
         Ok(v) => v,
         Err(e) => return Err(e),
     };
-    error!("hochan GetSectionByName({}) got section: {:?}", sectionName, section);
+    error!("GetSectionByName({}) got section: {:?}", sectionName, section);
     let data = unsafe { &*(elf_getdata(*section, 0 as _)) };
-    error!("hochan data: {:x?}", data);
+    error!("data: {:x?}", data);
 
     let mut secpos:usize = 0;
     while secpos < data.d_size {
         let position = data.d_buf as u64 + secpos as u64;
         let entry = unsafe { &*(position as *const u8 as *const NvInfoKernelEntry) };
-        error!("hochan entry: {:x?}", entry);
+        error!("entry: {:x?}", entry);
         if entry.format as u64 == EIFMT_SVAL && entry.attribute as u64 == EIATTR_KPARAM_INFO {
             if entry.values_size != 0xc {
                 return Err(Error::ELFLoadError("EIATTR_KPARAM_INFO values size has not the expected value of 0xc"));
             }
             let kparam = unsafe { &*(&entry.values as *const _ as *const u8 as *const NvInfoKParamInfo) };
-            error!("hochan kparam: {:x?}", *kparam);
+            error!("kparam: {:x?}", *kparam);
 
             unsafe {
                 if kparam.ordinal as usize >= (*kernel).paramNum {
@@ -207,13 +207,13 @@ pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> 
                     while (*kernel).paramOffsets.len() < (*kernel).paramNum {
                         (*kernel).paramOffsets.push(0);
                         (*kernel).paramSizes.push(0);
-                        error!("hochan in while kernel: {:x?}", *kernel);
+                        error!("in while kernel: {:x?}", *kernel);
                     }
-                    error!("hochan end while kernel: {:x?}", *kernel);                    
+                    error!("end while kernel: {:x?}", *kernel);                    
                 }
                 (*kernel).paramOffsets[kparam.ordinal as usize] = kparam.offset;
                 (*kernel).paramSizes[kparam.ordinal as usize] = kparam.GetSize();
-                error!("hochan changed value kernel: {:x?}, kparam: {:x?}", *kernel, *kparam);
+                error!("changed value kernel: {:x?}, kparam: {:x?}", *kernel, *kparam);
             }
 
             secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4 + entry.values_size as usize;
@@ -266,9 +266,9 @@ pub fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn
         let mut symtab_shdr = shdr.as_mut_ptr();
         symtab_shdr = unsafe { gelf_getshdr(scnNew, symtab_shdr) };
         let section_name = CString::FromAddr(unsafe { elf_strptr(elf, *str_section_index, (*symtab_shdr).sh_name as usize) as u64 }).Str().unwrap().to_string();
-        error!("hochan section_name {}", section_name);
+        error!("section_name {}", section_name);
         if name.eq(&section_name) {
-            error!("hochan Found section {}", section_name);
+            error!("Found section {}", section_name);
             *section = scnNew;
             found = true;
             break;
@@ -302,7 +302,7 @@ pub fn CheckElf(elf: *mut Elf) -> Result<i64> {
     let nbytes = 0 as *mut usize;
     let id = unsafe { elf_getident(elf, nbytes) };
     let idStr = CString::FromAddr(id as u64).Str().unwrap().to_string();
-    error!("hochan id: {:?}, nbytes: {:?}, idStr: {}", id, nbytes, idStr);
+    error!("id: {:?}, nbytes: {:?}, idStr: {}", id, nbytes, idStr);
 
     let mut size:usize = 0;
     let sections_num = &mut size as *mut _ as u64 as *mut usize;

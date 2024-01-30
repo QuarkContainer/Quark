@@ -17,6 +17,7 @@ use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::mem::MaybeUninit;
 use std::os::raw::*;
+use std::sync::Arc;
 
 use crate::qlib::common::*;
 use crate::qlib::linux_def::SysErr;
@@ -26,8 +27,6 @@ use crate::xpu::cuda::*;
 
 use cuda_driver_sys::*;
 
-//yiwang
-use std::sync::Arc;
 
 lazy_static! {
     pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
@@ -53,12 +52,12 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             panic!("get impossible proxy command");
         }
         ProxyCommand::CudaSetDevice => {
-            error!("hochan CudaSetDevice 1");
+            error!("CudaSetDevice 1");
             let func: extern "C" fn(libc::c_int) -> i32 = unsafe { std::mem::transmute(handler) };
 
-            error!("hochan CudaSetDevice 2");
+            error!("CudaSetDevice 2");
             let ret = func(parameters.para1 as i32);
-            error!("hochan CudaSetDevice 3");
+            error!("CudaSetDevice 3");
             return Ok(ret as i64);
         }
         ProxyCommand::CudaDeviceSynchronize => {
@@ -71,17 +70,17 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             let func: extern "C" fn(*mut *mut ::std::os::raw::c_void, usize) -> i32 =
                 unsafe { std::mem::transmute(handler) };
 
-            error!("hochan CudaMalloc before parameters:{:x?}", parameters);
+            error!("CudaMalloc before parameters:{:x?}", parameters);
             let mut para1 = parameters.para1 as *mut ::std::os::raw::c_void;
             let addr = &mut para1;
 
             error!(
-                "hochan before cuda_runtime_sys::cudaMalloc addr {:x}",
+                "before cuda_runtime_sys::cudaMalloc addr {:x}",
                 *addr as u64
             );
             let ret = func(addr, parameters.para2 as usize);
             error!( 
-                "hochan cuda_runtime_sys::cudaMalloc ret {:x?} addr {:x}",
+                "cuda_runtime_sys::cudaMalloc ret {:x?} addr {:x}",
                 ret, *addr as u64
             );
 
@@ -90,7 +89,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             }
 
             error!(
-                "hochan CudaMalloc after parameters:{:x?} ret {:x?}",
+                "CudaMalloc after parameters:{:x?} ret {:x?}",
                 parameters, ret
             );
             return Ok(ret as i64);
@@ -101,7 +100,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 unsafe {std::mem::transmute(handler)};
                   
             let ret = func( parameters.para1 as *mut ::std::os::raw::c_void);
-            error!("yiwang, cuda free memory return value: {} at location: {:x}", ret, parameters.para1);
+            error!("cuda free memory return value: {} at location: {:x}", ret, parameters.para1);
 
             return Ok(ret as i64);
 
@@ -112,7 +111,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
         ProxyCommand::CudaRegisterFatBinary => {
             let fatElfHeader = unsafe { &*(parameters.para2 as *const u8 as *const FatElfHeader) };
             let moduleKey = parameters.para3;
-            error!("hochan moduleKey:{:x}", moduleKey);
+            error!("moduleKey:{:x}", moduleKey);
 
             match GetFatbinInfo(parameters.para2, fatElfHeader) {
                 Ok(_) => {}
@@ -129,7 +128,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             };
             MODULES.lock().insert(moduleKey, module);
             error!(
-                "hochan called func ret {:?} module ptr {:x?} MODULES {:x?}",
+                "called func ret {:?} module ptr {:x?} MODULES {:x?}",
                 ret,
                 module,
                 MODULES.lock()
@@ -146,16 +145,16 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
            
             let mut module = match MODULES.lock().get(&info.fatCubinHandle){
                  Some(module) => {
-                     error!("yiwang module: {:x} for this fatCubinHandle:{} has been found", module, info.fatCubinHandle);
+                     error!("module: {:x} for this fatCubinHandle:{} has been found", module, info.fatCubinHandle);
                      *module
                  }
                  None => {
-                     error!("yiwang no module found with this fatCubin"); 
+                     error!("no module found with this fatCubin"); 
                      0
                  }
              };
             error!(
-                "hochan deviceName {}, parameters {:x?} module {:x}",
+                "deviceName {}, parameters {:x?} module {:x}",
                 deviceName, parameters, module
             );
 
@@ -169,7 +168,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             };
             FUNCTIONS.lock().insert(info.hostFun, hfunc);
             error!(
-                "hochan cuModuleGetFunction ret {:x?}, hfunc {:x}, &hfunc {:x}, FUNCTIONS  {:x?}",
+                "cuModuleGetFunction ret {:x?}, hfunc {:x}, &hfunc {:x}, FUNCTIONS  {:x?}",
                 ret,
                 hfunc,
                 &hfunc,
@@ -178,12 +177,12 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
 
             let kernelInfo = match KERNEL_INFOS.lock().get(&deviceName.to_string()) {
                 Some(kernelInformations) => {
-                    error!("yiwang found kernel {:?}", kernelInformations);
+                    error!("found kernel {:?}", kernelInformations);
                     kernelInformations.clone()
                 }
                 None => {
                     error!(
-                        "yiwang No kernel infos found with this deviceName : {}",
+                        "No kernel infos found with this deviceName : {}",
                         deviceName
                     );
                     Arc::new(KernelInfo::default())
@@ -196,29 +195,29 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 for i in 0..(*paramInfo).paramNum {
                     (*paramInfo).paramSizes[i] = kernelInfo.paramSizes[i];
                 }
-                error!("hochan paramInfo in nvidia {:x?}", (*paramInfo));
+                error!("paramInfo in nvidia {:x?}", (*paramInfo));
             }
             return Ok(ret as i64);
         }
         ProxyCommand::CudaLaunchKernel => {
             error!(
-                "hochan CudaLaunchKernel in host parameters {:x?}",
+                "CudaLaunchKernel in host parameters {:x?}",
                 parameters
             );
             let info = unsafe { &*(parameters.para1 as *const u8 as *const LaunchKernelInfo) };
           
             let func =  match FUNCTIONS.lock().get(&info.func){
                 Some(func) => {
-                    error!("yiwang func has been found: {:x}",func);
+                    error!("func has been found: {:x}",func);
                     func.clone()
                 }
                 None => {
-                    error!("yiwang no CUfunction has been found");
+                    error!("no CUfunction has been found");
                     0 
                 }
             };
             error!(
-                "hochan CudaLaunchKernel in host info {:x?}, func {:x}",
+                "CudaLaunchKernel in host info {:x?}, func {:x}",
                 info, func
             );
 
@@ -237,7 +236,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                     0 as *mut *mut ::std::os::raw::c_void,
                 )
             };
-            error!("hochan cuLaunchKernel ret {:x?}", ret);
+            error!("cuLaunchKernel ret {:x?}", ret);
 
             return Ok(0 as i64);
         }
@@ -338,11 +337,11 @@ impl NvidiaHandlersInner {
              
                 let handler = match XPU_LIBRARY_HANDLERS.lock().get(&pair.0) {
                     Some(functionHandler) => {
-                        error!("hochan function handler got {:?}", functionHandler);
+                        error!("function handler got {:?}", functionHandler);
                         functionHandler.clone()
                     }
                     None => {
-                        error!("hochan no function handler found");
+                        error!("no function handler found");
                         0
                     }
                 };
@@ -355,7 +354,7 @@ impl NvidiaHandlersInner {
                 };
 
                 if handler != 0 {
-                    error!("hochan got handler {:x}", handler);
+                    error!("got handler {:x}", handler);
                     return Ok(handler as u64);
                 }
             }
@@ -381,18 +380,18 @@ impl NvidiaHandlers {
         // This code piece is necessary. Otherwise cuModuleLoadData will return CUDA_ERROR_JIT_COMPILER_NOT_FOUND
         let lib = CString::new("libnvidia-ptxjitcompiler.so").unwrap();
         let handle = unsafe { libc::dlopen(lib.as_ptr(), libc::RTLD_LAZY) };
-        error!("hochan libnvidia-ptxjitcompiler.so handle {:?}", handle);
+        error!("libnvidia-ptxjitcompiler.so handle {:?}", handle);
 
         let initResult = unsafe { cuda_driver_sys::cuInit(0) };
-        error!("hochan initResult {:?}", initResult);
+        error!("initResult {:?}", initResult);
 
         let mut ctx: MaybeUninit<CUcontext> = MaybeUninit::uninit();
         let ptr_ctx = ctx.as_mut_ptr();
         let ret = unsafe { cuda_driver_sys::cuCtxCreate_v2(ptr_ctx, 0, 0) };
-        error!("hochan cuCtxCreate ret {:?}", ret);
+        error!("cuCtxCreate ret {:?}", ret);
 
         let ret = unsafe { cuCtxPushCurrent_v2(*ptr_ctx) };
-        error!("hochan cuCtxPushCurrent ret {:?}", ret);
+        error!("cuCtxPushCurrent ret {:?}", ret);
 
         let cuda = format!("/usr/lib/x86_64-linux-gnu/libcuda.so");
         let cudalib = CString::new(&*cuda).unwrap();

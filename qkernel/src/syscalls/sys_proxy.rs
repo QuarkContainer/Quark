@@ -47,7 +47,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
         ProxyCommand::CudaSetDevice |
         ProxyCommand::CudaDeviceSynchronize => {
-            error!("hochan SysProxy CudaSetDevice");
+            error!("SysProxy CudaSetDevice");
             let ret = HostSpace::Proxy(
                 cmd,
                 parameters,
@@ -77,7 +77,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             );
 
             if ret == 0{
-                error!("yiwang cuda free memory at {:x}", parameters.para1);
+                error!("cuda free memory at {:x}", parameters.para1);
             }
 
             return Ok(ret);
@@ -106,13 +106,13 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
         ProxyCommand::CudaRegisterFunction => {
             let mut data = task.CopyInObj::<RegisterFunctionInfo>(parameters.para1)?;
-            error!("hochan CudaRegisterFunction data {:x?}, parameters {:x?}", data, parameters);
+            error!("CudaRegisterFunction data {:x?}, parameters {:x?}", data, parameters);
 
             let deviceName = CString::ToString(task, data.deviceName)?;
             data.deviceName = &(deviceName.as_bytes()[0]) as * const _ as u64;
             parameters.para1 = &data as * const _ as u64;
             parameters.para2 = deviceName.as_bytes().len() as u64;
-            error!("hochan deviceName {}, data.deviceName {:x}, parameters {:x?}", deviceName, data.deviceName, parameters);
+            error!("deviceName {}, data.deviceName {:x}, parameters {:x?}", deviceName, data.deviceName, parameters);
 
             let mut paramInfo = ParamInfo::default();
             parameters.para3 = &mut paramInfo as *const _ as u64;
@@ -122,39 +122,39 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 parameters,
             );
 
-            error!("hochan paramInfo {:x?}", paramInfo);
+            error!("paramInfo {:x?}", paramInfo);
 
             let mut params_proxy: Vec<u16>=Vec::new();
             for i in 0..paramInfo.paramNum as usize {
                 params_proxy.push(paramInfo.paramSizes[i]);
-                error!("hochan i {}, paramInfo.paramSizes[i] {}", i, paramInfo.paramSizes[i]);
+                error!("i {}, paramInfo.paramSizes[i] {}", i, paramInfo.paramSizes[i]);
             }
 
             PARAM_INFOS.lock().insert(data.hostFun, Arc::new(params_proxy));
-            error!("hochan PARAM_INFOS {:x?}", PARAM_INFOS.lock());
+            error!("PARAM_INFOS {:x?}", PARAM_INFOS.lock());
 
             return Ok(ret);
         }
         ProxyCommand::CudaLaunchKernel => {
             let mut data = task.CopyInObj::<LaunchKernelInfo>(parameters.para1)?;
             let paramInfo = PARAM_INFOS.lock().get(&data.func).unwrap().clone();
-            error!("hochan LaunchKernelInfo data {:x?}, paramInfo {:x?}, parameters {:x?}", data, paramInfo, parameters);
+            error!("LaunchKernelInfo data {:x?}, paramInfo {:x?}, parameters {:x?}", data, paramInfo, parameters);
 
             let mut paramAddrs:Vec<u64> = task.CopyInVec(data.args, paramInfo.len())?;
-            error!("hochan paramAddrs {:x?}", paramAddrs);
+            error!("paramAddrs {:x?}", paramAddrs);
 
             let mut paramValues = Vec::new();
             for i in 0..paramInfo.len() {
                 let valueBytes:Vec<u8> = task.CopyInVec(paramAddrs[i], (paramInfo[i]) as usize)?;
-                error!("hochan valueBytes {:x?}", valueBytes);
+                error!("valueBytes {:x?}", valueBytes);
                 
                 paramValues.push(valueBytes);
                 paramAddrs[i] = &(paramValues[i][0]) as *const _ as u64;
-                error!("hochan i {} paramAddrs[i] {:x} paramValues[i] {:x?}",i, paramAddrs[i], paramValues[i]);
+                error!("i {} paramAddrs[i] {:x} paramValues[i] {:x?}",i, paramAddrs[i], paramValues[i]);
             }
-            error!("hochan paramAddrs after set {:x?}", paramAddrs);
+            error!("paramAddrs after set {:x?}", paramAddrs);
             data.args = &paramAddrs[0] as * const _ as u64;
-            error!("hochan data.args {:x?}", data.args);
+            error!("data.args {:x?}", data.args);
 
             parameters.para1 = &data as * const _ as u64;
             let ret = HostSpace::Proxy(
