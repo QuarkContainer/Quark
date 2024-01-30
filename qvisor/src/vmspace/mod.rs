@@ -25,6 +25,7 @@ pub mod syscall;
 pub mod time;
 pub mod uringMgr;
 pub mod nvidia;
+pub mod xpu;
 
 use core::arch::asm;
 use core::sync::atomic;
