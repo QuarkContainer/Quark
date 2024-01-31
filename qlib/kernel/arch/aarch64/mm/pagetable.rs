@@ -155,6 +155,11 @@ bitflags! {
                                 Self::INNER_SHAREABLE.bits|
                                 Self::PXN.bits|
                                 Self::UXN.bits;
+        //
+        // Occupied bits, dedicated for SW usage.
+        //
+        const SWAPPED_OUT     = 1 << 56;
+        const TAKEN           = 1 << 57; //Another thread is using the PTE.
     }
 }
 
