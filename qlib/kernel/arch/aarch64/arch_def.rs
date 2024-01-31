@@ -257,6 +257,10 @@ impl Aarch64Context {
         self.sp
     }
 
+    pub unsafe fn place_on_stack(&mut self, addr: u64) {
+        *(self.sp as *mut u64) = addr;
+    }
+
     pub fn set_para(&mut self, para: u64) {
         self.x0 = para;
     }
