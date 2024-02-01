@@ -36,6 +36,7 @@ use super::super::kernel::async_wait::*;
 use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
 use super::super::socket::hostinet::uring_socket::*;
+use super::super::socket::hostinet::tsotsocket::*;
 use super::super::Kernel::HostSpace;
 use super::super::IOURING;
 use super::super::SHARESPACE;
@@ -383,6 +384,25 @@ impl QUring {
         return Ok(());
     }
 
+    pub fn TsotSocketProduce(
+        task: &Task,
+        fd: i32,
+        queue: Queue,
+        buf: SocketBuff,
+        count: usize,
+        ops: &TsotSocketOperations,
+        iovs: &mut SocketBufIovs,
+    ) -> Result<()> {
+        let writeBuf = buf.Produce(task, count, iovs)?;
+        if let Some((addr, len)) = writeBuf {
+            let writeop = TsotAsyncSend::New(fd, queue, buf, addr, len, ops);
+
+            IOURING.AUCall(AsyncOps::TsotAsyncSend(writeop));
+        }
+
+        return Ok(());
+    }
+
     pub fn SocketSend(
         task: &Task,
         fd: i32,
@@ -397,6 +417,25 @@ impl QUring {
             let writeop = AsyncSend::New(fd, queue, buf, addr, len, ops);
 
             IOURING.AUCall(AsyncOps::AsyncSend(writeop));
+        }
+
+        return Ok(count as i64);
+    }
+
+    pub fn TsotSocketSend(
+        task: &Task,
+        fd: i32,
+        queue: Queue,
+        buf: SocketBuff,
+        srcs: &[IoVec],
+        ops: &TsotSocketOperations,
+    ) -> Result<i64> {
+        let (count, writeBuf) = buf.Writev(task, srcs)?;
+
+        if let Some((addr, len)) = writeBuf {
+            let writeop = TsotAsyncSend::New(fd, queue, buf, addr, len, ops);
+
+            IOURING.AUCall(AsyncOps::TsotAsyncSend(writeop));
         }
 
         return Ok(count as i64);

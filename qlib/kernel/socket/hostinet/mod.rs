@@ -19,6 +19,8 @@ pub mod rdma_socket;
 pub mod socket;
 pub mod socket_buf;
 pub mod uring_socket;
+pub mod tsotsocket;
+pub mod tsot_mgr;
 
 pub fn Init() {
     self::socket::Init();

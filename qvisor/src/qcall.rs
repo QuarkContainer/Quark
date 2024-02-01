@@ -138,6 +138,12 @@ impl KVMVcpu {
             Msg::HostUnixRecvMsg(msg) => {
                 ret = super::VMSpace::HostUnixRecvMsg(msg.fd, msg.msghdr, msg.flags) as u64;
             }
+            Msg::TsotRecvMsg(msg) => {
+                ret = super::VMSpace::TsotRecvMsg(msg.msgAddr) as u64;
+            }
+            Msg::TsotSendMsg(msg) => {
+                ret = super::VMSpace::TsotSendMsg(msg.msgAddr) as u64;
+            }
             Msg::OpenDevFile(msg) => {
                 ret = super::VMSpace::OpenDevFile(msg.dirfd, msg.name, msg.flags) as u64;
             }

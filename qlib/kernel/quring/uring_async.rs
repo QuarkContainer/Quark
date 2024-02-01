@@ -21,6 +21,7 @@ use core::ops::Deref;
 use core::sync::atomic::Ordering;
 use enum_dispatch::enum_dispatch;
 
+use crate::qlib::kernel::socket::hostinet::tsotsocket::TsotSocketOperations;
 use super::super::super::super::kernel_def::*;
 use super::super::super::common::*;
 use super::super::super::linux_def;
@@ -78,6 +79,7 @@ pub enum AsyncOps {
     AsyncAccept(AsyncAccept),
     AsyncEpollCtl(AsyncEpollCtl),
     AsyncSend(AsyncSend),
+    TsotAsyncSend(TsotAsyncSend),
     PollHostEpollWait(PollHostEpollWait),
     AsyncConnect(AsyncConnect),
     None(AsyncNone),
@@ -117,8 +119,9 @@ impl AsyncOps {
             AsyncOps::AsyncAccept(_) => return 19,
             AsyncOps::AsyncEpollCtl(_) => return 20,
             AsyncOps::AsyncSend(_) => return 21,
-            AsyncOps::PollHostEpollWait(_) => return 22,
-            AsyncOps::AsyncConnect(_) => return 23,
+            AsyncOps::TsotAsyncSend(_) => return 22,
+            AsyncOps::PollHostEpollWait(_) => return 23,
+            AsyncOps::AsyncConnect(_) => return 24,
             AsyncOps::None(_) => (),
         };
 
@@ -602,6 +605,93 @@ impl AsyncSend {
         addr: u64,
         len: usize,
         ops: &UringSocketOperations,
+    ) -> Self {
+        return Self {
+            fd,
+            queue,
+            buf,
+            addr,
+            len,
+            ops: ops.clone(),
+        };
+    }
+}
+
+
+pub struct TsotAsyncSend {
+    pub fd: i32,
+    pub queue: Queue,
+    pub buf: SocketBuff,
+    pub addr: u64,
+    pub len: usize,
+
+    // keep the socket in the async ops to avoid socket before send finish
+    pub ops: TsotSocketOperations,
+}
+
+impl AsyncOpsTrait for TsotAsyncSend {
+    fn SEntry(&self) -> squeue::Entry {
+        //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
+        let op = opcode::Send::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
+    }
+
+    fn Process(&mut self, result: i32) -> bool {
+        if result < 0 {
+            self.buf.SetErr(-result);
+            self.queue
+                .Notify(EventMaskFromLinux((EVENT_ERR | READABLE_EVENT) as u32));
+            return false;
+            //return true;
+        }
+
+        // EOF
+        // to debug
+        if result == 0 {
+            self.buf.SetWClosed();
+            if self.buf.ProduceReadBuf(0) {
+                self.queue
+                    .Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
+            } else {
+                self.queue
+                    .Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
+            }
+            return false;
+        }
+
+        let (trigger, addr, len) = self.buf.ConsumeAndGetAvailableWriteBuf(result as usize);
+        if trigger {
+            self.queue
+                .Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
+        }
+
+        if addr == 0 {
+            if self.buf.PendingWriteShutdown() {
+                self.queue.Notify(EVENT_PENDING_SHUTDOWN);
+            }
+
+            return false;
+        }
+
+        self.addr = addr;
+        self.len = len;
+
+        return true;
+    }
+}
+
+impl TsotAsyncSend {
+    pub fn New(
+        fd: i32,
+        queue: Queue,
+        buf: SocketBuff,
+        addr: u64,
+        len: usize,
+        ops: &TsotSocketOperations,
     ) -> Self {
         return Self {
             fd,

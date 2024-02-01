@@ -26,11 +26,22 @@ use qshare::common::*;
 use qshare::tsot_cni;
 
 use super::pod_broker::*;
+use super::tsot_msg::TsotMessage;
 
 use crate::pod_mgr::pod_sandbox::IpAddress;
 use crate::pod_mgr::NAMESPACE_MGR;
+use crate::tsot::tsot_msg::TSOT_SOCKET_PATH;
 
-pub static SOCKET_PATH: &'static str = "/var/run/quark/tsot-socket";
+
+impl Drop for TsotMessage {
+    fn drop(&mut self) {
+        unsafe {
+            if self.socket >= 0 {
+                libc::close(self.socket);
+            }
+        }
+    }
+}
 
 pub struct TsotSvc {
     pub closeNotify: Arc<Notify>,
@@ -41,7 +52,7 @@ pub struct TsotSvc {
 
 impl TsotSvc {
     pub fn New() -> Result<Self> {
-        let socket = Path::new(SOCKET_PATH);
+        let socket = Path::new(TSOT_SOCKET_PATH);
 
         // Delete old socket if necessary
         if socket.exists() {

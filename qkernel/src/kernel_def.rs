@@ -21,6 +21,9 @@ use core::sync::atomic::Ordering;
 
 use crate::qlib::fileinfo::*;
 
+use self::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
+use self::tsot_msg::TsotMessage;
+
 use super::qlib::kernel::asm::*;
 use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 use super::qlib::kernel::taskMgr::*;
@@ -504,4 +507,26 @@ pub fn IsKernel() -> bool {
 
 pub fn ReapSwapIn() {
     HostSpace::SwapIn();
+}
+
+
+impl TsotSocketMgr {
+    pub fn SendMsg(&self, m: &TsotMessage) -> Result<()> {
+        let res = HostSpace::TsotSendMsg(m as * const _ as u64);
+        if res == 0 {
+            return Ok(())
+        }
+
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    pub fn RecvMsg(&self) -> Result<TsotMessage> {
+        let mut m = TsotMessage::default();
+        let res = HostSpace::TsotRecvMsg(&mut m as * mut _ as u64);
+        if res == 0 {
+            return Ok(m)
+        }
+
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
 }

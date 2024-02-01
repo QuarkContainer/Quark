@@ -59,6 +59,8 @@ use super::super::super::{
     VCPU, VMS,
 };
 
+pub const SANDBOX_UID_NAME : &str = "io.kubernetes.cri.sandbox-uid";
+
 lazy_static! {
     static ref EXIT_STATUS: AtomicI32 = AtomicI32::new(-1);
     static ref DUMP: AtomicU64 = AtomicU64::new(0);
@@ -244,16 +246,10 @@ impl VirtualMachine {
             LOG.Reset(&args.ID[0..12]);
         }
 
+
         let cpuCount = args.GetCpuCount();
 
         let kvmfd = args.KvmFd;
-
-        /*if QUARK_CONFIG.lock().EnableRDMA {
-            // use default rdma device
-            let rdmaDeviceName = "";
-            let lbPort = QUARK_CONFIG.lock().RDMAPort;
-            super::super::super::vmspace::HostFileMap::rdma::RDMA.Init(rdmaDeviceName, lbPort);
-        }*/
 
         let reserveCpuCount = QUARK_CONFIG.lock().ReserveCpuCount;
         let cpuCount = if cpuCount == 0 {
@@ -267,6 +263,14 @@ impl VirtualMachine {
             VMS.lock().cpuAffinit = false;
         } else {
             VMS.lock().cpuAffinit = true;
+        }
+
+
+        match args.Spec.annotations.get(SANDBOX_UID_NAME) {
+            None => (),
+            Some(podUid) => {
+                VMS.lock().podUid = podUid.clone();
+            }
         }
 
         let cpuCount = cpuCount.max(2); // minimal 2 cpus

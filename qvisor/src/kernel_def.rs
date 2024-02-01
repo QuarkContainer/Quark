@@ -1,12 +1,18 @@
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::mpsc::channel;
 
 use cache_padded::CachePadded;
 use libc::*;
+use spin::mutex::Mutex;
 
 use crate::SHARE_SPACE;
+use crate::qlib::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
+
+use self::tsot_agent::TSOT_AGENT;
+use self::tsot_msg::TsotMessage;
 
 use super::qlib::common::*;
 use super::qlib::control_msg::*;
@@ -34,6 +40,18 @@ use super::URING_MGR;
 use super::VMS;
 
 impl std::error::Error for Error {}
+
+impl From<std::io::Error> for Error {
+    fn from(item: std::io::Error) -> Self {
+        return Self::StdIOErr(format!("{:?}", item));
+    }
+}
+
+impl From<uuid::Error> for Error {
+    fn from(item: uuid::Error) -> Self {
+        return Self::StdIOErr(format!("{:?}", item));
+    }
+}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -353,4 +371,24 @@ pub fn IsKernel() -> bool {
 
 pub fn ReapSwapIn() {
     SHARE_SPACE.hiberMgr.ReapSwapIn().unwrap();
+}
+
+pub static TSOT_SOCKET_PATH: &'static str = "/var/run/quark/tsot-socket";
+
+impl TsotSocketMgr {
+    pub fn New() -> Self {
+        return Self {
+            currReqId: AtomicU64::new(0),
+            listeningSockets: Mutex::new(BTreeMap::new()),
+            connectingSocket: Mutex::new(BTreeMap::new()),
+        }
+    }
+
+    pub fn SendMsg(&self, m: &TsotMessage) -> Result<()> {
+        return TSOT_AGENT.SendMsg(m)
+    }
+
+    pub fn RecvMsg(&self) -> Result<TsotMessage> {
+        return TSOT_AGENT.RecvMsg()
+    }
 }

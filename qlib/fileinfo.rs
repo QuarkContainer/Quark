@@ -242,7 +242,7 @@ impl FdWaitInfo {
     }
 
     pub fn Notify(&self, mask: EventMask) {
-                let queue = self.lock().queue.clone();
+        let queue = self.lock().queue.clone();
         queue.Notify(EventMaskFromLinux(mask as u32));
     }
 }

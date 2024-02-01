@@ -25,6 +25,7 @@ pub mod syscall;
 pub mod time;
 pub mod uringMgr;
 pub mod nvidia;
+pub mod tsot_agent;
 
 use core::arch::asm;
 use core::sync::atomic;
@@ -56,6 +57,8 @@ use self::limits::*;
 use self::nvidia::NvidiaProxy;
 use self::random::*;
 use self::syscall::*;
+use self::tsot_agent::TSOT_AGENT;
+use self::tsot_msg::TsotMessage;
 use super::kvm_vcpu::HostPageAllocator;
 use super::kvm_vcpu::KVMVcpu;
 use super::namespace::MountNs;
@@ -111,6 +114,7 @@ pub struct WaitingMsgCall {
 }
 
 pub struct VMSpace {
+    pub podUid: String,
     pub pageTables: PageTables,
     pub allocator: HostPageAllocator,
     pub hostAddrTop: u64,
@@ -1258,7 +1262,7 @@ impl VMSpace {
     ///////////start of network operation//////////////////////////////////////////////////////////////////
 
     pub fn HostUnixRecvMsg(fd: i32, msghdr: u64, flags: i32) -> i64 {
-        match Self::HostUnixRecvMsgHelp(fd, msghdr, flags) {
+        match Self::HostUnixRecvMsgHelper(fd, msghdr, flags) {
             Err(Error::SysError(errno)) => {
                 return -errno as i64
             }
@@ -1267,7 +1271,7 @@ impl VMSpace {
         }
     }
 
-    pub fn HostUnixRecvMsgHelp(fd: i32, msghdr: u64, flags: i32) -> Result<()> {
+    pub fn HostUnixRecvMsgHelper(fd: i32, msghdr: u64, flags: i32) -> Result<()> {
         let ret = unsafe {
             libc::recvmsg(fd, msghdr as * mut _, flags)
         };
@@ -1371,6 +1375,31 @@ impl VMSpace {
         let hostfd = GlobalIOMgr().AddSocket(fd);
         URING_MGR.lock().Addfd(fd).unwrap();
         return Self::GetRet(hostfd as i64);
+    }
+
+    pub fn TsotRecvMsg(msgAddr: u64) -> i64 {
+        match TSOT_AGENT.RecvMsg() {
+            Ok(msg) => {
+                let m = unsafe {
+                    &mut *(msgAddr as * mut TsotMessage)
+                };
+                *m = msg;
+                return 0;
+            }
+            Err(_) => return -1,
+        }
+    }
+
+    pub fn TsotSendMsg(msgAddr: u64) -> i64 {
+        let msg = unsafe {
+            &*(msgAddr as * const TsotMessage)
+        };
+        match TSOT_AGENT.SendMsg(msg) {
+            Ok(()) => {
+                return 0;
+            }
+            Err(_) => return -1,
+        }
     }
 
     pub fn Socket(domain: i32, type_: i32, protocol: i32) -> i64 {
@@ -2038,6 +2067,7 @@ impl VMSpace {
         let (haveMembarrierGlobal, haveMembarrierPrivateExpedited) = Self::MembarrierInit();
 
         return VMSpace {
+            podUid: "".to_owned(),
             allocator: HostPageAllocator::New(),
             pageTables: PageTables::default(),
             hostAddrTop: 0,

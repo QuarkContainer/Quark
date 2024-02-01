@@ -44,6 +44,7 @@ pub struct Config {
     pub Sandboxed: bool,
     pub Realtime: bool,
     pub EnableIOBuf: bool,
+    pub EnableTsot: bool,
 }
 
 impl Config {
@@ -90,6 +91,7 @@ impl Default for Config {
             Sandboxed: false,
             Realtime: false,
             EnableIOBuf: false,
+            EnableTsot: false,
         };
     }
 }
