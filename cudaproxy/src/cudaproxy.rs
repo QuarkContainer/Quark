@@ -66,7 +66,7 @@ pub extern "C" fn __cudaUnregisterFatBinary(fatCubinHandle:u64) {
     println!("Hijacked __cudaUnregisterFatBinary(fatCubinHandle = {:x})", fatCubinHandle);
     let fatCubinPtr: *const u64 = fatCubinHandle as *const u64;
     unsafe{
-    println!("Hijacked __cudaUnregisterFatBinaryEnd( the content of fatCubinHandle = {:x})", *fatCubinPtr);
+    println!("Hijacked __cudaUnregisterFatBinary( the content of fatCubinHandle = {:x})", *fatCubinPtr);
     }
    
     unsafe{

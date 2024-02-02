@@ -268,7 +268,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             };
             error!("cuLaunchKernel ret {:x?}", ret);
 
-            return Ok(0 as i64);
+            return Ok(ret as i64);
         }
         _ => todo!(),
     }
