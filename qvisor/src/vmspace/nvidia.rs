@@ -156,7 +156,11 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 cuda_driver_sys::cuModuleUnload((module as *const u64) as  CUmodule) 
             };
             error!("ret: {:?}", ret);
-            return Ok(ret);
+
+            // delete the module 
+            MODULES.lock().remove(&moduleKey);
+            error!("yiwang modules treepmap should be empty:{:x?}",MODULES.lock());
+            return Ok(ret as i64);
             
         }
 
