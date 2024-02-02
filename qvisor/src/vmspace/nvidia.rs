@@ -44,20 +44,20 @@ lazy_static! {
 }
 
 pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i64> {
-    error!("NvidiaProxy 0 cmd {:?}", cmd);
+    // error!("NvidiaProxy 0 cmd {:?}", cmd);
     let handler = NVIDIA_HANDLERS.GetFuncHandler(cmd)?;
-    error!("NvidiaProxy 0 cmd {:?} After getting handler", cmd);
+    // error!("NvidiaProxy 0 cmd {:?} After getting handler", cmd);
     match cmd {
         ProxyCommand::None => {
             panic!("get impossible proxy command");
         }
         ProxyCommand::CudaSetDevice => {
-            error!("CudaSetDevice 1");
+            // error!("CudaSetDevice 1");
             let func: extern "C" fn(libc::c_int) -> i32 = unsafe { std::mem::transmute(handler) };
 
-            error!("CudaSetDevice 2");
+            // error!("CudaSetDevice 2");
             let ret = func(parameters.para1 as i32);
-            error!("CudaSetDevice 3");
+            // error!("CudaSetDevice 3");
             return Ok(ret as i64);
         }
         ProxyCommand::CudaDeviceSynchronize => {
@@ -70,28 +70,28 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             let func: extern "C" fn(*mut *mut ::std::os::raw::c_void, usize) -> i32 =
                 unsafe { std::mem::transmute(handler) };
 
-            error!("CudaMalloc before parameters:{:x?}", parameters);
+            // error!("CudaMalloc before parameters:{:x?}", parameters);
             let mut para1 = parameters.para1 as *mut ::std::os::raw::c_void;
             let addr = &mut para1;
 
-            error!(
-                "before cuda_runtime_sys::cudaMalloc addr {:x}",
-                *addr as u64
-            );
+            // error!(
+            //     "before cuda_runtime_sys::cudaMalloc addr {:x}",
+            //     *addr as u64
+            // );
             let ret = func(addr, parameters.para2 as usize);
-            error!( 
-                "cuda_runtime_sys::cudaMalloc ret {:x?} addr {:x}",
-                ret, *addr as u64
-            );
+            // error!( 
+            //     "cuda_runtime_sys::cudaMalloc ret {:x?} addr {:x}",
+            //     ret, *addr as u64
+            // );
 
             unsafe {
                 *(parameters.para1 as *mut u64) = *addr as u64;
             }
 
-            error!(
-                "CudaMalloc after parameters:{:x?} ret {:x?}",
-                parameters, ret
-            );
+            // error!(
+            //     "CudaMalloc after parameters:{:x?} ret {:x?}",
+            //     parameters, ret
+            // );
             return Ok(ret as i64);
         }
 
@@ -100,7 +100,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 unsafe {std::mem::transmute(handler)};
                   
             let ret = func( parameters.para1 as *mut ::std::os::raw::c_void);
-            error!("cuda free memory return value: {} at location: {:x}", ret, parameters.para1);
+            // error!("cuda free memory return value: {} at location: {:x}", ret, parameters.para1);
 
             return Ok(ret as i64);
 
@@ -111,7 +111,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
         ProxyCommand::CudaRegisterFatBinary => {
             let fatElfHeader = unsafe { &*(parameters.para2 as *const u8 as *const FatElfHeader) };
             let moduleKey = parameters.para3;
-            error!("moduleKey:{:x}", moduleKey);
+            // error!("moduleKey:{:x}", moduleKey);
 
             match GetFatbinInfo(parameters.para2, fatElfHeader) {
                 Ok(_) => {}
@@ -127,12 +127,12 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 )
             };
             MODULES.lock().insert(moduleKey, module);
-            error!(
-                "called func ret {:?} module ptr {:x?} MODULES {:x?}",
-                ret,
-                module,
-                MODULES.lock()
-            );
+            // error!(
+            //     "called func ret {:?} module ptr {:x?} MODULES {:x?}",
+            //     ret,
+            //     module,
+            //     MODULES.lock()
+            // );
             return Ok(ret as i64);
         }
         ProxyCommand::CudaRegisterFunction => {
@@ -145,18 +145,18 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
            
             let mut module = match MODULES.lock().get(&info.fatCubinHandle){
                  Some(module) => {
-                     error!("module: {:x} for this fatCubinHandle:{} has been found", module, info.fatCubinHandle);
+                     // error!("module: {:x} for this fatCubinHandle:{} has been found", module, info.fatCubinHandle);
                      *module
                  }
                  None => {
-                     error!("no module found with this fatCubin"); 
+                     // error!("no module found with this fatCubin"); 
                      0
                  }
              };
-            error!(
-                "deviceName {}, parameters {:x?} module {:x}",
-                deviceName, parameters, module
-            );
+            // error!(
+            //     "deviceName {}, parameters {:x?} module {:x}",
+            //     deviceName, parameters, module
+            // );
 
             let mut hfunc: u64 = 0;
             let ret = unsafe {
@@ -167,24 +167,24 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 )
             };
             FUNCTIONS.lock().insert(info.hostFun, hfunc);
-            error!(
-                "cuModuleGetFunction ret {:x?}, hfunc {:x}, &hfunc {:x}, FUNCTIONS  {:x?}",
-                ret,
-                hfunc,
-                &hfunc,
-                FUNCTIONS.lock()
-            );
+            // error!(
+            //     "cuModuleGetFunction ret {:x?}, hfunc {:x}, &hfunc {:x}, FUNCTIONS  {:x?}",
+            //     ret,
+            //     hfunc,
+            //     &hfunc,
+            //     FUNCTIONS.lock()
+            // );
 
             let kernelInfo = match KERNEL_INFOS.lock().get(&deviceName.to_string()) {
                 Some(kernelInformations) => {
-                    error!("found kernel {:?}", kernelInformations);
+                    // error!("found kernel {:?}", kernelInformations);
                     kernelInformations.clone()
                 }
                 None => {
-                    error!(
-                        "No kernel infos found with this deviceName : {}",
-                        deviceName
-                    );
+                    // error!(
+                    //     "No kernel infos found with this deviceName : {}",
+                    //     deviceName
+                    // );
                     Arc::new(KernelInfo::default())
                 }
             };
@@ -195,31 +195,31 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 for i in 0..(*paramInfo).paramNum {
                     (*paramInfo).paramSizes[i] = kernelInfo.paramSizes[i];
                 }
-                error!("paramInfo in nvidia {:x?}", (*paramInfo));
+                // error!("paramInfo in nvidia {:x?}", (*paramInfo));
             }
             return Ok(ret as i64);
         }
         ProxyCommand::CudaLaunchKernel => {
-            error!(
-                "CudaLaunchKernel in host parameters {:x?}",
-                parameters
-            );
+            // error!(
+            //     "CudaLaunchKernel in host parameters {:x?}",
+            //     parameters
+            // );
             let info = unsafe { &*(parameters.para1 as *const u8 as *const LaunchKernelInfo) };
           
             let func =  match FUNCTIONS.lock().get(&info.func){
                 Some(func) => {
-                    error!("func has been found: {:x}",func);
+                    // error!("func has been found: {:x}",func);
                     func.clone()
                 }
                 None => {
-                    error!("no CUfunction has been found");
+                    // error!("no CUfunction has been found");
                     0 
                 }
             };
-            error!(
-                "CudaLaunchKernel in host info {:x?}, func {:x}",
-                info, func
-            );
+            // error!(
+            //     "CudaLaunchKernel in host info {:x?}, func {:x}",
+            //     info, func
+            // );
 
             let ret = unsafe {
                 cuda_driver_sys::cuLaunchKernel(
@@ -236,7 +236,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                     0 as *mut *mut ::std::os::raw::c_void,
                 )
             };
-            error!("cuLaunchKernel ret {:x?}", ret);
+            info!("cuLaunchKernel ret {:x?}", ret);
 
             return Ok(0 as i64);
         }
@@ -262,14 +262,14 @@ pub fn CudaMemcpy(handle: u64, parameters: &ProxyParameters) -> Result<i64> {
             for r in ranges {
                 let ret = func(dst + offset, r.start, r.len, kind);
                 if ret != 0 {
-                    error!(
-                        "CUDA_MEMCPY_HOST_TO_DEVICE ret is {:x}/{:x}/{:x}/{} {}",
-                        dst + offset,
-                        r.start,
-                        r.len,
-                        kind,
-                        ret
-                    );
+                    // error!(
+                    //     "CUDA_MEMCPY_HOST_TO_DEVICE ret is {:x}/{:x}/{:x}/{} {}",
+                    //     dst + offset,
+                    //     r.start,
+                    //     r.len,
+                    //     kind,
+                    //     ret
+                    // );
                     return Ok(ret as i64);
                 }
                 offset += r.len;
@@ -337,11 +337,11 @@ impl NvidiaHandlersInner {
              
                 let handler = match XPU_LIBRARY_HANDLERS.lock().get(&pair.0) {
                     Some(functionHandler) => {
-                        error!("function handler got {:?}", functionHandler);
+                        // error!("function handler got {:?}", functionHandler);
                         functionHandler.clone()
                     }
                     None => {
-                        error!("no function handler found");
+                        // error!("no function handler found");
                         0
                     }
                 };
@@ -354,7 +354,7 @@ impl NvidiaHandlersInner {
                 };
 
                 if handler != 0 {
-                    error!("got handler {:x}", handler);
+                    // error!("got handler {:x}", handler);
                     return Ok(handler as u64);
                 }
             }
@@ -380,18 +380,18 @@ impl NvidiaHandlers {
         // This code piece is necessary. Otherwise cuModuleLoadData will return CUDA_ERROR_JIT_COMPILER_NOT_FOUND
         let lib = CString::new("libnvidia-ptxjitcompiler.so").unwrap();
         let handle = unsafe { libc::dlopen(lib.as_ptr(), libc::RTLD_LAZY) };
-        error!("libnvidia-ptxjitcompiler.so handle {:?}", handle);
+        info!("libnvidia-ptxjitcompiler.so handle {:?}", handle);
 
         let initResult = unsafe { cuda_driver_sys::cuInit(0) };
-        error!("initResult {:?}", initResult);
+        info!("initResult {:?}", initResult);
 
         let mut ctx: MaybeUninit<CUcontext> = MaybeUninit::uninit();
         let ptr_ctx = ctx.as_mut_ptr();
         let ret = unsafe { cuda_driver_sys::cuCtxCreate_v2(ptr_ctx, 0, 0) };
-        error!("cuCtxCreate ret {:?}", ret);
+        info!("cuCtxCreate ret {:?}", ret);
 
         let ret = unsafe { cuCtxPushCurrent_v2(*ptr_ctx) };
-        error!("cuCtxPushCurrent ret {:?}", ret);
+        info!("cuCtxPushCurrent ret {:?}", ret);
 
         let cuda = format!("/usr/lib/x86_64-linux-gnu/libcuda.so");
         let cudalib = CString::new(&*cuda).unwrap();

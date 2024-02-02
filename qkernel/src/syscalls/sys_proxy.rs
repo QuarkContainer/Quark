@@ -47,7 +47,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
         ProxyCommand::CudaSetDevice |
         ProxyCommand::CudaDeviceSynchronize => {
-            error!("SysProxy CudaSetDevice");
+            // error!("SysProxy CudaSetDevice");
             let ret = HostSpace::Proxy(
                 cmd,
                 parameters,
@@ -77,7 +77,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             );
 
             if ret == 0{
-                error!("cuda free memory at {:x}", parameters.para1);
+                // error!("cuda free memory at {:x}", parameters.para1);
             }
 
             return Ok(ret);
@@ -105,14 +105,14 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             
         }
         ProxyCommand::CudaRegisterFunction => {
-            let mut data = task.CopyInObj::<RegisterFunctionInfo>(parameters.para1)?;
-            error!("CudaRegisterFunction data {:x?}, parameters {:x?}", data, parameters);
+            let mut functionInfo = task.CopyInObj::<RegisterFunctionInfo>(parameters.para1)?;
+            // error!("CudaRegisterFunction data {:x?}, parameters {:x?}", functionInfo, parameters);
 
-            let deviceName = CString::ToString(task, data.deviceName)?;
-            data.deviceName = &(deviceName.as_bytes()[0]) as * const _ as u64;
-            parameters.para1 = &data as * const _ as u64;
+            let deviceName = CString::ToString(task, functionInfo.deviceName)?;
+            functionInfo.deviceName = &(deviceName.as_bytes()[0]) as * const _ as u64;
+            parameters.para1 = &functionInfo as * const _ as u64;
             parameters.para2 = deviceName.as_bytes().len() as u64;
-            error!("deviceName {}, data.deviceName {:x}, parameters {:x?}", deviceName, data.deviceName, parameters);
+            // error!("deviceName {}, data.deviceName {:x}, parameters {:x?}", deviceName, functionInfo.deviceName, parameters);
 
             let mut paramInfo = ParamInfo::default();
             parameters.para3 = &mut paramInfo as *const _ as u64;
@@ -122,41 +122,41 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 parameters,
             );
 
-            error!("paramInfo {:x?}", paramInfo);
+            // error!("paramInfo {:x?}", paramInfo);
 
             let mut params_proxy: Vec<u16>=Vec::new();
             for i in 0..paramInfo.paramNum as usize {
                 params_proxy.push(paramInfo.paramSizes[i]);
-                error!("i {}, paramInfo.paramSizes[i] {}", i, paramInfo.paramSizes[i]);
+                // error!("i {}, paramInfo.paramSizes[i] {}", i, paramInfo.paramSizes[i]);
             }
 
-            PARAM_INFOS.lock().insert(data.hostFun, Arc::new(params_proxy));
-            error!("PARAM_INFOS {:x?}", PARAM_INFOS.lock());
+            PARAM_INFOS.lock().insert(functionInfo.hostFun, Arc::new(params_proxy));
+            // error!("PARAM_INFOS {:x?}", PARAM_INFOS.lock());
 
             return Ok(ret);
         }
         ProxyCommand::CudaLaunchKernel => {
-            let mut data = task.CopyInObj::<LaunchKernelInfo>(parameters.para1)?;
-            let paramInfo = PARAM_INFOS.lock().get(&data.func).unwrap().clone();
-            error!("LaunchKernelInfo data {:x?}, paramInfo {:x?}, parameters {:x?}", data, paramInfo, parameters);
+            let mut kernelInfo = task.CopyInObj::<LaunchKernelInfo>(parameters.para1)?;
+            let paramInfo = PARAM_INFOS.lock().get(&kernelInfo.func).unwrap().clone();
+            // error!("LaunchKernelInfo data {:x?}, paramInfo {:x?}, parameters {:x?}", kernelInfo, paramInfo, parameters);
 
-            let mut paramAddrs:Vec<u64> = task.CopyInVec(data.args, paramInfo.len())?;
-            error!("paramAddrs {:x?}", paramAddrs);
+            let mut paramAddrs:Vec<u64> = task.CopyInVec(kernelInfo.args, paramInfo.len())?;
+            // error!("paramAddrs {:x?}", paramAddrs);
 
             let mut paramValues = Vec::new();
             for i in 0..paramInfo.len() {
                 let valueBytes:Vec<u8> = task.CopyInVec(paramAddrs[i], (paramInfo[i]) as usize)?;
-                error!("valueBytes {:x?}", valueBytes);
+                // error!("valueBytes {:x?}", valueBytes);
                 
                 paramValues.push(valueBytes);
                 paramAddrs[i] = &(paramValues[i][0]) as *const _ as u64;
-                error!("i {} paramAddrs[i] {:x} paramValues[i] {:x?}",i, paramAddrs[i], paramValues[i]);
+                // error!("i {} paramAddrs[i] {:x} paramValues[i] {:x?}",i, paramAddrs[i], paramValues[i]);
             }
-            error!("paramAddrs after set {:x?}", paramAddrs);
-            data.args = &paramAddrs[0] as * const _ as u64;
-            error!("data.args {:x?}", data.args);
+            // error!("paramAddrs after set {:x?}", paramAddrs);
+            kernelInfo.args = &paramAddrs[0] as * const _ as u64;
+            // error!("data.args {:x?}", kernelInfo.args);
 
-            parameters.para1 = &data as * const _ as u64;
+            parameters.para1 = &kernelInfo as * const _ as u64;
             let ret = HostSpace::Proxy(
                 ProxyCommand::CudaLaunchKernel,
                 parameters,
@@ -170,7 +170,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn CudaMemcpy(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyKind) -> Result<i64> {
     match kind {
         CUDA_MEMCPY_HOST_TO_HOST => {
-            error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
+            // error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
             return Ok(1);
         }
         CUDA_MEMCPY_HOST_TO_DEVICE => {

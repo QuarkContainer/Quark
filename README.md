@@ -67,9 +67,14 @@ And also add the rust-src component to the current toolchain:
 rustup component add rust-src
 ```
 
-Please also install "cargo-xbuild" as below.
+And also install "cargo-xbuild" as below.
 ```sh
 cargo install cargo-xbuild
+```
+
+And also some extra libraries for compiling GPU module:
+```sh
+sudo apt-get install libelf-dev nvidia-driver-535
 ```
 
 ### Build
