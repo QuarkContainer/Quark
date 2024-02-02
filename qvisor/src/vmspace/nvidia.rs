@@ -40,6 +40,7 @@ lazy_static! {
         (ProxyCommand::CudaRegisterFunction,(XpuLibrary::CudaDriver, "cuModuleGetFunction")),
         (ProxyCommand::CudaLaunchKernel,(XpuLibrary::CudaDriver, "cuLaunchKernel")),
         (ProxyCommand::CudaFree,(XpuLibrary::CudaRuntime,"cudaFree")),
+        (ProxyCommand::CudaUnRegisterFatBinary,(XpuLibrary::CudaDriver,"cuModuleUnload")),
     ]);
 }
 
@@ -109,6 +110,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             return CudaMemcpy(handler, parameters);
         }
         ProxyCommand::CudaRegisterFatBinary => {
+            // reference to a FatElfHeader based on the memory location described by para2
             let fatElfHeader = unsafe { &*(parameters.para2 as *const u8 as *const FatElfHeader) };
             let moduleKey = parameters.para3;
             error!("moduleKey:{:x}", moduleKey);
@@ -128,15 +130,39 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             };
             MODULES.lock().insert(moduleKey, module);
             error!(
-                "called func ret {:?} module ptr {:x?} MODULES {:x?}",
+                "called func ret {:?} module key {:x} module ptr {:x?} MODULES {:x?}",
                 ret,
+                moduleKey,
                 module,
                 MODULES.lock()
             );
             return Ok(ret as i64);
         }
+        ProxyCommand::CudaUnRegisterFatBinary => {
+            let moduleKey = parameters.para1;
+            error!("yiwang unregister module key:{:x}", moduleKey);
+
+            let mut module = match MODULES.lock().get(&moduleKey){
+                Some(module) => {
+                    error!("yiwang module: {:x} for this module key: {:x} has been found",module, moduleKey);
+                    *module 
+                }
+                None => {
+                    error!("yiwang no module be found with this fatcubinHandle:{:x}",moduleKey);
+                    0
+                }
+            };
+            let ret = unsafe{
+                cuda_driver_sys::cuModuleUnload((module as *const u64) as  CUmodule) 
+            };
+            error!("ret: {:?}", ret);
+            return Ok(ret);
+            
+        }
+
         ProxyCommand::CudaRegisterFunction => {
-            let info = unsafe { &*(parameters.para1 as *const u8 as *const RegisterFunctionInfo) };
+            let info
+             = unsafe { &*(parameters.para1 as *const u8 as *const RegisterFunctionInfo) };
 
             let bytes = unsafe {
                 std::slice::from_raw_parts(info.deviceName as *const u8, parameters.para2 as usize)
@@ -145,7 +171,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
            
             let mut module = match MODULES.lock().get(&info.fatCubinHandle){
                  Some(module) => {
-                     error!("module: {:x} for this fatCubinHandle:{} has been found", module, info.fatCubinHandle);
+                     error!("module: {:x} for this fatCubinHandle:{:x} has been found", module, info.fatCubinHandle);
                      *module
                  }
                  None => {

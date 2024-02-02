@@ -62,6 +62,31 @@ pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) -> *mut u64 {
 }
 
 #[no_mangle]
+pub extern "C" fn __cudaUnregisterFatBinary(fatCubinHandle:u64) {
+    println!("Hijacked __cudaUnregisterFatBinary(fatCubinHandle = {:x})", fatCubinHandle);
+    let fatCubinPtr: *const u64 = fatCubinHandle as *const u64;
+    unsafe{
+    println!("Hijacked __cudaUnregisterFatBinaryEnd( the content of fatCubinHandle = {:x})", *fatCubinPtr);
+    }
+   
+    unsafe{
+        //  if *fatCubinPtr != 0 {
+         println!("the content of fatCubin poninter is not 0, need to unload the module");
+         syscall2(SYS_PROXY, ProxyCommand::CudaUnRegisterFatBinary as usize,fatCubinHandle as usize);
+        //  }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn __cudaRegisterFatBinaryEnd(fatCubinHandle:u64) {
+    let fatCubinPtr: *const u64 = fatCubinHandle as *const u64;
+    unsafe{
+    println!("Hijacked __cudaUnregisterFatBinaryEnd( the content of fatCubinHandle = {:x})", *fatCubinPtr);
+    }
+}
+
+
+#[no_mangle]
 pub extern "C" fn __cudaRegisterFunction(
     fatCubinHandle:u64, 
     hostFun:u64, 
@@ -92,6 +117,7 @@ pub extern "C" fn __cudaRegisterFunction(
         syscall2(SYS_PROXY, ProxyCommand::CudaRegisterFunction as usize, &info as *const _ as usize);
     }
 }
+
 
 #[no_mangle]
 pub extern "C" fn cudaLaunchKernel(

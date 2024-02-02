@@ -153,6 +153,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
             secpos += infoSize;
             continue;
         }
+      
         
         error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
 
@@ -170,7 +171,6 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
         error!("ki: {:x?}", ki);
 
         KERNEL_INFOS.lock().insert(kernel_str.clone(), Arc::new(ki));
-
         secpos += infoSize;
     }
 
@@ -245,7 +245,7 @@ fn GetKernelSectionFromKernelName(kernelName:String) -> String {
 
     format!(".nv.info.{}", kernelName)
 }
-
+                                                           // a mutable reference to a mutable raw pointer
 pub fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn) -> Result<i64> {
     let mut scn = 0 as u64 as *mut Elf_Scn;
     let mut size:usize = 0;

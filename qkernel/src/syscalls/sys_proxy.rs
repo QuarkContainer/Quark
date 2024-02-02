@@ -104,6 +104,16 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
             
         }
+        ProxyCommand::CudaUnRegisterFatBinary => {
+            error!("yw fatCubinHandle from the cudaproxy is {:x}", parameters.para1 as u64);
+            let ret = HostSpace::Proxy(
+                 ProxyCommand::CudaUnRegisterFatBinary,
+                 parameters,
+            );
+            error!("yw fatCubinHandle from the cudaproxy is {:x}", parameters.para1 as u64);
+            return Ok(ret);
+
+        }
         ProxyCommand::CudaRegisterFunction => {
             let mut data = task.CopyInObj::<RegisterFunctionInfo>(parameters.para1)?;
             error!("CudaRegisterFunction data {:x?}, parameters {:x?}", data, parameters);
