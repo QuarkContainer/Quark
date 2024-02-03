@@ -26,6 +26,7 @@ pub mod time;
 pub mod uringMgr;
 pub mod nvidia;
 pub mod tsot_agent;
+pub mod xpu;
 
 use core::arch::asm;
 use core::sync::atomic;
