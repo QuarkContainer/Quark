@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::MIN_VCPU_COUNT;
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Config {
     pub DebugLevel: DebugLevel,
@@ -44,6 +46,7 @@ pub struct Config {
     pub Sandboxed: bool,
     pub Realtime: bool,
     pub EnableIOBuf: bool,
+    pub LimitVMvCPUAmount: u64,
 }
 
 impl Config {
@@ -53,6 +56,19 @@ impl Config {
 
     pub fn Async(&self) -> bool {
         return self.LogType == LogType::Async;
+    }
+
+    //
+    // The assigned value is taken in consideration
+    // if it is at least equal to the required
+    // MIN_VCPU_COUNT value.
+    //
+    pub fn get_config_vcpu_amount(&self) -> Option<usize> {
+       if self.LimitVMvCPUAmount < MIN_VCPU_COUNT as u64 {
+            None
+       } else {
+            Some(self.LimitVMvCPUAmount as usize)
+       }
     }
 }
 
@@ -90,6 +106,7 @@ impl Default for Config {
             Sandboxed: false,
             Realtime: false,
             EnableIOBuf: false,
+            LimitVMvCPUAmount: 0
         };
     }
 }

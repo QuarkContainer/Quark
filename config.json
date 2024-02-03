@@ -27,5 +27,6 @@
   "TlbShootdownWait": true,
   "Sandboxed"     : false,
   "Realtime"      : false,
-  "EnableIOBuf"   : false
+  "EnableIOBuf"   : false,
+  "LimitVMvCPUAmount": 0
 }
