@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::socket::epsocket::epsocket::SIZEOF_I32;
+use crate::qlib::kernel::socket::hostinet::tsot_mgr::QIPv4Addr;
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
@@ -24,6 +26,7 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI32;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::AtomicU16;
+use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
 
 use super::super::super::super::common::*;
@@ -47,13 +50,13 @@ use super::super::super::task::*;
 use super::super::super::tcpip::tcpip::*;
 use super::super::super::Kernel;
 use super::super::super::Kernel::HostSpace;
-use super::super::super::IOURING;
 use super::super::super::SHARESPACE;
 use super::super::control::*;
 use super::super::socket::*;
-use super::super::unix::transport::unix::*;
+use super::tsot_mgr::QIPv4Endpoint;
+use super::tsot_mgr::TsotAcceptItem;
+use super::tsot_mgr::TsotAcceptQueue;
 use crate::qlib::bytestream::*;
-use crate::qlib::kernel::kernel::abstract_socket_namespace::*;
 use crate::qlib::kernel::kernel::waiter::Queue;
 use crate::qlib::kernel::socket::hostinet::loopbacksocket::*;
 use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFConf;
@@ -67,7 +70,7 @@ pub fn NewTsotSocketFile(
     nonblock: bool,
     queue: Queue,
     socketType: TsotSocketType,
-    addr: Option<Vec<u8>>,
+    remoteAddr: QIPv4Endpoint,
 ) -> Result<File> {
     let dirent = NewSocketDirent(task, SOCKET_DEVICE.clone(), fd)?;
     let inode = dirent.Inode();
@@ -80,7 +83,7 @@ pub fn NewTsotSocketFile(
         queue, //hostiops.Queue(),
         hostiops.clone(),
         socketType,
-        addr,
+        remoteAddr,
     )?;
 
     let file = File::New(
@@ -103,7 +106,7 @@ pub fn NewTsotSocketFile(
 pub enum TsotSocketType {
     Init,                      // Init TCP Socket, no listen and no connect
     Connecting,                // Start connecting, content is connect
-    Server(AcceptQueue),       // TCP Server socket, when socket start to listen
+    Server(Vec<TsotAcceptQueue>),       // TCP Server socket, when socket start to listen
     Uring(SocketBuff),
     Loopback(LoopbackSocket),
 }
@@ -171,11 +174,13 @@ pub struct TsotSocketOperationsIntern {
     pub fd: i32,
     pub connErrNo: AtomicI32,
     pub queue: Queue,
-    pub remoteAddr: QMutex<Option<SockAddr>>,
+    pub remoteAddr: QIPv4Endpoint,
     pub socketType: QMutex<TsotSocketType>,
-    pub enableAsyncAccept: AtomicBool,
-    pub loopbackPort: AtomicU16,
+    pub bindIp: AtomicU32,
+    pub bindPort: AtomicU16,
+    pub listening: AtomicBool, // is listening?
     pub hostops: HostInodeOp,
+    pub reusePort: AtomicBool,
     passInq: AtomicBool,
 }
 
@@ -199,9 +204,11 @@ pub struct TsotSocketOperations(Arc<TsotSocketOperationsIntern>);
 impl Drop for TsotSocketOperations {
     fn drop(&mut self) {
         if Arc::strong_count(&self.0) == 1 {
-            let loopbackPort = self.loopbackPort.load(Ordering::Acquire);
-            if loopbackPort > 0 {
-                TCP_SOCKET.Remove(loopbackPort).unwrap();
+            match self.Drop() {
+                Err(e) => {
+                    error!("TsotSocketOperations::Drop fail with error {:?}", e);
+                }
+                Ok(()) => (),
             }
         }
     }
@@ -210,6 +217,36 @@ impl Drop for TsotSocketOperations {
 impl TsotSocketOperations {
     pub fn Downgrade(&self) -> TsotSocketOperationsWeak {
         return TsotSocketOperationsWeak(Arc::downgrade(&self.0));
+    }
+
+    pub fn Drop(&self) -> Result<()> {
+        let bindIp: QIPv4Addr = self.bindIp.load(Ordering::Relaxed).into();
+        let bindPort = self.bindPort.load(Ordering::Relaxed);
+        let localAddr = SHARESPACE.tsotSocketMgr.LocalIpAddr();
+
+        if bindPort != 0 {
+            if bindIp.IsLoopback() {
+                SHARESPACE.tsotSocketMgr.RemoveBind(bindIp, bindPort)?;
+            } else if bindIp.IsAny() {
+                SHARESPACE.tsotSocketMgr.RemoveBind(QIPv4Addr::Loopback(), bindPort)?;
+                SHARESPACE.tsotSocketMgr.RemoveBind(localAddr, bindPort)?;
+            } else {
+                SHARESPACE.tsotSocketMgr.RemoveBind(localAddr, bindPort)?;
+            }
+        }
+
+        if self.listening.load(Ordering::Relaxed) {
+            if bindIp.IsLoopback() {
+                SHARESPACE.tsotSocketMgr.StopListen(self.fd, bindIp, bindPort)?;
+            } else if bindIp.IsAny() {
+                SHARESPACE.tsotSocketMgr.StopListen(self.fd, QIPv4Addr::Loopback(), bindPort)?;
+                SHARESPACE.tsotSocketMgr.StopListen(self.fd, localAddr, bindPort)?;
+            } else {
+                SHARESPACE.tsotSocketMgr.StopListen(self.fd, localAddr, bindPort)?;
+            }
+        }
+
+        return Ok(())
     }
 
     pub fn SetConnErrno(&self, errno: i32) {
@@ -227,19 +264,8 @@ impl TsotSocketOperations {
         queue: Queue,
         hostops: HostInodeOp,
         socketBuf: TsotSocketType,
-        addr: Option<Vec<u8>>,
+        remoteAddr: QIPv4Endpoint,
     ) -> Result<Self> {
-        let addr = match addr {
-            None => None,
-            Some(v) => {
-                if v.len() == 0 {
-                    None
-                } else {
-                    Some(GetAddr(v[0] as i16, &v[0..v.len()]).unwrap())
-                }
-            }
-        };
-
         match &socketBuf {
             TsotSocketType::Uring(ref buf) => {
                 QUring::BufSockInit(fd, queue.clone(), buf.clone(), true).unwrap();
@@ -255,12 +281,14 @@ impl TsotSocketOperations {
             fd,
             connErrNo: AtomicI32::new(0),
             queue,
-            remoteAddr: QMutex::new(addr),
+            remoteAddr: remoteAddr,
             socketType: QMutex::new(socketBuf.clone()),
-            enableAsyncAccept: AtomicBool::new(false),
-            loopbackPort: AtomicU16::new(0),
+            bindIp: AtomicU32::new(0),
+            bindPort: AtomicU16::new(0),
+            listening: AtomicBool::new(false),
             hostops: hostops,
             passInq: AtomicBool::new(false),
+            reusePort: AtomicBool::new(false),
         };
 
         let ret = Self(Arc::new(ret));
@@ -335,10 +363,6 @@ impl TsotSocketOperations {
         }
     }
 
-    pub fn AsyncAcceptEnabled(&self) -> bool {
-        return self.enableAsyncAccept.load(Ordering::Relaxed);
-    }
-
     pub fn SocketType(&self) -> TsotSocketType {
         return self.socketType.lock().clone();
     }
@@ -372,11 +396,19 @@ impl TsotSocketOperations {
         self.queue.Notify(EventMaskFromLinux(mask as u32));
     }
 
-    pub fn AcceptData(&self) -> Result<AcceptItem> {
+    pub fn AcceptData(&self) -> Result<TsotAcceptItem> {
         let sockBufType = self.socketType.lock().clone();
         match sockBufType {
-            TsotSocketType::Server(ref queue) => {
-                return IOURING.Accept(self.fd, &self.queue, queue)
+            TsotSocketType::Server(ref queues) => {
+                for q in queues {
+                    match q.lock().DeqSocket() {
+                        Ok(item) => return Ok(item),
+                        Err(Error::SysError(SysErr::EAGAIN)) => (),
+                        Err(e) => return Err(e)
+                    }
+                }
+
+                return Err(Error::SysError(SysErr::EAGAIN));
             }
             _ => {
                 error!("TsotSocketType invalid accept {:?}", sockBufType);
@@ -436,22 +468,6 @@ impl Deref for TsotSocketOperations {
     }
 }
 
-impl TsotSocketOperations {
-    pub fn SetRemoteAddr(&self, addr: Vec<u8>) -> Result<()> {
-        let addr = GetAddr(addr[0] as i16, &addr[0..addr.len()])?;
-
-        *self.remoteAddr.lock() = Some(addr);
-        return Ok(());
-    }
-
-    pub fn GetRemoteAddr(&self) -> Option<Vec<u8>> {
-        return match *self.remoteAddr.lock() {
-            None => None,
-            Some(ref v) => Some(v.ToVec().unwrap()),
-        };
-    }
-}
-
 pub const SIZEOF_SOCKADDR: usize = SocketSize::SIZEOF_SOCKADDR_INET6;
 
 impl Waitable for TsotSocketOperations {
@@ -464,8 +480,12 @@ impl Waitable for TsotSocketOperations {
                 }
                 return 0;
             }
-            TsotSocketType::Server(q) => {
-                return q.lock().Events() & mask;
+            TsotSocketType::Server(qs) => {
+                let mut event = 0;
+                for q in &qs {
+                    event |= q.lock().Events();
+                }
+                 return event & mask;
             }
             TsotSocketType::Uring(buf) => {
                 return buf.Events() & mask;
@@ -486,9 +506,7 @@ impl Waitable for TsotSocketOperations {
         let fd = self.fd;
 
         match self.SocketType() {
-            TsotSocketType::Connecting => {
-                UpdateFD(fd).unwrap();
-            }
+            TsotSocketType::Connecting => (),
             TsotSocketType::Server(_q) => (),
             TsotSocketType::Uring(_buf) => (),
             TsotSocketType::Loopback(_) => (),
@@ -503,9 +521,7 @@ impl Waitable for TsotSocketOperations {
         queue.EventUnregister(task, e);
         let fd = self.fd;
         match self.SocketType() {
-            TsotSocketType::Connecting => {
-                UpdateFD(fd).unwrap();
-            }
+            TsotSocketType::Connecting => (),
             TsotSocketType::Server(_q) => (),
             TsotSocketType::Uring(_buf) => (),
             TsotSocketType::Loopback(_) => (),
@@ -725,46 +741,36 @@ impl SockOperations for TsotSocketOperations {
             TsotSocketType::Init => {
                 let addr = unsafe { &*(&sockaddr[0] as *const _ as u64 as *const SockAddrInet) };
 
-                if addr.Family == AFType::AF_INET as u16 && addr.Addr == [127, 0, 0, 1] {
-                    match TCP_SOCKET.Get(addr.Port) {
-                        // in case for host network, there are process listen localhost outside of the container
-                        None => (), //return Err(Error::SysError(SysErr::ECONNREFUSED)),
-                        Some(q) => {
-                            let serverQueue = Queue::default();
-                            let (clientSock, serverSock) =
-                                LoopbackSocketPair(self.queue.clone(), serverQueue.clone());
-                            *self.socketType.lock() = TsotSocketType::Loopback(clientSock);
-                            let addr = SockAddrInet {
-                                Family: AFType::AF_INET as u16,
-                                Port: 0,
-                                Addr: [127, 0, 0, 1],
-                                ..Default::default()
-                            };
-
-                            let res = Kernel::HostSpace::Socket(
-                                AFType::AF_INET,
-                                SocketType::SOCK_STREAM | SocketFlags::SOCK_CLOEXEC,
-                                0,
-                            );
-                            if res < 0 {
-                                return Err(Error::SysError(-res as i32));
-                            }
-
-                            let fd = res as i32;
-
-                            q.EnqSocket(
-                                fd,
-                                TcpSockAddr::NewFromInet(addr),
-                                16,
-                                serverSock.into(),
-                                serverQueue,
-                            );
-                            return Ok(0);
-                        }
-                    };
+                if addr.Family != AFType::AF_INET as u16 {
+                    // only support Ipv4 so far;
+                    return Err(Error::SysError(SysErr::EAFNOSUPPORT));
                 }
 
-                // QUring::AsyncConnect(self.fd, self, sockaddr)?;
+                let ipAddr = QIPv4Addr::from(&addr.Addr);
+                if ipAddr.IsLoopback() {
+                    let serverQueue = Queue::default();
+                    let (clientSock, serverSock) =
+                        LoopbackSocketPair(self.queue.clone(), serverQueue.clone());
+                    *self.socketType.lock() = TsotSocketType::Loopback(clientSock);
+
+                    let res = Kernel::HostSpace::Socket(
+                        AFType::AF_INET,
+                        SocketType::SOCK_STREAM | SocketFlags::SOCK_CLOEXEC,
+                        0,
+                    );
+                    if res < 0 {
+                        return Err(Error::SysError(-res as i32));
+                    }
+
+                    let fd = res as i32;
+
+                    SHARESPACE.tsotSocketMgr.NewLoopbackConnection(fd, ipAddr, 123, serverSock.into(), serverQueue)?;
+
+                    return Ok(0);
+                }
+
+                SHARESPACE.tsotSocketMgr.Connect(ipAddr, addr.Port, 123, self.fd, self)?;
+                
                 if !blocking {
                     return Err(Error::SysError(SysErr::EINPROGRESS));
                 }
@@ -795,6 +801,10 @@ impl SockOperations for TsotSocketOperations {
                 }
                 _ => (),
             }
+        }
+
+        if self.ConnErrno() == 0 {
+            return Ok(0)
         }
 
         let errno = self.ConnErrno();
@@ -847,14 +857,18 @@ impl SockOperations for TsotSocketOperations {
             }
         }
 
-        let mut len: usize = acceptItem.addr.data.len();
+        let peerIp : QIPv4Addr = acceptItem.addr.into();
+        if !peerIp.IsLoopback() {
+            SHARESPACE.tsotSocketMgr.Accept(acceptItem.port)?;
+        }
+
         if addr.len() > 0 {
-            len = core::cmp::min(
-                core::cmp::min(acceptItem.len as usize, addr.len()),
-                acceptItem.addr.data.len(),
-            );
+            let peerAddr = QIPv4Endpoint::New(acceptItem.addr.into(), acceptItem.port);
+            let peerSockAddr = peerAddr.ToSockAddr();
+            let vec = peerSockAddr.ToVec()?;
+            let len = addr.len().min(vec.len());
             for i in 0..len {
-                addr[i] = acceptItem.addr.data[i];
+                addr[i] = vec[i];
             }
 
             *addrlen = len as u32;
@@ -862,8 +876,6 @@ impl SockOperations for TsotSocketOperations {
 
         let fd = acceptItem.fd;
 
-        let remoteAddr = &acceptItem.addr.data[0..len];
-        //let sockBuf = self.ConfigTsotSocketType();
         let sockBuf = self.SocketType().Accept(acceptItem.sockBuf.clone());
 
         let file = NewTsotSocketFile(
@@ -874,7 +886,7 @@ impl SockOperations for TsotSocketOperations {
             flags & SocketFlags::SOCK_NONBLOCK != 0,
             acceptItem.queue.clone(),
             sockBuf,
-            Some(remoteAddr.to_vec()),
+            QIPv4Endpoint::New(acceptItem.addr.into(), acceptItem.port),
         )?;
 
         let fdFlags = FDFlags {
@@ -885,81 +897,90 @@ impl SockOperations for TsotSocketOperations {
         return Ok(fd as i64);
     }
 
-    fn Bind(&self, task: &Task, sockaddr: &[u8]) -> Result<i64> {
-        let mut socketaddr = sockaddr;
+    fn Bind(&self, _task: &Task, sockaddr: &[u8]) -> Result<i64> {
+        let socketaddr = sockaddr;
 
         let addr = unsafe { &*(&socketaddr[0] as *const _ as u64 as *const SockAddrInet) };
         info!(
             "hostinet socket bind {:?}, addr is {:?}/{:?}",
             self.family, addr, socketaddr
         );
-        if (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && socketaddr.len() > SIZEOF_SOCKADDR
-        {
-            socketaddr = &socketaddr[..SIZEOF_SOCKADDR]
+
+        if self.family != AFType::AF_INET {
+            // doesn't support ipv6 so far
+            return Err(Error::SysError(SysErr::EAFNOSUPPORT)); 
         }
 
-        let res = Kernel::HostSpace::Bind(
-            self.fd,
-            &socketaddr[0] as *const _ as u64,
-            socketaddr.len() as u32,
-            task.Umask(),
-        );
-        if res < 0 {
-            return Err(Error::SysError(-res as i32));
+        let ip = QIPv4Addr::from(&addr.Addr);
+
+        let localAddr = SHARESPACE.tsotSocketMgr.LocalIpAddr();
+        if !ip.IsLoopback() && !ip.IsAny() {
+            if ip != localAddr {
+                // can't bind non-local address
+                return Err(Error::SysError(SysErr::EINVAL)); 
+            }
+        }
+        
+        let reusePort = self.reusePort.load(Ordering::Relaxed);
+        if ip.IsLoopback() {
+            SHARESPACE.tsotSocketMgr.Bind(ip, addr.Port, reusePort)?;
+        } else if ip.IsAny() {
+            SHARESPACE.tsotSocketMgr.Bind(QIPv4Addr::Loopback(), addr.Port, reusePort)?;
+            SHARESPACE.tsotSocketMgr.Bind(localAddr, addr.Port, reusePort)?;
+        } else {
+            SHARESPACE.tsotSocketMgr.Bind(localAddr, addr.Port, reusePort)?;
         }
 
-        if addr.Family == AFType::AF_INET as u16
-            && (addr.Addr == [0, 0, 0, 0] || addr.Addr == [127, 0, 0, 1])
-        {
-            self.loopbackPort.store(addr.Port, Ordering::Release);
-        }
+        self.bindPort.store(addr.Port, Ordering::SeqCst);
+        self.bindIp.store(ip.0, Ordering::SeqCst);
 
-        return Ok(res);
+        return Ok(0);
     }
 
     fn Listen(&self, _task: &Task, backlog: i32) -> Result<i64> {
-        let asyncAccept = SHARESPACE.config.read().AsyncAccept
-            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && self.stype == SockType::SOCK_STREAM;
-
-        let len = if backlog <= 0 { 5 } else { backlog };
+        let backlog = if backlog <= 0 { 5 } else { backlog as u32};
 
         let socketBuf = self.socketType.lock().clone();
-        let acceptQueue = match socketBuf {
-            TsotSocketType::Server(q) => {
-                q.lock().SetQueueLen(len as usize);
-                let loopbackPort = self.loopbackPort.load(Ordering::Acquire);
-                if loopbackPort > 0 {
-                    TCP_SOCKET.Add(loopbackPort, q.clone())?;
-                }
-                return Ok(0);
+        let mut qs = Vec::new();
+        let acceptQueues = match socketBuf {
+            TsotSocketType::Server(_q) => {
+                let ip :QIPv4Addr = self.bindIp.load(Ordering::Relaxed).into();
+                let port = self.bindPort.load(Ordering::Relaxed);
+                let q = if ip.IsLoopback() {
+                    SHARESPACE.tsotSocketMgr.Listen(ip, self.fd, port, backlog, &self.queue)?
+                } else if ip.IsAny() {
+                    let localIp = SHARESPACE.tsotSocketMgr.LocalIpAddr();
+                    let q = SHARESPACE.tsotSocketMgr.Listen(QIPv4Addr::Loopback(), self.fd, port, backlog, &self.queue)?;
+                    qs.push(q);
+                    SHARESPACE.tsotSocketMgr.Listen(localIp, self.fd, port, backlog, &self.queue)?
+                } else {
+                    SHARESPACE.tsotSocketMgr.Listen(ip, self.fd, port, backlog, &self.queue)?
+                };
+                qs.push(q);
+                qs
             }
-            TsotSocketType::Init => AcceptQueue::New(len as usize, self.queue.clone()),
+            TsotSocketType::Init => {
+                let ip :QIPv4Addr = self.bindIp.load(Ordering::Relaxed).into();
+                let port = self.bindPort.load(Ordering::Relaxed);
+                let q = if ip.IsLoopback() {
+                    SHARESPACE.tsotSocketMgr.Listen(ip, self.fd, port, backlog, &self.queue)?
+                } else if ip.IsAny() {
+                    let localIp = SHARESPACE.tsotSocketMgr.LocalIpAddr();
+                    let q = SHARESPACE.tsotSocketMgr.Listen(QIPv4Addr::Loopback(), self.fd, port, backlog, &self.queue)?;
+                    qs.push(q);
+                    SHARESPACE.tsotSocketMgr.Listen(localIp, self.fd, port, backlog, &self.queue)?
+                } else {
+                    SHARESPACE.tsotSocketMgr.Listen(ip, self.fd, port, backlog, &self.queue)?
+                };
+                qs.push(q);
+                qs
+            }
             _ => panic!("uring socket listen on wrong type {:?}", socketBuf), // panic?
         };
 
-        let res = Kernel::HostSpace::Listen(self.fd, backlog, asyncAccept);
+        *self.socketType.lock() = TsotSocketType::Server(acceptQueues);
 
-        if res < 0 {
-            return Err(Error::SysError(-res as i32));
-        }
-
-        *self.socketType.lock() = {
-            if !self.AsyncAcceptEnabled() {
-                IOURING.AcceptInit(self.fd, &self.queue, &acceptQueue)?;
-                self.enableAsyncAccept.store(true, Ordering::Relaxed);
-            }
-
-            let loopbackPort = self.loopbackPort.load(Ordering::Acquire);
-            if loopbackPort > 0 {
-                TCP_SOCKET.Add(loopbackPort, acceptQueue.clone())?;
-            }
-
-            TsotSocketType::Server(acceptQueue)
-        };
-
-        return Ok(res);
+        return Ok(0);
     }
 
     fn Shutdown(&self, task: &Task, how: i32) -> Result<i64> {
@@ -1024,7 +1045,7 @@ impl SockOperations for TsotSocketOperations {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    fn GetSockOpt(&self, _task: &Task, level: i32, name: i32, opt: &mut [u8]) -> Result<i64> {
+    fn GetSockOpt(&self, task: &Task, level: i32, name: i32, opt: &mut [u8]) -> Result<i64> {
         /*
         let optlen = match level as u64 {
             LibcConst::SOL_IPV6 => {
@@ -1106,11 +1127,12 @@ impl SockOperations for TsotSocketOperations {
                     }
                     
                     if self.ConnErrno() != 0 {
-                        let errno = self.ConnErrno();
+                        let errno = -self.ConnErrno();
                         self.SetConnErrno(0);
-                        unsafe {
-                            *(&mut opt[0] as *mut _ as u64 as *mut i32) = -errno;
-                        }
+                        task.CopyOutObj(&errno, &mut opt[0] as *mut _ as u64)?;
+                        // unsafe {
+                        //     *(&mut opt[0] as *mut _ as u64 as *mut i32) = -errno;
+                        // }
                         return Ok(4);
                     }
                 }
@@ -1118,6 +1140,38 @@ impl SockOperations for TsotSocketOperations {
             },
             _ => (),
         };
+
+        if (level as u64) == LibcConst::SOL_TCP {
+            match name as u64 {                
+                LibcConst::TCP_INQ => {
+                    // TCP_INQ is bound to buffer implementation
+                    if opt.len() < SIZEOF_I32 {
+                        return Err(Error::SysError(SysErr::EINVAL));
+                    }
+
+                    let passinq: i32 = if self.passInq.load(Ordering::SeqCst) {
+                        1
+                    } else {
+                        0
+                    };
+                    task.CopyOutObj(&passinq, &mut opt[0] as *mut _ as u64)?;
+                }
+                LibcConst::SO_REUSEPORT => {
+                    if opt.len() < SIZEOF_I32 {
+                        return Err(Error::SysError(SysErr::EINVAL));
+                    }
+
+                    let reusePort: i32 = if self.reusePort.load(Ordering::SeqCst) {
+                        1
+                    } else {
+                        0
+                    };
+
+                    task.CopyOutObj(&reusePort, &mut opt[0] as *mut _ as u64)?;
+                }
+                _ => (),
+            }
+        }
 
         let mut optLen = opt.len();
         let res = if optLen == 0 {
@@ -1202,14 +1256,28 @@ impl SockOperations for TsotSocketOperations {
             }
         }
 
-        // TCP_INQ is bound to buffer implementation
-        if (level as u64) == LibcConst::SOL_TCP && (name as u64) == LibcConst::TCP_INQ {
-            let val: i32 = task.CopyInObj::<i32>(&opt[0] as *const _ as u64)?;
+        if (level as u64) == LibcConst::SOL_TCP {
+            match name as u64 {                
+                LibcConst::TCP_INQ => {
+                    // TCP_INQ is bound to buffer implementation
+                    let val: i32 = task.CopyInObj::<i32>(&opt[0] as *const _ as u64)?;
 
-            if val == 1 {
-                self.passInq.store(true, Ordering::Relaxed);
-            } else {
-                self.passInq.store(false, Ordering::Relaxed);
+                    if val == 1 {
+                        self.passInq.store(true, Ordering::Relaxed);
+                    } else {
+                        self.passInq.store(false, Ordering::Relaxed);
+                    }
+                }
+                LibcConst::SO_REUSEPORT => {
+                    if opt.len() < SIZEOF_I32 {
+                        return Err(Error::SysError(SysErr::EINVAL));
+                    }
+    
+                    let val: i32 = task.CopyInObj::<i32>(&opt[0] as *const _ as u64)?;
+                    let reusePort = val != 0;
+                    self.reusePort.store(reusePort, Ordering::Relaxed);
+                }
+                _ => (),
             }
         }
 
@@ -1255,30 +1323,11 @@ impl SockOperations for TsotSocketOperations {
     }
 
     fn GetPeerName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
-        let len = socketaddr.len() as i32;
-
-        {
-            let peerName = self.remoteAddr.lock();
-            match &*peerName {
-                None => (),
-                Some(addr) => {
-                    let v = addr.ToVec()?;
-                    for i in 0..v.len() {
-                        socketaddr[i] = v[i];
-                    }
-    
-                    return Ok(v.len() as i64);
-                }
-            }    
-        }
-        
-        let res = Kernel::HostSpace::GetPeerName(
-            self.fd,
-            &socketaddr[0] as *const _ as u64,
-            &len as *const _ as u64,
-        );
-        if res < 0 {
-            return Err(Error::SysError(-res as i32));
+        let addr = self.remoteAddr.ToSockAddr();
+        let v = addr.ToVec()?;
+        let len = addr.Len().min(socketaddr.len());
+        for i in 0..len {
+            socketaddr[i] = v[i];
         }
 
         return Ok(len as i64);
@@ -1319,7 +1368,7 @@ impl SockOperations for TsotSocketOperations {
 
         if buf.RClosed() {
             let senderAddr = if senderRequested {
-                let addr = self.remoteAddr.lock().as_ref().unwrap().clone();
+                let addr = self.remoteAddr.ToSockAddr();
                 let l = addr.Len();
                 Some((addr, l))
             } else {
@@ -1343,7 +1392,7 @@ impl SockOperations for TsotSocketOperations {
                 Err(e) => return Err(e),
                 Ok(count) => {
                     let senderAddr = if senderRequested {
-                        let addr = self.remoteAddr.lock().as_ref().unwrap().clone();
+                        let addr = self.remoteAddr.ToSockAddr();
                         let l = addr.Len();
                         Some((addr, l))
                     } else {
@@ -1424,7 +1473,7 @@ impl SockOperations for TsotSocketOperations {
         }
 
         let senderAddr = if senderRequested {
-            let addr = self.remoteAddr.lock().as_ref().unwrap().clone();
+            let addr = self.remoteAddr.ToSockAddr();
             let l = addr.Len();
             Some((addr, l))
         } else {

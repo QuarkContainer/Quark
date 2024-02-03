@@ -116,6 +116,7 @@ use self::qmsg::*;
 use self::rdma_svc_cli::*;
 use self::ringbuf::*;
 use self::task_mgr::*;
+use self::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
 
 pub fn InitSingleton() {
     unsafe {
@@ -1173,6 +1174,8 @@ pub struct ShareSpace {
     pub controlSock: i32,
     pub hostEpollfd: AtomicI32,
 
+    pub tsotSocketMgr: TsotSocketMgr,
+
     pub values: Vec<[AtomicU64; 2]>,
 }
 
@@ -1181,6 +1184,7 @@ impl ShareSpace {
         return ShareSpace {
             ioUring: CachePadded::new(QUring::New(MemoryDef::QURING_SIZE)),
             ioMgr: CachePadded::new(IOMgr::Init().unwrap()),
+            tsotSocketMgr: TsotSocketMgr::default(),
             ..Default::default()
         };
     }
