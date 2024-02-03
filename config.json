@@ -28,5 +28,5 @@
   "Sandboxed"     : false,
   "Realtime"      : false,
   "EnableIOBuf"   : false,
-  "EnableTsot"    : true
+  "EnableTsot"    : false
 }
