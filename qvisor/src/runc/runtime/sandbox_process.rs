@@ -459,6 +459,8 @@ impl SandboxProcess {
         }
 
         let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
+        error!("mount to {} {}", &self.Rootfs, &rootContainerPath);
+        
         match create_dir_all(&rootContainerPath) {
             Ok(()) => (),
             Err(_e) => panic!("failed to create dir to mount containerrootPath"),
@@ -466,6 +468,25 @@ impl SandboxProcess {
         let ret = Util::Mount(&self.Rootfs, &rootContainerPath, "", rbindFlags, "");
         if ret < 0 {
             panic!("InitRootfs: mount rootfs fail, error is {}", ret);
+        }
+
+        if QUARK_CONFIG.lock().EnableTsot {
+            let share = Join(&self.SandboxRootDir, "run");
+            match create_dir_all(&share) {
+                Ok(()) => (),
+                Err(_e) => panic!("failed to create dir to mount containerrootPath"),
+            };
+
+            let shareDir = "/var/run/quark";
+
+            error!("InitRootfs1: start to mount sharefolder {} to {}", shareDir, &share);    
+            if Path::new(shareDir).exists() {
+                error!("InitRootfs2: start to mount sharefolder {} to {}", shareDir, &share);    
+                let ret = Util::Mount(shareDir, &share, "", rbindFlags, "");
+                if ret < 0 {
+                    panic!("InitRootfs: mount sharefolder fail, error is {}", ret);
+                }
+            }
         }
 
         let tmpfolder = Join(&self.SandboxRootDir, "tmp");

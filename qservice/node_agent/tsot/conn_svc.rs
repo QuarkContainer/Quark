@@ -23,9 +23,9 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::net::TcpSocket;
 use tokio::net::TcpStream;
+use tokio::sync::Notify;
 
 use qshare::common::*;
-use tokio::sync::Notify;
 
 use super::peer_mgr::PEER_MGR;
 use super::pod_broker::PodBroker;

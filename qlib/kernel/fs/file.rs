@@ -21,6 +21,7 @@ use core::any::Any;
 use core::ops::Deref;
 use enum_dispatch::enum_dispatch;
 
+use crate::qlib::kernel::socket::hostinet::tsotsocket::TsotSocketOperations;
 use crate::qlib::nvproxy::frontendfd::NvFrontendFileOptions;
 use crate::qlib::mutex::*;
 use crate::qlib::nvproxy::uvmfd::UvmFileOptions;
@@ -346,6 +347,7 @@ pub enum FileOps {
     HostSocketOperations(HostSocketOperations),
     SocketOperations(SocketOperations),
     UringSocketOperations(UringSocketOperations),
+    TsotSocketOperations(TsotSocketOperations),
     UnixSocketOperations(UnixSocketOperations),
     RootProcFile(RootProcFile),
     NvFrontendFileOptions(NvFrontendFileOptions),

@@ -455,6 +455,9 @@ pub enum Error {
 
     InvalidArgument(String),
     ContainerdShim(String),
+
+    StdIOErr(String),
+    UUidError(String),
 }
 
 impl Error {

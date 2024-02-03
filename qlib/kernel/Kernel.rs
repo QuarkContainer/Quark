@@ -728,6 +728,24 @@ impl HostSpace {
         return ret;
     }
 
+    pub fn TsotRecvMsg(msgAddr: u64) -> i64 {
+        let mut msg = Msg::TsotRecvMsg(TsotRecvMsg {
+            msgAddr: msgAddr,
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn TsotSendMsg(msgAddr: u64) -> i64 {
+        let mut msg = Msg::TsotSendMsg(TsotSendMsg {
+            msgAddr: msgAddr,
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
     pub fn CreateAt(
         dirfd: i32,
         pathName: u64,

@@ -359,7 +359,7 @@ impl SockAddr {
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SockAddrInet {
-    pub Family: u16,
+    pub Family: u16, // AFType::AF_INET as u16
     pub Port: u16,
     pub Addr: [u8; 4],
     pub Zero: [u8; 8], // pad to sizeof(struct sockaddr).
@@ -368,6 +368,12 @@ pub struct SockAddrInet {
 impl SockAddrInet {
     pub fn Len(&self) -> usize {
         return core::mem::size_of::<SockAddrInet>();
+    }
+    
+    pub fn Ipv4Addr(&self) -> u32 {
+        return unsafe {
+            *(&self.Addr[0] as * const _ as u64 as * const u32)
+        }
     }
 }
 

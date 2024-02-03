@@ -132,6 +132,48 @@ pub enum Msg {
     NvidiaMMap(NvidiaMMap),
     HostUnixConnect(HostUnixConnect),
     HostUnixRecvMsg(HostUnixRecvMsg),
+
+    // TsotListen(TsotListen),
+    // TsotAccept(TsotAccept),
+    // TsotStopListen(TsotStopListen),
+    // TsotConnect(TsotConnect),
+    TsotRecvMsg(TsotRecvMsg),
+    TsotSendMsg(TsotSendMsg),
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TsotRecvMsg {
+    pub msgAddr: u64,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TsotSendMsg {
+    pub msgAddr: u64,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TsotListen {
+    pub port: u16,
+    pub backlog: u32,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TsotAccept {
+    pub port: u16,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TsotStopListen {
+    pub port: u16,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TsotConnect {
+    pub reqId: u32,
+    pub dstIp: u32,
+    pub dstPort: u32,
+    pub srcPort: u16,
+    pub socket: i32,
 }
 
 #[derive(Clone, Default, Debug)]
