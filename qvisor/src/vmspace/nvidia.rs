@@ -38,6 +38,7 @@ lazy_static! {
         (ProxyCommand::CudaMemcpy,(XpuLibrary::CudaRuntime, "cudaMemcpy")),
         (ProxyCommand::CudaRegisterFatBinary,(XpuLibrary::CudaDriver, "cuModuleLoadData")),
         (ProxyCommand::CudaRegisterFunction,(XpuLibrary::CudaDriver, "cuModuleGetFunction")),
+        (ProxyCommand::CudaUnRegisterFatBinary,(XpuLibrary::CudaDriver,"cuModuleUnload")),
         (ProxyCommand::CudaLaunchKernel,(XpuLibrary::CudaDriver, "cuLaunchKernel")),
         (ProxyCommand::CudaFree,(XpuLibrary::CudaRuntime,"cudaFree")),
     ]);
@@ -134,6 +135,30 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             //     MODULES.lock()
             // );
             return Ok(ret as i64);
+        }
+        ProxyCommand::CudaUnRegisterFatBinary => {
+            let moduleKey = parameters.para1;
+            //error!("unregister module key:{:x}", moduleKey);
+
+            let mut module = match MODULES.lock().get(&moduleKey){
+                Some(module) => {
+                    //error!("module: {:x} for this module key: {:x} has been found",module, moduleKey);
+                    *module 
+                }
+                None => {
+                    //error!("no module be found with this fatcubinHandle:{:x}",moduleKey);
+                    0
+                }
+            };
+            let ret = unsafe{
+                cuda_driver_sys::cuModuleUnload((module as *const u64) as  CUmodule) 
+            };
+            //error!("ret: {:?}", ret);
+            // delete the module 
+            MODULES.lock().remove(&moduleKey);
+            //error!("modules treepmap should be empty:{:x?}",MODULES.lock());
+            return Ok(ret as i64);
+
         }
         ProxyCommand::CudaRegisterFunction => {
             let info = unsafe { &*(parameters.para1 as *const u8 as *const RegisterFunctionInfo) };
@@ -238,7 +263,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             };
             info!("cuLaunchKernel ret {:x?}", ret);
 
-            return Ok(0 as i64);
+            return Ok(ret as i64);
         }
         _ => todo!(),
     }
