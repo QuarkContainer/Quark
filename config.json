@@ -1,5 +1,5 @@
 {
-  "DebugLevel"    : "Debug",
+  "DebugLevel"    : "Error",
   "KernelMemSize" : 24,
   "LogType"       : "Sync",
   "LogLevel"      : "Simple",
@@ -18,7 +18,7 @@
   "RDMAPort"      : 1,
   "PerSandboxLog" : false,
   "ReserveCpuCount": 1,
-  "ShimMode"      : true,
+  "ShimMode"      : false,
   "EnableInotify" : true,
   "ReaddirCache"  : true,
   "HiberODirect"  : true,
