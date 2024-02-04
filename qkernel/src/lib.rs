@@ -208,6 +208,7 @@ pub fn Init() {
     print::init().unwrap();
 }
 
+#[cfg(target_arch = "x86_64")]
 #[no_mangle]
 #[cfg(target_arch = "x86_64")]
 pub extern "C" fn syscall_handler(
@@ -275,7 +276,7 @@ pub extern "C" fn syscall_handler(
             tid = currTask.Thread().lock().id;
             pid = currTask.Thread().ThreadGroup().ID();
             info!("({}/{})------get call id {:?} arg0:{:x}, 1:{:x}, 2:{:x}, 3:{:x}, 4:{:x}, 5:{:x}, userstack:{:x}, return address:{:x}, fs:{:x}",
-                tid, pid, callId, arg0, arg1, arg2, arg3, arg4, arg5, currTask.GetPtRegs().rsp, currTask.GetPtRegs().rcx, GetFs());
+                tid, pid, callId, arg0, arg1, arg2, arg3, arg4, arg5, currTask.GetPtRegs().get_stack_pointer(), currTask.GetPtRegs().rcx, GetFs());
         } else if llevel == LogLevel::Simple {
             tid = currTask.Thread().lock().id;
             pid = currTask.Thread().ThreadGroup().ID();
@@ -295,7 +296,7 @@ pub extern "C" fn syscall_handler(
 
     let pt = currTask.GetPtRegs();
 
-    CPULocal::SetUserStack(pt.rsp);
+    CPULocal::SetUserStack(pt.get_stack_pointer());
     CPULocal::SetKernelStack(currTask.GetKernelSp());
 
     currTask.AccountTaskEnter(SchedState::RunningApp);
@@ -678,6 +679,7 @@ fn StartRootContainer(_para: *const u8) -> ! {
     //CreateTask(StartExecProcess, ptr::null());
     let currTask = Task::Current();
     currTask.AccountTaskEnter(SchedState::RunningApp);
+    debug!("enter user, entry: {:x}, userStackAddr: {:x}, kernelStackAddr: {:x}", entry, userStackAddr, kernelStackAddr);
     EnterUser(entry, userStackAddr, kernelStackAddr);
 }
 
