@@ -21,6 +21,8 @@ use std::str::Utf8Error;
 #[derive(Debug)]
 pub enum Error {
     None,
+    SysError(i32),
+    SocketClose,
     NotExist(String),
     Exist(String),
     MpscSendFull(String),

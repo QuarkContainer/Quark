@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under
 
+use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::*;
 use std::result::Result as SResult;
 
+use qshare::config::TSOT_CONNECTION_PORT;
 use tokio::net::UnixListener;
 use tokio::sync::Notify;
 use tonic::transport::Server;
@@ -30,6 +32,7 @@ use super::tsot_msg::TsotMessage;
 
 use crate::pod_mgr::pod_sandbox::IpAddress;
 use crate::pod_mgr::NAMESPACE_MGR;
+use crate::tsot::conn_svc::ConnectionSvc;
 use crate::tsot::tsot_msg::TSOT_SOCKET_PATH;
 
 
@@ -54,6 +57,11 @@ impl TsotSvc {
     pub fn New() -> Result<Self> {
         let socket = Path::new(TSOT_SOCKET_PATH);
 
+        // create the parent folder if it doesn't exist
+        let path = socket.parent().unwrap();
+        fs::create_dir_all(path).ok();
+
+        error!("TsotSvc 2");
         // Delete old socket if necessary
         if socket.exists() {
             std::fs::remove_file(&socket).unwrap();
@@ -158,19 +166,28 @@ impl tsot_cni::tsot_cni_service_server::TsotCniService for TostCniSvc {
     }
 }
 
-pub async fn TsotCniSvc() -> Result<()>{
+pub async fn TsotSvc() -> Result<()>{
+    error!("Tsot service start ...");
+    let tsotSvc = TsotSvc::New()?;
+    let tsotSvcFuture = tsotSvc.Process();
+
     let tsotCniSvc = TostCniSvc{};
-    let addr = format!("127.0.0.1:{}", TSOT_CNI_PORT);
+    let cniAddr = format!("127.0.0.1:{}", TSOT_CNI_PORT);
    
-
-    let tostSvcFuture = Server::builder()
+    let tostCniSvcFuture = Server::builder()
         .add_service(tsot_cni::tsot_cni_service_server::TsotCniServiceServer::new(tsotCniSvc))
-        .serve(addr.parse().unwrap());
+        .serve(cniAddr.parse().unwrap());
 
+    let connectionSvcFuture = tokio::spawn(async move {
+        let connectionSvc = ConnectionSvc::New(TSOT_CONNECTION_PORT);
+        connectionSvc.Process().await.unwrap();
+    });
 
-    info!("TsotCni service start ...");
     tokio::select! {
-        _ = tostSvcFuture => {}
+        _ = tsotSvcFuture => {},
+        _ = tostCniSvcFuture => {},
+        _ = connectionSvcFuture => {}
     }
+    error!("Tsot service finish ...");
     return Ok(())
 }

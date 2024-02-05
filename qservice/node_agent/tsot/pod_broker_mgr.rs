@@ -108,9 +108,17 @@ impl PodBrokerMgrs {
         return Ok(mgr)
     } 
 
-    pub fn HandlePeerConnect(&self, namespace: &str, targetIp: u32, srcIp: u32, localPort: u16, socket: i32) -> Result<()> {
-        let broker = self.GetBroker(namespace, targetIp)?;
-        broker.HandleNewPeerConnection(srcIp, localPort, socket)?;
+    pub fn HandlePeerConnect(
+        &self, 
+        namespace: &str, 
+        dstIp: u32, 
+        dstPort: u16, 
+        peerIp: u32, 
+        peerPort: u16,
+        socket: i32
+    ) -> Result<()> {
+        let broker = self.GetBroker(namespace, dstIp)?;
+        broker.HandleNewPeerConnection(peerIp, peerPort, dstPort, socket)?;
         
         return Ok(())
     }

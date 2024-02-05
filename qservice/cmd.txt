@@ -1,0 +1,85 @@
+##########################Before running services#######################3
+1. install bridge cni
+curl -L -o cni-plugins.tgz https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni-plugins-linux-amd64-v1.4.0.tgz
+sudo mkdir -p /opt/cni/bin
+sudo tar -C /opt/cni/bin -xzf cni-plugins.tgz
+
+cat << EOF | sudo tee /etc/cni/net.d/10-containerd-net.conflist
+{
+  "cniVersion": "1.0.0",
+    "name": "containerd-net",
+    "plugins": [
+      {
+        "type": "bridge",
+        "bridge": "cni0",
+        "isGateway": true,
+        "ipMasq": true,
+        "promiscMode": true,
+        "ipam": {
+          "type": "host-local",
+          "ranges": [
+            [{
+              "subnet": "10.22.0.0/16"
+
+            }]
+
+          ],
+          "routes": [
+          { "dst": "0.0.0.0/0" }
+          ]
+        }
+      },
+      {
+        "type": "portmap",
+        "capabilities": {"portMappings": true}
+      }
+  ]
+}
+EOF
+sudo systemctl restart containerd
+sudo chmod 777 /run/containerd/containerd.sock
+
+2. config quark shim for containerd
+
+cat <<EOF | sudo tee /etc/containerd/config.toml
+version = 2
+[plugins."io.containerd.runtime.v1.linux"]
+  shim_debug = false
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+  runtime_type = "io.containerd.runc.v2"
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quark]
+  runtime_type = "io.containerd.quark.v1"
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quarkd]
+  runtime_type = "io.containerd.quarkd.v1"
+EOF
+
+3. Enabel shim mode in config.json
+
+in config.json, set "ShimMode" to true
+
+#########################Running Services##################################
+
+1. Start cadvisor
+
+VERSION=v0.36.0 # use the latest release version from https://github.com/google/cadvisor/releases
+sudo docker run \
+  --volume=/:/rootfs:ro \
+  --volume=/var/run:/var/run:ro \
+  --volume=/sys:/sys:ro \
+  --volume=/var/lib/docker/:/var/lib/docker:ro \
+  --volume=/dev/disk/:/dev/disk:ro \
+  --publish=8080:8080 \
+  --detach=true \
+  --name=cadvisor \
+  --privileged \
+  --device=/dev/kmsg \
+  --rm \
+  gcr.io/cadvisor/cadvisor:$VERSION
+
+2. Build 
+cd Quark/qservice
+make
+
+3. Run NodeAgent
+cd Quark/qservice/target/debug
+rm -f /var/log/quark/na.log; sudo ./na

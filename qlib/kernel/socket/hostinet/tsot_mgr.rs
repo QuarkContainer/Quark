@@ -96,7 +96,7 @@ impl TsotBindings {
                     backlog: backlog,
                 };
                     
-                self.listeningSockets.lock().insert(port, listenSocket);
+                listeningSockets.insert(port, listenSocket);
                 finalBacklog = backlog;
             }
             Some(listenSocket) => {
@@ -172,8 +172,12 @@ impl From<&[u8; 4]> for QIPv4Addr {
 
 impl QIPv4Addr {
     pub fn New(addr: &[u8; 4]) -> Self {
+        let mut bytes = [0; 4];
+        for i in 0..4 {
+            bytes[i] = addr[3-i];
+        }
         let ipAddr = unsafe {
-            *(&addr[0] as * const _ as u64 as * const u32)
+            *(&bytes[0] as * const _ as u64 as * const u32)
         };
 
         return Self(ipAddr)
@@ -183,7 +187,7 @@ impl QIPv4Addr {
         return Self::from(&[127, 0, 0, 1]);
     }
 
-    pub fn AsBytes<'a>(&self) -> &'a [u8] {
+    fn AsBytes<'a>(&self) -> &'a [u8] {
         let ptr = &self.0 as * const _ as u64 as * const u8;
         return unsafe {
             core::slice::from_raw_parts(ptr, 4)
@@ -194,7 +198,7 @@ impl QIPv4Addr {
         let mut addr = [0; 4];
         let bytes = self.AsBytes();
         for i in 0..4 {
-            addr[i] = bytes[i];
+            addr[i] = bytes[3-i];
         }
 
         return addr;
@@ -202,7 +206,7 @@ impl QIPv4Addr {
 
     pub fn IsLoopback(&self) -> bool {
         // like [127, 0, 0, 1] i.e. 127.0.0.1
-        return self.AsBytes()[0] == 127;
+        return self.AsBytes()[3] == 127;
     }
 
     pub fn IsAny(&self) -> bool {
@@ -260,12 +264,12 @@ impl Default for TsotSocketMgr {
 }
 
 impl TsotSocketMgr {
-    pub fn LocalIpAddr(&self) -> QIPv4Addr {
-        return self.localIpAddr.load(Ordering::Relaxed).into();
+    pub fn SetLocalIpAddr(&self, addr: u32) {
+        self.localIpAddr.store(addr, Ordering::SeqCst);
     }
 
-    pub fn SetLocalIpAddr(&self, ip: u32) {
-        self.localIpAddr.store(ip, Ordering::SeqCst)
+    pub fn LocalIpAddr(&self) -> QIPv4Addr {
+        return self.localIpAddr.load(Ordering::Relaxed).into();
     }
     
     pub fn NextReqId(&self) -> u16 {

@@ -48,6 +48,8 @@ use super::super::super::kernel::kernel::GetKernel;
 use super::super::super::kernel::time::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::quring::QUring;
+use super::tsotsocket::NewTsotSocketFile;
+use super::tsotsocket::TsotSocketType;
 use crate::qlib::rdmasocket::RDMAServerSock;
 // use super::super::super::rdmasocket::*;
 use super::super::super::task::*;
@@ -2456,7 +2458,21 @@ impl Provider for SocketProvider {
             && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
             // && self.family == AFType::AF_INET
             && (stype == SockType::SOCK_DGRAM);
-        if tcpRDMA || udpRDMA {
+
+        if SHARESPACE.config.read().EnableTsot {
+            error!("socket 2");
+            let socketType = TsotSocketType::Init;
+            file = NewTsotSocketFile(
+                task, 
+                self.family,
+                fd,
+                stype & SocketType::SOCK_TYPE_MASK,
+                nonblocking,
+                Queue::default(),
+                socketType,
+                None,
+            )?;
+        } else if tcpRDMA || udpRDMA {
             let socketType = SocketBufType::TCPInit;
 
             file = newSocketFile(

@@ -91,6 +91,27 @@ async fn GetPod() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
+    
+    let args: Vec<String> = std::env::args().collect();
+    let cmd = if args.len() > 2 {
+        args[2].clone()
+    } else {
+        "default".to_owned()
+    };
+
+    let commands = match &cmd[..] {
+        "server" => vec![
+            "/test/c/server".to_owned()
+        ],
+        "client" => vec![
+            "/test/c/client".to_owned()
+        ],
+        _ => vec![
+            "/usr/bin/sleep".to_owned(),
+            "200".to_owned()
+            ]
+    };
+    
     // let commands = vec![
     //     "/usr/bin/echo".to_owned(),
     //     "asdf >".to_owned(),
@@ -113,10 +134,14 @@ async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
     //     "/test/a.txt".to_owned()
     // ];
 
-    let commands = vec![
-        "/test/unixsocket/client/target/debug/client".to_owned(),
-        "200".to_owned()
-    ];
+    // let commands = vec![
+    //     "/test/unixsocket/client/target/debug/client".to_owned(),
+    //     "200".to_owned()
+    // ];
+
+    // let commands = vec![
+    //     "/test/c/server".to_owned()
+    // ];
 
     // let commands = vec![
     //     "/usr/bin/sleep".to_owned(),
@@ -146,7 +171,7 @@ async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
 
     let request = tonic::Request::new(CreateFuncPodReq {
         namespace: "ns1".into(),
-        name: "name1".into(),
+        name: cmd.into(), //"name1".into(),
         image: "ubuntu".into(),
         commands: commands,
         envs: envs,

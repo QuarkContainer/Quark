@@ -243,9 +243,14 @@ impl VirtualMachine {
 
         *ROOT_CONTAINER_ID.lock() = args.ID.clone();
         if QUARK_CONFIG.lock().PerSandboxLog {
-            LOG.Reset(&args.ID[0..12]);
-        }
-
+            let sandboxName = match args.Spec.annotations.get("io.kubernetes.cri.sandbox-name") {
+                None => {
+                    args.ID[0..12].to_owned()
+                }
+                Some(name) => name.clone()
+            };
+            LOG.Reset(&sandboxName);
+         }
 
         let cpuCount = args.GetCpuCount();
 

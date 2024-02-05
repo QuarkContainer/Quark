@@ -19,12 +19,14 @@ use std::sync::Arc;
 use std::sync::atomic::*;
 use std::sync::Mutex;
 use tokio::sync::Notify;
-use std::os::unix::net::{SocketAncillary, AncillaryData};
-use std::io::IoSliceMut;
+use std::os::unix::net::SocketAncillary;
 use std::os::fd::{FromRawFd, IntoRawFd, AsRawFd, RawFd};
 use std::os::unix::net::UnixStream as StdStream;
 use std::io::IoSlice;
 use core::ops::Deref;
+use nix::sys::socket::ControlMessageOwned;
+use nix::sys::socket::{recvmsg, MsgFlags};
+use nix::sys::uio::IoVec;
 
 use qshare::common::*;
 
@@ -168,6 +170,9 @@ impl PodBroker {
         
         match self.ProcessMsgs().await {
             Ok(()) => (),
+            Err(Error::SocketClose) => {
+                self.stop.store(false, Ordering::SeqCst);
+            },
             Err(e) => {
                 error!("podBroker process fail with error {:?}", e);
                 return;
@@ -196,7 +201,7 @@ impl PodBroker {
                             self.stop.store(false, Ordering::SeqCst);
                             break;
                         }
-                        _ = self.stream.readable() => {
+                        _res = self.stream.readable() => {
                             self.ProcessRead()?;
                         }
                         m = rx.recv() => {
@@ -243,7 +248,7 @@ impl PodBroker {
 
     pub fn SendMsg(&self, msg: TsotMessage) -> Result<()> {
         let socket = msg.socket;
-        let msgAddr = &msg as * const _ as u64 as * const u8;
+        let msgAddr = &msg.msg as * const _ as u64 as * const u8;
         let writeBuf = unsafe {
             std::slice::from_raw_parts(msgAddr, BUFF_SIZE)
         };
@@ -265,10 +270,11 @@ impl PodBroker {
             stdStream.send_vectored_with_ancillary(bufs, &mut ancillary)
         };
 
+        // take ownership of stdstream to avoid fd close
+        let _ = stdStream.into_raw_fd();
+
         let size = match res {
             Err(e) => {
-                // take ownership of stdstream to avoid fd close
-                let _ = stdStream.into_raw_fd();
                 return Err(e.into());
             }
             Ok(s) => s
@@ -279,34 +285,47 @@ impl PodBroker {
         return Ok(())
     }
 
-    pub fn ProcessRead(&self) -> Result<()> {
-        let mut readBuf : [u8; BUFF_SIZE] = [0; BUFF_SIZE];
-        let readbufAddr = &readBuf[0] as * const _ as u64;
-        let bufs = &mut [
-            IoSliceMut::new(&mut readBuf),
-        ];
-        let mut ancillary_buffer = [0; 128];
-        let mut ancillary = SocketAncillary::new(&mut ancillary_buffer[..]);
+    const MAX_FILES: usize = 16 * 4;
+    pub fn ReadWithFds(&self, socket: i32, buf: &mut [u8]) -> Result<(usize, Vec<i32>)> {
+        let iovec = [IoVec::from_mut_slice(buf)];
+        let mut space: Vec<u8> = vec![0; Self::MAX_FILES];
 
-        let raw_fd: RawFd = self.stream.as_raw_fd();
-        let stdStream : StdStream = unsafe { StdStream::from_raw_fd(raw_fd) };
+        match recvmsg(socket, &iovec, Some(&mut space), MsgFlags::empty()) {
+            Ok(msg) => {
+                let cnt = msg.bytes;
 
-        let size = match stdStream.recv_vectored_with_ancillary(bufs, &mut ancillary) {
-            Ok(s) => s,
-            Err(e) => {
-                // take ownership of stdstream to avoid fd close
-                let _ = stdStream.into_raw_fd();
-                return Err(e.into())
-            }
-        };
-        assert!(size == BUFF_SIZE);
-        let mut fds = Vec::new();
-        for ancillary_result in ancillary.messages() {
-            if let AncillaryData::ScmRights(scm_rights) = ancillary_result.unwrap() {
-                for fd in scm_rights {
-                    fds.push(fd);
+                let mut iter = msg.cmsgs();
+                match iter.next() {
+                    Some(ControlMessageOwned::ScmRights(fds)) => {
+                        return Ok((cnt, fds.to_vec()))
+                    }
+                    None => return Ok((cnt, Vec::new())),
+                    _ => return Ok((cnt, Vec::new())),
                 }
             }
+            Err(errno) => {
+                return Err(Error::SysError(errno as i32))
+            }
+        };
+    }
+
+    pub fn ProcessRead(&self) -> Result<()> {
+        let mut readBuf : [u8; BUFF_SIZE*2] = [0; BUFF_SIZE*2];
+        let readbufAddr = &readBuf[0] as * const _ as u64;
+        let raw_fd: RawFd = self.stream.as_raw_fd();
+        
+        let (size, fds) = match self.ReadWithFds(raw_fd, &mut readBuf) {
+            Ok((size, fds)) => (size, fds),
+            Err(Error::SysError(111)) => {
+                return Ok(());
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        };
+
+        if size == 0 {
+            return Err(Error::SocketClose);
         }
 
         let msg = unsafe {
@@ -318,6 +337,11 @@ impl PodBroker {
         } else {
             self.ProcessMsg(msg, Some(fds[0]))?;
         }
+        
+        // reset the tokio::unixstream state
+        let mut buf =[0; 0];
+        self.stream.try_read(&mut buf)?;
+
         
         return Ok(())
     }
@@ -353,7 +377,7 @@ impl PodBroker {
         }
     }
 
-    pub fn ProcessAccept(&self, req: Accept) -> Result<()> {
+    pub fn ProcessAccept(&self, req: AcceptReq) -> Result<()> {
         match self.listeningPorts.lock().unwrap().get_mut(&req.port) {
             Some(count) => {
                 *count += 1;
@@ -413,7 +437,7 @@ impl PodBroker {
             TsotMsg::ListenReq(m) => {
                 self.ProcessListenReq(m)?
             }
-            TsotMsg::Accept(m) => {
+            TsotMsg::AcceptReq(m) => {
                 self.ProcessAccept(m)?;
             }
             TsotMsg::StopListenReq(m) => {
@@ -425,9 +449,13 @@ impl PodBroker {
                 }
                 self.ProcessConnectReq(m, socket.unwrap())?;
             }
-            _ => ()
+            m => {
+                error!("ProcessMsg get unimplement msg {:?}", &m);
+                unimplemented!()
+            }            
         }
-        unimplemented!()
+        
+        return Ok(())
     }
 
     pub fn HandlePodRegisterResp(&self, containerIp: u32, errorCode: u32) -> Result<()> {
@@ -439,23 +467,24 @@ impl PodBroker {
         return self.EnqMsg(TsotMsg::PodRegisterResp(msg).into());
     }
 
-    pub fn HandleNewPeerConnection(&self, peerIp: u32, localPort: u16, socket: i32) -> Result<()> {
-        match self.listeningPorts.lock().unwrap().get_mut(&localPort) {
+    pub fn HandleNewPeerConnection(&self, peerIp: u32, peerPort: u16, dstPort: u16, socket: i32) -> Result<()> {
+        match self.listeningPorts.lock().unwrap().get_mut(&dstPort) {
             Some(count) => {
                 if *count == 0 {
-                    return Err(Error::NotExist(format!("target container doesn't listening the port {localPort}")));
+                    return Err(Error::NotExist(format!("target container doesn't listening the port {dstPort}")));
                 }
 
                 *count -= 1;
             }
             None => {
-                return Err(Error::NotExist(format!("target container doesn't listening the port {localPort}")));
+                return Err(Error::NotExist(format!("target container doesn't listening the port {dstPort}")));
             }
         } 
 
         let msg = PeerConnectNotify {
             peerIp: peerIp,
-            localPort: localPort
+            peerPort:peerPort,
+            localPort: dstPort
         };
 
         let message = TsotMessage {

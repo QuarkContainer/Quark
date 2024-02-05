@@ -24,6 +24,8 @@ pub enum ErrCode {
     ConnectFail,
 }
 
+#[repr(C)]
+#[derive(Debug)]
 pub struct TsotMessage {
     pub socket: i32,
     pub msg: TsotMsg,
@@ -74,12 +76,13 @@ impl TsotMsg {
         }
     }
 
-    pub fn FromBytes<'a>(bytes: &'a [u8]) -> &'a Self {
+    pub fn FromBytes(bytes: &[u8]) -> Self {
         assert!(bytes.len() == size_of::<Self>());
         let addr = &bytes[0] as * const _ as u64;
-        return unsafe {
-            &*(addr as * const Self)
-        }
+        let ret = unsafe {
+            *(addr as * const Self)
+        };
+        return ret;
     }
 }
 

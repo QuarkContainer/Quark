@@ -471,7 +471,7 @@ impl SandboxProcess {
         }
 
         if QUARK_CONFIG.lock().EnableTsot {
-            let share = Join(&self.SandboxRootDir, "run");
+            let share = Join(&self.SandboxRootDir, "var/run/quark");
             match create_dir_all(&share) {
                 Ok(()) => (),
                 Err(_e) => panic!("failed to create dir to mount containerrootPath"),

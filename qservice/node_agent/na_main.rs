@@ -33,7 +33,7 @@ mod pod_mgr;
 
 use crate::pod_mgr::cadvisor::client as CadvisorClient;
 use crate::pod_mgr::podMgr::PodMgrSvc;
-use crate::tsot::tsot_svc::TsotCniSvc;
+use crate::tsot::tsot_svc::TsotSvc;
 
 use qshare::common::*;
 
@@ -49,10 +49,14 @@ async fn main() -> Result<()> {
     log4rs::init_file("/etc/quark/na_logging_config.yaml", Default::default()).unwrap();
 
     let podMgrFuture = PodMgrSvc();
-    let tostSvcFuture = TsotCniSvc();
+    let tostSvcFuture = TsotSvc();
     tokio::select! {
-        _ = podMgrFuture => (),
-        _ = tostSvcFuture => ()
+        res = podMgrFuture => {
+            error!("podMgrFuture res is {:?}", res);
+        }
+        res = tostSvcFuture =>  {
+            error!("tostSvcFuturer res is {:?}", res);
+        }
     }
     
     return Ok(())

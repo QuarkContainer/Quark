@@ -1399,7 +1399,10 @@ impl VMSpace {
             Ok(()) => {
                 return 0;
             }
-            Err(_) => return -1,
+            Err(e) => {
+                error!("TsotSendMsg fail with error {:?}", e);
+                return -1;
+            }
         }
     }
 
