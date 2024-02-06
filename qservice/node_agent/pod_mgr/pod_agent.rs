@@ -391,7 +391,7 @@ impl PodAgent {
         let pod = &msg.pod;
         let container = &msg.container;
 
-        info!("pod Container Failed pod {} container {}", pod.PodId(), container.ContainerName());
+        info!("OnPodContainerFailed1: pod Container Failed pod {} container {}", pod.PodId(), container.ContainerName());
         
         // TODO, update pod cpu, memory resource usage
 	    return self.HandlePodContainerExit(pod, container).await;

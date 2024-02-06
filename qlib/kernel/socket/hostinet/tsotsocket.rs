@@ -40,7 +40,6 @@ use super::super::super::fs::dirent::*;
 use super::super::super::fs::file::*;
 use super::super::super::fs::flags::*;
 use super::super::super::fs::host::hostinodeop::*;
-use super::super::super::guestfdnotifier::*;
 use super::super::super::kernel::fd_table::*;
 use super::super::super::kernel::kernel::GetKernel;
 use super::super::super::kernel::time::*;
@@ -518,8 +517,7 @@ impl Waitable for TsotSocketOperations {
     fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
         let queue = self.queue.clone();
         queue.EventRegister(task, e, mask);
-        let fd = self.fd;
-
+        
         match self.SocketType() {
             TsotSocketType::Connecting => (),
             TsotSocketType::Server(_q) => (),
@@ -532,7 +530,6 @@ impl Waitable for TsotSocketOperations {
     fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
         let queue = self.queue.clone();
         queue.EventUnregister(task, e);
-        let fd = self.fd;
         match self.SocketType() {
             TsotSocketType::Connecting => (),
             TsotSocketType::Server(_q) => (),

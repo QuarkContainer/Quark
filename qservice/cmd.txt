@@ -83,3 +83,22 @@ make
 3. Run NodeAgent
 cd Quark/qservice/target/debug
 rm -f /var/log/quark/na.log; sudo ./na
+
+
+////////////////////////////////////////////////////////////////////
+
+1. change container runtime 
+
+in qservice/qshare/src/config.rs
+change pub const DefaultRuntimeHandler             : &str = "quarkd" to "runc";
+
+
+
+
+
+
+
+
+
+sudo rm -f /var/log/quark/client.log; ./test new client
+sudo rm -f /var/log/quark/server.log; ./test new server

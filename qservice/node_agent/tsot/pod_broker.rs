@@ -194,7 +194,6 @@ impl PodBroker {
 
         let mut msg : Option<TsotMessage> = None;
         
-        error!("ProcessMsgs 1");
         loop {
             match msg.take() {
                 None => {
@@ -204,7 +203,6 @@ impl PodBroker {
                             break;
                         }
                         _res = self.stream.readable() => {
-                            error!("ProcessMsgs 2");
                             self.ProcessRead()?;
                         }
                         m = rx.recv() => {
