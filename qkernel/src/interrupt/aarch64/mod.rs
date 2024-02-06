@@ -304,8 +304,11 @@ pub fn MemAbortUser(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool){
            });
     let dfsc = esr & EsrDefs::ISS_DFSC_MASK;
     let access_type = GetFaultAccessType(esr, is_instr);
-    match dfsc {
-        EsrDefs::DFSC_TF_L3 => {
+    let dfsc_root = dfsc & PageFaultErrorCode::GEN_xxSC_MASK;
+    match dfsc_root {
+        PageFaultErrorCode::GEN_PERMISSION_FAULT |
+        PageFaultErrorCode::GEN_TRANSLATION_FAULT|
+        PageFaultErrorCode::GEN_ACCESS_FLAG_FAULT => {
             info!("DFSC/IFSC == {:#X}, FAR == {:#X}, acces-type fault == {}, \
                   during address translation == {}.", dfsc, far,
                   access_type.String(), EsrDefs::IsCM(esr));
@@ -340,21 +343,18 @@ pub fn MemAbortKernel(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool){
            });
     let dfsc = esr & EsrDefs::ISS_DFSC_MASK;
     let access_type = GetFaultAccessType(esr, is_instr);
-    match dfsc {
-        EsrDefs::DFSC_TF_L0 |
-        EsrDefs::DFSC_TF_L1 |
-        EsrDefs::DFSC_TF_L2 |
-        EsrDefs::DFSC_TF_L3 => {
+    let dfsc_root = dfsc & PageFaultErrorCode::GEN_xxSC_MASK;
+    match dfsc_root {
+        PageFaultErrorCode::GEN_PERMISSION_FAULT |
+        PageFaultErrorCode::GEN_TRANSLATION_FAULT|
+        PageFaultErrorCode::GEN_ACCESS_FLAG_FAULT => {
             info!("DFSC/IFSC == {:#X}, FAR == {:#X}, acces-type fault == {}, \
                   during address translation == {}.", dfsc, far,
                   access_type.String(), EsrDefs::IsCM(esr));
             let ptregs_ptr = ptregs_addr as *mut PtRegs;
             let ptregs = unsafe {
-                &mut *ptregs_ptr  
+                &mut *ptregs_ptr
             };
-            //
-            //TODO: on work
-            //
             let error_code = PageFaultErrorCode::new(false, esr);
             PageFaultHandler(ptregs , far, error_code);
             return;

@@ -84,11 +84,11 @@ impl PageFaultErrorCode {
     // NOTE: Maybe not correct place to have them,
     //       still better than magic numbers.
     //
-    const GEN_xxSC_MASK: u64 = 0x3c; // Ignore the ll-bits
-    const GEN_ADDRESS_SIZE_FAULT: u64 = 0x0;
-    const GEN_TRANSLATION_FAULT:  u64 = 0x4;
-    const GEN_ACCESS_FLAG_FAULT:  u64 = 0x8;
-    const GEN_PERMISSION_FAULT:   u64 = 0xc;
+    pub const GEN_xxSC_MASK: u64 = 0x3c; // Ignore the ll-bits
+    pub const GEN_ADDRESS_SIZE_FAULT: u64 = 0x0;
+    pub const GEN_TRANSLATION_FAULT:  u64 = 0x4;
+    pub const GEN_ACCESS_FLAG_FAULT:  u64 = 0x8;
+    pub const GEN_PERMISSION_FAULT:   u64 = 0xc;
 
 
     pub fn new(from_user: bool, esr: u64) -> Self {
