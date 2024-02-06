@@ -42,6 +42,7 @@ lazy_static! {
         (ProxyCommand::CudaLaunchKernel,(XpuLibrary::CudaDriver, "cuLaunchKernel")),
         (ProxyCommand::CudaFree,(XpuLibrary::CudaRuntime,"cudaFree")),
         (ProxyCommand::CudaUnRegisterFatBinary,(XpuLibrary::CudaDriver,"cuModuleUnload")),
+        (ProxyCommand::CudaDeviceSynchronize,(XpuLibrary::CudaRuntime,"cudaStreamSynchronize")),
     ]);
 }
 
@@ -273,6 +274,15 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             error!("cuLaunchKernel ret {:x?}", ret);
 
             return Ok(ret as i64);
+        }
+        ProxyCommand::CudaDeviceSynchronize => {
+            error!(
+                "CudaDeviceSynchronize in host parameters {:x?}",
+                parameters
+            );
+            
+            return Ok(1);
+
         }
         _ => todo!(),
     }

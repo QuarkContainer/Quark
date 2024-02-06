@@ -27,6 +27,8 @@ pub enum ProxyCommand {
     CudaLaunchKernel,
 
     CuInit,
+
+    CudaStreamSynchronize,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]

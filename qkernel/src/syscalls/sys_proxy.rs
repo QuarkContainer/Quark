@@ -184,8 +184,19 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             );
             return Ok(ret);
         }
+
+        ProxyCommand::CudaDeviceSynchronize => {
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            return Ok(ret);
+        }
+
+        
         _ => todo!()
     }
+
 }
 
 pub fn CudaMemcpy(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyKind) -> Result<i64> {

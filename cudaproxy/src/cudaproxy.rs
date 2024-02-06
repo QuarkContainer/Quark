@@ -212,6 +212,19 @@ pub extern "C" fn cudaMemcpyAsync(
     return unsafe{
         syscall6(SYS_PROXY, ProxyCommand::CudaMemcpyAsync as usize, dst as * const _ as usize, src as usize, count as usize, kind as usize , stream as usize)
     };
+}
+
+// Stream Management API
+
+//Waits for stream tasks to complete
+pub extern "C" fn cudaStreamSynchronize(
+    stream:cudaStream_t
+) -> usize{
+    println!("Hijacked cudaStreamSynchronize stream: {:?}", stream);
+
+    return unsafe{
+        syscall2(SYS_PROXY, ProxyCommand::CudaStreamSynchronize as usize, stream as usize)
+    };
 
 }
 
