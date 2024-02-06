@@ -277,7 +277,7 @@ impl PmAgent {
         return Ok(())
     }
 
-     pub fn CreatePod(&self, pod: &k8s::Pod, configMap: &k8s::ConfigMap) -> Result<()> {
+     pub fn CreatePod(&self, pod: &k8s::Pod, configMap: &k8s::ConfigMap) -> Result<IpAddress> {
         let podId =  K8SUtil::PodId(&pod);
         if self.State() != PmAgentState::Ready {
             let inner = QuarkPodInner {
@@ -330,9 +330,8 @@ impl PmAgent {
                 None => return Err(Error::CommonError(format!("CreatePod are missing podname"))),
                 Some(podname) => podname
             };
-            error!("create pod with uid {:?}", &uid);
-
-            NAMESPACE_MGR.NewPodSandbox(&namespace, &uid, &podname)?;
+            
+            let addr = NAMESPACE_MGR.NewPodSandbox(&namespace, &uid, &podname)?;
 
             podAgent.Start()?;
             let qpod = podAgent.pod.clone();
@@ -340,11 +339,11 @@ impl PmAgent {
             podAgent.Send(NodeAgentMsg::PodCreate( PodCreate {
                 pod: qpod,
             }))?;
+
+            return Ok(addr)
         } else {
-            error!("Pod: {} already exist", podId);
             return Err(Error::CommonError(format!("Pod: {} already exist", podId)));
         }
-        return Ok(())
     }
 
     pub fn TerminatePod(&self, podId: &str) -> Result<()> {

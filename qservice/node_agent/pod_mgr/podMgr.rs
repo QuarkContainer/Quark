@@ -33,7 +33,6 @@ use qshare::common::*;
 
 use crate::pod_mgr::*;
 
-
 use super::qnode::QuarkNode;
 use super::{CADVISOR_PROVIDER, RUNTIME_MGR};
 use super::cadvisor::provider::CadvisorInfoProvider;
@@ -65,8 +64,8 @@ impl PodMgr {
 
     pub fn CreateFuncPod(
         &self, 
-        req: na::CreateFuncPodReq,
-    ) -> Result<()> {
+        req: na::CreateFuncPodReq
+    ) -> Result<IpAddress> {
         let template = r#"{
             "metadata": {
                 "name": "pypackage1",
@@ -147,8 +146,8 @@ impl PodMgr {
 
         let configMap = ConfigMap::default();
 
-        self.pmAgent.CreatePod(&pod, &configMap)?;
-        return Ok(())
+        let addr = self.pmAgent.CreatePod(&pod, &configMap)?;
+        return Ok(addr);
         
     }
 
@@ -241,11 +240,13 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
             Err(e) => {
                 return Ok(tonic::Response::new(na::CreateFuncPodResp {
                     error: format!("fail: {:?}", e),
+                    ipaddress: 0,
                 }))
             }
-            Ok(()) => {
+            Ok(addr) => {
                 return Ok(tonic::Response::new(na::CreateFuncPodResp {
-                    error: "".to_owned()
+                    error: "".to_owned(),
+                    ipaddress: addr.0,
                 }));
             }
         }

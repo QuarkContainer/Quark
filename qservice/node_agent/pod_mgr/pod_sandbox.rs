@@ -16,8 +16,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use core::ops::Deref;
 
-#[derive(Debug, Clone, Copy, Default)]
-pub struct IpAddress(pub u32);
+use qshare::common::*;
 
 #[derive(Debug, Default)]
 pub struct PodSandboxInner {

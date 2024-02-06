@@ -16,7 +16,7 @@
 
 use std::env;
 
-use qshare::na::{self, CreateFuncPodReq, TerminatePodReq, GetPodReq};
+use qshare::{common::IpAddress, na::{self, CreateFuncPodReq, CreateFuncPodResp, GetPodReq, TerminatePodReq}};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -181,7 +181,9 @@ async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
 
     let response = client.create_func_pod(request).await?;
 
-    println!("RESPONSE={:?}", response);
+    let resp : CreateFuncPodResp = response.into_inner();
+    let addr = IpAddress(resp.ipaddress);
+    println!("Ipaddr is {:?} RESPONSE={:?}", addr.AsBytes(), resp);
 
     Ok(())
 }

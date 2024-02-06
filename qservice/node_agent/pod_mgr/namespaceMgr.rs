@@ -22,7 +22,6 @@ use std::sync::Mutex;
 use qshare::common::*;
 
 use super::cidr::Cidr;
-use super::pod_sandbox::IpAddress;
 use super::pod_sandbox::PodSandbox;
 use super::NODEAGENT_CONFIG;
 
@@ -148,7 +147,7 @@ impl NamespaceMgr {
         return self.lock().unwrap().GetNamespace(namespace);
     }
 
-    pub fn NewPodSandbox(&self, namespace: &str, uid: &str, name: &str) -> Result<()> {
+    pub fn NewPodSandbox(&self, namespace: &str, uid: &str, name: &str) -> Result<IpAddress> {
         let ns = self.GetOrCreateNamespace(namespace);
         let addr = ns.NewPodSandboxAddr()?;
 
@@ -161,7 +160,7 @@ impl NamespaceMgr {
             }
         }
 
-        return Ok(())
+        return Ok(addr)
     }
 
     pub fn RemovePodSandbox(&self, uid: &str) -> Result<()> {

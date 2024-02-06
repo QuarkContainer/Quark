@@ -121,6 +121,8 @@ pub struct CreateFuncPodReq {
 pub struct CreateFuncPodResp {
     #[prost(string, tag = "1")]
     pub error: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "2")]
+    pub ipaddress: u32,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

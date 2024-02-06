@@ -118,3 +118,17 @@ impl From<ParseIntError> for Error {
         return Self::ParseIntError(item)
     }
 }
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct IpAddress(pub u32);
+
+impl IpAddress {
+    pub fn AsBytes(&self) -> [u8; 4] {
+        let mut bytes = [0u8; 4];
+        bytes[0] = (self.0 >> 24) as u8;
+        bytes[1] = (self.0 >> 16) as u8;
+        bytes[2] = (self.0 >> 8) as u8;
+        bytes[3] = (self.0 >> 0) as u8;
+        return bytes;
+    }
+}
