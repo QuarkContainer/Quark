@@ -516,7 +516,7 @@ impl PodBroker {
         return self.EnqMsg(message);
     }
 
-    pub fn HandleConnectResp(&self, reqId: u32, errorCode: u32) -> Result<()> {
+    pub fn HandleConnectResp(&self, reqId: u32, errorCode: i32) -> Result<()> {
         match self.connecting.lock().unwrap().remove(&reqId) {
             None => {
                 error!("HandleConnectResp get non exist reqId {}", reqId);
