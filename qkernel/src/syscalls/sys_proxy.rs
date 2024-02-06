@@ -24,7 +24,7 @@ use crate::qlib::linux_def::SysErr;
 use crate::qlib::proxy::*;
 use super::super::util::cstring::*;
 
-lazy_static! {
+lazy_static!{
     pub static ref PARAM_INFOS:Mutex<BTreeMap<u64, Arc<Vec<u16>>>> = Mutex::new(BTreeMap::new());
 }
 
@@ -103,6 +103,16 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             );
             return Ok(ret);
             
+        }
+        ProxyCommand::CudaUnregisterFatBinary => {
+            //error!("fatCubinHandle from the cudaproxy is {:x}", parameters.para1 as u64);
+            let ret = HostSpace::Proxy(
+                 ProxyCommand::CudaUnRegisterFatBinary,
+                 parameters,
+            );
+            //error!("fatCubinHandle from the cudaproxy is {:x}", parameters.para1 as u64);
+            return Ok(ret);
+
         }
         ProxyCommand::CudaRegisterFunction => {
             let mut functionInfo = task.CopyInObj::<RegisterFunctionInfo>(parameters.para1)?;

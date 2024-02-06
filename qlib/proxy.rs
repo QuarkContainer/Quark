@@ -21,6 +21,7 @@ pub enum ProxyCommand {
     CudaMemcpy,
     CudaFree,
     CudaRegisterFatBinary,
+    CudaUnregisterFatBinary,
     CudaRegisterFunction,
     CudaLaunchKernel,
 
