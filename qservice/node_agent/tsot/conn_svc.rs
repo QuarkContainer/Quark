@@ -236,16 +236,13 @@ pub struct TcpClientConnection {
 impl TcpClientConnection {
     pub async fn Process(self) {
         let podBroker = self.podBroker.clone();
-        error!("TcpClientConnection 1");
         match self.ProcessConnection().await {
             Ok(_stream) => {
                 // drop the TcpStream and close the socket 
-                error!("TcpClientConnection 2");
-                podBroker.HandleConnectResp(self.reqId, ErrCode::None as u32).unwrap();
+                podBroker.HandleConnectResp(self.reqId, ErrCode::None as i32).unwrap();
             }
-            Err(e) => {
-                error!("TcpClientConnection 3 error is {:?}", &e);
-                podBroker.HandleConnectResp(self.reqId, ErrCode::ConnectFail as u32).unwrap();
+            Err(_e) => {
+                podBroker.HandleConnectResp(self.reqId, ErrCode::ECONNREFUSED as i32).unwrap();
             }
         }
     }

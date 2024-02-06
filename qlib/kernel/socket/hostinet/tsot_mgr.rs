@@ -544,7 +544,7 @@ impl TsotSocketMgr {
                         Some(socket) => socket.clone()
                     };
 
-                    connectingSocket.SetConnErrno(m.errorCode as _);
+                    connectingSocket.SetConnErrno(-m.errorCode as _);
                     connectingSocket.queue.Notify(EVENT_OUT)
                 }
                 _ => ()

@@ -16,12 +16,12 @@ use core::mem::size_of;
 
 pub static TSOT_SOCKET_PATH: &'static str = "/var/run/quark/tsot-socket";
 
-#[repr(u32)]
+#[repr(i32)]
 #[derive(Debug, Clone, Copy)]
 pub enum ErrCode {
     None = 0,
     PodUidDonotExisit,
-    ConnectFail,
+    ECONNREFUSED = 111, //
 }
 
 #[repr(C)]
@@ -176,7 +176,7 @@ impl PeerConnectNotify {
 #[derive(Debug, Clone, Copy)]
 pub struct ConnectResp {
     pub reqId: u32,
-    pub errorCode: u32
+    pub errorCode: i32
 }
 
 

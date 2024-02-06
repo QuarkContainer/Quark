@@ -745,6 +745,7 @@ impl FileOperations for TsotSocketOperations {
 impl SockOperations for TsotSocketOperations {
     fn Connect(&self, task: &Task, sockaddr: &[u8], blocking: bool) -> Result<i64> {
         let sockType = self.SocketType();
+        error!("Connect 1");
         match sockType {
             TsotSocketType::Init => {
                 let addr = unsafe { &*(&sockaddr[0] as *const _ as u64 as *const SockAddrInet) };
@@ -778,6 +779,7 @@ impl SockOperations for TsotSocketOperations {
                     return Ok(0);
                 }
 
+                error!("Connect 2");
                 SHARESPACE.tsotSocketMgr.Connect(ipAddr, addrPort, 123, self.fd, self)?;
                 
                 *self.socketType.lock() = TsotSocketType::Connecting;
@@ -798,10 +800,12 @@ impl SockOperations for TsotSocketOperations {
             }
         }
 
+        error!("Connect 3");
         self.SetConnErrno(-SysErr::EINPROGRESS);
         let general = task.blocker.generalEntry.clone();
         self.EventRegister(task, &general, EVENT_OUT);
         defer!(self.EventUnregister(task, &general));
+        error!("Connect 4");
         if self.Readiness(task, WRITEABLE_EVENT) == 0 {
             match task.blocker.BlockWithMonoTimer(true, None) {
                 Err(Error::ErrInterrupted) => {
@@ -814,6 +818,7 @@ impl SockOperations for TsotSocketOperations {
             }
         }
 
+        error!("Connect 6 {:?}", self.ConnErrno());
         if self.ConnErrno() == 0 {
             self.PostConnect();
             return Ok(0)
