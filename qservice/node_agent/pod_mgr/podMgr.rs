@@ -134,6 +134,7 @@ impl PodMgr {
         }
 
         let container = Container {
+            name: req.name.clone(),
             image: Some(req.image.to_owned()),
             command: Some(req.commands),
             env: Some(containerEnvs),
