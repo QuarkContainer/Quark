@@ -70,8 +70,13 @@ pub fn NewTsotSocketFile(
     nonblock: bool,
     queue: Queue,
     socketType: TsotSocketType,
-    remoteAddr: QIPv4Endpoint,
+    remoteAddr: Option<QIPv4Endpoint>,
 ) -> Result<File> {
+    if family != AFType::AF_INET {
+        error!("Tsot only support IPV4");
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
     let dirent = NewSocketDirent(task, SOCKET_DEVICE.clone(), fd)?;
     let inode = dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
@@ -174,7 +179,7 @@ pub struct TsotSocketOperationsIntern {
     pub fd: i32,
     pub connErrNo: AtomicI32,
     pub queue: Queue,
-    pub remoteAddr: QIPv4Endpoint,
+    pub remoteAddr: QMutex<Option<QIPv4Endpoint>>,
     pub socketType: QMutex<TsotSocketType>,
     pub bindIp: AtomicU32,
     pub bindPort: AtomicU16,
@@ -217,6 +222,17 @@ impl Drop for TsotSocketOperations {
 impl TsotSocketOperations {
     pub fn Downgrade(&self) -> TsotSocketOperationsWeak {
         return TsotSocketOperationsWeak(Arc::downgrade(&self.0));
+    }
+
+    pub fn RemoteAddr(&self) -> Result<QIPv4Endpoint> {
+        match *self.remoteAddr.lock() {
+            None => return Err(Error::SysError(SysErr::EINVAL)),
+            Some(a) => return Ok(a.clone())
+        }
+    }
+
+    pub fn SetREmoteAddr(&self, addr: QIPv4Endpoint) {
+        *self.remoteAddr.lock() = Some(addr);
     }
 
     pub fn Drop(&self) -> Result<()> {
@@ -264,7 +280,7 @@ impl TsotSocketOperations {
         queue: Queue,
         hostops: HostInodeOp,
         socketBuf: TsotSocketType,
-        remoteAddr: QIPv4Endpoint,
+        remoteAddr: Option<QIPv4Endpoint>,
     ) -> Result<Self> {
         match &socketBuf {
             TsotSocketType::Uring(ref buf) => {
@@ -281,7 +297,7 @@ impl TsotSocketOperations {
             fd,
             connErrNo: AtomicI32::new(0),
             queue,
-            remoteAddr: remoteAddr,
+            remoteAddr: QMutex::new(remoteAddr),
             socketType: QMutex::new(socketBuf.clone()),
             bindIp: AtomicU32::new(0),
             bindPort: AtomicU16::new(0),
@@ -493,11 +509,10 @@ impl Waitable for TsotSocketOperations {
             TsotSocketType::Loopback(loopback) => {
                 return loopback.Events() & mask;
             }
-            TsotSocketType::Init => (),
+            TsotSocketType::Init => {
+                return 0;
+            },
         }
-
-        let fd = self.fd;
-        return NonBlockingPoll(fd, mask);
     }
 
     fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
@@ -510,9 +525,7 @@ impl Waitable for TsotSocketOperations {
             TsotSocketType::Server(_q) => (),
             TsotSocketType::Uring(_buf) => (),
             TsotSocketType::Loopback(_) => (),
-            TsotSocketType::Init => {
-                UpdateFD(fd).unwrap();
-            }
+            TsotSocketType::Init => {}
         }
     }
 
@@ -525,9 +538,7 @@ impl Waitable for TsotSocketOperations {
             TsotSocketType::Server(_q) => (),
             TsotSocketType::Uring(_buf) => (),
             TsotSocketType::Loopback(_) => (),
-            TsotSocketType::Init => {
-                UpdateFD(fd).unwrap();
-            }
+            TsotSocketType::Init => {}
         }
     }
 }
@@ -746,6 +757,7 @@ impl SockOperations for TsotSocketOperations {
                     return Err(Error::SysError(SysErr::EAFNOSUPPORT));
                 }
 
+                let addrPort = addr.Ipv4Port();
                 let ipAddr = QIPv4Addr::from(&addr.Addr);
                 if ipAddr.IsLoopback() {
                     let serverQueue = Queue::default();
@@ -769,8 +781,9 @@ impl SockOperations for TsotSocketOperations {
                     return Ok(0);
                 }
 
-                SHARESPACE.tsotSocketMgr.Connect(ipAddr, addr.Port, 123, self.fd, self)?;
+                SHARESPACE.tsotSocketMgr.Connect(ipAddr, addrPort, 123, self.fd, self)?;
                 
+                *self.socketType.lock() = TsotSocketType::Connecting;
                 if !blocking {
                     return Err(Error::SysError(SysErr::EINPROGRESS));
                 }
@@ -788,6 +801,7 @@ impl SockOperations for TsotSocketOperations {
             }
         }
 
+        self.SetConnErrno(-SysErr::EINPROGRESS);
         let general = task.blocker.generalEntry.clone();
         self.EventRegister(task, &general, EVENT_OUT);
         defer!(self.EventUnregister(task, &general));
@@ -804,6 +818,7 @@ impl SockOperations for TsotSocketOperations {
         }
 
         if self.ConnErrno() == 0 {
+            self.PostConnect();
             return Ok(0)
         }
 
@@ -886,7 +901,7 @@ impl SockOperations for TsotSocketOperations {
             flags & SocketFlags::SOCK_NONBLOCK != 0,
             acceptItem.queue.clone(),
             sockBuf,
-            QIPv4Endpoint::New(acceptItem.addr.into(), acceptItem.port),
+            Some(QIPv4Endpoint::New(acceptItem.addr.into(), acceptItem.port)),
         )?;
 
         let fdFlags = FDFlags {
@@ -921,17 +936,18 @@ impl SockOperations for TsotSocketOperations {
             }
         }
         
+        let addrPort = addr.Ipv4Port();
         let reusePort = self.reusePort.load(Ordering::Relaxed);
         if ip.IsLoopback() {
-            SHARESPACE.tsotSocketMgr.Bind(ip, addr.Port, reusePort)?;
+            SHARESPACE.tsotSocketMgr.Bind(ip, addrPort, reusePort)?;
         } else if ip.IsAny() {
-            SHARESPACE.tsotSocketMgr.Bind(QIPv4Addr::Loopback(), addr.Port, reusePort)?;
-            SHARESPACE.tsotSocketMgr.Bind(localAddr, addr.Port, reusePort)?;
+            SHARESPACE.tsotSocketMgr.Bind(QIPv4Addr::Loopback(), addrPort, reusePort)?;
+            SHARESPACE.tsotSocketMgr.Bind(localAddr, addrPort, reusePort)?;
         } else {
-            SHARESPACE.tsotSocketMgr.Bind(localAddr, addr.Port, reusePort)?;
+            SHARESPACE.tsotSocketMgr.Bind(localAddr, addrPort, reusePort)?;
         }
 
-        self.bindPort.store(addr.Port, Ordering::SeqCst);
+        self.bindPort.store(addrPort, Ordering::SeqCst);
         self.bindIp.store(ip.0, Ordering::SeqCst);
 
         return Ok(0);
@@ -1323,7 +1339,7 @@ impl SockOperations for TsotSocketOperations {
     }
 
     fn GetPeerName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
-        let addr = self.remoteAddr.ToSockAddr();
+        let addr = self.RemoteAddr()?.ToSockAddr();
         let v = addr.ToVec()?;
         let len = addr.Len().min(socketaddr.len());
         for i in 0..len {
@@ -1368,7 +1384,7 @@ impl SockOperations for TsotSocketOperations {
 
         if buf.RClosed() {
             let senderAddr = if senderRequested {
-                let addr = self.remoteAddr.ToSockAddr();
+                let addr = self.RemoteAddr()?.ToSockAddr();
                 let l = addr.Len();
                 Some((addr, l))
             } else {
@@ -1392,7 +1408,7 @@ impl SockOperations for TsotSocketOperations {
                 Err(e) => return Err(e),
                 Ok(count) => {
                     let senderAddr = if senderRequested {
-                        let addr = self.remoteAddr.ToSockAddr();
+                        let addr = self.RemoteAddr()?.ToSockAddr();
                         let l = addr.Len();
                         Some((addr, l))
                     } else {
@@ -1473,7 +1489,7 @@ impl SockOperations for TsotSocketOperations {
         }
 
         let senderAddr = if senderRequested {
-            let addr = self.remoteAddr.ToSockAddr();
+            let addr = self.RemoteAddr()?.ToSockAddr();
             let l = addr.Len();
             Some((addr, l))
         } else {
@@ -1502,10 +1518,6 @@ impl SockOperations for TsotSocketOperations {
         if buf.WClosed() {
             return Err(Error::SysError(SysErr::EPIPE));
         }
-
-        /*if msgHdr.msgName != 0 || msgHdr.msgControl != 0 {
-            error!("Hostnet Socketbuf doesn't support MsgHdr");
-        }*/
 
         let dontwait = flags & MsgType::MSG_DONTWAIT != 0;
 

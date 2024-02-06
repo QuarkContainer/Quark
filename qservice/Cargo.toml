@@ -31,6 +31,8 @@ once_cell = "1.17.1"
 ipnetwork = "0.20.0"
 cni-plugin = "0.2.1"
 scopeguard = { version = "^1.1.0", default-features = false }
+errno = "0.2.4"
+nix = "0.23.1"
 
 [dependencies.lazy_static]
 version = "1.0"

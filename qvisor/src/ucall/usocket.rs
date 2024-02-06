@@ -192,7 +192,7 @@ impl USocket {
             let cnt = unsafe { read(self.socket, &mut buf[0] as *mut _ as *mut c_void, len) };
 
             if cnt < 0 {
-                info!("UCliSocket read socket fail");
+                info!("UCliSocket ReadAll socket fail with error {}", -errno::errno().0);
                 return Err(Error::SysError(errno::errno().0 as i32));
             }
 
@@ -218,7 +218,7 @@ impl USocket {
             let cnt = unsafe { write(self.socket, &buf[0] as *const _ as *const c_void, len) };
 
             if cnt < 0 {
-                info!("UCliSocket read socket fail");
+                info!("UCliSocket writeAll socket fail with error {:?}", -errno::errno().0);
                 return Err(Error::SysError(-errno::errno().0 as i32));
             }
 

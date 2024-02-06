@@ -1181,12 +1181,14 @@ pub struct ShareSpace {
 
 impl ShareSpace {
     pub fn New() -> Self {
-        return ShareSpace {
+        let ret = ShareSpace {
             ioUring: CachePadded::new(QUring::New(MemoryDef::QURING_SIZE)),
             ioMgr: CachePadded::new(IOMgr::Init().unwrap()),
             tsotSocketMgr: TsotSocketMgr::default(),
             ..Default::default()
         };
+
+        return ret;
     }
 
     pub fn NewUID(&self) -> u64 {

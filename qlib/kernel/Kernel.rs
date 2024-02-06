@@ -733,7 +733,8 @@ impl HostSpace {
             msgAddr: msgAddr,
         });
 
-        let ret = Self::Call(&mut msg, false) as i64;
+        // TsotRecvMsg will be called in uring async process, must use HCall
+        let ret = Self::HCall(&mut msg, false) as i64;
         return ret;
     }
 

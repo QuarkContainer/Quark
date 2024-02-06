@@ -359,6 +359,13 @@ impl SandboxProcess {
                 continue;
             }
 
+            // tsot needs to run in host network namespace
+            if QUARK_CONFIG.lock().EnableTsot && space == LinuxNamespaceType::network as i32 {
+                info!("EnableNamespace disable network namespace");
+                Close(fd)?;
+                continue
+            }
+
             SetNamespace(fd, space)?;
             Close(fd)?;
             if space == LinuxNamespaceType::user as i32 {
@@ -471,7 +478,7 @@ impl SandboxProcess {
         }
 
         if QUARK_CONFIG.lock().EnableTsot {
-            let share = Join(&self.SandboxRootDir, "run");
+            let share = Join(&self.SandboxRootDir, "var/run/quark");
             match create_dir_all(&share) {
                 Ok(()) => (),
                 Err(_e) => panic!("failed to create dir to mount containerrootPath"),

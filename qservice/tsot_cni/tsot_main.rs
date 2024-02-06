@@ -144,13 +144,15 @@ async fn main() {
         Command::Del => {
             match remove_pod_sandbox(&namespace, &pod_uid, &podname, &container_id).await {
                 Err(e) => {
-                    let err = CniError::Generic(format!("remove_pod_sandbox fail with {:?}", e));
-                    reply::reply(err.into_reply(cni_version))
+                    let _err = CniError::Generic(format!("remove_pod_sandbox fail with {:?}", e));
+                    // ignore any fail to avoid block pods killing
+                    // reply::reply(err.into_reply(cni_version))
                 }
                 Ok(resp) => {
                     if resp.error.len() != 0 {
-                        let err = CniError::Generic(format!("remove_pod_sandbox fail with {:?}", resp.error));
-                        reply::reply(err.into_reply(cni_version))
+                        let _err = CniError::Generic(format!("remove_pod_sandbox fail with {:?}", resp.error));
+                        // ignore any fail to avoid block pods killing
+                        // reply::reply(err.into_reply(cni_version))
                     }
                 }
             };

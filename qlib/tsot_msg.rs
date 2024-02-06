@@ -24,6 +24,8 @@ pub enum ErrCode {
     ConnectFail,
 }
 
+#[repr(C)]
+#[derive(Debug)]
 pub struct TsotMessage {
     pub socket: i32,
     pub msg: TsotMsg,
@@ -53,6 +55,8 @@ impl From<TsotMsg> for TsotMessage {
 pub enum TsotMsg {
     None,
     PodRegisterReq(PodRegisterReq),
+    CreateSocketReq(CreateSocketReq),
+    
     ListenReq(ListenReq),
     AcceptReq(AcceptReq),
     StopListenReq(StopListenReq),
@@ -61,6 +65,7 @@ pub enum TsotMsg {
     //////////////////////////////////////////////////////
     // from nodeagent to pod
     PodRegisterResp(PodRegisterResp),
+    CreateSocketResp(CreateSocketResp),
     PeerConnectNotify(PeerConnectNotify),
     ConnectResp(ConnectResp),
 }
@@ -74,12 +79,13 @@ impl TsotMsg {
         }
     }
 
-    pub fn FromBytes<'a>(bytes: &'a [u8]) -> &'a Self {
+    pub fn FromBytes(bytes: &[u8]) -> Self {
         assert!(bytes.len() == size_of::<Self>());
         let addr = &bytes[0] as * const _ as u64;
-        return unsafe {
-            &*(addr as * const Self)
-        }
+        let ret = unsafe {
+            *(addr as * const Self)
+        };
+        return ret;
     }
 }
 
@@ -88,6 +94,11 @@ impl TsotMsg {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PodRegisterReq {
     pub podUid: [u8; 16],
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CreateSocketReq {
 }
 
 #[repr(C)]
@@ -114,7 +125,7 @@ pub struct StopListenReq {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ConnectReq {
-    pub reqId: u16,
+    pub reqId: u32,
     pub dstIp: u32,
     pub dstPort: u16,
     pub srcPort: u16,
@@ -129,6 +140,12 @@ pub struct PodRegisterResp {
     // the pod's container IP addr
     pub containerIp: u32,
     pub errorCode: u32
+}
+
+// send with new socket fd
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CreateSocketResp {
 }
 
 // another pod connected to current pod
@@ -158,7 +175,7 @@ impl PeerConnectNotify {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ConnectResp {
-    pub reqId: u16,
+    pub reqId: u32,
     pub errorCode: u32
 }
 

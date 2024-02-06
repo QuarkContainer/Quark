@@ -82,6 +82,7 @@ pub enum AsyncOps {
     TsotAsyncSend(TsotAsyncSend),
     PollHostEpollWait(PollHostEpollWait),
     AsyncConnect(AsyncConnect),
+    TsotPoll(TsotPoll),
     None(AsyncNone),
 }
 
@@ -122,6 +123,7 @@ impl AsyncOps {
             AsyncOps::TsotAsyncSend(_) => return 22,
             AsyncOps::PollHostEpollWait(_) => return 23,
             AsyncOps::AsyncConnect(_) => return 24,
+            AsyncOps::TsotPoll(_) => return 25,
             AsyncOps::None(_) => (),
         };
 
@@ -1415,8 +1417,7 @@ impl AsyncOpsTrait for AsyncLinkTimeout {
         return op.build();
     }
 
-    fn Process(&mut self, result: i32) -> bool {
-        error!("AsyncLinkTimeout ts is {:?}/{}", self.ts, result);
+    fn Process(&mut self, _result: i32) -> bool {
         return false;
     }
 }
@@ -1451,8 +1452,6 @@ impl AsyncOpsTrait for UnblockBlockPollAdd {
     }
 
     fn Process(&mut self, result: i32) -> bool {
-        error!("UnblockBlockPollAdd1 result {:x}", result);
-
         if result >= 0 {
             self.data.Set(Ok(result as EventMask));
         } else {
@@ -1460,7 +1459,6 @@ impl AsyncOpsTrait for UnblockBlockPollAdd {
         }
 
         self.wait.Done();
-        error!("UnblockBlockPollAdd2 result {:x}", result);
         return false;
     }
 }
@@ -1546,6 +1544,38 @@ impl AsyncConnect {
             len: len as _,
             socket: socket.Downgrade(),
         };
+    }
+}
+
+pub struct TsotPoll {
+    fd: i32,
+}
+
+impl AsyncOpsTrait for TsotPoll {
+    fn SEntry(&self) -> squeue::Entry {
+        let op = opcode::PollAdd::new(types::Fd(self.fd), EVENT_READ as u32);
+
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
+    }
+
+    fn Process(&mut self, result: i32) -> bool {
+        if result < 0 {
+            error!("TsotPoll::Process result {}", result);
+        }
+
+        SHARESPACE.tsotSocketMgr.Process().unwrap();
+
+        return true;
+    }
+}
+
+impl TsotPoll {
+    pub fn New(fd: i32) -> Self {
+        return Self { fd };
     }
 }
 

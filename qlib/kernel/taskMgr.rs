@@ -207,6 +207,7 @@ pub fn Wait() {
                 switch(current, newTask);
             }
 
+            // the context is still current, no switch needed.
             break;
         }
 

@@ -75,6 +75,7 @@ pub const TEST_CONFIG_NAME : &str = "node1";
 //pub const SYSTEM_CONFIG : &str = SYSTEM_CONFIG_SIMPLE;
 
 pub const TSOT_CNI_PORT: u16 = 1234;
+pub const TSOT_CONNECTION_PORT: u16 = 1235;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SystemConfig {

@@ -18,6 +18,10 @@ use std::sync::atomic::Ordering;
 
 use crate::qlib::common::*;
 use crate::qlib::tsot_msg::*;
+use crate::vmspace::kernel::GlobalIOMgr;
+use crate::vmspace::kernel::IOURING;
+use crate::vmspace::kernel::SHARESPACE;
+use crate::URING_MGR;
 use crate::VMS;
 
 use super::USocket;
@@ -35,10 +39,18 @@ impl TsotAgent {
     pub fn New() -> Result<Self> {
         let client = USocket::InitClient(TSOT_SOCKET_PATH)?;
 
-        return Ok(Self {
+        let socket = client.socket;
+
+        let agent = Self {
             client: client,
             currentReqId: AtomicU16::new(0),
-        });
+        };
+
+        agent.Register()?;
+
+        IOURING.TsotPollInit(socket);
+        
+        return Ok(agent);
     }
 
     pub fn NextReqId(&self) -> u16 {
@@ -61,60 +73,24 @@ impl TsotAgent {
                     panic!("TsotAgent::Register fail with error {:?}", m.errorCode);
                 }
 
-                info!("TsotAgent::Register success with ip {:x}", m.containerIp);
+                SHARESPACE.tsotSocketMgr.SetLocalIpAddr(m.containerIp);
+
+                //info!("TsotAgent::Register success with ip {:?}", QIPv4Addr::from(m.containerIp).ToBytes());
             }
             _ => {
                 panic!("TsotAgent::Register get unexpect message {:?}", resp.msg);
             }
         }
 
+        unsafe {
+            let socket = self.client.socket;
+            let flags = libc::fcntl(socket, libc::F_GETFL, 0);
+            let ret = libc::fcntl(socket, libc::F_SETFL, flags | libc::O_NONBLOCK);
+            assert!(ret == 0, "UnblockFd fail");
+        }
+
         return Ok(())
     }
-
-    // pub fn Listen(&self, port: u16, backlog: u32) -> Result<()> {
-    //     let listenReq = ListenReq {
-    //         port: port,
-    //         backlog: backlog
-    //     };
-
-    //     self.SendMsg(TsotMsg::ListenReq(listenReq).into())?;
-    //     return Ok(())
-    // }
-
-    // pub fn Accept(&self, port: u16) -> Result<()> {
-    //     let acceptReq = AcceptReq {
-    //         port: port
-    //     };
-
-    //     self.SendMsg(TsotMsg::AcceptReq(acceptReq).into())?;
-    //     return Ok(())
-    // }
-
-    // pub fn StopListen(&self, port: u16) -> Result<()> {
-    //     let stopListenReq = StopListenReq {
-    //         port: port
-    //     };
-
-    //     self.SendMsg(TsotMsg::StopListenReq(stopListenReq).into())?;
-    //     return Ok(())
-    // }
-
-    // pub fn Connect(&self, dstIp: u32, dstPort: u16, srcPort: u16, socket: i32) -> Result<()> {
-    //     let connectReq = ConnectReq {
-    //         reqId: self.NextReqId(),
-    //         dstIp: dstIp,
-    //         dstPort: dstPort,
-    //         srcPort: srcPort,
-    //     };
-
-    //     let msg = TsotMessage {
-    //         socket: socket,
-    //         msg: TsotMsg::ConnectReq(connectReq)
-    //     };
-
-    //     self.SendMsg(&msg)?;
-    //     return Ok(())
-    // }
 
     pub fn SendMsg(&self, m: &TsotMessage) -> Result<()> {
         let bytes = m.msg.AsBytes();
@@ -122,29 +98,36 @@ impl TsotAgent {
             let size = self.client.WriteWithFds(bytes, &[m.socket])?;
             assert!(size == bytes.len());
         } else {
-            self.client.WriteAll(bytes)?;
+            let ret = self.client.WriteAll(bytes);
+            return ret;
         }
 
         return Ok(())
     }
-    
+
     pub fn RecvMsg(&self) -> Result<TsotMessage> {
         const MSG_SIZE : usize = std::mem::size_of::<TsotMsg>();
         let mut bytes = [0u8; MSG_SIZE];
 
         let (size, fds) = self.client.ReadWithFds(&mut bytes)?;
         assert!(size == MSG_SIZE);
-        let msg = *TsotMsg::FromBytes(&bytes);
+        let msg = TsotMsg::FromBytes(&bytes);
+
         if fds.len() == 0 {
             return Ok(TsotMessage {
                 socket: -1,
                 msg: msg,
             })
         } else {
+            let fd = fds[0];
+            let _hostfd = GlobalIOMgr().AddSocket(fd);
+            URING_MGR.lock().Addfd(fd).unwrap();
+        
             return Ok(TsotMessage {
-                socket: fds[0],
+                socket: fd,
                 msg: msg,
             })
         }
+
     }
 }

@@ -92,28 +92,46 @@ impl ConnectionSvc {
     }
 
     pub async fn Process(&self) -> Result<()> {
+        //let addr = format!("0.0.0.0:{}", self.port);
         let addr = format!("0.0.0.0:{}", self.port);
-        let listener = TcpListener::bind(addr).await?;
+        let listener = TcpListener::bind(&addr).await?;
 
+        error!("ConnectionSvc::Process listen {}", addr);
         loop {
-            tokio::select! {
-                _ = self.closeNotify.notified() => {
-                    self.stop.store(false, Ordering::SeqCst);
-                    return Ok(())
-                }
-                res = listener.accept() => {
-                    match res {
-                        Err(_) => continue,
-                        Ok((stream, _peerAddr)) => {
-                            tokio::spawn(async move {
-                                let conn = TcpSvcConnection::New(stream);
-                                match conn.Process().await {
-                                    Err(e) => error!("ConnectionSvc::ProcessConnection fail with error {:?}", e),
-                                    Ok(_) => (),
-                                }
-                            });
+            // tokio::select! {
+            //     _ = self.closeNotify.notified() => {
+            //         self.stop.store(false, Ordering::SeqCst);
+            //         return Ok(())
+            //     }
+            //     res = listener.accept() => {
+            //         error!("ConnectionSvc::accept {:?}", &res);
+            //         match res {
+            //             Err(_) => continue,
+            //             Ok((stream, _peerAddr)) => {
+            //                 tokio::spawn(async move {
+            //                     let conn = TcpSvcConnection::New(stream);
+            //                     match conn.Process().await {
+            //                         Err(e) => error!("ConnectionSvc::ProcessConnection fail with error {:?}", e),
+            //                         Ok(_) => (),
+            //                     }
+            //                 });
+            //             }
+            //         }
+            //     }
+            // }
+
+            let res = listener.accept().await;
+            
+            match res {
+                Err(_) => continue,
+                Ok((stream, _peerAddr)) => {
+                    tokio::spawn(async move {
+                        let conn = TcpSvcConnection::New(stream);
+                        match conn.Process().await {
+                            Err(e) => error!("ConnectionSvc::ProcessConnection fail with error {:?}", e),
+                            Ok(_) => (),
                         }
-                    }
+                    });
                 }
             }
         }
@@ -137,7 +155,7 @@ impl TcpSvcConnection {
         let namespace = connReq.GetNamespace()?;
         let socket = self.stream.as_raw_fd();
         
-        POD_BRORKER_MGRS.HandlePeerConnect(&namespace, connReq.dstIp, connReq.srcIp, connReq.dstPort, socket)?;
+        POD_BRORKER_MGRS.HandlePeerConnect(&namespace, connReq.dstIp, connReq.dstPort, connReq.srcIp, connReq.srcPort, socket)?;
         return Ok(())
     }
 
@@ -207,7 +225,7 @@ pub struct TcpClientConnection {
 
     pub socket: i32,
 
-    pub reqId: u16,
+    pub reqId: u32,
     pub namespace: String,
     pub dstIp: u32,
     pub dstPort: u16,
@@ -218,18 +236,22 @@ pub struct TcpClientConnection {
 impl TcpClientConnection {
     pub async fn Process(self) {
         let podBroker = self.podBroker.clone();
+        error!("TcpClientConnection 1");
         match self.ProcessConnection().await {
             Ok(_stream) => {
                 // drop the TcpStream and close the socket 
+                error!("TcpClientConnection 2");
                 podBroker.HandleConnectResp(self.reqId, ErrCode::None as u32).unwrap();
             }
-            Err(_e) => {
+            Err(e) => {
+                error!("TcpClientConnection 3 error is {:?}", &e);
                 podBroker.HandleConnectResp(self.reqId, ErrCode::ConnectFail as u32).unwrap();
             }
         }
     }
 
     pub async fn ProcessConnection(&self) -> Result<TcpStream> {
+        error!("ProcessConnection 1");
         let stream = self.Connect().await?;
         let mut req = TsotConnReq {
             namespace: [0; 64],
@@ -238,15 +260,19 @@ impl TcpClientConnection {
             srcIp: self.srcIp,
             srcPort: self.srcPort
         };
-
+        error!("ProcessConnection 2 {:x?}", &req);
+        
         for i in 0..self.namespace.as_bytes().len() {
             req.namespace[i] = self.namespace.as_bytes()[i];
         }
 
+        error!("ProcessConnection 3");
         self.WriteConnReq(&stream, req).await?;
-
+        error!("ProcessConnection 4");
+        
         let resp = self.ReadConnResp(&stream).await?;
-
+        error!("ProcessConnection 5 {:?}", &resp);
+        
         if resp.errcode != TsotErrCode::Ok as u32 {
             return Err(Error::CommonError(format!("TcpClientConnection connect fail with error {:?}", resp.errcode)));
         }
@@ -255,13 +281,28 @@ impl TcpClientConnection {
     }
 
     pub async fn Connect(&self) -> Result<TcpStream> {
+        error!("TcpClientConnection::Connect 1 {}", self.socket);
         let peer = PEER_MGR.LookforPeer(self.dstIp)?;
-        let ip = Ipv4Addr::from(peer.hostIp);
+        error!("TcpClientConnection::Connect 2 {:x} port {}", peer.hostIp, peer.port);
+        //let ip = Ipv4Addr::from(peer.hostIp);
+        let ip = Ipv4Addr::new(127, 0, 0, 1);
+        error!("TcpClientConnection::Connect 3 {:x?} port {}", ip.octets(), peer.port);
+
+
         let socketv4Addr = SocketAddrV4::new(ip, peer.port);
+
         let socket = unsafe {
             TcpSocket::from_raw_fd(self.socket)
         };
-        let stream = socket.connect(socketv4Addr.into()).await?;
+
+        //let addr = "127.0.0.1:1235".parse().unwrap();
+        let stream = match socket.connect(socketv4Addr.into()).await {
+            Err(e) => {
+                error!("TcpClientConnection::Connect 4 {:?}", &e);
+                return Err(e.into());
+            }
+            Ok(s) => s,
+        };
         return Ok(stream);
     }
 

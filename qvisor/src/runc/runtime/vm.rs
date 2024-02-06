@@ -25,6 +25,7 @@ use lazy_static::lazy_static;
 use nix::sys::signal;
 
 use crate::qlib::MAX_VCPU_COUNT;
+use crate::tsot_agent::TSOT_AGENT;
 //use crate::vmspace::hibernate::HiberMgr;
 
 use super::super::super::elf_loader::*;
@@ -234,6 +235,11 @@ impl VirtualMachine {
             timer::InitSingleton();
         }
 
+        if SHARESPACE.config.read().EnableTsot {
+            // initialize the tost_agent
+            TSOT_AGENT.NextReqId();
+        };
+
         let syncPrint = sharespace.config.read().SyncPrint();
         super::super::super::print::SetSyncPrint(syncPrint);
     }
@@ -243,9 +249,14 @@ impl VirtualMachine {
 
         *ROOT_CONTAINER_ID.lock() = args.ID.clone();
         if QUARK_CONFIG.lock().PerSandboxLog {
-            LOG.Reset(&args.ID[0..12]);
-        }
-
+            let sandboxName = match args.Spec.annotations.get("io.kubernetes.cri.sandbox-name") {
+                None => {
+                    args.ID[0..12].to_owned()
+                }
+                Some(name) => name.clone()
+            };
+            LOG.Reset(&sandboxName);
+         }
 
         let cpuCount = args.GetCpuCount();
 
