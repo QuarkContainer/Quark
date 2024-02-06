@@ -26,7 +26,7 @@ use crate::qlib::range::Range;
 use crate::xpu::cuda::*;
 
 use cuda_driver_sys::*;
-
+use cuda_runtime_sys::cudaStream_t;  
 
 lazy_static! {
     pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
@@ -36,6 +36,7 @@ lazy_static! {
         (ProxyCommand::CudaDeviceSynchronize,(XpuLibrary::CudaRuntime, "cudaDeviceSynchronize")),
         (ProxyCommand::CudaMalloc,(XpuLibrary::CudaRuntime, "cudaMalloc")),
         (ProxyCommand::CudaMemcpy,(XpuLibrary::CudaRuntime, "cudaMemcpy")),
+        (ProxyCommand::CudaMemcpyAsync,(XpuLibrary::CudaRuntime,"cudaMemcpyAsync")),
         (ProxyCommand::CudaRegisterFatBinary,(XpuLibrary::CudaDriver, "cuModuleLoadData")),
         (ProxyCommand::CudaRegisterFunction,(XpuLibrary::CudaDriver, "cuModuleGetFunction")),
         (ProxyCommand::CudaLaunchKernel,(XpuLibrary::CudaDriver, "cuLaunchKernel")),
@@ -108,6 +109,9 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
         }
         ProxyCommand::CudaMemcpy => {
             return CudaMemcpy(handler, parameters);
+        }
+        ProxyCommand::CudaMemcpyAsync => {
+            return CudaMemcpyAsync(handler, parameters);
         }
         ProxyCommand::CudaRegisterFatBinary => {
             // reference to a FatElfHeader based on the memory location described by para2
@@ -334,6 +338,76 @@ pub fn CudaMemcpy(handle: u64, parameters: &ProxyParameters) -> Result<i64> {
             let src = parameters.para3;
             let count = parameters.para4;
             let ret = func(dst, src, count, kind);
+            return Ok(ret as i64);
+        }
+        _ => todo!(),
+    }
+}
+
+pub fn CudaMemcpyAsync(handle: u64, parameters: &ProxyParameters) -> Result<i64> {
+    
+    let func: extern "C" fn(u64, u64, u64, u64, cudaStream_t) -> i32 = unsafe { std::mem::transmute(handle) };
+    let kind = parameters.para5;
+    let stream = parameters.para6 as cudaStream_t;
+    match kind{
+        CUDA_MEMCPY_HOST_TO_HOST => todo!(),
+        CUDA_MEMCPY_HOST_TO_DEVICE => {
+            let dst = parameters.para1;  // device 
+            let ptr = parameters.para2 as *const Range;
+            // length of the vector 
+            let len = parameters.para3 as usize;
+            let count = parameters.para4;
+
+            let ranges = unsafe { std::slice::from_raw_parts(ptr, len) };
+            let mut offset = 0;
+            for r in ranges {
+                let ret = func(dst + offset, r.start, r.len, kind, stream);
+                if ret != 0 {
+                    error!(
+                        "CUDA_MEMCPY_ASYNC_HOST_TO_DEVICE ret is {:x}/{:x}/{:x}/{}/{}/{:?}",
+                        dst + offset,
+                        r.start,
+                        r.len,
+                        kind,
+                        ret,
+                        stream
+                    );
+                    return Ok(ret as i64);
+                }
+                offset += r.len;
+            }
+            
+            assert!(offset == count);
+
+            return Ok(0);
+        }
+        CUDA_MEMCPY_DEVICE_TO_HOST => {
+            // dst is host(virtual address)
+            let ptr = parameters.para1 as *const Range;
+            let len = parameters.para2 as usize;
+
+            let src = parameters.para3;       //device 
+            let count = parameters.para4;
+
+            let ranges = unsafe { std::slice::from_raw_parts(ptr, len) };
+            let mut offset = 0;
+            for r in ranges {
+                let ret = func(r.start, src + offset, r.len, kind,stream);
+                if ret != 0 {
+                    return Ok(ret as i64);
+                }
+                offset += r.len;
+            }
+
+            assert!(offset == count);
+
+            return Ok(0);
+        }
+        CUDA_MEMCPY_DEVICE_TO_DEVICE => {
+            let dst = parameters.para1;
+            let src = parameters.para3;
+            let count = parameters.para4;
+            let ret = func(dst, src, count, kind,stream);
             return Ok(ret as i64);
         }
         _ => todo!(),

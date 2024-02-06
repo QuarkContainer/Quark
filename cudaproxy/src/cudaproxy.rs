@@ -14,7 +14,7 @@
 use std::os::raw::*;
 
 use cuda_runtime_sys::cudaMemcpyKind;
-
+use cuda_runtime_sys::cudaStream_t; 
 use crate::syscall::*;
 use crate::proxy::*;
 pub const SYS_PROXY: usize = 10003;
@@ -190,3 +190,29 @@ pub extern "C" fn cudaMemcpy(
         syscall5(SYS_PROXY, ProxyCommand::CudaMemcpy as usize, dst as * const _ as usize, src as usize, count as usize, kind as usize) 
     };
 }
+
+#[no_mangle]
+pub extern "C" fn cudaMemcpyAsync(
+    dst: *mut c_void,
+    src: *const c_void,
+    count: usize,
+    kind: cudaMemcpyKind,
+    stream:cudaStream_t
+) -> usize{
+    println!("Hijacked cudaMemcpyAsync(size:{})",count);
+
+    if kind == cudaMemcpyKind::cudaMemcpyHostToHost{
+        unsafe{
+            std::ptr::copy_nonoverlapping(src, dst, count);
+        }
+
+        return 0; 
+    }
+
+    return unsafe{
+        syscall6(SYS_PROXY, ProxyCommand::CudaMemcpyAsync as usize, dst as * const _ as usize, src as usize, count as usize, kind as usize , stream as usize)
+    };
+
+}
+
+

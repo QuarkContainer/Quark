@@ -94,6 +94,17 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
             
         }
+        ProxyCommand::CudaMemcpyAsync => {
+            let ret = CudaMemcpyAsync(
+                task,
+                parameters.para1,
+                parameters.para2,
+                parameters.para3,
+                parameters.para4,
+                parameters.para5      
+            )?;
+            return Ok(ret);
+        }
         ProxyCommand::CudaRegisterFatBinary => {
             let data: Vec<u8> = task.CopyInVec(parameters.para2, parameters.para1 as usize)?;
             parameters.para2 = &data[0] as *const _ as u64;
@@ -246,4 +257,77 @@ pub fn CudaMemcpy(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyK
         _ => todo!()
     }
     
+}
+
+fn CudaMemcpyAsync(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyKind, stream: u64) -> Result<i64> {
+    match kind {
+        CUDA_MEMCPY_HOST_TO_HOST => {
+            error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
+            return Ok(1);
+        }
+        CUDA_MEMCPY_HOST_TO_DEVICE => {
+            // src is the virtual addr(src is host memory ), address and # of bytes 
+            let mut prs = Vec::new();
+            task.V2P(src, count, &mut prs, true, false)?;
+
+            let parameters = ProxyParameters {
+                para1: dst,
+                para2: &prs[0] as * const _ as u64,
+                para3: prs.len() as u64,
+                para4: count as u64,
+                para5: kind,
+                para6: stream,
+                ..Default::default()
+            };
+
+            let ret = HostSpace::Proxy(
+                ProxyCommand::CudaMemcpyAsync,
+                parameters,
+            );
+
+            return Ok(ret);
+        }
+        CUDA_MEMCPY_DEVICE_TO_HOST => {
+            // dst is the virtual addr(host memory)
+            let mut prs = Vec::new();
+            task.V2P(dst, count, &mut prs, true, false)?;
+
+            let parameters = ProxyParameters {
+                para1: &prs[0] as * const _ as u64,
+                para2: prs.len() as u64,
+                para3: src,
+                para4: count as u64,
+                para5: kind,
+                para6: stream,
+                ..Default::default()
+            };
+
+            let ret = HostSpace::Proxy(
+                ProxyCommand::CudaMemcpyAsync,
+                parameters,
+            );
+
+            return Ok(ret);
+            
+        }
+        CUDA_MEMCPY_DEVICE_TO_DEVICE => {
+            let parameters = ProxyParameters {
+                para1: dst,
+                para2: 0,
+                para3: src,
+                para4: count as u64,
+                para5: kind,
+                para6: stream,
+                ..Default::default()
+            };
+
+            let ret = HostSpace::Proxy(
+                ProxyCommand::CudaMemcpyAsync,
+                parameters,
+            );
+
+            return Ok(ret);
+        }
+        _ => todo!()
+    }
 }
