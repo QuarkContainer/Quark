@@ -80,6 +80,7 @@ message CreateFuncPodReq {
 
 message CreateFuncPodResp {
   string error = 1;
+  uint32 ipaddress = 2;
 }
 
 message ReadFuncLogReq {

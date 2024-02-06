@@ -19,8 +19,6 @@ use std::collections::BTreeSet;
 
 use qshare::common::*;
 
-use super::pod_sandbox::IpAddress;
-
 #[derive(Debug)]
 pub struct CidrInner {
     pub addr: u32,

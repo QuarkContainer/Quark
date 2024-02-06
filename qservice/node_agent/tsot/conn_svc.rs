@@ -278,14 +278,9 @@ impl TcpClientConnection {
     }
 
     pub async fn Connect(&self) -> Result<TcpStream> {
-        error!("TcpClientConnection::Connect 1 {}", self.socket);
         let peer = PEER_MGR.LookforPeer(self.dstIp)?;
-        error!("TcpClientConnection::Connect 2 {:x} port {}", peer.hostIp, peer.port);
-        //let ip = Ipv4Addr::from(peer.hostIp);
-        let ip = Ipv4Addr::new(127, 0, 0, 1);
-        error!("TcpClientConnection::Connect 3 {:x?} port {}", ip.octets(), peer.port);
-
-
+        let ip = Ipv4Addr::from(peer.hostIp);
+        
         let socketv4Addr = SocketAddrV4::new(ip, peer.port);
 
         let socket = unsafe {

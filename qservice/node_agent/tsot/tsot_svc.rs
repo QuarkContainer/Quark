@@ -30,7 +30,6 @@ use qshare::tsot_cni;
 use super::pod_broker::*;
 use super::tsot_msg::TsotMessage;
 
-use crate::pod_mgr::pod_sandbox::IpAddress;
 use crate::pod_mgr::NAMESPACE_MGR;
 use crate::tsot::conn_svc::ConnectionSvc;
 use crate::tsot::tsot_msg::TSOT_SOCKET_PATH;
