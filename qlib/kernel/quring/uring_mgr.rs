@@ -337,6 +337,11 @@ impl QUring {
         IOURING.AUCall(AsyncOps::PollHostEpollWait(op));
     }
 
+    pub fn TsotPollInit(&self, tsotSocket: i32) {
+        let op = TsotPoll::New(tsotSocket);
+        IOURING.AUCall(AsyncOps::TsotPoll(op));
+    }
+
     pub fn BufSockInit(fd: i32, queue: Queue, buf: SocketBuff, isSocket: bool) -> Result<()> {
         let (addr, len) = buf.GetFreeReadBuf();
         let readop = AsyncFileRead::New(fd, queue, buf, addr, len, isSocket);

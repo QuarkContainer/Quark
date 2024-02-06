@@ -359,6 +359,13 @@ impl SandboxProcess {
                 continue;
             }
 
+            // tsot needs to run in host network namespace
+            if QUARK_CONFIG.lock().EnableTsot && space == LinuxNamespaceType::network as i32 {
+                info!("EnableNamespace disable network namespace");
+                Close(fd)?;
+                continue
+            }
+
             SetNamespace(fd, space)?;
             Close(fd)?;
             if space == LinuxNamespaceType::user as i32 {

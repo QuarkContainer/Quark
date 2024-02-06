@@ -371,8 +371,21 @@ impl SockAddrInet {
     }
     
     pub fn Ipv4Addr(&self) -> u32 {
+        let mut bytes = [0; 4];
+        for i in 0..3 {
+            bytes[i] = self.Addr[3-i];
+        }
         return unsafe {
-            *(&self.Addr[0] as * const _ as u64 as * const u32)
+            *(&bytes[0] as * const _ as u64 as * const u32)
+        }
+    }
+
+    pub fn Ipv4Port(&self) -> u16 {
+        let mut bytes = [0; 2];
+        bytes[0] = (self.Port >> 8) as u8;
+        bytes[1] = self.Port as u8;
+        return unsafe {
+            *(&bytes[0] as * const _ as u64 as * const u16)
         }
     }
 }

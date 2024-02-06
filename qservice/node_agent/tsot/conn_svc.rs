@@ -225,7 +225,7 @@ pub struct TcpClientConnection {
 
     pub socket: i32,
 
-    pub reqId: u16,
+    pub reqId: u32,
     pub namespace: String,
     pub dstIp: u32,
     pub dstPort: u16,
@@ -289,65 +289,15 @@ impl TcpClientConnection {
         error!("TcpClientConnection::Connect 3 {:x?} port {}", ip.octets(), peer.port);
 
 
-        error!("TcpClientConnection::Connect 3 {:?} port {}", ip.octets(), peer.port);
-        
         let socketv4Addr = SocketAddrV4::new(ip, peer.port);
 
-
-        // pub fn UnblockFd(fd: i32) {
-        //     unsafe {
-        //         let flags = libc::fcntl(fd, libc::F_GETFL, 0);
-        //         let ret = libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-        //         assert!(ret == 0, "UnblockFd fail");
-        //     }
-        // }
-    
-        // pub fn BlockFd(fd: i32) {
-        //     unsafe {
-        //         let flags = libc::fcntl(fd, libc::F_GETFL, 0);
-        //         let ret = libc::fcntl(fd, libc::F_SETFL, flags & !libc::O_NONBLOCK);
-        //         assert!(ret == 0, "UnblockFd fail");
-        //     }
-        // }
-
-        // let addr = libc::sockaddr_in {
-        //     sin_family: libc::AF_INET as u16,
-        //     sin_port: 0xd304,
-        //     sin_addr: libc::in_addr {
-        //         s_addr: 0x0101017f,
-        //         //s_addr: 0x7f010101,
-        //     },
-        //     sin_zero: [0; 8]
-        // };
-
-        // let tcpSocket = TcpSocket::new_v4()?;
-        // let sockfd = tcpSocket.as_raw_fd();
-        // // let sockfd = unsafe {
-        //     libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0)
-        // };
-
-        // let sockfd = self.socket;
-        // error!("TcpClientConnection::Connect xxx 0 fd is {}", sockfd);
-        // BlockFd(sockfd);
-
-        // let addr = &addr as * const _ as u64 as  * const libc::sockaddr;
-        // error!("TcpClientConnection::Connect xxx 1");
-        // let ret = unsafe {
-        //     //libc::connect(self.socket as i32, addr, 16)
-        //     libc::connect(sockfd as i32, addr, 16)
-        // };
-        // error!("TcpClientConnection::Connect try xxx {}/{}", ret, errno::errno().0);
-
-        // UnblockFd(sockfd);
         let socket = unsafe {
             TcpSocket::from_raw_fd(self.socket)
         };
 
         //let addr = "127.0.0.1:1235".parse().unwrap();
         let stream = match socket.connect(socketv4Addr.into()).await {
-        // error!("TcpClientConnection::Connect 4.3 {}", socket.as_raw_fd());
-        //let stream = match socket.connect(addr).await {
-                Err(e) => {
+            Err(e) => {
                 error!("TcpClientConnection::Connect 4 {:?}", &e);
                 return Err(e.into());
             }

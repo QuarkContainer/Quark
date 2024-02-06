@@ -18,8 +18,10 @@ use std::sync::atomic::Ordering;
 
 use crate::qlib::common::*;
 use crate::qlib::tsot_msg::*;
-use crate::vmspace::kernel::socket::hostinet::tsot_mgr::QIPv4Addr;
+use crate::vmspace::kernel::GlobalIOMgr;
+use crate::vmspace::kernel::IOURING;
 use crate::vmspace::kernel::SHARESPACE;
+use crate::URING_MGR;
 use crate::VMS;
 
 use super::USocket;
@@ -35,8 +37,9 @@ pub struct TsotAgent {
 
 impl TsotAgent {
     pub fn New() -> Result<Self> {
-        error!("TsotAgent::New 1");
         let client = USocket::InitClient(TSOT_SOCKET_PATH)?;
+
+        let socket = client.socket;
 
         let agent = Self {
             client: client,
@@ -45,6 +48,8 @@ impl TsotAgent {
 
         agent.Register()?;
 
+        IOURING.TsotPollInit(socket);
+        
         return Ok(agent);
     }
 
@@ -70,11 +75,18 @@ impl TsotAgent {
 
                 SHARESPACE.tsotSocketMgr.SetLocalIpAddr(m.containerIp);
 
-                info!("TsotAgent::Register success with ip {:?}", QIPv4Addr::from(m.containerIp).ToBytes());
+                //info!("TsotAgent::Register success with ip {:?}", QIPv4Addr::from(m.containerIp).ToBytes());
             }
             _ => {
                 panic!("TsotAgent::Register get unexpect message {:?}", resp.msg);
             }
+        }
+
+        unsafe {
+            let socket = self.client.socket;
+            let flags = libc::fcntl(socket, libc::F_GETFL, 0);
+            let ret = libc::fcntl(socket, libc::F_SETFL, flags | libc::O_NONBLOCK);
+            assert!(ret == 0, "UnblockFd fail");
         }
 
         return Ok(())
@@ -100,16 +112,22 @@ impl TsotAgent {
         let (size, fds) = self.client.ReadWithFds(&mut bytes)?;
         assert!(size == MSG_SIZE);
         let msg = TsotMsg::FromBytes(&bytes);
+
         if fds.len() == 0 {
             return Ok(TsotMessage {
                 socket: -1,
                 msg: msg,
             })
         } else {
+            let fd = fds[0];
+            let _hostfd = GlobalIOMgr().AddSocket(fd);
+            URING_MGR.lock().Addfd(fd).unwrap();
+        
             return Ok(TsotMessage {
-                socket: fds[0],
+                socket: fd,
                 msg: msg,
             })
         }
+
     }
 }

@@ -80,35 +80,35 @@ impl CPULocal {
 
     pub fn ToSearch(&self, sharespace: &ShareSpace) -> u64 {
         assert!(
-            self.state.load(Ordering::SeqCst) != VcpuState::Searching as u64,
+            self.state.load(Ordering::Acquire) != VcpuState::Searching as u64,
             "state is {}",
-            self.state.load(Ordering::SeqCst)
+            self.state.load(Ordering::Acquire)
         );
         self.state
-            .store(VcpuState::Searching as u64, Ordering::SeqCst);
+            .store(VcpuState::Searching as u64, Ordering::Release);
         return sharespace.IncrVcpuSearching();
     }
 
     pub fn ToWaiting(&self, sharespace: &ShareSpace) -> u64 {
         assert!(
-            self.state.load(Ordering::SeqCst) == VcpuState::Searching as u64,
+            self.state.load(Ordering::Acquire) == VcpuState::Searching as u64,
             "state is {}",
-            self.state.load(Ordering::SeqCst)
+            self.state.load(Ordering::Acquire)
         );
         self.state
-            .store(VcpuState::Waiting as u64, Ordering::SeqCst);
+            .store(VcpuState::Waiting as u64, Ordering::Release);
         let searchingCnt = sharespace.DecrVcpuSearching();
         return searchingCnt;
     }
 
     pub fn ToRunning(&self, sharespace: &ShareSpace) -> u64 {
         assert!(
-            self.state.load(Ordering::SeqCst) == VcpuState::Searching as u64,
+            self.state.load(Ordering::Acquire) == VcpuState::Searching as u64,
             "state is {}",
-            self.state.load(Ordering::SeqCst)
+            self.state.load(Ordering::Acquire)
         );
         self.state
-            .store(VcpuState::Running as u64, Ordering::SeqCst);
+            .store(VcpuState::Running as u64, Ordering::Release);
         let searchingCnt = sharespace.DecrVcpuSearching();
         return searchingCnt;
     }

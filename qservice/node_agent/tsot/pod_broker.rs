@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use tokio::net::TcpSocket;
 use tokio::net::UnixStream;
 use tokio::sync::mpsc;
 use std::collections::HashMap;
@@ -64,7 +65,7 @@ pub struct PodBrokerInner {
     pub listeningPorts: Mutex<HashMap<u16, u32>>,
 
     // reqId to ConnectReq
-    pub connecting: Mutex<HashMap<u16, ConnectReq>>,
+    pub connecting: Mutex<HashMap<u32, ConnectReq>>,
 }
 
 #[derive(Debug, Clone)]
@@ -193,6 +194,7 @@ impl PodBroker {
 
         let mut msg : Option<TsotMessage> = None;
         
+        error!("ProcessMsgs 1");
         loop {
             match msg.take() {
                 None => {
@@ -202,12 +204,14 @@ impl PodBroker {
                             break;
                         }
                         _res = self.stream.readable() => {
+                            error!("ProcessMsgs 2");
                             self.ProcessRead()?;
                         }
                         m = rx.recv() => {
                             match m {
                                 None => (),
                                 Some(m) => {
+                                    error!("ProcessMsgs 4 {:?}", &m);
                                     msg = Some(m);
                                 }
                             }
@@ -221,12 +225,14 @@ impl PodBroker {
                             break;
                         }
                         _ = self.stream.readable() => {
+                            error!("ProcessMsgs 3");
                             self.ProcessRead()?;
 
                             // return the msg
                             msg = Some(m);
                         }
                         _ = self.stream.writable() => {
+                            error!("ProcessMsgs 5 {:?}", &m);
                             self.SendMsg(m)?;
                         }
                     }
@@ -314,9 +320,15 @@ impl PodBroker {
         let readbufAddr = &readBuf[0] as * const _ as u64;
         let raw_fd: RawFd = self.stream.as_raw_fd();
         
+        defer!(          
+            // reset the tokio::unixstream state
+            let mut buf =[0; 0];
+            self.stream.try_read(&mut buf).ok();
+        );
         let (size, fds) = match self.ReadWithFds(raw_fd, &mut readBuf) {
             Ok((size, fds)) => (size, fds),
-            Err(Error::SysError(111)) => {
+            Err(Error::SysError(11)) => {
+                // EAGAIN
                 return Ok(());
             }
             Err(e) => {
@@ -337,11 +349,6 @@ impl PodBroker {
         } else {
             self.ProcessMsg(msg, Some(fds[0]))?;
         }
-        
-        // reset the tokio::unixstream state
-        let mut buf =[0; 0];
-        self.stream.try_read(&mut buf)?;
-
         
         return Ok(())
     }
@@ -365,6 +372,19 @@ impl PodBroker {
 
         self.SendMsg(TsotMsg::PodRegisterResp(resp).into())?;
         return Ok(())
+    }
+
+    pub fn ProcessCreateSocketReq(&self, _req: CreateSocketReq) -> Result<()> {
+        let stream = TcpSocket::new_v4()?;
+        let fd = stream.into_raw_fd();
+        let resp = CreateSocketResp {};
+
+        let message = TsotMessage {
+            socket: fd,
+            msg: TsotMsg::CreateSocketResp(resp),
+        };
+
+        return self.EnqMsg(message);
     }
 
     pub fn ProcessListenReq(&self, req: ListenReq) -> Result<()> {
@@ -434,6 +454,9 @@ impl PodBroker {
             TsotMsg::PodRegisterReq(m) => {
                 self.ProcessPodRegisterReq(m)?;
             }
+            TsotMsg::CreateSocketReq(m) => {
+                self.ProcessCreateSocketReq(m)?;
+            }
             TsotMsg::ListenReq(m) => {
                 self.ProcessListenReq(m)?
             }
@@ -495,7 +518,7 @@ impl PodBroker {
         return self.EnqMsg(message);
     }
 
-    pub fn HandleConnectResp(&self, reqId: u16, errorCode: u32) -> Result<()> {
+    pub fn HandleConnectResp(&self, reqId: u32, errorCode: u32) -> Result<()> {
         match self.connecting.lock().unwrap().remove(&reqId) {
             None => {
                 error!("HandleConnectResp get non exist reqId {}", reqId);

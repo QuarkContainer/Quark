@@ -55,6 +55,8 @@ impl From<TsotMsg> for TsotMessage {
 pub enum TsotMsg {
     None,
     PodRegisterReq(PodRegisterReq),
+    CreateSocketReq(CreateSocketReq),
+    
     ListenReq(ListenReq),
     AcceptReq(AcceptReq),
     StopListenReq(StopListenReq),
@@ -63,6 +65,7 @@ pub enum TsotMsg {
     //////////////////////////////////////////////////////
     // from nodeagent to pod
     PodRegisterResp(PodRegisterResp),
+    CreateSocketResp(CreateSocketResp),
     PeerConnectNotify(PeerConnectNotify),
     ConnectResp(ConnectResp),
 }
@@ -94,6 +97,11 @@ pub struct PodRegisterReq {
 }
 
 #[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CreateSocketReq {
+}
+
+#[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ListenReq {
     pub port: u16,
@@ -117,7 +125,7 @@ pub struct StopListenReq {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ConnectReq {
-    pub reqId: u16,
+    pub reqId: u32,
     pub dstIp: u32,
     pub dstPort: u16,
     pub srcPort: u16,
@@ -132,6 +140,12 @@ pub struct PodRegisterResp {
     // the pod's container IP addr
     pub containerIp: u32,
     pub errorCode: u32
+}
+
+// send with new socket fd
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CreateSocketResp {
 }
 
 // another pod connected to current pod
@@ -161,7 +175,7 @@ impl PeerConnectNotify {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ConnectResp {
-    pub reqId: u16,
+    pub reqId: u32,
     pub errorCode: u32
 }
 

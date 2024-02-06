@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::qlib::mutex::*;
-use crate::qlib::rdma_share::*;
-use crate::qlib::rdmasocket::*;
+
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -27,6 +25,9 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 
+use crate::qlib::mutex::*;
+use crate::qlib::rdma_share::*;
+use crate::qlib::rdmasocket::*;
 use super::super::super::super::common::*;
 use super::super::super::super::fileinfo::*;
 use super::super::super::super::linux::netdevice::*;
@@ -2440,14 +2441,57 @@ impl Provider for SocketProvider {
         let nonblocking = stype & SocketFlags::SOCK_NONBLOCK != 0;
         let stype = stype & SocketType::SOCK_TYPE_MASK;
 
-        let res =
-            Kernel::HostSpace::Socket(self.family, stype | SocketFlags::SOCK_CLOEXEC, protocol);
+        // let fd = if SHARESPACE.config.read().EnableTsot {
+        //     if self.family == AFType::AF_INET && stype == SockType::SOCK_STREAM {
+        //         let general = task.blocker.generalEntry.clone();
+        //         SHARESPACE.tsotSocketMgr.CreateSocket()?;
+                
+        //         SHARESPACE.tsotSocketMgr.EventRegister(task, &general, EVENT_IN);
+        //         defer!(SHARESPACE.tsotSocketMgr.EventUnregister(task, &general));
+        //         let fd;
+        //         error!("SocketProvider 1 {:?}", CPULocal::Myself().State()); 
+        //         loop {
+        //             match SHARESPACE.tsotSocketMgr.GetSocket() {
+        //                 None => {
+        //                     error!("SocketProvider 2 {:?}", CPULocal::Myself().State()); 
+        //                     match task.blocker.BlockWithMonoTimer(true, None) {
+        //                         Err(e) => {
+        //                             return Err(e);
+        //                         }
+        //                         _ => (),
+        //                     }
+        //                 },
+        //                 Some(socket) => {
+        //                     error!("SocketProvider 3"); 
+        //                     fd = socket;
+        //                     break;
+        //                 }
+        //             }
+        //         }
+
+        //         error!("SocketProvider 4 fd is {}", fd);
+
+        //         fd
+        //     } else {
+        //         // tsot only support IPv4 tcp
+        //         return Err(Error::SysError(SysErr::ESOCKTNOSUPPORT));
+        //     }
+        // } else {
+        //     let res = Kernel::HostSpace::Socket(self.family, stype | SocketFlags::SOCK_CLOEXEC, protocol);
+        //     if res < 0 {
+        //         return Err(Error::SysError(-res as i32));
+        //     }
+
+        //     let fd = res as i32;
+        //     fd
+        // };
+
+        let res = Kernel::HostSpace::Socket(self.family, stype | SocketFlags::SOCK_CLOEXEC, protocol);
         if res < 0 {
             return Err(Error::SysError(-res as i32));
         }
 
         let fd = res as i32;
-        // error!("SocketProvider::Socket, fd: {}", fd);
 
         let file;
         let tcpRDMA = SHARESPACE.config.read().EnableRDMA
@@ -2460,7 +2504,6 @@ impl Provider for SocketProvider {
             && (stype == SockType::SOCK_DGRAM);
 
         if SHARESPACE.config.read().EnableTsot {
-            error!("socket 2");
             let socketType = TsotSocketType::Init;
             file = NewTsotSocketFile(
                 task, 
