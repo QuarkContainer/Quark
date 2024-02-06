@@ -34,30 +34,30 @@ cfg_x86_64! {
    // A swapt-out page has the bit-flag set.
    //
    fn is_pte_swapped(flags: PageTableFlags) -> bool {
-       (flags & PageTableFlags::BIT_9) == PageTableFlags::BIT_9
+       flags.contains(PageTableFlags::BIT_9)
    }
 
    fn set_pte_swapped(flags: &mut PageTableFlags) {
-       *flags |= PageTableFlags::BIT_9;
+       flags.insert(PageTableFlags::BIT_9);
    }
 
    fn unset_pte_swapped(flags: &mut PageTableFlags) {
-       *flags &= !PageTableFlags::BIT_9; 
+       flags.unset(PageTableFlags::BIT_9);
    }
 
    //
    // Bit flag is set if another thread is using the PTE.
    //
    fn is_pte_taken(flags: PageTableFlags) -> bool {
-       (flags & PageTableFlags::BIT_10) == PageTableFlags::BIT_10
+       flags.contains(PageTableFlags::BIT_10)
    }
 
    fn set_pte_taken(flags: &mut PageTableFlags) {
-       *flags |= PageTableFlags::BIT_10;
+       flags.insert(PageTableFlags::BIT_10);
    }
 
    fn unset_pte_taken(flags: &mut PageTableFlags) {
-       *flags &= PageTableFlags::BIT_10;
+       flags.unset(PageTableFlags::BIT_10);
    }
 
    #[inline]
@@ -75,30 +75,30 @@ cfg_aarch64! {
    // A swapt-out page has the bit-flag set.
    //
    fn is_pte_swapped(flags: PageTableFlags) -> bool {
-       (flags & PageTableFlags::SWAPPED_OUT) == PageTableFlags::SWAPPED_OUT
+       flags.contains(PageTableFlags::SWAPPED_OUT)
    }
 
    fn set_pte_swapped(flags: &mut PageTableFlags) {
-       *flags |= PageTableFlags::SWAPPED_OUT;
+       flags.insert(PageTableFlags::SWAPPED_OUT);
    }
 
    fn unset_pte_swapped(flags: &mut PageTableFlags) {
-       *flags &= !PageTableFlags::SWAPPED_OUT; 
+       flags.remove(PageTableFlags::SWAPPED_OUT);
    }
 
    //
    // Bit flag is set if another thread is using the PTE.
    //
    fn is_pte_taken(flags: PageTableFlags) -> bool {
-       (flags & PageTableFlags::TAKEN) == PageTableFlags::TAKEN
+       flags.contains(PageTableFlags::TAKEN)
    }
 
    fn set_pte_taken(flags: &mut PageTableFlags) {
-       *flags |= PageTableFlags::TAKEN;
+       flags.insert(PageTableFlags::TAKEN);
    }
 
    fn unset_pte_taken(flags: &mut PageTableFlags) {
-       *flags &= PageTableFlags::TAKEN;
+       flags.remove(PageTableFlags::TAKEN);
    }
 
    #[inline]
