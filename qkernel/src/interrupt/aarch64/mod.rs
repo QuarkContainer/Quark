@@ -16,7 +16,7 @@ pub mod fault;
 
 use core::arch::asm;
 use super::super::syscall_dispatch_aarch64;
-use crate::qlib::linux_def::MmapProt;
+use crate::qlib::{linux_def::MmapProt, addr::PAGE_SIZE};
 use crate::qlib::addr::AccessType;
 use crate::qlib::kernel::task;
 use crate::qlib::kernel::threadmgr::task_sched::SchedState;
@@ -269,7 +269,53 @@ pub extern "C" fn exception_handler_el0_sync(ptregs_addr:usize){
             MemAbortUser(ptregs_addr, esr, far, true);
         },
         _ => {
-            panic!("unhandled sync exception from el0: {},\n current-context: {:?}", ec, ctx);
+            debug!("VM: Unhandled sync exception from el0: {},\n current-context: {:#x}", ec, ctx);
+            //
+            // Print the page with the error.
+            //
+            unsafe {
+                asm!("MSR PAN, #0");
+                let page = ctx.pc & !(PAGE_SIZE - 1);
+                let currTask = task::Task::Current();
+                let g_frame = currTask
+                        .mm
+                        .pagetable
+                        .read()
+                        .pt
+                        .VirtualToPhy(page).unwrap().0;
+                let page_offset = ctx.pc & (PAGE_SIZE - 1);
+                let fault_addr = (g_frame | page_offset) as *const u32;
+                let fault_instr = fault_addr.read_unaligned();
+                debug!("VM: FaultInstr:{:#x} (LittleEnd) - in PC:{:#x} - frame:{:#x}.",
+                       fault_instr, ctx.pc, fault_addr as u64);
+                let MSR: u32 =0xD5300000;
+                let mask: u32 = 0xFFF00000;
+                let is_mrs = if (fault_instr & mask) == MSR {
+                                true
+                            } else {
+                                false
+                            };
+                if is_mrs {
+                    let Xt = fault_instr & 0x1F;
+                    let sys_reg = (fault_instr >> 5) & 0x4FFF;
+                    //
+                    // NOTE: Check against a list of allowed system registers.
+                    //
+                    let MIDR_EL1_OP: u32 = 0x3 << 13;
+                    if sys_reg & MIDR_EL1_OP != 0 {
+                        debug!("VM: Emulate MIDR_EL1 read for user.");
+                        let MIDR_EL1: u64;
+                        asm!("mrs {}, midr_el1", out(reg) MIDR_EL1);
+                         ctx.regs[Xt as usize] = MIDR_EL1;
+                         ctx.pc += 4;
+                    } else {
+                        panic!("VM: Exit on unhandled exception on EL0 - MRS on unkown .");
+                    }
+                } else {
+                    panic!("VM: Exit on unhandled exception on EL0.");
+                }
+            }
+            //panic!("VM: Exit on unhandled exception on EL0.");
         }
         // TODO (default case) for a unhandled exception from user,
         // the kill the user process instead of panicing
