@@ -86,6 +86,8 @@ void cuda_add() {
     printf("testcuda 5\n");
     cudaMemcpy(d_b, b, sizeof(float) * N, cudaMemcpyHostToDevice);
 
+    
+    
     // Executing kernel 
     printf("testcuda 6 d_out %p d_a %p d_b %p\n", d_out, d_a, d_b);
     vector_add<<<1,1>>>(d_out, d_a, d_b, N);
@@ -118,6 +120,13 @@ void cuda_add() {
     free(a); 
     free(b); 
     free(out);
+
+    cudaStream_t stream_;
+    printf("stream_ is %p\n", stream_);
+    printf("stream_ is %x\n", stream_);
+
+    cudaStreamCreate(&stream_);
+      printf("stream_ is %p\n", stream_);
 }
 
 int main(){

@@ -42,7 +42,9 @@ lazy_static! {
         (ProxyCommand::CudaLaunchKernel,(XpuLibrary::CudaDriver, "cuLaunchKernel")),
         (ProxyCommand::CudaFree,(XpuLibrary::CudaRuntime,"cudaFree")),
         (ProxyCommand::CudaUnRegisterFatBinary,(XpuLibrary::CudaDriver,"cuModuleUnload")),
-        (ProxyCommand::CudaDeviceSynchronize,(XpuLibrary::CudaRuntime,"cudaStreamSynchronize")),
+
+        (ProxyCommand::CudaStreamSynchronize,(XpuLibrary::CudaRuntime,"cudaStreamSynchronize")),
+        (ProxyCommand::CudaStreamCreate,(XpuLibrary::CudaRuntime,"cudaStreamCreate")),
     ]);
 }
 
@@ -147,7 +149,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             let moduleKey = parameters.para1;
             error!("yiwang unregister module key:{:x}", moduleKey);
 
-            let mut module = match MODULES.lock().get(&moduleKey){
+            let module = match MODULES.lock().get(&moduleKey){
                 Some(module) => {
                     error!("yiwang module: {:x} for this module key: {:x} has been found",module, moduleKey);
                     *module 
@@ -275,15 +277,42 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
 
             return Ok(ret as i64);
         }
-        ProxyCommand::CudaDeviceSynchronize => {
-            error!(
-                "CudaDeviceSynchronize in host parameters {:x?}",
-                parameters
-            );
+        ProxyCommand::CudaStreamSynchronize => {
+            error!("yiwang CudaStreamSynchronize stream parameter is:{:?}",parameters.para1);
+            let func: extern "C" fn(cudaStream_t) -> i32 = unsafe {std::mem::transmute(handler)};
+              
+            let ret = func( parameters.para1 as cudaStream_t);
+
+            error!("yiwang cudaStreamSynchronize result {:x?}", ret);
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaStreamCreate => {
+                   
+            error!("yiwang parameters para1 value(address of stream):{:x}",parameters.para1);
+                 
+            let func: extern "C" fn(*mut cudaStream_t) -> i32 = unsafe {std::mem::transmute(handler)};
+            unsafe{
+            let mut a:u64 = *(parameters.para1 as *mut u64);
             
-            return Ok(1);
+            error!("yiwang a value(content of stream):{:x}", a);
+           
+            let ret = func(&mut a as *mut u64 as *mut cudaStream_t);
+            error!("yiwang a value(content of stream):{:x}", a);
+            error!("yiwang stream value:{:x}", *(parameters.para1 as *mut u64));
+    
+            // let ret = func(parameters.para1 as *mut u64 as *mut cudaStream_t);
+            // error!("yiwang CudaStreamCreate pStream content is: {:?}",pStream);
+            // error!("yiwang CudaStreamCreate a value after call:{:x}", a);
+            // error!("yiwang CudaStreamCreate a address after call:{:p}", &a);
+            error!("yiwang CudaStreamCreate result: {:x}",ret);
+    
+            *(parameters.para1 as *mut u64) = a as u64;
+
+            return Ok(ret as i64);}
 
         }
+       
         _ => todo!(),
     }
 }

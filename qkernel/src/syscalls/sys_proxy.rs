@@ -18,11 +18,13 @@ use alloc::vec::Vec;
 
 use crate::qlib::common::*;
 use crate::syscalls::syscalls::*;
-use crate::task::*;
+use crate::{parameters, task::*};
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::linux_def::SysErr;
 use crate::qlib::proxy::*;
 use super::super::util::cstring::*;
+
+// use cuda_runtime_sys::cudaStream_t; 
 
 lazy_static! {
     pub static ref PARAM_INFOS:Mutex<BTreeMap<u64, Arc<Vec<u16>>>> = Mutex::new(BTreeMap::new());
@@ -185,12 +187,35 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
         }
 
-        ProxyCommand::CudaDeviceSynchronize => {
+        ProxyCommand::CudaStreamSynchronize => {
+            error!("yiwang stream parameter from cudaproxy is : {:x}", parameters.para1);
             let ret = HostSpace::Proxy(
                 cmd,
                 parameters,
             );
             return Ok(ret);
+        }
+
+        ProxyCommand::CudaStreamCreate => {
+          
+            let mut stream:u64 = parameters.para1;
+            parameters.para1 = &mut stream as *mut _ as u64;
+         
+            error!("yiwang stream content is :{:x}", stream);
+            error!("yiwang parameters.para1(address of stream) is:{:x}",parameters.para1);
+            let ret = HostSpace::Proxy(
+                    cmd,
+                    parameters,
+                );
+
+            error!("yiwang stream content should change, is :{:x}, ret is: {}",stream, ret);
+
+            if ret == 0 {
+                task.CopyOutObj(&stream, args.arg1 as u64)?; 
+                }
+
+            return Ok(ret);
+
         }
 
         

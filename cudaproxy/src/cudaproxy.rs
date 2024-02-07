@@ -217,6 +217,7 @@ pub extern "C" fn cudaMemcpyAsync(
 // Stream Management API
 
 //Waits for stream tasks to complete
+#[no_mangle]
 pub extern "C" fn cudaStreamSynchronize(
     stream:cudaStream_t
 ) -> usize{
@@ -229,3 +230,17 @@ pub extern "C" fn cudaStreamSynchronize(
 }
 
 
+// create an asynchronous stream 
+#[no_mangle]
+pub extern "C" fn cudaStreamCreate(
+    pStream: *mut cudaStream_t
+) -> usize{
+    
+    println!("Hijacked cudaStreamCreate,  {:x}",pStream as u64);
+   
+    return unsafe {
+        syscall2(SYS_PROXY, ProxyCommand::CudaStreamCreate as usize, pStream as *const _ as usize)
+    };
+
+
+}
