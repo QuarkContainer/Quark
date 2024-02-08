@@ -18,7 +18,7 @@ use alloc::vec::Vec;
 
 use crate::qlib::common::*;
 use crate::syscalls::syscalls::*;
-use crate::{parameters, task::*};
+use crate::task::*;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::linux_def::SysErr;
 use crate::qlib::proxy::*;
@@ -215,7 +215,16 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 }
 
             return Ok(ret);
+        }
 
+        ProxyCommand::CudaStreamDestroy => {
+            error!("yiwang stream parameter from cudaproxy is : {:x}", parameters.para1);
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            return Ok(ret);
         }
 
         

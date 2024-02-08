@@ -45,6 +45,8 @@ lazy_static! {
 
         (ProxyCommand::CudaStreamSynchronize,(XpuLibrary::CudaRuntime,"cudaStreamSynchronize")),
         (ProxyCommand::CudaStreamCreate,(XpuLibrary::CudaRuntime,"cudaStreamCreate")),
+        (ProxyCommand::CudaStreamDestroy,(XpuLibrary::CudaRuntime,"cudaStreamDestroy")),
+
     ]);
 }
 
@@ -310,6 +312,17 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             *(parameters.para1 as *mut u64) = a as u64;
 
             return Ok(ret as i64);}
+
+        }
+        ProxyCommand::CudaStreamDestroy => {
+            error!("yiwang cudaStreamDestroy stream value to be destroy: {:x}", parameters.para1);
+            let func: extern "C" fn(cudaStream_t) -> i32 = unsafe { std::mem::transmute(handler)};
+
+            let ret = func(parameters.para1 as cudaStream_t);
+            error!("yiwang CudaStreamDestory result: {:x}", ret);
+
+
+            return Ok(ret as i64);
 
         }
        

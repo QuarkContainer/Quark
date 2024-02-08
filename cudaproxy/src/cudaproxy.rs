@@ -229,18 +229,26 @@ pub extern "C" fn cudaStreamSynchronize(
 
 }
 
-
 // create an asynchronous stream 
 #[no_mangle]
 pub extern "C" fn cudaStreamCreate(
     pStream: *mut cudaStream_t
 ) -> usize{
     
-    println!("Hijacked cudaStreamCreate,  {:x}",pStream as u64);
+    println!("Hijacked cudaStreamCreate, stream: {:x}",pStream as u64);
    
     return unsafe {
         syscall2(SYS_PROXY, ProxyCommand::CudaStreamCreate as usize, pStream as *const _ as usize)
     };
+}
 
-
+// Destroys and cleans up an asynchronous stream.
+#[no_mangle]
+pub extern "C" fn cudaStreamDestroy(
+    stream: cudaStream_t
+) -> usize {
+    println!("Hijacked cudaStreamDestory, stream: {:x}",stream as u64);
+    return unsafe{
+        syscall2(SYS_PROXY,ProxyCommand::CudaStreamDestroy as usize,  stream as usize)
+    };
 }

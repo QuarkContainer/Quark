@@ -30,6 +30,7 @@ pub enum ProxyCommand {
     // stream management 
     CudaStreamSynchronize,
     CudaStreamCreate,
+    CudaStreamDestroy,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]

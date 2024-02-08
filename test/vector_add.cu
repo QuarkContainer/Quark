@@ -120,13 +120,33 @@ void cuda_add() {
     free(a); 
     free(b); 
     free(out);
-
-    cudaStream_t stream_;
+     // cudaSteam_t is a data type 
+      cudaStream_t stream_;
     printf("stream_ is %p\n", stream_);
     printf("stream_ is %x\n", stream_);
 
-    cudaStreamCreate(&stream_);
-      printf("stream_ is %p\n", stream_);
+    int createResult = cudaStreamCreate(&stream_);
+    printf("result of cudaStreamCreate is : %d\n",createResult);
+    
+    printf("after cudaStreamCreate, stream_ is %p\n", stream_);
+
+    // cuda stream synchronize
+    int synResult = cudaStreamSynchronize(stream_);
+    printf("result of cudaStreamSynchronize is : %d",synResult);
+
+    // cudaStream capturing
+    // cudaStreamCaptureStatus is enum 
+    // cudaStreamCaptureStatus is_capturing;
+    // printf("cuda stream capture stauts is %d\n",is_capturing);
+    // cudaStreamIsCapturing(stream_, &is_capturing);
+    // printf("cuda stream capture status is %d\n", is_capturing);
+
+
+    int destroyResult = cudaStreamDestroy(stream_);
+    printf("result of cudaStreamDestroy is : %d\n",createResult);
+
+    printf("after cudaStreamDestory, stream_ is %p\n", stream_);
+    
 }
 
 int main(){
