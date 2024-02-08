@@ -17,6 +17,8 @@ use tonic::Status as TonicStatus;
 use std::num::ParseIntError;
 use std::string::FromUtf8Error;
 use std::str::Utf8Error;
+use prost::EncodeError;
+use prost::DecodeError;
 
 #[derive(Debug)]
 pub enum Error {
@@ -41,9 +43,23 @@ pub enum Error {
     TokioChannFull,
     TokioChannClose,
     IpNetworkError(ipnetwork::IpNetworkError),
+    EncodeError(EncodeError),
+    DecodeError(DecodeError),
 }
 
 unsafe impl core::marker::Send for Error {}
+
+impl From<EncodeError> for Error {
+    fn from(item: EncodeError) -> Self {
+        return Self::EncodeError(item)
+    }
+}
+
+impl From<DecodeError> for Error {
+    fn from(item: DecodeError) -> Self {
+        return Self::DecodeError(item)
+    }
+}
 
 impl From<ipnetwork::IpNetworkError> for Error {
     fn from(item: ipnetwork::IpNetworkError) -> Self {

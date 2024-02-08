@@ -17,12 +17,16 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 
+#[macro_use]
+extern crate log;
+
 pub mod common;
 pub mod config;
 pub mod consts;
 pub mod types;
 pub mod k8s_util;
 pub mod databuf;
+pub mod metastore;
 
 pub mod crictl {
     include!("pb_gen/runtime.v1alpha2.rs");
@@ -39,6 +43,11 @@ pub mod na {
 pub mod tsot_cni {
     include!("pb_gen/tsot_cni.rs");
 }
+
+pub mod qmeta {
+    include!("pb_gen/qmeta.rs");
+}
+
 
 pub use k8s_openapi::api::core::v1 as k8s;
 pub use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta as ObjectMeta;

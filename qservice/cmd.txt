@@ -94,11 +94,8 @@ change pub const DefaultRuntimeHandler             : &str = "quarkd" to "runc";
 
 
 
+2. Container Network test
 
-
-
-
-
-
-sudo rm -f /var/log/quark/client.log; ./test new client
 sudo rm -f /var/log/quark/server.log; ./test new server
+
+sudo rm -f /var/log/quark/client.log; ./test new client 10.1.1.1
