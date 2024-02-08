@@ -50,6 +50,7 @@ use super::qlib::*;
 use super::syscalls::sys_file::*;
 use super::Kernel::HostSpace;
 
+
 use crate::GLOBAL_ALLOCATOR;
 
 impl OOMHandler for ListAllocator {
@@ -451,7 +452,6 @@ pub fn ReapSwapIn() {
     HostSpace::SwapIn();
 }
 
-
 impl TsotSocketMgr {
     pub fn SendMsg(m: &TsotMessage) -> Result<()> {
         let res = HostSpace::TsotSendMsg(m as * const _ as u64);
@@ -476,5 +476,34 @@ impl TsotSocketMgr {
 impl DnsSvc {
     pub fn Init(&self) -> Result<()> {
         panic!("impossible");
+    }
+}
+
+/// enable access to EL0 memory from EL1 return the previous state
+/// true : enabled, false : disabled
+#[inline]
+pub fn enable_access_user() -> bool {
+    #[cfg(target_feature = "pan")]
+    {
+        unsafe {
+            // PAN==1 means access NOT allowed
+            let allow = !pan();
+            pan_set(false);
+            return allow;
+        }
+    }
+    // if PAN is not the case, accessing user memory is always enabled for EL1
+    return true;
+}
+
+/// reset access to EL0 memory from EL1 return the previous state
+/// true : enable false : disable
+#[inline]
+pub fn set_access_user(allow: bool) {
+    #[cfg(target_feature = "pan")]
+    {
+        unsafe {
+            pan_set(!allow);
+        }
     }
 }

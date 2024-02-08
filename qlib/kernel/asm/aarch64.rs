@@ -689,3 +689,21 @@ pub fn spsel() -> u64 {
     }
     ret
 }
+
+#[inline]
+#[target_feature(enable = "pan")]
+pub unsafe fn pan() -> bool {
+    let pan: u64;
+    asm !("mrs {0}, pan", out(reg) pan);
+    return pan != 0;
+}
+
+#[inline]
+#[target_feature(enable = "pan")]
+pub unsafe fn pan_set(val: bool) {
+    if val {
+        asm!("msr pan, #1");
+    }else {
+        asm!("msr pan, #0");
+    }
+}
