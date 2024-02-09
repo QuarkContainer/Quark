@@ -23,7 +23,7 @@
 #include <wait.h>
 #include <signal.h>
 
-#define PORT 8080
+#define PORT 5678
 
 void handler1(int sig)
 {

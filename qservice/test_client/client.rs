@@ -99,7 +99,7 @@ async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
         "default".to_owned()
     };
 
-    let commands = match &cmd[..] {
+    let mut commands = match &cmd[..] {
         "server" => vec![
             "/test/c/server".to_owned()
         ],
@@ -111,6 +111,10 @@ async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
             "1".to_owned()
             ]
     };
+
+    for i in 3..args.len() {
+        commands.push(args[i].to_owned());
+    }
     
     // let commands = vec![
     //     "/usr/bin/echo".to_owned(),

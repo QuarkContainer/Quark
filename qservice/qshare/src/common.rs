@@ -17,6 +17,9 @@ use tonic::Status as TonicStatus;
 use std::num::ParseIntError;
 use std::string::FromUtf8Error;
 use std::str::Utf8Error;
+use prost::EncodeError;
+use prost::DecodeError;
+use etcd_client::Error as EtcdError;
 
 #[derive(Debug)]
 pub enum Error {
@@ -41,9 +44,37 @@ pub enum Error {
     TokioChannFull,
     TokioChannClose,
     IpNetworkError(ipnetwork::IpNetworkError),
+    EncodeError(EncodeError),
+    DecodeError(DecodeError),
+    Timeout,
+    MinRevsionErr(MinRevsionErr),
+    NewKeyExistsErr(NewKeyExistsErr),
+    DeleteRevNotMatchErr(DeleteRevNotMatchErr),
+    UpdateRevNotMatchErr(UpdateRevNotMatchErr),
+    EtcdError(EtcdError),
+    ContextCancel,
+
 }
 
 unsafe impl core::marker::Send for Error {}
+
+impl From<EtcdError> for Error {
+    fn from(item: EtcdError) -> Self {
+        return Self::EtcdError(item)
+    }
+}
+
+impl From<EncodeError> for Error {
+    fn from(item: EncodeError) -> Self {
+        return Self::EncodeError(item)
+    }
+}
+
+impl From<DecodeError> for Error {
+    fn from(item: DecodeError) -> Self {
+        return Self::DecodeError(item)
+    }
+}
 
 impl From<ipnetwork::IpNetworkError> for Error {
     fn from(item: ipnetwork::IpNetworkError) -> Self {
@@ -130,5 +161,60 @@ impl IpAddress {
         bytes[2] = (self.0 >> 8) as u8;
         bytes[3] = (self.0 >> 0) as u8;
         return bytes;
+    }
+}
+
+#[derive(Debug)]
+pub struct MinRevsionErr {
+    pub minRevision: i64,
+    pub actualRevision: i64,
+}
+
+#[derive(Debug)]
+pub struct NewKeyExistsErr {
+    pub key: String,
+    pub rv: i64,
+}
+
+#[derive(Debug)]
+pub struct DeleteRevNotMatchErr {
+    pub expectRv: i64,
+    pub actualRv: i64,
+}
+
+#[derive(Debug)]
+pub struct UpdateRevNotMatchErr {
+    pub expectRv: i64,
+    pub actualRv: i64,
+}
+
+
+impl Error {
+    pub fn NewMinRevsionErr(minRevision: i64, actualRevision: i64) -> Self {
+        return Self::MinRevsionErr(MinRevsionErr { 
+            minRevision: minRevision, 
+            actualRevision: actualRevision 
+        })
+    }
+
+    pub fn NewNewKeyExistsErr(key: String, rv: i64) -> Self {
+        return Self::NewKeyExistsErr(NewKeyExistsErr{
+            key: key,
+            rv: rv,
+        });
+    }
+
+    pub fn NewDeleteRevNotMatchErr(expectRv: i64, actualRv: i64) -> Self {
+        return Self::DeleteRevNotMatchErr(DeleteRevNotMatchErr {
+            expectRv: expectRv,
+            actualRv: actualRv
+        })
+    }
+
+    pub fn NewUpdateRevNotMatchErr(expectRv: i64, actualRv: i64) -> Self {
+        return Self::UpdateRevNotMatchErr(UpdateRevNotMatchErr {
+            expectRv: expectRv,
+            actualRv: actualRv
+        })
     }
 }

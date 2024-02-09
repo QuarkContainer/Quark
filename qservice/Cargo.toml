@@ -48,7 +48,7 @@ features = [
 
 [[bin]]
 name = "na"
-path = "node_agent/na_main.rs"
+path = "qlet/na_main.rs"
 
 [[bin]]
 name = "cni"
