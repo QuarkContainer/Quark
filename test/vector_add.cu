@@ -136,10 +136,10 @@ void cuda_add() {
 
     // cudaStream capturing
     // cudaStreamCaptureStatus is enum 
-    // cudaStreamCaptureStatus is_capturing;
-    // printf("cuda stream capture stauts is %d\n",is_capturing);
-    // cudaStreamIsCapturing(stream_, &is_capturing);
-    // printf("cuda stream capture status is %d\n", is_capturing);
+    cudaStreamCaptureStatus is_capturing;
+    printf("cuda stream capture stauts is %d\n",is_capturing);
+    cudaStreamIsCapturing(stream_, &is_capturing);
+    printf("cuda stream capture status is %d\n", is_capturing);
 
 
     int destroyResult = cudaStreamDestroy(stream_);

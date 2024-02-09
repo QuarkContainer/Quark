@@ -31,6 +31,7 @@ pub enum ProxyCommand {
     CudaStreamSynchronize,
     CudaStreamCreate,
     CudaStreamDestroy,
+    CudaStreamIsCapturing,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]

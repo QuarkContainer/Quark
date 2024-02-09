@@ -18,7 +18,7 @@ use alloc::vec::Vec;
 
 use crate::qlib::common::*;
 use crate::syscalls::syscalls::*;
-use crate::task::*;
+use crate::{parameters, task::*};
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::linux_def::SysErr;
 use crate::qlib::proxy::*;
@@ -197,8 +197,9 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
 
         ProxyCommand::CudaStreamCreate => {
-          
-            let mut stream:u64 = parameters.para1;
+            unsafe{
+            let mut stream:u64 = *(parameters.para1 as *mut _);
+            
             parameters.para1 = &mut stream as *mut _ as u64;
          
             error!("yiwang stream content is :{:x}", stream);
@@ -213,8 +214,9 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             if ret == 0 {
                 task.CopyOutObj(&stream, args.arg1 as u64)?; 
                 }
-
+            
             return Ok(ret);
+            }
         }
 
         ProxyCommand::CudaStreamDestroy => {
@@ -225,6 +227,36 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             );
 
             return Ok(ret);
+        }
+
+        ProxyCommand::CudaStreamIsCapturing => {
+            error!("yiwang CudaStreamIsCapturing stream parameter from cudaproxy is : {:x}", parameters.para1);
+            error!("yiwang address of capture status address from cudaproxy is : {:x}", parameters.para2);
+            let mut pCaptureStatus:i32;
+
+            unsafe{
+                 // why i32 is fine, i64 got error ? 
+                pCaptureStatus = *(parameters.para2 as *mut _) ;
+            
+                error!("yiwang value of parameter.para2 is: {}",*(parameters.para2 as *mut i32));
+                
+            }
+                parameters.para2 = &mut pCaptureStatus as *mut _ as u64;
+                error!("yiwang content of the pCaptureStatus is: {}", pCaptureStatus );
+                error!("yiwang address of pCaptureStatus in current context is:{:x}", parameters.para2);
+
+                let ret = HostSpace::Proxy(
+                    cmd,
+                    parameters,
+                );
+                error!("yiwang the content of the pCaptureStatus now should change is: {}", pCaptureStatus);
+
+                if ret == 0 {
+                    task.CopyOutObj(&pCaptureStatus, args.arg2 as u64);
+                }
+                
+            return Ok(ret);
+            
         }
 
         

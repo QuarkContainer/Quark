@@ -15,6 +15,7 @@ use std::os::raw::*;
 
 use cuda_runtime_sys::cudaMemcpyKind;
 use cuda_runtime_sys::cudaStream_t; 
+use cuda_runtime_sys::cudaStreamCaptureStatus;
 use crate::syscall::*;
 use crate::proxy::*;
 pub const SYS_PROXY: usize = 10003;
@@ -235,7 +236,10 @@ pub extern "C" fn cudaStreamCreate(
     pStream: *mut cudaStream_t
 ) -> usize{
     
-    println!("Hijacked cudaStreamCreate, stream: {:x}",pStream as u64);
+    println!("Hijacked cudaStreamCreate, stream address: {:x}",pStream as u64);
+    unsafe{
+        println!("pStream referecne to : {:x}",(*pStream) as u64);
+    }
    
     return unsafe {
         syscall2(SYS_PROXY, ProxyCommand::CudaStreamCreate as usize, pStream as *const _ as usize)
@@ -251,4 +255,25 @@ pub extern "C" fn cudaStreamDestroy(
     return unsafe{
         syscall2(SYS_PROXY,ProxyCommand::CudaStreamDestroy as usize,  stream as usize)
     };
+}
+
+//Return a stream's capture status 
+#[no_mangle]
+pub extern "C" fn cudaStreamIsCapturing(
+    stream: cudaStream_t,
+    pCaptureStatus: *mut cudaStreamCaptureStatus
+) -> usize {
+
+    unsafe{
+    println!("Hijacked cudaStreamIsCapturing,, captureStatus is :{}", (*pCaptureStatus) as u64);
+    };
+
+    println!("captureStatus address is: {:x}", pCaptureStatus as usize);
+
+    return unsafe{
+        syscall3(SYS_PROXY, ProxyCommand::CudaStreamIsCapturing as usize, stream as usize, pCaptureStatus as *const _ as usize)
+    };
+
+    
+
 }

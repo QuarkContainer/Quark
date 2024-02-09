@@ -26,7 +26,7 @@ use crate::qlib::range::Range;
 use crate::xpu::cuda::*;
 
 use cuda_driver_sys::*;
-use cuda_runtime_sys::cudaStream_t;  
+use cuda_runtime_sys::{cudaStreamCaptureStatus, cudaStream_t};  
 
 lazy_static! {
     pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
@@ -46,7 +46,7 @@ lazy_static! {
         (ProxyCommand::CudaStreamSynchronize,(XpuLibrary::CudaRuntime,"cudaStreamSynchronize")),
         (ProxyCommand::CudaStreamCreate,(XpuLibrary::CudaRuntime,"cudaStreamCreate")),
         (ProxyCommand::CudaStreamDestroy,(XpuLibrary::CudaRuntime,"cudaStreamDestroy")),
-
+        (ProxyCommand::CudaStreamIsCapturing,(XpuLibrary::CudaRuntime,"cudaStreamIsCapturing")),     
     ]);
 }
 
@@ -295,19 +295,20 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                  
             let func: extern "C" fn(*mut cudaStream_t) -> i32 = unsafe {std::mem::transmute(handler)};
             unsafe{
-            let mut a:u64 = *(parameters.para1 as *mut u64);
+            let mut a: cudaStream_t = *(parameters.para1 as *mut u64) as cudaStream_t;
             
-            error!("yiwang a value(content of stream):{:x}", a);
+            error!("yiwang a value(content of stream):{:x}", a as u64);
            
-            let ret = func(&mut a as *mut u64 as *mut cudaStream_t);
-            error!("yiwang a value(content of stream):{:x}", a);
+            let ret = func(&mut a);
+            //let ret = func(&mut a as * mut u64 as cudaStream_t)
+            error!("yiwang a value(content of stream) after function call:{:x}", a as u64);
             error!("yiwang stream value:{:x}", *(parameters.para1 as *mut u64));
     
             // let ret = func(parameters.para1 as *mut u64 as *mut cudaStream_t);
             // error!("yiwang CudaStreamCreate pStream content is: {:?}",pStream);
             // error!("yiwang CudaStreamCreate a value after call:{:x}", a);
             // error!("yiwang CudaStreamCreate a address after call:{:p}", &a);
-            error!("yiwang CudaStreamCreate result: {:x}",ret);
+            error!("yiwang CudaStreamCreate result: {:x?}",ret);
     
             *(parameters.para1 as *mut u64) = a as u64;
 
@@ -319,12 +320,34 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             let func: extern "C" fn(cudaStream_t) -> i32 = unsafe { std::mem::transmute(handler)};
 
             let ret = func(parameters.para1 as cudaStream_t);
-            error!("yiwang CudaStreamDestory result: {:x}", ret);
+            error!("yiwang CudaStreamDestory result: {:x?}", ret);
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaStreamIsCapturing => {
+            error!("yiwang CudaStreamIsCapturing stream value is :{:x}", parameters.para1);
+            let func: extern "C" fn(cudaStream_t, *mut cudaStreamCaptureStatus) -> i32 = unsafe{std::mem::transmute(handler)};
+
+            let mut captureStatus:cudaStreamCaptureStatus;
+            unsafe {
+                captureStatus = *(parameters.para2 as *mut _);        
+            }
+            error!("captureStatus is: {}, {:?}", captureStatus as i32,captureStatus);
+
+            let ret = func(parameters.para1 as cudaStream_t, &mut captureStatus);
+
+            error!("ret is :{:x?}",ret);
+            error!("now captureStatus should change: {}, {:?}",captureStatus as i32,captureStatus);
+
+            unsafe{
+            *(parameters.para2 as *mut _) = captureStatus as i32;
+            }
 
 
             return Ok(ret as i64);
-
         }
+
+
        
         _ => todo!(),
     }
