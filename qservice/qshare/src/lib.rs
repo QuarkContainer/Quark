@@ -18,6 +18,9 @@
 #![allow(non_camel_case_types)]
 
 #[macro_use]
+extern crate scopeguard;
+
+#[macro_use]
 extern crate log;
 
 pub mod common;
@@ -27,6 +30,7 @@ pub mod types;
 pub mod k8s_util;
 pub mod databuf;
 pub mod metastore;
+pub mod etcd;
 
 pub mod crictl {
     include!("pb_gen/runtime.v1alpha2.rs");

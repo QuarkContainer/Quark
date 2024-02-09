@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2014 The Kubernetes Authors
+// Copyright (c) 2021 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,10 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod validation;
-pub mod selector;
-pub mod data_obj;
-pub mod selection_predicate;
+pub mod etcd_client;
+pub mod etcd_store;
 pub mod watch;
-pub mod cacher;
-pub mod store;
+pub mod svc_dir;
+pub mod etcd_svc;
+
+use svc_dir::*;
+
+lazy_static::lazy_static! {
+    pub static ref SVC_DIR: SvcDir = SvcDir::default();
+    pub static ref CACHE_OBJ_TYPES: Vec<&'static str> = vec!["pod", "podset", "package"];
+}

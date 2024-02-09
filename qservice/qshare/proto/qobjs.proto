@@ -107,6 +107,7 @@ message Object {
     string kind = 1;
     string namespace = 2;
     string name = 3;
+
     repeated KV labels = 5;
     repeated KV annotations = 6;
 
