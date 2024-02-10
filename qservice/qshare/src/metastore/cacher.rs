@@ -30,7 +30,7 @@ use async_trait::async_trait;
 
 #[async_trait]
 pub trait BackendStore : Sync + Send + Debug {
-    async fn Create(&self, obj: &DataObject) -> Result<DataObject>;
+    async fn Create(&self, obj: &DataObject, leaseId: i64) -> Result<DataObject>;
     async fn Update(&self, expectedRev: i64, obj: &DataObject) -> Result<DataObject>;
     async fn Delete(&self, key: &str, expectedRev: i64) -> Result<i64>;
     async fn Get(&self, key: &str, minRevision: i64) -> Result<Option<DataObject>>;
@@ -126,7 +126,7 @@ impl Cacher {
 
     pub async fn Create(&self, obj: &DataObject) -> Result<DataObject> {
         let store = self.Store();
-        return store.Create(&obj).await;
+        return store.Create(&obj, 0).await;
     }
 
     pub async fn Delete(&self, namespace: &str, name: &str) -> Result<i64> {
