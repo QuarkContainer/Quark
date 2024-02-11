@@ -5,10 +5,6 @@ use super::porting::*;
 use super::sys;
 use super::*;
 
-pub(crate) fn execute(fd: RawFd, opcode: u32, arg: *const u64, len: u32) -> Result<i32> {
-    return io_uring_register(fd, opcode, arg, len);
-}
-
 pub struct Probe(ptr::NonNull<sys::io_uring_probe>);
 
 impl Probe {

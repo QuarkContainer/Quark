@@ -557,8 +557,10 @@ impl UringAsyncOpsTrait for AIOFsync {
 
 impl UringAsyncOpsTrait for AsyncLinkTimeout {
     fn Entry(&self) -> squeue::Entry {
+        let tv_sec = self.timeout / 1000_000_000;
+        let tv_nsec = self.timeout % 1000_000_000;
         let ts = types::Timespec::from(
-            Duration::new(self.ts.tv_sec as u64, self.ts.tv_nsec as _)
+            Duration::new(tv_sec as u64, tv_nsec as _)
         );
         let op = opcode::LinkTimeout::new(&ts);
 

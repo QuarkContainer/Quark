@@ -7,7 +7,7 @@ use core::mem;
 use super::super::linux_def::TcpSockAddr;
 
 use super::porting::*;
-use super::squeue::Entry;
+// use super::squeue::Entry;
 use super::sys;
 
 pub mod sealed {
@@ -126,8 +126,8 @@ macro_rules! assign_fd {
         match $opfd {
             sealed::Target::Fd(fd) => $sqe.fd = fd,
             sealed::Target::Fixed(i) => {
-                $sqe.fd = i as _;
-                $sqe.flags |= super::squeue::Flags::FIXED_FILE.bits();
+                // $sqe.fd = i as _;
+                // $sqe.flags |= super::squeue::Flags::FIXED_FILE.bits();
             }
         }
     };

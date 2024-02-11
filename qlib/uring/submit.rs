@@ -4,7 +4,6 @@ use core::sync::atomic;
 use super::super::common::*;
 use super::super::linux_def::IoVec;
 use super::porting::*;
-use super::register::execute;
 use super::register::Probe;
 use super::squeue::SubmissionQueue;
 use super::sys;

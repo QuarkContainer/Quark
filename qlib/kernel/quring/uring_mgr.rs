@@ -13,14 +13,11 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use core::sync::atomic;
 
 use super::super::super::bytestream::*;
 use super::super::super::common::*;
 use super::super::super::object_ref::*;
 pub use super::super::super::uring::cqueue;
-pub use super::super::super::uring::cqueue::CompletionQueue;
-pub use super::super::super::uring::squeue::SubmissionQueue;
 pub use super::super::super::uring::*;
 use super::super::fs::file::*;
 use super::super::task::*;
@@ -28,7 +25,6 @@ use super::super::taskMgr::*;
 
 use super::super::super::linux_def::*;
 use super::super::super::socket_buf::*;
-use super::super::super::uring::util::*;
 use super::super::super::vcpu_mgr::*;
 use super::super::kernel::async_wait::*;
 use super::super::kernel::waiter::qlock::*;
@@ -48,48 +44,8 @@ pub fn QUringProcessOne() -> bool {
     return IOURING.ProcessOne();
 }
 
-unsafe impl Send for Submission {}
-unsafe impl Sync for Submission {}
-
-impl IoUring {
-    pub fn SqLen(&self) -> usize {
-        let sq = self.sq.lock();
-        unsafe {
-            let head = (*sq.head).load(atomic::Ordering::Acquire);
-            let tail = unsync_load(sq.tail);
-
-            tail.wrapping_sub(head) as usize
-        }
-    }
-
-    pub fn IsFull(&self) -> bool {
-        return self.sq.lock().is_full();
-    }
-
-    pub fn FreeSlots(&self) -> usize {
-        return self.sq.lock().freeSlot();
-    }
-
-    pub fn NeedWakeup(&self) -> bool {
-        unsafe {
-            (*self.sq.lock().flags).load(atomic::Ordering::Acquire) & sys::IORING_SQ_NEED_WAKEUP
-                != 0
-        }
-    }
-
-    pub fn Next(&mut self) -> Option<cqueue::Entry> {
-        //return self.cq.available().next()
-        return self.cq.lock().next();
-    }
-
-    pub fn CqLen(&mut self) -> usize {
-        return self.cq.lock().len();
-    }
-
-    pub fn Overflow(&self) -> u32 {
-        return self.cq.lock().overflow();
-    }
-}
+// unsafe impl Send for Submission {}
+// unsafe impl Sync for Submission {}
 
 pub type IOUringRef = ObjectRef<QUring>;
 
