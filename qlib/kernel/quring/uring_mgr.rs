@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::collections::VecDeque;
 use alloc::sync::Arc;
+use crossbeam_queue::ArrayQueue;
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use spin::Mutex;
 
 use super::super::super::bytestream::*;
 use super::super::super::common::*;
@@ -119,10 +122,17 @@ impl IoUring {
 
 pub type IOUringRef = ObjectRef<QUring>;
 
-#[derive(Default)]
 pub struct QUring {
     pub uringsAddr: AtomicU64,
+    pub submitq: Mutex<VecDeque<squeue::Entry>>,
+    pub completeq: ArrayQueue<cqueue::Entry>,
     pub asyncMgr: UringAsyncMgr,
+}
+
+impl Default for QUring {
+    fn default() -> Self {
+        return Self::New(MemoryDef::QURING_SIZE)
+    }
 }
 
 impl QUring {
@@ -132,6 +142,8 @@ impl QUring {
         let ret = QUring {
             asyncMgr: UringAsyncMgr::New(size),
             uringsAddr: AtomicU64::new(0),
+            submitq: Default::default(),
+            completeq: ArrayQueue::new(size),
         };
 
         return ret;
@@ -552,8 +564,13 @@ impl QUring {
     }
 
     pub fn AUCallDirect(&self, ops: &AsyncOps, id: usize) {
-        let entry = ops.SEntry().user_data(id as u64);
-        self.AUringCall(entry)
+        let uringEntry = UringEntry {
+            ops: UringOps::AsyncOps(ops.clone()),
+            userdata: id as u64,
+            linked: false,
+        };
+
+        self.AUringCall(uringEntry)
     }
 
     pub fn AUCall(&self, ops: AsyncOps) -> usize {
@@ -610,7 +627,8 @@ impl QUring {
             }
         }
 
-        let entry1 = self.asyncMgr.SetOps(index1, ops1);
+        let mut entry1 = self.asyncMgr.SetOps(index1, ops1);
+        entry1.linked = true;
         let entry2 = self.asyncMgr.SetOps(index2, ops2);
 
         self.AUringCallLinked(entry1, entry2);
@@ -669,78 +687,33 @@ impl QUring {
     }
 
     pub fn UringCall(&self, call: &UringCall) {
-        let entry = call.SEntry();
-        let entry = entry.user_data(call.Ptr());
-
-        self.UringPush(entry);
+        let uringEntry = UringEntry {
+            ops: UringOps::UringCall(*call),
+            userdata: call.Ptr(),
+            linked: false,
+        };
+        self.UringPush(uringEntry);
     }
 
-    pub fn UringPush(&self, entry: squeue::Entry) {
-        if super::super::SHARESPACE.config.read().UringBuf {
+    pub fn UringPush(&self, entry: UringEntry) {
+        {
             let mut s = self.IOUring().submitq.lock();
             s.push_back(entry);
-        } else {
-            loop {
-                let mut s = self.IOUring().sq.lock();
-                if s.freeSlot() < Self::SUBMISSION_QUEUE_FREE_COUNT {
-                    drop(s);
-                    super::super::super::ShareSpace::Yield();
-                    error!("AUringCall1: submission full... ");
-                    continue;
-                }
-
-                unsafe {
-                    match s.push(entry) {
-                        Ok(_) => (),
-                        Err(_) => panic!("AUringCall submission queue is full"),
-                    }
-                }
-
-                break;
-            }
         }
 
         self.IOUring().Submit().expect("QUringIntern::submit fail");
         return;
     }
 
-    pub fn AUringCall(&self, entry: squeue::Entry) {
+    pub fn AUringCall(&self, entry: UringEntry) {
         self.UringPush(entry);
     }
 
-    pub fn AUringCallLinked(&self, entry1: squeue::Entry, entry2: squeue::Entry) {
-        if super::super::SHARESPACE.config.read().UringBuf {
+    pub fn AUringCallLinked(&self, entry1: UringEntry, entry2: UringEntry) {
+        {
             let mut s = self.IOUring().submitq.lock();
-            s.push_back(entry1.flags(squeue::Flags::IO_LINK));
+            s.push_back(entry1);
             s.push_back(entry2);
-        } else {
-            loop {
-                let mut s = self.IOUring().sq.lock();
-                if s.freeSlot() < Self::SUBMISSION_QUEUE_FREE_COUNT + 1 {
-                    drop(s);
-                    super::super::super::ShareSpace::Yield();
-                    error!("AUringCallLinked: submission full... idx");
-                    continue;
-                }
-
-                unsafe {
-                    match s.push(entry1.flags(squeue::Flags::IO_LINK)) {
-                        Ok(_) => (),
-                        Err(_e) => {
-                            panic!("AUringCallLinked push fail 1 ...");
-                        }
-                    }
-
-                    match s.push(entry2) {
-                        Ok(_) => (),
-                        Err(_e) => {
-                            panic!("AUringCallLinked push fail 2 ...");
-                        }
-                    }
-                }
-
-                break;
-            }
         }
 
         self.IOUring().Submit().expect("QUringIntern::submit fail");
