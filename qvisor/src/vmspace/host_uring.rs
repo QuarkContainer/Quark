@@ -37,6 +37,99 @@ use super::syscall::*;
 use crate::vmspace::kernel::GlobalIOMgr;
 use crate::URING;
 
+pub fn CopyCompleteEntry() -> usize {
+    let mut count = 0;
+
+    let mut uring = URING.lock();
+    {
+        let mut cq = uring.completion();
+        loop {
+            let cqe = cq.next();
+
+            match cqe {
+                None => break,
+                Some(cqe) => {
+                    count += 1;
+                    let entry = unsafe {
+                        *(&cqe as * const _ as u64 as * const _)
+                    };
+                    match SHARESPACE.uringQueue.completeq.push(entry) {
+                        Err(_) => {
+                            panic!("CopyCompleteEntry fail ...");
+                        }
+                        _ => (),
+                    }
+                }
+            }
+        }
+    }
+
+    return count;
+}
+
+#[inline]
+pub fn HostSubmit() -> Result<usize> {
+    let _count = CopyCompleteEntry();
+        
+    let mut count = 0;
+
+    {
+        let mut uring = URING.lock();
+        let mut sq = uring.submission();
+        let mut submitq = SHARESPACE.uringQueue.submitq.lock();
+
+        if sq.dropped() != 0 {
+            error!("uring fail dropped {}", sq.dropped());
+        }
+
+        if sq.cq_overflow() {
+            error!("uring fail overflow")
+        }
+        assert!(sq.dropped() == 0, "dropped {}", sq.dropped());
+        assert!(!sq.cq_overflow());
+
+        while !sq.is_full() {
+            let uringEntry = match submitq.pop_front() {
+                None => break,
+                Some(e) => e,
+            };
+
+            let entry = match &uringEntry.ops {
+                UringOps::UringCall(call) => {
+                    call.Entry()
+                }
+                UringOps::AsyncOps(ops) => {
+                    ops.Entry()
+                }
+            };
+    
+            let entry = entry.user_data(uringEntry.userdata);
+            let entry = if uringEntry.linked {
+                entry.flags(squeue::Flags::IO_LINK)
+            } else {
+                entry
+            };
+
+            unsafe {
+                match sq.push(&entry) {
+                    Ok(_) => (),
+                    Err(_) => panic!("AUringCall submission queue is full"),
+                }
+            }
+
+            count += 1;
+        }
+    }
+
+    if count > 0 {
+        let ret = URING.lock().submit_and_wait(0)?;
+        return Ok(ret);
+    }
+
+    return Ok(0);
+}
+
+
 impl Mmap {
     pub fn new(fd: i32, offset: u64, len: usize) -> Result<Mmap> {
         let prot = (MmapProt::PROT_WRITE | MmapProt::PROT_READ) as i32;
@@ -141,98 +234,6 @@ impl IoUring {
     #[inline]
     pub fn submit(&self) -> Result<usize> {
         self.submitter().submit()
-    }
-
-    pub fn CopyCompleteEntry(&self) -> usize {
-        let mut count = 0;
-
-        let mut uring = URING.lock();
-        {
-            let mut cq = uring.completion();
-            loop {
-                let cqe = cq.next();
-    
-                match cqe {
-                    None => break,
-                    Some(cqe) => {
-                        count += 1;
-                        let entry = unsafe {
-                            *(&cqe as * const _ as u64 as * const _)
-                        };
-                        match SHARESPACE.uringQueue.completeq.push(entry) {
-                            Err(_) => {
-                                panic!("CopyCompleteEntry fail ...");
-                            }
-                            _ => (),
-                        }
-                    }
-                }
-            }
-        }
-
-        return count;
-    }
-
-    #[inline]
-    pub fn HostSubmit(&self) -> Result<usize> {
-        let _count = self.CopyCompleteEntry();
-            
-        let mut count = 0;
-
-        {
-            let mut uring = URING.lock();
-            let mut sq = uring.submission();
-            let mut submitq = SHARESPACE.uringQueue.submitq.lock();
-
-            if sq.dropped() != 0 {
-                error!("uring fail dropped {}", sq.dropped());
-            }
-
-            if sq.cq_overflow() {
-                error!("uring fail overflow")
-            }
-            assert!(sq.dropped() == 0, "dropped {}", sq.dropped());
-            assert!(!sq.cq_overflow());
-
-            while !sq.is_full() {
-                let uringEntry = match submitq.pop_front() {
-                    None => break,
-                    Some(e) => e,
-                };
-
-                let entry = match &uringEntry.ops {
-                    UringOps::UringCall(call) => {
-                        call.Entry()
-                    }
-                    UringOps::AsyncOps(ops) => {
-                        ops.Entry()
-                    }
-                };
-        
-                let entry = entry.user_data(uringEntry.userdata);
-                let entry = if uringEntry.linked {
-                    entry.flags(squeue::Flags::IO_LINK)
-                } else {
-                    entry
-                };
-
-                unsafe {
-                    match sq.push(&entry) {
-                        Ok(_) => (),
-                        Err(_) => panic!("AUringCall submission queue is full"),
-                    }
-                }
-
-                count += 1;
-            }
-        }
-    
-        if count > 0 {
-            let ret = URING.lock().submit_and_wait(0)?;
-            return Ok(ret);
-        }
-
-        return Ok(0);
     }
 
     /// Initiate and/or complete asynchronous I/O

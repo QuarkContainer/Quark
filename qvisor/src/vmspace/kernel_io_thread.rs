@@ -16,6 +16,8 @@ use core::sync::atomic::Ordering;
 use std::sync::atomic::AtomicI32;
 use libc::*;
 
+use self::host_uring::HostSubmit;
+
 use super::super::kvm_vcpu::*;
 use super::super::qlib::common::*;
 use super::super::qlib::kernel::kernel::timer::TIMER_STORE;
@@ -52,15 +54,15 @@ impl KIOThread {
         if QUARK_CONFIG.lock().EnableRDMA {
             count += GlobalRDMASvcCli().ProcessRDMASvcMessage();
         }
-        count += IOURING.IOUring().HostSubmit().unwrap();
+        count += HostSubmit().unwrap();
         TIMER_STORE.Trigger();
-        count += IOURING.IOUring().HostSubmit().unwrap();
+        count += HostSubmit().unwrap();
         count += IOURING.DrainCompletionQueue();
-        count += IOURING.IOUring().HostSubmit().unwrap();
+        count += HostSubmit().unwrap();
         count += KVMVcpu::GuestMsgProcess(sharespace);
-        count += IOURING.IOUring().HostSubmit().unwrap();
+        count += HostSubmit().unwrap();
         count += FD_NOTIFIER.HostEpollWait() as usize;
-        count += IOURING.IOUring().HostSubmit().unwrap();
+        count += HostSubmit().unwrap();
 
         sharespace.CheckVcpuTimeout();
 

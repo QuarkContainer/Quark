@@ -1,3 +1,5 @@
+use crate::host_uring::HostSubmit;
+
 use super::qcall::AQHostCall;
 use super::qlib::buddyallocator::ZeroPage;
 use super::qlib::common::Allocator;
@@ -436,7 +438,7 @@ impl CPULocal {
         let mut count = 0;
 
         loop {
-            let cnt = IOURING.IOUring().HostSubmit().unwrap();
+            let cnt = HostSubmit().unwrap();
             if cnt == 0 {
                 break;
             }
