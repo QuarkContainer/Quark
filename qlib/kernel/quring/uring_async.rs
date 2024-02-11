@@ -27,9 +27,7 @@ use super::super::super::common::*;
 use super::super::super::linux_def;
 use super::super::super::linux_def::*;
 use super::super::super::socket_buf::*;
-use super::super::super::uring::opcode;
-use super::super::super::uring::opcode::*;
-use super::super::super::uring::squeue;
+//use super::super::super::uring::squeue;
 use super::super::fs::file::*;
 use super::super::kernel::aio::aio_context::*;
 use super::super::kernel::async_wait::*;
@@ -58,10 +56,6 @@ pub struct UringEntry {
 
 #[enum_dispatch(AsyncOps)]
 pub trait AsyncOpsTrait {
-    fn SEntry(&self) -> squeue::Entry {
-        panic!("doesn't support AsyncOpsTrait::SEntry")
-    }
-
     fn Process(&mut self, _result: i32) -> bool {
         panic!("doesn't support AsyncOpsTrait::Process")
     }
@@ -205,8 +199,6 @@ impl UringAsyncMgr {
         };
 
         return uringEntry
-
-        // return self.ops[id].lock().SEntry().user_data(id as u64);
     }
 }
 
@@ -223,20 +215,6 @@ impl AsyncEventfdWrite {
 }
 
 impl AsyncOpsTrait for AsyncEventfdWrite {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = Write::new(
-            types::Fd(self.fd),
-            &self.addr as *const _ as u64 as *const u8,
-            8,
-        );
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         if result < 0 {
             panic!("AsyncEventfdWrite result {}, fd {}", result, self.fd);
@@ -247,34 +225,18 @@ impl AsyncOpsTrait for AsyncEventfdWrite {
 
 #[derive(Debug, Clone)]
 pub struct AsyncTimeout {
-    pub ts: types::Timespec,
     pub timeout: u64,
 }
 
 impl AsyncTimeout {
     pub fn New(_expire: i64, timeout: i64) -> Self {
         return Self {
-            ts: types::Timespec {
-                tv_sec: timeout / 1000_000_000,
-                tv_nsec: timeout % 1000_000_000,
-            },
-            // ts: types::Timespec(
-            //     sys::__kernel_timespec {
-            //         tv_sec: timeout / 1000_000_000,
-            //         tv_nsec: timeout % 1000_000_000,
-            //     }   
-            // ),
             timeout: timeout as u64,
         };
     }
 }
 
 impl AsyncOpsTrait for AsyncTimeout {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = Timeout::new(&self.ts);
-        return op.build();
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         if result == -SysErr::ETIME {
             timer::Timeout();
@@ -288,7 +250,6 @@ impl AsyncOpsTrait for AsyncTimeout {
 pub struct AsyncRawTimeout {
     pub timerId: u64,
     pub seqNo: u64,
-    pub ts: types::Timespec,
     pub timeout: u64
 }
 
@@ -297,27 +258,12 @@ impl AsyncRawTimeout {
         return Self {
             timerId: timerId,
             seqNo: seqNo,
-            ts: types::Timespec {
-                tv_sec: timeout / 1000_000_000,
-                tv_nsec: timeout % 1000_000_000,
-            },
-            // ts: types::Timespec(
-            //     sys::__kernel_timespec {
-            //         tv_sec: timeout / 1000_000_000,
-            //         tv_nsec: timeout % 1000_000_000,
-            //     }   
-            // ),
             timeout: timeout as u64
         };
     }
 }
 
 impl AsyncOpsTrait for AsyncRawTimeout {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = Timeout::new(&self.ts);
-        return op.build();
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         if result == -SysErr::ETIME {
             // todo: deprecate this
@@ -340,12 +286,6 @@ impl AsyncTimerRemove {
 }
 
 impl AsyncOpsTrait for AsyncTimerRemove {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = TimeoutRemove::new(self.userData);
-
-        return op.build();
-    }
-
     fn Process(&mut self, _result: i32) -> bool {
         return false;
     }
@@ -385,18 +325,6 @@ impl AsyncStatx {
 }
 
 impl AsyncOpsTrait for AsyncStatx {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = opcode::Statx::new(
-            types::Fd(self.dirfd),
-            self.pathname as *const _,
-            &self.statx as *const _ as u64 as *mut types::statx,
-        )
-        .flags(self.flags)
-        .mask(self.mask);
-
-        return op.build();
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         if result < 0 {
             self.future.Set(Err(Error::SysError(-result)))
@@ -430,16 +358,6 @@ impl AsyncTTYWrite {
 }
 
 impl AsyncOpsTrait for AsyncTTYWrite {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = Write::new(types::Fd(self.fd), self.addr as *const _, self.len as u32);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, _result: i32) -> bool {
         //error!("AsyncWrite::Process result is {}", result);
         return false;
@@ -460,17 +378,6 @@ impl AsyncOpsTrait for AsyncWritev {
         // add back when need
         //BUF_MGR.Free(self.addr, self.len as u64);
         return false;
-    }
-
-    fn SEntry(&self) -> squeue::Entry {
-        let op =
-            Write::new(types::Fd(self.fd), self.addr as *const u8, self.len).offset(self.offset);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
     }
 }
 
@@ -505,22 +412,6 @@ impl Deref for AsyncBufWrite {
 }
 
 impl AsyncOpsTrait for AsyncBufWrite {
-    fn SEntry(&self) -> squeue::Entry {
-        //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
-        let op = opcode::Write::new(
-            types::Fd(self.fd),
-            self.buf.Ptr() as *const u8,
-            self.buf.Len() as u32,
-        )
-        .offset(self.offset);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         assert!(
             result as usize == self.buf.Len(),
@@ -555,17 +446,6 @@ pub struct AsyncLogFlush {
 }
 
 impl AsyncOpsTrait for AsyncLogFlush {
-    fn SEntry(&self) -> squeue::Entry {
-        //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
-        let op = opcode::Write::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32); //.flags(MsgType::MSG_DONTWAIT);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         if result <= 0 {
             panic!("AsyncLogFlush fail {}/{}", result, self.fd)
@@ -603,16 +483,6 @@ pub struct AsyncSend {
 }
 
 impl AsyncOpsTrait for AsyncSend {
-    fn SEntry(&self) -> squeue::Entry {
-        //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
-        let op = opcode::Send::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32);
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         if result < 0 {
             self.buf.SetErr(-result);
@@ -690,16 +560,6 @@ pub struct TsotAsyncSend {
 }
 
 impl AsyncOpsTrait for TsotAsyncSend {
-    fn SEntry(&self) -> squeue::Entry {
-        //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
-        let op = opcode::Send::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32);
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         if result < 0 {
             self.buf.SetErr(-result);
@@ -775,16 +635,6 @@ pub struct AsyncFiletWrite {
 }
 
 impl AsyncOpsTrait for AsyncFiletWrite {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = opcode::Write::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         if result < 0 {
             self.buf.SetErr(-result);
@@ -863,19 +713,6 @@ pub struct AsyncAccept {
 }
 
 impl AsyncOpsTrait for AsyncAccept {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = Accept::new(
-            types::Fd(self.fd),
-            &self.addr as *const _ as u64 as *mut _,
-            &self.len as *const _ as u64 as *mut _,
-        );
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         if result < 0 {
             self.acceptQueue.lock().SetErr(-result);
@@ -937,24 +774,6 @@ pub struct AsyncFileRead {
 }
 
 impl AsyncOpsTrait for AsyncFileRead {
-    fn SEntry(&self) -> squeue::Entry {
-        if self.isSocket {
-            let op = Recv::new(types::Fd(self.fd), self.addr as *mut u8, self.len as u32);
-            if SHARESPACE.config.read().UringFixedFile {
-                return op.build().flags(squeue::Flags::FIXED_FILE);
-            } else {
-                return op.build();
-            }
-        }
-
-        let op = Read::new(types::Fd(self.fd), self.addr as *mut u8, self.len as u32);
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         if result < 0 {
             self.buf.SetErr(-result);
@@ -1028,17 +847,6 @@ impl Deref for AsycnSendMsg {
 }
 
 impl AsyncOpsTrait for AsycnSendMsg {
-    fn SEntry(&self) -> squeue::Entry {
-        let intern = self.lock();
-        let op = SendMsg::new(types::Fd(intern.fd), &intern.msg as *const _ as *const u64);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         let intern = self.lock();
         let buf = intern.ops.SocketBuf();
@@ -1118,17 +926,6 @@ impl Deref for AsycnRecvMsg {
 }
 
 impl AsyncOpsTrait for AsycnRecvMsg {
-    fn SEntry(&self) -> squeue::Entry {
-        let intern = self.lock();
-        let op = RecvMsg::new(types::Fd(intern.fd), &intern.msg as *const _ as *const u64);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         let intern = self.lock();
         let buf = intern.ops.SocketBuf();
@@ -1209,21 +1006,6 @@ impl Deref for AIOWrite {
 }
 
 impl AsyncOpsTrait for AIOWrite {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = Write::new(
-            types::Fd(self.fd),
-            self.buf.Ptr() as *const u8,
-            self.buf.Len() as u32,
-        )
-        .offset(self.offset);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         let ev = IOEvent {
             data: self.cbData,
@@ -1324,21 +1106,6 @@ impl Deref for AIORead {
 }
 
 impl AsyncOpsTrait for AIORead {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = Read::new(
-            types::Fd(self.fd),
-            self.buf.Ptr() as *mut u8,
-            self.buf.Len() as u32,
-        )
-        .offset(self.offset);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         if result > 0 {
             let task = Task::GetTask(self.taskId);
@@ -1451,20 +1218,6 @@ impl Deref for AIOFsync {
 }
 
 impl AsyncOpsTrait for AIOFsync {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = if self.dataSyncOnly {
-            Fsync::new(types::Fd(self.fd)).flags(types::FsyncFlags::DATASYNC)
-        } else {
-            Fsync::new(types::Fd(self.fd))
-        };
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         let ev = IOEvent {
             data: self.cbData,
@@ -1514,16 +1267,10 @@ impl AIOFsync {
 
 #[derive(Clone)]
 pub struct AsyncLinkTimeout {
-    pub ts: types::Timespec,
+    pub timeout: i64
 }
 
 impl AsyncOpsTrait for AsyncLinkTimeout {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = opcode::LinkTimeout::new(&self.ts);
-
-        return op.build();
-    }
-
     fn Process(&mut self, _result: i32) -> bool {
         return false;
     }
@@ -1532,10 +1279,7 @@ impl AsyncOpsTrait for AsyncLinkTimeout {
 impl AsyncLinkTimeout {
     pub fn New(timeout: i64) -> Self {
         return Self {
-            ts: types::Timespec {
-                tv_sec: timeout / 1000_000_000,
-                tv_nsec: timeout % 1000_000_000,
-            },
+            timeout: timeout
         };
     }
 }
@@ -1549,16 +1293,6 @@ pub struct UnblockBlockPollAdd {
 }
 
 impl AsyncOpsTrait for UnblockBlockPollAdd {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = opcode::PollAdd::new(types::Fd(self.fd), self.flags);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         if result >= 0 {
             self.data.Set(Ok(result as EventMask));
@@ -1593,16 +1327,6 @@ pub struct AsyncConnect {
 }
 
 impl AsyncOpsTrait for AsyncConnect {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = opcode::Connect::new(types::Fd(self.fd), &self.addr as *const _, self.len);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         let socket = match self.socket.Upgrade() {
             None => return false,
@@ -1662,16 +1386,6 @@ pub struct TsotPoll {
 }
 
 impl AsyncOpsTrait for TsotPoll {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = opcode::PollAdd::new(types::Fd(self.fd), EVENT_READ as u32);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         if result < 0 {
             error!("TsotPoll::Process result {}", result);
@@ -1695,16 +1409,6 @@ pub struct PollHostEpollWait {
 }
 
 impl AsyncOpsTrait for PollHostEpollWait {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = opcode::PollAdd::new(types::Fd(self.fd), EVENT_READ as u32);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, result: i32) -> bool {
         if result < 0 {
             error!("PollHostEpollWait::Process result {}", result);
@@ -1749,21 +1453,6 @@ pub struct AsyncEpollCtl {
 }
 
 impl AsyncOpsTrait for AsyncEpollCtl {
-    fn SEntry(&self) -> squeue::Entry {
-        let op = EpollCtl::new(
-            types::Fd(self.epollfd),
-            types::Fd(self.fd),
-            self.op,
-            &self.ev as *const _ as u64 as *const types::epoll_event,
-        );
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-
     fn Process(&mut self, _result: i32) -> bool {
         //assert!(result >= 0, "AsyncEpollCtl process fail fd is {} {}, {:?}", self.fd, result, self);
 

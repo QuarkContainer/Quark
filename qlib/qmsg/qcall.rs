@@ -103,7 +103,6 @@ pub enum Msg {
     MUnmap(MUnmap),
     NonBlockingPoll(NonBlockingPoll),
     NewTmpfsFile(NewTmpfsFile),
-    IoUringEnter(IoUringEnter),
     Statm(Statm),
     NewSocket(NewSocket),
     HostEpollWaitProcess(HostEpollWaitProcess),
@@ -303,13 +302,6 @@ pub struct IoUringRegister {
     pub Opcode: u32,
     pub arg: u64,
     pub nrArgs: u32,
-}
-
-#[derive(Clone, Default, Debug, Copy)]
-pub struct IoUringEnter {
-    pub toSubmit: u32,
-    pub minComplete: u32,
-    pub flags: u32,
 }
 
 #[derive(Clone, Default, Debug)]

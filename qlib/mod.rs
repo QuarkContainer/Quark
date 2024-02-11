@@ -71,7 +71,7 @@ pub mod singleton;
 pub mod socket_buf;
 pub mod sort_arr;
 pub mod task_mgr;
-pub mod uring;
+//pub mod uring;
 pub mod usage;
 
 pub mod kernel;
@@ -98,7 +98,10 @@ use core::sync::atomic::AtomicI32;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use crossbeam_queue::ArrayQueue;
+use alloc::collections::VecDeque;
 
+use self::common::*;
 use self::bytestream::*;
 use self::config::*;
 use self::control_msg::SignalArgs;
@@ -117,6 +120,7 @@ use self::rdma_svc_cli::*;
 use self::ringbuf::*;
 use self::task_mgr::*;
 use self::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
+use self::kernel::quring::uring_async::UringEntry;
 
 pub fn InitSingleton() {
     unsafe {
@@ -141,7 +145,6 @@ pub const HYPERCALL_EXIT: u16 = 9;
 pub const HYPERCALL_GETTIME: u16 = 11;
 pub const HYPERCALL_QCALL: u16 = 12;
 pub const HYPERCALL_HLT: u16 = 13;
-pub const HYPERCALL_URING_WAKE: u16 = 14;
 pub const HYPERCALL_HCALL: u16 = 15;
 pub const HYPERCALL_IOWAIT: u16 = 16;
 pub const HYPERCALL_WAKEUP_VCPU: u16 = 17;
@@ -1128,6 +1131,39 @@ pub struct Str {
 pub type ShareSpaceRef = ObjectRef<ShareSpace>;
 
 #[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+// io_uring complete entry
+pub struct CompleteEntry {
+    pub user_data: u64,
+    pub res: i32,
+    pub flags: u32,
+}
+
+impl CompleteEntry {
+    pub fn result(&self) -> i32 {
+        return self.res;
+    }
+
+    pub fn user_data(&self) -> u64 {
+        return self.user_data;
+    }
+}
+
+pub struct UringQueue {
+    pub submitq: QMutex<VecDeque<UringEntry>>,
+    pub completeq: ArrayQueue<CompleteEntry>,
+}
+
+impl Default for UringQueue {
+    fn default() -> Self {
+        return Self {
+            submitq: Default::default(),
+            completeq: ArrayQueue::new(MemoryDef::QURING_SIZE)
+        }
+    }
+}
+
+#[repr(C)]
 #[repr(align(128))]
 #[derive(Default)]
 pub struct ShareSpace {
@@ -1175,6 +1211,7 @@ pub struct ShareSpace {
     pub hostEpollfd: AtomicI32,
 
     pub tsotSocketMgr: TsotSocketMgr,
+    pub uringQueue: UringQueue,
 
     pub values: Vec<[AtomicU64; 2]>,
 }
@@ -1189,6 +1226,14 @@ impl ShareSpace {
         };
 
         return ret;
+    }
+
+    pub fn Submit(&self) -> Result<usize> {
+        if self.HostProcessor() == 0 {
+            self.scheduler.VcpuArr[0].Wakeup();
+        }
+
+        return Ok(0);
     }
 
     pub fn NewUID(&self) -> u64 {
@@ -1219,10 +1264,6 @@ impl ShareSpace {
 
     pub fn SetTlbShootdownMask(&self, mask: u64) {
         self.tlbShootdownMask.store(mask, Ordering::SeqCst);
-    }
-
-    pub fn SetIOUringsAddr(&self, addr: u64) {
-        self.ioUring.SetIOUringsAddr(addr);
     }
 
     pub fn SetSignalHandlerAddr(&self, addr: u64) {

@@ -42,10 +42,6 @@ impl HostSpace {
         HyperCall64(HYPERCALL_HLT, 0, 0, 0, 0);
     }
 
-    pub fn UringWake(minCompleted: u64) {
-        HyperCall64(HYPERCALL_URING_WAKE, minCompleted, 0, 0, 0);
-    }
-
     pub fn LoadProcessKernel(processAddr: u64) -> i64 {
         let mut msg = Msg::LoadProcessKernel(LoadProcessKernel {
             processAddr: processAddr,
@@ -833,16 +829,6 @@ impl HostSpace {
 
     pub fn NewTmpfsFile(typ: TmpfsFileType, addr: u64) -> i64 {
         let mut msg = Msg::NewTmpfsFile(NewTmpfsFile { typ, addr });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn IoUringEnter(toSubmit: u32, minComplete: u32, flags: u32) -> i64 {
-        let mut msg = Msg::IoUringEnter(IoUringEnter {
-            toSubmit,
-            minComplete,
-            flags,
-        });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }

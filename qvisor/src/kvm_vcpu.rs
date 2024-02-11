@@ -1,3 +1,5 @@
+use crate::host_uring::HostSubmit;
+
 use super::qcall::AQHostCall;
 use super::qlib::buddyallocator::ZeroPage;
 use super::qlib::common::Allocator;
@@ -12,7 +14,6 @@ use super::qlib::task_mgr::Scheduler;
 use super::qlib::vcpu_mgr::CPULocal;
 use super::qlib::ShareSpace;
 use super::FD_NOTIFIER;
-use super::URING_MGR;
 use super::VMS;
 use super::vmspace::VMSpace;
 use alloc::alloc::alloc;
@@ -427,10 +428,6 @@ impl CPULocal {
             );
         }
 
-        let mut uring = URING_MGR.lock();
-
-        uring.Addfd(eventfd).expect("fail to add vcpu eventfd");
-
         self.eventfd = eventfd;
         self.epollfd = epfd;
         self.vcpuId = vcpuId;
@@ -441,7 +438,7 @@ impl CPULocal {
         let mut count = 0;
 
         loop {
-            let cnt = IOURING.IOUring().HostSubmit().unwrap();
+            let cnt = HostSubmit().unwrap();
             if cnt == 0 {
                 break;
             }

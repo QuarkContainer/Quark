@@ -196,8 +196,7 @@ impl VirtualMachine {
 
         let sharespace = SHARE_SPACE.Ptr();
         let logfd = super::super::super::print::LOG.Logfd();
-        URING_MGR.lock().Init();
-
+        
         URING_MGR.lock().Addfd(logfd).unwrap();
 
         for i in 0..cpuCount {
@@ -210,15 +209,12 @@ impl VirtualMachine {
         }
 
         KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
-        URING_MGR
-            .lock()
-            .SetupEventfd(sharespace.scheduler.VcpuArr[0].eventfd);
+
         URING_MGR
             .lock()
             .Addfd(sharespace.HostHostEpollfd())
             .unwrap();
         URING_MGR.lock().Addfd(controlSock).unwrap();
-        sharespace.SetIOUringsAddr(URING_MGR.lock().IOUringsAddr());
         IOURING.SetValue(sharespace.GetIOUringAddr());
 
         unsafe {
@@ -243,6 +239,7 @@ impl VirtualMachine {
         let syncPrint = sharespace.config.read().SyncPrint();
         super::super::super::print::SetSyncPrint(syncPrint);
     }
+
 
     pub fn Init(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
         PerfGoto(PerfType::Other);
@@ -290,6 +287,9 @@ impl VirtualMachine {
         VMS.lock().RandomVcpuMapping();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
         let controlSock = args.ControlSock;
+
+        error!("controlSock is {}", args.ControlSock);
+
         let rdmaSvcCliSock = args.RDMASvcCliSock;
 
         let umask = Self::Umask();

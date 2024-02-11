@@ -44,8 +44,6 @@ use super::qlib::mutex::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::qmsg::*;
 use super::qlib::task_mgr::*;
-use super::qlib::uring::util::*;
-use super::qlib::uring::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::ShareSpace;
 use super::qlib::*;
@@ -53,71 +51,6 @@ use super::syscalls::sys_file::*;
 use super::Kernel::HostSpace;
 
 use crate::GLOBAL_ALLOCATOR;
-
-impl IoUring {
-    /// Initiate asynchronous I/O.
-    #[inline]
-    pub fn submit(&self) -> Result<usize> {
-        self.submit_and_wait(0)
-    }
-
-    pub fn submit_and_wait(&self, want: usize) -> Result<usize> {
-        let len = self.sq_len();
-
-        let mut flags = 0;
-
-        if want > 0 {
-            flags |= sys::IORING_ENTER_GETEVENTS;
-        }
-
-        if self.params.0.flags & sys::IORING_SETUP_SQPOLL != 0 {
-            if self.sq_need_wakeup() {
-                if want > 0 {
-                    flags |= sys::IORING_ENTER_SQ_WAKEUP;
-                } else {
-                    HostSpace::UringWake(0);
-                    return Ok(0);
-                }
-            } else if want == 0 {
-                // fast poll
-                return Ok(len);
-            }
-        }
-
-        unsafe { self.enter(len as _, want as _, flags) }
-    }
-
-    pub unsafe fn enter(&self, to_submit: u32, min_complete: u32, flag: u32) -> Result<usize> {
-        return io_uring_enter(to_submit, min_complete, flag);
-    }
-
-    pub fn sq_len(&self) -> usize {
-        unsafe {
-            let head = (*self.sq.lock().head).load(Ordering::Acquire);
-            let tail = unsync_load(self.sq.lock().tail);
-
-            tail.wrapping_sub(head) as usize
-        }
-    }
-
-    pub fn sq_need_wakeup(&self) -> bool {
-        unsafe { (*self.sq.lock().flags).load(Ordering::Acquire) & sys::IORING_SQ_NEED_WAKEUP != 0 }
-    }
-}
-
-pub fn io_uring_enter(
-    to_submit: u32,
-    min_complete: u32,
-    flags: u32,
-    //sig: *const sigset_t,
-) -> Result<usize> {
-    let ret = HostSpace::IoUringEnter(to_submit, min_complete, flags);
-    if ret < 0 {
-        return Err(Error::SysError(-ret as i32));
-    }
-
-    return Ok(ret as usize);
-}
 
 impl OOMHandler for ListAllocator {
     fn handleError(&self, size: u64, alignment: u64) {
@@ -330,9 +263,6 @@ pub fn VcpuFreq() -> i64 {
 
 pub fn NewSocket(fd: i32) -> i64 {
     return HostSpace::NewSocket(fd);
-}
-pub fn UringWake(minCompleted: u64) {
-    HostSpace::UringWake(minCompleted);
 }
 
 impl HostSpace {

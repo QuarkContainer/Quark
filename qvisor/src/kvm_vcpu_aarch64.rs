@@ -332,14 +332,6 @@ impl KVMVcpu {
                     }
                 };
             }
-            qlib::HYPERCALL_URING_WAKE => {
-                let minComplete = para1 as usize;
-
-                URING_MGR
-                    .lock()
-                    .Wake(minComplete)
-                    .expect("qlib::HYPER CALL_URING_WAKE fail");
-            }
             qlib::HYPERCALL_RELEASE_VCPU => {
                 SyncMgr::WakeShareSpaceReady();
             }

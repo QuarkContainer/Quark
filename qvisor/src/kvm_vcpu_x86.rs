@@ -26,6 +26,7 @@ use kvm_ioctls::VcpuExit;
 use libc::*;
 //use nix::sys::signal;
 
+use crate::host_uring::HostSubmit;
 use crate::qlib::cpuid::XSAVEFeature::{XSAVEFeatureBNDCSR, XSAVEFeatureBNDREGS};
 use crate::qlib::kernel::asm::xgetbv;
 
@@ -36,7 +37,6 @@ use super::qlib::buddyallocator::ZeroPage;
 use super::qlib::*;
 //use super::kvm_ctl::*;
 use super::qlib::common::*;
-use super::qlib::kernel::IOURING;
 use super::qlib::GetTimeCall;
 //use super::qlib::kernel::stack::*;
 use super::kvm_vcpu::KVMVcpuState;
@@ -49,7 +49,6 @@ use super::qlib::perf_tunning::*;
 //use super::qlib::vcpu_mgr::*;
 use super::runc::runtime::vm::*;
 use super::syncmgr::*;
-use super::URING_MGR;
 
 #[repr(C)]
 pub struct SignalMaskStruct {
@@ -396,14 +395,6 @@ impl KVMVcpu {
                             }
                             //error!("HYPERCALL_IOWAIT waking ...");
                         }
-                        qlib::HYPERCALL_URING_WAKE => {
-                            let minComplete = para1 as usize;
-
-                            URING_MGR
-                                .lock()
-                                .Wake(minComplete)
-                                .expect("qlib::HYPER CALL_URING_WAKE fail");
-                        }
                         qlib::HYPERCALL_RELEASE_VCPU => {
                             SyncMgr::WakeShareSpaceReady();
                         }
@@ -519,7 +510,7 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_VCPU_YIELD => {
-                            let _ret = IOURING.IOUring().HostSubmit().unwrap();
+                            let _ret = HostSubmit().unwrap();
                             //error!("HYPERCALL_VCPU_YIELD2 {:?}", ret);
                             //use std::{thread, time};
 
