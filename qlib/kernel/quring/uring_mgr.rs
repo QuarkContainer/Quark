@@ -14,8 +14,6 @@
 
 use alloc::sync::Arc;
 use core::sync::atomic;
-use core::sync::atomic::AtomicU64;
-use core::sync::atomic::Ordering;
 
 use super::super::super::bytestream::*;
 use super::super::super::common::*;
@@ -79,20 +77,6 @@ impl IoUring {
         }
     }
 
-    pub fn SubmitAndWait(&self, _want: usize) -> Result<usize> {
-        self.pendingCnt.fetch_add(1, Ordering::Release);
-
-        if SHARESPACE.HostProcessor() == 0 {
-            SHARESPACE.scheduler.VcpuArr[0].Wakeup();
-        }
-
-        return Ok(0);
-    }
-
-    pub fn Submit(&self) -> Result<usize> {
-        return self.SubmitAndWait(0);
-    }
-
     pub fn Next(&mut self) -> Option<cqueue::Entry> {
         //return self.cq.available().next()
         return self.cq.lock().next();
@@ -110,7 +94,6 @@ impl IoUring {
 pub type IOUringRef = ObjectRef<QUring>;
 
 pub struct QUring {
-    pub uringsAddr: AtomicU64,
     pub asyncMgr: UringAsyncMgr,
 }
 
@@ -126,7 +109,6 @@ impl QUring {
     pub fn New(size: usize) -> Self {
         let ret = QUring {
             asyncMgr: UringAsyncMgr::New(size),
-            uringsAddr: AtomicU64::new(0),
         };
 
         return ret;
@@ -134,18 +116,6 @@ impl QUring {
 
     pub fn Addr(&self) -> u64 {
         return self as *const _ as u64;
-    }
-
-    pub fn SetIOUringsAddr(&self, addr: u64) {
-        self.uringsAddr.store(addr, atomic::Ordering::SeqCst);
-    }
-
-    #[inline(always)]
-    pub fn IOUring(&self) -> &'static IoUring {
-        let addr = self.uringsAddr.load(atomic::Ordering::Relaxed);
-        let uring = unsafe { &*(addr as *const IoUring) };
-
-        return uring;
     }
 
     pub fn TimerRemove(&self, task: &Task, userData: u64) -> i64 {
@@ -680,7 +650,7 @@ impl QUring {
             s.push_back(entry);
         }
 
-        self.IOUring().Submit().expect("QUringIntern::submit fail");
+        SHARESPACE.Submit().expect("QUringIntern::submit fail");
         return;
     }
 
@@ -695,7 +665,7 @@ impl QUring {
             s.push_back(entry2);
         }
 
-        self.IOUring().Submit().expect("QUringIntern::submit fail");
+        SHARESPACE.Submit().expect("QUringIntern::submit fail");
         return;
     }
 }

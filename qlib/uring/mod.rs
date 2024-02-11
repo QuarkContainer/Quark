@@ -20,8 +20,6 @@ pub mod squeue;
 pub mod submit;
 pub mod sys;
 
-use core::sync::atomic::AtomicU64;
-
 pub use self::cqueue::CompletionQueue;
 use self::porting::*;
 pub use self::register::Probe;
@@ -47,7 +45,6 @@ pub struct Completion {
 /// IoUring instance
 pub struct IoUring {
     pub fd: Fd,
-    pub pendingCnt: AtomicU64,
     pub lock: QMutex<()>,
     pub params: Parameters,
     pub memory: MemoryMap,
@@ -59,7 +56,6 @@ impl Default for IoUring {
     fn default() -> Self {
         return Self {
             fd: Default::default(),
-            pendingCnt: Default::default(),
             lock: Default::default(),
             params: Default::default(),
             memory: Default::default(),

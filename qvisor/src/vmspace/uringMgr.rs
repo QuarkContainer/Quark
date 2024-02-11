@@ -20,14 +20,10 @@ use super::super::qlib::uring::sys::sys::*;
 use super::super::qlib::uring::*;
 
 use super::super::*;
-use super::host_uring::*;
 
 //#[derive(Debug)]
 pub struct UringMgr {
-    pub uringfd: i32,
-    pub eventfd: i32,
     pub fds: Vec<i32>,
-    pub ring: Option<IoUring>,
     pub uringSize: usize,
 }
 
@@ -53,10 +49,7 @@ impl UringMgr {
         }
 
         let ret = Self {
-            uringfd: -1,
-            eventfd: 0,
             fds: fds,
-            ring: None,
             uringSize: size,
         };
 
@@ -64,13 +57,6 @@ impl UringMgr {
     }
 
     pub fn Close(&mut self) {
-        //error!("UringMgr close1 ...");
-        //self.UnRegisterFile().unwrap();
-
-        unsafe {
-            libc::close(self.uringfd);
-        }
-
         let logfd = LOG.Logfd();
         for fd in &self.fds {
             if *fd >= 0 && *fd != logfd {
@@ -81,75 +67,24 @@ impl UringMgr {
         }
     }
 
-    pub fn IOUringsAddr(&self) -> u64 {
-        return self.ring.as_ref().unwrap().Addr();
-    }
-
-    pub fn Init(&mut self) {
-        let ring = Builder::default()
-            .setup_cqsize(self.uringSize as u32 * 2)
-            .setup_clamp()
-            .build(self.uringSize as u32)
-            .expect("InitUring fail");
-        self.uringfd = ring.fd.0;
-        self.ring = Some(ring);
-
-        if QUARK_CONFIG.lock().UringFixedFile {
-            self.Register(
-                IORING_REGISTER_FILES,
-                &self.fds[0] as *const _ as u64,
-                self.fds.len() as u32,
-            )
-            .expect("InitUring register files fail");
-        }
-    }
-
-    pub fn SetupEventfd(&mut self, eventfd: i32) {
-        self.eventfd = eventfd;
-
-        self.Register(IORING_REGISTER_EVENTFD, &self.eventfd as *const _ as u64, 1)
-            .expect("InitUring register eventfd fail");
-    }
-
-    pub fn CompletEntries(&self) -> usize {
-        return self.ring.as_ref().unwrap().completion().lock().len();
-    }
-
-    pub fn Wake(&self, minComplete: usize) -> Result<()> {
-        let fd = self.uringfd;
-        let ret = if minComplete == 0 {
-            IOUringEnter(fd, 1, minComplete as u32, IORING_ENTER_SQ_WAKEUP)
-        } else {
-            IOUringEnter(fd, 1, minComplete as u32, 0)
-        };
-
-        //error!("uring wake minComplete {} ret {}, free {}", minComplete, ret, self.ring.sq.freeSlot());
-        //self.ring.sq.Print();
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32));
-        }
+    pub fn Register(&self, _opcode: u32, _arg: u64, _nrArgs: u32) -> Result<()> {
+        // // it is inited
+        // if self.uringfd != -1 {
+        //     self.RegisterOne(self.uringfd, opcode, arg, nrArgs)?;
+        // }
 
         return Ok(());
     }
 
-    pub fn Register(&self, opcode: u32, arg: u64, nrArgs: u32) -> Result<()> {
-        // it is inited
-        if self.uringfd != -1 {
-            self.RegisterOne(self.uringfd, opcode, arg, nrArgs)?;
-        }
+    // pub fn RegisterOne(&self, fd: i32, opcode: u32, arg: u64, nrArgs: u32) -> Result<()> {
+    //     let ret = IOUringRegister(fd, opcode, arg, nrArgs);
+    //     if ret < 0 {
+    //         error!("IOUringRegister get fail {}", ret);
+    //         return Err(Error::SysError(-ret as i32));
+    //     }
 
-        return Ok(());
-    }
-
-    pub fn RegisterOne(&self, fd: i32, opcode: u32, arg: u64, nrArgs: u32) -> Result<()> {
-        let ret = IOUringRegister(fd, opcode, arg, nrArgs);
-        if ret < 0 {
-            error!("IOUringRegister get fail {}", ret);
-            return Err(Error::SysError(-ret as i32));
-        }
-
-        return Ok(());
-    }
+    //     return Ok(());
+    // }
 
     pub fn UnRegisterFile(&mut self) -> Result<()> {
         return self.Register(IORING_UNREGISTER_FILES, 0, 0);

@@ -101,6 +101,7 @@ use core::sync::atomic::Ordering;
 use crossbeam_queue::ArrayQueue;
 use alloc::collections::VecDeque;
 
+use self::common::*;
 use self::bytestream::*;
 use self::config::*;
 use self::control_msg::SignalArgs;
@@ -1209,6 +1210,14 @@ impl ShareSpace {
         return ret;
     }
 
+    pub fn Submit(&self) -> Result<usize> {
+        if self.HostProcessor() == 0 {
+            self.scheduler.VcpuArr[0].Wakeup();
+        }
+
+        return Ok(0);
+    }
+
     pub fn NewUID(&self) -> u64 {
         return self.uid.fetch_add(1, Ordering::SeqCst) + 1;
     }
@@ -1237,10 +1246,6 @@ impl ShareSpace {
 
     pub fn SetTlbShootdownMask(&self, mask: u64) {
         self.tlbShootdownMask.store(mask, Ordering::SeqCst);
-    }
-
-    pub fn SetIOUringsAddr(&self, addr: u64) {
-        self.ioUring.SetIOUringsAddr(addr);
     }
 
     pub fn SetSignalHandlerAddr(&self, addr: u64) {

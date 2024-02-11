@@ -21,7 +21,6 @@ use crate::qlib::tsot_msg::*;
 use crate::vmspace::kernel::GlobalIOMgr;
 use crate::vmspace::kernel::IOURING;
 use crate::vmspace::kernel::SHARESPACE;
-use crate::URING_MGR;
 use crate::VMS;
 
 use super::USocket;
@@ -121,8 +120,7 @@ impl TsotAgent {
         } else {
             let fd = fds[0];
             let _hostfd = GlobalIOMgr().AddSocket(fd);
-            URING_MGR.lock().Addfd(fd).unwrap();
-        
+            
             return Ok(TsotMessage {
                 socket: fd,
                 msg: msg,
