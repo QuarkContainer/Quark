@@ -12,13 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::collections::VecDeque;
 use alloc::sync::Arc;
-use crossbeam_queue::ArrayQueue;
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use spin::Mutex;
 
 use super::super::super::bytestream::*;
 use super::super::super::common::*;
@@ -114,8 +111,6 @@ pub type IOUringRef = ObjectRef<QUring>;
 
 pub struct QUring {
     pub uringsAddr: AtomicU64,
-    pub submitq: Mutex<VecDeque<squeue::Entry>>,
-    pub completeq: ArrayQueue<cqueue::Entry>,
     pub asyncMgr: UringAsyncMgr,
 }
 
@@ -132,8 +127,6 @@ impl QUring {
         let ret = QUring {
             asyncMgr: UringAsyncMgr::New(size),
             uringsAddr: AtomicU64::new(0),
-            submitq: Default::default(),
-            completeq: ArrayQueue::new(size),
         };
 
         return ret;
@@ -625,11 +618,7 @@ impl QUring {
     }
 
     pub fn NextCompleteEntry(&self) -> Option<cqueue::Entry> {
-        if super::super::SHARESPACE.config.read().UringBuf {
-            return self.IOUring().completeq.pop();
-        } else {
-            return self.IOUring().cq.lock().next();
-        }
+        return SHARESPACE.uringQueue.completeq.pop();
     }
 
     pub fn ProcessOne(&self) -> bool {
@@ -687,7 +676,7 @@ impl QUring {
 
     pub fn UringPush(&self, entry: UringEntry) {
         {
-            let mut s = self.IOUring().submitq.lock();
+            let mut s = SHARESPACE.uringQueue.submitq.lock();
             s.push_back(entry);
         }
 
@@ -701,7 +690,7 @@ impl QUring {
 
     pub fn AUringCallLinked(&self, entry1: UringEntry, entry2: UringEntry) {
         {
-            let mut s = self.IOUring().submitq.lock();
+            let mut s = SHARESPACE.uringQueue.submitq.lock();
             s.push_back(entry1);
             s.push_back(entry2);
         }

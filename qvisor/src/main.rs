@@ -153,11 +153,7 @@ lazy_static! {
         Mutex::new(config)
     };
     pub static ref URING_MGR: Arc<Mutex<UringMgr>> = {
-        let uringQueueSize = if QUARK_CONFIG.lock().UringBuf {
-            1024
-        } else {
-            64
-        };
+        let uringQueueSize = 1024;
 
         Arc::new(Mutex::new(UringMgr::New(uringQueueSize)))
     };

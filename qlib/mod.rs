@@ -98,6 +98,8 @@ use core::sync::atomic::AtomicI32;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use crossbeam_queue::ArrayQueue;
+use alloc::collections::VecDeque;
 
 use self::bytestream::*;
 use self::config::*;
@@ -117,6 +119,8 @@ use self::rdma_svc_cli::*;
 use self::ringbuf::*;
 use self::task_mgr::*;
 use self::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
+use self::kernel::quring::uring_async::UringEntry;
+use self::uring::cqueue;
 
 pub fn InitSingleton() {
     unsafe {
@@ -1126,6 +1130,20 @@ pub struct Str {
 
 pub type ShareSpaceRef = ObjectRef<ShareSpace>;
 
+pub struct UringQueue {
+    pub submitq: QMutex<VecDeque<UringEntry>>,
+    pub completeq: ArrayQueue<cqueue::Entry>,
+}
+
+impl Default for UringQueue {
+    fn default() -> Self {
+        return Self {
+            submitq: Default::default(),
+            completeq: ArrayQueue::new(MemoryDef::QURING_SIZE)
+        }
+    }
+}
+
 #[repr(C)]
 #[repr(align(128))]
 #[derive(Default)]
@@ -1174,6 +1192,7 @@ pub struct ShareSpace {
     pub hostEpollfd: AtomicI32,
 
     pub tsotSocketMgr: TsotSocketMgr,
+    pub uringQueue: UringQueue,
 
     pub values: Vec<[AtomicU64; 2]>,
 }

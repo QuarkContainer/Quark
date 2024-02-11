@@ -12,12 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::collections::VecDeque;
 use core::mem;
 use core::sync::atomic::AtomicU64;
-use core::sync::atomic::Ordering;
 use std::time::Duration;
-use crossbeam_queue::ArrayQueue;
 use std::ptr;
 use enum_dispatch::enum_dispatch;
 
@@ -135,8 +132,6 @@ impl IoUring {
             pendingCnt: AtomicU64::new(0),
             sq: QMutex::new(sq),
             cq: QMutex::new(cq),
-            submitq: QMutex::new(VecDeque::with_capacity(16)),
-            completeq: ArrayQueue::new(MemoryDef::QURING_SIZE),
             params: Parameters(p),
             memory: mm,
         })
@@ -164,7 +159,7 @@ impl IoUring {
                         let entry = unsafe {
                             *(&cqe as * const _ as u64 as * const _)
                         };
-                        match self.completeq.push(entry) {
+                        match SHARESPACE.uringQueue.completeq.push(entry) {
                             Err(_) => {
                                 panic!("CopyCompleteEntry fail ...");
                             }
@@ -180,74 +175,64 @@ impl IoUring {
 
     #[inline]
     pub fn HostSubmit(&self) -> Result<usize> {
-        if QUARK_CONFIG.lock().UringBuf {
-            let _count = self.CopyCompleteEntry();
+        let _count = self.CopyCompleteEntry();
             
-            let mut count = 0;
+        let mut count = 0;
 
-            {
-                let mut uring = URING.lock();
-                let mut sq = uring.submission();
-                let mut submitq = self.submitq.lock();
+        {
+            let mut uring = URING.lock();
+            let mut sq = uring.submission();
+            let mut submitq = SHARESPACE.uringQueue.submitq.lock();
 
-                if sq.dropped() != 0 {
-                    error!("uring fail dropped {}", sq.dropped());
-                }
+            if sq.dropped() != 0 {
+                error!("uring fail dropped {}", sq.dropped());
+            }
 
-                if sq.cq_overflow() {
-                    error!("uring fail overflow")
-                }
-                assert!(sq.dropped() == 0, "dropped {}", sq.dropped());
-                assert!(!sq.cq_overflow());
+            if sq.cq_overflow() {
+                error!("uring fail overflow")
+            }
+            assert!(sq.dropped() == 0, "dropped {}", sq.dropped());
+            assert!(!sq.cq_overflow());
 
-                while !sq.is_full() {
-                    let uringEntry = match submitq.pop_front() {
-                        None => break,
-                        Some(e) => e,
-                    };
+            while !sq.is_full() {
+                let uringEntry = match submitq.pop_front() {
+                    None => break,
+                    Some(e) => e,
+                };
 
-                    let entry = match &uringEntry.ops {
-                        UringOps::UringCall(call) => {
-                            call.Entry()
-                        }
-                        UringOps::AsyncOps(ops) => {
-                            ops.Entry()
-                        }
-                    };
-            
-                    let entry = entry.user_data(uringEntry.userdata);
-                    let entry = if uringEntry.linked {
-                        entry.flags(squeue::Flags::IO_LINK)
-                    } else {
-                        entry
-                    };
-
-                    unsafe {
-                        match sq.push(&entry) {
-                            Ok(_) => (),
-                            Err(_) => panic!("AUringCall submission queue is full"),
-                        }
+                let entry = match &uringEntry.ops {
+                    UringOps::UringCall(call) => {
+                        call.Entry()
                     }
-
-                    count += 1;
-                }
-            }
+                    UringOps::AsyncOps(ops) => {
+                        ops.Entry()
+                    }
+                };
         
-            if count > 0 {
-                let ret = URING.lock().submit_and_wait(0)?;
-                return Ok(ret);
-            }
+                let entry = entry.user_data(uringEntry.userdata);
+                let entry = if uringEntry.linked {
+                    entry.flags(squeue::Flags::IO_LINK)
+                } else {
+                    entry
+                };
 
-            return Ok(0);
-        } else {
-            let count = self.pendingCnt.swap(0, Ordering::Acquire);
-            if count == 0 {
-                return Ok(0);
-            }
+                unsafe {
+                    match sq.push(&entry) {
+                        Ok(_) => (),
+                        Err(_) => panic!("AUringCall submission queue is full"),
+                    }
+                }
 
-            let ret = self.SubmitEntry(count as _)?;
+                count += 1;
+            }
+        }
+    
+        if count > 0 {
+            let ret = URING.lock().submit_and_wait(0)?;
             return Ok(ret);
         }
+
+        return Ok(0);
     }
 
     /// Initiate and/or complete asynchronous I/O

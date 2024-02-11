@@ -111,15 +111,6 @@ impl UringMgr {
             .expect("InitUring register eventfd fail");
     }
 
-    pub fn Enter(&mut self, toSumbit: u32, minComplete: u32, flags: u32) -> Result<i32> {
-        let ret = IOUringEnter(self.uringfd, toSumbit, minComplete, flags);
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32));
-        }
-
-        return Ok(ret as i32);
-    }
-
     pub fn CompletEntries(&self) -> usize {
         return self.ring.as_ref().unwrap().completion().lock().len();
     }

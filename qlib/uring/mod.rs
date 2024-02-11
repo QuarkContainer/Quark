@@ -20,6 +20,8 @@ pub mod squeue;
 pub mod submit;
 pub mod sys;
 
+use core::sync::atomic::AtomicU64;
+
 pub use self::cqueue::CompletionQueue;
 use self::porting::*;
 pub use self::register::Probe;
@@ -27,14 +29,7 @@ pub use self::squeue::SubmissionQueue;
 pub use self::submit::Submitter;
 use self::util::{Fd, Mmap};
 use super::common::*;
-use super::linux_def::*;
 use super::mutex::*;
-use alloc::collections::VecDeque;
-use crossbeam_queue::ArrayQueue;
-
-use core::sync::atomic::AtomicU64;
-
-use crate::qlib::kernel::quring::uring_async::UringEntry;
 
 #[derive(Default)]
 pub struct Submission {
@@ -58,8 +53,6 @@ pub struct IoUring {
     pub memory: MemoryMap,
     pub sq: QMutex<SubmissionQueue>,
     pub cq: QMutex<CompletionQueue>,
-    pub submitq: QMutex<VecDeque<UringEntry>>,
-    pub completeq: ArrayQueue<cqueue::Entry>,
 }
 
 impl Default for IoUring {
@@ -72,8 +65,8 @@ impl Default for IoUring {
             memory: Default::default(),
             sq: Default::default(),
             cq: Default::default(),
-            submitq: Default::default(),
-            completeq: ArrayQueue::new(MemoryDef::QURING_SIZE),
+            // submitq: Default::default(),
+            // completeq: ArrayQueue::new(MemoryDef::QURING_SIZE),
         };
     }
 }
