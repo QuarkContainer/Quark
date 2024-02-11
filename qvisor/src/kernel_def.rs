@@ -34,7 +34,6 @@ use super::vmspace::*;
 use super::ThreadId;
 use super::FD_NOTIFIER;
 use super::QUARK_CONFIG;
-use super::URING_MGR;
 use super::VMS;
 
 impl std::error::Error for Error {}
@@ -307,13 +306,6 @@ pub fn VcpuFreq() -> i64 {
 
 pub fn NewSocket(fd: i32) -> i64 {
     return VMSpace::NewSocket(fd);
-}
-
-pub fn UringWake(minCompleted: u64) {
-    URING_MGR
-        .lock()
-        .Wake(minCompleted as _)
-        .expect("qlib::HYPER CALL_URING_WAKE fail");
 }
 
 impl HostSpace {

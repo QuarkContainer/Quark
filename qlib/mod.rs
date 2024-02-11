@@ -141,7 +141,6 @@ pub const HYPERCALL_EXIT: u16 = 9;
 pub const HYPERCALL_GETTIME: u16 = 11;
 pub const HYPERCALL_QCALL: u16 = 12;
 pub const HYPERCALL_HLT: u16 = 13;
-pub const HYPERCALL_URING_WAKE: u16 = 14;
 pub const HYPERCALL_HCALL: u16 = 15;
 pub const HYPERCALL_IOWAIT: u16 = 16;
 pub const HYPERCALL_WAKEUP_VCPU: u16 = 17;

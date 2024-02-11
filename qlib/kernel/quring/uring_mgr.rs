@@ -40,7 +40,6 @@ use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
 use super::super::socket::hostinet::uring_socket::*;
 use super::super::socket::hostinet::tsotsocket::*;
-use super::super::Kernel::HostSpace;
 use super::super::IOURING;
 use super::super::SHARESPACE;
 use super::uring_async::*;
@@ -95,15 +94,6 @@ impl IoUring {
 
     pub fn Submit(&self) -> Result<usize> {
         return self.SubmitAndWait(0);
-    }
-
-    pub fn Enter(&self, to_submit: u32, min_complete: u32, flags: u32) -> Result<usize> {
-        let ret = HostSpace::IoUringEnter(to_submit, min_complete, flags);
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32));
-        }
-
-        return Ok(ret as usize);
     }
 
     pub fn Next(&mut self) -> Option<cqueue::Entry> {

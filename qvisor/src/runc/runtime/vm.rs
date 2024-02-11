@@ -244,6 +244,7 @@ impl VirtualMachine {
         super::super::super::print::SetSyncPrint(syncPrint);
     }
 
+
     pub fn Init(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
         PerfGoto(PerfType::Other);
 
@@ -290,6 +291,9 @@ impl VirtualMachine {
         VMS.lock().RandomVcpuMapping();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
         let controlSock = args.ControlSock;
+
+        error!("controlSock is {}", args.ControlSock);
+
         let rdmaSvcCliSock = args.RDMASvcCliSock;
 
         let umask = Self::Umask();

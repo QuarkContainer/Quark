@@ -12,7 +12,6 @@ use super::qlib::task_mgr::Scheduler;
 use super::qlib::vcpu_mgr::CPULocal;
 use super::qlib::ShareSpace;
 use super::FD_NOTIFIER;
-use super::URING_MGR;
 use super::VMS;
 use super::vmspace::VMSpace;
 use alloc::alloc::alloc;
@@ -426,10 +425,6 @@ impl CPULocal {
                 errno::errno().0
             );
         }
-
-        let mut uring = URING_MGR.lock();
-
-        uring.Addfd(eventfd).expect("fail to add vcpu eventfd");
 
         self.eventfd = eventfd;
         self.epollfd = epfd;
