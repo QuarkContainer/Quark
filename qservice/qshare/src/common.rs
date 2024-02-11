@@ -20,6 +20,7 @@ use std::str::Utf8Error;
 use prost::EncodeError;
 use prost::DecodeError;
 use etcd_client::Error as EtcdError;
+use tokio::task::JoinError;
 
 #[derive(Debug)]
 pub enum Error {
@@ -53,10 +54,17 @@ pub enum Error {
     UpdateRevNotMatchErr(UpdateRevNotMatchErr),
     EtcdError(EtcdError),
     ContextCancel,
-
+    JoinError(JoinError),
+    
 }
 
 unsafe impl core::marker::Send for Error {}
+
+impl From<JoinError> for Error {
+    fn from(item: JoinError) -> Self {
+        return Self::JoinError(item)
+    }
+}
 
 impl From<EtcdError> for Error {
     fn from(item: EtcdError) -> Self {

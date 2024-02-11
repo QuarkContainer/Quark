@@ -14,10 +14,10 @@
 
 use std::{collections::BTreeMap, sync::Arc, ops::Deref};
 
-use tokio::sync::{RwLock as TRwLock};
+use tokio::sync::RwLock as TRwLock;
 
-use crate::selection_predicate::ListOption;
-use crate::{cacher_client::CacherClient, informer::Informer};
+use super::selection_predicate::ListOption;
+use super::{cacher_client::CacherClient, informer::Informer};
 use crate::common::*;
 
 #[derive(Debug)]
@@ -62,7 +62,7 @@ impl InformerFactory {
     pub async fn RemoveInformer(&self, objType: &str) -> Result<()> {
         let mut inner = self.write().await;
         match inner.informers.remove(objType) {
-            None => return Err(Error::NotExist),
+            None => return Err(Error::NotExist(format!("RemoveInformer doesn't exist {objType}"))),
             Some(_) => return Ok(())
         }
     }
@@ -70,7 +70,7 @@ impl InformerFactory {
     pub async fn GetInformer(&self, objType: &str) -> Result<Informer> {
         let inner = self.read().await;
         match inner.informers.get(objType) {
-            None => return Err(Error::NotExist),
+            None => return Err(Error::NotExist(format!("GetInformer doesn't exist {objType}"))),
             Some(i) => return Ok(i.clone())
         }
     }
