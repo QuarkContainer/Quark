@@ -16,8 +16,6 @@ use alloc::vec::Vec;
 
 use super::super::print::*;
 use super::super::qlib::common::*;
-use super::super::qlib::uring::sys::sys::*;
-use super::super::qlib::uring::*;
 
 use super::super::*;
 
@@ -87,46 +85,49 @@ impl UringMgr {
     // }
 
     pub fn UnRegisterFile(&mut self) -> Result<()> {
-        return self.Register(IORING_UNREGISTER_FILES, 0, 0);
+        //return self.Register(IORING_UNREGISTER_FILES, 0, 0);
+        return Ok(())
     }
 
-    pub fn Addfd(&mut self, fd: i32) -> Result<()> {
-        if !QUARK_CONFIG.lock().UringFixedFile {
-            return Ok(());
-        }
+    pub fn Addfd(&mut self, _fd: i32) -> Result<()> {
+        // if !QUARK_CONFIG.lock().UringFixedFile {
+        //     return Ok(());
+        // }
 
-        if fd as usize >= self.fds.len() {
-            error!("Addfd out of bound fd {}", fd);
-            panic!("Addfd out of bound fd {}", fd)
-        }
-        self.fds[fd as usize] = fd;
+        // if fd as usize >= self.fds.len() {
+        //     error!("Addfd out of bound fd {}", fd);
+        //     panic!("Addfd out of bound fd {}", fd)
+        // }
+        // self.fds[fd as usize] = fd;
 
-        let fu = sys::io_uring_files_update {
-            offset: fd as u32,
-            resv: 0,
-            fds: self.fds[fd as usize..].as_ptr() as _,
-        };
+        // let fu = sys::io_uring_files_update {
+        //     offset: fd as u32,
+        //     resv: 0,
+        //     fds: self.fds[fd as usize..].as_ptr() as _,
+        // };
 
-        return self.Register(IORING_REGISTER_FILES_UPDATE, &fu as *const _ as u64, 1);
+        // return self.Register(IORING_REGISTER_FILES_UPDATE, &fu as *const _ as u64, 1);
+        return Ok(())
     }
 
-    pub fn Removefd(&mut self, fd: i32) -> Result<()> {
-        if !QUARK_CONFIG.lock().UringFixedFile {
-            return Ok(());
-        }
+    pub fn Removefd(&mut self, _fd: i32) -> Result<()> {
+        // if !QUARK_CONFIG.lock().UringFixedFile {
+        //     return Ok(());
+        // }
 
-        if fd as usize >= self.fds.len() {
-            error!("Removefd out of bound fd {}", fd);
-            panic!("Removefd out of bound fd {}", fd)
-        }
+        // if fd as usize >= self.fds.len() {
+        //     error!("Removefd out of bound fd {}", fd);
+        //     panic!("Removefd out of bound fd {}", fd)
+        // }
 
-        self.fds[fd as usize] = -1;
-        let fu = sys::io_uring_files_update {
-            offset: fd as u32,
-            resv: 0,
-            fds: self.fds[fd as usize..].as_ptr() as _,
-        };
+        // self.fds[fd as usize] = -1;
+        // let fu = sys::io_uring_files_update {
+        //     offset: fd as u32,
+        //     resv: 0,
+        //     fds: self.fds[fd as usize..].as_ptr() as _,
+        // };
 
-        return self.Register(IORING_REGISTER_FILES_UPDATE, &fu as *const _ as u64, 1);
+        // return self.Register(IORING_REGISTER_FILES_UPDATE, &fu as *const _ as u64, 1);
+        return Ok(())
     }
 }

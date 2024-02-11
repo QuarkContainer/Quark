@@ -71,7 +71,7 @@ pub mod singleton;
 pub mod socket_buf;
 pub mod sort_arr;
 pub mod task_mgr;
-pub mod uring;
+//pub mod uring;
 pub mod usage;
 
 pub mod kernel;
@@ -121,7 +121,6 @@ use self::ringbuf::*;
 use self::task_mgr::*;
 use self::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
 use self::kernel::quring::uring_async::UringEntry;
-use self::uring::cqueue;
 
 pub fn InitSingleton() {
     unsafe {
@@ -1131,9 +1130,28 @@ pub struct Str {
 
 pub type ShareSpaceRef = ObjectRef<ShareSpace>;
 
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+// io_uring complete entry
+pub struct CompleteEntry {
+    pub user_data: u64,
+    pub res: i32,
+    pub flags: u32,
+}
+
+impl CompleteEntry {
+    pub fn result(&self) -> i32 {
+        return self.res;
+    }
+
+    pub fn user_data(&self) -> u64 {
+        return self.user_data;
+    }
+}
+
 pub struct UringQueue {
     pub submitq: QMutex<VecDeque<UringEntry>>,
-    pub completeq: ArrayQueue<cqueue::Entry>,
+    pub completeq: ArrayQueue<CompleteEntry>,
 }
 
 impl Default for UringQueue {

@@ -16,9 +16,9 @@ use alloc::sync::Arc;
 
 use super::super::super::bytestream::*;
 use super::super::super::common::*;
+use super::super::super::CompleteEntry;
 use super::super::super::object_ref::*;
-pub use super::super::super::uring::cqueue;
-pub use super::super::super::uring::*;
+//pub use super::super::super::uring::*;
 use super::super::fs::file::*;
 use super::super::task::*;
 use super::super::taskMgr::*;
@@ -422,7 +422,7 @@ impl QUring {
         return len;
     }
 
-    pub fn Process(&self, cqe: &cqueue::Entry) {
+    pub fn Process(&self, cqe: &CompleteEntry) {
         if super::super::Shutdown() {
             return;
         }
@@ -543,7 +543,7 @@ impl QUring {
         self.AUringCallLinked(entry1, entry2);
     }
 
-    pub fn NextCompleteEntry(&self) -> Option<cqueue::Entry> {
+    pub fn NextCompleteEntry(&self) -> Option<CompleteEntry> {
         return SHARESPACE.uringQueue.completeq.pop();
     }
 
