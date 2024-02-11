@@ -42,7 +42,19 @@ use super::super::socket::hostinet::uring_socket::*;
 use super::super::task::*;
 use super::super::IOURING;
 use super::super::SHARESPACE;
+use super::uring_op::UringCall;
 use crate::qlib::kernel::kernel::kernel::GetKernel;
+
+pub enum UringOps {
+    UringCall(UringCall),
+    AsyncOps(AsyncOps),
+}
+
+pub struct UringEntry {
+    pub ops: UringOps,
+    pub linked: bool,
+    pub userdata: u64,
+}
 
 #[enum_dispatch(AsyncOps)]
 pub trait AsyncOpsTrait {
@@ -57,6 +69,7 @@ pub trait AsyncOpsTrait {
 
 #[enum_dispatch]
 #[repr(align(128))]
+#[derive(Clone)]
 pub enum AsyncOps {
     AsyncTimeout(AsyncTimeout),
     AsyncTimerRemove(AsyncTimerRemove),
@@ -182,12 +195,22 @@ impl UringAsyncMgr {
         self.ids.lock().push_back(id as u16);
     }
 
-    pub fn SetOps(&self, id: usize, ops: AsyncOps) -> squeue::Entry {
-        *self.ops[id].lock() = ops;
-        return self.ops[id].lock().SEntry().user_data(id as u64);
+    pub fn SetOps(&self, id: usize, ops: AsyncOps) -> UringEntry { // squeue::Entry {
+        *self.ops[id].lock() = ops.clone();
+
+        let uringEntry = UringEntry {
+            ops: UringOps::AsyncOps(ops),
+            userdata: id as u64,
+            linked: false,
+        };
+
+        return uringEntry
+
+        // return self.ops[id].lock().SEntry().user_data(id as u64);
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct AsyncEventfdWrite {
     pub fd: i32,
     pub addr: u64,
@@ -222,9 +245,10 @@ impl AsyncOpsTrait for AsyncEventfdWrite {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AsyncTimeout {
     pub ts: types::Timespec,
+    pub timeout: u64,
 }
 
 impl AsyncTimeout {
@@ -234,6 +258,13 @@ impl AsyncTimeout {
                 tv_sec: timeout / 1000_000_000,
                 tv_nsec: timeout % 1000_000_000,
             },
+            // ts: types::Timespec(
+            //     sys::__kernel_timespec {
+            //         tv_sec: timeout / 1000_000_000,
+            //         tv_nsec: timeout % 1000_000_000,
+            //     }   
+            // ),
+            timeout: timeout as u64,
         };
     }
 }
@@ -253,22 +284,30 @@ impl AsyncOpsTrait for AsyncTimeout {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AsyncRawTimeout {
     pub timerId: u64,
     pub seqNo: u64,
     pub ts: types::Timespec,
+    pub timeout: u64
 }
 
 impl AsyncRawTimeout {
-    pub fn New(timerId: u64, seqNo: u64, ns: i64) -> Self {
+    pub fn New(timerId: u64, seqNo: u64, timeout: i64) -> Self {
         return Self {
             timerId: timerId,
             seqNo: seqNo,
             ts: types::Timespec {
-                tv_sec: ns / 1000_000_000,
-                tv_nsec: ns % 1000_000_000,
+                tv_sec: timeout / 1000_000_000,
+                tv_nsec: timeout % 1000_000_000,
             },
+            // ts: types::Timespec(
+            //     sys::__kernel_timespec {
+            //         tv_sec: timeout / 1000_000_000,
+            //         tv_nsec: timeout % 1000_000_000,
+            //     }   
+            // ),
+            timeout: timeout as u64
         };
     }
 }
@@ -289,6 +328,7 @@ impl AsyncOpsTrait for AsyncRawTimeout {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct AsyncTimerRemove {
     pub userData: u64,
 }
@@ -311,6 +351,7 @@ impl AsyncOpsTrait for AsyncTimerRemove {
     }
 }
 
+#[derive(Clone)]
 pub struct AsyncStatx {
     pub dirfd: i32,
     pub pathname: u64,
@@ -369,6 +410,7 @@ impl AsyncOpsTrait for AsyncStatx {
     }
 }
 
+#[derive(Clone)]
 pub struct AsyncTTYWrite {
     pub file: File,
     pub fd: i32,
@@ -404,6 +446,7 @@ impl AsyncOpsTrait for AsyncTTYWrite {
     }
 }
 
+#[derive(Clone)]
 pub struct AsyncWritev {
     pub file: File,
     pub fd: i32,
@@ -443,11 +486,22 @@ impl AsyncWritev {
     }
 }
 
-pub struct AsyncBufWrite {
+pub struct AsyncBufWriteInner {
     pub fd: i32,
     pub buf: DataBuff,
     pub offset: i64,
-    pub lockGuard: Option<QAsyncLockGuard>,
+    pub lockGuard: QMutex<Option<QAsyncLockGuard>>,
+}
+
+#[derive(Clone)]
+pub struct AsyncBufWrite(Arc<AsyncBufWriteInner>);
+
+impl Deref for AsyncBufWrite {
+    type Target = Arc<AsyncBufWriteInner>;
+
+    fn deref(&self) -> &Arc<AsyncBufWriteInner> {
+        &self.0
+    }
 }
 
 impl AsyncOpsTrait for AsyncBufWrite {
@@ -475,22 +529,25 @@ impl AsyncOpsTrait for AsyncBufWrite {
             self.buf.Len(),
             self.fd
         );
-        self.lockGuard = None;
+        *self.lockGuard.lock() = None;
         return false;
     }
 }
 
 impl AsyncBufWrite {
     pub fn New(fd: i32, buf: DataBuff, offset: i64, lockGuard: QAsyncLockGuard) -> Self {
-        return Self {
+        let inner = AsyncBufWriteInner {
             fd,
             buf,
             offset,
-            lockGuard: Some(lockGuard),
+            lockGuard: QMutex::new(Some(lockGuard)),
         };
+
+        return Self(Arc::new(inner))
     }
 }
 
+#[derive(Clone)]
 pub struct AsyncLogFlush {
     pub fd: i32,
     pub addr: u64,
@@ -533,6 +590,7 @@ impl AsyncLogFlush {
     }
 }
 
+#[derive(Clone)]
 pub struct AsyncSend {
     pub fd: i32,
     pub queue: Queue,
@@ -619,7 +677,7 @@ impl AsyncSend {
     }
 }
 
-
+#[derive(Clone)]
 pub struct TsotAsyncSend {
     pub fd: i32,
     pub queue: Queue,
@@ -706,6 +764,7 @@ impl TsotAsyncSend {
     }
 }
 
+#[derive(Clone)]
 pub struct AsyncFiletWrite {
     pub fd: i32,
     pub queue: Queue,
@@ -794,6 +853,7 @@ impl AsyncFiletWrite {
     }
 }
 
+#[derive(Clone)]
 pub struct AsyncAccept {
     pub fd: i32,
     pub queue: Queue,
@@ -866,6 +926,7 @@ impl AsyncAccept {
     }
 }
 
+#[derive(Clone)]
 pub struct AsyncFileRead {
     pub fd: i32,
     pub queue: Queue,
@@ -955,12 +1016,13 @@ pub struct AsycnSendMsgIntern {
     pub msg: MsgHdr,
 }
 
-pub struct AsycnSendMsg(QMutex<AsycnSendMsgIntern>);
+#[derive(Clone)]
+pub struct AsycnSendMsg(Arc<QMutex<AsycnSendMsgIntern>>);
 
 impl Deref for AsycnSendMsg {
-    type Target = QMutex<AsycnSendMsgIntern>;
+    type Target = Arc<QMutex<AsycnSendMsgIntern>>;
 
-    fn deref(&self) -> &QMutex<AsycnSendMsgIntern> {
+    fn deref(&self) -> &Arc<QMutex<AsycnSendMsgIntern>> {
         &self.0
     }
 }
@@ -1015,7 +1077,7 @@ impl AsyncOpsTrait for AsycnSendMsg {
 impl AsycnSendMsg {
     pub fn New(fd: i32, ops: &SocketOperations) -> Self {
         let intern = AsycnSendMsgIntern::New(fd, ops);
-        return Self(QMutex::new(intern));
+        return Self(Arc::new(QMutex::new(intern)));
     }
 }
 
@@ -1044,12 +1106,13 @@ pub struct AsycnRecvMsgIntern {
     pub msg: MsgHdr,
 }
 
-pub struct AsycnRecvMsg(QMutex<AsycnRecvMsgIntern>);
+#[derive(Clone)]
+pub struct AsycnRecvMsg(Arc<QMutex<AsycnRecvMsgIntern>>);
 
 impl Deref for AsycnRecvMsg {
-    type Target = QMutex<AsycnRecvMsgIntern>;
+    type Target = Arc<QMutex<AsycnRecvMsgIntern>>;
 
-    fn deref(&self) -> &QMutex<AsycnRecvMsgIntern> {
+    fn deref(&self) -> &Arc<QMutex<AsycnRecvMsgIntern>> {
         &self.0
     }
 }
@@ -1099,7 +1162,7 @@ impl AsyncOpsTrait for AsycnRecvMsg {
 impl AsycnRecvMsg {
     pub fn New(fd: i32, ops: &SocketOperations) -> Self {
         let intern = AsycnRecvMsgIntern::New(fd, ops);
-        return Self(QMutex::new(intern));
+        return Self(Arc::new(QMutex::new(intern)));
     }
 }
 
@@ -1123,7 +1186,7 @@ impl AsycnRecvMsgIntern {
     }
 }
 
-pub struct AIOWrite {
+pub struct AIOWriteInner {
     pub fd: i32,
     pub buf: DataBuff,
     pub offset: i64,
@@ -1132,6 +1195,17 @@ pub struct AIOWrite {
     pub cbData: u64,
     pub ctx: AIOContext,
     pub eventfops: Option<EventOperations>,
+}
+
+#[derive(Clone)]
+pub struct AIOWrite(Arc<AIOWriteInner>);
+
+impl Deref for AIOWrite {
+    type Target = Arc<AIOWriteInner>;
+
+    fn deref(&self) -> &Arc<AIOWriteInner> {
+        &self.0
+    }
 }
 
 impl AsyncOpsTrait for AIOWrite {
@@ -1186,7 +1260,7 @@ impl AIOWrite {
         let vec = task.CopyInVec(cb.buf, cb.bytes as usize)?;
         let buf = DataBuff { buf: vec };
 
-        return Ok(Self {
+        let inner = AIOWriteInner {
             fd: cb.fd as i32,
             buf: buf,
             offset: cb.offset,
@@ -1194,7 +1268,9 @@ impl AIOWrite {
             cbData: cb.data,
             ctx: ctx,
             eventfops: eventfops,
-        });
+        };
+
+        return Ok(Self(Arc::new(inner)))
     }
 
     pub fn NewWritev(
@@ -1209,7 +1285,7 @@ impl AIOWrite {
         let mut buf = DataBuff::New(size);
         task.CopyDataInFromIovs(&mut buf.buf, &srcs, false)?;
 
-        return Ok(Self {
+        let inner = AIOWriteInner {
             fd: cb.fd as i32,
             buf: buf,
             offset: cb.offset,
@@ -1217,11 +1293,13 @@ impl AIOWrite {
             cbData: cb.data,
             ctx: ctx,
             eventfops: eventfops,
-        });
+        };
+
+        return Ok(Self(Arc::new(inner)))
     }
 }
 
-pub struct AIORead {
+pub struct AIOReadInner {
     pub fd: i32,
     pub buf: DataBuff,
     pub iovs: Vec<IoVec>,
@@ -1232,6 +1310,17 @@ pub struct AIORead {
     pub cbData: u64,
     pub ctx: AIOContext,
     pub eventfops: Option<EventOperations>,
+}
+
+#[derive(Clone)]
+pub struct AIORead(Arc<AIOReadInner>);
+
+impl Deref for AIORead {
+    type Target = Arc<AIOReadInner>;
+
+    fn deref(&self) -> &Arc<AIOReadInner> {
+        &self.0
+    }
 }
 
 impl AsyncOpsTrait for AIORead {
@@ -1297,7 +1386,7 @@ impl AIORead {
         task.FixPermissionForIovs(&iovs, true)?;
         let buf = DataBuff::New(cb.bytes as usize);
 
-        return Ok(Self {
+        let inner = AIOReadInner {
             fd: cb.fd as i32,
             buf: buf,
             iovs: iovs,
@@ -1307,7 +1396,9 @@ impl AIORead {
             cbData: cb.data,
             ctx: ctx,
             eventfops: eventfops,
-        });
+        };
+
+        return Ok(Self(Arc::new(inner)));
     }
 
     pub fn NewReadv(
@@ -1322,7 +1413,7 @@ impl AIORead {
         let size = IoVec::NumBytes(&iovs);
         let buf = DataBuff::New(size as usize);
 
-        return Ok(Self {
+        let inner = AIOReadInner {
             fd: cb.fd as i32,
             buf: buf,
             iovs: iovs,
@@ -1332,11 +1423,13 @@ impl AIORead {
             cbData: cb.data,
             ctx: ctx,
             eventfops: eventfops,
-        });
+        };
+
+        return Ok(Self(Arc::new(inner)));
     }
 }
 
-pub struct AIOFsync {
+pub struct AIOFsyncInner {
     pub fd: i32,
     pub dataSyncOnly: bool,
 
@@ -1344,6 +1437,17 @@ pub struct AIOFsync {
     pub cbData: u64,
     pub ctx: AIOContext,
     pub eventfops: Option<EventOperations>,
+}
+
+#[derive(Clone)]
+pub struct AIOFsync(Arc<AIOFsyncInner>);
+
+impl Deref for AIOFsync {
+    type Target = Arc<AIOFsyncInner>;
+
+    fn deref(&self) -> &Arc<AIOFsyncInner> {
+        &self.0
+    }
 }
 
 impl AsyncOpsTrait for AIOFsync {
@@ -1395,17 +1499,20 @@ impl AIOFsync {
         eventfops: Option<EventOperations>,
         dataSyncOnly: bool,
     ) -> Result<Self> {
-        return Ok(Self {
+        let inner = AIOFsyncInner {
             fd: cb.fd as i32,
             dataSyncOnly: dataSyncOnly,
             cbAddr: cbAddr,
             cbData: cb.data,
             ctx: ctx,
             eventfops: eventfops,
-        });
+        };
+
+        return Ok(Self(Arc::new(inner)))
     }
 }
 
+#[derive(Clone)]
 pub struct AsyncLinkTimeout {
     pub ts: types::Timespec,
 }
@@ -1433,6 +1540,7 @@ impl AsyncLinkTimeout {
     }
 }
 
+#[derive(Clone)]
 pub struct UnblockBlockPollAdd {
     pub fd: i32,
     pub flags: u32,
@@ -1476,6 +1584,7 @@ impl UnblockBlockPollAdd {
     }
 }
 
+#[derive(Clone)]
 pub struct AsyncConnect {
     pub fd: i32,
     pub addr: TcpSockAddr,
@@ -1547,8 +1656,9 @@ impl AsyncConnect {
     }
 }
 
+#[derive(Clone)]
 pub struct TsotPoll {
-    fd: i32,
+    pub fd: i32,
 }
 
 impl AsyncOpsTrait for TsotPoll {
@@ -1579,6 +1689,7 @@ impl TsotPoll {
     }
 }
 
+#[derive(Clone)]
 pub struct PollHostEpollWait {
     pub fd: i32,
 }

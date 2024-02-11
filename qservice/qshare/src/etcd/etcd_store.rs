@@ -16,7 +16,7 @@ use std::sync::Arc;
 use core::ops::Deref;
 
 use async_trait::async_trait;
-use etcd_client::GetOptions;
+use etcd_client::{GetOptions, PutOptions};
 use etcd_client::{
     Client, CompactionOptions, Compare, CompareOp, DeleteOptions, Txn, TxnOp, TxnOpResponse,
 };
@@ -52,15 +52,20 @@ pub struct EtcdStore(Arc<EtcdStoreInner>);
 
 #[async_trait]
 impl BackendStore for EtcdStore {
-    async fn Create(&self, obj: &DataObject) -> Result<DataObject> {
+    async fn Create(&self, obj: &DataObject, leaseId: i64) -> Result<DataObject> {
         let key = obj.StoreKey();
         let preparedKey = self.PrepareKey(&key)?;
         let keyVec: &str = &preparedKey;
+        let putopt = if leaseId == 0 {
+            None
+        } else {
+            Some(PutOptions::default().with_lease(leaseId))
+        };
         let txn = Txn::new()
             .when(vec![Compare::mod_revision(keyVec, CompareOp::Equal, 0)])
-            .and_then(vec![TxnOp::put(keyVec, obj.Object().Encode()?, None)]);
+            .and_then(vec![TxnOp::put(keyVec, obj.Object().Encode()?, putopt)]);
 
-        let resp = self.client.lock().await.txn(txn).await?;
+        let resp: etcd_client::TxnResponse = self.client.lock().await.txn(txn).await?;
         if !resp.succeeded() {
             return Err(Error::NewNewKeyExistsErr(preparedKey, 0));
         } else {
@@ -375,6 +380,20 @@ impl EtcdStore {
         return Ok(Self(Arc::new(inner)));
     }
 
+    pub async fn LeaseGrant(&self, ttl: i64) -> Result<i64> {
+        let resp = self.client.client.lock().await.lease_client().grant(ttl, None).await?;
+        return Ok(resp.id());
+    }
+
+    pub async fn LeaseRevoke(&self, leaseId: i64) -> Result<()> {
+        let _resp = self.client.client.lock().await.lease_client().revoke(leaseId).await?;
+        return Ok(())
+    }
+
+    pub async fn LeaseKeepalive(&self, leaseId: i64) -> Result<()> { 
+        let _resp = self.client.client.lock().await.lease_client().keep_alive(leaseId).await?;
+        return Ok(())
+    }
 
     async fn Process(&self, cacher: Cacher, rev: i64, prefix: String, ready: Arc<Notify>, notify: Arc<Notify>) -> Result<()> {
         let list = self

@@ -139,6 +139,30 @@ unsafe impl Sync for VMSpace {}
 unsafe impl Send for VMSpace {}
 
 impl VMSpace {
+    pub fn Init() -> Self {
+        let (haveMembarrierGlobal, haveMembarrierPrivateExpedited) = Self::MembarrierInit();
+        
+        return VMSpace {
+            podUid: "".to_owned(),
+            allocator: HostPageAllocator::New(),
+            pageTables: PageTables::default(),
+            hostAddrTop: 0,
+            sharedLoasdOffset: 0x0000_5555_0000_0000,
+            vdsoAddr: 0,
+            cpuAffinit: false,
+            vcpuCount: 0,
+            vcpuMappingDelta: 0,
+            rng: RandGen::Init(),
+            args: None,
+            pivot: false,
+            waitingMsgCall: None,
+            controlSock: -1,
+            vcpus: Vec::new(),
+            haveMembarrierGlobal: haveMembarrierGlobal,
+            haveMembarrierPrivateExpedited: haveMembarrierPrivateExpedited,
+        };
+    }
+
     ///////////start of file operation//////////////////////////////////////////////
     pub fn GetOsfd(hostfd: i32) -> Option<i32> {
         return GlobalIOMgr().GetFdByHost(hostfd);
@@ -2067,29 +2091,6 @@ impl VMSpace {
         return (haveMembarrierGlobal, haveMembarrierPrivateExpedited);
     }
 
-    pub fn Init() -> Self {
-        let (haveMembarrierGlobal, haveMembarrierPrivateExpedited) = Self::MembarrierInit();
-
-        return VMSpace {
-            podUid: "".to_owned(),
-            allocator: HostPageAllocator::New(),
-            pageTables: PageTables::default(),
-            hostAddrTop: 0,
-            sharedLoasdOffset: 0x0000_5555_0000_0000,
-            vdsoAddr: 0,
-            cpuAffinit: false,
-            vcpuCount: 0,
-            vcpuMappingDelta: 0,
-            rng: RandGen::Init(),
-            args: None,
-            pivot: false,
-            waitingMsgCall: None,
-            controlSock: -1,
-            vcpus: Vec::new(),
-            haveMembarrierGlobal: haveMembarrierGlobal,
-            haveMembarrierPrivateExpedited: haveMembarrierPrivateExpedited,
-        };
-    }
 }
 
 impl PostRDMAConnect {

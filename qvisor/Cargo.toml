@@ -58,6 +58,7 @@ enum_dispatch = { git = "https://github.com/QuarkContainer/enum_dispatch_clone.g
 cuda-driver-sys = "0.3.0"
 cuda-runtime-sys = "0.3.0-alpha.1"
 libelf = "0.1.0"
+io-uring = "0.6.3"
 
 [dependencies.lazy_static]
 version = "1.4"

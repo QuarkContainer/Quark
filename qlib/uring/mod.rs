@@ -34,6 +34,8 @@ use crossbeam_queue::ArrayQueue;
 
 use core::sync::atomic::AtomicU64;
 
+use crate::qlib::kernel::quring::uring_async::UringEntry;
+
 #[derive(Default)]
 pub struct Submission {
     pub fd: Fd,
@@ -56,7 +58,7 @@ pub struct IoUring {
     pub memory: MemoryMap,
     pub sq: QMutex<SubmissionQueue>,
     pub cq: QMutex<CompletionQueue>,
-    pub submitq: QMutex<VecDeque<squeue::Entry>>,
+    pub submitq: QMutex<VecDeque<UringEntry>>,
     pub completeq: ArrayQueue<cqueue::Entry>,
 }
 
