@@ -20,5 +20,5 @@ pub mod watch;
 pub mod cacher;
 pub mod store;
 pub mod cacher_client;
-// pub mod informer;
-// pub mod informer_factory;
+pub mod informer;
+pub mod informer_factory;
