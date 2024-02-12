@@ -222,7 +222,7 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
         if error_code.is_flag_set(PageFaultErrorFlags::FaultTranslation)
         {
 
-            info!("VM: InstallPage 1, range is {:x?}, address is {:x}, vma.growsDown is {}",
+            info!("VM: InstallPage 1, range is {:x?}, address is {:#x}, vma.growsDown is {}",
                &range, pageAddr, vma.growsDown);
             //let startTime = TSC.Rdtsc();
             let addr = currTask
@@ -235,7 +235,12 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
             //let endtime = TSC.Rdtsc();
             if addr > 0 {
                 //use crate::qlib::kernel::Tsc;
-                info!("VM: Swap in page {:x?}/{:x}", Addr(pageAddr).RoundDown().unwrap(), addr/*, Tsc::Scale(endtime - startTime)*/);
+                info!("VM: Page {:x?}/{:x} is mapped", Addr(pageAddr).RoundDown().unwrap(), addr/*, Tsc::Scale(endtime - startTime)*/);
+                //
+                // Check if PAGE-/VALID-flagbits are set.
+                // We take this path after being sure from above that the page
+                // is present.
+                //
                 {
                     let bind = currTask
                         .mm
@@ -244,6 +249,20 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
                     let pte = bind.pt
                         .VirtualToEntry(pageAddr).unwrap();
                     debug!("VM: Found virt-addr - {:#x}; PTE - {:?}", pageAddr, *pte);
+                    let mut flags = pte.flags();
+                    let page_bit_set = flags.contains(PageTableFlags::PAGE);
+                    let valid_bit_set = flags.contains(PageTableFlags::VALID);
+                    if valid_bit_set && page_bit_set {
+                         panic!("VM: Error - Translation-PF with mapped page, PAGE-/VALID-Flag are set in PTE.");
+                    } else {
+                        if !page_bit_set {
+                            flags.insert(PageTableFlags::PAGE);
+                        }
+                        if !valid_bit_set {
+                            flags.insert(PageTableFlags::VALID);
+                        }
+                    }
+                    bind.pt.SetPageFlags(Addr(pageAddr), flags);
                 }
                 return;
             }
