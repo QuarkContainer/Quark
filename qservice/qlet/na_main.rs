@@ -32,12 +32,17 @@ mod tsot;
 mod pod_mgr;
 mod qlet_config;
 
+use std::sync::Arc;
+
 use crate::pod_mgr::cadvisor::client as CadvisorClient;
 use crate::pod_mgr::podMgr::PodMgrSvc;
 use crate::tsot::tsot_svc::TsotSvc;
 
+use pod_mgr::node_mgr::NodeMgr;
 use qlet_config::QletConfig;
 use qshare::common::*;
+use qshare::metastore::informer_factory::InformerFactory;
+use qshare::metastore::selection_predicate::ListOption;
 
 lazy_static::lazy_static! {
     pub static ref CADVISOR_CLI: CadvisorClient::Client = {
@@ -58,6 +63,8 @@ lazy_static::lazy_static! {
                 tsotCniPort: 1234,
                 tsotSvcPort: 1235,
                 cidr: "10.1.1.0/8".to_string(),
+                stateSvcAddr: "127.0.0.1:8890".to_string(),
+                singleNodeModel: true
             }
         } else {
             let configFilePath = "node1";
@@ -65,6 +72,8 @@ lazy_static::lazy_static! {
             config
         }
     };
+
+    pub static ref NODE_MGR: Arc<NodeMgr> = Arc::new(NodeMgr::default());
 }
 
 #[tokio::main]
@@ -73,6 +82,14 @@ async fn main() -> Result<()> {
     log4rs::init_file("/etc/quark/na_logging_config.yaml", Default::default()).unwrap();
 
     error!("config is {:#?}", &QLET_CONFIG.clone());
+
+    if !QLET_CONFIG.singleNodeModel {
+        let stateSvcAddr = &format!("http://{}", QLET_CONFIG.stateSvcAddr);
+        let factory = InformerFactory::New(stateSvcAddr, "").await.unwrap();
+        factory.AddInformer("node_info", &ListOption::default()).await.unwrap();
+        let informer = factory.GetInformer("node_info").await.unwrap();
+        let _id1 = informer.AddEventHandler(NODE_MGR.clone()).await.unwrap();
+    }
 
     let podMgrFuture = PodMgrSvc();
     let tostSvcFuture = TsotSvc();

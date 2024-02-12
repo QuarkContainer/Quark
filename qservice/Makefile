@@ -1,4 +1,4 @@
-All: na test cni
+All: na ss cni test
 
 na: 
 	cargo +nightly-x86_64-unknown-linux-gnu build --bin na
@@ -8,6 +8,10 @@ cni:
 	cargo build --bin cni
 	cp -f cni_logging_config.yaml /etc/quark/
 	sudo cp -f target/debug/cni /opt/cni/bin/tsot
+
+ss:
+	cargo +nightly-x86_64-unknown-linux-gnu build --bin ss
+	cp -f ss_logging_config.yaml /etc/quark/
 
 test:
 	cargo build --bin test

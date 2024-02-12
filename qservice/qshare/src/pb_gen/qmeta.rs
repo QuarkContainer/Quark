@@ -23,40 +23,6 @@ pub struct ReadFuncLogResp {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PutObjReq {
-    #[prost(string, tag = "1")]
-    pub namespace: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub name: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "3")]
-    pub data: ::prost::alloc::vec::Vec<u8>,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PutObjResp {
-    #[prost(string, tag = "1")]
-    pub error: ::prost::alloc::string::String,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DeleteObjReq {
-    #[prost(string, tag = "1")]
-    pub namespace: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub name: ::prost::alloc::string::String,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DeleteObjResp {
-    #[prost(string, tag = "1")]
-    pub error: ::prost::alloc::string::String,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReadObjReq {
     #[prost(string, tag = "1")]
     pub namespace: ::prost::alloc::string::String,
@@ -155,24 +121,6 @@ pub struct Obj {
     pub annotations: ::prost::alloc::vec::Vec<Kv>,
     #[prost(string, tag = "7")]
     pub data: ::prost::alloc::string::String,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PutRequestMessage {
-    #[prost(string, tag = "1")]
-    pub object_type: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub obj: ::core::option::Option<Object>,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PutResponseMessage {
-    #[prost(string, tag = "1")]
-    pub error: ::prost::alloc::string::String,
-    #[prost(int64, tag = "2")]
-    pub revision: i64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -399,25 +347,6 @@ pub mod q_meta_service_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
-        pub async fn create(
-            &mut self,
-            request: impl tonic::IntoRequest<super::CreateRequestMessage>,
-        ) -> Result<tonic::Response<super::CreateResponseMessage>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/qmeta.QMetaService/Create",
-            );
-            self.inner.unary(request.into_request(), path, codec).await
-        }
         pub async fn get(
             &mut self,
             request: impl tonic::IntoRequest<super::GetRequestMessage>,
@@ -433,44 +362,6 @@ pub mod q_meta_service_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/qmeta.QMetaService/Get");
-            self.inner.unary(request.into_request(), path, codec).await
-        }
-        pub async fn delete(
-            &mut self,
-            request: impl tonic::IntoRequest<super::DeleteRequestMessage>,
-        ) -> Result<tonic::Response<super::DeleteResponseMessage>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/qmeta.QMetaService/Delete",
-            );
-            self.inner.unary(request.into_request(), path, codec).await
-        }
-        pub async fn update(
-            &mut self,
-            request: impl tonic::IntoRequest<super::UpdateRequestMessage>,
-        ) -> Result<tonic::Response<super::UpdateResponseMessage>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/qmeta.QMetaService/Update",
-            );
             self.inner.unary(request.into_request(), path, codec).await
         }
         pub async fn list(
@@ -510,44 +401,6 @@ pub mod q_meta_service_client {
             let path = http::uri::PathAndQuery::from_static("/qmeta.QMetaService/Watch");
             self.inner.server_streaming(request.into_request(), path, codec).await
         }
-        pub async fn put_obj(
-            &mut self,
-            request: impl tonic::IntoRequest<super::PutObjReq>,
-        ) -> Result<tonic::Response<super::PutObjResp>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/qmeta.QMetaService/PutObj",
-            );
-            self.inner.unary(request.into_request(), path, codec).await
-        }
-        pub async fn delete_obj(
-            &mut self,
-            request: impl tonic::IntoRequest<super::DeleteObjReq>,
-        ) -> Result<tonic::Response<super::DeleteObjResp>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/qmeta.QMetaService/DeleteObj",
-            );
-            self.inner.unary(request.into_request(), path, codec).await
-        }
         pub async fn read_obj(
             &mut self,
             request: impl tonic::IntoRequest<super::ReadObjReq>,
@@ -586,25 +439,6 @@ pub mod q_meta_service_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
-        pub async fn read_func_log(
-            &mut self,
-            request: impl tonic::IntoRequest<super::ReadFuncLogReq>,
-        ) -> Result<tonic::Response<super::ReadFuncLogResp>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::new(
-                        tonic::Code::Unknown,
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/qmeta.QMetaService/ReadFuncLog",
-            );
-            self.inner.unary(request.into_request(), path, codec).await
-        }
     }
 }
 /// Generated server implementations.
@@ -618,22 +452,10 @@ pub mod q_meta_service_server {
             &self,
             request: tonic::Request<super::VersionRequestMessage>,
         ) -> Result<tonic::Response<super::VersionResponseMessage>, tonic::Status>;
-        async fn create(
-            &self,
-            request: tonic::Request<super::CreateRequestMessage>,
-        ) -> Result<tonic::Response<super::CreateResponseMessage>, tonic::Status>;
         async fn get(
             &self,
             request: tonic::Request<super::GetRequestMessage>,
         ) -> Result<tonic::Response<super::GetResponseMessage>, tonic::Status>;
-        async fn delete(
-            &self,
-            request: tonic::Request<super::DeleteRequestMessage>,
-        ) -> Result<tonic::Response<super::DeleteResponseMessage>, tonic::Status>;
-        async fn update(
-            &self,
-            request: tonic::Request<super::UpdateRequestMessage>,
-        ) -> Result<tonic::Response<super::UpdateResponseMessage>, tonic::Status>;
         async fn list(
             &self,
             request: tonic::Request<super::ListRequestMessage>,
@@ -648,14 +470,6 @@ pub mod q_meta_service_server {
             &self,
             request: tonic::Request<super::WatchRequestMessage>,
         ) -> Result<tonic::Response<Self::WatchStream>, tonic::Status>;
-        async fn put_obj(
-            &self,
-            request: tonic::Request<super::PutObjReq>,
-        ) -> Result<tonic::Response<super::PutObjResp>, tonic::Status>;
-        async fn delete_obj(
-            &self,
-            request: tonic::Request<super::DeleteObjReq>,
-        ) -> Result<tonic::Response<super::DeleteObjResp>, tonic::Status>;
         async fn read_obj(
             &self,
             request: tonic::Request<super::ReadObjReq>,
@@ -664,10 +478,6 @@ pub mod q_meta_service_server {
             &self,
             request: tonic::Request<super::ListObjReq>,
         ) -> Result<tonic::Response<super::ListObjResp>, tonic::Status>;
-        async fn read_func_log(
-            &self,
-            request: tonic::Request<super::ReadFuncLogReq>,
-        ) -> Result<tonic::Response<super::ReadFuncLogResp>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct QMetaServiceServer<T: QMetaService> {
@@ -766,44 +576,6 @@ pub mod q_meta_service_server {
                     };
                     Box::pin(fut)
                 }
-                "/qmeta.QMetaService/Create" => {
-                    #[allow(non_camel_case_types)]
-                    struct CreateSvc<T: QMetaService>(pub Arc<T>);
-                    impl<
-                        T: QMetaService,
-                    > tonic::server::UnaryService<super::CreateRequestMessage>
-                    for CreateSvc<T> {
-                        type Response = super::CreateResponseMessage;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::CreateRequestMessage>,
-                        ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move { (*inner).create(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = CreateSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
                 "/qmeta.QMetaService/Get" => {
                     #[allow(non_camel_case_types)]
                     struct GetSvc<T: QMetaService>(pub Arc<T>);
@@ -831,82 +603,6 @@ pub mod q_meta_service_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = GetSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/qmeta.QMetaService/Delete" => {
-                    #[allow(non_camel_case_types)]
-                    struct DeleteSvc<T: QMetaService>(pub Arc<T>);
-                    impl<
-                        T: QMetaService,
-                    > tonic::server::UnaryService<super::DeleteRequestMessage>
-                    for DeleteSvc<T> {
-                        type Response = super::DeleteResponseMessage;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::DeleteRequestMessage>,
-                        ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move { (*inner).delete(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = DeleteSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/qmeta.QMetaService/Update" => {
-                    #[allow(non_camel_case_types)]
-                    struct UpdateSvc<T: QMetaService>(pub Arc<T>);
-                    impl<
-                        T: QMetaService,
-                    > tonic::server::UnaryService<super::UpdateRequestMessage>
-                    for UpdateSvc<T> {
-                        type Response = super::UpdateResponseMessage;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::UpdateRequestMessage>,
-                        ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move { (*inner).update(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = UpdateSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -995,80 +691,6 @@ pub mod q_meta_service_server {
                     };
                     Box::pin(fut)
                 }
-                "/qmeta.QMetaService/PutObj" => {
-                    #[allow(non_camel_case_types)]
-                    struct PutObjSvc<T: QMetaService>(pub Arc<T>);
-                    impl<T: QMetaService> tonic::server::UnaryService<super::PutObjReq>
-                    for PutObjSvc<T> {
-                        type Response = super::PutObjResp;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::PutObjReq>,
-                        ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move { (*inner).put_obj(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = PutObjSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/qmeta.QMetaService/DeleteObj" => {
-                    #[allow(non_camel_case_types)]
-                    struct DeleteObjSvc<T: QMetaService>(pub Arc<T>);
-                    impl<
-                        T: QMetaService,
-                    > tonic::server::UnaryService<super::DeleteObjReq>
-                    for DeleteObjSvc<T> {
-                        type Response = super::DeleteObjResp;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::DeleteObjReq>,
-                        ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move { (*inner).delete_obj(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = DeleteObjSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
                 "/qmeta.QMetaService/ReadObj" => {
                     #[allow(non_camel_case_types)]
                     struct ReadObjSvc<T: QMetaService>(pub Arc<T>);
@@ -1130,46 +752,6 @@ pub mod q_meta_service_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = ListObjSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/qmeta.QMetaService/ReadFuncLog" => {
-                    #[allow(non_camel_case_types)]
-                    struct ReadFuncLogSvc<T: QMetaService>(pub Arc<T>);
-                    impl<
-                        T: QMetaService,
-                    > tonic::server::UnaryService<super::ReadFuncLogReq>
-                    for ReadFuncLogSvc<T> {
-                        type Response = super::ReadFuncLogResp;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::ReadFuncLogReq>,
-                        ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move {
-                                (*inner).read_func_log(request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = ReadFuncLogSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

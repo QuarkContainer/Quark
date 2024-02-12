@@ -50,24 +50,9 @@ impl CacherClient {
         return Ok(Self(Arc::new(TMutex::new(inner))));
     }
 
-    pub async fn Create(&self, objType: &str, obj: Obj) -> Result<i64> {
-        let mut inner = self.lock().await;
-        return inner.Create(objType, obj).await;
-    }
-
     pub async fn Get(&self, objType: &str, namespace: &str, name: &str, revision: i64) -> Result<Option<DataObject>> {
         let mut inner = self.lock().await;
         return inner.Get(objType, namespace, name, revision).await;
-    }
-
-    pub async fn Delete(&self, objType: &str, namespace: &str, name: &str) -> Result<i64> {
-        let mut inner = self.lock().await;
-        return inner.Delete(objType, namespace, name).await;
-    }
-
-    pub async fn Update(&self, objType: &str, obj: &DataObject) -> Result<i64> {
-        let mut inner = self.lock().await;
-        return inner.Update(objType, obj).await;
     }
 
     pub async fn List(&self, objType: &str, namespace: &str, opts: &ListOption) -> Result<DataObjList> {
@@ -78,16 +63,6 @@ impl CacherClient {
     pub async fn Watch(&self, objType: &str, namespace: &str, opts: &ListOption) -> Result<WatchStream> {
         let mut inner = self.lock().await;
         return inner.Watch(objType, namespace, opts).await;
-    }
-
-    pub async fn PutObject(&self, namespace: &str, name: &str, data: Vec<u8>) -> Result<()> {
-        let mut inner = self.lock().await;
-        return inner.PutObject(namespace, name, data).await;
-    }
-
-    pub async fn DeleteObject(&self, namespace: &str, name: &str) -> Result<()> {
-        let mut inner = self.lock().await;
-        return inner.DeleteObject(namespace, name).await;
     }
 
     pub async fn ReadObject(&self, namespace: &str, name: &str) -> Result<Vec<u8>> {
@@ -114,21 +89,6 @@ impl CacherClientInner {
         })
     }
 
-    pub async fn Create(&mut self, objType: &str, obj: Obj) -> Result<i64> {
-        let req = CreateRequestMessage {
-            obj_type: objType.to_string(),
-            obj: Some(obj),
-        };
-
-        let response = self.client.create(Request::new(req)).await?;
-        let resp = response.get_ref();
-        if resp.error.len() == 0 {
-            return Ok(resp.revision)
-        }
-        
-        return Err(Error::CommonError(resp.error.clone()))
-    }
-
     pub async fn Get(&mut self, objType: &str, namespace: &str, name: &str, revision: i64) -> Result<Option<DataObject>> {
         let req = GetRequestMessage {
             obj_type: objType.to_string(),
@@ -146,37 +106,6 @@ impl CacherClientInner {
                     return Ok(Some(DataObject::NewFromObj(&o)))
                 }
             }
-        }
-        
-        return Err(Error::CommonError(resp.error.clone()))
-    }
-
-    pub async fn Delete(&mut self, objType: &str, namespace: &str, name: &str) -> Result<i64> {
-        let req = DeleteRequestMessage {
-            obj_type: objType.to_string(),
-            namespace: namespace.to_string(),
-            name: name.to_string(),
-        };
-
-        let mut response = self.client.delete(Request::new(req)).await?;
-        let resp = response.get_mut();
-        if resp.error.len() == 0 {
-            return Ok(resp.revision)
-        }
-        
-        return Err(Error::CommonError(resp.error.clone()))
-    }
-
-    pub async fn Update(&mut self, objType: &str, obj: &DataObject) -> Result<i64> {
-        let req = UpdateRequestMessage {
-            obj_type: objType.to_string(),
-            obj: Some(obj.Obj()),
-        };
-
-        let response = self.client.update(Request::new(req)).await?;
-        let resp = response.get_ref();
-        if resp.error.len() == 0 {
-            return Ok(resp.revision)
         }
         
         return Err(Error::CommonError(resp.error.clone()))
@@ -224,37 +153,6 @@ impl CacherClientInner {
         let response = self.client.watch(Request::new(req)).await?;
         let resp = response.into_inner();
         return Ok(WatchStream { stream: resp })
-    }
-
-    async fn PutObject(&mut self, namespace: &str, name: &str, data: Vec<u8>) -> Result<()> {
-        let req = PutObjReq {
-            namespace: namespace.to_owned(),
-            name: name.to_owned(),
-            data: data,
-        };
-
-        let response = self.client.put_obj(Request::new(req)).await?;
-        let resp = response.into_inner();
-        if resp.error.len() == 0 {
-            return Ok(())
-        }
-
-        return Err(Error::CommonError(resp.error.to_owned()))
-    }
-    
-    async fn DeleteObject(&mut self, namespace: &str, name: &str) -> Result<()> {
-        let req = DeleteObjReq {
-            namespace: namespace.to_owned(),
-            name: name.to_owned(),
-        };
-
-        let response = self.client.delete_obj(Request::new(req)).await?;
-        let resp = response.into_inner();
-        if resp.error.len() == 0 {
-            return Ok(())
-        }
-
-        return Err(Error::CommonError(resp.error.to_owned()))
     }
 
     async fn ReadObject(&mut self, namespace: &str, name: &str) -> Result<Vec<u8>> {

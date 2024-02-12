@@ -19,17 +19,11 @@ package qmeta;
 
 service QMetaService {
   rpc Version (VersionRequestMessage) returns (VersionResponseMessage) {}
-  rpc Create (CreateRequestMessage) returns (CreateResponseMessage) {}
   rpc Get (GetRequestMessage) returns (GetResponseMessage) {}
-  rpc Delete (DeleteRequestMessage) returns (DeleteResponseMessage) {}
-  rpc Update (UpdateRequestMessage) returns (UpdateResponseMessage) {}
   rpc List (ListRequestMessage) returns (ListResponseMessage) {}
   rpc Watch (WatchRequestMessage) returns (stream WEvent) {}
-  rpc PutObj (PutObjReq) returns (PutObjResp) {}
-  rpc DeleteObj (DeleteObjReq) returns (DeleteObjResp) {}
   rpc ReadObj (ReadObjReq) returns (ReadObjResp) {}
   rpc ListObj (ListObjReq) returns (ListObjResp) {}
-  rpc ReadFuncLog(ReadFuncLogReq) returns (ReadFuncLogResp) {}
 }
 
 message ReadFuncLogReq {
@@ -42,26 +36,6 @@ message ReadFuncLogReq {
 message ReadFuncLogResp {
   string error = 1;
   string content = 2;
-}
-
-
-message PutObjReq {
-    string namespace = 1;
-    string name = 2;
-    bytes data = 3;
-}
-
-message PutObjResp {
-    string error = 1;
-}
-
-message DeleteObjReq {
-    string namespace = 1;
-    string name = 2;
-}
-
-message DeleteObjResp {
-    string error = 1;
 }
 
 message ReadObjReq {
@@ -125,16 +99,6 @@ message Obj {
     string data = 7;
 }
 
-message PutRequestMessage {
-    string ObjectType = 1;
-    Object obj = 2;
-}
-
-message PutResponseMessage {
-    string error = 1;
-    int64 revision = 2;
-}
-
 message ResponseHeader {
     string error = 1;
     uint64 server_id = 2;
@@ -182,7 +146,6 @@ message UpdateResponseMessage {
     string error = 1;
     int64 revision = 2;
 }
-
 
 message ListRequestMessage {
     string obj_type = 1;

@@ -26,6 +26,8 @@ pub struct QletConfig {
     pub tsotCniPort: u16,
     pub tsotSvcPort: u16,
     pub cidr: String,
+    pub stateSvcAddr: String,
+    pub singleNodeModel: bool,
 }
 
 impl QletConfig {
