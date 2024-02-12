@@ -1270,6 +1270,7 @@ impl PageTables {
     pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
     }
 
+    #[cfg(target_arch="x86_64")]
     pub fn MProtect(
         &self,
         start: Addr,
@@ -1290,6 +1291,30 @@ impl PageTables {
             failFast,
         );
     }
+
+    #[cfg(target_arch="aarch64")]
+    pub fn MProtect(
+        &self,
+        start: Addr,
+        end: Addr,
+        flags: PageTableFlags,
+        failFast: bool,
+    ) -> Result<()> {
+        //info!("MProtoc: start={:x}, end={:x}, flag = {:?}", start.0, end.0, flags);
+        defer!(self.EnableTlbShootdown());
+        return self.Traverse(
+            start,
+            end,
+            |entry, virtualAddr| {
+                self.HandlingSwapInPage(virtualAddr, entry);
+                entry.set_flags(flags | PageTableFlags::PAGE);
+                Invlpg(virtualAddr);
+            },
+            failFast,
+        );
+    }
+
+
 
     fn freeEntry(&self, entry: &mut PageTableEntry, pagePool: &Allocator) -> Result<bool> {
         let currAddr = entry.addr().as_u64();
