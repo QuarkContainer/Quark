@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use std::result::Result as SResult;
-use qshare::consts::NODEMGRSVC_ADDR;
 use qshare::k8s::ConfigMap;
 use qshare::k8s::Container;
 use qshare::k8s::ContainerPort;
@@ -32,6 +31,7 @@ use qshare::crictl;
 use qshare::common::*;
 
 use crate::pod_mgr::*;
+use crate::QLET_CONFIG;
 
 use super::qnode::QuarkNode;
 use super::{CADVISOR_PROVIDER, RUNTIME_MGR};
@@ -286,9 +286,11 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
 pub async fn PodMgrSvc() -> Result<()> {
     let podMgr = PodMgr::New().await?;
 
+    let podMgrAddr = format!("0.0.0.0:{}", QLET_CONFIG.portMgrPort);
+
     let podMgrSvcFuture = Server::builder()
         .add_service(na::node_agent_service_server::NodeAgentServiceServer::new(podMgr))
-        .serve(NODEMGRSVC_ADDR.parse().unwrap());
+        .serve(podMgrAddr.parse().unwrap());
 
     info!("func service start ...");
     tokio::select! {

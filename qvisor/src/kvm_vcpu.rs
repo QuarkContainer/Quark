@@ -294,7 +294,7 @@ pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64>
     );
     let layout = Layout::from_size_align(size, align);
     match layout {
-        Err(_e) => Err(Error::UnallignedAddress),
+        Err(_e) => Err(Error::UnallignedAddress(format!("AlignedAllocate {:?}", align))),
         Ok(l) => unsafe {
             let addr = alloc(l);
             if zeroData {

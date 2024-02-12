@@ -18,6 +18,14 @@ use std::collections::BTreeMap;
 
 use crate::crictl as cri;
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NodeInfo {
+    pub nodeName: String,
+    pub nodeIp: String,
+    pub port: u16,
+    pub cidr: String
+}
+
 pub enum PodType {
     Normal,
     Python(String)

@@ -41,7 +41,6 @@ impl Deref for Cidr {
     }
 }
 
-
 impl Cidr {
     // for cidr (10.2.0.0/16), the addr is 10.2.0.0, the maskbits is 16 
     pub fn New(addr: u32, maskbits: usize) -> Self {
