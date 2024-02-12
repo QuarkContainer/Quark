@@ -59,7 +59,6 @@ impl TsotSvc {
         let path = socket.parent().unwrap();
         fs::create_dir_all(path).ok();
 
-        error!("TsotSvc 2");
         // Delete old socket if necessary
         if socket.exists() {
             std::fs::remove_file(&socket).unwrap();

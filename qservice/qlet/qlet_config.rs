@@ -20,7 +20,9 @@ use qshare::common::*;
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct QletConfig {
     pub nodeName: String,
-    pub portMgrPort: u16,
+    pub etcdAddresses: Vec<String>,
+    pub nodeIp: String,
+    pub podMgrPort: u16,
     pub tsotCniPort: u16,
     pub tsotSvcPort: u16,
     pub cidr: String,
