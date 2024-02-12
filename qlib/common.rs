@@ -362,7 +362,7 @@ pub enum Error {
     SysCallNotImplement,
     Common(String),
     CreateMMap(String),
-    UnallignedAddress,
+    UnallignedAddress(String),
     UnallignedSize,
     NoEnoughMemory,
     AddressNotInRange,

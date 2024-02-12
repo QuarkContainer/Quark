@@ -21,6 +21,7 @@ use etcd_client::{
     Client, CompactionOptions, Compare, CompareOp, DeleteOptions, Txn, TxnOp, TxnOpResponse,
 };
 use tokio::sync::Notify;
+use std::fmt::Debug;
 
 use crate::etcd::etcd_client::EtcdClient;
 use crate::etcd::watch::{WatchReader, Watcher};
@@ -30,7 +31,7 @@ use crate::qmeta::*;
 use crate::metastore::data_obj::*;
 use crate::metastore::cacher::*;
 
-pub const PATH_PREFIX: &str = "/registry";use std::fmt::Debug;
+pub const PATH_PREFIX: &str = "/registry";
 
 #[derive(Debug)]
 pub struct EtcdStoreInner {
@@ -368,6 +369,17 @@ impl BackendStore for EtcdStore {
 }
 
 impl EtcdStore {
+    pub async fn NewWithEndpoints(endpoints: &[String], pagingEnable: bool) -> Result<Self> {
+        let client = Client::connect(endpoints, None).await?;
+        let inner = EtcdStoreInner {
+            client: EtcdClient::New(client),
+            pathPrefix: PATH_PREFIX.to_string(),
+            pagingEnable,
+        };
+
+        return Ok(Self(Arc::new(inner))); 
+    }
+
     pub async fn New(addr: &str, pagingEnable: bool) -> Result<Self> {
         let client = Client::connect([addr], None).await?;
 

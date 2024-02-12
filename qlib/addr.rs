@@ -485,7 +485,7 @@ impl Addr {
 
     pub fn PageAligned(&self) -> Result<()> {
         if !self.IsPageAligned() {
-            return Err(Error::UnallignedAddress);
+            return Err(Error::UnallignedAddress(format!("PageAligned {:?}", self)));
         }
 
         Ok(())

@@ -18,12 +18,10 @@ use std::sync::Arc;
 use std::sync::atomic::*;
 use std::result::Result as SResult;
 
-use qshare::config::TSOT_CONNECTION_PORT;
 use tokio::net::UnixListener;
 use tokio::sync::Notify;
 use tonic::transport::Server;
 
-use qshare::config::TSOT_CNI_PORT;
 use qshare::common::*;
 use qshare::tsot_cni;
 
@@ -33,6 +31,7 @@ use super::tsot_msg::TsotMessage;
 use crate::pod_mgr::NAMESPACE_MGR;
 use crate::tsot::conn_svc::ConnectionSvc;
 use crate::tsot::tsot_msg::TSOT_SOCKET_PATH;
+use crate::QLET_CONFIG;
 
 
 impl Drop for TsotMessage {
@@ -171,14 +170,14 @@ pub async fn TsotSvc() -> Result<()>{
     let tsotSvcFuture = tsotSvc.Process();
 
     let tsotCniSvc = TostCniSvc{};
-    let cniAddr = format!("127.0.0.1:{}", TSOT_CNI_PORT);
+    let cniAddr = format!("127.0.0.1:{}", QLET_CONFIG.tsotCniPort);
    
     let tostCniSvcFuture = Server::builder()
         .add_service(tsot_cni::tsot_cni_service_server::TsotCniServiceServer::new(tsotCniSvc))
         .serve(cniAddr.parse().unwrap());
 
     let connectionSvcFuture = tokio::spawn(async move {
-        let connectionSvc = ConnectionSvc::New(TSOT_CONNECTION_PORT);
+        let connectionSvc = ConnectionSvc::New(QLET_CONFIG.tsotSvcPort);
         connectionSvc.Process().await.unwrap();
     });
 

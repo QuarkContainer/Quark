@@ -1,0 +1,7 @@
+{
+    "nodeName"      : "node1",
+    "portMgrPort"   : 8888,
+    "tsotCniPort"   : 1234,
+    "tsotSvcPort"   : 1235,
+    "cidr"          : "10.1.1.0/8"
+}

@@ -248,7 +248,6 @@ impl TcpClientConnection {
     }
 
     pub async fn ProcessConnection(&self) -> Result<TcpStream> {
-        error!("ProcessConnection 1");
         let stream = self.Connect().await?;
         let mut req = TsotConnReq {
             namespace: [0; 64],
@@ -257,18 +256,14 @@ impl TcpClientConnection {
             srcIp: self.srcIp,
             srcPort: self.srcPort
         };
-        error!("ProcessConnection 2 {:x?}", &req);
         
         for i in 0..self.namespace.as_bytes().len() {
             req.namespace[i] = self.namespace.as_bytes()[i];
         }
 
-        error!("ProcessConnection 3");
         self.WriteConnReq(&stream, req).await?;
-        error!("ProcessConnection 4");
         
         let resp = self.ReadConnResp(&stream).await?;
-        error!("ProcessConnection 5 {:?}", &resp);
         
         if resp.errcode != TsotErrCode::Ok as u32 {
             return Err(Error::CommonError(format!("TcpClientConnection connect fail with error {:?}", resp.errcode)));

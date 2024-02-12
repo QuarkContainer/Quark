@@ -30,16 +30,36 @@ extern crate simple_logging;
 
 mod tsot;
 mod pod_mgr;
+mod qlet_config;
 
 use crate::pod_mgr::cadvisor::client as CadvisorClient;
 use crate::pod_mgr::podMgr::PodMgrSvc;
 use crate::tsot::tsot_svc::TsotSvc;
 
+use qlet_config::QletConfig;
 use qshare::common::*;
 
 lazy_static::lazy_static! {
     pub static ref CADVISOR_CLI: CadvisorClient::Client = {
         CadvisorClient::Client::Init()
+    };
+
+    #[derive(Debug)]
+    pub static ref QLET_CONFIG: QletConfig = {
+        let args : Vec<String> = std::env::args().collect();
+        if args.len() != 2 {
+            QletConfig {
+                nodeName: "node1".to_string(),
+                portMgrPort: 8888,
+                tsotCniPort: 1234,
+                tsotSvcPort: 1235,
+                cidr: "10.1.1.0/8".to_string(),
+            }
+        } else {
+            let configFilePath = "node1";
+            let config = QletConfig::Load(configFilePath).expect(&format!("can't load config from {}", configFilePath));
+            config
+        }
     };
 }
 
@@ -47,6 +67,8 @@ lazy_static::lazy_static! {
 async fn main() -> Result<()> {
     defer!(error!("node_agent finish"));
     log4rs::init_file("/etc/quark/na_logging_config.yaml", Default::default()).unwrap();
+
+    error!("config is {:#?}", &QLET_CONFIG.clone());
 
     let podMgrFuture = PodMgrSvc();
     let tostSvcFuture = TsotSvc();

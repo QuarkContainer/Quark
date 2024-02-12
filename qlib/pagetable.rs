@@ -167,7 +167,7 @@ impl PageTables {
 
     pub fn CopyRange(&self, to: &Self, start: u64, len: u64, pagePool: &Allocator) -> Result<()> {
         if start & MemoryDef::PAGE_MASK != 0 || len & MemoryDef::PAGE_MASK != 0 {
-            return Err(Error::UnallignedAddress);
+            return Err(Error::UnallignedAddress(format!("CopyRange {:x?}", len)));
         }
 
         let mut vAddr = start;
@@ -189,7 +189,7 @@ impl PageTables {
     // The Copy On Write will be done when write to the page
     pub fn ForkRange(&self, to: &Self, start: u64, len: u64, pagePool: &Allocator) -> Result<()> {
         if start & MemoryDef::PAGE_MASK != 0 || len & MemoryDef::PAGE_MASK != 0 {
-            return Err(Error::UnallignedAddress);
+            return Err(Error::UnallignedAddress(format!("ForkRange start {:x} len {:x}", start, len)));
         }
 
         //change to read only
@@ -1494,6 +1494,7 @@ impl PageBufAllocator {
     }
 }
 
+#[derive(Debug)]
 pub struct AlignedAllocator {
     pub size: usize,
     pub align: usize,
@@ -1510,7 +1511,7 @@ impl AlignedAllocator {
     pub fn Allocate(&self) -> Result<u64> {
         let layout = Layout::from_size_align(self.size, self.align);
         match layout {
-            Err(_e) => Err(Error::UnallignedAddress),
+            Err(_e) => Err(Error::UnallignedAddress(format!("Allocate {:?}", self))),
             Ok(l) => unsafe {
                 let addr = alloc(l);
                 Ok(addr as u64)
@@ -1521,7 +1522,7 @@ impl AlignedAllocator {
     pub fn Free(&self, addr: u64) -> Result<()> {
         let layout = Layout::from_size_align(self.size, self.align);
         match layout {
-            Err(_e) => Err(Error::UnallignedAddress),
+            Err(_e) => Err(Error::UnallignedAddress(format!("Allocate {:?}", self))),
             Ok(l) => unsafe {
                 dealloc(addr as *mut u8, l);
                 Ok(())

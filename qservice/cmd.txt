@@ -53,9 +53,12 @@ version = 2
   runtime_type = "io.containerd.quarkd.v1"
 EOF
 
-3. Enabel shim mode in config.json
+3. Enable shim mode in config.json
 
 in config.json, set "ShimMode" to true
+
+4. Enable PerSandboxLog in config.json so that different container has different log name
+in config.json, set "PerSandboxLog" to true
 
 #########################Running Services##################################
 
@@ -93,6 +96,11 @@ in qservice/qshare/src/config.rs
 change pub const DefaultRuntimeHandler             : &str = "quarkd" to "runc";
 
 
+/////////////////////////tsot test////////////////////////////////////////////
+1. change container runtime 
+Enable tsot in config.json
+
+set EnableTsot to true
 
 2. Container Network test
 
