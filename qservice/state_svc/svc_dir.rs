@@ -15,28 +15,28 @@
 use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::sync::Arc;
-use tokio::sync::RwLock as TRwLock;
+use std::sync::RwLock;
 
-use crate::metastore::cacher::*;
-use crate::common::*;
+use qshare::metastore::cacher::*;
+use qshare::common::*;
 
-use crate::etcd::etcd_store::EtcdStore;
-use super::CACHE_OBJ_TYPES;
+use qshare::etcd::etcd_store::EtcdStore;
+use crate::ETCD_OBJECTS;
 
-#[derive(Debug, Default)]
-pub struct SvcDir(Arc<TRwLock<SvcDirInner>>);
+#[derive(Debug, Default, Clone)]
+pub struct SvcDir(Arc<RwLock<SvcDirInner>>);
 
 impl Deref for SvcDir {
-    type Target = Arc<TRwLock<SvcDirInner>>;
+    type Target = Arc<RwLock<SvcDirInner>>;
 
-    fn deref(&self) -> &Arc<TRwLock<SvcDirInner>> {
+    fn deref(&self) -> &Arc<RwLock<SvcDirInner>> {
         &self.0
     }
 }
 
 impl SvcDir {
-    pub async fn GetCacher(&self, objType: &str) -> Option<Cacher> {
-        return match self.read().await.map.get(objType) {
+    pub fn GetCacher(&self, objType: &str) -> Option<Cacher> {
+        return match self.read().unwrap().map.get(objType) {
             None => None,
             Some(c) => Some(c.clone()),
         };
@@ -49,10 +49,10 @@ pub struct SvcDirInner {
 }
 
 impl SvcDirInner {
-    pub async fn EtcdInit(&mut self, addr: &str) -> Result<()> {
-        let store = EtcdStore::New(addr, true).await?;
-        for i in 0..CACHE_OBJ_TYPES.len() {
-            let t = CACHE_OBJ_TYPES[i];
+    pub async fn EtcdInit(&mut self, etcdAddr: &str) -> Result<()> {
+        let store = EtcdStore::New(etcdAddr, true).await?;
+        for i in 0..ETCD_OBJECTS.len() {
+            let t = ETCD_OBJECTS[i];
             let c = Cacher::New(Arc::new(store.clone()), t, 0).await?;
             self.map.insert(t.to_string(), c);
         }

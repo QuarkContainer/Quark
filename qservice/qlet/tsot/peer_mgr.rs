@@ -21,15 +21,21 @@ use std::str::FromStr;
 use qshare::common::*;
 
 use crate::pod_mgr::NODEAGENT_CONFIG;
+use crate::QLET_CONFIG;
 
 lazy_static::lazy_static! {
     pub static ref PEER_MGR: PeerMgr = {
         let cidrStr = NODEAGENT_CONFIG.cidr.clone();
         let ipv4 = ipnetwork::Ipv4Network::from_str(&cidrStr).unwrap();
         //let localIp = local_ip_address::local_ip().unwrap();
-        let localIp : u32 = ipnetwork::Ipv4Network::from_str(&NODEAGENT_CONFIG.hostIP).unwrap().ip().into();
-        let localPort = NODEAGENT_CONFIG.nodeAgentPort;
-        PeerMgr::New(localIp, localPort, ipv4.ip().into(), ipv4.prefix() as _)
+        let pm = PeerMgr::New(ipv4.prefix() as _);
+        
+        if QLET_CONFIG.singleNodeModel {
+            let localIp : u32 = ipnetwork::Ipv4Network::from_str(&NODEAGENT_CONFIG.hostIP).unwrap().ip().into();
+            let localPort = NODEAGENT_CONFIG.nodeAgentPort;
+            pm.AddPeer(localIp, localPort, ipv4.ip().into()).unwrap();
+        }
+        pm
     };
 }
 
@@ -83,7 +89,7 @@ impl Deref for PeerMgr {
 }
 
 impl PeerMgr {
-    pub fn New(localHostIp: u32, localPort: u16, localCidrAddr: u32, maskbits: usize) -> Self {
+    pub fn New(maskbits: usize) -> Self {
         assert!(maskbits < 32);
         let mask = !((1 << maskbits) - 1);
         let inner = PeerMgrInner {
@@ -93,7 +99,6 @@ impl PeerMgr {
         };
 
         let mgr = Self(Arc::new(RwLock::new(inner)));
-        mgr.AddPeer(localHostIp, localPort, localCidrAddr).unwrap();
         return mgr;
     }
 

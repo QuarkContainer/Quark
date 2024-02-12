@@ -29,6 +29,7 @@ pub mod pod_sandbox;
 pub mod cidr;
 pub mod namespaceMgr;
 pub mod node_register;
+pub mod node_mgr;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
