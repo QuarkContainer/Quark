@@ -22,7 +22,8 @@ use crate::crictl as cri;
 pub struct NodeInfo {
     pub nodeName: String,
     pub nodeIp: String,
-    pub port: u16,
+    pub podMgrPort: u16,
+    pub tsotSvcPort: u16,
     pub cidr: String
 }
 

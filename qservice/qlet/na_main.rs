@@ -50,7 +50,11 @@ lazy_static::lazy_static! {
         if args.len() != 2 {
             QletConfig {
                 nodeName: "node1".to_string(),
-                portMgrPort: 8888,
+                etcdAddresses: vec![
+                    "127.0.0.1:2380".to_string(),
+                ],
+                nodeIp: "127.0.0.1".to_string(),
+                podMgrPort: 8888,
                 tsotCniPort: 1234,
                 tsotSvcPort: 1235,
                 cidr: "10.1.1.0/8".to_string(),

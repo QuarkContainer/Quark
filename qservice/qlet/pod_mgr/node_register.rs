@@ -31,7 +31,8 @@ pub struct NodeRegister {
     pub etcdAddresses: Vec<String>,
     pub nodeName: String,
     pub nodeIp: String,
-    pub port: u16,
+    pub podMgrPort: u16,
+    pub tsotSvcPort: u16,
     pub cidr: String
 }
 
@@ -40,7 +41,8 @@ impl NodeRegister {
         addresses: &[String],
         nodeName: &str,
         nodeIp: &str,
-        port: u16,
+        podMgrPort: u16,
+        tsotSvcPort: u16,
         cidr: &str
     ) -> Self {
         let mut etcdAddresses = Vec::new();
@@ -54,7 +56,8 @@ impl NodeRegister {
             etcdAddresses: etcdAddresses,
             nodeName: nodeName.to_owned(),
             nodeIp: nodeIp.to_owned(),
-            port: port,
+            podMgrPort: podMgrPort,
+            tsotSvcPort: tsotSvcPort,
             cidr: cidr.to_owned(),
         }
     }
@@ -68,7 +71,8 @@ impl NodeRegister {
         return NodeInfo {
             nodeName: self.nodeName.clone(),
             nodeIp: self.nodeIp.clone(),
-            port: self.port,
+            podMgrPort: self.podMgrPort,
+            tsotSvcPort: self.tsotSvcPort,
             cidr: self.cidr.clone(),
         }
     }
@@ -78,7 +82,7 @@ impl NodeRegister {
             kind: Self::KEY.to_owned(),
             namespace: "system".to_owned(),
             name: self.nodeName.to_owned(),
-            data: serde_json::to_string(&self.NodeInfo()).unwrap(),
+            data: serde_json::to_string_pretty(&self.NodeInfo()).unwrap(),
             ..Default::default()
         };
 

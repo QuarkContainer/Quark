@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::result::Result as SResult;
+use podMgr::node_register::NodeRegister;
 use qshare::k8s::ConfigMap;
 use qshare::k8s::Container;
 use qshare::k8s::ContainerPort;
@@ -286,15 +287,27 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
 pub async fn PodMgrSvc() -> Result<()> {
     let podMgr = PodMgr::New().await?;
 
-    let podMgrAddr = format!("0.0.0.0:{}", QLET_CONFIG.portMgrPort);
+    let podMgrAddr = format!("0.0.0.0:{}", QLET_CONFIG.podMgrPort);
 
     let podMgrSvcFuture = Server::builder()
         .add_service(na::node_agent_service_server::NodeAgentServiceServer::new(podMgr))
         .serve(podMgrAddr.parse().unwrap());
 
-    info!("func service start ...");
+    let nodeRegister = NodeRegister::New(
+        &QLET_CONFIG.etcdAddresses, 
+        &QLET_CONFIG.nodeName, 
+        &QLET_CONFIG.nodeIp,
+        QLET_CONFIG.podMgrPort, 
+        QLET_CONFIG.tsotSvcPort,
+        &QLET_CONFIG.cidr
+    );
+
+    let nodeRegisterFuture = nodeRegister.Process();
+
+    info!("pod manager start ...");
     tokio::select! {
-        _ = podMgrSvcFuture => {}
+        _ = podMgrSvcFuture => {},
+        _ = nodeRegisterFuture => {}
     }
 
     return Ok(())
