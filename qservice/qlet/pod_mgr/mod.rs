@@ -31,15 +31,11 @@ pub mod namespaceMgr;
 pub mod node_register;
 pub mod node_mgr;
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use once_cell::sync::OnceCell;
 
-use qshare::config::NodeAgentConfig;
 use qshare::config::NodeConfiguration;
-use qshare::config::SYSTEM_CONFIGS;
-use qshare::config::SystemConfig;
 use runtime::runtime::*;
 use runtime::image_mgr::*;
 use cadvisor::provider::CadvisorInfoProvider;
@@ -55,18 +51,18 @@ lazy_static::lazy_static! {
 
     pub static ref NODE_READY_NOTIFY : Arc<Notify> = Arc::new(Notify::new());
 
-    pub static ref NODEAGENT_CONFIG: NodeAgentConfig = {
-        let systemConfigs: BTreeMap<String, SystemConfig> = serde_json::from_str(SYSTEM_CONFIGS).unwrap();
+    // pub static ref NODEAGENT_CONFIG: NodeAgentConfig = {
+    //     let systemConfigs: BTreeMap<String, SystemConfig> = serde_json::from_str(SYSTEM_CONFIGS).unwrap();
 
-        let configName = ConfigName();
+    //     let configName = ConfigName();
 
-        let systemConfig = match systemConfigs.get(&configName) {
-            None => panic!("there is no system config named {}", configName),
-            Some(c) => c,
-        };
+    //     let systemConfig = match systemConfigs.get(&configName) {
+    //         None => panic!("there is no system config named {}", configName),
+    //         Some(c) => c,
+    //     };
     
-        systemConfig.nodeAgentConfig.clone()
-    };
+    //     systemConfig.nodeAgentConfig.clone()
+    // };
 
     pub static ref NAMESPACE_MGR : NamespaceMgr = NamespaceMgr::New();
 

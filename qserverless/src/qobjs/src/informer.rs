@@ -22,9 +22,6 @@ use crate::common::*;
 
 pub trait EventHandler : Debug + Send + Sync {
     fn handle(&self, store: &ThreadSafeStore, event: &DeltaEvent);
-    //fn OnAdd(&self, store: &ThreadSafeStore, obj: &DataObject, isInInitialList: bool);
-    //fn OnUpdate(&self, store: &ThreadSafeStore, oldObj: &DataObject, newObj: &DataObject);
-    //fn OnDelete(&self, store: &ThreadSafeStore, obj: &DataObject);
 }
 
 #[derive(Debug, Clone)]
