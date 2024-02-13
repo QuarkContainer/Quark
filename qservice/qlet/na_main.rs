@@ -67,7 +67,7 @@ lazy_static::lazy_static! {
                 singleNodeModel: true
             }
         } else {
-            let configFilePath = "node1";
+            let configFilePath = &args[1];
             let config = QletConfig::Load(configFilePath).expect(&format!("can't load config from {}", configFilePath));
             config
         }
@@ -78,7 +78,7 @@ lazy_static::lazy_static! {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    defer!(error!("node_agent finish"));
+    defer!(error!("qlet finish"));
     log4rs::init_file("/etc/quark/na_logging_config.yaml", Default::default()).unwrap();
 
     error!("config is {:#?}", &QLET_CONFIG.clone());

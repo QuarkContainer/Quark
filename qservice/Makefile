@@ -12,7 +12,9 @@ cni:
 ss:
 	cargo +nightly-x86_64-unknown-linux-gnu build --bin ss
 	cp -f ss_logging_config.yaml /etc/quark/
-
+	cp -f qlet/node1.json /etc/quark/
+	cp -f qlet/node2.json /etc/quark/
+	
 test:
 	cargo build --bin test
 

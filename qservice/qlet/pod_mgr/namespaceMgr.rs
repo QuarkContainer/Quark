@@ -21,9 +21,10 @@ use std::sync::Mutex;
 
 use qshare::common::*;
 
+use crate::QLET_CONFIG;
+
 use super::cidr::Cidr;
 use super::pod_sandbox::PodSandbox;
-use super::NODEAGENT_CONFIG;
 
 #[derive(Debug, Clone)]
 pub struct NamespaceInner {
@@ -116,7 +117,7 @@ impl Deref for NamespaceMgr {
 
 impl NamespaceMgr {
     pub fn New() -> Self {
-        let cidrStr = NODEAGENT_CONFIG.cidr.clone();
+        let cidrStr = QLET_CONFIG.cidr.clone();
         let ipv4 = ipnetwork::Ipv4Network::from_str(&cidrStr).unwrap();
 
         let inner = NamespaceMgrInner {

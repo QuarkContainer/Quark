@@ -51,7 +51,7 @@ impl PodMgr {
         IMAGE_MGR.set(ImageMgr::New(crictl::AuthConfig::default()).await.unwrap()).unwrap();
     
         let config = &NODE_CONFIG;
-        let nodename = &NODEAGENT_CONFIG.NodeName();
+        let nodename = &QLET_CONFIG.nodeName;
 
         PmAgent::CleanPods(nodename).await?;
     
@@ -306,9 +306,14 @@ pub async fn PodMgrSvc() -> Result<()> {
 
     info!("pod manager start ...");
     tokio::select! {
-        _ = podMgrSvcFuture => {},
-        _ = nodeRegisterFuture => {}
+        _ = podMgrSvcFuture => {
+            error!("podMgrSvcFuture finish");
+        },
+        _ = nodeRegisterFuture => {
+            error!("nodeRegisterFuture finish");
+        }
     }
-
+    info!("pod manager finish ...");
+    
     return Ok(())
 }

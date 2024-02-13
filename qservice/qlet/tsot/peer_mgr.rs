@@ -20,19 +20,18 @@ use std::str::FromStr;
 
 use qshare::common::*;
 
-use crate::pod_mgr::NODEAGENT_CONFIG;
 use crate::QLET_CONFIG;
 
 lazy_static::lazy_static! {
     pub static ref PEER_MGR: PeerMgr = {
-        let cidrStr = NODEAGENT_CONFIG.cidr.clone();
+        let cidrStr = QLET_CONFIG.cidr.clone();
         let ipv4 = ipnetwork::Ipv4Network::from_str(&cidrStr).unwrap();
         //let localIp = local_ip_address::local_ip().unwrap();
         let pm = PeerMgr::New(ipv4.prefix() as _);
         
         if QLET_CONFIG.singleNodeModel {
-            let localIp : u32 = ipnetwork::Ipv4Network::from_str(&NODEAGENT_CONFIG.hostIP).unwrap().ip().into();
-            let localPort = NODEAGENT_CONFIG.nodeAgentPort;
+            let localIp : u32 = ipnetwork::Ipv4Network::from_str(&QLET_CONFIG.nodeIp).unwrap().ip().into();
+            let localPort = QLET_CONFIG.podMgrPort;
             pm.AddPeer(localIp, localPort, ipv4.ip().into()).unwrap();
         }
         pm

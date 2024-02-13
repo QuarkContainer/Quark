@@ -1,0 +1,11 @@
+{
+    "nodeName"      : "node2",
+    "etcdAddresses" : ["127.0.0.1:2380"],
+    "nodeIp"        : "127.0.0.1",
+    "podMgrPort"   : 8889,
+    "tsotCniPort"   : 1254,
+    "tsotSvcPort"   : 1255,
+    "cidr"          : "10.1.2.0/8",
+    "stateSvcAddr"  : "127.0.0.1:8890",
+    "singleNodeModel": false
+}

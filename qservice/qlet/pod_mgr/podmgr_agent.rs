@@ -31,8 +31,9 @@ use qshare::k8s_util::K8SUtil;
 //use qobjs::runtime_types::QuarkNode;
 use qshare::common::*;
 
-use crate::pod_mgr::{NAMESPACE_MGR, NODEAGENT_CONFIG, RUNTIME_MGR};
+use crate::pod_mgr::{NAMESPACE_MGR, RUNTIME_MGR};
 use crate::pod_mgr::node_status::{SetNodeStatus, IsNodeStatusReady};
+use crate::QLET_CONFIG;
 
 use super::pm_msg::{NodeAgentMsg, PodCreate};
 use super::{qnode::*, ConfigName};
@@ -186,7 +187,7 @@ impl PmAgent {
                     if self.State() == PmAgentState::Registered || self.State() == PmAgentState::Registering {
                         if IsNodeStatusReady(&self.node) {
                             NODE_READY_NOTIFY.notify_waiters();
-                            info!("Node {} is ready", NODEAGENT_CONFIG.NodeName());
+                            info!("Node {} is ready", &QLET_CONFIG.nodeName);
                             *self.state.lock().unwrap() = PmAgentState::Ready;
                             SetNodeStatus(&self.node).await?;
                             self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodeRunning));
