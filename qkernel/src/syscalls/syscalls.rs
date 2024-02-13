@@ -891,7 +891,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall,   // 290 sys_pkey_free,
     SysStatx,              // 291 sys_statx,
     NotImplementSyscall,  // 292
-    NotImplementSyscall,  // 293
+    SysNoSys,              // 293 sys_rseq,
     NotImplementSyscall,  // 294
     NotImplementSyscall,  // 295
     NotImplementSyscall,  // 296
