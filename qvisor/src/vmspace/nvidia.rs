@@ -140,7 +140,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             let moduleKey = parameters.para1;
             //error!("unregister module key:{:x}", moduleKey);
 
-            let mut module = match MODULES.lock().get(&moduleKey){
+            let module = match MODULES.lock().get(&moduleKey){
                 Some(module) => {
                     //error!("module: {:x} for this module key: {:x} has been found",module, moduleKey);
                     *module 
