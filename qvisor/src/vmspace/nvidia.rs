@@ -371,10 +371,9 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             //     unsafe {std::mem::transmute(handler)};
                   
             // let ret = func( parameters.para1 as *mut ::std::os::raw::c_void);
-            let initResult = unsafe { cuda_driver_sys::cuInit(0) };
-            error!("initResult {:?}", initResult);
+            
 
-            let mut mode: CUmoduleLoadingMode =CUmoduleLoadingMode::None;
+            let mut mode: CUmoduleLoadingMode  = CUmoduleLoadingMode_enum::CU_MODULE_EAGER_LOADING;
             let func: extern "C" fn(*mut CUmoduleLoadingMode) -> i32  = unsafe{std::mem::transmute(handler)};
             let ret = func(&mut mode);
 
