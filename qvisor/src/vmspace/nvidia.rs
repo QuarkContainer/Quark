@@ -46,7 +46,8 @@ lazy_static! {
         (ProxyCommand::CudaStreamSynchronize,(XpuLibrary::CudaRuntime,"cudaStreamSynchronize")),
         (ProxyCommand::CudaStreamCreate,(XpuLibrary::CudaRuntime,"cudaStreamCreate")),
         (ProxyCommand::CudaStreamDestroy,(XpuLibrary::CudaRuntime,"cudaStreamDestroy")),
-        (ProxyCommand::CudaStreamIsCapturing,(XpuLibrary::CudaRuntime,"cudaStreamIsCapturing")),     
+        (ProxyCommand::CudaStreamIsCapturing,(XpuLibrary::CudaRuntime,"cudaStreamIsCapturing")),  
+        (ProxyCommand::CuModuleGetLoadingMode,(XpuLibrary::CudaDriver,"cuModuleGetLoadingMode")), 
     ]);
 }
 
@@ -343,9 +344,46 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             *(parameters.para2 as *mut _) = captureStatus as i32;
             }
 
-
             return Ok(ret as i64);
         }
+        ProxyCommand::CuModuleGetLoadingMode => {
+            //  let mut loadingMode:CUmoduleLoadingMode; 
+            //  unsafe{
+            //     loadingMode = *(parameters.para1 as *mut _ )
+            //  };
+
+            //  error!("before function call, loading mode is: {}, {:?}", loadingMode as i32, loadingMode );
+
+
+            //  let func: extern "C" fn(*mut CUmoduleLoadingMode) -> i32  = unsafe{std::mem::transmute(handler)};
+
+            //  let ret = func(&mut loadingMode);
+
+            //  error!("ret is : {}, {:x?}",ret, ret);
+            //  error!("loading mode should change: {}, {:?}",loadingMode as i32,loadingMode);
+
+            //  return Ok(ret as i64);
+
+            // let initResult = unsafe { cuda_driver_sys::cuInit(0) };
+            // error!("initResult {:?}", initResult);
+
+            // let func: extern "C" fn(*mut ::std::os::raw::c_void) -> i32 =
+            //     unsafe {std::mem::transmute(handler)};
+                  
+            // let ret = func( parameters.para1 as *mut ::std::os::raw::c_void);
+            let initResult = unsafe { cuda_driver_sys::cuInit(0) };
+            error!("initResult {:?}", initResult);
+
+            let mut mode: CUmoduleLoadingMode =CUmoduleLoadingMode::None;
+            let func: extern "C" fn(*mut CUmoduleLoadingMode) -> i32  = unsafe{std::mem::transmute(handler)};
+            let ret = func(&mut mode);
+
+            error!("ret is 3: {}, {:x?}",ret, ret);
+            error!("loading mode should change: {} {:?}, " ,mode as i32, mode );
+
+            return Ok(ret as i64);
+
+         }
 
 
        
@@ -499,8 +537,11 @@ impl NvidiaHandlersInner {
     pub fn GetFuncHandler(&mut self, cmd: ProxyCommand) -> Result<u64> {
         match self.handlers.get(&cmd) {
             None => {
+                error!("yiwang cmd {:?}",cmd);
                 let func = self.DLSym(cmd)?;
+                error!("yiwang func {:x}",func);
                 self.handlers.insert(cmd, func);
+                error!("yiwang handlers {:x?}",self.handlers);
                 return Ok(func);
             }
             Some(func) => {

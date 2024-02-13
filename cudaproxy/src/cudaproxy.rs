@@ -16,6 +16,8 @@ use std::os::raw::*;
 use cuda_runtime_sys::cudaMemcpyKind;
 use cuda_runtime_sys::cudaStream_t; 
 use cuda_runtime_sys::cudaStreamCaptureStatus;
+
+
 use crate::syscall::*;
 use crate::proxy::*;
 pub const SYS_PROXY: usize = 10003;
@@ -118,7 +120,7 @@ pub extern "C" fn __cudaRegisterFunction(
         syscall2(SYS_PROXY, ProxyCommand::CudaRegisterFunction as usize, &info as *const _ as usize);
     }
 }
-
+  
 
 #[no_mangle]
 pub extern "C" fn cudaLaunchKernel(
@@ -274,6 +276,18 @@ pub extern "C" fn cudaStreamIsCapturing(
         syscall3(SYS_PROXY, ProxyCommand::CudaStreamIsCapturing as usize, stream as usize, pCaptureStatus as *const _ as usize)
     };
 
-    
+}
 
+// todo cuModuleGetLoadingMode   
+#[no_mangle]
+pub extern "C" fn cuModuleGetLoadingMode(
+    mode: *mut CUmoduleLoadingMode
+) -> usize {
+    unsafe{
+    println!("Hijacked cuModuleGetLoadingMode, mode is {:x?}", (*mode) as u64);
+    }
+
+    return unsafe{
+        syscall2(SYS_PROXY, ProxyCommand::CuModuleGetLoadingMode as usize, mode as *const _ as usize )
+    };
 }

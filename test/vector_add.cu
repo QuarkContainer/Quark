@@ -108,6 +108,41 @@ void cuda_add() {
     printf("out[0] = %f\n", out[0]);
     printf("PASSED\n");
 
+ // cuModuleGetLoadingMode 
+ 
+    CUmoduleLoadingMode mode;
+
+    size_t size = sizeof(mode);
+    printf("Size of CUmoduleLoadingMode: %zu bytes\n", size);
+
+    switch (mode) {
+    case CU_MODULE_EAGER_LOADING :
+        printf("cuModuleGetLoadingMode is CU_MODULE_EAGER_LOADING\n");
+        break;
+    case CU_MODULE_LAZY_LOADING:
+        printf("cuModuleGetLoadingMode is CU_MODULE_LAZY_LOADING\n");
+        break;
+    default:
+        printf("cuModuleGetLoadingMode has an unknown value: %x\n", mode);
+        break;
+    }
+    printf("cuModuleGetLoadingMode mode before function call is %x \n", mode);
+
+    cuModuleGetLoadingMode(&mode);
+    printf("cuModuleGetLoadingMode mode after function call is %x \n", mode);
+
+    switch (mode) {
+    case CU_MODULE_EAGER_LOADING :
+        printf("cuModuleGetLoadingMode is CU_MODULE_EAGER_LOADING\n");
+        break;
+    case CU_MODULE_LAZY_LOADING:
+        printf("cuModuleGetLoadingMode is CU_MODULE_LAZY_LOADING\n");
+        break;
+    default:
+        printf("cuModuleGetLoadingMode has an unknown value: %x\n", mode);
+        break;
+}
+
     // Deallocate device memory
     printf("Deallocating GPU memory\n");
  
@@ -120,31 +155,42 @@ void cuda_add() {
     free(a); 
     free(b); 
     free(out);
+
+    
      // cudaSteam_t is a data type 
-      cudaStream_t stream_;
+    cudaStream_t stream_;
+
     printf("stream_ is %p\n", stream_);
-    printf("stream_ is %x\n", stream_);
+    // printf("stream_ is %x\n", stream_);
 
     int createResult = cudaStreamCreate(&stream_);
+
     printf("result of cudaStreamCreate is : %d\n",createResult);
-    
     printf("after cudaStreamCreate, stream_ is %p\n", stream_);
 
     // cuda stream synchronize
     int synResult = cudaStreamSynchronize(stream_);
-    printf("result of cudaStreamSynchronize is : %d",synResult);
+
+    printf("result of cudaStreamSynchronize is : %d\n",synResult);
 
     // cudaStream capturing
     // cudaStreamCaptureStatus is enum 
     cudaStreamCaptureStatus is_capturing;
-    printf("cuda stream capture stauts is %d\n",is_capturing);
+
+    printf("cuda stream capture status before function call is %d\n",is_capturing);
+
     cudaStreamIsCapturing(stream_, &is_capturing);
+
     printf("cuda stream capture status is %d\n", is_capturing);
 
+   
 
+
+
+    //cudaStream Destroy 
     int destroyResult = cudaStreamDestroy(stream_);
-    printf("result of cudaStreamDestroy is : %d\n",createResult);
 
+    printf("result of cudaStreamDestroy is : %d\n",createResult);
     printf("after cudaStreamDestory, stream_ is %p\n", stream_);
     
 }

@@ -18,7 +18,7 @@ use alloc::vec::Vec;
 
 use crate::qlib::common::*;
 use crate::syscalls::syscalls::*;
-use crate::{parameters, task::*};
+use crate::task::*;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::linux_def::SysErr;
 use crate::qlib::proxy::*;
@@ -186,7 +186,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             );
             return Ok(ret);
         }
-
         ProxyCommand::CudaStreamSynchronize => {
             error!("yiwang stream parameter from cudaproxy is : {:x}", parameters.para1);
             let ret = HostSpace::Proxy(
@@ -195,7 +194,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             );
             return Ok(ret);
         }
-
         ProxyCommand::CudaStreamCreate => {
             unsafe{
             let mut stream:u64 = *(parameters.para1 as *mut _);
@@ -218,7 +216,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
             }
         }
-
         ProxyCommand::CudaStreamDestroy => {
             error!("yiwang stream parameter from cudaproxy is : {:x}", parameters.para1);
             let ret = HostSpace::Proxy(
@@ -228,7 +225,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             return Ok(ret);
         }
-
         ProxyCommand::CudaStreamIsCapturing => {
             error!("yiwang CudaStreamIsCapturing stream parameter from cudaproxy is : {:x}", parameters.para1);
             error!("yiwang address of capture status address from cudaproxy is : {:x}", parameters.para2);
@@ -252,11 +248,23 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 error!("yiwang the content of the pCaptureStatus now should change is: {}", pCaptureStatus);
 
                 if ret == 0 {
-                    task.CopyOutObj(&pCaptureStatus, args.arg2 as u64);
+                    task.CopyOutObj(&pCaptureStatus, args.arg2 as u64)?;
                 }
                 
             return Ok(ret);
             
+        }
+        ProxyCommand::CuModuleGetLoadingMode => {
+            let mut mode:i32 = 0; 
+            parameters.para1 = &mut mode as *mut _ as u64; 
+
+            let ret = HostSpace::Proxy(
+                 cmd,
+                 parameters,
+             );
+
+            return Ok(ret);
+
         }
 
         

@@ -32,6 +32,7 @@ pub enum ProxyCommand {
     CudaStreamCreate,
     CudaStreamDestroy,
     CudaStreamIsCapturing,
+    CuModuleGetLoadingMode,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]
@@ -41,6 +42,23 @@ pub enum XpuLibrary {
     CudaRuntime,
     CudaDriver,
 }
+
+#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]
+#[repr(u32)]
+pub enum CUmoduleLoadingMode {
+    None = 0x0,
+    CU_MODULE_EAGER_LOADING = 0x1,
+    CU_MODULE_LAZY_LOADING = 0x2,
+}
+
+impl Default for CUmoduleLoadingMode {
+    fn default() -> Self {
+        return CUmoduleLoadingMode::None;
+    }
+}
+
+
+
 
 impl Default for ProxyCommand {
     fn default() -> Self {
