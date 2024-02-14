@@ -22,6 +22,11 @@ use crate::syscall::*;
 use crate::proxy::*;
 pub const SYS_PROXY: usize = 10003;
 
+// cudaGetDeviceProperties
+//cudaDeviceGetStreamPriorityRange
+//__cudaRegisterVar
+
+// device management
 #[no_mangle]
 pub extern "C" fn cudaSetDevice(device: c_int) -> usize {
     println!("Hijacked cudaSetDevice({})", device);
@@ -33,6 +38,17 @@ pub extern "C" fn cudaSetDevice(device: c_int) -> usize {
     println!("Hijacked ret({})", ret);
     return ret;
 }
+// not yet tested
+#[no_mangle]
+pub extern "C" fn cudaSetDeviceFlags(flags: c_uint) -> usize{
+    println!("Hijacked cudaSetDeviceFlags({})", flags);
+
+    let ret = unsafe {
+        syscall2(SYS_PROXY, ProxyCommand::CudaSetDeviceFlags as usize,flags as usize)
+
+    };
+    return ret;
+}
 
 #[no_mangle]
 pub extern "C" fn cudaDeviceSynchronize() -> usize {
@@ -40,6 +56,27 @@ pub extern "C" fn cudaDeviceSynchronize() -> usize {
 
     return unsafe {
         syscall1(SYS_PROXY, ProxyCommand::CudaDeviceSynchronize as usize) 
+    };
+}
+// not yet tested 
+#[no_mangle]
+pub extern "C" fn cudaDeviceReset() -> usize{
+    println!("Hijacked cudaDeviceReset()");
+
+    return unsafe{
+        syscall1(SYS_PROXY,ProxyCommand::CudaDeviceReset as usize)
+    };
+}
+
+// not yet tested 
+#[no_mangle]
+pub extern "C" fn cudaGetDeviceCount(count: *mut c_int) -> usize{
+    unsafe{
+    println!("Hijacked cudaGetDeviceCount({})", *count)
+    };
+    
+    return unsafe{
+        syscall2(SYS_PROXY, ProxyCommand::CudaGetDeviceCount as usize, count as *const _ as usize )
     };
 }
 
@@ -75,7 +112,7 @@ pub extern "C" fn __cudaUnregisterFatBinary(fatCubinHandle:u64) {
     unsafe{
         //  if *fatCubinPtr != 0 {
          println!("the content of fatCubin poninter is not 0, need to unload the module");
-         syscall2(SYS_PROXY, ProxyCommand::CudaUnRegisterFatBinary as usize,fatCubinHandle as usize);
+         syscall2(SYS_PROXY, ProxyCommand::CudaUnregisterFatBinary as usize,fatCubinHandle as usize);
         //  }
     }
 }
@@ -277,17 +314,27 @@ pub extern "C" fn cudaStreamIsCapturing(
     };
 
 }
+  
+// #[no_mangle]
+// pub extern "C" fn cuModuleGetLoadingMode(
+//     mode: *mut CUmoduleLoadingMode
+// ) -> usize {
+//     unsafe{
+//     println!("Hijacked cuModuleGetLoadingMode, mode is {:x?}", (*mode) as u64);
+//     }
 
-// todo cuModuleGetLoadingMode   
+//     return unsafe{
+//         syscall2(SYS_PROXY, ProxyCommand::CuModuleGetLoadingMode as usize, mode as *const _ as usize )
+//     };
+// }
+
+// Error handling 
+// not yet tested 
 #[no_mangle]
-pub extern "C" fn cuModuleGetLoadingMode(
-    mode: *mut CUmoduleLoadingMode
-) -> usize {
-    unsafe{
-    println!("Hijacked cuModuleGetLoadingMode, mode is {:x?}", (*mode) as u64);
-    }
+pub extern "C" fn cudaGetLastError() -> usize{
+    println!("Hijacked cudaGetLatError()");
 
     return unsafe{
-        syscall2(SYS_PROXY, ProxyCommand::CuModuleGetLoadingMode as usize, mode as *const _ as usize )
-    };
+        syscall1(SYS_PROXY, ProxyCommand::CudaGetLastError as usize)
+    };   
 }

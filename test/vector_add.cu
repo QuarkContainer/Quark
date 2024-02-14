@@ -110,38 +110,38 @@ void cuda_add() {
 
  // cuModuleGetLoadingMode 
  
-    CUmoduleLoadingMode mode;
+//     CUmoduleLoadingMode mode;
 
-    size_t size = sizeof(mode);
-    printf("Size of CUmoduleLoadingMode: %zu bytes\n", size);
+//     size_t size = sizeof(mode);
+//     printf("Size of CUmoduleLoadingMode: %zu bytes\n", size);
 
-    switch (mode) {
-    case CU_MODULE_EAGER_LOADING :
-        printf("cuModuleGetLoadingMode is CU_MODULE_EAGER_LOADING\n");
-        break;
-    case CU_MODULE_LAZY_LOADING:
-        printf("cuModuleGetLoadingMode is CU_MODULE_LAZY_LOADING\n");
-        break;
-    default:
-        printf("cuModuleGetLoadingMode has an unknown value: %x\n", mode);
-        break;
-    }
-    printf("cuModuleGetLoadingMode mode before function call is %x \n", mode);
+//     switch (mode) {
+//     case CU_MODULE_EAGER_LOADING :
+//         printf("cuModuleGetLoadingMode is CU_MODULE_EAGER_LOADING\n");
+//         break;
+//     case CU_MODULE_LAZY_LOADING:
+//         printf("cuModuleGetLoadingMode is CU_MODULE_LAZY_LOADING\n");
+//         break;
+//     default:
+//         printf("cuModuleGetLoadingMode has an unknown value: %x\n", mode);
+//         break;
+//     }
+//     printf("cuModuleGetLoadingMode mode before function call is %x \n", mode);
 
-    cuModuleGetLoadingMode(&mode);
-    printf("cuModuleGetLoadingMode mode after function call is %x \n", mode);
+//     cuModuleGetLoadingMode(&mode);
+//     printf("cuModuleGetLoadingMode mode after function call is %x \n", mode);
 
-    switch (mode) {
-    case CU_MODULE_EAGER_LOADING :
-        printf("cuModuleGetLoadingMode is CU_MODULE_EAGER_LOADING\n");
-        break;
-    case CU_MODULE_LAZY_LOADING:
-        printf("cuModuleGetLoadingMode is CU_MODULE_LAZY_LOADING\n");
-        break;
-    default:
-        printf("cuModuleGetLoadingMode has an unknown value: %x\n", mode);
-        break;
-}
+//     switch (mode) {
+//     case CU_MODULE_EAGER_LOADING :
+//         printf("cuModuleGetLoadingMode is CU_MODULE_EAGER_LOADING\n");
+//         break;
+//     case CU_MODULE_LAZY_LOADING:
+//         printf("cuModuleGetLoadingMode is CU_MODULE_LAZY_LOADING\n");
+//         break;
+//     default:
+//         printf("cuModuleGetLoadingMode has an unknown value: %x\n", mode);
+//         break;
+// }
 
     // Deallocate device memory
     printf("Deallocating GPU memory\n");

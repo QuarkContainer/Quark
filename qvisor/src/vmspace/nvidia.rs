@@ -33,7 +33,11 @@ lazy_static! {
     pub static ref FUNC_MAP: BTreeMap<ProxyCommand, (XpuLibrary, &'static str)> = BTreeMap::from(
         [
         (ProxyCommand::CudaSetDevice,(XpuLibrary::CudaRuntime, "cudaSetDevice")),
+        (ProxyCommand::CudaSetDeviceFlags,(XpuLibrary::CudaRuntime, "cudaSetDeviceFlags")),
         (ProxyCommand::CudaDeviceSynchronize,(XpuLibrary::CudaRuntime, "cudaDeviceSynchronize")),
+        (ProxyCommand::CudaDeviceReset,(XpuLibrary::CudaRuntime, "cudaDeviceReset")),
+        (ProxyCommand::CudaGetDeviceCount,(XpuLibrary::CudaRuntime, "cudaGetDeviceCount")),
+
         (ProxyCommand::CudaMalloc,(XpuLibrary::CudaRuntime, "cudaMalloc")),
         (ProxyCommand::CudaMemcpy,(XpuLibrary::CudaRuntime, "cudaMemcpy")),
         (ProxyCommand::CudaMemcpyAsync,(XpuLibrary::CudaRuntime,"cudaMemcpyAsync")),
@@ -41,13 +45,16 @@ lazy_static! {
         (ProxyCommand::CudaRegisterFunction,(XpuLibrary::CudaDriver, "cuModuleGetFunction")),
         (ProxyCommand::CudaLaunchKernel,(XpuLibrary::CudaDriver, "cuLaunchKernel")),
         (ProxyCommand::CudaFree,(XpuLibrary::CudaRuntime,"cudaFree")),
-        (ProxyCommand::CudaUnRegisterFatBinary,(XpuLibrary::CudaDriver,"cuModuleUnload")),
+        (ProxyCommand::CudaUnregisterFatBinary,(XpuLibrary::CudaDriver,"cuModuleUnload")),
 
         (ProxyCommand::CudaStreamSynchronize,(XpuLibrary::CudaRuntime,"cudaStreamSynchronize")),
         (ProxyCommand::CudaStreamCreate,(XpuLibrary::CudaRuntime,"cudaStreamCreate")),
         (ProxyCommand::CudaStreamDestroy,(XpuLibrary::CudaRuntime,"cudaStreamDestroy")),
         (ProxyCommand::CudaStreamIsCapturing,(XpuLibrary::CudaRuntime,"cudaStreamIsCapturing")),  
         (ProxyCommand::CuModuleGetLoadingMode,(XpuLibrary::CudaDriver,"cuModuleGetLoadingMode")), 
+
+        (ProxyCommand::CudaGetLastError,(XpuLibrary::CudaRuntime,"cudaGetLastError")),
+
     ]);
 }
 
@@ -68,11 +75,39 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             error!("CudaSetDevice 3");
             return Ok(ret as i64);
         }
+        ProxyCommand::CudaSetDeviceFlags => {
+            error!("CudaSetDeviceFlags");
+            let func: extern "C" fn(libc::c_uint) -> i32 = unsafe { std::mem::transmute(handler)};
+
+            let ret = func(parameters.para1 as u32);
+            error!("result is {}, {:?}", ret, ret);
+
+            return Ok(ret as i64);
+        } 
+        ProxyCommand::CudaDeviceReset |
         ProxyCommand::CudaDeviceSynchronize => {
             let func: extern "C" fn() -> i32 = unsafe { std::mem::transmute(handler) };
 
             let ret = func();
             return Ok(ret as i64);
+        }
+        ProxyCommand::CudaGetDeviceCount => {
+            let mut deviceCount: libc::c_int = 0; 
+
+            let func: extern "C" fn(*mut ::std::os::raw::c_int) -> i32 = 
+                unsafe { std::mem::transmute(handler)};
+
+            let ret = func(&mut deviceCount);
+
+            error!("yiwang device count after function call is :{:x}", deviceCount);
+            error!("yiwang cudaGetDeviceCount result is: {:?}, {}", ret,ret);
+            
+            unsafe{
+            *(parameters.para1 as *mut i32) = deviceCount as i32
+            };
+
+            return Ok(ret as i64);
+
         }
         ProxyCommand::CudaMalloc => {
             let func: extern "C" fn(*mut *mut ::std::os::raw::c_void, usize) -> i32 =
@@ -148,7 +183,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             );
             return Ok(ret as i64);
         }
-        ProxyCommand::CudaUnRegisterFatBinary => {
+        ProxyCommand::CudaUnregisterFatBinary => {
             let moduleKey = parameters.para1;
             error!("yiwang unregister module key:{:x}", moduleKey);
 
@@ -333,36 +368,36 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             unsafe {
                 captureStatus = *(parameters.para2 as *mut _);        
             }
-            error!("captureStatus is: {}, {:?}", captureStatus as i32,captureStatus);
+            error!("captureStatus is: {}, {:?}", captureStatus as u32,captureStatus);
 
             let ret = func(parameters.para1 as cudaStream_t, &mut captureStatus);
 
             error!("ret is :{:x?}",ret);
-            error!("now captureStatus should change: {}, {:?}",captureStatus as i32,captureStatus);
+            error!("now captureStatus should change: {}, {:?}",captureStatus as u32,captureStatus);
 
             unsafe{
-            *(parameters.para2 as *mut _) = captureStatus as i32;
+            *(parameters.para2 as *mut _) = captureStatus as u32;
             }
 
             return Ok(ret as i64);
         }
         ProxyCommand::CuModuleGetLoadingMode => {
-            //  let mut loadingMode:CUmoduleLoadingMode; 
-            //  unsafe{
-            //     loadingMode = *(parameters.para1 as *mut _ )
-            //  };
+             let mut loadingMode:CUmoduleLoadingMode; 
+             unsafe{
+                loadingMode = *(parameters.para1 as *mut _ )
+             };
 
-            //  error!("before function call, loading mode is: {}, {:?}", loadingMode as i32, loadingMode );
+             error!("before function call, loading mode is: {}, {:?}", loadingMode as i32, loadingMode );
 
 
-            //  let func: extern "C" fn(*mut CUmoduleLoadingMode) -> i32  = unsafe{std::mem::transmute(handler)};
+             let func: extern "C" fn(*mut CUmoduleLoadingMode) -> i32  = unsafe{std::mem::transmute(handler)};
 
-            //  let ret = func(&mut loadingMode);
+             let ret = func(&mut loadingMode);
 
-            //  error!("ret is : {}, {:x?}",ret, ret);
-            //  error!("loading mode should change: {}, {:?}",loadingMode as i32,loadingMode);
+             error!("ret is : {}, {:x?}",ret, ret);
+             error!("loading mode should change: {}, {:?}",loadingMode as i32,loadingMode);
 
-            //  return Ok(ret as i64);
+             return Ok(ret as i64);
 
             // let initResult = unsafe { cuda_driver_sys::cuInit(0) };
             // error!("initResult {:?}", initResult);
@@ -371,17 +406,21 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             //     unsafe {std::mem::transmute(handler)};
                   
             // let ret = func( parameters.para1 as *mut ::std::os::raw::c_void);
-            
+        
+            // let mut mode: CUmoduleLoadingMode  = CUmoduleLoadingMode_enum::CU_MODULE_EAGER_LOADING;
+            // let func: extern "C" fn(*mut CUmoduleLoadingMode) -> i32  = unsafe{std::mem::transmute(handler)};
+            // let ret = func(&mut mode);
 
-            let mut mode: CUmoduleLoadingMode  = CUmoduleLoadingMode_enum::CU_MODULE_EAGER_LOADING;
-            let func: extern "C" fn(*mut CUmoduleLoadingMode) -> i32  = unsafe{std::mem::transmute(handler)};
-            let ret = func(&mut mode);
+            // error!("ret is 3: {}, {:x?}",ret, ret);
+            // error!("loading mode should change: {} {:?}, " ,mode as i32, mode );
 
-            error!("ret is 3: {}, {:x?}",ret, ret);
-            error!("loading mode should change: {} {:?}, " ,mode as i32, mode );
+            // return Ok(ret as i64);
+         }
+         ProxyCommand::CudaGetLastError => {
+            let func: extern "C" fn() -> i32 = unsafe { std::mem::transmute(handler) };
 
+            let ret = func();
             return Ok(ret as i64);
-
          }
 
 
@@ -536,11 +575,11 @@ impl NvidiaHandlersInner {
     pub fn GetFuncHandler(&mut self, cmd: ProxyCommand) -> Result<u64> {
         match self.handlers.get(&cmd) {
             None => {
-                error!("yiwang cmd {:?}",cmd);
+                // error!("yiwang cmd {:?}",cmd);
                 let func = self.DLSym(cmd)?;
-                error!("yiwang func {:x}",func);
+                // error!("yiwang func {:x}",func);
                 self.handlers.insert(cmd, func);
-                error!("yiwang handlers {:x?}",self.handlers);
+                // error!("yiwang handlers {:x?}",self.handlers);
                 return Ok(func);
             }
             Some(func) => {

@@ -15,14 +15,18 @@
 #[repr(u64)]
 pub enum ProxyCommand {
     None = 0 as u64,
+    //devcie management
     CudaSetDevice,
+    CudaSetDeviceFlags,
     CudaDeviceSynchronize,
+    CudaDeviceReset,
+    CudaGetDeviceCount,
     CudaMalloc,
     CudaMemcpy,
     CudaMemcpyAsync,
     CudaFree,
     CudaRegisterFatBinary,
-    CudaUnRegisterFatBinary,
+    CudaUnregisterFatBinary,
     CudaRegisterFunction,
     CudaLaunchKernel,
 
@@ -33,6 +37,8 @@ pub enum ProxyCommand {
     CudaStreamDestroy,
     CudaStreamIsCapturing,
     CuModuleGetLoadingMode,
+    //Error handling
+    CudaGetLastError, 
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]

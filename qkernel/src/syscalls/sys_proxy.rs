@@ -56,6 +56,41 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             );
             return Ok(ret);
         }
+        ProxyCommand::CudaSetDeviceFlags => {
+            error!("SysProxy CudaSetDeviceFlags");
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            return Ok(ret);
+        }
+        ProxyCommand::CudaDeviceReset => {
+            error!("SysProxy CudaDeviceReset");
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            return Ok(ret);
+        } 
+        ProxyCommand::CudaGetDeviceCount => {
+            let mut deviceCount:i32 = 0 ; 
+
+            parameters.para1 = &mut deviceCount as *mut _ as u64;
+
+            error!("yiwang device count is :{:x}", deviceCount);
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+           
+            error!("yiwang device count should change, is :{}, ret is: {}",deviceCount, ret);
+            if ret == 0 {
+                task.CopyOutObj(&deviceCount, args.arg1 as u64)?; 
+            }
+
+            return Ok(ret);
+        }
         ProxyCommand::CudaMalloc => {
             let mut addr:u64 = 0;
             parameters.para1 = &mut addr as *mut _ as u64;
@@ -117,10 +152,10 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
             
         }
-        ProxyCommand::CudaUnRegisterFatBinary => {
+        ProxyCommand::CudaUnregisterFatBinary => {
             error!("yw fatCubinHandle from the cudaproxy is {:x}", parameters.para1 as u64);
             let ret = HostSpace::Proxy(
-                 ProxyCommand::CudaUnRegisterFatBinary,
+                 ProxyCommand::CudaUnregisterFatBinary,
                  parameters,
             );
             error!("yw fatCubinHandle from the cudaproxy is {:x}", parameters.para1 as u64);
@@ -228,13 +263,13 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ProxyCommand::CudaStreamIsCapturing => {
             error!("yiwang CudaStreamIsCapturing stream parameter from cudaproxy is : {:x}", parameters.para1);
             error!("yiwang address of capture status address from cudaproxy is : {:x}", parameters.para2);
-            let mut pCaptureStatus:i32;
+            let mut pCaptureStatus:u32;
 
             unsafe{
                  // why i32 is fine, i64 got error ? 
                 pCaptureStatus = *(parameters.para2 as *mut _) ;
             
-                error!("yiwang value of parameter.para2 is: {}",*(parameters.para2 as *mut i32));
+                error!("yiwang value of parameter.para2 is: {}",*(parameters.para2 as *mut u32));
                 
             }
                 parameters.para2 = &mut pCaptureStatus as *mut _ as u64;
@@ -255,16 +290,27 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             
         }
         ProxyCommand::CuModuleGetLoadingMode => {
-            let mut mode:i32 = 0; 
+            let mut mode:u32 = 0; 
             parameters.para1 = &mut mode as *mut _ as u64; 
 
             let ret = HostSpace::Proxy(
                  cmd,
                  parameters,
              );
-
+             
+            if ret == 0 {
+                task.CopyOutObj(&mode, args.arg1 as u64)?
+            }
             return Ok(ret);
 
+        }
+        ProxyCommand::CudaGetLastError => {
+            error!("SysProxy CudaGetLastError");
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            return Ok(ret);
         }
 
         
