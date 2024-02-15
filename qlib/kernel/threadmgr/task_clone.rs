@@ -451,7 +451,9 @@ impl Task {
             cTask.CopyOutObjManual(&pid, cTid)?;
         }
 
-        cTask.context.set_tls(tls);
+        if opts.SetTLS {
+            cTask.context.set_tls(tls);
+        }
 
         taskMgr::NewTask(TaskId::New(cTask.taskId));
 
@@ -671,16 +673,16 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
         toTask.archfpstate = Some(Box::new(
             fromTask.archfpstate.as_ref().unwrap().Fork(),
         ));
-        
+
         // TODO what is this?
         #[cfg(target_arch = "x86_64")]
         {
             toPtRegs.rax = 0;
         }
         toPtRegs.set_stack_pointer(userSp);
-        
-        
-        toTask.context.set_sp(child_clone as u64);
+
+
+        toTask.context.place_on_stack(child_clone as u64);
     }
 }
 

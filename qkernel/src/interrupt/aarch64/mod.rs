@@ -1,18 +1,35 @@
+// Copyright (c) 2021 Quark Container Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+pub mod fault;
+
+use core::arch::asm;
 use super::super::syscall_dispatch_aarch64;
 use crate::qlib::linux_def::MmapProt;
 use crate::qlib::addr::AccessType;
 use crate::qlib::kernel::task;
 use crate::qlib::kernel::threadmgr::task_sched::SchedState;
 use crate::qlib::kernel::SignalDef::PtRegs;
+use crate::qlib::vcpu_mgr::*;
+use self::fault::{PageFaultHandler, PageFaultErrorCode};
+
 pub unsafe fn InitSingleton() {
 }
 
 pub fn init() {
     // TODO set up GIC
 }
-
-use core::arch::asm;
-
 
 pub struct EsrDefs{}
 pub struct ISSDataAbort {}
@@ -159,8 +176,6 @@ pub fn GetException() -> u64{
     return EsrDefs::GetExceptionFromESR(esr);
 }
 
-
-
 #[no_mangle]
 pub extern "C" fn exception_handler_unhandled(_ptregs_addr:usize, exception_type:usize){
     // MUST CHECK ptr!=0 before dereferencing
@@ -226,13 +241,13 @@ pub extern "C" fn exception_handler_el0_sync(ptregs_addr:usize){
     if ptregs_addr == 0 {
         panic!("exception frame is null pointer\n")
     }
+    // arm64 linux syscall calling convention
+    // TODO maybe there is a better/safer way of this pointer cast
+    let ctx_p = ptregs_addr as *mut PtRegs;
+    let ctx_p = ctx_p.cast::<PtRegs>();
+    let ctx = unsafe { &mut *ctx_p };
     match ec {
         EsrDefs::EC_SVC => {
-            // arm64 linux syscall calling convention
-            // TODO maybe there is a better/safer way of this pointer cast
-            let ctx_p = ptregs_addr as *mut PtRegs;
-            let ctx_p = ctx_p.cast::<PtRegs>();
-            let ctx = unsafe { &mut *ctx_p };
             // syscall number from w8
             let call_no = ctx.regs[8] as u32;
             let arg0 = ctx.regs[0];
@@ -254,11 +269,12 @@ pub extern "C" fn exception_handler_el0_sync(ptregs_addr:usize){
             MemAbortUser(ptregs_addr, esr, far, true);
         },
         _ => {
-            panic!("unhandled sync exception from el0: {}\n", ec);
+            panic!("unhandled sync exception from el0: {},\n current-context: {:?}", ec, ctx);
         }
         // TODO (default case) for a unhandled exception from user,
         // the kill the user process instead of panicing
     }
+    CPULocal::Myself().SetMode(VcpuMode::User);
 }
 
 #[no_mangle]
@@ -288,10 +304,33 @@ pub fn MemAbortUser(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool){
            });
     let dfsc = esr & EsrDefs::ISS_DFSC_MASK;
     let access_type = GetFaultAccessType(esr, is_instr);
-    match dfsc {
+    let dfsc_root = dfsc & PageFaultErrorCode::GEN_xxSC_MASK;
+    match dfsc_root {
+        PageFaultErrorCode::GEN_PERMISSION_FAULT |
+        PageFaultErrorCode::GEN_TRANSLATION_FAULT|
+        PageFaultErrorCode::GEN_ACCESS_FLAG_FAULT => {
+            info!("DFSC/IFSC == {:#X}, FAR == {:#X}, acces-type fault == {}, \
+                  during address translation == {}.", dfsc, far,
+                  access_type.String(), EsrDefs::IsCM(esr));
+            let ptregs_ptr = ptregs_addr as *mut PtRegs;
+            let ptregs = unsafe {
+                &mut *ptregs_ptr
+            };
+            //
+            //TODO: on work
+            //
+            let error_code = PageFaultErrorCode::new(true, esr);
+            PageFaultHandler(ptregs , far, error_code);
+            return;
+        },
         _ => {
             // TODO insert proper handler
-            panic!("DFSC/IFSC == 0x{:02x}, FAR == {}, faulty access type = {}",  dfsc, far, access_type.String());
+            panic!("DFSC/IFSC == 0x{:02x}, FAR == {:#x}, acces-type fault = {},\
+                   during address translation: {} ",  dfsc, far, access_type.String(),
+                   match EsrDefs::IsCM(esr) {
+                       true => "Yes",
+                       false => "No",
+                   });
         },
     }
 }
@@ -304,10 +343,30 @@ pub fn MemAbortKernel(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool){
            });
     let dfsc = esr & EsrDefs::ISS_DFSC_MASK;
     let access_type = GetFaultAccessType(esr, is_instr);
-    match dfsc {
+    let dfsc_root = dfsc & PageFaultErrorCode::GEN_xxSC_MASK;
+    match dfsc_root {
+        PageFaultErrorCode::GEN_PERMISSION_FAULT |
+        PageFaultErrorCode::GEN_TRANSLATION_FAULT|
+        PageFaultErrorCode::GEN_ACCESS_FLAG_FAULT => {
+            info!("DFSC/IFSC == {:#X}, FAR == {:#X}, acces-type fault == {}, \
+                  during address translation == {}.", dfsc, far,
+                  access_type.String(), EsrDefs::IsCM(esr));
+            let ptregs_ptr = ptregs_addr as *mut PtRegs;
+            let ptregs = unsafe {
+                &mut *ptregs_ptr
+            };
+            let error_code = PageFaultErrorCode::new(false, esr);
+            PageFaultHandler(ptregs , far, error_code);
+            return;
+        },
         _ => {
             // TODO insert proper handler
-            panic!("DFSC/IFSC == 0x{:02x}, FAR == {}, faulty access type = {}",  dfsc, far, access_type.String());
+            panic!("DFSC/IFSC == 0x{:02x}, FAR == {:#x}, acces-type fault = {},\
+                   during address translation: {} ",  dfsc, far, access_type.String(),
+                   match EsrDefs::IsCM(esr) {
+                       true => "Yes",
+                       false => "No",
+                   });
         },
     }
 }

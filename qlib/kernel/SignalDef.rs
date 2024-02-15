@@ -110,6 +110,18 @@ pub struct PtRegs {
 }
 
 #[cfg(target_arch = "aarch64")]
+impl fmt::LowerHex for PtRegs {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SP:[{:#x}]
+                   PC:[{:#x}]
+                   State:[{:#x}]
+                   X0:[{:#x}]
+                   GenRegs:[{:#?}]",
+                   self.sp, self.pc, self.pstate,
+                   self.orig_x0, self.regs)
+    }
+}
+#[cfg(target_arch = "aarch64")]
 impl PtRegs {
     pub fn Set(&mut self, ctx: &SigContext) {
         self.regs = ctx.regs.clone();
