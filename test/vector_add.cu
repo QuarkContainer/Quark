@@ -108,6 +108,12 @@ void cuda_add() {
     printf("out[0] = %f\n", out[0]);
     printf("PASSED\n");
 
+    int low, high;
+    printf("low is: %d, high is: %d", low, high);
+    cudaDeviceGetStreamPriorityRange(&low, &high);
+    printf("low is: %d, high is: %d", low, high);
+
+
  // cuModuleGetLoadingMode 
  
 //     CUmoduleLoadingMode mode;

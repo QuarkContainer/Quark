@@ -18,13 +18,12 @@ use alloc::vec::Vec;
 
 use crate::qlib::common::*;
 use crate::syscalls::syscalls::*;
-use crate::task::*;
+use crate::{parameters, task::*};
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::linux_def::SysErr;
 use crate::qlib::proxy::*;
 use super::super::util::cstring::*;
 
-// use cuda_runtime_sys::cudaStream_t; 
 
 lazy_static! {
     pub static ref PARAM_INFOS:Mutex<BTreeMap<u64, Arc<Vec<u16>>>> = Mutex::new(BTreeMap::new());
@@ -90,6 +89,58 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
 
             return Ok(ret);
+        }
+        ProxyCommand::CudaDeviceGetStreamPriorityRange => {
+            let mut lowPriority:i32;
+            let mut highPriority:i32;
+
+            unsafe{
+                lowPriority = *(parameters.para1 as *mut _);
+                highPriority = *(parameters.para2 as *mut _);
+            }
+
+            error!("yiwang low range from cudaProxy is :{}", lowPriority);
+            error!("yiwang high range from cudaProxy is :{}", highPriority);
+
+            parameters.para1 = &mut lowPriority as *mut _ as u64;
+            parameters.para2 = &mut highPriority as *mut _ as u64;
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            error!("yiwang low range should change, is :{}, ret is: {}",lowPriority, ret);
+            error!("yiwang high range should change, is :{}",highPriority);
+            if ret == 0 {
+                task.CopyOutObj(&lowPriority, args.arg1)?;
+                task.CopyOutObj(&highPriority, args.arg2)?
+            }
+
+            return Ok(ret);
+
+        }
+        ProxyCommand::CudaGetDeviceProperties => {
+
+            let mut deviceProp:CudaDeviceProperties = CudaDeviceProperties::default();
+
+            parameters.para1 = &mut deviceProp as * mut _ as u64;
+
+            error!("yiwang cudaGetDeviceProperties Device: {}",parameters.para2);
+
+
+            let ret = HostSpace::Proxy(
+                cmd, 
+                parameters
+            );
+
+            error!("yiwang deviceProp should change: {:?}", deviceProp);
+            if ret == 0 {
+                task.CopyOutObj(&deviceProp, args.arg1)?;
+            }
+
+            return Ok(ret);
+
         }
         ProxyCommand::CudaMalloc => {
             let mut addr:u64 = 0;
@@ -167,9 +218,10 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             error!("CudaRegisterFunction data {:x?}, parameters {:x?}", data, parameters);
 
             let deviceName = CString::ToString(task, data.deviceName)?;
+            // address 
             data.deviceName = &(deviceName.as_bytes()[0]) as * const _ as u64;
-            parameters.para1 = &data as * const _ as u64;
-            parameters.para2 = deviceName.as_bytes().len() as u64;
+            parameters.para1 = &data as * const _ as u64; // address 
+            parameters.para2 = deviceName.as_bytes().len() as u64; // device name length 
             error!("deviceName {}, data.deviceName {:x}, parameters {:x?}", deviceName, data.deviceName, parameters);
 
             let mut paramInfo = ParamInfo::default();

@@ -16,15 +16,13 @@ use std::os::raw::*;
 use cuda_runtime_sys::cudaMemcpyKind;
 use cuda_runtime_sys::cudaStream_t; 
 use cuda_runtime_sys::cudaStreamCaptureStatus;
+use cuda_runtime_sys::cudaDeviceProp;
+
 
 
 use crate::syscall::*;
 use crate::proxy::*;
 pub const SYS_PROXY: usize = 10003;
-
-// cudaGetDeviceProperties
-//cudaDeviceGetStreamPriorityRange
-//__cudaRegisterVar
 
 // device management
 #[no_mangle]
@@ -78,6 +76,29 @@ pub extern "C" fn cudaGetDeviceCount(count: *mut c_int) -> usize{
     return unsafe{
         syscall2(SYS_PROXY, ProxyCommand::CudaGetDeviceCount as usize, count as *const _ as usize )
     };
+}
+
+//not yet tested 
+#[no_mangle]
+pub extern "C" fn cudaDeviceGetStreamPriorityRange(leastPriority: *mut c_int, greatestPriority: *mut c_int) -> usize{
+    unsafe{
+        println!("Hijacked cudaDeviceGetStreamPriorityRange, leastPriority is: {}, greatestPriority is: {}", *leastPriority,*greatestPriority)
+    };
+
+    return unsafe{
+        syscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetStreamPriorityRange as usize, leastPriority as *const _ as usize, greatestPriority as *const _ as usize)
+    };
+}
+
+// not yet tested 
+#[no_mangle]
+pub extern "C" fn cudaGetDeviceProperties(prop: *mut cudaDeviceProp, device: c_int) -> usize{
+    println!("Hijacked cudaGetDevicePropoerties(device {})",device);
+    
+    return unsafe{
+        syscall3(SYS_PROXY, ProxyCommand::CudaGetDeviceProperties as usize, prop as * const _ as usize , device as usize)
+    };
+
 }
 
 #[no_mangle]
@@ -157,6 +178,8 @@ pub extern "C" fn __cudaRegisterFunction(
         syscall2(SYS_PROXY, ProxyCommand::CudaRegisterFunction as usize, &info as *const _ as usize);
     }
 }
+
+// __cudaRegisterVar
   
 
 #[no_mangle]

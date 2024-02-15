@@ -27,6 +27,8 @@ use crate::xpu::cuda::*;
 
 use cuda_driver_sys::*;
 use cuda_runtime_sys::{cudaStreamCaptureStatus, cudaStream_t};  
+use cuda_runtime_sys::cudaDeviceProp;
+
 
 lazy_static! {
     pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
@@ -37,6 +39,8 @@ lazy_static! {
         (ProxyCommand::CudaDeviceSynchronize,(XpuLibrary::CudaRuntime, "cudaDeviceSynchronize")),
         (ProxyCommand::CudaDeviceReset,(XpuLibrary::CudaRuntime, "cudaDeviceReset")),
         (ProxyCommand::CudaGetDeviceCount,(XpuLibrary::CudaRuntime, "cudaGetDeviceCount")),
+        (ProxyCommand::CudaDeviceGetStreamPriorityRange,(XpuLibrary::CudaRuntime, "cudaDeviceGetStreamPriorityRange")),
+        (ProxyCommand::CudaGetDeviceProperties,(XpuLibrary::CudaRuntime, "cudaGetDeviceProperties")),
 
         (ProxyCommand::CudaMalloc,(XpuLibrary::CudaRuntime, "cudaMalloc")),
         (ProxyCommand::CudaMemcpy,(XpuLibrary::CudaRuntime, "cudaMemcpy")),
@@ -104,6 +108,57 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             
             unsafe{
             *(parameters.para1 as *mut i32) = deviceCount as i32
+            };
+
+            return Ok(ret as i64);
+
+        }
+        ProxyCommand::CudaDeviceGetStreamPriorityRange => {
+            let mut leastPriority: ::std::os::raw::c_int;
+            let mut greatestPriority: ::std::os::raw::c_int;
+
+            unsafe{
+                leastPriority = *(parameters.para1 as *mut _); 
+                greatestPriority = *(parameters.para2 as *mut _) ;
+            } 
+
+            error!("yiwang leastPriority before function call is: {}",leastPriority);
+            error!("yiwang greatestPriority before function call is: {}",greatestPriority);
+
+            let func: extern "C" fn(*mut ::std::os::raw::c_int, *mut ::std::os::raw::c_int) -> i32 = 
+                unsafe { std::mem::transmute(handler)};
+
+            let ret = func(&mut leastPriority,&mut greatestPriority);
+
+            error!("yiwang leastPriority after function call is :{}", leastPriority);
+            error!("yiwang greatestPriority after function call is:{}",greatestPriority);
+
+            error!("yiwang result is: {:?}, {}", ret, ret);
+            
+            unsafe{
+                *(parameters.para1 as *mut _) = leastPriority;
+                *(parameters.para2 as *mut _) = greatestPriority;
+            }
+
+            return Ok(ret as i64);
+
+        }
+        ProxyCommand::CudaGetDeviceProperties => {
+            let device = parameters.para2; 
+
+            let mut deviceProp: cudaDeviceProp = Default::default();
+
+            let func: extern "C" fn(*mut cudaDeviceProp, ::std::os::raw::c_int) -> i32 = 
+                unsafe { std::mem::transmute(handler)};
+            
+            let ret = func(&mut deviceProp, device as ::std::os::raw::c_int);
+
+            error!("yiwang deviceProp after function call, deviceProp.name:{:?}, deviceProp.uuid:{:?}, deviceProp.luid:{:?}", deviceProp.name, deviceProp.uuid, deviceProp.luid);
+            error!("yiwang result is {}, {:?}",ret,ret);
+
+
+            unsafe{
+                *(parameters.para2 as * mut _ ) = deviceProp
             };
 
             return Ok(ret as i64);
