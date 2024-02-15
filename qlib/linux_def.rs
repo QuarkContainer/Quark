@@ -3236,6 +3236,7 @@ pub fn ComparePage(from: u64, to: u64) -> bool {
     }
 }
 
+/// UNSAFE CODE! the caller must make sure the to and from address are 4k aligned.
 #[inline(always)]
 pub fn CopyPage(to: u64, from: u64) {
     unsafe {
