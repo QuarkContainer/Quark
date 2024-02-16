@@ -63,7 +63,7 @@ impl PageTableEntry {
     /// Returns the physical address mapped by this entry, might be zero.
     #[inline]
     pub fn addr(&self) -> PhysAddr {
-        PhysAddr::new(self.entry & 0x000f_ffff_ffff_f000)
+        PhysAddr::new(self.entry & 0x0000_ffff_ffff_f000)
     }
 
     /// Returns the physical frame mapped by this entry.
@@ -122,13 +122,20 @@ bitflags! {
         const PRESENT         = 1;
         const VALID           = 1;
         const TABLE           = 1 << 1;
+        const PAGE            = 1 << 1;      // 4k granule
         // [11:2] Lower page/block attributes
         // [4:2] Memory Attributes
-        // TODO avoid setting multiple bits
-        const PAGE            = 3;      // 4k granule
-        const MEM_DEVICE      = 0x1 << 2; // device mmio
-        const MEM_NORMAL      = 0x4 << 2;
-        const NC              = 1 << 3; // non cachable
+        // MAIR programming defined in qvisor/src/kvm_vcpu_aarch64.rs
+        // MEM_DEVICE and MEM_NORMAL are shorthand aliases
+        const MEM_DEVICE      = 1 << 2;
+        const MEM_NORMAL      = 4 << 2;
+        const MT_DEVICE_nGnRnE= 0 << 2;
+        const MT_DEVICE_nGnRE = 1 << 2;
+        const MT_DEVICE_GRE   = 2 << 2;
+        const MT_NORMAL_NC    = 3 << 2;
+        const MT_NORMAL       = 4 << 2;
+        const MT_NORMAL_WT    = 5 << 2;
+
         const NS              = 1 << 5; // non secure
         // [7:6] Access permissions (AP)
         const USER_ACCESSIBLE = 1 << 6; // allow EL0 access
@@ -146,18 +153,7 @@ bitflags! {
         const UXN             = 1 << 54;
         const DIRTY           = 1 << 55;
 
-        // A handy collection of flags that specify device memory
-        // TODO remove this composition from PageTableFlags and
-        // add a function set all individual flags in addr.rs
-        const DEVICE_FLAGS    = Self::MEM_DEVICE.bits|
-                                Self::PAGE.bits|
-                                Self::NC.bits|
-                                Self::INNER_SHAREABLE.bits|
-                                Self::PXN.bits|
-                                Self::UXN.bits;
-        //
         // Occupied bits, dedicated for SW usage.
-        //
         const SWAPPED_OUT     = 1 << 56;
         const TAKEN           = 1 << 57; //Another thread is using the PTE.
     }
