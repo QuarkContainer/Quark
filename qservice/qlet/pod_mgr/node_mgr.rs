@@ -26,14 +26,13 @@ pub struct NodeMgr {
 }
 
 impl EventHandler for NodeMgr {
-    fn handle(&self, store: &ThreadSafeStore, event: &DeltaEvent) {
+    fn handle(&self, _store: &ThreadSafeStore, event: &DeltaEvent) {
         match &event.type_ {
             EventType::Added => {
                 let obj = &event.obj;
                 let nodeInfo : NodeInfo = serde_json::from_str(&obj.data)
                     .expect(&format!("NodeMgr::handle deserialize fail for {}", &obj.data));
 
-                info!("node {:#?} is added", &nodeInfo);
                 let peerIp = ipnetwork::Ipv4Network::from_str(&nodeInfo.nodeIp).unwrap().ip().into();
                 let peerPort : u16 = nodeInfo.tsotSvcPort;
                 let cidr = ipnetwork::Ipv4Network::from_str(&nodeInfo.cidr).unwrap();
@@ -44,12 +43,10 @@ impl EventHandler for NodeMgr {
                 let nodeInfo : NodeInfo = serde_json::from_str(&obj.data)
                     .expect(&format!("NodeMgr::handle deserialize fail for {}", &obj.data));
                 
-                info!("node {:#?} is removed", &nodeInfo);
                 let cidr = ipnetwork::Ipv4Network::from_str(&nodeInfo.cidr).unwrap();
                 PEER_MGR.RemovePeer(cidr.ip().into()).unwrap();
             }
             _ => ()
         }
-        error!("NodeMgr store is {:#?} event {:#?}", store, event);
     }
 }

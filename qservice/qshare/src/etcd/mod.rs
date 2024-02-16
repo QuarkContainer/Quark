@@ -15,12 +15,7 @@
 pub mod etcd_client;
 pub mod etcd_store;
 pub mod watch;
-pub mod svc_dir;
-pub mod etcd_svc;
-
-use svc_dir::*;
 
 lazy_static::lazy_static! {
-    pub static ref SVC_DIR: SvcDir = SvcDir::default();
     pub static ref CACHE_OBJ_TYPES: Vec<&'static str> = vec!["pod", "podset", "package"];
 }

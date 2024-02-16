@@ -23,21 +23,22 @@ use uuid::Uuid;
 use tokio::sync::Notify;
 
 use crate::common::*;
-use super::cacher::DEFAULT_CACHE_COUNT;
 use super::data_obj::*;
 use super::selection_predicate::*;
 use super::watch::*;
 
 use async_trait::async_trait;
 
+pub const DEFAULT_CACHE_COUNT: usize = 2000;
+
 #[async_trait]
-pub trait BackendStore1 : Sync + Send + Debug {
-    async fn Get1(&self, key: &str, minRevision: i64) -> Result<Option<DataObject>>;
-    async fn List1(&self, prefix: &str, opts: &ListOption) -> Result<DataObjList>;
+pub trait BackendStore : Sync + Send + Debug {
+    async fn Get(&self, key: &str, minRevision: i64) -> Result<Option<DataObject>>;
+    async fn List(&self, prefix: &str, opts: &ListOption) -> Result<DataObjList>;
 
     // register cacher for the prefix, the ready will be notified when the first list finish
     // the notify is used by Cacher to notice BackendStore stop update the Cacher
-    fn Register1(&self, cacher: CacheStore, rev: i64, prefix: String, ready: Arc<Notify>, notify: Arc<Notify>) -> Result<()>;
+    fn Register(&self, cacher: CacheStore, rev: i64, prefix: String, ready: Arc<Notify>, notify: Arc<Notify>) -> Result<()>;
 }
 
 #[derive(Clone, Debug)]
@@ -52,7 +53,7 @@ impl Deref for CacheStore {
 }
 
 impl CacheStore {
-    pub async fn New(store: Arc<dyn BackendStore1>, objType: &str, rev: i64) -> Result<Self> {
+    pub async fn New(store: Arc<dyn BackendStore>, objType: &str, rev: i64) -> Result<Self> {
         let storeClone = store.clone();
         let inner = CacheStoreInner::New(store, objType);
         let notify = inner.closeNotify.clone();
@@ -64,9 +65,8 @@ impl CacheStore {
         let ready = Arc::new(Notify::new());
         let readyClone = ready.clone();
 
-
-        storeClone.Register1(watch, rev, prefixClone, readyClone, notify)?;
-    
+        storeClone.Register(watch, rev, prefixClone, readyClone, notify)?;
+        
         ready.notified().await;
         
         return Ok(ret);
@@ -120,9 +120,9 @@ impl CacheStore {
         let objKey = namespace.to_string() + "/" + name;
         if revision == -1 {
             // -1 means get from etcd
-            let store: Arc<dyn BackendStore1> = self.Store();
+            let store: Arc<dyn BackendStore> = self.Store();
             let key = &self.StoreKey(&objKey);
-            return store.Get1(key, revision).await;
+            return store.Get(key, revision).await;
         }
 
         self.WaitUntilRev(revision).await?;
@@ -143,7 +143,7 @@ impl CacheStore {
             opts.revision = 0;
             let prefix = &self.StoreKey(namespace);
 
-            return store.List1(prefix, &opts).await;
+            return store.List(prefix, &opts).await;
         }
 
         self.WaitUntilRev(opts.revision).await?;
@@ -164,7 +164,7 @@ impl CacheStore {
         });
     }
 
-    pub fn Store(&self) -> Arc<dyn BackendStore1> {
+    pub fn Store(&self) -> Arc<dyn BackendStore> {
         return self.read().unwrap().backendStore.clone();
     }
 
@@ -217,7 +217,7 @@ impl CacheStore {
 
 #[derive(Debug)]
 pub struct CacheStoreInner {
-    pub backendStore: Arc<dyn BackendStore1>,
+    pub backendStore: Arc<dyn BackendStore>,
 
     pub objectType: String, // like "pod"
 
@@ -242,7 +242,7 @@ pub struct CacheStoreInner {
 }
 
 impl CacheStoreInner {
-    pub fn New(store: Arc<dyn BackendStore1>, objectType: &str) -> Self {
+    pub fn New(store: Arc<dyn BackendStore>, objectType: &str) -> Self {
         return Self {
             backendStore: store,
             objectType: objectType.to_string(),
