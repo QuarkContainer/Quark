@@ -180,6 +180,23 @@ pub extern "C" fn __cudaRegisterFunction(
 }
 
 // __cudaRegisterVar
+#[no_mangle]
+pub extern "C" fn __cudaRegisterVar(
+    fatCubinHandle:u64,
+    hostVar:u64,
+    deviceAddress:u64,
+    deviceName:u64,
+    ext:c_int,
+    size: usize,
+    constant: c_int,
+    global: c_int,
+){
+    println!("yiwang Hijacked __cudaRegisterVar(fatCubinHandle:{:x}, hostVar:{:x}, 
+        deviceAddress:{:x}, deviceName:{:x}, ext:{}, size:{}, constant:{}, 
+        global:{})",fatCubinHandle, hostVar, deviceAddress, deviceName, ext, size, constant, global);
+
+
+}
   
 
 #[no_mangle]

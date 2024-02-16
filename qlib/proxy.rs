@@ -430,3 +430,19 @@ pub struct NvInfoEntry {
     pub kernel_id: u32,
     pub value: u32
 }
+
+
+#[repr(C)]
+#[derive(Default, Debug, Copy, Clone)]
+pub struct RegisterVarInfo {
+    fatCubinHandle:u64, 
+    hostFun:u64, 
+    deviceFun:u64, 
+    deviceName:u64, 
+    thread_limit:usize, 
+    tid:u64, 
+    bid:u64, 
+    bDim:u64, 
+    gDim:u64, 
+    wSize:usize
+}
