@@ -34,6 +34,7 @@ lazy_static! {
     pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
     pub static ref FUNC_MAP: BTreeMap<ProxyCommand, (XpuLibrary, &'static str)> = BTreeMap::from(
         [
+        (ProxyCommand::CudaChooseDevice,(XpuLibrary::CudaRuntime, "cudaChooseDevice")),
         (ProxyCommand::CudaSetDevice,(XpuLibrary::CudaRuntime, "cudaSetDevice")),
         (ProxyCommand::CudaSetDeviceFlags,(XpuLibrary::CudaRuntime, "cudaSetDeviceFlags")),
         (ProxyCommand::CudaDeviceSynchronize,(XpuLibrary::CudaRuntime, "cudaDeviceSynchronize")),
@@ -69,6 +70,39 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
     match cmd {
         ProxyCommand::None => {
             panic!("get impossible proxy command");
+        }
+        ProxyCommand::CudaChooseDevice => {
+
+            let mut device: ::std::os::raw::c_int = Default::default() ; 
+
+            let deviceProp= unsafe { *(parameters.para2 as *const u8 as *const cudaDeviceProp)};
+
+            error!("yiwang deviceProp is(
+                deviceProp.luidDeviceNodeMask: {:x},
+                deviceProp.totalGlobalMem: {:x},
+                deviceProp.sharedMemPerBlock: {:x}
+                deviceProp.regsPerBlock: {:x}
+            )...",
+            deviceProp.luidDeviceNodeMask,
+            deviceProp.totalGlobalMem,
+            deviceProp.sharedMemPerBlock,
+            deviceProp.regsPerBlock,
+             );
+
+            let func: extern "C" fn(*mut ::std::os::raw::c_int, *const cudaDeviceProp) -> i32 = 
+                unsafe { std::mem::transmute(handler)};
+
+            let ret = func(&mut device, &deviceProp);
+
+            error!("yiwang device after function call is :{}", device);
+
+            error!("yiwang result is: {:?}, {}", ret, ret);
+
+            unsafe {
+                *(parameters.para1 as *mut i32 ) = device
+            };
+
+            return Ok(ret as i64);
         }
         ProxyCommand::CudaSetDevice => {
             error!("CudaSetDevice 1");
@@ -158,7 +192,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
 
 
             unsafe{
-                *(parameters.para2 as * mut _ ) = deviceProp
+                *(parameters.para1 as * mut _ ) = deviceProp
             };
 
             return Ok(ret as i64);

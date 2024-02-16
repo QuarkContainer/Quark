@@ -46,6 +46,40 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ProxyCommand::None => {
             return Err(Error::SysError(SysErr::EINVAL));
         }
+        ProxyCommand::CudaChooseDevice => {
+            let mut device: i32 = 0;
+
+            parameters.para1 = &mut device as *mut _ as u64;
+
+            let deviceProperties = task.CopyInObj::<CudaDeviceProperties>(parameters.para2)?;  // got the big struct
+
+            error!("yiwang deviceProperties is(
+                deviceProperties.luidDeviceNodeMask: {:x},
+                deviceProperties.totalGlobalMem: {:x},
+                deviceProperties.sharedMemPerBlock: {:x}
+                deviceProperties.regsPerBlock: {:x}
+            )...",
+            deviceProperties.luidDeviceNodeMask,
+            deviceProperties.totalGlobalMem,
+            deviceProperties.sharedMemPerBlock,
+            deviceProperties.regsPerBlock,
+        );
+
+            parameters.para2 = &deviceProperties as * const _ as u64;  // address for device pointer 
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            error!("yiwang, device should change after function call, is {}", device);
+
+            if ret == 0 {
+                task.CopyOutObj(&device, args.arg1 as u64)?; 
+            }
+
+            return Ok(ret);
+        }
         ProxyCommand::CudaSetDevice |
         ProxyCommand::CudaDeviceSynchronize => {
             error!("SysProxy CudaSetDevice");

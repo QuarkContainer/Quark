@@ -25,6 +25,31 @@ use crate::proxy::*;
 pub const SYS_PROXY: usize = 10003;
 
 // device management
+//Select compute-device which best matches criteria
+#[no_mangle]
+pub extern "C" fn cudaChooseDevice(device:*mut c_int, prop: *const cudaDeviceProp) -> usize{
+    println!("Hijacked cudaChooseDevice(prop address: {:x})", prop as u64);
+
+    unsafe{
+        println!("yiwang deviceProperties is(   
+            prop.luidDeviceNodeMask: {:x},
+            prop.totalGlobalMem: {:x},
+            prop.sharedMemPerBlock: {:x}
+            prop.regsPerBlock: {:x}
+        )...",    
+        (*prop).luidDeviceNodeMask,
+        (*prop).totalGlobalMem,
+        (*prop).sharedMemPerBlock,
+        (*prop).regsPerBlock)
+    };
+
+    let ret = unsafe{
+        syscall3(SYS_PROXY, ProxyCommand::CudaChooseDevice as usize, device as *const _ as usize, prop as usize) 
+    };
+    return ret; 
+}
+
+
 #[no_mangle]
 pub extern "C" fn cudaSetDevice(device: c_int) -> usize {
     println!("Hijacked cudaSetDevice({})", device);
@@ -78,7 +103,7 @@ pub extern "C" fn cudaGetDeviceCount(count: *mut c_int) -> usize{
     };
 }
 
-//not yet tested 
+
 #[no_mangle]
 pub extern "C" fn cudaDeviceGetStreamPriorityRange(leastPriority: *mut c_int, greatestPriority: *mut c_int) -> usize{
     unsafe{
@@ -186,10 +211,10 @@ pub extern "C" fn __cudaRegisterVar(
     hostVar:u64,
     deviceAddress:u64,
     deviceName:u64,
-    ext:c_int,
+    ext:i32,
     size: usize,
-    constant: c_int,
-    global: c_int,
+    constant: i32,
+    global: i32,
 ){
     println!("yiwang Hijacked __cudaRegisterVar(fatCubinHandle:{:x}, hostVar:{:x}, 
         deviceAddress:{:x}, deviceName:{:x}, ext:{}, size:{}, constant:{}, 
