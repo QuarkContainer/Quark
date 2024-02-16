@@ -21,6 +21,7 @@ use core::sync::atomic::fence;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use crate::qlib::kernel::SHARESPACE;
 
 cfg_x86_64! {
    pub use x86_64::structures::paging::page_table::PageTableEntry;
@@ -1253,6 +1254,11 @@ impl PageTables {
 
     #[cfg(target_arch = "x86_64")]
     pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
+        let hibernate_enabled = SHARESPACE.config.read().EnableHibernante;
+        if !hibernate_enabled {
+            return;
+        }
+
         let flags = pteEntry.flags();
         // bit9 : whether the page is swapout
         // bit10: whether there is thread is working on swapin the page

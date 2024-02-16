@@ -152,9 +152,13 @@ impl PageBlockAlloc {
 
         // try to swap in the page in case it is freed before swap in
         // todo: if disable this, system is not stable. root cause this.
-        if SHARESPACE.hiberMgr.ContainersPage(addr) {
-            let _ret = HostSpace::SwapInPage(addr);
+        {
+            let hibernate_enabled = SHARESPACE.config.read().EnableHibernante;
+            if SHARESPACE.hiberMgr.ContainersPage(addr) && hibernate_enabled {
+                let _ret = HostSpace::SwapInPage(addr);
+            }
         }
+
 
         match action {
             // the pb was empty and get just get one freed page, so it can allocate page now

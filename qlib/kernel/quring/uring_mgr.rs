@@ -25,7 +25,6 @@ use super::super::taskMgr::*;
 use super::super::super::linux_def::*;
 use super::super::super::socket_buf::*;
 use super::super::super::vcpu_mgr::*;
-use super::super::kernel::async_wait::*;
 use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
 use super::super::socket::hostinet::uring_socket::*;

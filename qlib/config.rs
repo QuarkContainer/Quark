@@ -44,6 +44,7 @@ pub struct Config {
     pub Realtime: bool,
     pub EnableIOBuf: bool,
     pub EnableTsot: bool,
+    pub EnableHibernante: bool,
 }
 
 impl Config {
@@ -90,6 +91,7 @@ impl Default for Config {
             Realtime: false,
             EnableIOBuf: false,
             EnableTsot: false,
+            EnableHibernante: false,
         };
     }
 }

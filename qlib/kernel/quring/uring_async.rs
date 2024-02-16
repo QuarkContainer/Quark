@@ -708,13 +708,16 @@ impl AsyncOpsTrait for AsyncAccept {
         /**************************hibernate wakeu **************************/
         // so far the quark hibernate is wakeup by accept.
         // todo: find better to handle this
-        if SHARESPACE.reapFileAvaiable.load(Ordering::Relaxed) {
-            ReapSwapIn();
-        }
+        let hibernate_enabled = SHARESPACE.config.read().EnableHibernante;
+        if hibernate_enabled {
+            if SHARESPACE.reapFileAvaiable.load(Ordering::Relaxed) {
+                ReapSwapIn();
+            }
 
-        if SHARESPACE.hibernatePause.load(Ordering::Relaxed) {
-            GetKernel().Unpause();
-            SHARESPACE.hibernatePause.store(false, Ordering::SeqCst);
+            if SHARESPACE.hibernatePause.load(Ordering::Relaxed) {
+                GetKernel().Unpause();
+                SHARESPACE.hibernatePause.store(false, Ordering::SeqCst);
+            }
         }
 
         /**************************hibernate wakeu end **************************/
