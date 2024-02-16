@@ -404,11 +404,8 @@ pub fn syscall_dispatch_aarch64(
         if llevel == LogLevel::Complex {
             tid = currTask.Thread().lock().id;
             pid = currTask.Thread().ThreadGroup().ID();
-            use qlib::kernel::arch::__arch::arch_def::Context;
-            unsafe{
-                info!("({}/{})------get call id {:?} arg0:{:x}, 1:{:x}, 2:{:x}, 3:{:x}, 4:{:x}, 5:{:x}, userstack:{:x}, return address:{:x}, fs:{:x}",
-                    tid, pid, callId, _arg0, _arg1, _arg2, _arg3, _arg4, _arg5, currTask.GetPtRegs().get_stack_pointer(),  (*(currTask.GetContext() as *const Context)).pc, GetFs());
-            }
+            info!("({}/{})------get call id {:?} arg0:{:x}, 1:{:x}, 2:{:x}, 3:{:x}, 4:{:x}, 5:{:x}, userstack:{:x}, return address:{:x}, fs:{:x}",
+                tid, pid, callId, _arg0, _arg1, _arg2, _arg3, _arg4, _arg5, currTask.GetPtRegs().get_stack_pointer(),  currTask.context.pc, currTask.context.tls);
         } else if llevel == LogLevel::Simple {
             tid = currTask.Thread().lock().id;
             pid = currTask.Thread().ThreadGroup().ID();
