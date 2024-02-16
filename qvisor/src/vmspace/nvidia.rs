@@ -27,7 +27,8 @@ use crate::xpu::cuda::*;
 
 use cuda_driver_sys::*;
 use cuda_runtime_sys::{cudaStreamCaptureStatus, cudaStream_t};  
-use cuda_runtime_sys::cudaDeviceProp;
+use cuda_runtime_sys::{cudaDeviceProp, cudaDeviceAttr};
+
 
 
 lazy_static! {
@@ -103,6 +104,34 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             };
 
             return Ok(ret as i64);
+        }
+        ProxyCommand::CudaDeviceGetAttribute => {
+            let attribute: cudaDeviceAttr;
+
+            // beacuse cannot cast a primitive type to a struct 
+            unsafe{
+                attribute = *(&parameters.para2 as *const _ as u64 as *mut cudaDeviceAttr);
+            }
+
+            let mut value: c_int = 0; 
+
+            let device: c_int = parameters.para3 as c_int; 
+
+            let func: extern "C" fn(*mut ::std::os::raw::c_int, cudaDeviceAttr, ::std::os::raw::c_int) -> i32 = 
+            unsafe { std::mem::transmute(handler)};
+            
+
+            let ret = func(&mut value, attribute, device);
+
+            error!("yiwang value after function call is :{:x}", value);
+            error!("yiwang cudaDeviceGetAttribute result is: {:?}, {}", ret,ret);
+            
+            unsafe{
+            *(parameters.para1 as *mut i32) = value as i32
+            };
+
+            return Ok(ret as i64);
+
         }
         ProxyCommand::CudaSetDevice => {
             error!("CudaSetDevice 1");

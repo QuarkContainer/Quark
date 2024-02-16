@@ -17,6 +17,7 @@ use cuda_runtime_sys::cudaMemcpyKind;
 use cuda_runtime_sys::cudaStream_t; 
 use cuda_runtime_sys::cudaStreamCaptureStatus;
 use cuda_runtime_sys::cudaDeviceProp;
+use cuda_runtime_sys::cudaDeviceAttr;
 
 
 
@@ -25,7 +26,7 @@ use crate::proxy::*;
 pub const SYS_PROXY: usize = 10003;
 
 // device management
-//Select compute-device which best matches criteria
+//not yet tested 
 #[no_mangle]
 pub extern "C" fn cudaChooseDevice(device:*mut c_int, prop: *const cudaDeviceProp) -> usize{
     println!("Hijacked cudaChooseDevice(prop address: {:x})", prop as u64);
@@ -49,6 +50,17 @@ pub extern "C" fn cudaChooseDevice(device:*mut c_int, prop: *const cudaDevicePro
     return ret; 
 }
 
+// not yet tested 
+#[no_mangle]
+pub extern "C" fn cudaDeviceGetAttribute(value: *mut c_int, attr: cudaDeviceAttr, device: c_int) -> usize{
+    println!("Hijacked cudaDeviceGetAttribute(device: {}, cudaDeviceAttr: {:?}) ", device, attr);
+
+    let ret = unsafe{
+        syscall4(SYS_PROXY, ProxyCommand::CudaDeviceGetAttribute as usize , value as * const _ as usize, attr as usize , device as usize)
+    };
+
+    return ret;
+}
 
 #[no_mangle]
 pub extern "C" fn cudaSetDevice(device: c_int) -> usize {

@@ -80,6 +80,25 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             return Ok(ret);
         }
+        ProxyCommand::CudaDeviceGetAttribute => {
+            let mut value: i32 = 0; 
+            
+            parameters.para1 = &mut value as * mut _ as u64;
+
+            let attribute: u32 = parameters.para2 as u32;
+            error!("SysProxy CudaDeviceGetAttribute, query about attribute: {}, device: {}", attribute, parameters.para3);
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            error!("the value of the attribute query about should change: {}", value);
+            if ret == 0 {
+                task.CopyOutObj(&value, args.arg1 as u64)?; 
+            }
+
+            return Ok(ret);
+        }
         ProxyCommand::CudaSetDevice |
         ProxyCommand::CudaDeviceSynchronize => {
             error!("SysProxy CudaSetDevice");
@@ -107,6 +126,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         } 
         ProxyCommand::CudaGetDeviceCount => {
             let mut deviceCount:i32 = 0 ; 
+            
 
             parameters.para1 = &mut deviceCount as *mut _ as u64;
 
@@ -351,8 +371,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             error!("yiwang address of capture status address from cudaproxy is : {:x}", parameters.para2);
             let mut pCaptureStatus:u32;
 
-            unsafe{
-                 // why i32 is fine, i64 got error ? 
+            unsafe{ 
                 pCaptureStatus = *(parameters.para2 as *mut _) ;
             
                 error!("yiwang value of parameter.para2 is: {}",*(parameters.para2 as *mut u32));
