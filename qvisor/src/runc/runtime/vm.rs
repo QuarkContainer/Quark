@@ -357,10 +357,10 @@ impl VirtualMachine {
                 let mut opts = addr::PageOpts::Zero();
 
                 opts.SetWrite().SetGlobal().SetPresent().SetAccessed();
-                opts.SetDeviceMMIO();
+                opts.SetMMIOPage();
                 vms.KernelMap(
                     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
-                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE + 0x1000),
+                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE + MemoryDef::HYPERCALL_MMIO_SIZE),
                     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
                     opts.Val(),
                 )?;
