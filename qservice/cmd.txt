@@ -131,6 +131,7 @@ cd Quark/qservice/target/debug
 rm -f /var/log/quark/na.log; sudo ./na
 
 multiple qlet test
+rm -f /var/log/quark/ss.log; sudo ./ss
 rm -f /var/log/quark/na.log; sudo ./na /etc/quark/node1.json
 sudo ./na /etc/quark/node2.json
 

@@ -17,7 +17,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 use std::sync::RwLock;
 
-use qshare::metastore::cacher::*;
+use qshare::metastore::cache_store::CacheStore;
 use qshare::common::*;
 
 use qshare::etcd::etcd_store::EtcdStore;
@@ -35,7 +35,7 @@ impl Deref for SvcDir {
 }
 
 impl SvcDir {
-    pub fn GetCacher(&self, objType: &str) -> Option<Cacher> {
+    pub fn GetCacher(&self, objType: &str) -> Option<CacheStore> {
         return match self.read().unwrap().map.get(objType) {
             None => None,
             Some(c) => Some(c.clone()),
@@ -45,7 +45,7 @@ impl SvcDir {
 
 #[derive(Debug, Default)]
 pub struct SvcDirInner {
-    pub map: BTreeMap<String, Cacher>,
+    pub map: BTreeMap<String, CacheStore>,
 }
 
 impl SvcDirInner {
@@ -53,7 +53,7 @@ impl SvcDirInner {
         let store = EtcdStore::New(etcdAddr, true).await?;
         for i in 0..ETCD_OBJECTS.len() {
             let t = ETCD_OBJECTS[i];
-            let c = Cacher::New(Arc::new(store.clone()), t, 0).await?;
+            let c = CacheStore::New(Arc::new(store.clone()), t, 0).await?;
             self.map.insert(t.to_string(), c);
         }
         

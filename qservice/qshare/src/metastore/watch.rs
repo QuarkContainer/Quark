@@ -88,7 +88,7 @@ impl CacheWatcher {
                 obj: event.obj.DeepCopy(),
             }));
         } else if !curObjPasses && oldObjPasses {
-            let oldObj = event.prevObj.as_ref().unwrap().CopyWithRev(event.revision);
+            let oldObj = event.prevObj.as_ref().unwrap().CopyWithRev(event.channelRev, event.revision);
             return Ok(Some(WatchEvent {
                 type_: EventType::Deleted,
                 obj: oldObj,
@@ -552,6 +552,7 @@ pub struct WatchCacheEvent {
     pub type_: EventType,
     pub obj: DataObject,
     pub prevObj: Option<DataObject>,
+    pub channelRev: i64,
     pub revision: i64,
     pub recordTime: SystemTime,
 }
@@ -562,6 +563,7 @@ impl Default for WatchCacheEvent {
             type_: Default::default(),
             obj: Default::default(),
             prevObj: Default::default(),
+            channelRev: Default::default(),
             revision: Default::default(),
             recordTime: SystemTime::now(),
         };

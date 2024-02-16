@@ -17,7 +17,6 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
-use qshare::metastore::cacher::BackendStore;
 use qshare::metastore::data_obj::DataObject;
 use qshare::metastore::data_obj::DataObjectInner;
 use qshare::types::NodeInfo;

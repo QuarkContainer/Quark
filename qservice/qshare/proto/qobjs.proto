@@ -92,11 +92,12 @@ message Obj {
     string kind = 1;
     string namespace = 2;
     string name = 3;
-    int64 revision = 4;
-    repeated KV labels = 5;
-    repeated KV annotations = 6;
+    int64 channelRev = 4;
+    int64 revision = 5;
+    repeated KV labels = 6;
+    repeated KV annotations = 7;
     
-    string data = 7;
+    string data = 8;
 }
 
 message ResponseHeader {
