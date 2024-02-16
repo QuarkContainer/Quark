@@ -114,12 +114,14 @@ pub struct Obj {
     #[prost(string, tag = "3")]
     pub name: ::prost::alloc::string::String,
     #[prost(int64, tag = "4")]
+    pub channel_rev: i64,
+    #[prost(int64, tag = "5")]
     pub revision: i64,
-    #[prost(message, repeated, tag = "5")]
-    pub labels: ::prost::alloc::vec::Vec<Kv>,
     #[prost(message, repeated, tag = "6")]
+    pub labels: ::prost::alloc::vec::Vec<Kv>,
+    #[prost(message, repeated, tag = "7")]
     pub annotations: ::prost::alloc::vec::Vec<Kv>,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag = "8")]
     pub data: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]

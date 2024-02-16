@@ -175,7 +175,8 @@ impl Watcher {
             None
         } else {
             let obj = Object::Decode(kv.value())?;
-            Some(DataObject::NewFromObject(&obj, kv.mod_revision()))
+            // for etcd, channelRev == Revision
+            Some(DataObject::NewFromObject(&obj, kv.mod_revision(), kv.mod_revision()))
         };
 
         let oldObj: Option<DataObject> = match e.prev_kv() {
@@ -183,7 +184,7 @@ impl Watcher {
             Some(pkv) => {
                 if e.event_type() == etcd_client::EventType::Delete || !self.AcceptAll() {
                     let obj = Object::Decode(pkv.value())?;
-                    Some(DataObject::NewFromObject(&obj, kv.mod_revision()))
+                    Some(DataObject::NewFromObject(&obj, kv.mod_revision(), kv.mod_revision()))
                 } else {
                     None
                 }
@@ -301,7 +302,7 @@ impl Watcher {
 
         for kv in getResp.kvs() {
             let obj = Object::Decode(kv.value())?;
-            let obj = DataObject::NewFromObject(&obj, kv.mod_revision());
+            let obj = DataObject::NewFromObject(&obj, kv.mod_revision(), kv.mod_revision());
 
             if self.internalPred.Match(&obj)? {
                 let event = WatchEvent {

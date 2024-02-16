@@ -234,9 +234,12 @@ pub struct DataObjectInner {
     pub name: String,
     pub lables: Labels,
     pub annotations: Labels,
-    
-    // revision number set by etcd
-    pub reversion: i64,
+
+    // Revision of the Channel
+    pub channelRev: i64,
+
+    // revision number set by creator of object such as etcd
+    pub revision: i64,
 
     pub data: String,
 }
@@ -247,21 +250,22 @@ impl PartialEq for DataObjectInner {
         self.namespace == other.namespace &&
         self.lables == other.lables &&
         self.annotations == other.annotations &&
-        self.reversion == other.reversion &&
+        self.revision == other.revision &&
         self.data == other.data
     }
 }
 impl Eq for DataObjectInner {}
 
 impl DataObjectInner {
-    pub fn CopyWithRev(&self, reversion: i64) -> Self {
+    pub fn CopyWithRev(&self, channelRev: i64, revision: i64) -> Self {
         return Self {
             kind: self.kind.clone(),
             namespace: self.namespace.clone(),
             name: self.name.clone(),
             lables: self.lables.Copy(),
             annotations: self.annotations.Copy(),
-            reversion: reversion,
+            channelRev: channelRev,
+            revision: revision,
             data: self.data.clone(),
         }
     }
@@ -275,7 +279,8 @@ impl DeepCopy for DataObjectInner {
             name: self.name.clone(),
             lables: self.lables.Copy(),
             annotations: self.annotations.Copy(),
-            reversion:self.reversion,
+            channelRev: self.channelRev,
+            revision:self.revision,
             data: self.data.clone(),
         }
     }
@@ -299,7 +304,8 @@ impl From<&Object> for DataObjectInner {
             name: item.name.clone(),
             lables: lables.into(),
             annotations: annotations.into(),
-            reversion: 0,
+            channelRev: 0,
+            revision: 0,
             data: item.data.clone(),
         };
 
@@ -325,7 +331,8 @@ impl From<&Obj> for DataObjectInner {
             name: item.name.clone(),
             lables: lables.into(),
             annotations: annotations.into(),
-            reversion: item.revision,
+            channelRev: item.channel_rev,
+            revision: item.revision,
             data: item.data.clone(),
         };
 
@@ -416,7 +423,8 @@ impl DataObject {
             name: meta.name.as_deref().unwrap_or("").to_string(),
             annotations: annotations.into(),
             lables: labels.into(),
-            reversion: meta.resource_version.as_deref().unwrap_or("0").parse::<i64>().unwrap_or(0),
+            channelRev: 0,
+            revision: meta.resource_version.as_deref().unwrap_or("0").parse::<i64>().unwrap_or(0),
             data: data,
         };
 
@@ -440,18 +448,19 @@ impl DataObject {
             name: item.name.clone(),
             lables: lables.into(),
             annotations: annotations.into(),
-            reversion: item.revision,
+            channelRev: item.channel_rev,
+            revision: item.revision,
             data: item.data.clone(),
         };
 
         return inner.into();
     }
 
-    pub fn CopyWithRev(&self, revision: i64) -> Self {
-        return Self(Arc::new(self.0.CopyWithRev(revision)));
+    pub fn CopyWithRev(&self, channelRev: i64, revision: i64) -> Self {
+        return Self(Arc::new(self.0.CopyWithRev(channelRev, revision)));
     }
 
-    pub fn NewFromObject(item: &Object, revision: i64) -> Self {
+    pub fn NewFromObject(item: &Object, channelRev: i64, revision: i64) -> Self {
         let mut lables = BTreeMap::new();
         for l in &item.labels {
             lables.insert(l.key.clone(), l.val.clone());
@@ -468,7 +477,8 @@ impl DataObject {
             name: item.name.clone(),
             lables: lables.into(),
             annotations: annotations.into(),
-            reversion: revision,
+            channelRev: channelRev,
+            revision: revision,
             data: item.data.clone(),
         };
 
@@ -507,6 +517,7 @@ impl DataObject {
             kind: self.kind.clone(),
             namespace: self.namespace.clone(),
             name: self.name.clone(),
+            channel_rev: self.channelRev,
             revision: self.Revision(),
             labels: self.lables.ToVec(),
             annotations: self.annotations.ToVec(),
@@ -515,7 +526,7 @@ impl DataObject {
     }
 
     pub fn Revision(&self) -> i64 {
-        return self.reversion;
+        return self.revision;
     }
 
     /*pub fn Decode(buf: &[u8]) -> Result<Self> {

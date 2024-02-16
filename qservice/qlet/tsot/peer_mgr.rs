@@ -31,7 +31,7 @@ lazy_static::lazy_static! {
         
         if QLET_CONFIG.singleNodeModel {
             let localIp : u32 = ipnetwork::Ipv4Network::from_str(&QLET_CONFIG.nodeIp).unwrap().ip().into();
-            let localPort = QLET_CONFIG.podMgrPort;
+            let localPort = QLET_CONFIG.tsotSvcPort;
             pm.AddPeer(localIp, localPort, ipv4.ip().into()).unwrap();
         }
         pm

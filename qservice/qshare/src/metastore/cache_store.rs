@@ -12,77 +12,49 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeSet;
-use std::fmt::Debug;
-use std::ops::Deref;
-use std::time::{Duration, Instant};
-use std::{collections::BTreeMap, sync::Arc, time::SystemTime};
-
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime};
 use std::sync::RwLock;
+use std::ops::Deref;
+use std::fmt::Debug;
+use uuid::Uuid;
+
 use tokio::sync::Notify;
 
 use crate::common::*;
-use super::selection_predicate::*;
+use super::cacher::DEFAULT_CACHE_COUNT;
 use super::data_obj::*;
+use super::selection_predicate::*;
 use super::watch::*;
 
 use async_trait::async_trait;
 
 #[async_trait]
-pub trait BackendStore : Sync + Send + Debug {
-    async fn Get(&self, key: &str, minRevision: i64) -> Result<Option<DataObject>>;
-    async fn List(&self, prefix: &str, opts: &ListOption) -> Result<DataObjList>;
+pub trait BackendStore1 : Sync + Send + Debug {
+    async fn Get1(&self, key: &str, minRevision: i64) -> Result<Option<DataObject>>;
+    async fn List1(&self, prefix: &str, opts: &ListOption) -> Result<DataObjList>;
 
     // register cacher for the prefix, the ready will be notified when the first list finish
     // the notify is used by Cacher to notice BackendStore stop update the Cacher
-    fn Register(&self, cacher: Cacher, rev: i64, prefix: String, ready: Arc<Notify>, notify: Arc<Notify>) -> Result<()>;
+    fn Register1(&self, cacher: CacheStore, rev: i64, prefix: String, ready: Arc<Notify>, notify: Arc<Notify>) -> Result<()>;
 }
 
 #[derive(Clone, Debug)]
-pub struct Cacher(Arc<RwLock<CacherInner>>);
+pub struct CacheStore(Arc<RwLock<CacheStoreInner>>);
 
-impl Deref for Cacher {
-    type Target = Arc<RwLock<CacherInner>>;
+impl Deref for CacheStore {
+    type Target = Arc<RwLock<CacheStoreInner>>;
 
-    fn deref(&self) -> &Arc<RwLock<CacherInner>> {
+    fn deref(&self) -> &Arc<RwLock<CacheStoreInner>> {
         &self.0
     }
 }
 
-impl Cacher {
-    pub fn ProcessEvent(&self, event: &WatchEvent) -> Result<()> {
-        let mut inner = self.write().unwrap();
-        return inner.ProcessEvent(event);
-    }
-
-    pub async fn WaitUntilRev(&self, revision: i64) -> Result<()> {
-        if revision == 0 {
-            // 0 means current rev
-            return Ok(());
-        }
-
-        let time = Instant::now();
-        let until = time.checked_add(Duration::from_secs(3)).unwrap();
-
-        let revNotify = self.read().unwrap().revNotify.clone();
-        loop {
-            if self.read().unwrap().revision >= revision {
-                return Ok(());
-            }
-            tokio::select! {
-                _ = revNotify.notified() => {
-                    return Ok(())
-                }
-                _ = tokio::time::sleep(until.duration_since(time)) => {
-                    return Err(Error::Timeout)
-                }
-            }
-        }
-    }
-
-    pub async fn New(store: Arc<dyn BackendStore>, objType: &str, rev: i64) -> Result<Self> {
+impl CacheStore {
+    pub async fn New(store: Arc<dyn BackendStore1>, objType: &str, rev: i64) -> Result<Self> {
         let storeClone = store.clone();
-        let inner = CacherInner::New(store, objType);
+        let inner = CacheStoreInner::New(store, objType);
         let notify = inner.closeNotify.clone();
         let ret = Self(Arc::new(RwLock::new(inner)));
 
@@ -92,14 +64,9 @@ impl Cacher {
         let ready = Arc::new(Notify::new());
         let readyClone = ready.clone();
 
-        /*let future = tokio::spawn(async move{
-            storeClone.Process(watch, rev, prefixClone, readyClone, notify).await
-        });*/
 
-        storeClone.Register(watch, rev, prefixClone, readyClone, notify)?;
+        storeClone.Register1(watch, rev, prefixClone, readyClone, notify)?;
     
-        //ret.0.write().unwrap().bgWorker = Some(future);
-
         ready.notified().await;
         
         return Ok(ret);
@@ -153,9 +120,9 @@ impl Cacher {
         let objKey = namespace.to_string() + "/" + name;
         if revision == -1 {
             // -1 means get from etcd
-            let store: Arc<dyn BackendStore> = self.Store();
+            let store: Arc<dyn BackendStore1> = self.Store();
             let key = &self.StoreKey(&objKey);
-            return store.Get(key, revision).await;
+            return store.Get1(key, revision).await;
         }
 
         self.WaitUntilRev(revision).await?;
@@ -176,7 +143,7 @@ impl Cacher {
             opts.revision = 0;
             let prefix = &self.StoreKey(namespace);
 
-            return store.List(prefix, &opts).await;
+            return store.List1(prefix, &opts).await;
         }
 
         self.WaitUntilRev(opts.revision).await?;
@@ -192,12 +159,12 @@ impl Cacher {
 
         return Ok(DataObjList {
             objs: objs,
-            revision: inner.revision,
+            revision: inner.channelRev,
             ..Default::default()
         });
     }
 
-    pub fn Store(&self) -> Arc<dyn BackendStore> {
+    pub fn Store(&self) -> Arc<dyn BackendStore1> {
         return self.read().unwrap().backendStore.clone();
     }
 
@@ -216,22 +183,49 @@ impl Cacher {
     pub fn Refresh(&self, objs: &[DataObject]) -> Result<()> {
         return self.write().unwrap().Refresh(objs);
     }
+
+    pub fn ProcessEvent(&self, event: &WatchEvent) -> Result<()> {
+        let mut inner = self.write().unwrap();
+        return inner.ProcessEvent(event);
+    }
+
+    pub async fn WaitUntilRev(&self, channelRev: i64) -> Result<()> {
+        if channelRev == 0 {
+            // 0 means current rev
+            return Ok(());
+        }
+
+        let time = Instant::now();
+        let until = time.checked_add(Duration::from_secs(3)).unwrap();
+
+        let revNotify = self.read().unwrap().revNotify.clone();
+        loop {
+            if self.read().unwrap().channelRev >= channelRev {
+                return Ok(());
+            }
+            tokio::select! {
+                _ = revNotify.notified() => {
+                    return Ok(())
+                }
+                _ = tokio::time::sleep(until.duration_since(time)) => {
+                    return Err(Error::Timeout)
+                }
+            }
+        }
+    }
 }
 
-pub const DEFAULT_CACHE_COUNT: usize = 2000;
-
 #[derive(Debug)]
-pub struct CacherInner {
-    pub backendStore: Arc<dyn BackendStore>,
+pub struct CacheStoreInner {
+    pub backendStore: Arc<dyn BackendStore1>,
 
-    pub objectType: String, // like "pods"
+    pub objectType: String, // like "pod"
+
+    pub channleId: Uuid,
 
     pub cache: RingBuf,
 
     pub channelRev: i64,
-
-    // ResourceVersion up to which the watchCache is propagated.
-    pub revision: i64,
 
     // ResourceVersion of the last list result (populated via Replace() method).
     pub listRevision: i64,
@@ -245,18 +239,16 @@ pub struct CacherInner {
     pub cacheStore: BTreeMap<String, DataObject>,
 
     pub watchers: BTreeMap<u64, CacheWatcher>,
-
-    //pub bgWorker: Option<JoinHandle<Result<()>>>,
 }
 
-impl CacherInner {
-    pub fn New(store: Arc<dyn BackendStore>, objectType: &str) -> Self {
+impl CacheStoreInner {
+    pub fn New(store: Arc<dyn BackendStore1>, objectType: &str) -> Self {
         return Self {
             backendStore: store,
             objectType: objectType.to_string(),
+            channleId: Uuid::new_v4(),
             cache: RingBuf::New(DEFAULT_CACHE_COUNT),
-            channelRev: 0, 
-            revision: 0,
+            channelRev: 0,
             listRevision: 0,
             lastWatcherId: 0,
             closeNotify: Arc::new(Notify::new()),
@@ -319,6 +311,37 @@ impl CacherInner {
         return Ok(())
     }
 
+    pub fn Add(&mut self, obj: &DataObject) -> Result<()> {
+        // the object's creator is the cachestore, so the channelRev == Revision
+        let rev = self.ChannelRev();
+        let event = WatchEvent {
+            type_: EventType::Added,
+            obj: obj.CopyWithRev(rev, rev),
+        };
+
+        return self.ProcessEvent(&event);
+    }
+
+    pub fn Remove(&mut self, obj: &DataObject) -> Result<()> {
+        let rev = self.ChannelRev();
+        let event = WatchEvent {
+            type_: EventType::Deleted,
+            obj: obj.CopyWithRev(rev, rev),
+        };
+
+        return self.ProcessEvent(&event);
+    }
+
+    pub fn Update(&mut self, obj: &DataObject) -> Result<()> {
+        let rev = self.ChannelRev();
+        let event = WatchEvent {
+            type_: EventType::Modified,
+            obj: obj.CopyWithRev(rev, rev),
+        };
+
+        return self.ProcessEvent(&event);
+    }
+
     pub fn ProcessEvent(&mut self, event: &WatchEvent) -> Result<()> {
         let mut wcEvent = WatchCacheEvent {
             type_: event.type_.DeepCopy(),
@@ -334,6 +357,13 @@ impl CacherInner {
         match self.cacheStore.get(&key) {
             None => (),
             Some(o) => {
+                let newRev = event.obj.revision;
+                let preRev = o.revision;
+
+                // get older update, ignore this
+                if newRev <= preRev {
+                    return Ok(())
+                }
                 wcEvent.prevObj = Some(o.clone());
             }
         }
@@ -361,7 +391,6 @@ impl CacherInner {
             self.cacheStore.insert(key, event.obj.clone());
         }
 
-        self.revision = event.obj.Revision();
         return Ok(());
     }
 
