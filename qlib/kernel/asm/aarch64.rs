@@ -44,20 +44,6 @@ pub const KernelFlagsSet:u64 = _PSR_MODE_EL1h | _PSR_D_BIT | _PSR_A_BIT | _PSR_I
 // UserFlagsSet are always set in userspace.
 pub const UserFlagsSet:u64 = _PSR_MODE_EL0t;
 
-#[inline]
-pub fn WriteMsr(msr: u32, value: u64) {
-
-}
-
-#[inline]
-pub fn ReadMsr(msr: u32) -> u64 {
-    0
-}
-
-#[inline]
-pub fn SwapGs() {
-}
-
 pub fn GetVcpuId() -> usize {
     let ret: u64;
     unsafe {
@@ -68,10 +54,6 @@ pub fn GetVcpuId() -> usize {
         out(reg) ret);
     };
     return ret as usize;
-}
-
-#[inline]
-pub fn Hlt() {
 }
 
 #[inline]
@@ -184,9 +166,6 @@ pub fn GetCurrentUserSp() -> u64 {
     return sp_el0();
 }
 
-#[inline]
-pub fn Clflush(addr: u64) {
-}
 
 // HostID executes a native CPUID instruction.
 // return (ax, bx, cx, dx)
@@ -208,99 +187,25 @@ pub fn WriteBarrier() {
     };
 }
 
-#[inline(always)]
-pub fn GetCpu() -> u32 {
-    let rcx: u64 = 0;
-//    unsafe {
-//        asm!("\
-//            rdtscp
-//            ",
-//            out("rcx") rcx
-//        )
-//    };
-
-    return (rcx & 0xfff) as u32;
-}
-
-#[inline(always)]
-pub fn GetRflags() -> u64 {
-    let rax: u64 = 0;
-//    unsafe {
-//        asm!("\
-//                pushfq                  # push eflags into stack
-//                pop rax                 # pop it into rax
-//            ",
-//            out("rax") rax
-//        )
-//    };
-
-    return rax;
-}
-
-#[inline(always)]
-pub fn SetRflags(val: u64) {
-//    unsafe {
-//        asm!("\
-//                push rax
-//                popfq
-//            ",
-//            in("rax") val)
-//    };
-}
 
 pub fn SaveFloatingPoint(addr: u64) {
-//    if SUPPORT_XSAVEOPT.load(Ordering::Acquire) {
-//        xsaveopt(addr);
-//    } else if SUPPORT_XSAVE.load(Ordering::Acquire) {
-//        xsave(addr);
-//    } else {
-//        fxsave(addr);
-//    }
-//    NOTE Arm does not seem to have direct aquivalents for the above instructions: xsaveopt/xsave/fxsave.
-//          As both SUPPORT_XSAVEOPT/XSAVE are per default not taken,
-//          only an fxsave is emulated.
-
-            fxsave(addr);
+    // if SUPPORT_XSAVEOPT.load(Ordering::Acquire) {
+    //     xsaveopt(addr);
+    // } else if SUPPORT_XSAVE.load(Ordering::Acquire) {
+    //     xsave(addr);
+    // } else {
+    //     fxsave(addr);
+    // }
+    // NOTE Arm does not seem to have direct aquivalents for the above instructions:
+    // xsaveopt/xsave/fxsave. As both SUPPORT_XSAVEOPT/XSAVE are per default not taken, only an
+    // fxsave is emulated.
+    fxsave(addr);
 }
 
-//    NOTE Arm does not seem to have direct aquivalents for the above instructions: xrstor/fxrstor.
-//          As SUPPORT_XSAVE is per default not taken,
-//          only an fxrstor is emulated.
+// NOTE Arm does not seem to have direct aquivalents for the above instructions: xrstor/fxrstor. As
+// SUPPORT_XSAVE is per default not taken, only an fxrstor is emulated.
 pub fn LoadFloatingPoint(addr: u64) {
         fxrstor(addr);
-}
-
-pub fn xsave(addr: u64) {
-//    unsafe {
-//        asm!("\
-//                xsave64 [rdi + 0]
-//            ",
-//            in("rdi") addr, )
-//    };
-}
-
-pub fn xsaveopt(addr: u64) {
-//    let negtive1: u64 = 0xffffffff;
-//    unsafe {
-//        asm!("\
-//                xsaveopt64 [rdi + 0]
-//            ",
-//            in("rdi") addr, 
-//            in("eax") negtive1,
-//            in("edx") negtive1)
-//    };
-}
-
-pub fn xrstor(addr: u64) {
-//    let negtive1: u64 = 0xffffffff;
-//    unsafe {
-//        asm!("\
-//                xrstor64 [rdi + 0]
-//            ",
-//            in("rdi") addr,
-//            in("eax") negtive1,
-//            in("edx") negtive1)
-//    };
 }
 
 //  FPCR;FPSR Registers are saved placed after 'q15'.
@@ -397,93 +302,8 @@ pub fn lfence() {
     }
 }
 
-pub fn stmxcsr(addr: u64) {
-//    unsafe {
-//        asm!("\
-//                STMXCSR [rax]
-//            ",
-//            in("rax") addr)
-//    };
-}
-
-pub fn ldmxcsr(addr: u64) {
-//    unsafe {
-//        asm!("\
-//                LDMXCSR [rax]
-//            ",
-//            in("rax") addr)
-//    };
-}
-
-pub fn FSTCW(addr: u64) {
-//    unsafe {
-//        asm!("\
-//                FSTCW [rax]
-//            ",
-//            in("rax") addr
-//        )
-//    };
-}
-
-pub fn FLDCW(addr: u64) {
-//    unsafe {
-//        asm!("\
-//                FLDCW [rax]
-//            ",
-//            in("rax") addr)
-//    };
-}
-
-pub fn FNCLEX() {
-//    unsafe {
-//        asm!(
-//            "\
-//            FNCLEX
-//        "
-//        )
-//    };
-}
-
+// TODO implement fpu init, if necessary
 pub fn fninit() {
-//    unsafe {
-//        asm!(
-//            "\
-//            fninit
-//            "
-//        )
-//    };
-}
-
-pub fn xsetbv(val: u64) {
-//    let reg = 0u64;
-//    let val_l = val & 0xffff;
-//    let val_h = val >> 32;
-//    unsafe {
-//        asm!("\
-//                xsetbv
-//            ",
-//            in("rcx") reg,
-//            in("edx") val_h,
-//            in("eax") val_l,
-//        )
-//    };
-}
-
-pub fn xgetbv() -> u64 {
-    let reg: u64 = 0;
-    let val_l: u32 = 0;
-    let val_h: u32 = 0;
-//    unsafe {
-//        asm!("\
-//                xgetbv
-//            ",
-//            out("edx") val_h,
-//            out("eax") val_l,
-//            in("rcx") reg
-//        )
-//    };
-    let val = ((val_h as u64) << 32) | ((val_l as u64) & 0xffff);
-    return val;
 }
 
 bitflags! {

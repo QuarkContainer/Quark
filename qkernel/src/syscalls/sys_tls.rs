@@ -25,6 +25,7 @@ pub fn IsValidSegmentBase(addr: u64) -> bool {
     return addr < MAX_ADDR64;
 }
 
+#[cfg(target_arch="x86_64")]
 pub fn SysArchPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let code = args.arg0;
     let addr = args.arg1 as u64;
