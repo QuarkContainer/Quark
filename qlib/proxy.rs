@@ -18,6 +18,7 @@ pub enum ProxyCommand {
     //devcie management
     CudaChooseDevice,
     CudaDeviceGetAttribute,
+    CudaDeviceGetByPCIBusId,
     CudaSetDevice,
     CudaSetDeviceFlags,
     CudaDeviceSynchronize,

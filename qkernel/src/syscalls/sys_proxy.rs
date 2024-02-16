@@ -99,6 +99,31 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             return Ok(ret);
         }
+        ProxyCommand::CudaDeviceGetByPCIBusId => {
+            let mut device: i32 = 0;
+
+            parameters.para1 = &mut device as *mut _ as u64;
+
+            let PCIBusId = CString::ToString(task, parameters.para2)?;
+            // address 
+            parameters.para2 = &(PCIBusId.as_bytes()[0]) as * const _ as u64;
+            // length 
+            parameters.para3 = PCIBusId.as_bytes().len() as u64;
+
+            error!("PCIBusId {}",PCIBusId);
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            error!("the device should change: {}", device);
+            if ret == 0 {
+                task.CopyOutObj(&device, args.arg1 as u64)?; 
+            }
+
+            return Ok(ret);
+        }
         ProxyCommand::CudaSetDevice |
         ProxyCommand::CudaDeviceSynchronize => {
             error!("SysProxy CudaSetDevice");

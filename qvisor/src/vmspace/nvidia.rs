@@ -36,6 +36,8 @@ lazy_static! {
     pub static ref FUNC_MAP: BTreeMap<ProxyCommand, (XpuLibrary, &'static str)> = BTreeMap::from(
         [
         (ProxyCommand::CudaChooseDevice,(XpuLibrary::CudaRuntime, "cudaChooseDevice")),
+        (ProxyCommand::CudaDeviceGetAttribute,(XpuLibrary::CudaRuntime, "cudaDeviceGetAttribute")),
+        (ProxyCommand::CudaDeviceGetByPCIBusId,(XpuLibrary::CudaRuntime, "cudaDeviceGetByPCIBusId")),
         (ProxyCommand::CudaSetDevice,(XpuLibrary::CudaRuntime, "cudaSetDevice")),
         (ProxyCommand::CudaSetDeviceFlags,(XpuLibrary::CudaRuntime, "cudaSetDeviceFlags")),
         (ProxyCommand::CudaDeviceSynchronize,(XpuLibrary::CudaRuntime, "cudaDeviceSynchronize")),
@@ -129,6 +131,34 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             unsafe{
             *(parameters.para1 as *mut i32) = value as i32
             };
+
+            return Ok(ret as i64);
+
+        }
+        ProxyCommand::CudaDeviceGetByPCIBusId => {
+            let func: extern "C" fn(*mut ::std::os::raw::c_int, *const ::std::os::raw::c_char) -> i32 = 
+            unsafe { std::mem::transmute(handler)};
+
+            let mut device: c_int = 0;
+
+            let bytes = unsafe {
+                std::slice::from_raw_parts(parameters.para2 as *const u8, parameters.para3 as usize)
+            };
+
+            let PCIBusId = std::str::from_utf8(bytes).unwrap();
+
+            // Store the CString in a variable to extend its lifetime
+            let cstring = CString::new(PCIBusId).unwrap();
+
+            let ret = func(&mut device, cstring.as_ptr());
+            error!("the cstring: {:?}",cstring);
+
+            error!("yiwang device after function call is :{:x}", device);
+            error!("yiwang cudaDeviceGetByPCIBusId result is: {:?}, {}", ret,ret);
+
+            unsafe{
+                *(parameters.para1 as *mut i32) = device as i32
+                };
 
             return Ok(ret as i64);
 

@@ -12,6 +12,7 @@
 // limitations under the License.
 
 use std::os::raw::*;
+use std::ffi::CStr;
 
 use cuda_runtime_sys::cudaMemcpyKind;
 use cuda_runtime_sys::cudaStream_t; 
@@ -60,6 +61,24 @@ pub extern "C" fn cudaDeviceGetAttribute(value: *mut c_int, attr: cudaDeviceAttr
     };
 
     return ret;
+}
+
+//not yet tested
+pub extern "C" fn cudaDeviceGetByPCIBusId(device: *mut c_int, pciBusId: *const c_char) -> usize {
+
+     // Convert *const c_char to &CStr
+     let c_str = unsafe { CStr::from_ptr(pciBusId) };
+
+     // Convert &CStr to &str
+     if let Ok(str_val) = c_str.to_str() {
+         println!("Hijacked cudaDeviceGetByPCIBusId(pciBusId: {})", str_val);
+     } 
+
+     let ret = unsafe{
+        syscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetByPCIBusId as usize, device as *const _ as usize, pciBusId as usize)
+     };
+
+     return ret;
 }
 
 #[no_mangle]
