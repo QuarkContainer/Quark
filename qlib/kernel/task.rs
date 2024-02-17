@@ -862,6 +862,12 @@ impl Task {
         SetTLS(self.context.tls);
     }
 
+    #[cfg(target_arch="aarch64")]
+    #[inline]
+    pub fn SaveTLS(&mut self) {
+        self.context.tls = tpidr_el0();
+    }
+
     #[inline]
     pub fn GetContext(&self) -> u64 {
         return (&self.context as *const Context) as u64;

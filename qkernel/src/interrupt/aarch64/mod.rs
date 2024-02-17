@@ -234,6 +234,7 @@ pub extern "C" fn exception_handler_el1h_serror(ptregs_addr:usize){
 pub extern "C" fn exception_handler_el0_sync(ptregs_addr: usize) {
     let currTask = task::Task::Current();
     currTask.AccountTaskLeave(SchedState::RunningApp);
+    currTask.SaveTLS();
     let esr = GetEsrEL1();
     let ec = EsrDefs::GetExceptionFromESR(esr);
     if ptregs_addr == 0 {
