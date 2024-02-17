@@ -13,7 +13,7 @@
 // limitations under the License.
 
 pub mod fault;
-
+pub mod sysreg;
 use core::arch::asm;
 use super::super::syscall_dispatch_aarch64;
 use crate::qlib::linux_def::MmapProt;
@@ -230,10 +230,8 @@ pub extern "C" fn exception_handler_el1h_serror(ptregs_addr:usize){
     return exception_handler_unhandled(ptregs_addr, 7);
 }
 
-// TODO add parameter to the handler
-// TODO implement el0_64_sync handler for syscalls
 #[no_mangle]
-pub extern "C" fn exception_handler_el0_sync(ptregs_addr:usize){
+pub extern "C" fn exception_handler_el0_sync(ptregs_addr: usize) {
     let currTask = task::Task::Current();
     currTask.AccountTaskLeave(SchedState::RunningApp);
     let esr = GetEsrEL1();
@@ -257,7 +255,7 @@ pub extern "C" fn exception_handler_el0_sync(ptregs_addr:usize){
             let arg4 = ctx.regs[4];
             let arg5 = ctx.regs[5];
             // write syscall ret to x0
-            ctx.regs[0] = syscall_dispatch_aarch64(call_no,arg0,arg1,arg2,arg3,arg4,arg5);
+            ctx.regs[0] = syscall_dispatch_aarch64(call_no, arg0, arg1, arg2, arg3, arg4, arg5);
             // TODO do we need to write the "second ret val" back to x1?
         },
         EsrDefs::EC_DATA_ABORT_L => {
@@ -268,11 +266,23 @@ pub extern "C" fn exception_handler_el0_sync(ptregs_addr:usize){
             let far = GetFarEL1();
             MemAbortUser(ptregs_addr, esr, far, true);
         },
+        EsrDefs::EC_UNKNOWN => match sysreg::try_emulate_mrs(ctx.pc) {
+            sysreg::SysmovResult::ReadSuccess(val, xt) => {
+                debug!("el0 mrs emulated: set X{} to 0x{:x}", xt, val);
+                ctx.regs[xt as usize] = val;
+                ctx.pc += 4;
+            }
+            _ => {
+                panic!("unhandled sync exception from el0: {},\ncan't emulate mrs\n current-context: {:?}", ec, ctx);
+            }
+        },
         _ => {
-            panic!("unhandled sync exception from el0: {},\n current-context: {:?}", ec, ctx);
-        }
-        // TODO (default case) for a unhandled exception from user,
-        // the kill the user process instead of panicing
+            panic!(
+                "unhandled sync exception from el0: {},\n current-context: {:?}",
+                ec, ctx
+            );
+        } // TODO (default case) for a unhandled exception from user,
+          // the kill the user process instead of panicing
     }
     CPULocal::Myself().SetMode(VcpuMode::User);
 }

@@ -543,3 +543,21 @@ pub fn set_access_user(allow: bool) {
         }
     }
 }
+
+/// read raw opcode from userspace memory with pc;
+/// unsafe: MUST make sure the mem page is present.
+/// e.g. this exact user instruction has just triggered an exception
+#[cfg(target_arch = "aarch64")]
+pub unsafe fn read_user_opcode(pc: u64) -> Option<u32> {
+    // this read is failiable
+    // check pc alignment:
+    if pc & 0b11 != 0 {
+        return None;
+    }
+    let opcode: u32;
+    let ua = enable_access_user();
+    asm!("ldr {0:w}, [{1}]", out(reg) opcode, in(reg) pc);
+
+    set_access_user(ua);
+    return Some(opcode);
+}
