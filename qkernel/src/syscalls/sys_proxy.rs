@@ -147,6 +147,27 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             return Ok(ret);
         }
+        ProxyCommand::CudaDeviceGetLimit => {
+
+            let mut limit: usize = 0; 
+            
+            parameters.para1 = &mut limit as * mut _ as u64;
+
+            let attribute: u32 = parameters.para2 as u32;
+            error!("SysProxy CudaDeviceGetLimit, query about attribute: {}", attribute);
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            error!("the value of the limit should change: {}", limit);
+            if ret == 0 {
+                task.CopyOutObj(&limit, args.arg1 as u64)?; 
+            }
+
+            return Ok(ret);
+
+        }
         ProxyCommand::CudaSetDevice |
         ProxyCommand::CudaDeviceSynchronize => {
             error!("SysProxy CudaSetDevice");

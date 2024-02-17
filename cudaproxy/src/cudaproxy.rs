@@ -20,6 +20,7 @@ use cuda_runtime_sys::cudaStreamCaptureStatus;
 use cuda_runtime_sys::cudaDeviceProp;
 use cuda_runtime_sys::cudaDeviceAttr;
 use cuda_runtime_sys::cudaFuncCache;
+use cuda_runtime_sys::cudaLimit;
 
 
 
@@ -94,6 +95,21 @@ pub extern "C" fn cudaDeviceGetCacheConfig(pCacheConfig: *mut cudaFuncCache) -> 
         return unsafe{
             syscall2(SYS_PROXY, ProxyCommand::CudaDeviceGetCacheConfig as usize, pCacheConfig as *const _ as usize)    
         };
+}
+
+
+
+// not yet tested 
+#[no_mangle] 
+pub extern "C" fn cudaDeviceGetLimit(pValue: *mut usize, limit: cudaLimit) -> usize {
+    println!("Hijacked cudaDeviceGetLimit(limit want to query: {:?}) ", limit);
+
+    let ret = unsafe{
+        syscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetLimit as usize, pValue as *const _ as usize, limit as usize)
+    };
+
+    return ret;
+
 }
 
 #[no_mangle]

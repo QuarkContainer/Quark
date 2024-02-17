@@ -27,7 +27,7 @@ use crate::xpu::cuda::*;
 
 use cuda_driver_sys::*;
 use cuda_runtime_sys::{cudaStreamCaptureStatus, cudaStream_t};  
-use cuda_runtime_sys::{cudaDeviceProp, cudaDeviceAttr,cudaFuncCache};
+use cuda_runtime_sys::{cudaDeviceProp, cudaDeviceAttr,cudaFuncCache,cudaLimit};
 
 
 
@@ -39,6 +39,7 @@ lazy_static! {
         (ProxyCommand::CudaDeviceGetAttribute,(XpuLibrary::CudaRuntime, "cudaDeviceGetAttribute")),
         (ProxyCommand::CudaDeviceGetByPCIBusId,(XpuLibrary::CudaRuntime, "cudaDeviceGetByPCIBusId")),
         (ProxyCommand::CudaDeviceGetCacheConfig,(XpuLibrary::CudaRuntime, "cudaDeviceGetCacheConfig")),
+        (ProxyCommand::CudaDeviceGetLimit,(XpuLibrary::CudaRuntime, "cudaDeviceGetLimit")),
         (ProxyCommand::CudaSetDevice,(XpuLibrary::CudaRuntime, "cudaSetDevice")),
         (ProxyCommand::CudaSetDeviceFlags,(XpuLibrary::CudaRuntime, "cudaSetDeviceFlags")),
         (ProxyCommand::CudaDeviceSynchronize,(XpuLibrary::CudaRuntime, "cudaDeviceSynchronize")),
@@ -181,6 +182,28 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             unsafe{
             *(parameters.para1 as *mut _) = cacheConfig as u32;
             }
+
+            return Ok(ret as i64);
+
+        }
+        ProxyCommand::CudaDeviceGetLimit => {
+            let limitType: cudaLimit;
+            unsafe{
+                limitType = *(&parameters.para2 as *const _ as u64 as *mut cudaLimit);
+            }
+
+            let mut limit: usize = 0;
+
+            let func: extern "C" fn(*mut usize, cudaLimit) -> i32 = unsafe { std::mem::transmute(handler)};
+
+            let ret = func(&mut limit, limitType);
+
+            error!("yiwang limit after function call is :{:x}", limit);
+            error!("yiwang cudaDeviceGetAttribute result is: {:?}, {}", ret,ret);
+
+            unsafe{
+                *(parameters.para1 as *mut _ ) = limit
+                 };
 
             return Ok(ret as i64);
 
