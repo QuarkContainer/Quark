@@ -21,6 +21,7 @@ use qshare::metastore::cache_store::CacheStore;
 use qshare::common::*;
 
 use qshare::etcd::etcd_store::EtcdStore;
+use qshare::metastore::cache_store::ChannelRev;
 use crate::ETCD_OBJECTS;
 
 #[derive(Debug, Default, Clone)]
@@ -46,6 +47,7 @@ impl SvcDir {
 #[derive(Debug, Default)]
 pub struct SvcDirInner {
     pub map: BTreeMap<String, CacheStore>,
+    pub channelRev: ChannelRev,
 }
 
 impl SvcDirInner {
@@ -53,7 +55,7 @@ impl SvcDirInner {
         let store = EtcdStore::New(etcdAddr, true).await?;
         for i in 0..ETCD_OBJECTS.len() {
             let t = ETCD_OBJECTS[i];
-            let c = CacheStore::New(Arc::new(store.clone()), t, 0).await?;
+            let c = CacheStore::New(Some(Arc::new(store.clone())), t, 0, &self.channelRev).await?;
             self.map.insert(t.to_string(), c);
         }
         

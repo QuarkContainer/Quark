@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2023 Quark Container Authors 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
+#![allow(deprecated)]
 
 #[macro_use]
 extern crate scopeguard;
@@ -31,6 +32,9 @@ pub mod k8s_util;
 pub mod databuf;
 pub mod metastore;
 pub mod etcd;
+pub mod node;
+pub mod qlet_config;
+pub mod cadvisor_types;
 
 pub mod crictl {
     include!("pb_gen/runtime.v1alpha2.rs");

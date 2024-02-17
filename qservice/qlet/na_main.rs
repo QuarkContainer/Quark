@@ -30,7 +30,6 @@ extern crate simple_logging;
 
 mod tsot;
 mod pod_mgr;
-mod qlet_config;
 
 use std::sync::Arc;
 
@@ -39,10 +38,10 @@ use crate::pod_mgr::podMgr::PodMgrSvc;
 use crate::tsot::tsot_svc::TsotSvc;
 
 use pod_mgr::node_mgr::NodeMgr;
-use qlet_config::QletConfig;
 use qshare::common::*;
 use qshare::metastore::informer_factory::InformerFactory;
 use qshare::metastore::selection_predicate::ListOption;
+use qshare::qlet_config::QletConfig;
 
 lazy_static::lazy_static! {
     pub static ref CADVISOR_CLI: CadvisorClient::Client = {
