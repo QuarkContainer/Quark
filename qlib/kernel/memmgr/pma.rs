@@ -268,7 +268,7 @@ impl PageTables {
         {
             let mut opts = PageOpts::Zero();
             opts.SetWrite().SetGlobal().SetPresent().SetAccessed();
-            opts.SetDeviceMMIO();
+            opts.SetMMIOPage();
             ret.MapPage(Addr(MemoryDef::HYPERCALL_MMIO_BASE),
             Addr(MemoryDef::HYPERCALL_MMIO_BASE),
             opts.Val(),

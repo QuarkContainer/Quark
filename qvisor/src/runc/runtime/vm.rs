@@ -357,10 +357,10 @@ impl VirtualMachine {
                 let mut opts = addr::PageOpts::Zero();
 
                 opts.SetWrite().SetGlobal().SetPresent().SetAccessed();
-                opts.SetDeviceMMIO();
+                opts.SetMMIOPage();
                 vms.KernelMap(
                     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
-                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE + 0x1000),
+                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE + MemoryDef::HYPERCALL_MMIO_SIZE),
                     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
                     opts.Val(),
                 )?;
@@ -392,40 +392,6 @@ impl VirtualMachine {
             unsafe { *p3 },
             heapStartAddr
         );
-
-        #[cfg(target_arch = "aarch64")]
-        {
-
-            let mem = unsafe {
-                libc::mmap(
-                    std::ptr::null_mut(),
-                    0x1000,
-                    libc::PROT_READ | libc::PROT_WRITE,
-                    libc::MAP_SHARED | libc::MAP_ANONYMOUS,
-                    -1,
-                     0,
-                )
-            };
-
-            if mem == libc::MAP_FAILED {
-                panic!("VMM: Failed to map area for MMIO, error - {}", std::io::Error::last_os_error());
-            }
-
-            let mem_region = kvm_userspace_memory_region {
-                slot: 2,
-                guest_phys_addr: MemoryDef::HYPERCALL_MMIO_BASE,
-                memory_size: 0x1000,
-                userspace_addr: mem as u64,
-                flags: 0x1 << 1,
-            };
-    
-            unsafe {
-                vm_fd
-                    .set_user_memory_region(mem_region)
-                    .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-            }
-    
-        }
 
         {
             super::super::super::URING_MGR.lock();
