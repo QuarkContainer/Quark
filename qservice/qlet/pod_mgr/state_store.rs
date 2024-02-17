@@ -12,5 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod client;
-pub mod provider;
+use qshare::metastore::cache_store::CacheStore;
+
+pub struct StateStore {
+    pub nodeStore: CacheStore,
+}

@@ -15,7 +15,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-use qshare::common::*;
+use crate::common::*;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct QletConfig {

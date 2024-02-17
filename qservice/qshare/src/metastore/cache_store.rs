@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::AtomicI64;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use std::sync::RwLock;
@@ -41,6 +42,21 @@ pub trait BackendStore : Sync + Send + Debug {
     fn Register(&self, cacher: CacheStore, rev: i64, prefix: String, ready: Arc<Notify>, notify: Arc<Notify>) -> Result<()>;
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct ChannelRev {
+    pub rev: Arc<AtomicI64>,
+}
+
+impl ChannelRev {
+    pub fn Next(&self) -> i64 {
+        return self.rev.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+    }
+
+    pub fn Current(&self) -> i64 {
+        return self.rev.load(std::sync::atomic::Ordering::SeqCst) + 1;
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct CacheStore(Arc<RwLock<CacheStoreInner>>);
 
@@ -53,9 +69,9 @@ impl Deref for CacheStore {
 }
 
 impl CacheStore {
-    pub async fn New(store: Arc<dyn BackendStore>, objType: &str, rev: i64) -> Result<Self> {
+    pub async fn New(store: Option<Arc<dyn BackendStore>>, objType: &str, rev: i64, channelRev: &ChannelRev) -> Result<Self> {
         let storeClone = store.clone();
-        let inner = CacheStoreInner::New(store, objType);
+        let inner = CacheStoreInner::New(store, objType, channelRev);
         let notify = inner.closeNotify.clone();
         let ret = Self(Arc::new(RwLock::new(inner)));
 
@@ -65,7 +81,12 @@ impl CacheStore {
         let ready = Arc::new(Notify::new());
         let readyClone = ready.clone();
 
-        storeClone.Register(watch, rev, prefixClone, readyClone, notify)?;
+        match storeClone {
+            None => (),
+            Some(s) => {
+                s.Register(watch, rev, prefixClone, readyClone, notify)?;
+            }
+        }
         
         ready.notified().await;
         
@@ -75,15 +96,8 @@ impl CacheStore {
     pub async fn Stop(&self) -> Result<()> {
         let notify = self.read().unwrap().closeNotify.clone();
         notify.notify_waiters();
-        //let worker = self.write().unwrap().bgWorker.take();
         let objType = self.read().unwrap().objectType.clone();
         defer!(info!("cacher[{}] stop ... ", &objType));
-        /*match worker {
-            None => return Ok(()),
-            Some(w) => {
-                return w.await?;
-            }
-        }*/
 
         return Ok(())
     }
@@ -120,7 +134,10 @@ impl CacheStore {
         let objKey = namespace.to_string() + "/" + name;
         if revision == -1 {
             // -1 means get from etcd
-            let store: Arc<dyn BackendStore> = self.Store();
+            let store: Arc<dyn BackendStore> = match self.Store() {
+                None => return Ok(None),
+                Some(s) => s
+            };
             let key = &self.StoreKey(&objKey);
             return store.Get(key, revision).await;
         }
@@ -138,7 +155,10 @@ impl CacheStore {
 
     pub async fn List(&self, namespace: &str, opts: &ListOption) -> Result<DataObjList> {
         if opts.revision == -1 {
-            let store = self.Store();
+            let store = match self.Store() {
+                None => return Ok(DataObjList::default()),
+                Some(s) => s
+            };
             let mut opts = opts.DeepCopy();
             opts.revision = 0;
             let prefix = &self.StoreKey(namespace);
@@ -159,12 +179,12 @@ impl CacheStore {
 
         return Ok(DataObjList {
             objs: objs,
-            revision: inner.channelRev,
+            revision: inner.channelRev.Current(),
             ..Default::default()
         });
     }
 
-    pub fn Store(&self) -> Arc<dyn BackendStore> {
+    pub fn Store(&self) -> Option<Arc<dyn BackendStore>> {
         return self.read().unwrap().backendStore.clone();
     }
 
@@ -200,7 +220,7 @@ impl CacheStore {
 
         let revNotify = self.read().unwrap().revNotify.clone();
         loop {
-            if self.read().unwrap().channelRev >= channelRev {
+            if self.read().unwrap().channelRev.Current() >= channelRev {
                 return Ok(());
             }
             tokio::select! {
@@ -217,15 +237,15 @@ impl CacheStore {
 
 #[derive(Debug)]
 pub struct CacheStoreInner {
-    pub backendStore: Arc<dyn BackendStore>,
+    pub backendStore: Option<Arc<dyn BackendStore>>,
 
     pub objectType: String, // like "pod"
 
-    pub channleId: Uuid,
+    pub channelId: Uuid,
 
     pub cache: RingBuf,
 
-    pub channelRev: i64,
+    pub channelRev: ChannelRev,
 
     // ResourceVersion of the last list result (populated via Replace() method).
     pub listRevision: i64,
@@ -242,13 +262,13 @@ pub struct CacheStoreInner {
 }
 
 impl CacheStoreInner {
-    pub fn New(store: Arc<dyn BackendStore>, objectType: &str) -> Self {
+    pub fn New(store: Option<Arc<dyn BackendStore>>, objectType: &str, channelRev: &ChannelRev) -> Self {
         return Self {
             backendStore: store,
             objectType: objectType.to_string(),
-            channleId: Uuid::new_v4(),
+            channelId: Uuid::new_v4(),
             cache: RingBuf::New(DEFAULT_CACHE_COUNT),
-            channelRev: 0,
+            channelRev: channelRev.clone(),
             listRevision: 0,
             lastWatcherId: 0,
             closeNotify: Arc::new(Notify::new()),
@@ -259,9 +279,8 @@ impl CacheStoreInner {
         };
     }
 
-    pub fn ChannelRev(&mut self) -> i64 {
-        self.channelRev += 1;
-        return self.channelRev;
+    pub fn ChannelRev(&self) -> i64 {
+        self.channelRev.Next()
     }
 
     pub fn StoreKey(&self, key: &str) -> String {

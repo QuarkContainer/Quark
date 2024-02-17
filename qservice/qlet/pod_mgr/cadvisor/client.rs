@@ -16,8 +16,7 @@ use reqwest;
 
 use qshare::common::Result;
 
-use super::types::MachineInfo;
-use super::types::VersionInfo;
+use qshare::cadvisor_types::{MachineInfo, VersionInfo};
 //type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Debug)]

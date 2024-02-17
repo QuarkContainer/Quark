@@ -30,6 +30,7 @@ pub mod cidr;
 pub mod namespaceMgr;
 pub mod node_register;
 pub mod node_mgr;
+pub mod state_store;
 
 use std::sync::Arc;
 
