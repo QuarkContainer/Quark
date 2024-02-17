@@ -27,7 +27,7 @@ use crate::xpu::cuda::*;
 
 use cuda_driver_sys::*;
 use cuda_runtime_sys::{cudaStreamCaptureStatus, cudaStream_t};  
-use cuda_runtime_sys::{cudaDeviceProp, cudaDeviceAttr};
+use cuda_runtime_sys::{cudaDeviceProp, cudaDeviceAttr,cudaFuncCache};
 
 
 
@@ -38,6 +38,7 @@ lazy_static! {
         (ProxyCommand::CudaChooseDevice,(XpuLibrary::CudaRuntime, "cudaChooseDevice")),
         (ProxyCommand::CudaDeviceGetAttribute,(XpuLibrary::CudaRuntime, "cudaDeviceGetAttribute")),
         (ProxyCommand::CudaDeviceGetByPCIBusId,(XpuLibrary::CudaRuntime, "cudaDeviceGetByPCIBusId")),
+        (ProxyCommand::CudaDeviceGetCacheConfig,(XpuLibrary::CudaRuntime, "cudaDeviceGetCacheConfig")),
         (ProxyCommand::CudaSetDevice,(XpuLibrary::CudaRuntime, "cudaSetDevice")),
         (ProxyCommand::CudaSetDeviceFlags,(XpuLibrary::CudaRuntime, "cudaSetDeviceFlags")),
         (ProxyCommand::CudaDeviceSynchronize,(XpuLibrary::CudaRuntime, "cudaDeviceSynchronize")),
@@ -159,6 +160,27 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             unsafe{
                 *(parameters.para1 as *mut i32) = device as i32
                 };
+
+            return Ok(ret as i64);
+
+        }
+        ProxyCommand::CudaDeviceGetCacheConfig => {
+            
+            let func: extern "C" fn(*mut cudaFuncCache) -> i32 = unsafe{std::mem::transmute(handler)};
+
+            let mut cacheConfig:cudaFuncCache;
+            unsafe {
+                cacheConfig = *(parameters.para1 as *mut _);        
+            }
+            
+            let ret = func(&mut cacheConfig);
+
+            error!("ret is :{}, {:?}",ret, ret);
+            error!("now cacheConfig should change: {}, {:?}",cacheConfig as u32,cacheConfig);
+
+            unsafe{
+            *(parameters.para1 as *mut _) = cacheConfig as u32;
+            }
 
             return Ok(ret as i64);
 

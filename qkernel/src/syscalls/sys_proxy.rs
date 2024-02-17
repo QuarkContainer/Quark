@@ -124,6 +124,29 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             return Ok(ret);
         }
+        ProxyCommand::CudaDeviceGetCacheConfig => {
+            let mut CacheConfig:u32;
+
+            unsafe{ 
+                CacheConfig = *(parameters.para1 as *mut _) ;  
+                error!("yiwang value of parameter.para2 is: {}",*(parameters.para1 as *mut u32));         
+            }
+
+            parameters.para1 = &mut CacheConfig as *mut _ as u64;
+               
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            error!("the CacheConfig should change: {}", CacheConfig);
+
+            if ret == 0 {
+                task.CopyOutObj(&CacheConfig, args.arg1 as u64)?; 
+            }
+
+            return Ok(ret);
+        }
         ProxyCommand::CudaSetDevice |
         ProxyCommand::CudaDeviceSynchronize => {
             error!("SysProxy CudaSetDevice");

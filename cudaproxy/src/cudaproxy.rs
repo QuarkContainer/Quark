@@ -19,6 +19,7 @@ use cuda_runtime_sys::cudaStream_t;
 use cuda_runtime_sys::cudaStreamCaptureStatus;
 use cuda_runtime_sys::cudaDeviceProp;
 use cuda_runtime_sys::cudaDeviceAttr;
+use cuda_runtime_sys::cudaFuncCache;
 
 
 
@@ -64,6 +65,7 @@ pub extern "C" fn cudaDeviceGetAttribute(value: *mut c_int, attr: cudaDeviceAttr
 }
 
 //not yet tested
+#[no_mangle]
 pub extern "C" fn cudaDeviceGetByPCIBusId(device: *mut c_int, pciBusId: *const c_char) -> usize {
 
      // Convert *const c_char to &CStr
@@ -79,6 +81,19 @@ pub extern "C" fn cudaDeviceGetByPCIBusId(device: *mut c_int, pciBusId: *const c
      };
 
      return ret;
+}
+
+//not yet tested
+#[no_mangle] 
+pub extern "C" fn cudaDeviceGetCacheConfig(pCacheConfig: *mut cudaFuncCache) -> usize {
+        println!("Hijacked cudaDeviceGetCacheConfig");
+        
+    
+        println!("cudaFuncCache struct address is: {:x}", pCacheConfig as usize);
+    
+        return unsafe{
+            syscall2(SYS_PROXY, ProxyCommand::CudaDeviceGetCacheConfig as usize, pCacheConfig as *const _ as usize)    
+        };
 }
 
 #[no_mangle]
