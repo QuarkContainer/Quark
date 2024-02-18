@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::BTreeMap;
 use std::result::Result as SResult;
 use podMgr::node_register::NodeRegister;
 use qshare::k8s::ConfigMap;
-use qshare::k8s::Container;
-use qshare::k8s::ContainerPort;
-use qshare::k8s::EnvVar;
 use qshare::k8s::HostPathVolumeSource;
 use qshare::k8s::Volume;
-use qshare::k8s::VolumeMount;
+use qshare::node::ContainerPort;
+use qshare::node::*;
 use tonic::transport::Server;
 
 use podMgr::podmgr_agent::PmAgent;
@@ -67,29 +66,12 @@ impl PodMgr {
         &self, 
         req: na::CreateFuncPodReq
     ) -> Result<IpAddress> {
-        let template = r#"{
-            "metadata": {
-                "name": "pypackage1",
-                "namespace": "ns1"
-            },
-            "spec": {
-                "template": {
-                    "containers": [],
-                    "hostNetwork": true
-                }
-            }
-        }"#;
-        
-        let mut pod = PodFromString(template)?;
-
-        pod.metadata.uid = Some(uuid::Uuid::new_v4().to_string());
-
-        pod.metadata.name = Some(req.name.to_owned());
-        pod.metadata.namespace = Some(req.namespace.to_owned());
-
-        error!("pod id is {:?}", &pod.metadata.uid);
-
-        let podSpec = pod.spec.as_mut().unwrap();
+        let mut pod = PodDef {
+            namespace: req.namespace.to_owned(),
+            name: req.name.to_owned(),
+            uid: uuid::Uuid::new_v4().to_string(),
+            ..Default::default()
+        };
 
         let mut volumes = Vec::new();
         let mut volumeMounts: Vec<VolumeMount> = Vec::new();
@@ -113,37 +95,33 @@ impl PodMgr {
             });
         }
 
-        podSpec.volumes = Some(volumes);
+        pod.volumes = volumes;
 
-        let mut containerPods = Vec::new();
+        let mut containerPorts = Vec::new();
         for p in &req.ports {
-            containerPods.push(ContainerPort {
+            containerPorts.push(ContainerPort {
                 container_port: p.container_port,
                 host_port: Some(p.host_port),
                 ..Default::default()
             })
         }
 
-        let mut containerEnvs = Vec::new();
+        let mut containerEnvs = BTreeMap::new();
         for env in req.envs {
-            containerEnvs.push(EnvVar {
-                name: env.name.clone(),
-                value: Some(env.value.clone()),
-                ..Default::default()
-            })
+            containerEnvs.insert(env.name.clone(), env.value.clone());
         }
 
-        let container = Container {
+        let container = ContainerDef {
             name: req.name.clone(),
-            image: Some(req.image.to_owned()),
-            command: Some(req.commands),
-            env: Some(containerEnvs),
-            volume_mounts: Some(volumeMounts),
-            ports: Some(containerPods),
+            image: req.image.to_owned(),
+            commands: req.commands,
+            envs: containerEnvs,
+            volume_mounts: volumeMounts,
+            ports: containerPorts,
             ..Default::default()
         };
 
-        podSpec.containers.push(container);
+        pod.containers.push(container);
 
         let configMap = ConfigMap::default();
 
@@ -269,7 +247,7 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
             }
         };
         
-        match self.pmAgent.NodeConfigure(node).await {
+        match self.pmAgent.NodeConfigure(&node).await {
             Err(e) => {
                 return Ok(tonic::Response::new(na::NodeConfigResp {
                     error: format!("fail: {:?}", e),

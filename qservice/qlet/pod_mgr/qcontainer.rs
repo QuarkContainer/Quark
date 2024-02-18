@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use qshare::node::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::sync::Mutex;
 use core::ops::Deref;
 
 use qshare::crictl;
-use qshare::k8s;
 use qshare::types::*;
 
 // ContainersReady indicates whether all containers in the pod are ready.
@@ -34,7 +34,7 @@ pub struct RuntimeContainerStatus {
 pub struct QuarkContainerInner {
     pub state: RuntimeContainerState,
     pub initContainer: bool,
-    pub spec: k8s::Container,
+    pub spec: ContainerDef,
     pub runtimeContainer: RuntimeContainer,
     pub containerStatus: Option<crictl::ContainerStatus>,
 }

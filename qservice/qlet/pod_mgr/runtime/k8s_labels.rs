@@ -16,13 +16,13 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::RwLock;
+use qshare::node::ContainerDef;
 use serde::Deserialize;
 
 use k8s_openapi::api::core::v1::{self as k8s, ContainerPort};
-
+use qshare::node::PodDef;
 use qshare::common::*;
 use qshare::consts::*;
-use qshare::k8s_util::*;
 
 pub struct LabeledPodSandboxInfo {
 	// Labels from v1.Pod
@@ -68,29 +68,23 @@ pub struct AnnotatedContainerInfo {
 	pub containerPorts: Vec<ContainerPort>,
 }
 
-pub fn NewPodAnnotations(pod: &k8s::Pod) -> HashMap<String, String> {
+pub fn NewPodAnnotations(pod: &PodDef) -> HashMap<String, String> {
 	let mut a = HashMap::new();
 
-	if let Some(annotations) = &pod.metadata.annotations {
-		for (k, v) in annotations {
-			a.insert(k.to_string(), v.to_string());
-		}
+	for (k, v) in &pod.annotations {
+		a.insert(k.to_string(), v.to_string());
 	}
 	
 	return a;
 }
 
-pub fn NewPodLabels(pod: &k8s::Pod) -> HashMap<String, String> {
+pub fn NewPodLabels(pod: &PodDef) -> HashMap<String, String> {
     let mut labels = HashMap::new();
-    labels.insert(KUBERNETES_POD_NAME_LABEL.to_string(), pod.metadata.name.as_deref().unwrap_or("").to_string());
-    labels.insert(KUBERNETES_POD_NAMESPACE_LABEL.to_string(), pod.metadata.namespace.as_deref().unwrap_or("").to_string());
-    labels.insert(KUBERNETES_POD_UIDLABEL.to_string(), pod.metadata.uid.as_deref().unwrap_or("").to_string());
-
-	if pod.metadata.labels.is_none() {
-		return labels
-	}
+    labels.insert(KUBERNETES_POD_NAME_LABEL.to_string(), pod.name.clone());
+    labels.insert(KUBERNETES_POD_NAMESPACE_LABEL.to_string(), pod.namespace.clone());
+    labels.insert(KUBERNETES_POD_UIDLABEL.to_string(), pod.uid.clone());
     
-	for (k, v) in pod.metadata.labels.as_ref().unwrap() {
+	for (k, v) in &pod.labels {
 		labels.insert(k.to_string(), v.to_string());
 	}
 
@@ -99,7 +93,7 @@ pub fn NewPodLabels(pod: &k8s::Pod) -> HashMap<String, String> {
 
 // HashContainer returns the hash of the container. It is used to compare
 // the running container with its desired spec.
-pub fn HashContainer(container: &k8s::Container) -> u64 {
+pub fn HashContainer(container: &ContainerDef) -> u64 {
 	use std::collections::hash_map::DefaultHasher;
 	use std::hash::{Hash, Hasher};
 
@@ -111,59 +105,59 @@ pub fn HashContainer(container: &k8s::Container) -> u64 {
 	return ret;
 }
 
-pub fn NewContainerLabels(container: &k8s::Container, pod: &Arc<RwLock<k8s::Pod>>) -> HashMap<String, String> {
+pub fn NewContainerLabels(container: &ContainerDef, pod: &Arc<RwLock<PodDef>>) -> HashMap<String, String> {
 	let pod = &pod.read().unwrap();
     let mut labels = HashMap::new();
-    labels.insert(KUBERNETES_POD_NAME_LABEL.to_string(), pod.metadata.name.as_deref().unwrap_or("").to_string());
-    labels.insert(KUBERNETES_POD_NAMESPACE_LABEL.to_string(), pod.metadata.namespace.as_deref().unwrap_or("").to_string());
-    labels.insert(KUBERNETES_POD_UIDLABEL.to_string(), pod.metadata.name.as_deref().unwrap_or("").to_string());
+    labels.insert(KUBERNETES_POD_NAME_LABEL.to_string(), pod.name.clone());
+    labels.insert(KUBERNETES_POD_NAMESPACE_LABEL.to_string(), pod.namespace.clone());
+    labels.insert(KUBERNETES_POD_UIDLABEL.to_string(), pod.name.clone());
 	labels.insert(KUBERNETES_CONTAINER_NAME_LABEL.to_string(), container.name.clone());
 
 	return labels;
 }
 
-pub fn NewContainerAnnotations(container: &k8s::Container, pod: &Arc<RwLock<k8s::Pod>>, restartCount: i32, overrideAnnotations: &BTreeMap<String, String>) -> HashMap<String, String> {
+pub fn NewContainerAnnotations(container: &ContainerDef, pod: &Arc<RwLock<PodDef>>, restartCount: i32, overrideAnnotations: &BTreeMap<String, String>) -> HashMap<String, String> {
 	let pod = &pod.read().unwrap();
     let mut annotations = HashMap::new();
 
 	annotations.insert(CONTAINER_HASH_LABEL.to_string(), format!("{}", HashContainer(container)));
 	annotations.insert(CONTAINER_RESTART_COUNT_LABEL.to_string(), format!("{}", restartCount));
-	annotations.insert(CONTAINER_TERMINATION_MESSAGE_PATH_LABEL.to_string(), container.termination_message_path.as_deref().unwrap_or("").to_string());
-	annotations.insert(CONTAINER_TERMINATION_MESSAGE_POLICY_LABEL.to_string(), container.termination_message_policy.as_deref().unwrap_or("").to_string());
+	// annotations.insert(CONTAINER_TERMINATION_MESSAGE_PATH_LABEL.to_string(), container.termination_message_path.as_deref().unwrap_or("").to_string());
+	// annotations.insert(CONTAINER_TERMINATION_MESSAGE_POLICY_LABEL.to_string(), container.termination_message_policy.as_deref().unwrap_or("").to_string());
 
-	if let Some(s) = &pod.metadata.deletion_grace_period_seconds {
+	if let Some(s) = &pod.deletion_grace_period_seconds {
 		annotations.insert(POD_DELETION_GRACE_PERIOD_LABEL.to_string(), format!("{}", *s));
 	}
 
-	if let Some(s) = &pod.spec.as_ref().unwrap().termination_grace_period_seconds {
+	if let Some(s) = &pod.termination_grace_period_seconds {
 		annotations.insert(POD_DELETION_GRACE_PERIOD_LABEL.to_string(), format!("{}", *s));
 	}
 
-	if container.lifecycle.is_some() && container.lifecycle.as_ref().unwrap().pre_stop.is_some() {
-		match serde_json::to_string(container.lifecycle.as_ref().unwrap().pre_stop.as_ref().unwrap()) {
-			Ok(s) => {
-				annotations.insert(CONTAINER_PRE_STOP_HANDLER_LABEL.to_string(), s);
-			}
-			Err(e) => {
-				error!("Unable to marshal lifecycle PreStop handler for container containerName {} pod {} error {:?}", 
-					container.name, K8SUtil::PodId(pod), e);
-			}
-		}
-	}
+	// if container.lifecycle.is_some() && container.lifecycle.as_ref().unwrap().pre_stop.is_some() {
+	// 	match serde_json::to_string(container.lifecycle.as_ref().unwrap().pre_stop.as_ref().unwrap()) {
+	// 		Ok(s) => {
+	// 			annotations.insert(CONTAINER_PRE_STOP_HANDLER_LABEL.to_string(), s);
+	// 		}
+	// 		Err(e) => {
+	// 			error!("Unable to marshal lifecycle PreStop handler for container containerName {} pod {} error {:?}", 
+	// 				container.name, K8SUtil::PodId(pod), e);
+	// 		}
+	// 	}
+	// }
 
-	if let Some(ports) = &container.ports {
-		if ports.len() > 0 {
-			match serde_json::to_string(ports) {
-				Ok(s) => {
-					annotations.insert(CONTAINER_PORTS_LABEL.to_string(), s);
-				}
-				Err(e) => {
-					error!("Unable to marshal container ports for container containerName {} pod {} error {:?}", 
-						container.name, K8SUtil::PodId(pod), e);
-				}
-			}
-		}
-	}
+	// if let Some(ports) = &container.ports {
+	// 	if ports.len() > 0 {
+	// 		match serde_json::to_string(ports) {
+	// 			Ok(s) => {
+	// 				annotations.insert(CONTAINER_PORTS_LABEL.to_string(), s);
+	// 			}
+	// 			Err(e) => {
+	// 				error!("Unable to marshal container ports for container containerName {} pod {} error {:?}", 
+	// 					container.name, K8SUtil::PodId(pod), e);
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	for (k, v) in overrideAnnotations {
 		annotations.insert(k.to_string(), v.to_string());

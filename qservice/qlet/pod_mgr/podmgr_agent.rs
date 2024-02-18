@@ -17,7 +17,7 @@ use std::sync::{Arc, RwLock};
 use std::sync::atomic::AtomicBool;
 use std::time::{SystemTime, Duration};
 use qshare::consts::{NodePending, DefaultNodeFuncLogFolder, AnnotationNodeMgrNode, AnnotationNodeMgrNodeRevision, NodeRunning, DefaultDomainName};
-use uuid::Uuid;
+use qshare::node::PodDef;
 use tokio::sync::{mpsc, Notify};
 use std::sync::Mutex;
 use std::sync::atomic::Ordering;
@@ -26,7 +26,7 @@ use tokio::time;
 
 
 use qshare::k8s;
-use qshare::k8s_util::K8SUtil;
+use qshare::node::*;
 
 //use qobjs::runtime_types::QuarkNode;
 use qshare::common::*;
@@ -39,7 +39,7 @@ use super::pm_msg::{NodeAgentMsg, PodCreate};
 use super::{qnode::*, ConfigName};
 use super::pod_agent::*;
 use super::NODEAGENT_STORE;
-use super::qpod::{QuarkPod, PodState, QuarkPodInner};
+use super::qpod::*;
 use super::NODE_READY_NOTIFY;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -167,8 +167,8 @@ impl PmAgent {
 
     pub fn IncrNodeRevision(&self) -> i64 {
         let revision = self.node.revision.fetch_add(1, Ordering::SeqCst);
-        self.node.node.lock().unwrap().metadata.resource_version = Some(format!("{}", revision));
-        self.node.node.lock().unwrap().metadata.annotations.as_mut().unwrap().insert(
+        self.node.node.lock().unwrap().metadata.resource_version = format!("{}", revision);
+        self.node.node.lock().unwrap().metadata.annotations.insert(
             AnnotationNodeMgrNodeRevision.to_string(), 
             format!("{}", revision)
         );
@@ -190,7 +190,7 @@ impl PmAgent {
                             info!("Node {} is ready", &QLET_CONFIG.nodeName);
                             *self.state.lock().unwrap() = PmAgentState::Ready;
                             SetNodeStatus(&self.node).await?;
-                            self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodeRunning));
+                            self.node.node.lock().unwrap().status.phase = format!("{}", NodeRunning);
                             NODEAGENT_STORE.UpdateNode(&self.node)?;
                         }
                     } else {
@@ -252,11 +252,8 @@ impl PmAgent {
         return Ok(())
     }
 
-    pub async fn NodeConfigure(&self, node: k8s::Node) -> Result<()> {
+    pub async fn NodeConfigure(&self, node: &Node) -> Result<()> {
         if *self.state.lock().unwrap() == PmAgentState::Registering {
-            //return Err(Error::CommonError(format!("node is not in registering state, it does not expect configuration change after registering")));
-         
-
             info!("received node spec from nodemgr: {:?}", &node);
             ValidateNodeSpec(&node)?;
 
@@ -270,7 +267,7 @@ impl PmAgent {
 
             *self.state.lock().unwrap() = PmAgentState::Registered;
             SetNodeStatus(&self.node).await?;
-            self.node.node.lock().unwrap().status.as_mut().unwrap().phase = Some(format!("{}", NodePending));
+            self.node.node.lock().unwrap().status.phase = format!("{}", NodePending);
         }
 
         NODEAGENT_STORE.UpdateNode(&self.node)?;
@@ -278,11 +275,11 @@ impl PmAgent {
         return Ok(())
     }
 
-     pub fn CreatePod(&self, pod: &k8s::Pod, configMap: &k8s::ConfigMap) -> Result<IpAddress> {
-        let podId =  K8SUtil::PodId(&pod);
+     pub fn CreatePod(&self, pod: &PodDef, configMap: &k8s::ConfigMap) -> Result<IpAddress> {
+        let podId =  pod.PodId();
         if self.State() != PmAgentState::Ready {
             let inner = QuarkPodInner {
-                id: K8SUtil::PodId(&pod),
+                id: podId.clone(),
                 podState: PodState::Cleanup,
                 isDaemon: false,
                 pod: Arc::new(RwLock::new(pod.clone())),
@@ -303,7 +300,7 @@ impl PmAgent {
                 Ok(a) => a,
                 Err(e) => {
                     let inner = QuarkPodInner {
-                        id: K8SUtil::PodId(&pod),
+                        id: pod.PodId(),
                         podState: PodState::Cleanup,
                         isDaemon: false,
                         pod: Arc::new(RwLock::new(pod.clone())),
@@ -319,18 +316,9 @@ impl PmAgent {
                 }
             };
 
-            let uid = match pod.metadata.uid.clone() {
-                None => return Err(Error::CommonError(format!("CreatePod are missing uid"))),
-                Some(uid) => uid
-            };
-            let namespace = match pod.metadata.namespace.clone() {
-                None => return Err(Error::CommonError(format!("CreatePod are missing namespace"))),
-                Some(namespace) => namespace
-            };
-            let podname = match pod.metadata.name.clone() {
-                None => return Err(Error::CommonError(format!("CreatePod are missing podname"))),
-                Some(podname) => podname
-            };
+            let uid = pod.uid.clone();
+            let namespace = pod.namespace.clone();
+            let podname = pod.name.clone();
             
             let addr = NAMESPACE_MGR.NewPodSandbox(&namespace, &uid, &podname)?;
 
@@ -378,20 +366,11 @@ impl PmAgent {
         return Ok(content)
     }
 
-    pub fn BuildAQuarkPod(&self, state: PodState, pod: &k8s::Pod, configMap: &Option<k8s::ConfigMap>, isDaemon: bool) -> Result<QuarkPod> {
-        ValidatePodSpec(pod)?;
-
-        let mut pod = pod.clone();
-        if pod.metadata.uid.is_none() {
-            pod.metadata.uid = Some(Uuid::new_v4().to_string());
-        }
-
-        if pod.metadata.annotations.is_none() {
-            pod.metadata.annotations = Some(BTreeMap::new());
-        }
+    pub fn BuildQuarkPod(&self, state: PodState, pod: &PodDef, configMap: &Option<k8s::ConfigMap>, isDaemon: bool) -> Result<QuarkPod> {
+        let pod = pod.clone();
         
         let inner = QuarkPodInner {
-            id: K8SUtil::PodId(&pod),
+            id: pod.PodId(),
             podState: state,
             isDaemon: isDaemon,
             pod: Arc::new(RwLock::new(pod)),
@@ -401,24 +380,17 @@ impl PmAgent {
             lastTransitionTime: SystemTime::now(), 
         };
 
-        let annotationsNone = inner.pod.read().unwrap().metadata.annotations.is_none();
-        if annotationsNone {
-            inner.pod.write().unwrap().metadata.annotations = Some(BTreeMap::new());
-        }
-
-        //let nodeId = K8SUtil::NodeId(&(*self.node.node.lock().unwrap()));
-        //inner.pod.write().unwrap().metadata.annotations.as_mut().unwrap().insert(AnnotationNodeMgrNode.to_string(), nodeId);
-
         let qpod = QuarkPod(Arc::new(Mutex::new(inner)));
-        let k8snode = self.node.node.lock().unwrap().clone();
-        qpod.SetPodStatus(Some(&k8snode));
+        let node = self.node.node.lock().unwrap().clone();
+        qpod.SetPodStatus(Some(&node));
         
         return Ok(qpod);
     }
 
     pub fn StartPodAgent(&self, qpod: &QuarkPod) -> Result<PodAgent> {
-        qpod.Pod().write().unwrap().status.as_mut().unwrap().host_ip = Some(self.node.node.lock().unwrap().status.as_ref().unwrap().addresses.as_ref().unwrap()[0].address.clone());
-        qpod.Pod().write().unwrap().metadata.annotations.as_mut().unwrap().insert(AnnotationNodeMgrNode.to_string(), K8SUtil::NodeId(&(*self.node.node.lock().unwrap())));
+        qpod.Pod().write().unwrap().status.host_ip = self.node.node.lock().unwrap().status.addresses[0].address.clone();
+        let nodeId = self.node.node.lock().unwrap().NodeId();
+        qpod.Pod().write().unwrap().annotations.insert(AnnotationNodeMgrNode.to_string(), nodeId);
 
         let podAgent = PodAgent::New(self.agentChann.clone(), qpod, &self.node.nodeConfig);
         let podId = qpod.lock().unwrap().id.clone();
@@ -427,8 +399,8 @@ impl PmAgent {
         return Ok(podAgent);
     }
 
-    pub fn CreatePodAgent(&self, state: PodState, pod: &k8s::Pod, configMap: &Option<k8s::ConfigMap>, isDaemon: bool) -> Result<PodAgent> {
-        let qpod = self.BuildAQuarkPod(state, pod, configMap, isDaemon)?;
+    pub fn CreatePodAgent(&self, state: PodState, pod: &PodDef, configMap: &Option<k8s::ConfigMap>, isDaemon: bool) -> Result<PodAgent> {
+        let qpod = self.BuildQuarkPod(state, pod, configMap, isDaemon)?;
 
         let podAgent = self.StartPodAgent(&qpod)?;
         return Ok(podAgent);

@@ -19,6 +19,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
 use std::sync::RwLock;
 use qshare::consts::DefaultNodeFuncLogFolder;
+use qshare::node::*;
 use rand::prelude::*;
 
 use qshare::k8s;
@@ -27,43 +28,43 @@ use qshare::common::*;
 
 use qshare::config::*;
 use crate::pod_mgr::runtime::k8s_quantity::*;
-use crate::pod_mgr::runtime::security_context::*;
+// use crate::pod_mgr::runtime::security_context::*;
 
 use super::k8s_types::RunContainerOptions;
 
-pub fn CleanupPodDataDirs(rootPath: &str, pod: &k8s::Pod) -> Result<()> {
-    let uid = pod.metadata.uid.as_ref().unwrap();
+pub fn CleanupPodDataDirs(rootPath: &str, pod: &PodDef) -> Result<()> {
+    let uid = &pod.uid;
     fs::remove_dir_all(&GetPodDir(rootPath, uid)).ok();
     fs::remove_dir_all(&GetPodVolumesDir(rootPath, uid)).ok();
     fs::remove_dir_all(&GetPodPluginsDir(rootPath, uid)).ok();
     return Ok(())
 }
 
-pub fn MakePodDataDir(rootPath: &str, pod: &k8s::Pod) -> Result<()> {
-    let uid = pod.metadata.uid.as_ref().unwrap();
+pub fn MakePodDataDir(rootPath: &str, pod: &PodDef) -> Result<()> {
+    let uid = &pod.uid;
     fs::create_dir_all(&GetPodDir(rootPath, uid)).ok();
     fs::create_dir_all(&GetPodVolumesDir(rootPath, uid)).ok();
     fs::create_dir_all(&GetPodPluginsDir(rootPath, uid)).ok();
     return Ok(())
 }
 
-pub fn CleanupPodLogDir(rootPath: &str, pod: &k8s::Pod) -> Result<()> {
-    let namespace = pod.metadata.namespace.as_ref().unwrap();
-    let name = pod.metadata.name.as_ref().unwrap();
-    let uid = pod.metadata.uid.as_ref().unwrap();
+pub fn CleanupPodLogDir(rootPath: &str, pod: &PodDef) -> Result<()> {
+    let namespace = &pod.namespace;
+    let name = &pod.name;
+    let uid = &pod.uid;
     fs::remove_dir_all(&GetPodLogDir(rootPath, namespace, name, uid)).ok();
     return Ok(())
 }
 
-pub fn MakePodLogDir(rootPath: &str, pod: &k8s::Pod) -> Result<()> {
-    let namespace = pod.metadata.namespace.as_ref().unwrap();
-    let name = pod.metadata.name.as_ref().unwrap();
-    let uid = pod.metadata.uid.as_ref().unwrap();
+pub fn MakePodLogDir(rootPath: &str, pod: &PodDef) -> Result<()> {
+    let namespace = &pod.namespace;
+    let name = &pod.name;
+    let uid = &pod.uid;
     fs::create_dir_all(&GetPodLogDir(rootPath, namespace, name, uid)).ok();
     return Ok(())
 }
 
-pub fn GetPullSecretsForPod(_pod: &k8s::Pod) -> Vec<k8s::Secret> {
+pub fn GetPullSecretsForPod(_pod: &PodDef) -> Vec<k8s::Secret> {
 	let pullSecrets = Vec::new();
 
 	// for _, secretRef := range pod.Spec.ImagePullSecrets {
@@ -84,9 +85,8 @@ pub fn GetPullSecretsForPod(_pod: &k8s::Pod) -> Vec<k8s::Secret> {
 	return pullSecrets
 }
 
-pub fn IsHostNetworkPod(pod: &k8s::Pod) -> bool {
-    return pod.spec.as_ref().unwrap().host_network.is_some() && 
-        pod.spec.as_ref().unwrap().host_network.clone().unwrap();
+pub fn IsHostNetworkPod(pod: &PodDef) -> bool {
+    return pod.host_network;
 }
 
 pub fn ContainerLogFileName(containerName: &str, restartCount: i32) -> String {
@@ -129,35 +129,22 @@ pub fn AllFeatureEnabledContainers() -> ContainerType {
     return AllContainers;
 }
 
-pub type ContainerVisitor = fn(container: &k8s::Container, containerType: ContainerType) -> bool;
-
-pub fn HasPrivileged(c: &k8s::Container, _containerType: ContainerType) -> bool {
-    if c.security_context.is_some() 
-        && c.security_context.as_ref().unwrap().privileged.is_some() 
-        && c.security_context.as_ref().unwrap().privileged.unwrap() {
-        return true;
-    }
+pub fn HasPrivileged(_c: &ContainerDef, _containerType: ContainerType) -> bool {
+    // if c.security_context.is_some() 
+    //     && c.security_context.as_ref().unwrap().privileged.is_some() 
+    //     && c.security_context.as_ref().unwrap().privileged.unwrap() {
+    //     return true;
+    // }
     return false;
 }
 
-pub fn HasPrivileged1(c: &k8s::EphemeralContainer, _containerType: ContainerType) -> bool {
-    if c.security_context.is_some() 
-        && c.security_context.as_ref().unwrap().privileged.is_some() 
-        && c.security_context.as_ref().unwrap().privileged.unwrap() {
-        return true;
-    }
-    return false;
-}
-
-pub fn HasPrivilegedContainer(podSpec: &k8s::PodSpec) -> bool {
+pub fn HasPrivilegedContainer(podSpec: &PodDef) -> bool {
     let mask = AllContainers;
-    if mask & InitContainers != 0 && podSpec.init_containers.is_some() {
-        for i in podSpec.init_containers.as_ref().unwrap() {{
-            if HasPrivileged(i, InitContainers) {
-                return true;
-            }
-        }}
-    }
+    for i in &podSpec.init_containers {{
+        if HasPrivileged(i, InitContainers) {
+            return true;
+        }
+    }}
 
     if mask & Containers != 0 {
         for i in &podSpec.containers {{
@@ -167,13 +154,13 @@ pub fn HasPrivilegedContainer(podSpec: &k8s::PodSpec) -> bool {
         }}
     }
 
-    if mask & EphemeralContainers != 0 && podSpec.ephemeral_containers.is_some() {
-        for i in podSpec.ephemeral_containers.as_ref().unwrap() {{
-            if HasPrivileged1(&i, EphemeralContainers) {
-                return true;
-            }
-        }}
-    }
+    // if mask & EphemeralContainers != 0 && podSpec.ephemeral_containers.is_some() {
+    //     for i in podSpec.ephemeral_containers.as_ref().unwrap() {{
+    //         if HasPrivileged1(&i, EphemeralContainers) {
+    //             return true;
+    //         }
+    //     }}
+    // }
 
     return false;
 }
@@ -185,13 +172,10 @@ pub const ProtocolUDP: &str = "UDP";
 // ProtocolSCTP is the SCTP protocol.
 pub const ProtocolSCTP: &str = "SCTP";
 
-pub fn MakePortMappings(container: &k8s::Container) -> Vec<crictl::PortMapping> {
+pub fn MakePortMappings(container: &ContainerDef) -> Vec<crictl::PortMapping> {
     let mut pms = Vec::new();
-    if container.ports.is_none() {
-        return pms;
-    }
 
-    for p in container.ports.as_ref().unwrap() {
+    for p in &container.ports {
         let pm = crictl::PortMapping {
             host_ip: p.host_ip.as_deref().unwrap_or("").to_string(),
             host_port: p.host_port.clone().unwrap_or(0), 
@@ -215,7 +199,7 @@ pub fn ToRuntimeProtocol(protocol: &str) -> i32 {
 
 // namespacesForPod returns the criv1.NamespaceOption for a given pod.
 // An empty or nil pod can be used to get the namespace defaults for v1.Pod.
-pub fn NamespacesForPod(pod: &k8s::Pod) -> crictl::NamespaceOption {
+pub fn NamespacesForPod(pod: &PodDef) -> crictl::NamespaceOption {
 	return crictl::NamespaceOption {
 		ipc:     IpcNamespaceForPod(pod),
 		network: NetworkNamespaceForPod(pod),
@@ -249,27 +233,26 @@ pub const NamespaceMode_NODE: NamespaceMode = 2;
 // all of the processes that container target_id can view.
 pub const NamespaceMode_TARGET: NamespaceMode = 3;
 
-pub fn IpcNamespaceForPod(pod: &k8s::Pod) -> NamespaceMode {
-	if *pod.spec.as_ref().unwrap().host_ipc.as_ref().unwrap_or(&false) {
+pub fn IpcNamespaceForPod(pod: &PodDef) -> NamespaceMode {
+	if pod.host_ipc {
 		return NamespaceMode_NODE
 	}
 	return NamespaceMode_POD
 }
 
-pub fn NetworkNamespaceForPod(pod: &k8s::Pod) -> NamespaceMode {
-	if pod.spec.as_ref().unwrap().host_network.as_ref().is_some() {
+pub fn NetworkNamespaceForPod(pod: &PodDef) -> NamespaceMode {
+	if pod.host_network {
 		return NamespaceMode_NODE
 	}
 	return NamespaceMode_POD
 }
 
-pub fn PidNamespaceForPod(pod: &k8s::Pod) -> NamespaceMode {
-	if *pod.spec.as_ref().unwrap().host_pid.as_ref().unwrap_or(&false) {
+pub fn PidNamespaceForPod(pod: &PodDef) -> NamespaceMode {
+	if pod.host_pid {
 		return NamespaceMode_NODE
 	}
 
-    if pod.spec.as_ref().unwrap().share_process_namespace.is_some()  
-        && *pod.spec.as_ref().unwrap().share_process_namespace.as_ref().unwrap() {
+    if pod.share_process_namespace {
 		return NamespaceMode_POD
 	}
 
@@ -277,20 +260,13 @@ pub fn PidNamespaceForPod(pod: &k8s::Pod) -> NamespaceMode {
 	return NamespaceMode_CONTAINER
 }
 
-pub fn ConvertOverheadToLinuxResources(nodeConfig: &NodeConfigurationInner, pod: &k8s::Pod) -> crictl::LinuxContainerResources {
-    let resource = crictl::LinuxContainerResources::default();
-    
-    let spec = pod.spec.as_ref().unwrap();
-    if let Some(overhead) = &spec.overhead {
-        let resource = QuarkResource::New(overhead).unwrap();
+pub fn ConvertOverheadToLinuxResources(nodeConfig: &NodeConfigurationInner, pod: &PodDef) -> crictl::LinuxContainerResources {
+    let resource = QuarkResource::New(&pod.overhead);
 
-        return calculateLinuxResources(nodeConfig, resource.cpu, resource.cpu, resource.memory);
-    }
-
-    return resource;
+    return calculateLinuxResources(nodeConfig, resource.cpu, resource.cpu, resource.memory);
 }
 
-pub fn ApplySandboxResources(nodeConfig: &NodeConfigurationInner, pod: &k8s::Pod, psc: &mut crictl::PodSandboxConfig) -> Result<()> {
+pub fn ApplySandboxResources(nodeConfig: &NodeConfigurationInner, pod: &PodDef, psc: &mut crictl::PodSandboxConfig) -> Result<()> {
     if psc.linux.is_none() {
         return Ok(());
     }
@@ -301,33 +277,21 @@ pub fn ApplySandboxResources(nodeConfig: &NodeConfigurationInner, pod: &k8s::Pod
     return Ok(())
 }
 
-pub fn CalculateSandboxResources(nodeConfig: &NodeConfigurationInner, pod: &k8s::Pod) -> crictl::LinuxContainerResources {
+pub fn CalculateSandboxResources(nodeConfig: &NodeConfigurationInner, pod: &PodDef) -> crictl::LinuxContainerResources {
     let (req, lim) = PodRequestsAndLimitsWithoutOverhead(pod);
     return calculateLinuxResources(nodeConfig, req.cpu, lim.cpu, lim.memory);
 }
 
-pub fn ContainerResource(container: &k8s::Container) -> (QuarkResource, QuarkResource) {
-    if container.resources.is_none() {
-        return (QuarkResource::default(), QuarkResource::default());
-    }
-    let req = if container.resources.as_ref().unwrap().requests.is_none() {
-        QuarkResource::default()
-    } else {
-        QuarkResource::New(container.resources.as_ref().unwrap().requests.as_ref().unwrap()).unwrap()
-    };
-        
-    let lim = if container.resources.as_ref().unwrap().requests.is_none() {
-        QuarkResource::default()
-    } else {
-        QuarkResource::New(container.resources.as_ref().unwrap().limits.as_ref().unwrap()).unwrap()
-    };
+pub fn ContainerResource(container: &ContainerDef) -> (QuarkResource, QuarkResource) {
+    let req = QuarkResource::New(&container.resources.requests);    
+    let lim =QuarkResource::New(&container.resources.limits);
     return (req, lim);
 }
 
-pub fn PodRequestsAndLimitsWithoutOverhead(pod: &k8s::Pod) -> (QuarkResource, QuarkResource) {
+pub fn PodRequestsAndLimitsWithoutOverhead(pod: &PodDef) -> (QuarkResource, QuarkResource) {
     let mut reqs = QuarkResource::default();
     let mut limits = QuarkResource::default();
-    for container in &pod.spec.as_ref().unwrap().containers {
+    for container in &pod.containers {
         let (tmpReqs, tmpLimits) = ContainerResource(container);
 
         reqs.Add(&tmpReqs);
@@ -430,16 +394,17 @@ pub const MemoryHigh: &str = "memory.high";
 
 pub fn generateLinuxContainerConfig(
     nodeConfig: &NodeConfigurationInner, 
-    container: &k8s::Container, 
-    pod: &Arc<RwLock<k8s::Pod>>, 
-    uid: Option<i64>, 
-    username: &str, 
+    container: &ContainerDef, 
+    pod: &Arc<RwLock<PodDef>>, 
+    _uid: Option<i64>, 
+    _username: &str, 
     enforceMemoryQoS: bool
 ) -> crictl::LinuxContainerConfig {
-    let pod = &pod.read().unwrap();
+    let _pod = &pod.read().unwrap();
     let mut lc = crictl::LinuxContainerConfig {
         resources: Some(crictl::LinuxContainerResources::default()),
-        security_context: Some(DetermineEffectiveSecurityContext(pod, container, uid, username, nodeConfig.SeccompDefault, &nodeConfig.SeccompProfileRoot)),
+        // security_context: Some(DetermineEffectiveSecurityContext(pod, container, uid, username, nodeConfig.SeccompDefault, &nodeConfig.SeccompProfileRoot)),
+        security_context: None,
     };
 
     let (req, lim) = ContainerResource(container);
@@ -504,44 +469,34 @@ pub fn MakeDevice(opts: &RunContainerOptions) -> Vec<crictl::Device> {
 }
 
 
-pub async fn MakeMounts(pod: &Arc<RwLock<k8s::Pod>>, container: &k8s::Container, namespace: &str) -> Result<Vec<crictl::Mount>> {
+pub async fn MakeMounts(pod: &Arc<RwLock<PodDef>>, container: &ContainerDef, namespace: &str) -> Result<Vec<crictl::Mount>> {
     let pod = pod.read().unwrap();
     let mut volumeMounts = Vec::new();
 
     let mut volumes = BTreeMap::new();
-    match &pod.spec.as_ref().unwrap().volumes {
-        Some(vs) => {
-            for v in vs {
-                // todo: we only support hostpath so far. Add other support later
-                match &v.host_path {
-                    Some(h) => {
-                        volumes.insert(v.name.clone(), h.path.clone());
-                    }
-                    None => (),
-                } 
+    for v in &pod.volumes {
+        // todo: we only support hostpath so far. Add other support later
+        match &v.host_path {
+            Some(h) => {
+                volumes.insert(v.name.clone(), h.path.clone());
             }
-        }
-        None => ()
+            None => (),
+        } 
     }
 
-    match &container.volume_mounts {
-        Some(ms) => {
-            for mount in ms {
-                match volumes.get(&mount.name) {
-                    Some(hostpath) => {
-                        let mount = crictl::Mount {
-                            host_path: hostpath.clone(),
-                            container_path: mount.mount_path.clone(),
-                            ..Default::default()
-                        };
-                        
-                        volumeMounts.push(mount);
-                    }
-                    None => ()
-                }
+    for mount in &container.volume_mounts {
+        match volumes.get(&mount.name) {
+            Some(hostpath) => {
+                let mount = crictl::Mount {
+                    host_path: hostpath.clone(),
+                    container_path: mount.mount_path.clone(),
+                    ..Default::default()
+                };
+                
+                volumeMounts.push(mount);
             }
+            None => ()
         }
-        None => ()
     }
 
     // let mount = crictl::Mount {
