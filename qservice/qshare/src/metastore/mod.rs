@@ -22,3 +22,4 @@ pub mod cacher_client;
 pub mod informer;
 pub mod informer_factory;
 pub mod cache_store;
+pub mod svc_dir;

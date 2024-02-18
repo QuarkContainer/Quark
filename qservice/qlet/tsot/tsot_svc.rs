@@ -164,7 +164,7 @@ impl tsot_cni::tsot_cni_service_server::TsotCniService for TostCniSvc {
 }
 
 pub async fn TsotSvc() -> Result<()>{
-    error!("Tsot service start ...");
+    info!("Tsot service start ...");
     let tsotSvc = TsotSvc::New()?;
     let tsotSvcFuture = tsotSvc.Process();
 
@@ -185,6 +185,6 @@ pub async fn TsotSvc() -> Result<()>{
         _ = tostCniSvcFuture => {},
         _ = connectionSvcFuture => {}
     }
-    error!("Tsot service finish ...");
+    info!("Tsot service finish ...");
     return Ok(())
 }

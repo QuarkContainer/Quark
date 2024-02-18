@@ -36,7 +36,7 @@ use crate::pod_mgr::node_status::{SetNodeStatus, IsNodeStatusReady};
 use crate::QLET_CONFIG;
 
 use super::pm_msg::{NodeAgentMsg, PodCreate};
-use super::{qnode::*, ConfigName};
+use super::{qnode::*, ConfigName, QLET_STORE};
 use super::pod_agent::*;
 use super::NODEAGENT_STORE;
 use super::qpod::*;
@@ -148,6 +148,7 @@ impl PmAgent {
         *self.state.lock().unwrap() = PmAgentState::Registering;
         SetNodeStatus(&self.node).await?;
         NODEAGENT_STORE.CreateNode(&*self.node.node.lock().unwrap())?;
+        QLET_STORE.get().unwrap().CreateNode(&self.node)?;
 
         tokio::spawn(async move {
             clone.Process(rx).await.unwrap();
@@ -167,8 +168,8 @@ impl PmAgent {
 
     pub fn IncrNodeRevision(&self) -> i64 {
         let revision = self.node.revision.fetch_add(1, Ordering::SeqCst);
-        self.node.node.lock().unwrap().metadata.resource_version = format!("{}", revision);
-        self.node.node.lock().unwrap().metadata.annotations.insert(
+        self.node.node.lock().unwrap().resource_version = format!("{}", revision);
+        self.node.node.lock().unwrap().annotations.insert(
             AnnotationNodeMgrNodeRevision.to_string(), 
             format!("{}", revision)
         );
@@ -191,10 +192,12 @@ impl PmAgent {
                             *self.state.lock().unwrap() = PmAgentState::Ready;
                             SetNodeStatus(&self.node).await?;
                             self.node.node.lock().unwrap().status.phase = format!("{}", NodeRunning);
+                            QLET_STORE.get().unwrap().CreateNode(&self.node)?;
                             NODEAGENT_STORE.UpdateNode(&self.node)?;
                         }
                     } else {
                         SetNodeStatus(&self.node).await?;
+                        QLET_STORE.get().unwrap().CreateNode(&self.node)?;
                         NODEAGENT_STORE.UpdateNode(&self.node)?;
                     }
                 }
@@ -218,12 +221,12 @@ impl PmAgent {
                 if qpod.PodState() == PodState::Cleanup {
                     self.CleanupPodStoreAndAgent(&qpod).await?;
                     NODEAGENT_STORE.DeletePod(&qpod)?;
+                    QLET_STORE.get().unwrap().RemovePod(&qpod)?;
                     qpod.SetPodState(PodState::Deleted);
                 } else if qpod.PodState() != PodState::Deleted {
                     NODEAGENT_STORE.UpdatePod(&qpod)?;
+                    QLET_STORE.get().unwrap().UpdatePod(&qpod)?;
                 }
-
-                
             }
             NodeAgentMsg::NodeUpdate => {
                 SetNodeStatus(&self.node).await?;
@@ -257,7 +260,13 @@ impl PmAgent {
             info!("received node spec from nodemgr: {:?}", &node);
             ValidateNodeSpec(&node)?;
 
-            self.node.node.lock().unwrap().spec = node.spec.clone();
+            {
+                let mut nodelock = self.node.node.lock().unwrap();
+                nodelock.node_ip = node.node_ip.clone();
+                nodelock.pod_cidr = node.pod_cidr.clone();
+                nodelock.unschedulable = node.unschedulable;
+            }
+
             if NodeSpecPodCidrChanged(&*self.node.node.lock().unwrap(), &node) {
                 if self.node.pods.lock().unwrap().len() > 0 {
                     return Err(Error::CommonError(format!("change pod cidr when node has pods is not allowed, should not happen")));
@@ -271,7 +280,8 @@ impl PmAgent {
         }
 
         NODEAGENT_STORE.UpdateNode(&self.node)?;
-        
+        QLET_STORE.get().unwrap().CreateNode(&self.node)?;
+                            
         return Ok(())
     }
 
@@ -290,7 +300,9 @@ impl PmAgent {
             };
             let qpod = QuarkPod(Arc::new(Mutex::new(inner)));
             NODEAGENT_STORE.CreatePod(&qpod)?;
+            QLET_STORE.get().unwrap().CreatePod(&qpod)?;
             NODEAGENT_STORE.DeletePod(&qpod)?;
+            QLET_STORE.get().unwrap().RemovePod(&qpod)?;
             return Err(Error::CommonError("Node is not in ready state to create a new pod".to_string()));
         }
        
@@ -311,7 +323,9 @@ impl PmAgent {
                     };
                     let qpod = QuarkPod(Arc::new(Mutex::new(inner)));
                     NODEAGENT_STORE.CreatePod(&qpod)?;
+                    QLET_STORE.get().unwrap().CreatePod(&qpod)?;
                     NODEAGENT_STORE.DeletePod(&qpod)?;
+                    QLET_STORE.get().unwrap().RemovePod(&qpod)?;
                     return Err(e);
                 }
             };
@@ -325,6 +339,7 @@ impl PmAgent {
             podAgent.Start()?;
             let qpod = podAgent.pod.clone();
             NODEAGENT_STORE.CreatePod(&qpod)?;
+            QLET_STORE.get().unwrap().CreatePod(&qpod)?;
             podAgent.Send(NodeAgentMsg::PodCreate( PodCreate {
                 pod: qpod,
             }))?;

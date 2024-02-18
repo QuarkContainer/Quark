@@ -109,17 +109,37 @@ pub struct ObjectMeta {
     pub annotations: BTreeMap<String, String>,
 }
 
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Node {
-    pub metadata: ObjectMeta,
-    pub spec: NodeDef,
+    /////////////// metadata //////////////////////////
+    pub name: String,
+    pub namespace: String,
+    pub uid: String,
+    pub resource_version: String,
+    pub labels: BTreeMap<String, String>,
+    /// Annotations is an unstructured key value map stored with a resource that may be set by external tools to store and retrieve arbitrary metadata. They are not queryable and should be preserved when modifying objects. More info: http://kubernetes.io/docs/user-guide/annotations
+    pub annotations: BTreeMap<String, String>,
+
+    //////////////// spec ////////////////////
+    pub node_ip: String,
+
+    /// PodCIDR represents the pod IP range assigned to the node.
+    pub pod_cidr: String,
+
+    /// Unschedulable controls node schedulability of new pods. By default, node is schedulable. More info: https://kubernetes.io/docs/concepts/nodes/node/#manual-node-administration
+    pub unschedulable: bool,
+
+    //pub spec: NodeDef,
     pub status: NodeStatus,
 }
 
-impl Node{
+impl Node {
     pub fn NodeId(&self) -> String {
-        return format!("{}/{}", &self.metadata.namespace, &self.metadata.name);
+        return format!("{}/{}", &self.namespace, &self.name);
+    }
+
+    pub fn ToString(&self) -> String {
+        return serde_json::to_string_pretty(self).unwrap();
     }
 }
 
@@ -232,6 +252,7 @@ pub struct PodDef {
     pub resource_version: String,
     pub labels: BTreeMap<String, String>,
     pub annotations: BTreeMap<String, String>,
+
     pub init_containers: Vec<ContainerDef>,
     pub containers: Vec<ContainerDef>,
     pub volumes: Vec<Volume>,
@@ -245,13 +266,18 @@ pub struct PodDef {
     pub deletion_grace_period_seconds: Option<i32>,
     pub termination_grace_period_seconds: Option<i32>,
     pub runtime_class_name: Option<String>,
-    pub status: PodStatus,
     pub security_context: Option<k8s::PodSecurityContext>,
+    
+    pub status: PodStatus,
 }
 
 impl PodDef {
     pub fn PodId(&self) -> String {
         return format!("{}/{}", &self.namespace, &self.name);
+    }
+
+    pub fn ToString(&self) -> String {
+        return serde_json::to_string_pretty(self).unwrap();
     }
 }
 

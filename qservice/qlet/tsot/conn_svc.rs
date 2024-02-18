@@ -96,7 +96,6 @@ impl ConnectionSvc {
         let addr = format!("0.0.0.0:{}", self.port);
         let listener = TcpListener::bind(&addr).await?;
 
-        error!("ConnectionSvc::Process listen {}", addr);
         loop {
             // tokio::select! {
             //     _ = self.closeNotify.notified() => {
