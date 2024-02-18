@@ -250,7 +250,7 @@ impl NodeAgentStoreInner {
     pub fn UpdateNode(&mut self, node: &QuarkNode) -> Result<()> {
         assert!(self.nodeCache.is_some());
         self.revision += 1;
-        node.node.lock().unwrap().metadata.resource_version = format!("{}", self.revision);
+        node.node.lock().unwrap().resource_version = format!("{}", self.revision);
         
         let k8sNode = node.node.lock().unwrap().clone();
 

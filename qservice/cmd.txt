@@ -123,12 +123,14 @@ sudo docker run \
   --initial-cluster node1=http://${NODE1}:2380
 
 export ETCDCTL_API=3
+etcdctl get / --prefix
+
 etcdctl put foo bar
 etcdctl get foo
 
 3. Run qlet
 cd Quark/qservice/target/debug
-rm -f /var/log/quark/na.log; sudo ./na
+  rm -f /var/log/quark/na.log; sudo ./na
 
 multiple qlet test
 rm -f /var/log/quark/ss.log; sudo ./ss

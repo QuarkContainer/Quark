@@ -20,10 +20,9 @@ use std::sync::atomic::AtomicI64;
 use std::time::SystemTime;
 use qshare::node::Node;
 use qshare::node::NodeCondition;
-use qshare::node::NodeDef;
 use qshare::node::NodeStatus;
-use qshare::node::ObjectMeta;
 use qshare::node::PodDef;
+use qshare::qlet_config::QletConfig;
 use uuid::Uuid;
 
 use qshare::config::*;
@@ -38,17 +37,17 @@ lazy_static::lazy_static! {
     };
 }
 
-pub fn InitK8sNode(hostname: &str) -> Result<Node> {
+pub fn InitNode(qletConfig: &QletConfig) -> Result<Node> {
     let mut node = Node {
-        metadata: ObjectMeta  {
-            name: hostname.to_owned(),
-            annotations: BTreeMap::new(),
-            namespace: DefaultNodeMgrNodeNameSpace.to_string(),
-            uid: Uuid::new_v4().to_string(),
-            resource_version: "0".to_owned(),
-            labels: BTreeMap::new(),
-        },
-        spec:  NodeDef::default(),
+        name: qletConfig.nodeName.clone(),
+        annotations: BTreeMap::new(),
+        namespace: DefaultNodeMgrNodeNameSpace.to_string(),
+        uid: Uuid::new_v4().to_string(),
+        resource_version: "0".to_owned(),
+        labels: BTreeMap::new(),
+        node_ip: qletConfig.nodeIp.clone(),
+        pod_cidr: qletConfig.cidr.clone(),
+        unschedulable: false,
         status: NodeStatus {
             capacity: BTreeMap::new(),
             allocatable: BTreeMap::new(),
@@ -107,8 +106,8 @@ impl Deref for QuarkNode {
 }
 
 impl QuarkNode {
-    pub fn NewQuarkNode(nodename: &str, nodeConfig: &NodeConfiguration) -> Result<QuarkNode> {
-        let k8sNode = InitK8sNode(nodename)?;
+    pub fn NewQuarkNode(qletConfig: &QletConfig, nodeConfig: &NodeConfiguration) -> Result<QuarkNode> {
+        let k8sNode = InitNode(qletConfig)?;
         
         let inner = QuarkNodeInner {
             nodeConfig: nodeConfig.clone(),
@@ -152,11 +151,8 @@ pub fn NodeSpecPodCidrChanged(old: &Node, new: &Node) -> bool {
         Ok(()) => ()
     }
 
-    let oldspec = &old.spec;
-    let newspec = &new.spec;
-
-    if oldspec.pod_cidr.len() == 0 
-        || oldspec.pod_cidr != newspec.pod_cidr { 
+    if old.pod_cidr.len() == 0 
+        || old.pod_cidr != new.pod_cidr { 
         return true;
     }
 
@@ -166,11 +162,10 @@ pub fn NodeSpecPodCidrChanged(old: &Node, new: &Node) -> bool {
 pub fn ValidateNodeSpec(node: &Node) -> Result<()> {
     use ipnetwork::IpNetwork;
 
-    let spec = &node.spec;
-    if spec.pod_cidr.len() == 0 {
+    if node.pod_cidr.len() == 0 {
         return Err(Error::CommonError(format!("api node spec pod cidr is nil")));
     } else {
-        let _network = spec.pod_cidr.parse::<IpNetwork>()?;
+        let _network = node.pod_cidr.parse::<IpNetwork>()?;
     }
 
     return Ok(())

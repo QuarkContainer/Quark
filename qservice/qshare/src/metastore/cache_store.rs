@@ -85,10 +85,9 @@ impl CacheStore {
             None => (),
             Some(s) => {
                 s.Register(watch, rev, prefixClone, readyClone, notify)?;
+                ready.notified().await;
             }
         }
-        
-        ready.notified().await;
         
         return Ok(ret);
     }
@@ -123,6 +122,18 @@ impl CacheStore {
             }
             Some(_) => return Ok(()),
         }
+    }
+
+    pub fn Add(&self, obj: &DataObject) -> Result<()> {
+        return self.write().unwrap().Add(obj)
+    }
+
+    pub fn Update(&self, obj: &DataObject) -> Result<()> {
+        return self.write().unwrap().Update(obj)
+    }
+
+    pub fn Remove(&self, obj: &DataObject) -> Result<()> {
+        return self.write().unwrap().Remove(obj)
     }
 
     pub async fn Get(

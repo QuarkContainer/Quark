@@ -30,7 +30,7 @@ pub mod cidr;
 pub mod namespaceMgr;
 pub mod node_register;
 pub mod node_mgr;
-pub mod state_store;
+pub mod qlet_store; 
 
 use std::sync::Arc;
 
@@ -44,6 +44,7 @@ use nodeagent_store::NodeAgentStore;
 use tokio::sync::Notify;
 
 use self::namespaceMgr::NamespaceMgr;
+use self::qlet_store::QletStore;
 
 lazy_static::lazy_static! {
     pub static ref NODEAGENT_STORE: NodeAgentStore = {
@@ -51,19 +52,6 @@ lazy_static::lazy_static! {
     };
 
     pub static ref NODE_READY_NOTIFY : Arc<Notify> = Arc::new(Notify::new());
-
-    // pub static ref NODEAGENT_CONFIG: NodeAgentConfig = {
-    //     let systemConfigs: BTreeMap<String, SystemConfig> = serde_json::from_str(SYSTEM_CONFIGS).unwrap();
-
-    //     let configName = ConfigName();
-
-    //     let systemConfig = match systemConfigs.get(&configName) {
-    //         None => panic!("there is no system config named {}", configName),
-    //         Some(c) => c,
-    //     };
-    
-    //     systemConfig.nodeAgentConfig.clone()
-    // };
 
     pub static ref NAMESPACE_MGR : NamespaceMgr = NamespaceMgr::New();
 
@@ -84,3 +72,4 @@ pub fn ConfigName() -> String {
 pub static RUNTIME_MGR: OnceCell<RuntimeMgr> = OnceCell::new();
 pub static IMAGE_MGR: OnceCell<ImageMgr> = OnceCell::new();
 pub static CADVISOR_PROVIDER: OnceCell<CadvisorInfoProvider> = OnceCell::new();
+pub static QLET_STORE: OnceCell<QletStore> = OnceCell::new();

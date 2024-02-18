@@ -34,10 +34,8 @@ use crate::pod_mgr::*;
 use crate::QLET_CONFIG;
 
 use super::qnode::QuarkNode;
-use super::{CADVISOR_PROVIDER, RUNTIME_MGR};
+use super::{CADVISOR_PROVIDER, RUNTIME_MGR, QLET_STORE};
 use super::cadvisor::provider::CadvisorInfoProvider;
-
-
 
 pub struct PodMgr {
     pub pmAgent: PmAgent,
@@ -48,13 +46,14 @@ impl PodMgr {
         CADVISOR_PROVIDER.set(CadvisorInfoProvider::New().await.unwrap()).unwrap();
         RUNTIME_MGR.set(RuntimeMgr::New(10).await.unwrap()).unwrap();
         IMAGE_MGR.set(ImageMgr::New(crictl::AuthConfig::default()).await.unwrap()).unwrap();
-    
+        QLET_STORE.set(QletStore::New().await.unwrap()).unwrap();
+        
         let config = &NODE_CONFIG;
         let nodename = &QLET_CONFIG.nodeName;
 
         PmAgent::CleanPods(nodename).await?;
     
-        let quarkNode = QuarkNode::NewQuarkNode(nodename, &config)?;
+        let quarkNode = QuarkNode::NewQuarkNode(&QLET_CONFIG, &config)?;
         let pmAgent = PmAgent::New(&quarkNode)?;
         pmAgent.Start().await?;
         return Ok(Self {

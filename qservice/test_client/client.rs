@@ -90,7 +90,9 @@ async fn GetPod() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
+    println!("client 0");
     let mut client = na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
+    println!("client 0.1");
     
     let args: Vec<String> = std::env::args().collect();
     let cmd = if args.len() > 2 {
@@ -183,7 +185,9 @@ async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
         ports: ports,
     });
 
+    println!("client 1");
     let response = client.create_func_pod(request).await?;
+    println!("client 2");
     
     let resp : CreateFuncPodResp = response.into_inner();
     let addr = IpAddress(resp.ipaddress);
