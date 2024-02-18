@@ -14,22 +14,22 @@
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::time::SystemTime;
 
-use chrono::prelude::*;
 use qshare::config::NodeConfiguration;
-use qshare::k8s;
-use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
+use qshare::node::*;
 
 use qshare::common::*;
 use qshare::consts::*;
+use qshare::node::Node;
+use qshare::node::NodeCondition;
 
+use super::runtime::k8s_quantity::QuarkResource;
 use super::CADVISOR_PROVIDER;
 use super::RUNTIME_MGR;
 use super::cadvisor::client::NodeCAdvisorInfo;
 use super::qnode::NETWORK_PROVIDER;
 use super::qnode::QuarkNode;
-use super::runtime::k8s_quantity::*;
 use super::qpod::PodState;
 
 // NodeReady means kubelet is healthy and ready to accept pods.
@@ -52,16 +52,16 @@ pub const NodeRunning : &str = "Running";
 // NodeTerminated means the node has been removed from the cluster.
 pub const NodeTerminated : &str = "Terminated";
 
-pub fn UpdateNodeAddress(node: &mut k8s::Node) -> Result<k8s::NodeCondition> {
+pub fn UpdateNodeAddress(node: &mut Node) -> Result<NodeCondition> {
     let addresses = NETWORK_PROVIDER.GetNetAddress();
     if addresses.len() == 0 {
         return Err(Error::CommonError("can't get local v4 ip address".to_string()));
     }
 
-    node.status.as_mut().unwrap().addresses = Some(addresses);
+    node.status.addresses = addresses;
 
-    let currentTime = Time(Utc::now());
-    let condition = k8s::NodeCondition {
+    let currentTime = SystemTime::now();
+    let condition = NodeCondition {
         type_: NodeNetworkUnavailable.to_string(),
         status: ConditionFalse.to_string(),
         reason: Some("Node network initialized".to_owned()),
@@ -73,9 +73,9 @@ pub fn UpdateNodeAddress(node: &mut k8s::Node) -> Result<k8s::NodeCondition> {
     return Ok(condition);
 }
 
-pub async fn UpdateNodeReadyStatus() -> Result<k8s::NodeCondition> {
+pub async fn UpdateNodeReadyStatus() -> Result<NodeCondition> {
     let status = RUNTIME_MGR.get().unwrap().GetRuntimeStatus().await?;
-    let currentTime = Time(Utc::now());
+    let currentTime = SystemTime::now();
 
 	let mut networkReady = false;
 	let mut runtimeReady = false;
@@ -92,7 +92,7 @@ pub async fn UpdateNodeReadyStatus() -> Result<k8s::NodeCondition> {
 
     let condition;
     if runtimeReady && networkReady {
-        condition = k8s::NodeCondition {
+        condition = NodeCondition {
             type_: NodeReady.to_string(),
             status: ConditionTrue.to_string(),
             reason: Some("Node runtime ready".to_owned()),
@@ -101,7 +101,7 @@ pub async fn UpdateNodeReadyStatus() -> Result<k8s::NodeCondition> {
             last_transition_time: Some(currentTime.clone()),
         }
     } else {
-        condition = k8s::NodeCondition {
+        condition = NodeCondition {
             type_: NodeReady.to_string(),
             status: ConditionTrue.to_string(),
             reason: Some("Node runtime not ready".to_owned()),
@@ -146,8 +146,8 @@ pub async fn SetNodeStatus(node: &QuarkNode) -> Result<()> {
 	conditions[condition.Type] = condition
     */
 
-    let currentTime = Time(Utc::now());
-    conditions.insert(NodeReady.to_string(), k8s::NodeCondition {
+    let currentTime = SystemTime::now();
+    conditions.insert(NodeReady.to_string(), NodeCondition {
         type_: NodeReady.to_string(),
         status: ConditionTrue.to_string(),
         reason: Some("NodeRuntime Ready".to_owned()),
@@ -161,11 +161,11 @@ pub async fn SetNodeStatus(node: &QuarkNode) -> Result<()> {
     return Ok(())
 }
 
-pub fn UpdateNodeCapacity(nodeConfig: &NodeConfiguration, node: &mut k8s::Node) -> Result<()> {
+pub fn UpdateNodeCapacity(nodeConfig: &NodeConfiguration, node: &mut Node) -> Result<()> {
     let info = CADVISOR_PROVIDER.get().unwrap().CAdvisorInfo();
     
-    let status = node.status.as_mut().unwrap();
-    let nodeinfo = status.node_info.as_mut().unwrap();
+    let status = &mut node.status;
+    let nodeinfo = &mut status.node_info;
     nodeinfo.operating_system = "linux".to_string();
     nodeinfo.architecture = "amd64".to_string();
     nodeinfo.kernel_version = info.versionInfo.KernelVersion.clone();
@@ -179,13 +179,13 @@ pub fn UpdateNodeCapacity(nodeConfig: &NodeConfiguration, node: &mut k8s::Node) 
     let map = ResourceListFromMachineInfo(&info);
 
     {
-        let capacity = status.allocatable.as_mut().unwrap();
+        let capacity = &mut status.allocatable;
         for (rname, rCap) in &map {
             capacity.insert(rname.to_string(), rCap.clone());
         }
     }
 
-    let capacity = status.capacity.as_mut().unwrap();
+    let capacity = &mut status.capacity;
     
     for (rname, rCap) in map {
         capacity.insert(rname, rCap);
@@ -194,9 +194,9 @@ pub fn UpdateNodeCapacity(nodeConfig: &NodeConfiguration, node: &mut k8s::Node) 
     if nodeConfig.PodsPerCore > 0 {
         let resourcePods = (info.machineInfo.NumCores * nodeConfig.PodsPerCore) as i64;
         let resourcePods = resourcePods.min(nodeConfig.MaxPods as i64);
-        capacity.insert("pods".to_string(), Quantity(format!("{}", resourcePods)));
+        capacity.insert("pods".to_string(), Quantity(resourcePods));
     } else {
-        capacity.insert("pods".to_string(), Quantity(format!("{}", nodeConfig.MaxPods)));
+        capacity.insert("pods".to_string(), Quantity(nodeConfig.MaxPods as i64));
     }
 
     return Ok(())
@@ -204,13 +204,13 @@ pub fn UpdateNodeCapacity(nodeConfig: &NodeConfiguration, node: &mut k8s::Node) 
 
 pub fn ResourceListFromMachineInfo(info: &Arc<NodeCAdvisorInfo>) -> BTreeMap<String, Quantity> {
     let mut map = BTreeMap::new();
-    map.insert(ResourceCPU.to_string(), Quantity(format!("{}", info.machineInfo.NumCores * 1000)));
-    map.insert(ResourceMemory.to_string(), Quantity(format!("{}", info.machineInfo.MemoryCapacity)));
+    map.insert(ResourceCPU.to_string(), Quantity(info.machineInfo.NumCores as i64 * 1000));
+    map.insert(ResourceMemory.to_string(), Quantity(info.machineInfo.MemoryCapacity as i64));
     return map;
 }
 
-pub fn MergeNodeConditions(node: &mut k8s::Node, condition: &mut BTreeMap<String, k8s::NodeCondition>) {
-    let conditions = node.status.as_mut().unwrap().conditions.as_mut().unwrap();
+pub fn MergeNodeConditions(node: &mut Node, condition: &mut BTreeMap<String, NodeCondition>) {
+    let conditions = &mut node.status.conditions;
     let count = conditions.len();
     for i in 0..count {
         let oldCondition = &mut conditions[i];
@@ -229,7 +229,7 @@ pub fn MergeNodeConditions(node: &mut k8s::Node, condition: &mut BTreeMap<String
 
 pub fn IsNodeStatusReady(node: &QuarkNode) -> bool {
     // check node capacity and allocatable are set
-	let resource = QuarkResource::New(node.node.lock().unwrap().status.as_ref().unwrap().allocatable.as_ref().unwrap()).unwrap();
+	let resource = QuarkResource::New(&node.node.lock().unwrap().status.allocatable);
 
     let cpuReady = resource.cpu > 0;
     let memReady = resource.memory > 0;
@@ -247,8 +247,8 @@ pub fn IsNodeStatusReady(node: &QuarkNode) -> bool {
     return cpuReady && memReady && daemonReady && nodeConditionReady;
 }
 
-pub fn IsNodeCondtionReady(node: &k8s::Node) -> bool {
-    for v in node.status.as_ref().unwrap().conditions.as_ref().unwrap() {
+pub fn IsNodeCondtionReady(node: &Node) -> bool {
+    for v in &node.status.conditions {
         if &v.type_ == NodeReady && &v.status == ConditionTrue {
             return true;
         }
@@ -257,6 +257,6 @@ pub fn IsNodeCondtionReady(node: &k8s::Node) -> bool {
     return false;
 }
 
-pub fn IsNodeRunning(node: &k8s::Node) -> bool {
-    return node.status.as_ref().unwrap().phase == Some(NodeRunning.to_string());
+pub fn IsNodeRunning(node: &Node) -> bool {
+    return node.status.phase == NodeRunning.to_string();
 }

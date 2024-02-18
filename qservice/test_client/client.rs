@@ -184,7 +184,7 @@ async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let response = client.create_func_pod(request).await?;
-
+    
     let resp : CreateFuncPodResp = response.into_inner();
     let addr = IpAddress(resp.ipaddress);
     println!("Ipaddr is {:?} RESPONSE={:?}", addr.AsBytes(), resp);

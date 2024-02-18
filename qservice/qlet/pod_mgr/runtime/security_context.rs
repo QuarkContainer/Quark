@@ -17,6 +17,7 @@ use lazy_static::lazy_static;
 
 use qshare::k8s;
 use qshare::crictl;
+use qshare::node::PodDef;
 
 use crate::pod_mgr::runtime::k8s_const;
 use crate::pod_mgr::runtime::k8s_util;
@@ -30,7 +31,7 @@ pub const SeccompProfileTypeRuntimeDefault: &str = "RuntimeDefault";
 pub const SeccompProfileTypeLocalhost: &str = "Localhost";
 
 pub fn DetermineEffectiveSecurityContext(
-    pod: &k8s::Pod, 
+    pod: &PodDef, 
     container: &k8s::Container, 
     _uid: Option<i64>, 
     _username: &str, 
@@ -40,15 +41,11 @@ pub fn DetermineEffectiveSecurityContext(
     let effectiveSc = determineEffectiveSecurityContext(pod, container);
     let mut synthesized = ConvertToRuntimeSecurityContext(&effectiveSc);
 
-    let map = BTreeMap::new();
-    let annotation = match &pod.metadata.annotations {
-        None => &map,
-        Some(m) => m 
-    };
+    let annotation = &pod.annotations;
     synthesized.seccomp_profile_path = GetSeccompProfilePath(
         annotation, 
         &container.name, 
-        &pod.spec.as_ref().unwrap().security_context, 
+        &pod.security_context, 
         &container.security_context, 
         seccompDefault, 
         seccompProfileRoot
@@ -58,14 +55,14 @@ pub fn DetermineEffectiveSecurityContext(
         seccompProfileRoot, 
         annotation, 
         &container.name, 
-        &pod.spec.as_ref().unwrap().security_context, 
+        &pod.security_context, 
         &container.security_context, 
         seccompDefault
     ));
     
     synthesized.namespace_options = Some(k8s_util::NamespacesForPod(pod));
 
-    let podSc = &pod.spec.as_ref().unwrap().security_context;
+    let podSc = &pod.security_context;
     if podSc != &None {
         let podSc = podSc.as_ref().unwrap();
         if podSc.fs_group.is_some() {
@@ -159,16 +156,14 @@ pub fn ConvertToRuntimeReadonlyPaths(opt: &Option<String>) -> Vec<String> {
 	return defaultReadonlyPaths.to_vec();
 }
 
-pub fn SecurityContextFromPodSecurityContext(pod: &k8s::Pod) -> Option<k8s::SecurityContext> {
+pub fn SecurityContextFromPodSecurityContext(pod: &PodDef) -> Option<k8s::SecurityContext> {
     let mut synthesized = k8s::SecurityContext::default();
 
-    let spec = pod.spec.as_ref().unwrap();
-
-    if spec.security_context.is_none() {
+    if pod.security_context.is_none() {
         return None;
     }
 
-    let context = spec.security_context.as_ref().unwrap();
+    let context = pod.security_context.as_ref().unwrap();
 
     synthesized.run_as_user = context.run_as_user.clone();
     synthesized.run_as_group = context.run_as_group.clone();
@@ -181,7 +176,7 @@ pub fn SecurityContextFromPodSecurityContext(pod: &k8s::Pod) -> Option<k8s::Secu
 // DetermineEffectiveSecurityContext returns a synthesized SecurityContext for reading effective configurations
 // from the provided pod's and container's security context. Container's fields take precedence in cases where both
 // are set
-pub fn determineEffectiveSecurityContext(pod: &k8s::Pod, container: &k8s::Container) -> k8s::SecurityContext {
+pub fn determineEffectiveSecurityContext(pod: &PodDef, container: &k8s::Container) -> k8s::SecurityContext {
     let effectiveSc = SecurityContextFromPodSecurityContext(pod);
     let containerSc = &container.security_context;
 

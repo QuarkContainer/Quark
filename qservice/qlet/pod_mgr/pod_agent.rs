@@ -21,19 +21,18 @@ use std::fs::Permissions;
 use std::sync::Mutex;
 use std::time::Duration;
 use core::ops::Deref;
+use std::time::SystemTime;
 
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
+use qshare::node::*;
 use tokio::sync::{mpsc, Notify};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use tokio::time;
-use chrono::prelude::*;
 
 use qshare::k8s;
             
 use qshare::common::*;
-use qshare::k8s_util::*;
 use qshare::crictl;
 use qshare::config::*;
 use qshare::types::*;
@@ -168,23 +167,19 @@ impl PodAgent {
         }
          */
 
-        let namespace = pod.read().unwrap().metadata.namespace.clone().unwrap();
+        let namespace = pod.read().unwrap().namespace.clone();
 
-        info!("Pull pod secret pod {}", &podId);
-        let pullSecrets = Vec::new();
         info!("Create pod sandbox {}", &podId);
         let runtimePod = Arc::new(self.CreatePodSandbox().await?);
         info!("Get pod sandbox {}, sandbox {:?}", &podId, &runtimePod);
 
         self.pod.lock().unwrap().runtimePod = Some(runtimePod.clone());
         info!("Start pod init containers pod {}", &podId);
-        if pod.read().unwrap().spec.as_ref().unwrap().init_containers.is_some() {
-            let containers = pod.read().unwrap().spec.as_ref().unwrap().init_containers.as_ref().unwrap().to_vec();
+        let containers = pod.read().unwrap().init_containers.to_vec();
             for c in &containers {
                 let runtimeContainer = self.CreateContainer(
                     runtimePod.sandboxConfig.as_ref().unwrap(), 
                     c, 
-                    &pullSecrets,
                     &namespace
                 ).await?;
                 let inner = QuarkContainerInner {
@@ -200,15 +195,13 @@ impl PodAgent {
                 self.containers.lock().unwrap().insert(c.name.clone(), containerAgent.clone());
                 containerAgent.Start().await?;
             }
-        }
 
         info!("Start pod containers pod {}", &podId);
-        let containers = pod.read().unwrap().spec.as_ref().unwrap().containers.to_vec();
+        let containers = pod.read().unwrap().containers.to_vec();
         for c in &containers {
             let runtimeContainer = self.CreateContainer(
                 runtimePod.sandboxConfig.as_ref().unwrap(), 
                 c, 
-                &pullSecrets,
                 &namespace
             ).await?;
             let inner = QuarkContainerInner {
@@ -484,10 +477,10 @@ impl PodAgent {
             self.pod.PodId(), self.pod.PodState(), forceTerminatePod);
 
         let pod = self.pod.Pod();
-        let hasDeleted = pod.read().unwrap().metadata.deletion_timestamp.is_some();
-        let utc = Utc::now();
+        let hasDeleted = pod.read().unwrap().deletion_timestamp.is_some();
+        let utc = SystemTime::now();
         if !hasDeleted {
-            pod.write().unwrap().metadata.deletion_timestamp = Some(Time(utc));
+            pod.write().unwrap().deletion_timestamp = Some(utc);
         }
 
         if self.pod.PodState() == PodState::Terminated || self.pod.PodState() == PodState::Cleanup {
@@ -496,7 +489,7 @@ impl PodAgent {
 
         self.pod.SetPodState(PodState::Terminating);
         let mut gracefulPeriodSeconds = 0;
-        if let Some(period) = pod.read().unwrap().metadata.deletion_grace_period_seconds {
+        if let Some(period) = pod.read().unwrap().deletion_grace_period_seconds {
             gracefulPeriodSeconds = period;
         }
 
@@ -579,11 +572,11 @@ impl PodAgent {
         
         // Remove data directories for the pod
 	    info!("Remove Pod Data dirs pod {}", self.pod.PodId());
-        let k8sPod = self.pod.Pod();
-        CleanupPodDataDirs(&self.nodeConfig.RootPath, &k8sPod.read().unwrap())?;
+        let pod = self.pod.Pod();
+        CleanupPodDataDirs(&self.nodeConfig.RootPath, &pod.read().unwrap())?;
 
         info!("Remove Pod log dirs pod {}", self.pod.PodId());
-        CleanupPodLogDir(&self.nodeConfig.RootPath, &k8sPod.read().unwrap())?;
+        CleanupPodLogDir(&self.nodeConfig.RootPath, &pod.read().unwrap())?;
             
         /*
         	// remove cgroups for the pod and apply resource parameters
@@ -636,7 +629,7 @@ impl PodAgent {
         let perms = Permissions::from_mode(0o755);
         fs::set_permissions(&podsandboxConfig.log_directory, perms)?;
 
-        let runtime = self.pod.Pod().read().unwrap().spec.as_ref().unwrap().runtime_class_name.clone();
+        let runtime = self.pod.Pod().read().unwrap().runtime_class_name.clone();
         let runtimehandler = match runtime {
             None => self.nodeConfig.RuntimeHandler.clone(),
             Some(runtime) => runtime.clone(),
@@ -656,11 +649,11 @@ impl PodAgent {
         let pod = self.pod.Pod();
         let pod = pod.read().unwrap();
         
-        let podUID = pod.metadata.uid.as_deref().unwrap_or("").to_string();
+        let podUID = pod.uid.clone();
         let mut podSandboxConfig = crictl::PodSandboxConfig {
             metadata: Some(crictl::PodSandboxMetadata {
-                name: pod.metadata.name.as_deref().unwrap_or("").to_string(),
-                namespace: pod.metadata.namespace.as_deref().unwrap_or("").to_string(),
+                name: pod.name.clone(),
+                namespace: pod.namespace.clone(),
                 uid: podUID,
                 ..Default::default()
             }),
@@ -669,22 +662,20 @@ impl PodAgent {
             ..Default::default()
         };
 
-        let spec = pod.spec.as_ref().unwrap();
-
         podSandboxConfig.dns_config = Some(crictl::DnsConfig::default());
-        if !IsHostNetworkPod(&pod) && spec.hostname.is_some() {
-            podSandboxConfig.hostname = spec.hostname.as_deref().unwrap_or("").to_string();
+        if !IsHostNetworkPod(&pod) {
+            podSandboxConfig.hostname = pod.host_name.clone();
         }
 
         podSandboxConfig.log_directory = GetPodLogDir(
             DefaultPodLogsRootPath,
-            pod.metadata.namespace.as_deref().unwrap_or(""), 
-            pod.metadata.name.as_deref().unwrap_or(""),  
-            pod.metadata.uid.as_deref().unwrap_or("")
+            &pod.namespace, 
+            &pod.name,  
+            &pod.uid,
         );
 
         let mut podMapping = Vec::new();
-        for c in &spec.containers {
+        for c in &pod.containers {
             for v in MakePortMappings(c) {
                 podMapping.push(v);
             }
@@ -703,36 +694,35 @@ impl PodAgent {
     }
 
     pub fn GeneratePodSandboxLinuxConfig(&self) -> Result<crictl::LinuxPodSandboxConfig> {
-        let pod = self.pod.Pod();
-        let pod = pod.read().unwrap();
-        let mut lpsc = crictl::LinuxPodSandboxConfig {
+        // let pod = self.pod.Pod();
+        // let pod = pod.read().unwrap();
+        let lpsc = crictl::LinuxPodSandboxConfig {
             cgroup_parent: "".to_owned(),
-            security_context: Some(crictl::LinuxSandboxSecurityContext {
-                privileged: HasPrivilegedContainer(pod.spec.as_ref().unwrap()),
-                seccomp: Some(crictl::SecurityProfile {
-                    profile_type: SecurityProfile_RuntimeDefault,
-                    ..Default::default()
-                }),
-                ..Default::default()
-            }),
+            security_context: None,
+            // security_context: Some(crictl::LinuxSandboxSecurityContext {
+            //     privileged: HasPrivilegedContainer(pod.spec.as_ref().unwrap()),
+            //     seccomp: Some(crictl::SecurityProfile {
+            //         profile_type: SecurityProfile_RuntimeDefault,
+            //         ..Default::default()
+            //     }),
+            //     ..Default::default()
+            // }),
             ..Default::default()
         };
 
-        AddPodSecurityContext(&pod, &mut lpsc);
+        //AddPodSecurityContext(&pod, &mut lpsc);
         return Ok(lpsc)
     }
 
     pub async fn CreateContainer(
         &self, 
         podSandboxConfig: &crictl::PodSandboxConfig,
-        containerSpec: &k8s::Container,
-        _pullSecrets: &Vec<k8s::Secret>,
+        containerSpec: &ContainerDef,
         namespace: &str
     ) -> Result<RuntimeContainer> {
         info!("Pull image for container pod {} container {}", self.pod.PodId(), &containerSpec.name);
         let pod = self.pod.Pod();
-        
-        let imageRef = IMAGE_MGR.get().unwrap().PullImageForContainer(containerSpec, podSandboxConfig).await?;
+        let imageRef = IMAGE_MGR.get().unwrap().PullImageForContainer(&containerSpec.image, podSandboxConfig).await?;
 
         info!("Create container log dir pod {} container {}", self.pod.PodId(), &containerSpec.name);
         let _logDir = BuildContainerLogsDirectory(&pod.read().unwrap(), &containerSpec.name)?;
@@ -759,47 +749,36 @@ impl PodAgent {
         }
     }
 
-    pub async fn generateContainerConfig(&self, container: &k8s::Container, imageRef: &crictl::Image, namespace: &str) -> Result<crictl::ContainerConfig> {
+    pub async fn generateContainerConfig(&self, container: &ContainerDef, imageRef: &crictl::Image, namespace: &str) -> Result<crictl::ContainerConfig> {
         let pod = self.pod.Pod();
         BuildContainerLogsDirectory(&pod.read().unwrap(), &container.name)?;
 
         let containerLogsPath = ContainerLogFileName(&container.name, 0);
-        let mut podIP = "".to_string();
-        if self.pod.RuntimePod().as_ref().unwrap().IPs.len() > 0 {
-            podIP = self.pod.RuntimePod().as_ref().unwrap().IPs[0].to_string();
-        }
+        // let mut podIP = "".to_string();
+        // if self.pod.RuntimePod().as_ref().unwrap().IPs.len() > 0 {
+        //     podIP = self.pod.RuntimePod().as_ref().unwrap().IPs[0].to_string();
+        // }
 
-        let envs = MakeEnvironmentVariables(
-                &pod.read().unwrap(), 
-                container, 
-                &k8s::ConfigMap::default(),
-                 &Vec::new(), 
-                 &podIP, 
-                 &self.pod.RuntimePod().as_ref().unwrap().IPs
-        )?;
+        let envs = MakeEnvironmentVariables(container)?;
         
         let mut commands = Vec::new();
-        if container.command.is_some() {
-            for v in container.command.as_ref().unwrap() {
-                let mut cmd = v.to_string();
-                for e in &envs {
-                    let oldv = format!("$({})", &e.name);
-                    cmd = cmd.replace(&oldv, &e.value);
-                }
-                commands.push(cmd);
+        for v in &container.commands {
+            let mut cmd = v.to_string();
+            for e in &envs {
+                let oldv = format!("$({})", &e.name);
+                cmd = cmd.replace(&oldv, &e.value);
             }
+            commands.push(cmd);
         }
 
         let mut args = Vec::new();
-        if container.args.is_some() {
-            for v in container.args.as_ref().unwrap() {
-                let mut arg = v.to_string();
-                for e in &envs {
-                    let oldv = format!("$({})", &e.name);
-                    arg = arg.replace(&oldv, &e.value);
-                }
-                args.push(arg);
+        for v in &container.args {
+            let mut arg = v.to_string();
+            for e in &envs {
+                let oldv = format!("$({})", &e.name);
+                arg = arg.replace(&oldv, &e.value);
             }
+            args.push(arg);
         }
         
         let mut config = crictl::ContainerConfig {
@@ -813,14 +792,14 @@ impl PodAgent {
             }),
             command: commands,
             args: args,
-            working_dir: container.working_dir.as_deref().unwrap_or("").to_string(),
+            working_dir: container.working_dir.clone(),
             labels: NewContainerLabels(container, &pod),
             annotations: NewContainerAnnotations(container, &pod, 0, &BTreeMap::new()),
             //devices:
             mounts: MakeMounts(&pod, container, namespace).await?,
             log_path: containerLogsPath,
-            stdin: *container.stdin.as_ref().unwrap_or(&false),
-            stdin_once: *container.stdin_once.as_ref().unwrap_or(&false),
+            stdin: container.stdin,
+            stdin_once: container.stdin_once,
             ..Default::default()
         };
 
@@ -856,10 +835,10 @@ impl PodAgent {
 
 pub const DEFAULT_POD_LOGS_ROOT_PATH : &str = "/var/log/pods";
 
-pub fn BuildContainerLogsDirectory(pod: &k8s::Pod, containerName: &str) -> Result<String> {
-    let namespace = K8SUtil::Namespace(&pod.metadata);
-    let name = K8SUtil::Name(&pod.metadata);
-    let uid = K8SUtil::Uid(&pod.metadata);
+pub fn BuildContainerLogsDirectory(pod: &PodDef, containerName: &str) -> Result<String> {
+    let namespace = &pod.namespace;
+    let name = &pod.name;
+    let uid = &pod.uid;
 
     let podPath = Path::new(DEFAULT_POD_LOGS_ROOT_PATH)
         .join(namespace)
@@ -926,13 +905,12 @@ pub fn DeterminePodSandboxIPs(podNamespace: &str, podName: &str, podSandbox: &cr
     return podIps;
 }
 
-pub fn AddPodSecurityContext(pod: &k8s::Pod, lpsc: &mut crictl::LinuxPodSandboxConfig) {
-    let mut spec = pod.spec.as_ref().unwrap().clone();
+pub fn AddPodSecurityContext(pod: &mut PodDef, lpsc: &mut crictl::LinuxPodSandboxConfig) {
     let mut sysctls = HashMap::new();
-    if spec.security_context.is_none() {
-        spec.security_context = Some(k8s::PodSecurityContext::default());
+    if pod.security_context.is_none() {
+        pod.security_context = Some(k8s::PodSecurityContext::default());
     }
-    if let Some(sc) = &spec.security_context {
+    if let Some(sc) = &pod.security_context {
         if let Some(ctls) = &sc.sysctls {
             for c in ctls {
                 sysctls.insert(c.name.clone(), c.value.clone());

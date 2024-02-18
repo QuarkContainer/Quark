@@ -12,20 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//use std::collections::BTreeMap;
-
-use qshare::k8s;
-use qshare::common::*;
+use qshare::{common::*, node::ContainerDef};
 
 use super::k8s_types::EnvVar;
 
 pub fn MakeEnvironmentVariables(
-    _pod: &k8s::Pod, 
-    container: &k8s::Container, 
-    _v1ConfigMaps: &k8s::ConfigMap,  
-    _v1Secrets: &[k8s::Secret],
-    _podIP: &str,
-    _podIPs: &[String]
+    container: &ContainerDef, 
 ) -> Result<Vec<EnvVar>> {
     // todo: ?
     /*if pod.spec.as_ref().unwrap().enable_service_links.is_none() {
@@ -37,14 +29,10 @@ pub fn MakeEnvironmentVariables(
     //let mut secrets: BTreeMap<String, k8s::Secret> = BTreeMap::new();
     //let mut tmpEnv: BTreeMap<String, String> = BTreeMap::new();
 
-    if container.env.is_none() {
-        return Ok(result);
-    }
-
-    for e in container.env.as_ref().unwrap() {
+    for e in &container.envs {
         let env = EnvVar {
-            name: e.name.to_string(),
-            value: e.value.as_deref().unwrap_or("").to_string(),
+            name: e.0.to_string(),
+            value: e.1.to_string(),
         };
 
         result.push(env);

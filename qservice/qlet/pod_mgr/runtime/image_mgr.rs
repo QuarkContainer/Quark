@@ -39,10 +39,10 @@ impl ImageMgr {
         })
     }
 
-    pub async fn PullImageForContainer(&self, container: &k8s::Container, podSandboxConfig: &crictl::PodSandboxConfig) -> Result<crictl::Image> {
-        let imageWithTag = match ApplyDefaultImageTag(container.image.as_deref().unwrap_or("")) {
+    pub async fn PullImageForContainer(&self, imageLink: &str, podSandboxConfig: &crictl::PodSandboxConfig) -> Result<crictl::Image> {
+        let imageWithTag = match ApplyDefaultImageTag(imageLink) {
             None => {
-                return Err(Error::CommonError(format!("Failed to apply default image tag {}", container.image.as_deref().unwrap_or(""))));
+                return Err(Error::CommonError(format!("Failed to apply default image tag {}", imageLink)));
             }
             Some(l) => l,
         };

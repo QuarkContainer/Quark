@@ -14,7 +14,7 @@
 
 use std::net::IpAddr;
 use local_ip_address::list_afinet_netifas;
-use qshare::k8s;
+use qshare::node::NodeAddress;
 
 // NodeHostName identifies a name of the node. Although every node can be assumed
 // to have a NodeAddress of this type, its exact syntax and semantics are not
@@ -56,7 +56,7 @@ pub const  NodeInternalDNS : &str = "InternalDNS";
 pub const  NodeExternalDNS : &str = "ExternalDNS";
 
 pub struct LocalNetworkAddressProvider{
-    pub nodeIPs: Vec<k8s::NodeAddress>,
+    pub nodeIPs: Vec<NodeAddress>,
     pub hostname: String,
 }
 
@@ -66,7 +66,7 @@ impl LocalNetworkAddressProvider {
         let ips = GetLocalV4IP();
         let mut addresses = Vec::new();
         for ip in ips {
-            let addr = k8s::NodeAddress {
+            let addr = NodeAddress {
                 address: ip.to_string(),
                 type_: NodeInternalIP.to_string(),
             };
@@ -78,7 +78,7 @@ impl LocalNetworkAddressProvider {
         };
     }
 
-    pub fn GetNetAddress(&self) -> Vec<k8s::NodeAddress> {
+    pub fn GetNetAddress(&self) -> Vec<NodeAddress> {
         return self.nodeIPs.to_vec();
     }
 }

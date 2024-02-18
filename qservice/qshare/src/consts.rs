@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::node::Node;
+use crate::node::PodDef;
+
 use super::common::*;
 use super::k8s;
 
@@ -98,13 +101,13 @@ pub const ConditionTrue    : &str = "True";
 pub const ConditionFalse   : &str = "False";
 pub const ConditionUnknown : &str = "Unknown";
 
-pub fn PodToString(pod: &k8s::Pod) -> Result<String> {
+pub fn PodToString(pod: &PodDef) -> Result<String> {
     let s = serde_json::to_string(pod)?;
     return Ok(s);
 }
 
-pub fn PodFromString(s: &str) -> Result<k8s::Pod> {
-    let p: k8s::Pod = serde_json::from_str(s)?;
+pub fn PodFromString(s: &str) -> Result<PodDef> {
+    let p: PodDef = serde_json::from_str(s)?;
     return Ok(p);
 }
 
@@ -123,7 +126,7 @@ pub fn NodeToString(o: &k8s::Node) -> Result<String> {
     return Ok(s);
 }
 
-pub fn NodeFromString(s: &str) -> Result<k8s::Node> {
-    let p: k8s::Node = serde_json::from_str(s)?;
+pub fn NodeFromString(s: &str) -> Result<Node> {
+    let p: Node = serde_json::from_str(s)?;
     return Ok(p);
 }

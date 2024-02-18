@@ -17,17 +17,18 @@ use std::sync::Arc;
 use std::ops::Deref;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicI64;
-use chrono::Utc;
+use std::time::SystemTime;
+use qshare::node::Node;
+use qshare::node::NodeCondition;
+use qshare::node::NodeDef;
+use qshare::node::NodeStatus;
+use qshare::node::ObjectMeta;
+use qshare::node::PodDef;
 use uuid::Uuid;
-
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, Time};
 
 use qshare::config::*;
 use qshare::consts::*;
-use qshare::k8s;
 use qshare::common::*;
-use qshare::k8s_util::K8SUtil;
-
 use super::runtime::network::*;
 use super::qpod::*;
 
@@ -37,53 +38,50 @@ lazy_static::lazy_static! {
     };
 }
 
-pub fn InitK8sNode(hostname: &str) -> Result<k8s::Node> {
-    let mut node = k8s::Node {
+pub fn InitK8sNode(hostname: &str) -> Result<Node> {
+    let mut node = Node {
         metadata: ObjectMeta  {
-            name: Some(hostname.to_owned()),
-            annotations: Some(BTreeMap::new()),
-            namespace: Some(DefaultNodeMgrNodeNameSpace.to_string()),
-            uid: Some(Uuid::new_v4().to_string()),
-            resource_version: Some("0".to_owned()),
-            generation: Some(0),
-            creation_timestamp: Some(Time(Utc::now())),
-            ..Default::default()
+            name: hostname.to_owned(),
+            annotations: BTreeMap::new(),
+            namespace: DefaultNodeMgrNodeNameSpace.to_string(),
+            uid: Uuid::new_v4().to_string(),
+            resource_version: "0".to_owned(),
+            labels: BTreeMap::new(),
         },
-        spec:  Some(k8s::NodeSpec::default()),
-        status: Some(k8s::NodeStatus {
-            capacity: Some(BTreeMap::new()),
-            allocatable: Some(BTreeMap::new()),
-            phase: Some(NodePending.to_string()),
-            conditions: Some(Vec::new()),
-            addresses: Some(Vec::new()),
-            daemon_endpoints: Some(k8s::NodeDaemonEndpoints::default()),
-            node_info: Some(k8s::NodeSystemInfo::default()),
-            images: Some(Vec::new()),
-            volumes_in_use: Some(Vec::new()),
-            volumes_attached: Some(Vec::new()),
+        spec:  NodeDef::default(),
+        status: NodeStatus {
+            capacity: BTreeMap::new(),
+            allocatable: BTreeMap::new(),
+            phase: NodePending.to_string(),
+            conditions: Vec::new(),
+            addresses: Vec::new(),
+            //node_info: Some(k8s::NodeSystemInfo::default()),
+            images: Vec::new(),
+            // volumes_in_use: Some(Vec::new()),
+            // volumes_attached: Some(Vec::new()),
             ..Default::default()
-        })
+        }
     };
 
-    node.status.as_mut().unwrap().conditions.as_mut().unwrap().push(k8s::NodeCondition{
+    node.status.conditions.push(NodeCondition{
         type_   : NodeReady.to_string(),
         status: ConditionFalse.to_string(),
         reason: Some("Node Initialiazing".to_string()),
         message: Some("Node Initialiazing".to_string()),
-        last_heartbeat_time: Some(Time(Utc::now())),
+        last_heartbeat_time: Some(SystemTime::now()),
         ..Default::default()
     });
 
-    node.status.as_mut().unwrap().conditions.as_mut().unwrap().push(k8s::NodeCondition{
+    node.status.conditions.push(NodeCondition{
         type_   : NodeNetworkUnavailable.to_string(),
         status: ConditionTrue.to_string(),
         reason: Some("Node Initialiazing".to_string()),
         message: Some("Node Initialiazing".to_string()),
-        last_heartbeat_time: Some(Time(Utc::now())),
+        last_heartbeat_time: Some(SystemTime::now()),
         ..Default::default()
     });
 
-    node.status.as_mut().unwrap().addresses = Some(NETWORK_PROVIDER.GetNetAddress());
+    node.status.addresses = NETWORK_PROVIDER.GetNetAddress();
 
     return Ok(node)
 }
@@ -92,7 +90,7 @@ pub fn InitK8sNode(hostname: &str) -> Result<k8s::Node> {
 #[derive(Debug)]
 pub struct QuarkNodeInner {
     pub nodeConfig: NodeConfiguration,
-    pub node: Mutex<k8s::Node>,
+    pub node: Mutex<Node>,
     pub revision: AtomicI64,
     pub pods: Mutex<BTreeMap<String, QuarkPod>>, 
 }
@@ -122,7 +120,7 @@ impl QuarkNode {
         return Ok(QuarkNode(Arc::new(inner)));
     }
 
-    pub fn ActivePods(&self) -> Vec<k8s::Pod> {
+    pub fn ActivePods(&self) -> Vec<PodDef> {
         let map = self.pods.lock().unwrap();
         let mut pods = Vec::new();
         for p in map.values() {
@@ -134,7 +132,7 @@ impl QuarkNode {
     }
 
     pub fn NodeName(&self) -> String {
-        return K8SUtil::Id(&self.node.lock().unwrap().metadata);
+        return self.node.lock().unwrap().NodeId();
     }
 
 }
@@ -145,7 +143,7 @@ pub struct ContainerWorldSummary {
     pub terminatedPods: Vec<QuarkPod>,
 }
 
-pub fn NodeSpecPodCidrChanged(old: &k8s::Node, new: &k8s::Node) -> bool {
+pub fn NodeSpecPodCidrChanged(old: &Node, new: &Node) -> bool {
     match ValidateNodeSpec(new) {
         Err(e) => {
             error!("api node spec is not valid, errors {:?}", e);
@@ -154,47 +152,25 @@ pub fn NodeSpecPodCidrChanged(old: &k8s::Node, new: &k8s::Node) -> bool {
         Ok(()) => ()
     }
 
-    let oldspec = old.spec.as_ref().unwrap();
-    let newspec = new.spec.as_ref().unwrap();
+    let oldspec = &old.spec;
+    let newspec = &new.spec;
 
-    if oldspec.pod_cidr.as_ref().unwrap().len() == 0 
-    || oldspec.pod_cidr != newspec.pod_cidr 
-    || oldspec.pod_cidrs.as_ref().unwrap().len() != newspec.pod_cidrs.as_ref().unwrap().len() {
+    if oldspec.pod_cidr.len() == 0 
+        || oldspec.pod_cidr != newspec.pod_cidr { 
         return true;
-    }
-
-    let mut oldcidrs = oldspec.pod_cidrs.as_ref().unwrap().to_vec();
-    let mut newcidrs = newspec.pod_cidrs.as_ref().unwrap().to_vec();
-
-    oldcidrs.sort();
-    newcidrs.sort();
-    
-    for i in 0..oldcidrs.len() {
-        if oldcidrs[i] != newcidrs[i] {
-            return true;
-        }
     }
 
     return false;
 }
 
-pub fn ValidateNodeSpec(node: &k8s::Node) -> Result<()> {
+pub fn ValidateNodeSpec(node: &Node) -> Result<()> {
     use ipnetwork::IpNetwork;
 
-    let spec = node.spec.as_ref().unwrap();
-    if spec.pod_cidr.is_none() {
+    let spec = &node.spec;
+    if spec.pod_cidr.len() == 0 {
         return Err(Error::CommonError(format!("api node spec pod cidr is nil")));
     } else {
-        let _network = spec.pod_cidr.as_ref().unwrap().parse::<IpNetwork>()?;
-    }
-
-    for cidr in spec.pod_cidrs.as_ref().unwrap() {
-        let _network = cidr.parse::<IpNetwork>()?;
-    }
-
-    if spec.pod_cidr.is_some() && &spec.pod_cidrs.as_ref().unwrap()[0] != spec.pod_cidr.as_ref().unwrap() {
-        return Err(Error::CommonError(format!("node spec podcidrs[0] {} does not match podcidr {}",
-            spec.pod_cidrs.as_ref().unwrap()[0], spec.pod_cidr.as_ref().unwrap())));
+        let _network = spec.pod_cidr.parse::<IpNetwork>()?;
     }
 
     return Ok(())

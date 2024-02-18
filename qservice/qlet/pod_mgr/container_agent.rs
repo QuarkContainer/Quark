@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
+use qshare::node::ContainerDef;
+use qshare::node::*;
 use tokio::sync::mpsc;
 use tokio::time;
 use std::sync::Arc;
@@ -22,8 +23,6 @@ use tokio::sync::Notify;
 use core::ops::Deref;
 use core::time::Duration;
 
-//use qobjs::core_types::LifecycleHandler;
-use qshare::k8s;
 use qshare::crictl;
 use qshare::common::*;
 use qshare::types::*;
@@ -226,6 +225,7 @@ impl PodContainerAgent {
             // todo: start liveness and readyness probe
 
             info!("Run post start lifecycle handler pod {} containerName {}", self.pod.PodId(), self.container.ContainerName());
+
             let lifecycle = self.container.lock().unwrap().spec.lifecycle.clone();
             if let Some(lifecycle) = lifecycle {
                 if let Some(postStart) = lifecycle.post_start {   
@@ -347,10 +347,10 @@ impl PodContainerAgent {
         self.closeNotify.notify_one();
     }
 
-    pub async fn RunLifecycleHandler(&self, pod: &QuarkPod, container: &QuarkContainer, handle: &k8s::LifecycleHandler) -> Result<String> {
+    pub async fn RunLifecycleHandler(&self, pod: &QuarkPod, container: &QuarkContainer, handle: &LifecycleHandler) -> Result<String> {
         if let Some(exec) = &handle.exec {
             let containerid = container.lock().unwrap().runtimeContainer.id.clone();
-            match super::RUNTIME_MGR.get().unwrap().ExecCommand(&containerid, exec.command.as_ref().unwrap().to_vec(), 0).await {
+            match super::RUNTIME_MGR.get().unwrap().ExecCommand(&containerid, exec.command.to_vec(), 0).await {
                 Err(e) => return Err(e),
                 Ok((stdout, _stderr)) => {
                     let stdout = std::str::from_utf8(&stdout)?;
@@ -367,7 +367,7 @@ impl PodContainerAgent {
         return Err(Error::CommonError("Cannot run lifecycle handler as handler is unknown".to_string()));
     }
 
-    pub async fn RunHttpHandler(&self, pod: &QuarkPod, container: &QuarkContainer, handle: &k8s::LifecycleHandler) -> Result<String> {
+    pub async fn RunHttpHandler(&self, pod: &QuarkPod, container: &QuarkContainer, handle: &LifecycleHandler) -> Result<String> {
         let httpGet = handle.http_get.as_ref().unwrap();
         let host = match &httpGet.host {
             None => {
@@ -396,20 +396,15 @@ impl PodContainerAgent {
     }
 }
 
-pub fn ResolvePort(portStr: &str, container: &k8s::Container) -> Result<i32> {
+pub fn ResolvePort(portStr: &str, container: &ContainerDef) -> Result<i32> {
     match portStr.parse::<i32>() {
         Ok(p) => return Ok(p),
         Err(_) => (),
     };
 
-    let ports = match &container.ports {
-        None => return Err(Error::CommonError(format!("couldn't find port: {:?} in {:?}", portStr, container))),
-        Some(p) => p
-    };
-
-    for portSpec in ports {
-        if Some(portStr.to_string()) == portSpec.name {
-            return Ok(portSpec.container_port)
+    for port in &container.ports {
+        if Some(portStr.to_string()) == port.name {
+            return Ok(port.container_port)
         }
     }
 

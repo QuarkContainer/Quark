@@ -16,12 +16,12 @@ use std::sync::Mutex;
 use std::{collections::BTreeMap, sync::Arc};
 use std::ops::Deref;
 
+use qshare::node::*;
 use tokio::sync::{mpsc::Receiver};
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::error::TrySendError;
 
-use qshare::k8s;
 use qshare::na as NmMsg;
 use qshare::common::*;
 
@@ -95,8 +95,8 @@ impl WatchEvent {
 
 #[derive(Debug, Clone)]
 pub enum NodeAgentEventObj {
-    Pod(k8s::Pod),
-    Node(k8s::Node),
+    Pod(PodDef),
+    Node(Node),
 }
 
 #[derive(Debug)]
@@ -194,9 +194,9 @@ pub struct NodeAgentStoreInner {
     
     pub eventQueue: RingBuf,
 
-    pub podCache: BTreeMap<String, k8s::Pod>,
+    pub podCache: BTreeMap<String, PodDef>,
 
-    pub nodeCache: Option<k8s::Node>,
+    pub nodeCache: Option<Node>,
     // last node update revision
     pub nodeRevision: i64,
 
@@ -234,12 +234,12 @@ impl NodeAgentStoreInner {
         })
     }
 
-    pub fn GetNode(&self) -> k8s::Node {
+    pub fn GetNode(&self) -> Node {
         assert!(self.nodeCache.is_some());
         return self.nodeCache.as_ref().unwrap().clone();
     }
 
-    pub fn CreateNode(&mut self, node: &k8s::Node) -> Result<()> {
+    pub fn CreateNode(&mut self, node: &Node) -> Result<()> {
         self.revision += 1;
         self.nodeRevision = self.revision;
         assert!(self.nodeCache.is_none());
@@ -250,7 +250,7 @@ impl NodeAgentStoreInner {
     pub fn UpdateNode(&mut self, node: &QuarkNode) -> Result<()> {
         assert!(self.nodeCache.is_some());
         self.revision += 1;
-        node.node.lock().unwrap().metadata.resource_version = Some(format!("{}", self.revision));
+        node.node.lock().unwrap().metadata.resource_version = format!("{}", self.revision);
         
         let k8sNode = node.node.lock().unwrap().clone();
 
@@ -269,7 +269,7 @@ impl NodeAgentStoreInner {
         let key = obj.lock().unwrap().id.clone();
 
         self.revision += 1;
-        obj.Pod().write().unwrap().metadata.resource_version = Some(self.revision.to_string());
+        obj.Pod().write().unwrap().resource_version = self.revision.to_string();
         let jsonObj = obj.ToQuarkPodJson();
         let event = WatchEvent {
             type_: EventType::Added,
@@ -286,7 +286,7 @@ impl NodeAgentStoreInner {
         return Ok(())
     }
 
-    pub fn GetPod(&self, id: &str) -> Result<(i64, k8s::Pod)> {
+    pub fn GetPod(&self, id: &str) -> Result<(i64, PodDef)> {
         match self.podCache.get(id) {
             None => {
                 return Err(Error::CommonError(format!("The pod {} doesn't exist", id)));
@@ -300,7 +300,7 @@ impl NodeAgentStoreInner {
     pub fn UpdatePod(&mut self, obj: &QuarkPod) -> Result<()> {
         let key = obj.lock().unwrap().id.clone();
         self.revision += 1;
-        obj.Pod().write().unwrap().metadata.resource_version = Some(self.revision.to_string());
+        obj.Pod().write().unwrap().resource_version = self.revision.to_string();
         let jsonObj = obj.ToQuarkPodJson();
         assert!(self.podCache.contains_key(&key));
         self.podCache.insert(key.clone(), jsonObj.pod.clone());
@@ -322,7 +322,7 @@ impl NodeAgentStoreInner {
         assert!(self.podCache.contains_key(&key));
         self.revision += 1;
         let _ = self.podCache.remove(&key).unwrap();
-        obj.Pod().write().unwrap().metadata.resource_version = Some(self.revision.to_string());
+        obj.Pod().write().unwrap().resource_version = self.revision.to_string();
         let jsonObj = obj.ToQuarkPodJson();
         // update the pod status phase with Modifed event first
         let event = WatchEvent {
@@ -336,7 +336,7 @@ impl NodeAgentStoreInner {
 
         // delete it after update the phase
         self.revision += 1;
-        obj.Pod().write().unwrap().metadata.resource_version = Some(self.revision.to_string());
+        obj.Pod().write().unwrap().resource_version = self.revision.to_string();
         let jsonObj = obj.ToQuarkPodJson();
         let event = WatchEvent {
             type_: EventType::Deleted,
@@ -454,7 +454,7 @@ impl NodeAgentStoreInner {
     }
 
     pub fn List(&self) -> PodList {
-        let pods : Vec<k8s::Pod> = self.podCache.values().cloned().collect();
+        let pods : Vec<PodDef> = self.podCache.values().cloned().collect();
         return PodList { 
             revision: self.revision, 
             pods: pods 
@@ -465,7 +465,7 @@ impl NodeAgentStoreInner {
 #[derive(Debug)]
 pub struct PodList {
     pub revision: i64,
-    pub pods: Vec<k8s::Pod>,
+    pub pods: Vec<PodDef>,
 }
 
 #[derive(Debug)]
@@ -486,11 +486,11 @@ impl NodeAgentStore {
         return Ok(store)
     }
 
-    pub fn GetNode(&self) -> k8s::Node {
+    pub fn GetNode(&self) -> Node {
         return self.lock().unwrap().GetNode();
     }
 
-    pub fn CreateNode(&self, node: &k8s::Node) -> Result<()> {
+    pub fn CreateNode(&self, node: &Node) -> Result<()> {
         return self.lock().unwrap().CreateNode(node);
     }
 
@@ -498,7 +498,7 @@ impl NodeAgentStore {
         return self.lock().unwrap().UpdateNode(node);
     }
 
-    pub fn GetPod(&self, podId: &str) -> Result<(i64, k8s::Pod)> {
+    pub fn GetPod(&self, podId: &str) -> Result<(i64, PodDef)> {
         return self.lock().unwrap().GetPod(podId);
     }
 
