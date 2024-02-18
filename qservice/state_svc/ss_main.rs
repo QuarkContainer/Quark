@@ -22,18 +22,12 @@
 extern crate log;
 extern crate simple_logging;
 
-pub mod svc_dir;
 pub mod state_svc;
 
 use qshare::common::*;
 
-use svc_dir::SvcDir;
 use self::state_svc::StateService;
 
-lazy_static::lazy_static! {
-    //pub static ref ETCD_OBJECTS: Vec<&'static str> = vec!["pod", "podset", "package"];
-    pub static ref ETCD_OBJECTS: Vec<&'static str> = vec!["node_info"];
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {

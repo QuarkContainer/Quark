@@ -13,18 +13,25 @@
 // limitations under the License.
 
 use std::result::Result as SResult;
+use std::sync::Arc;
 
+use qshare::etcd::etcd_store::EtcdStore;
+use qshare::metastore::cache_store::CacheStore;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Response, Status, Request};
 use tokio::sync::mpsc;
 
 use qshare::common::*;
+use qshare::metastore::svc_dir::SvcDir;
 use qshare::qmeta;
 use qshare::metastore::data_obj::*;
 use qshare::metastore::selection_predicate::*;
 use qshare::metastore::selector::*;
 
-use super::SvcDir;
+lazy_static::lazy_static! {
+    //pub static ref ETCD_OBJECTS: Vec<&'static str> = vec!["pod", "podset", "package"];
+    pub static ref ETCD_OBJECTS: Vec<&'static str> = vec!["node_info"];
+}
 
 pub const VERSION: &str = "0.1";
 
@@ -35,7 +42,14 @@ pub struct StateSvc {
 
 impl StateSvc {
     pub async fn EtcdInit(&self, etcdAddr: &str) -> Result<()> {
-        self.svcDir.write().unwrap().EtcdInit(etcdAddr).await?;
+        let store = EtcdStore::New(etcdAddr, true).await?;
+        let channelRev = self.svcDir.read().unwrap().channelRev.clone();
+        for i in 0..ETCD_OBJECTS.len() {
+            let t = ETCD_OBJECTS[i];
+            let c = CacheStore::New(Some(Arc::new(store.clone())), t, 0, &channelRev).await?;
+            self.svcDir.write().unwrap().map.insert(t.to_string(), c);
+        }
+        
         return Ok(());
     }
 }
