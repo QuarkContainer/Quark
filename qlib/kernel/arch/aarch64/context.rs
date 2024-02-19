@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::qlib as qlib;
-use qlib::limits::{LimitSet, LimitType, INFINITY};
-use qlib::{linux_def::SysErr, MemoryDef, addr::Addr};
-use qlib::kernel::{arch, memmgr, kernel_util::RandU64};
+use crate::qlib;
 use memmgr::arch::{MmapLayout, MMAP_BOTTOM_UP, MMAP_TOP_DOWN};
 use qlib::common::*;
+use qlib::kernel::{arch, kernel_util::RandU64, memmgr};
+use qlib::limits::{LimitSet, LimitType, INFINITY};
+use qlib::{addr::Addr, linux_def::SysErr, MemoryDef};
 
-use arch::__arch::arch_def::{Aarch64Regs, State};
+use super::super::super::SignalDef::*;
+use arch::__arch::arch_def::*;
 
 // MAX_ADDR64 is the maximum userspace address. It is TASK_SIZE in Linux
 // for a 64-bit process.
 // ref: linux/latest/source/arch/arm64/include/asm/processor.h
-const VA_BITS_4KB_4L_PT: u16 = 48; 
-pub const MAX_ADDR64: u64 = 1 << VA_BITS_4KB_4L_PT;
+pub const MAX_ADDR64: u64 = 1 << 48;
 // MAX_STACK_RAND64 is the maximum randomization to apply to the stack.
 // ref: linux/latest/source/mm/util.c: mmap_base
 const STACK_RND_MASK: u64 = 0x3ffff;
@@ -51,36 +51,13 @@ pub const PREFERRED_PIELOAD_ADDR: u64 = (2 * MAX_ADDR64) / 3;
 pub const PREFERRED_TOP_DOWN_ALLOC_MIN: u64 = 0x7E8000000000;
 pub const PREFERRED_ALLOCATION_GAP: u64 = 128 << 30;
 pub const PREFERRED_TOP_DOWN_BASE_MIN: u64 =
-          PREFERRED_TOP_DOWN_ALLOC_MIN +
-          PREFERRED_ALLOCATION_GAP;
-//
-//NOTE: Every thing here is placeholder.
-//
+    PREFERRED_TOP_DOWN_ALLOC_MIN + PREFERRED_ALLOCATION_GAP;
 
 pub struct Context64 {
     pub state: State,
 }
 
 impl Context64 {
-    pub fn Fork(&self, regs: &'static mut Aarch64Regs) -> Self {
-        Self {
-            state: self.state.Fork(regs),
-        }
-    }
-
-    //
-    // Syscall return value.
-    //
-    pub fn Return(&self) -> u64 {
-        self.state.Regs.X0
-    }
-
-    //
-    // Set Syscall return value manualy.
-    //
-    pub fn SetReturn(&mut self, _ret: u64) {
-        self.state.Regs.X0 = _ret;
-    }
 
     pub fn PIELoadAddress(l: &MmapLayout) -> Result<u64> {
         let mut pref_base: u64 = PREFERRED_PIELOAD_ADDR;
@@ -90,14 +67,14 @@ impl Context64 {
         };
 
         if top_addr > l.MaxAddr {
-            //
             // Linux resets base to 2/3rd;
-            //
             pref_base = (l.TopDownBase * 2) / 3;
         }
 
         Ok(Addr(pref_base + Self::MMapRand(MAX_MMAP_RAND64).unwrap())
-           .RoundDown().unwrap().0)
+            .RoundDown()
+            .unwrap()
+            .0)
     }
 
     pub fn MMapRand(max: u64) -> Result<u64> {
@@ -113,29 +90,30 @@ impl Context64 {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        let mut max_addr = if max > MAX_ADDR64 {
-            MAX_ADDR64
-        } else { max };
+        let mut max_addr = if max > MAX_ADDR64 { MAX_ADDR64 } else { max };
         max_addr = Addr(max_addr).RoundUp()?.0;
         let min_addr = Addr(min).RoundUp()?.0;
-        
+
         let stack_size: u64 = r.Get(LimitType::Stack).Cur;
         let default_direction = if stack_size == INFINITY {
             MMAP_BOTTOM_UP
-        }else { MMAP_TOP_DOWN };
-        
+        } else {
+            MMAP_TOP_DOWN
+        };
+
         let max_gap = (max_addr / 6) * 5; // Linux defiened
         let mut gap = if stack_size < MIN_GAP64 {
             MIN_GAP64
-        } else { stack_size };
+        } else {
+            stack_size
+        };
         if gap > max_gap {
             gap = max_gap;
         }
 
         let mut max_rand: u64 = MAX_MMAP_RAND64;
         if (max_addr - gap - max_rand) < PREFERRED_TOP_DOWN_BASE_MIN {
-            let bottom_base_adjust = PREFERRED_TOP_DOWN_BASE_MIN -
-                                     (max_addr - gap - max_rand);
+            let bottom_base_adjust = PREFERRED_TOP_DOWN_BASE_MIN - (max_addr - gap - max_rand);
             let max_adjust = MAX_MMAP_RAND64 - MIN_MMAP_RAND64;
             if bottom_base_adjust <= max_adjust {
                 max_rand = MAX_MMAP_RAND64 - bottom_base_adjust;
@@ -150,7 +128,7 @@ impl Context64 {
             //
             // TASK_UNMAPPED_BASE
             //
-            BottomUpBase: Addr(max/3 + rand).RoundDown()?.0,
+            BottomUpBase: Addr(max / 3 + rand).RoundDown()?.0,
             TopDownBase: Addr(max - gap - rand).RoundDown()?.0,
             DefaultDirection: default_direction,
             //

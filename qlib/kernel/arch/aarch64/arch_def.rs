@@ -18,78 +18,7 @@ use alloc::sync::Arc;
 use crate::qlib as qlib;
 use qlib::{linux_def::MemoryDef, QMutex, kernel::FP_STATE};
 use super::super::super::asm;
-//
-// General Purpose Registers
-// ref: ARM Cortex-A Series Programmer's Guide for ARMv8-A.
-//      Procedure Call Standart for the Arm 64-bit Architecture.
-//
-//
-#[derive(Debug, Copy, Clone, Default)]
-pub struct Aarch64Regs {
-    //
-    // Parameter/Result Registers for subroutine call
-    //
-    pub X0  : u64,
-    pub X1  : u64,
-    pub X2  : u64,
-    pub X3  : u64,
-    pub X4  : u64,
-    pub X5  : u64,
-    pub X6  : u64,
-    pub X7  : u64,
-    //
-    // Indirect result location Register
-    //
-    pub X8  : u64,
-    //
-    // Local variables, Caller-saved Registers
-    //
-    pub X9  : u64,
-    pub X10 : u64,
-    pub X11 : u64,
-    pub X12 : u64,
-    pub X13 : u64,
-    pub X14 : u64,
-    pub X15 : u64,
-    //
-    // IPC Temporary Registers
-    //
-    pub X16 : u64, // IP0
-    pub X17 : u64, // IP1
-    //
-    // Platform Register (if needed) || Temporary Register
-    //
-    pub X18 : u64,
-    //
-    // Calle-saved Registers
-    //    
-    pub X19 : u64,
-    pub X20 : u64,
-    pub X21 : u64,
-    pub X22 : u64,
-    pub X23 : u64,
-    pub X24 : u64,
-    pub X25 : u64,
-    pub X26 : u64,
-    pub X27 : u64,
-    pub X28 : u64,
-    //
-    // End Calle-saved Registers
-    //
-    pub X29 : u64, // FramePointer
-    pub X30 : u64, // LinkRegister
-    pub X31 : u64, // StackPointer
-    //
-    // Thread Pointer / ID Register
-    //
-    pub TPIDR_EL0: u64,
-    //
-    // Process state information Register
-    //
-    pub PSTATE: u64, // See also SPSR
-    pub TTBR0_EL1: u64,
-    //NOTE: Possible ASID (note used for now)
-}
+use super::super::super::SignalDef::*;
 
 // Aarch64 FP state
 #[derive(Debug)]
@@ -164,31 +93,24 @@ impl Aarch64FPState{
     }
     //
     //NOTE: Every thing here is placeholder.
-    //
-    //
     // TODO
-    // How to proceed...
-    //
-    pub fn SanitizeUser(&self) {}
+    pub fn SanitizeUser(&self) {
+        todo!("Aarch64FPState::SanitizeUser not implemented");
+    }
 
-    //
-    // TODO
-    // In which context is this used?
-    //
+    // TODO FPState imcomplete for aarch64
     pub fn Reset(&self)  {}
 }
 
 pub struct State {
-    pub Regs: &'static mut Aarch64Regs,
+    pub Regs: &'static mut PtRegs,
     pub archFPState: Arc<QMutex<Aarch64FPState>>,
 }
 
 impl State {
-    //
-    // NOTE It does not seem to be used at all...
     pub fn FullRestore(&self) -> bool { true }
 
-    pub fn Fork(&self, regs: &'static mut Aarch64Regs) -> Self{
+    pub fn Fork(&self, regs: &'static mut PtRegs) -> Self{
         Self {
             Regs: regs,
             archFPState: Arc::new(QMutex::new(self.archFPState.lock().Fork()))
