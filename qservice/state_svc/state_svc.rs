@@ -28,6 +28,8 @@ use qshare::metastore::data_obj::*;
 use qshare::metastore::selection_predicate::*;
 use qshare::metastore::selector::*;
 
+use crate::QletAggrStore::QletAggrStore;
+
 lazy_static::lazy_static! {
     //pub static ref ETCD_OBJECTS: Vec<&'static str> = vec!["pod", "podset", "package"];
     pub static ref ETCD_OBJECTS: Vec<&'static str> = vec!["node_info"];
@@ -333,17 +335,24 @@ pub async fn StateService() -> Result<()> {
     let stateSvc = StateSvc::default();
     stateSvc.EtcdInit("localhost:2379").await?;
 
-    let cacher = stateSvc.svcDir.GetCacher("node_info").unwrap();
-    let list = cacher.List("system", &ListOption::default()).await?;
-    error!("list is {:?}", list);
+    let qletAggrStore = QletAggrStore::New(&stateSvc.svcDir.ChannelRev()).await?;
+
+    stateSvc.svcDir.AddCacher(qletAggrStore.NodeStore());
+    stateSvc.svcDir.AddCacher(qletAggrStore.PodStore());
+    let qletAggrStoreFuture = qletAggrStore.Process();
 
     let stateSvcFuture = Server::builder()
         .add_service(QMetaServiceServer::new(stateSvc))
-        .serve(QMETASVC_ADDR.parse().unwrap());
+        .serve(STATESVC_ADDR.parse().unwrap());
 
     info!("state service start ...");
     tokio::select! {
-        _ = stateSvcFuture => {}
+        _ = stateSvcFuture => {
+            info!("stateSvcFuture finish...");
+        }
+        ret = qletAggrStoreFuture => {
+            info!("qletAggrStoreFuture finish... {:?}", ret);
+        }
     }
 
     Ok(())

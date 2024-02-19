@@ -24,6 +24,7 @@ pub struct NodeInfo {
     pub nodeIp: String,
     pub podMgrPort: u16,
     pub tsotSvcPort: u16,
+    pub stateSvcPort: u16,
     pub cidr: String
 }
 

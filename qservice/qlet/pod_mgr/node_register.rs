@@ -32,6 +32,7 @@ pub struct NodeRegister {
     pub nodeIp: String,
     pub podMgrPort: u16,
     pub tsotSvcPort: u16,
+    pub stateSvcPort: u16,
     pub cidr: String
 }
 
@@ -42,6 +43,7 @@ impl NodeRegister {
         nodeIp: &str,
         podMgrPort: u16,
         tsotSvcPort: u16,
+        stateSvcPort: u16,
         cidr: &str
     ) -> Self {
         let mut etcdAddresses = Vec::new();
@@ -57,6 +59,7 @@ impl NodeRegister {
             nodeIp: nodeIp.to_owned(),
             podMgrPort: podMgrPort,
             tsotSvcPort: tsotSvcPort,
+            stateSvcPort: stateSvcPort,
             cidr: cidr.to_owned(),
         }
     }
@@ -72,6 +75,7 @@ impl NodeRegister {
             nodeIp: self.nodeIp.clone(),
             podMgrPort: self.podMgrPort,
             tsotSvcPort: self.tsotSvcPort,
+            stateSvcPort: self.stateSvcPort,
             cidr: self.cidr.clone(),
         }
     }

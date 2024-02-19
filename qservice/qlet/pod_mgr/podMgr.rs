@@ -15,6 +15,7 @@
 use std::collections::BTreeMap;
 use std::result::Result as SResult;
 use podMgr::node_register::NodeRegister;
+use podMgr::qlet_store::QletStateService;
 use qshare::k8s::ConfigMap;
 use qshare::k8s::HostPathVolumeSource;
 use qshare::k8s::Volume;
@@ -276,10 +277,13 @@ pub async fn PodMgrSvc() -> Result<()> {
         &QLET_CONFIG.nodeIp,
         QLET_CONFIG.podMgrPort, 
         QLET_CONFIG.tsotSvcPort,
+        QLET_CONFIG.stateSvcPort,
         &QLET_CONFIG.cidr
     );
 
     let nodeRegisterFuture = nodeRegister.Process();
+
+    let qletStateSvcFuture = QletStateService();
 
     info!("pod manager start ...");
     tokio::select! {
@@ -288,6 +292,9 @@ pub async fn PodMgrSvc() -> Result<()> {
         },
         _ = nodeRegisterFuture => {
             error!("nodeRegisterFuture finish");
+        }
+        _ = qletStateSvcFuture => {
+            error!("qletStateSvcFuture finish");
         }
     }
     info!("pod manager finish ...");

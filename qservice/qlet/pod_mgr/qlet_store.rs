@@ -17,30 +17,33 @@ use std::collections::BTreeMap;
 use qshare::common::*;
 use qshare::metastore::cache_store::*;
 use qshare::metastore::data_obj::{DataObject, DataObjectInner};
+use qshare::metastore::svc_dir::SvcDir;
+
+use crate::pod_mgr::QLET_STORE;
+use crate::QLET_CONFIG;
 
 use super::qnode::QuarkNode;
 use super::qpod::QuarkPod;
 
 #[derive(Debug)]
 pub struct QletStore {
-    pub map: BTreeMap<String, CacheStore>,
-    pub channelRev: ChannelRev,
+    pub svcDir: SvcDir,
     pub nodeStore: CacheStore,
     pub podStore: CacheStore,
 }
 
 impl QletStore {
     pub async fn New() -> Result<Self> {
-        let channelRev = ChannelRev::default();
-        let mut map = BTreeMap::new();
+        let svcDir = SvcDir::default();
+        let channelRev = svcDir.ChannelRev();
         let nodeStore = CacheStore::New(None, "node", 0, &channelRev).await?;
         let podStore = CacheStore::New(None, "pod", 0, &channelRev).await?;
-        map.insert("node".to_owned(), nodeStore.clone());
-        map.insert("pod".to_owned(), nodeStore.clone());
+        
+        svcDir.AddCacher(nodeStore.clone());
+        svcDir.AddCacher(podStore.clone());
 
         return Ok(Self {
-            map: map,
-            channelRev: channelRev,
+            svcDir: svcDir,
             nodeStore: nodeStore,
             podStore: podStore,
         })
@@ -58,7 +61,7 @@ impl QletStore {
             annotations.insert(k.clone(), v.clone());
         }
 
-        let channelRev = self.channelRev.Next();
+        let channelRev = self.svcDir.ChannelRev().Next();
         node.resource_version = format!("{}", channelRev);
 
         let inner = DataObjectInner {
@@ -100,11 +103,11 @@ impl QletStore {
             annotations.insert(k.clone(), v.clone());
         }
 
-        let channelRev = self.channelRev.Next();
+        let channelRev = self.svcDir.ChannelRev().Next();
         pod.resource_version = format!("{}", channelRev);
 
         let inner = DataObjectInner {
-            kind: "node".to_owned(),
+            kind: "pod".to_owned(),
             namespace: pod.namespace.clone(),
             name: pod.name.clone(),
             lables: labels.into(),
@@ -136,3 +139,20 @@ impl QletStore {
     }
 }
 
+pub async fn QletStateService() -> Result<()> {
+    use tonic::transport::Server;
+    use qshare::qmeta::q_meta_service_server::QMetaServiceServer;
+
+    let localStateSvcAddr = format!("127.0.0.1:{}", QLET_CONFIG.stateSvcPort);
+
+    let stateSvcFuture = Server::builder()
+        .add_service(QMetaServiceServer::new(QLET_STORE.get().unwrap().svcDir.clone()))
+        .serve(localStateSvcAddr.parse().unwrap());
+
+    info!("state service start ...");
+    tokio::select! {
+        _ = stateSvcFuture => {}
+    }
+
+    Ok(())
+}

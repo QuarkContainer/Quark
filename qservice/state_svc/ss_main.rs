@@ -23,6 +23,7 @@ extern crate log;
 extern crate simple_logging;
 
 pub mod state_svc;
+pub mod QletAggrStore;
 
 use qshare::common::*;
 

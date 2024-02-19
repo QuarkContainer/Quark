@@ -42,6 +42,7 @@ use qshare::common::*;
 use qshare::metastore::informer_factory::InformerFactory;
 use qshare::metastore::selection_predicate::ListOption;
 use qshare::qlet_config::QletConfig;
+use tokio::sync::Notify;
 
 lazy_static::lazy_static! {
     pub static ref CADVISOR_CLI: CadvisorClient::Client = {
@@ -61,6 +62,7 @@ lazy_static::lazy_static! {
                 podMgrPort: 8888,
                 tsotCniPort: 1234,
                 tsotSvcPort: 1235,
+                stateSvcPort: 1236,
                 cidr: "10.1.1.0/8".to_string(),
                 stateSvcAddr: "127.0.0.1:8890".to_string(),
                 singleNodeModel: true
@@ -88,6 +90,12 @@ async fn main() -> Result<()> {
         factory.AddInformer("node_info", &ListOption::default()).await.unwrap();
         let informer = factory.GetInformer("node_info").await.unwrap();
         let _id1 = informer.AddEventHandler(NODE_MGR.clone()).await.unwrap();
+        tokio::spawn(async move {
+            let notify = Arc::new(Notify::new());
+
+            // todo: handle statesvc crash
+            informer.Process(notify).await.ok();
+        });
     }
 
     let podMgrFuture = PodMgrSvc();

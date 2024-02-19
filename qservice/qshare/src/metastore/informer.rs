@@ -62,18 +62,8 @@ impl Informer {
         };
 
         let informer = Self(Arc::new(TRwLock::new(inner)));
-        let iclone = informer.clone();
-
-        let readyNotify = Arc::new(Notify::new());
-        let notifyClone = readyNotify.clone();
         
-        let task: tokio::task::JoinHandle<Result<()>> = tokio::spawn(async move {
-            return iclone.Process(notifyClone).await;
-        });
-
-        readyNotify.notified().await;
-
-        informer.write().await.task = Some(task);
+        informer.write().await.task = None; //Some(task);
 
         return Ok(informer);
     }
@@ -103,8 +93,7 @@ impl Informer {
         return self.write().await.RemoveEventHandler(id);
     }
 
-    pub async fn Process(&self, notify: Arc<Notify>) -> Result<()> {
-
+    pub async fn InitList(&self) -> Result<()> {
         let mut inner = self.write().await;
         let client = inner.client.clone();
         let store = inner.store.clone();
@@ -112,7 +101,6 @@ impl Informer {
         let objType = inner.objType.clone();
         let namespace = inner.namespace.clone();
         let mut opts = inner.opts.DeepCopy();
-        let closeNotify = inner.closeNotify.clone();
         
         let objs = client.List(&objType, &namespace, &opts).await?;
         opts.revision = objs.revision + 1;
@@ -126,9 +114,21 @@ impl Informer {
                 oldObj: None,
             });
         }
-        drop(inner);
         
-        notify.notify_waiters();
+        return Ok(())
+    }
+
+    pub async fn WatchUpdate(&self) -> Result<()> {
+        let inner = self.write().await;
+        let client = inner.client.clone();
+        let objType = inner.objType.clone();
+        let namespace = inner.namespace.clone();
+        let mut opts = inner.opts.DeepCopy();
+        opts.revision = inner.revision + 1;
+        let store = inner.store.clone();
+        let closeNotify = inner.closeNotify.clone();
+        drop(inner);
+
         loop {
             let mut ws = client.Watch(&objType, &namespace, &opts).await?;
             loop {
@@ -172,12 +172,12 @@ impl Informer {
                                         }
                                     }
                                     EventType::Deleted => {
-                                        store.Delete(&e.obj)?;
+                                        let old = store.Delete(&e.obj)?;
                                         DeltaEvent {
                                             type_: e.type_,
                                             inInitialList: false,
                                             obj: e.obj.clone(),
-                                            oldObj: None
+                                            oldObj: Some(old),
                                         }
                                     }
                                     _ => panic!("Informer::Process get unexpect type {:?}", e.type_),
@@ -204,6 +204,14 @@ impl Informer {
             }
         }
         
+    }
+
+    pub async fn Process(&self, notify: Arc<Notify>) -> Result<()> {
+        self.InitList().await?;
+        
+        notify.notify_waiters();
+        self.WatchUpdate().await?;
+        return Ok(())   
     }
 }
 

@@ -192,12 +192,12 @@ impl PmAgent {
                             *self.state.lock().unwrap() = PmAgentState::Ready;
                             SetNodeStatus(&self.node).await?;
                             self.node.node.lock().unwrap().status.phase = format!("{}", NodeRunning);
-                            QLET_STORE.get().unwrap().CreateNode(&self.node)?;
+                            QLET_STORE.get().unwrap().UpdateNode(&self.node)?;
                             NODEAGENT_STORE.UpdateNode(&self.node)?;
                         }
                     } else {
                         SetNodeStatus(&self.node).await?;
-                        QLET_STORE.get().unwrap().CreateNode(&self.node)?;
+                        QLET_STORE.get().unwrap().UpdateNode(&self.node)?;
                         NODEAGENT_STORE.UpdateNode(&self.node)?;
                     }
                 }
@@ -280,7 +280,7 @@ impl PmAgent {
         }
 
         NODEAGENT_STORE.UpdateNode(&self.node)?;
-        QLET_STORE.get().unwrap().CreateNode(&self.node)?;
+        QLET_STORE.get().unwrap().UpdateNode(&self.node)?;
                             
         return Ok(())
     }
