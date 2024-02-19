@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::{collections::BTreeMap, sync::Arc, fmt::Debug};
 use core::ops::Deref;
 
@@ -25,18 +26,15 @@ use crate::common::*;
 
 pub trait EventHandler : Debug + Send + Sync {
     fn handle(&self, store: &ThreadSafeStore, event: &DeltaEvent);
-    //fn OnAdd(&self, store: &ThreadSafeStore, obj: &DataObject, isInInitialList: bool);
-    //fn OnUpdate(&self, store: &ThreadSafeStore, oldObj: &DataObject, newObj: &DataObject);
-    //fn OnDelete(&self, store: &ThreadSafeStore, obj: &DataObject);
 }
 
 #[derive(Debug, Clone)]
-pub struct Informer(Arc<TRwLock<InformerInner>>);
+pub struct Informer(Arc<InformerInner>);
 
 impl Deref for Informer {
-    type Target = Arc<TRwLock<InformerInner>>;
+    type Target = Arc<InformerInner>;
 
-    fn deref(&self) -> &Arc<TRwLock<InformerInner>> {
+    fn deref(&self) -> &Arc<InformerInner> {
         &self.0
     }
 }
@@ -51,84 +49,88 @@ impl Informer {
             objType: objType.to_string(),
             namespace: namespace.to_string(),
             opts: opts.DeepCopy(),
-            revision: 0,
+            revision: AtomicI64::new(0),
             store: ThreadSafeStore::default(),
-            lastEventHandlerId: 0,
+            lastEventHandlerId: AtomicU64::new(0),
             client: client.clone(),
-            handlers: BTreeMap::new(),
+            handlers: TRwLock::new(BTreeMap::new()),
             closeNotify: Arc::new(Notify::new()),
-            closed: false,
-            task: None,
+            closed: AtomicBool::new(false)
         };
 
-        let informer = Self(Arc::new(TRwLock::new(inner)));
-        
-        informer.write().await.task = None; //Some(task);
+        let informer = Self(Arc::new(inner));
 
         return Ok(informer);
     }
 
     pub async fn Close(&self) -> Result<()> {
-        let (notify, task) = {
-            let mut inner = self.write().await;
-            (inner.closeNotify.clone(), inner.task.take())
-        };
+        let notify = self.closeNotify.clone();
 
-        match task {
-            None => {
-                return Err(Error::CommonError(format!("informer close with none task")));
-            }
-            Some(t) => {
-                notify.notify_waiters();
-                return t.await?;
-            }
-        }
+        notify.notify_waiters();
+        return Ok(())
     }
+
 
     pub async fn AddEventHandler(&self, h: Arc<dyn EventHandler>) -> Result<u64> {
-        return self.write().await.AddEventHandler(h)
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(Error::CommonError("the informer is closed".to_owned()));
+        }
+
+        let id = self.lastEventHandlerId.fetch_add(1, Ordering::SeqCst);
+        
+        let objs = self.store.List();
+        for obj in objs {
+            let event = DeltaEvent { 
+                type_: EventType::Added, 
+                inInitialList: true,
+                obj: obj, 
+                oldObj: None 
+            };
+
+            h.handle(&self.store, &event);
+        }
+
+        self.handlers.write().await.insert(id, h.clone());
+
+        return Ok(id);
     }
 
-    pub async fn RemoveEventHandler(&self, id: u64) -> Option<Arc<dyn EventHandler>> {
-        return self.write().await.RemoveEventHandler(id);
+    pub async fn RemoveEventHandler(&mut self, id: u64) -> Option<Arc<dyn EventHandler>> {
+        return self.handlers.write().await.remove(&id);
     }
 
     pub async fn InitList(&self) -> Result<()> {
-        let mut inner = self.write().await;
-        let client = inner.client.clone();
-        let store = inner.store.clone();
+        let client = self.client.clone();
+        let store = self.store.clone();
         
-        let objType = inner.objType.clone();
-        let namespace = inner.namespace.clone();
-        let mut opts = inner.opts.DeepCopy();
+        let objType = self.objType.clone();
+        let namespace = self.namespace.clone();
+        let opts = self.opts.DeepCopy();
         
         let objs = client.List(&objType, &namespace, &opts).await?;
-        opts.revision = objs.revision + 1;
-        inner.revision = objs.revision;
+        self.revision.store(objs.revision, Ordering::SeqCst);
         for o in objs.objs {
             store.Add(&o)?;
-            inner.Distribute(&DeltaEvent {
+            self.Distribute(&DeltaEvent {
                 type_: EventType::Added,
                 inInitialList: true,
                 obj: o,
                 oldObj: None,
-            });
+            }).await;
         }
         
         return Ok(())
     }
 
     pub async fn WatchUpdate(&self) -> Result<()> {
-        let inner = self.write().await;
-        let client = inner.client.clone();
-        let objType = inner.objType.clone();
-        let namespace = inner.namespace.clone();
-        let mut opts = inner.opts.DeepCopy();
-        opts.revision = inner.revision + 1;
-        let store = inner.store.clone();
-        let closeNotify = inner.closeNotify.clone();
-        drop(inner);
-
+        let client = self.client.clone();
+        let objType = self.objType.clone();
+        let namespace = self.namespace.clone();
+        let mut opts = self.opts.DeepCopy();
+        opts.revision = self.revision.load(Ordering::SeqCst) + 1;
+        let store = self.store.clone();
+        let closeNotify = self.closeNotify.clone();
+        
         loop {
             let mut ws = client.Watch(&objType, &namespace, &opts).await?;
             loop {
@@ -137,7 +139,7 @@ impl Informer {
                         e
                     }
                     _ = closeNotify.notified() => {
-                        self.write().await.closed = true;
+                        self.closed.store(true, Ordering::SeqCst);
                         return Ok(())
                     }
                 };
@@ -188,19 +190,18 @@ impl Informer {
                     }
                 };
 
-                self.read().await.Distribute(&event);
+                self.Distribute(&event).await;
             }
 
             let objs = client.List(&objType, &namespace, &opts).await?;
             opts.revision = objs.revision + 1;
-            let inner = self.read().await;
             for o in objs.objs {
-                inner.Distribute(&DeltaEvent {
+                self.Distribute(&DeltaEvent {
                     type_: EventType::Added,
                     inInitialList: false,
                     obj: o,
                     oldObj: None,
-                });
+                }).await;
             }
         }
         
@@ -213,6 +214,14 @@ impl Informer {
         self.WatchUpdate().await?;
         return Ok(())   
     }
+
+    pub async fn Distribute(&self, event: &DeltaEvent) {
+        let handlers = self.handlers.read().await;
+        for h in handlers.values().into_iter() {
+            h.handle(&self.store, event)
+        }
+    }
+
 }
 
 #[derive(Debug)]
@@ -221,70 +230,14 @@ pub struct InformerInner {
     pub namespace: String,
     pub opts: ListOption,
 
-    pub revision: i64,
+    pub revision: AtomicI64,
 
     pub store: ThreadSafeStore,
 
-    pub lastEventHandlerId: u64,
+    pub lastEventHandlerId: AtomicU64,
     pub client: CacherClient,
-    pub handlers: BTreeMap<u64, Arc<dyn EventHandler>>,
+    pub handlers: TRwLock<BTreeMap<u64, Arc<dyn EventHandler>>>,
 
     pub closeNotify: Arc<Notify>,
-    pub closed: bool,
-
-    pub task: Option<tokio::task::JoinHandle<Result<()>>>,
-}
-
-impl InformerInner {
-    pub fn Distribute(&self, event: &DeltaEvent) {
-        for (_, h) in &self.handlers {
-            self.DistributeToHandler(event, h)
-        }
-    }
-
-    pub fn DistributeToHandler(&self, event: &DeltaEvent, h: &Arc<dyn EventHandler>) {
-        /*match event.type_ {
-            EventType::Added => {
-                h.OnAdd(&self.store, &event.obj, isInInitialList);
-            }
-            EventType::Deleted => {
-                h.OnDelete(&self.store,&event.obj);
-            }
-            EventType::Modified => {
-                h.OnUpdate(&self.store, event.oldObj.as_ref().unwrap(), &event.obj);
-            }
-            _ => {
-                panic!("InformerInner::Distribute get unexpected type {:?}", event.type_);
-            }
-        }*/
-
-        h.handle(&self.store, event)
-    }
-
-    pub fn AddEventHandler(&mut self, h: Arc<dyn EventHandler>) -> Result<u64> {
-        if self.closed {
-            return Err(Error::CommonError("the informer is closed".to_owned()));
-        }
-
-        self.lastEventHandlerId += 1;
-        
-        let objs = self.store.List();
-        for obj in objs {
-            self.DistributeToHandler(&DeltaEvent { 
-                type_: EventType::Added, 
-                inInitialList: true,
-                obj: obj, 
-                oldObj: None 
-            }, &h)
-        }
-
-        let id = self.lastEventHandlerId;
-        self.handlers.insert(id, h.clone());
-
-        return Ok(id);
-    }
-
-    pub fn RemoveEventHandler(&mut self, id: u64) -> Option<Arc<dyn EventHandler>> {
-        return self.handlers.remove(&id);
-    }
+    pub closed: AtomicBool,
 }

@@ -118,7 +118,7 @@ impl AggregateClient {
             tokio::select! { 
                 _ = self.closeNotify.notified() => {
                     if self.closed.swap(true, Ordering::SeqCst) == false {
-                        let store = informer.read().await.store.clone();
+                        let store = informer.store.clone();
                         let lock = store.read();
                         for (_k, obj) in &lock.map {
                             self.aggregateCacher.Remove(obj)?;
