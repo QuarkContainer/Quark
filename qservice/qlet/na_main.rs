@@ -90,9 +90,9 @@ async fn main() -> Result<()> {
         factory.AddInformer("node_info", &ListOption::default()).await.unwrap();
         let informer = factory.GetInformer("node_info").await.unwrap();
         let _id1 = informer.AddEventHandler(NODE_MGR.clone()).await.unwrap();
+        let notify = Arc::new(Notify::new());
         tokio::spawn(async move {
-            let notify = Arc::new(Notify::new());
-
+            
             // todo: handle statesvc crash
             informer.Process(notify).await.ok();
         });
