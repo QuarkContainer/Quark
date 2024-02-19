@@ -176,7 +176,6 @@ impl VirtualMachine {
     pub const KERNEL_IMAGE: &'static str = "/usr/local/bin/qkernel.bin";
 
     pub fn InitShareSpace(
-        vmfd: &VmFd,
         cpuCount: usize,
         controlSock: i32,
         rdmaSvcCliSock: i32,
@@ -198,15 +197,6 @@ impl VirtualMachine {
         let logfd = super::super::super::print::LOG.Logfd();
         
         URING_MGR.lock().Addfd(logfd).unwrap();
-
-        for i in 0..cpuCount {
-            let addr = MemoryDef::KVM_IOEVENTFD_BASEADDR + (i as u64) * 8;
-            Self::IoEventfdAddEvent(
-                vmfd.as_raw_fd(),
-                addr,
-                sharespace.scheduler.VcpuArr[i].eventfd,
-            );
-        }
 
         KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
 
@@ -367,18 +357,6 @@ impl VirtualMachine {
                 MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
             vms.pageTables = PageTables::New(&vms.allocator)?;
 
-            vms.KernelMap(
-                addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
-                addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR + 0x1000),
-                addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
-                addr::PageOpts::Zero()
-                    .SetPresent()
-                    .SetWrite()
-                    .SetGlobal()
-                    .Val(),
-            )?;
-
-            //info!("the pageAllocatorBaseAddr is {:x}, the end of pageAllocator is {:x}", pageAllocatorBaseAddr, pageAllocatorBaseAddr + kernelMemSize);
             vms.KernelMapHugeTable(
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR),
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
@@ -405,7 +383,7 @@ impl VirtualMachine {
             vms.args = Some(args);
         }
 
-        Self::InitShareSpace(&vm_fd, cpuCount, controlSock, rdmaSvcCliSock, podId);
+        Self::InitShareSpace(cpuCount, controlSock, rdmaSvcCliSock, podId);
 
         let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
         //let vdsoMap = VDSOMemMap::Init(&"/home/brad/rust/quark/vdso/vdso.so".to_string()).unwrap();

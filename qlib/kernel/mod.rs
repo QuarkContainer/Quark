@@ -63,7 +63,8 @@ pub static TSC: Tsc = Tsc::New();
 pub static SHARESPACE: ShareSpaceRef = ShareSpaceRef::New();
 pub static IOURING: IOUringRef = IOUringRef::New();
 pub static KERNEL_PAGETABLE: Singleton<PageTables> = Singleton::<PageTables>::New();
-pub static PAGE_MGR: PageMgrRef = PageMgrRef::New();
+// used for allocate new page table see pub fn Fork(&self, pagePool: &PageMgr) -> Result<Self> {
+pub static PAGE_MGR: PageMgrRef = PageMgrRef::New();    
 pub static LOADER: Singleton<Loader> = Singleton::<Loader>::New();
 pub static WAIT_CONTAINER_FD: AtomicI32 = AtomicI32::new(-1);
 pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> =
