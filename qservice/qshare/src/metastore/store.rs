@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::collections::BTreeMap;
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use spin::RwLock;
 use core::ops::Deref;
@@ -79,9 +80,23 @@ pub trait Store {
     }
 }
 
-#[derive(Debug, Default)]
+pub static STORE_ID: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Debug)]
 pub struct ThreadSafeStoreInner {
+    pub id: u64,
     pub map: BTreeMap<String, DataObject>
+}
+
+impl Default for ThreadSafeStoreInner {
+    fn default() -> Self {
+        let ret = Self {
+            id: STORE_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            map: BTreeMap::new(),
+        };
+
+        return ret;
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -101,7 +116,7 @@ impl ThreadSafeStore {
         match self.write().map.insert(key.clone(), obj.clone()) {
             None => return Ok(()),
             Some(_o) => {
-                return Err(Error::CommonError(format!("ThreadSafeStore Update get not none prev obj with key {}", key)));
+                return Err(Error::CommonError(format!("ThreadSafeStore Add get not none prev obj with obj {:#?}", key)));
             }
         }
     }
@@ -116,11 +131,11 @@ impl ThreadSafeStore {
         }
     }
 
-    pub fn Delete(&self, obj: &DataObject) -> Result<()> {
+    pub fn Delete(&self, obj: &DataObject) -> Result<DataObject> {
         let key = obj.Key();
         match self.write().map.remove(&key) {
             None => return Err(Error::CommonError(format!("ThreadSafeStore Update get none prev obj with key {}", key))),
-            Some(_) => return Ok(())
+            Some(obj) => return Ok(obj)
         }
     }
 

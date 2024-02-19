@@ -91,6 +91,10 @@ impl CacheStore {
         
         return Ok(ret);
     }
+    
+    pub fn ObjType(&self) -> String {
+        return self.read().unwrap().objectType.clone();
+    }
 
     pub async fn Stop(&self) -> Result<()> {
         let notify = self.read().unwrap().closeNotify.clone();
@@ -462,7 +466,7 @@ impl CacheStoreInner {
     ) -> Result<Vec<WatchCacheEvent>> {
         let size = self.cache.Size();
 
-        let oldest = if self.listRevision > 0 && self.cache.tail == 0 {
+        let oldest = if self.listRevision >= 0 && self.cache.tail == 0 {
             // If no event was removed from the buffer since last relist, the oldest watch
             // event we can deliver is one greater than the resource version of the list.
             self.listRevision + 1
@@ -473,7 +477,9 @@ impl CacheStoreInner {
                 .revision
         } else {
             return Err(Error::CommonError(format!(
-                "watch cache isn't correctly initialized"
+                "CacheStoreInner: watch cache isn't correctly initialized self.listRevision = {} tail = {}", 
+                self.listRevision,
+                self.cache.tail,
             )));
         };
 

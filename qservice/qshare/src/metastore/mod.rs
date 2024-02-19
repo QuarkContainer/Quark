@@ -23,3 +23,4 @@ pub mod informer;
 pub mod informer_factory;
 pub mod cache_store;
 pub mod svc_dir;
+pub mod aggregate_client;

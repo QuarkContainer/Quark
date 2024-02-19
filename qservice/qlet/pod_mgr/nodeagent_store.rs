@@ -140,7 +140,7 @@ impl RingBuf {
             match &self.buf[idx] {
                 None => {
                     return Err(Error::CommonError(
-                        "watch cache isn't correctly initialized".to_owned(),
+                        "RingBuf: watch cache isn't correctly initialized".to_owned(),
                     ))
                 }
                 Some(o) => {
@@ -365,7 +365,7 @@ impl NodeAgentStoreInner {
                 .revision
         } else {
             return Err(Error::CommonError(format!(
-                "watch cache isn't correctly initialized"
+                "NodeAgentStoreInner: watch cache isn't correctly initialized"
             )));
         };
 

@@ -47,6 +47,14 @@ impl SvcDir {
             Some(c) => Some(c.clone()),
         };
     }
+
+    pub fn AddCacher(&self, cacher: CacheStore) {
+        self.write().unwrap().map.insert(cacher.ObjType(), cacher);
+    }
+
+    pub fn ChannelRev(&self) -> ChannelRev {
+        return self.read().unwrap().channelRev.clone();
+    }
 }
 
 #[derive(Debug, Default)]
@@ -55,7 +63,6 @@ pub struct SvcDirInner {
     pub channelRev: ChannelRev,
     pub version: String,
 }
-
 
 #[tonic::async_trait]
 impl qmeta::q_meta_service_server::QMetaService for SvcDir {

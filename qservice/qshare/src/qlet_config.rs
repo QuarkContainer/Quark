@@ -22,9 +22,12 @@ pub struct QletConfig {
     pub nodeName: String,
     pub etcdAddresses: Vec<String>,
     pub nodeIp: String,
+    
     pub podMgrPort: u16,
     pub tsotCniPort: u16,
     pub tsotSvcPort: u16,
+    pub stateSvcPort: u16,
+
     pub cidr: String,
     pub stateSvcAddr: String,
     pub singleNodeModel: bool,

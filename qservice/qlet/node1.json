@@ -5,6 +5,7 @@
     "podMgrPort"   : 8888,
     "tsotCniPort"   : 1234,
     "tsotSvcPort"   : 1235,
+    "stateSvcPort"  : 1236,
     "cidr"          : "10.1.1.0/8",
     "stateSvcAddr"  : "127.0.0.1:8890",
     "singleNodeModel": false

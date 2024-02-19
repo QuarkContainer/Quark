@@ -209,7 +209,6 @@ impl PodBroker {
                             match m {
                                 None => (),
                                 Some(m) => {
-                                    error!("ProcessMsgs 4 {:?}", &m);
                                     msg = Some(m);
                                 }
                             }
@@ -223,14 +222,12 @@ impl PodBroker {
                             break;
                         }
                         _ = self.stream.readable() => {
-                            error!("ProcessMsgs 3");
                             self.ProcessRead()?;
 
                             // return the msg
                             msg = Some(m);
                         }
                         _ = self.stream.writable() => {
-                            error!("ProcessMsgs 5 {:?}", &m);
                             self.SendMsg(m)?;
                         }
                     }
