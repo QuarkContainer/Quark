@@ -240,14 +240,14 @@ pub extern "C" fn __cudaRegisterFunction(
     hostFun:u64, 
     deviceFun:u64, 
     deviceName:u64, 
-    thread_limit:usize, 
+    thread_limit:isize, 
     tid:u64, 
     bid:u64, 
     bDim:u64, 
     gDim:u64, 
     wSize:usize
 ) {
-    println!("Hijacked __cudaRegisterFunction(fatCubinHandle:{:x}, hostFun:{:x}, deviceFun:{:x}, deviceName:{:x}, thread_limit: {}, tid: {:x}, bid: {:x}, bDim: {:x}, gDim: {:x}, wSize: {})", fatCubinHandle, hostFun, deviceFun, deviceName, thread_limit, tid, bid, bDim, gDim, wSize);    
+    println!("Hijacked __cudaRegisterFunction(fatCubinHandle:{:x}, hostFun:{:x}, deviceFun:{:x}, deviceName:{:x}, thread_limit: {:x}, tid: {:x}, bid: {:x}, bDim: {:x}, gDim: {:x}, wSize: {})", fatCubinHandle, hostFun, deviceFun, deviceName, thread_limit, tid, bid, bDim, gDim, wSize);    
     let info = RegisterFunctionInfo {
         fatCubinHandle: fatCubinHandle, 
         hostFun: hostFun, 
@@ -270,19 +270,34 @@ pub extern "C" fn __cudaRegisterFunction(
 #[no_mangle]
 pub extern "C" fn __cudaRegisterVar(
     fatCubinHandle:u64,
-    hostVar:u64,
-    deviceAddress:u64,
-    deviceName:u64,
+    hostVar:u64,   // char pointer
+    deviceAddress:u64,  // char pointer 
+    deviceName:u64, // char pointer 
     ext:i32,
     size: usize,
     constant: i32,
     global: i32,
 ){
-    println!("yiwang Hijacked __cudaRegisterVar(fatCubinHandle:{:x}, hostVar:{:x}, 
-        deviceAddress:{:x}, deviceName:{:x}, ext:{}, size:{}, constant:{}, 
+    println!("Hijacked __cudaRegisterVar(fatCubinHandle:{:x}, hostVar:{:x}, 
+        deviceAddress:{:x}, deviceName:{:x}, ext:{}, size:{:x}, constant:{}, 
         global:{})",fatCubinHandle, hostVar, deviceAddress, deviceName, ext, size, constant, global);
 
+    let info = RegisterVarInfo {
+        fatCubinHandle: fatCubinHandle,
+        hostVar: hostVar,
+        deviceAddress: deviceAddress,
+        deviceName: deviceName,
+        ext: ext,
+        size: size,
+        constant: constant,
+        global: global
+    };
 
+    println!("RegisterVarInfo {:x?}", info);
+
+    unsafe {
+        syscall2(SYS_PROXY, ProxyCommand::CudaRegisterVar as usize, &info as *const _ as usize);
+    }
 }
   
 

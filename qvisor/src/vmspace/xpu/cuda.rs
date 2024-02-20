@@ -27,11 +27,13 @@ lazy_static! {
     pub static ref KERNEL_INFOS:Mutex<BTreeMap<String, Arc<KernelInfo>>> = Mutex::new(BTreeMap::new());
     pub static ref MODULES:Mutex<BTreeMap<u64, CUmoduleAddr>> = Mutex::new(BTreeMap::new());
     pub static ref FUNCTIONS:Mutex<BTreeMap<u64, CUfunctionAddr>> = Mutex::new(BTreeMap::new());
+    pub static ref GLOBALS:Mutex<BTreeMap<u64, CUdeviceAddr>> = Mutex::new(BTreeMap::new());
 }
 
 pub type HandlerAddr = u64;
 pub type CUmoduleAddr = u64;
 pub type CUfunctionAddr = u64;
+pub type CUdeviceAddr = u64;
 
 #[repr(C)]
 #[derive(Default, Debug)]

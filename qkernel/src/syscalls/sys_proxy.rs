@@ -53,6 +53,8 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             let deviceProperties = task.CopyInObj::<CudaDeviceProperties>(parameters.para2)?;  // got the big struct
 
+            // todo, check whether need to get the char array { name } , and the length
+
             error!("yiwang deviceProperties is(
                 deviceProperties.luidDeviceNodeMask: {:x},
                 deviceProperties.totalGlobalMem: {:x},
@@ -367,6 +369,27 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             error!("PARAM_INFOS {:x?}", PARAM_INFOS.lock());
 
             return Ok(ret);
+        }
+        ProxyCommand::CudaRegisterVar => {
+            let mut data = task.CopyInObj::<RegisterVarInfo>(parameters.para1)?;   // still take the addresss 
+            error!("CudaRegisterVar data {:x?}, parameters {:x?}", data, parameters);
+
+            let deviceName = CString::ToString(task, data.deviceName)?;
+
+            // get the deviceName string and assign the address of first byte to the data struct field 
+            data.deviceName = &(deviceName.as_bytes()[0]) as * const _ as u64;
+            parameters.para1 = &data as * const _ as u64; // address 
+
+            parameters.para2 = deviceName.as_bytes().len() as u64; // device name length 
+            error!("yiwang deviceName {}, data.deviceName {:x}, parameters {:x?}", deviceName, data.deviceName, parameters);
+
+            let ret = HostSpace::Proxy(
+                ProxyCommand::CudaRegisterVar,
+                parameters,
+            );
+
+            return Ok(ret); 
+            
         }
         ProxyCommand::CudaLaunchKernel => {
             let mut data = task.CopyInObj::<LaunchKernelInfo>(parameters.para1)?;

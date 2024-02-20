@@ -36,6 +36,7 @@ pub enum ProxyCommand {
     CudaRegisterFatBinary,
     CudaUnregisterFatBinary,
     CudaRegisterFunction,
+    CudaRegisterVar,
     CudaLaunchKernel,
 
     CuInit,
@@ -394,7 +395,7 @@ pub struct RegisterFunctionInfo {
     pub hostFun:u64, 
     pub deviceFun:u64, 
     pub deviceName:u64, 
-    pub thread_limit:usize, 
+    pub thread_limit:isize, 
     pub tid:u64, 
     pub bid:u64, 
     pub bDim:u64, 
@@ -440,14 +441,12 @@ pub struct NvInfoEntry {
 #[repr(C)]
 #[derive(Default, Debug, Copy, Clone)]
 pub struct RegisterVarInfo {
-    fatCubinHandle:u64, 
-    hostFun:u64, 
-    deviceFun:u64, 
-    deviceName:u64, 
-    thread_limit:usize, 
-    tid:u64, 
-    bid:u64, 
-    bDim:u64, 
-    gDim:u64, 
-    wSize:usize
+    pub fatCubinHandle:u64, 
+    pub hostVar: u64,
+    pub deviceAddress:u64,
+    pub deviceName:u64,
+    pub ext:i32,
+    pub size: usize,
+    pub constant: i32,
+    pub global: i32,
 }

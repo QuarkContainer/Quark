@@ -467,6 +467,50 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             }
             return Ok(ret as i64);
         }
+        ProxyCommand::CudaRegisterVar  => {
+            let info = unsafe { *(parameters.para1 as *const u8 as *const RegisterVarInfo)};
+
+            
+            let bytes = unsafe {
+                std::slice::from_raw_parts(info.deviceName as *const u8, parameters.para2 as usize)
+            };
+
+            let deviceName = std::str::from_utf8(bytes).unwrap();
+
+            let deviceName_cString = CString::new(deviceName).unwrap();
+
+            let module = match MODULES.lock().get(&info.fatCubinHandle){
+                Some(module) => {
+                    error!("module: {:x} for this fatCubinHandle:{:x} has been found", module, info.fatCubinHandle);
+                    *module
+                }
+                None => {
+                    error!("no module found with this fatCubin"); 
+                    0
+                }
+            };
+            error!("deviceName {}, parameters {:x?} module {:x}", deviceName, parameters, module);
+
+            let mut devicePtr: CUdeviceptr = 0; 
+            let mut d_size: usize = 0 ; 
+            let ret = unsafe {
+                cuda_driver_sys::cuModuleGetGlobal_v2(
+                    &mut devicePtr, 
+                    &mut d_size, 
+                    (module as *const u64) as  CUmodule, 
+                    deviceName_cString.as_ptr())
+            };
+
+            GLOBALS.lock().insert(info.hostVar, devicePtr);
+            error!(
+                "cuModuleGetGlobal_v2 ret {:x?}, devicePtr {:x}, GLOBALS {:x?}",
+                ret,
+                devicePtr,
+                GLOBALS.lock()
+            );
+         
+            return Ok(ret as i64);
+        }
         ProxyCommand::CudaLaunchKernel => {
             error!(
                 "CudaLaunchKernel in host parameters {:x?}",
