@@ -21,6 +21,7 @@ use cuda_runtime_sys::cudaDeviceProp;
 use cuda_runtime_sys::cudaDeviceAttr;
 use cuda_runtime_sys::cudaFuncCache;
 use cuda_runtime_sys::cudaLimit;
+use cuda_runtime_sys::cudaDeviceP2PAttr;
 
 
 
@@ -110,6 +111,18 @@ pub extern "C" fn cudaDeviceGetLimit(pValue: *mut usize, limit: cudaLimit) -> us
 
     return ret;
 
+}
+
+//not yet tested 
+#[no_mangle] 
+pub extern "C" fn cudaDeviceGetP2PAttribute(value: *mut c_int, attr: cudaDeviceP2PAttr, srcDevice: c_int, dstDevice: c_int) -> usize {
+    println!("Hijacked cudaDeviceGetP2PAttribute(Queries attribute: {:?} of the link between device {} and device {}.) ",attr, srcDevice, dstDevice);
+
+    let ret = unsafe { 
+        syscall5(SYS_PROXY, ProxyCommand::CudaDeviceGetP2PAttribute as usize, value as *const _ as usize, attr as usize, srcDevice as usize, dstDevice as usize)
+    };
+
+    return ret; 
 }
 
 #[no_mangle]

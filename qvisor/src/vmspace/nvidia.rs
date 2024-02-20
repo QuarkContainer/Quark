@@ -26,7 +26,7 @@ use crate::qlib::range::Range;
 use crate::xpu::cuda::*;
 
 use cuda_driver_sys::*;
-use cuda_runtime_sys::{cudaStreamCaptureStatus, cudaStream_t};  
+use cuda_runtime_sys::{cudaDeviceP2PAttr, cudaStreamCaptureStatus, cudaStream_t};  
 use cuda_runtime_sys::{cudaDeviceProp, cudaDeviceAttr,cudaFuncCache,cudaLimit};
 
 
@@ -40,6 +40,7 @@ lazy_static! {
         (ProxyCommand::CudaDeviceGetByPCIBusId,(XpuLibrary::CudaRuntime, "cudaDeviceGetByPCIBusId")),
         (ProxyCommand::CudaDeviceGetCacheConfig,(XpuLibrary::CudaRuntime, "cudaDeviceGetCacheConfig")),
         (ProxyCommand::CudaDeviceGetLimit,(XpuLibrary::CudaRuntime, "cudaDeviceGetLimit")),
+        (ProxyCommand::CudaDeviceGetP2PAttribute,(XpuLibrary::CudaRuntime, "cudaDeviceGetP2PAttribute")),
         (ProxyCommand::CudaSetDevice,(XpuLibrary::CudaRuntime, "cudaSetDevice")),
         (ProxyCommand::CudaSetDeviceFlags,(XpuLibrary::CudaRuntime, "cudaSetDeviceFlags")),
         (ProxyCommand::CudaDeviceSynchronize,(XpuLibrary::CudaRuntime, "cudaDeviceSynchronize")),
@@ -53,6 +54,7 @@ lazy_static! {
         (ProxyCommand::CudaMemcpyAsync,(XpuLibrary::CudaRuntime,"cudaMemcpyAsync")),
         (ProxyCommand::CudaRegisterFatBinary,(XpuLibrary::CudaDriver, "cuModuleLoadData")),
         (ProxyCommand::CudaRegisterFunction,(XpuLibrary::CudaDriver, "cuModuleGetFunction")),
+        (ProxyCommand::CudaRegisterVar,(XpuLibrary::CudaDriver, "cuModuleGetGlobal")),
         (ProxyCommand::CudaLaunchKernel,(XpuLibrary::CudaDriver, "cuLaunchKernel")),
         (ProxyCommand::CudaFree,(XpuLibrary::CudaRuntime,"cudaFree")),
         (ProxyCommand::CudaUnregisterFatBinary,(XpuLibrary::CudaDriver,"cuModuleUnload")),
@@ -206,7 +208,22 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                  };
 
             return Ok(ret as i64);
+        }
+        ProxyCommand::CudaDeviceGetP2PAttribute => {
+            let mut value: libc::c_int = 0; // _host__​cudaError_t cudaDeviceGetP2PAttribute ( int* value, cudaDeviceP2PAttr attr, int  srcDevice, int  dstDevice )
+            let attribute = unsafe { *(&parameters.para2 as *const _ as u64 as *mut cudaDeviceP2PAttr) };
 
+            let func: extern "C" fn(*mut ::std::os::raw::c_int, cudaDeviceP2PAttr, ::std::os::raw::c_int, ::std::os::raw::c_int) -> i32 = unsafe { std::mem::transmute(handler)};
+            let ret = func(&mut value, attribute, parameters.para3 as c_int, parameters.para4 as c_int);
+
+            error!("yiwang value after function call is :{:x}", value);
+            error!("yiwang cudaDeviceGetP2PAttribute result is: {:?}, {}", ret,ret);
+
+            unsafe{
+                *(parameters.para1 as *mut _ ) = value  as i32
+                 };
+
+            return Ok(ret as i64);  
         }
         ProxyCommand::CudaSetDevice => {
             error!("CudaSetDevice 1");

@@ -18,7 +18,7 @@ use alloc::vec::Vec;
 
 use crate::qlib::common::*;
 use crate::syscalls::syscalls::*;
-use crate::{parameters, task::*};
+use crate::task::*;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::linux_def::SysErr;
 use crate::qlib::proxy::*;
@@ -167,6 +167,25 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 task.CopyOutObj(&limit, args.arg1 as u64)?; 
             }
 
+            return Ok(ret);
+
+        }
+        ProxyCommand::CudaDeviceGetP2PAttribute => {
+            let mut value: i32;
+            parameters.para1 = &value as * mut _ as u64;
+
+            let attribute: u32 = parameters.para2 as u32;
+            error!("SysProxy CudaDeviceGetP2PAttribute, query about attribute: {}", attribute);
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            error!("the value should change: {}", value);
+            if ret == 0 {
+                task.CopyOutObj(&value, args.arg1 as u64)?;
+            }
             return Ok(ret);
 
         }

@@ -21,6 +21,7 @@ pub enum ProxyCommand {
     CudaDeviceGetByPCIBusId,
     CudaDeviceGetCacheConfig,
     CudaDeviceGetLimit,
+    CudaDeviceGetP2PAttribute,
     CudaSetDevice,
     CudaSetDeviceFlags,
     CudaDeviceSynchronize,
