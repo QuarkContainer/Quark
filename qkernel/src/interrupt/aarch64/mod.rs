@@ -274,7 +274,14 @@ pub extern "C" fn exception_handler_el0_sync(ptregs_addr: usize) {
                 ctx.pc += 4;
             }
             _ => {
-                panic!("unhandled sync exception from el0: {},\ncan't emulate mrs\n current-context: {:?}", ec, ctx);
+                unsafe {
+                     if let Some(opcode) = kernel_def::read_user_opcode(ctx.pc) {
+                         debug!("VM: UNKNOWN_EXCEPTION from EL0, current-PC: {:#x}, retrieved PC[opcode]:{:#x}.", ctx.pc, opcode);
+                     } else {
+                         debug!("VM: UNKNOWN_EXCEPTION from EL0, current-PC: {:#x}, can not retrieve PC[opcode].", ctx.pc);
+                     }
+                }
+                panic!("VM: panic on UNKNOWN_EXCEPTION from EL0 - current-context: {:?}", ctx);
             }
         },
         _ => {
