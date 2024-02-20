@@ -3014,8 +3014,6 @@ impl MemoryDef {
     pub const UPPER_BOTTOM: u64 = 0xffff_8000_0000_0000;
     pub const ENTRY_COUNT: u16 = 512 as u16;
 
-    pub const KVM_IOEVENTFD_BASEADDR: u64 = Self::PHY_LOWER_ADDR - 0x1000;
-
     pub const KERNEL_START_P2_ENTRY: usize = (Self::PHY_LOWER_ADDR / Self::ONE_GB) as usize; //256
     pub const KERNEL_END_P2_ENTRY: usize = (Self::PHY_UPPER_ADDR / Self::ONE_GB) as usize; //512
 }
