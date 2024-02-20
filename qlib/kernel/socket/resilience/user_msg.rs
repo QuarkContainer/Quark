@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use crate::qlib::bytestream::*;
 use crate::qlib::common::*;
@@ -22,7 +22,7 @@ use crate::qlib::linux_def::*;
 #[repr(u8)]
 pub enum UserMsgType {
     UserFuncCall = 1,
-    UserFuncResp
+    UserFuncResp,
 }
 
 // serialize format
@@ -40,11 +40,11 @@ impl MessageIO for UserMsg {
         match self {
             UserMsg::UserFuncCall(msg) => {
                 // msg type + msgboday
-                return 1 + msg.Size()
+                return 1 + msg.Size();
             }
             UserMsg::UserFuncResp(msg) => {
                 // msg type + msgboday
-                return 1 + msg.Size()
+                return 1 + msg.Size();
             }
         }
     }
@@ -56,16 +56,16 @@ impl MessageIO for UserMsg {
         match msgType {
             x if x == UserMsgType::UserFuncCall as u8 => {
                 let msg = UserFuncCall::Read(buf)?;
-                return Ok(Self::UserFuncCall(msg))
+                return Ok(Self::UserFuncCall(msg));
             }
             x if x == UserMsgType::UserFuncResp as u8 => {
                 let msg = UserFuncResp::Read(buf)?;
-                return Ok(Self::UserFuncResp(msg))
+                return Ok(Self::UserFuncResp(msg));
             }
-            _ => return Err(Error::SysError(SysErr::EINVAL))
+            _ => return Err(Error::SysError(SysErr::EINVAL)),
         }
     }
-    
+
     // write obj, return <whether trigger>
     fn Write(&self, buf: &mut SocketBufIovs) -> Result<()> {
         match self {
@@ -79,18 +79,18 @@ impl MessageIO for UserMsg {
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 }
- 
+
 pub struct UserFuncCall {
     pub userdata: u64,
-    
+
     // <len: u16, bytes: [u8]>
     pub funcName: String,
-    
+
     // <len: u16, bytes: [u8]>
-    pub payload: Vec<u8>, 
+    pub payload: Vec<u8>,
 }
 
 impl MessageIO for UserFuncCall {
@@ -99,7 +99,7 @@ impl MessageIO for UserFuncCall {
         let mut size = 8;
         size += 2 + self.funcName.len();
         size += 2 + self.payload.len();
-        return size
+        return size;
     }
 
     // read obj, return <Obj, whether trigger>
@@ -107,7 +107,7 @@ impl MessageIO for UserFuncCall {
         let userData = buf.ReadObj::<u64>()?;
 
         let namelen = buf.ReadObj::<u16>()?;
-        let name= buf.ReadString(namelen as usize)?;
+        let name = buf.ReadString(namelen as usize)?;
 
         let buflen = buf.ReadObj::<u16>()?;
         let payload = buf.ReadVec(buflen as usize)?;
@@ -118,9 +118,9 @@ impl MessageIO for UserFuncCall {
             payload: payload,
         };
 
-        return Ok(obj)
+        return Ok(obj);
     }
-    
+
     // write obj, return <whether trigger>
     fn Write(&self, buf: &mut SocketBufIovs) -> Result<()> {
         buf.WriteObj(&self.userdata)?;
@@ -129,10 +129,9 @@ impl MessageIO for UserFuncCall {
         buf.WriteObj(&(self.payload.len() as u16))?;
         buf.WriteSlice(&self.payload)?;
 
-        return Ok(())
+        return Ok(());
     }
 }
-
 
 pub struct UserFuncResp {
     pub userdata: u64,
@@ -148,7 +147,7 @@ impl MessageIO for UserFuncResp {
 
         // 2 is the len of payload
         size += 2 + self.payload.len();
-        return size
+        return size;
     }
 
     // read obj, return <Obj, whether trigger>
@@ -164,9 +163,9 @@ impl MessageIO for UserFuncResp {
             payload: payload,
         };
 
-        return Ok(obj)
+        return Ok(obj);
     }
-    
+
     // write obj, return <whether trigger>
     fn Write(&self, buf: &mut SocketBufIovs) -> Result<()> {
         buf.WriteObj(&self.userdata)?;

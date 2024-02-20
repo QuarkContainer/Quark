@@ -55,30 +55,26 @@ impl Args {
     pub fn GetCpuCount(&self) -> usize {
         match &self.Spec.linux {
             None => return 0,
-            Some(linux) => {
-                match &linux.resources {
+            Some(linux) => match &linux.resources {
+                None => return 0,
+                Some(resources) => match &resources.cpu {
                     None => return 0,
-                    Some(resources) => {
-                        match &resources.cpu {
+                    Some(cpu) => {
+                        let quota = match cpu.quota {
                             None => return 0,
-                            Some(cpu) => {
-                                let quota = match cpu.quota {
-                                    None => return 0,
-                                    Some(q) => q,
-                                };
+                            Some(q) => q,
+                        };
 
-                                let period = match cpu.period {
-                                    None => return 0,
-                                    Some(p) => p,
-                                };
+                        let period = match cpu.period {
+                            None => return 0,
+                            Some(p) => p,
+                        };
 
-                                let count = (quota as u64 + period - 1) / period;
-                                return count as usize;
-                            }
-                        }
+                        let count = (quota as u64 + period - 1) / period;
+                        return count as usize;
                     }
-                }
-            }
+                },
+            },
         };
-    } 
+    }
 }

@@ -1,0 +1,119 @@
+// Copyright (c) 2021 Quark Container Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
+syntax = "proto3";
+package nm;
+
+service NodeAgentService {
+  rpc StreamProcess(stream NodeAgentRespMsg) returns (stream NodeAgentReq);
+}
+///////////////////////////////////////////////////////////////////////
+
+message NodeAgentRespMsg {
+  oneof MessageBody {
+    NodeAgentResp nodeAgentResp = 100;
+    NodeAgentStreamMsg nodeAgentStreamMsg = 200;
+  }
+}
+
+message NodeAgentReq {
+  uint64 requestId = 1;
+  oneof MessageBody {
+    NodeConfigReq nodeConfigReq = 100;
+    CreatePodReq createPodReq = 200;
+    TerminatePodReq terminatePodReq = 300;
+    ReadFuncLogReq readFuncLogReq = 400;
+  }
+}
+
+message NodeAgentResp {
+  uint64 requestId = 1;
+  string error = 2;
+  oneof MessageBody {
+    NodeConfigResp nodeConfigResp = 100;
+    CreatePodResp createPodResp = 200;
+    TerminatePodResp terminatePodResp = 300;
+    ReadFuncLogResp readFuncLogResp = 400;
+  }
+}
+
+message ReadFuncLogReq {
+  string namespace = 1;
+  string funcName = 2;
+  uint64 offset = 3;
+  uint32 len = 4;
+}
+
+message ReadFuncLogResp {
+  string error = 1;
+  string content = 2;
+}
+
+message NodeConfigReq {
+  string clusterDomain = 1;
+  //k8s.io.api.core.v1.Node node = 2;
+  string node = 2;
+  //repeated k8s.io.api.core.v1.Pod daemonPods = 3;
+  //repeated string daemonPods = 3;
+}
+
+message NodeConfigResp {
+}
+
+message CreatePodReq {
+  string pod = 1;
+  string configMap = 2;
+}
+
+message CreatePodResp {
+}
+
+message TerminatePodReq {
+  string podId = 1;
+}
+
+message TerminatePodResp {
+}
+
+message NodeAgentStreamMsg {
+  oneof EventBody {
+    NodeRegister nodeRegister = 100;
+    NodeUpdate nodeUpdate = 200;
+    PodEvent podEvent = 300;
+  }
+}
+
+message NodeRegister {
+  int64 revision = 2;
+  string node = 3; // k8s::Node json
+  repeated string pods = 4; // Vec<k8s::Pod>
+}
+
+message NodeUpdate {
+  int64 revision = 2;
+  string node = 3; // k8s::Node json
+}
+
+enum EventType {
+  Add = 0;
+  Update = 2;
+  Delete = 3;
+}
+
+message PodEvent {
+  EventType eventType = 1;
+  int64 revision = 2;
+  string pod = 3; // k8s::Node json
+}

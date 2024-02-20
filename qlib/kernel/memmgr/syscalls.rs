@@ -15,17 +15,17 @@
 use alloc::vec::Vec;
 use core::u64;
 
-use super::*;
-use super::super::kernel::futex::*;
-use super::super::memmgr::mm::*;
-use super::super::memmgr::vma::*;
 use super::super::super::addr::*;
 use super::super::super::common::*;
 use super::super::super::limits::*;
 use super::super::super::linux::limits::*;
 use super::super::super::linux_def::*;
 use super::super::super::range::*;
+use super::super::kernel::futex::*;
+use super::super::memmgr::mm::*;
+use super::super::memmgr::vma::*;
 use super::super::task::*;
+use super::*;
 
 #[derive(Debug)]
 pub struct MSyncOpts {
@@ -40,7 +40,7 @@ impl MemoryManager {
     // MMap establishes a memory mapping.
     pub fn MMap(&self, task: &Task, opts: &mut MMapOpts) -> Result<u64> {
         let _ml = self.MappingWriteLock();
-
+        
         if opts.Length == 0 {
             return Err(Error::SysError(SysErr::EINVAL));
         }
@@ -52,7 +52,7 @@ impl MemoryManager {
 
         opts.Length = length;
 
-        if opts.Mappable.HostIops().is_some() {
+        if opts.Mappable.HasFileMap() {
             // Offset must be aligned.
             if Addr(opts.Offset).RoundDown()?.0 != opts.Offset {
                 return Err(Error::SysError(SysErr::EINVAL));
@@ -88,11 +88,11 @@ impl MemoryManager {
         if opts.GrowsDown && opts.Mappable.HostIops().is_some() {
             return Err(Error::SysError(SysErr::EINVAL));
         }
-
+        
         let (vseg, ar) = self.CreateVMAlocked(task, opts)?;
-
+        
         self.PopulateVMALocked(task, &vseg, &ar, opts.Precommit, opts.VDSO)?;
-
+        
         self.TlbShootdown();
         return Ok(ar.Start());
     }
@@ -107,7 +107,12 @@ impl MemoryManager {
         // process stack must be mapped up-front.
         const MAX_STACK_SIZE: u64 = 128 << 20; //128 MB
 
-        let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::Stack).Cur;
+        let lim = task
+            .Thread()
+            .ThreadGroup()
+            .Limits()
+            .Get(LimitType::Stack)
+            .Cur;
 
         let sz = match Addr(lim).RoundUp() {
             Err(_) => {
@@ -116,7 +121,10 @@ impl MemoryManager {
             }
             Ok(stackSize) => {
                 if stackSize.0 > DEFAULT_STACK_SOFT_LIMIT {
-                    warn!("Capping stack size from RLIMIT_STACK of {} down to {}.", stackSize.0, DEFAULT_STACK_SOFT_LIMIT);
+                    warn!(
+                        "Capping stack size from RLIMIT_STACK of {} down to {}.",
+                        stackSize.0, DEFAULT_STACK_SOFT_LIMIT
+                    );
                     DEFAULT_STACK_SOFT_LIMIT
                 } else if stackSize.0 == 0 {
                     return Err(Error::SysError(SysErr::ENOMEM));
@@ -241,7 +249,12 @@ impl MemoryManager {
             let creds = task.creds.clone();
             let userns = creds.lock().UserNamespace.Root();
             if !creds.HasCapabilityIn(Capability::CAP_IPC_LOCK, &userns) {
-                let mlockLimit = task.Thread().ThreadGroup().Limits().Get(LimitType::MemoryLocked).Cur;
+                let mlockLimit = task
+                    .Thread()
+                    .ThreadGroup()
+                    .Limits()
+                    .Get(LimitType::MemoryLocked)
+                    .Cur;
                 let newLockedAS = self.mapping.lock().lockedAS - oldSize + newSize;
                 if newLockedAS > mlockLimit {
                     return Err(Error::SysError(SysErr::EAGAIN));
@@ -373,7 +386,8 @@ impl MemoryManager {
 
         // Inform the Mappable, if any, of the new mapping.
         let offsetat = vseg.MappableOffsetAt(oldAR.Start());
-        vma.mappable.CopyMapping(self, &oldAR, &newAR, offsetat, vma.CanWriteMappableLocked())?;
+        vma.mappable
+            .CopyMapping(self, &oldAR, &newAR, offsetat, vma.CanWriteMappableLocked())?;
 
         if oldSize == 0 {
             // Handle copying.
@@ -420,7 +434,8 @@ impl MemoryManager {
 
         // Now that pmas have been moved to newAR, we can notify vma.mappable that
         // oldAR is no longer mapped.
-        vma.mappable.RemoveMapping(self, &oldAR, vma.offset, vma.CanWriteMappableLocked())?;
+        vma.mappable
+            .RemoveMapping(self, &oldAR, vma.offset, vma.CanWriteMappableLocked())?;
 
         self.PopulateVMARemapLocked(task, &vseg, &newAR, &Range::New(oldAddr, oldSize), true)?;
         self.TlbShootdown();
@@ -625,7 +640,12 @@ impl MemoryManager {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::Data).Cur;
+        let lim = task
+            .Thread()
+            .ThreadGroup()
+            .Limits()
+            .Get(LimitType::Data)
+            .Cur;
         let brkStart = self.mapping.lock().brkInfo.brkStart;
         if (addr - brkStart) as u64 > lim {
             // return current brk end.

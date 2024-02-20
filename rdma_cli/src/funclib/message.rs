@@ -78,27 +78,23 @@ impl fmt::Debug for QMsg {
 impl MsgIO for QMsg {
     fn Size(&self) -> usize {
         let mut size = 0;
-        size += 4; // message size field: 4 bytes;
         size += 8; // message Id: 8 bytes
         size += self.payload.Size();
         return size;
     }
 
     fn Read(buf: &mut SocketBufIovs) -> Result<Self> {
-        let len = buf.ReadObj::<u32>()? as usize;
         let messageId = buf.ReadObj::<u64>()?;
         let payload = MsgPayload::Read(buf)?;
-
+        
         let msg = Self {
             messageId: messageId,
             payload: payload,
         };
-        assert!(len == msg.Size());
         return Ok(msg)
     }
 
     fn Write(&self, buf: &mut SocketBufIovs) -> Result<()> {
-        buf.WriteObj(&(self.Size() as u32))?;
         buf.WriteObj(&self.messageId)?;
         self.payload.Write(buf)?;
         return Ok(())

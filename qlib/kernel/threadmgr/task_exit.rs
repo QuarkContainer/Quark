@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::sync::atomic::AtomicU64;
+
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
@@ -32,6 +34,16 @@ use super::super::super::perf_tunning::*;
 use super::super::task::*;
 use super::super::SignalDef::*;
 use super::task_stop::*;
+
+lazy_static! {
+    pub static ref SYS_CALL_TIME: Vec<AtomicU64> = {
+        let mut tbl = Vec::with_capacity(500);
+        for _ in 0..500 {
+            tbl.push(AtomicU64::new(0));
+        }
+        tbl
+    };
+}
 
 // An ExitStatus is a value communicated from an exiting task or thread group
 // to the party that reaps it.
@@ -981,7 +993,7 @@ impl Thread {
             tglock.liveTasks -= 1;
             tglock.liveThreads.Add(-1);
 
-            error!("living task count:{}", tglock.liveTasks);
+            info!("living task count:{}", tglock.liveTasks);
             // Check if this completes a sibling's execve.
             if tglock.execing.Upgrade().is_some() && tglock.liveTasks == 1 {
                 // execing blocks the addition of new tasks to the thread group, so
@@ -1018,14 +1030,44 @@ impl Thread {
                 .remove(&ExecID { cid: cid, pid: tid });
         }
         let taskCnt = owner.write().DecrTaskCount1();
-        error!(
-            "ExitNotify 4 [{:x}], taskcnt is {}",
-            self.lock().taskId,
-            taskCnt
-        );
+        // error!(
+        //     "ExitNotify 4 [{:x}], taskcnt is {}",
+        //     self.lock().taskId,
+        //     taskCnt
+        // );
         if taskCnt == 0 {
-            error!("ExitNotify shutdown");
+            info!("ExitNotify shutdown");
             PAGE_MGR.Clear();
+
+            if super::super::SHARESPACE.config.read().PerfDebug {
+                use crate::qlib::SysCallID;
+                use crate::qlib::kernel::Scale;
+
+                #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+                struct PerfStruct {
+                    time: u64,
+                    callId: SysCallID,
+                }
+
+                let mut perfVec = Vec::new();
+
+                for nr in 0..450 {
+                    let callId : SysCallID = unsafe { core::mem::transmute(nr as u64) };
+                    if SYS_CALL_TIME[nr].load(core::sync::atomic::Ordering::Relaxed) > 0 {
+                        let perfStruct = PerfStruct {
+                            time: Scale(SYS_CALL_TIME[nr].load(core::sync::atomic::Ordering::Relaxed) as _) as u64,
+                            callId: callId,
+                        };
+
+                        perfVec.push(perfStruct);
+                    }
+                }
+
+                perfVec.sort();
+
+                error!("syscall time is {:#?}", &perfVec);
+            }
+
             super::super::SHARESPACE.StoreShutdown();
             //PerfStop();
             PerfPrint();
@@ -1254,10 +1296,12 @@ impl Task {
                 }
                 Some(addr) => {
                     let val: u32 = 0;
-                    self.CopyOutObj(&val, addr)
-                        .expect(&format!("RunThreadExitNotify clear_child_tid copy fail {:x}", addr));
+                    self.CopyOutObj(&val, addr).expect(&format!(
+                        "RunThreadExitNotify clear_child_tid copy fail {:x}",
+                        addr
+                    ));
                     self.futexMgr.Wake(self, addr, false, !0, 1).ok();
-                        //.expect(&format!("RunThreadExitNotify futexMgrm wake fail {:x}, oldmap is {}", addr, map));
+                    //.expect(&format!("RunThreadExitNotify futexMgrm wake fail {:x}, oldmap is {}", addr, map));
                 }
             }
         }

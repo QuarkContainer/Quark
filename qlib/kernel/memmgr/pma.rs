@@ -12,23 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use spin::Mutex;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use x86_64::structures::paging::PageTable;
-use x86_64::structures::paging::PageTableFlags;
-use x86_64::PhysAddr;
-use x86_64::VirtAddr;
+use spin::Mutex;
 
+use super::super::super::pagetable::PageTableFlags;
+use super::super::super::pagetable::PageTable;
+use super::super::super::pagetable::PhysAddr;
+use super::super::super::pagetable::VirtAddr;
 use super::super::super::addr::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
+use super::super::super::mem::block_allocator::*;
 use super::super::super::object_ref::*;
 use super::super::super::pagetable::*;
 use super::super::super::range::*;
 use super::super::task::*;
 use super::super::PAGE_MGR;
-use super::super::super::mem::block_allocator::*;
 
 use crate::kernel_def::Invlpg;
 //use crate::qlib::kernel::memmgr::pmamgr::PagePool;
@@ -105,12 +105,16 @@ impl PageMgr {
         self.pagepool.Deref(addr).unwrap();
     }
 
+    pub fn RefPage(&self, addr: u64) {
+        self.pagepool.Ref(addr).unwrap();
+    }
+
     pub fn Deref(&self, addr: u64) -> Result<u64> {
         self.pagepool.Deref(addr)
     }
 
     pub fn FreePage(&self, addr: u64) -> Result<()> {
-        return self.pagepool.FreePage(addr)
+        return self.pagepool.FreePage(addr);
     }
 
     pub fn VsyscallPages(&self) -> Arc<Vec<u64>> {
@@ -231,13 +235,18 @@ impl PageTables {
             let nPt: *mut PageTable = ret.GetRoot() as *mut PageTable;
             let nPgdEntry = &mut (*nPt)[0];
             let nPudTbl = pagePool.AllocPage(true)? as *mut PageTable;
+            #[cfg(target_arch = "x86_64")]
             nPgdEntry.set_addr(
                 PhysAddr::new(nPudTbl as u64),
                 PageTableFlags::PRESENT
                     | PageTableFlags::WRITABLE
                     | PageTableFlags::USER_ACCESSIBLE,
             );
-
+            #[cfg(target_arch = "aarch64")]
+            nPgdEntry.set_addr(
+                PhysAddr::new(nPudTbl as u64),
+                PageTableFlags::VALID | PageTableFlags::TABLE | PageTableFlags::ACCESSED | PageTableFlags::USER_ACCESSIBLE,
+            );
             for i in MemoryDef::KERNEL_START_P2_ENTRY..MemoryDef::KERNEL_END_P2_ENTRY {
                 //memspace between 256GB to 512GB
                 //copy entry[i]

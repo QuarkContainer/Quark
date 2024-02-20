@@ -201,7 +201,7 @@ impl ProcessGroup {
         }
 
         let mut alive = true;
-        
+
         let mut needRemove = false;
         self.lock().refs.DecRefWithDesctructor(|| {
             needRemove = true;
@@ -250,7 +250,7 @@ impl ProcessGroup {
         }
 
         let mut hasStopped = false;
-        let pidns = self.lock().pidns.clone(); 
+        let pidns = self.lock().pidns.clone();
         let tgids: Vec<ThreadGroup> = pidns.lock().tgids.keys().cloned().collect();
         for tg in &tgids {
             match tg.lock().processGroup.clone() {
@@ -368,7 +368,7 @@ impl ProcessGroup {
                 let _s = lock.lock();
                 let leader = match tg.lock().leader.Upgrade() {
                     None => continue,
-                    Some(t) => t
+                    Some(t) => t,
                 };
                 let infoCopy = *info;
                 match leader.sendSignalLocked(&infoCopy, true) {

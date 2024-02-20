@@ -22,3 +22,4 @@ pub mod user_srv;
 pub mod agent;
 pub mod func_agent;
 pub mod tcp_teststream;
+pub mod func_client;

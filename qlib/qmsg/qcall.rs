@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use crate::qlib::fileinfo::*;
+use crate::qlib::proxy::ProxyCommand;
+use crate::qlib::proxy::ProxyParameters;
 
 use super::super::config::*;
 use super::super::kernel::util::cstring::*;
@@ -47,7 +49,9 @@ pub enum Msg {
     Fstatfs(Fstatfs),
 
     TryOpenAt(TryOpenAt),
+    TryOpenWrite(TryOpenWrite),
     OpenAt(OpenAt),
+    OpenDevFile(OpenDevFile),
     CreateAt(CreateAt),
     Mkdirat(Mkdirat),
     SysSync(SysSync),
@@ -99,7 +103,6 @@ pub enum Msg {
     MUnmap(MUnmap),
     NonBlockingPoll(NonBlockingPoll),
     NewTmpfsFile(NewTmpfsFile),
-    IoUringEnter(IoUringEnter),
     Statm(Statm),
     NewSocket(NewSocket),
     HostEpollWaitProcess(HostEpollWaitProcess),
@@ -122,13 +125,102 @@ pub enum Msg {
     SwapOut(SwapOut),
     SwapIn(SwapIn),
     Proxy(Proxy),
+    RemapGuestMemRanges(RemapGuestMemRanges),
+    UnmapGuestMemRange(UnmapGuestMemRange),
+    NividiaDriverVersion(NividiaDriverVersion),
+    NvidiaMMap(NvidiaMMap),
+    HostUnixConnect(HostUnixConnect),
+    HostUnixRecvMsg(HostUnixRecvMsg),
+
+    // TsotListen(TsotListen),
+    // TsotAccept(TsotAccept),
+    // TsotStopListen(TsotStopListen),
+    // TsotConnect(TsotConnect),
+    TsotRecvMsg(TsotRecvMsg),
+    TsotSendMsg(TsotSendMsg),
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TsotRecvMsg {
+    pub msgAddr: u64,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TsotSendMsg {
+    pub msgAddr: u64,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TsotListen {
+    pub port: u16,
+    pub backlog: u32,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TsotAccept {
+    pub port: u16,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TsotStopListen {
+    pub port: u16,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TsotConnect {
+    pub reqId: u32,
+    pub dstIp: u32,
+    pub dstPort: u32,
+    pub srcPort: u16,
+    pub socket: i32,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct NividiaDriverVersion {
+    pub ioctlParamsAddr: u64
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct NvidiaMMap {
+    pub addr: u64,
+    pub len: u64,
+    pub prot: i32,
+    pub flags: i32,
+    pub fd: i32,
+    pub offset: u64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct HostUnixConnect {
+    pub type_: i32, 
+    pub addr: u64, 
+    pub len: usize
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct HostUnixRecvMsg {
+    pub fd: i32,
+    pub msghdr: u64,
+    pub flags: i32,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RemapGuestMemRanges {
+    pub len: u64,
+    pub addr: u64,
+    pub count: usize,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct UnmapGuestMemRange {
+    pub start: u64,
+    pub len: u64,
 }
 
 #[derive(Clone, Default, Debug)]
 pub struct Proxy {
-    pub cmd: u64,
-    pub addrIn: u64,
-    pub addrOut: u64,
+    pub cmd: ProxyCommand,
+    pub parameters: ProxyParameters
 }
 
 #[derive(Clone, Default, Debug)]
@@ -143,7 +235,7 @@ pub struct SwapInPage {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct HostMemoryBarrier{}
+pub struct HostMemoryBarrier {}
 
 #[derive(Clone, Default, Debug)]
 pub struct FSetXattr {
@@ -212,13 +304,6 @@ pub struct IoUringRegister {
     pub nrArgs: u32,
 }
 
-#[derive(Clone, Default, Debug, Copy)]
-pub struct IoUringEnter {
-    pub toSubmit: u32,
-    pub minComplete: u32,
-    pub flags: u32,
-}
-
 #[derive(Clone, Default, Debug)]
 pub struct InitPara {
     pub KernelPageTableRoot: u64,
@@ -264,7 +349,7 @@ pub struct Statm {
 #[derive(Clone, Default, Debug)]
 pub struct CreateMemfd {
     pub len: i64,
-    pub flags: u32
+    pub flags: u32,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -432,6 +517,14 @@ pub struct TryOpenAt {
     pub dirfd: i32,
     pub name: u64,
     pub addr: u64,
+    pub skiprw: bool,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TryOpenWrite {
+    pub dirfd: i32,
+    pub oldfd: i32,
+    pub name: u64, 
 }
 
 #[derive(Clone, Default, Debug)]
@@ -440,6 +533,13 @@ pub struct OpenAt {
     pub name: u64,
     pub flags: i32,
     pub addr: u64,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct OpenDevFile {
+    pub dirfd: i32,
+    pub name: u64,
+    pub flags: i32,
 }
 
 #[derive(Clone, Default, Debug)]

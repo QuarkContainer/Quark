@@ -57,9 +57,12 @@ impl UnixSocket {
 
         let cstr = CString::New(path);
         let slice = cstr.Slice();
+        #[cfg(target_arch="x86_64")]
         for i in 0..slice.len() {
             server.sun_path[i] = slice[i] as i8;
         }
+        #[cfg(target_arch="aarch64")]
+        server.sun_path.copy_from_slice(slice);
 
         let sock = unsafe { socket(AF_UNIX, SOCK_STREAM, 0) };
 
@@ -122,9 +125,12 @@ impl UnixSocket {
 
         let cstr = CString::New(path);
         let slice = cstr.Slice();
+        #[cfg(target_arch="x86_64")]
         for i in 0..slice.len() {
             server.sun_path[i] = slice[i] as i8;
         }
+        #[cfg(target_arch="aarch64")]
+        server.sun_path.copy_from_slice(slice);
 
         let sock = unsafe { socket(AF_UNIX, SOCK_STREAM, 0) };
 
@@ -144,7 +150,11 @@ impl UnixSocket {
         };
 
         if ret < 0 {
-            info!("UCliSocket connect socket fail, path is {}, errorno is: {}", path, errno::errno().0 as i32);
+            info!(
+                "UCliSocket connect socket fail, path is {}, errorno is: {}",
+                path,
+                errno::errno().0 as i32
+            );
             return Err(Error::SysError(-errno::errno().0 as i32));
         }
 

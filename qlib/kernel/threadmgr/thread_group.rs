@@ -350,7 +350,7 @@ impl Drop for ThreadGroup {
 }
 
 impl ThreadGroup {
-    pub fn Downgrade(&self) -> ThreadGroupWeak {
+        pub fn Downgrade(&self) -> ThreadGroupWeak {
         return ThreadGroupWeak {
             uid: self.uid,
             data: Arc::downgrade(&self.data),
@@ -473,7 +473,8 @@ impl ThreadGroup {
             }
         }
 
-        let session = self.lock()
+        let session = self
+            .lock()
             .processGroup
             .clone()
             .unwrap()
@@ -481,11 +482,7 @@ impl ThreadGroup {
             .session
             .clone();
 
-        let pg = ProcessGroup::New(
-            id,
-            self.clone(),
-            session,
-        );
+        let pg = ProcessGroup::New(id, self.clone(), session);
 
         let leader = self.lock().leader.Upgrade().unwrap();
         if let Some(ref parent) = &leader.lock().parent {

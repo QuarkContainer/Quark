@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h2>package list</h2>
+
+    <style>
+        table, th, td {
+          border:1px solid black;
+        }
+    </style>
+    <table style="width:100%">
+    <tr>
+        <th>namespace</th>
+        <th>packageName</th>
+        <th>Revision</th>
+        <th>package </th>
+    </tr>
+    {% for package in packages %}
+        <tr>
+            <td>{{ package[0] }}</td>
+            <td><a href="{{ hosturl }}package?namespace={{ package[0] }}&&name={{ package[1] }}">{{ package[1] }}</a></td>
+            <td>{{ package[3] }}</td>
+            {% autoescape false %}
+            <td>{{ package[2] }}</td>
+            {% endautoescape %}
+        </tr>
+    {% endfor %}
+    </table>
+    {{ hosturl }}
+{% endblock %}

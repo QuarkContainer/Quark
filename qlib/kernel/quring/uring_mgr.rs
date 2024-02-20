@@ -13,30 +13,24 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use core::sync::atomic;
-use core::sync::atomic::AtomicU64;
-use core::sync::atomic::Ordering;
 
-use super::super::super::common::*;
 use super::super::super::bytestream::*;
+use super::super::super::common::*;
+use super::super::super::CompleteEntry;
 use super::super::super::object_ref::*;
-pub use super::super::super::uring::cqueue;
-pub use super::super::super::uring::cqueue::CompletionQueue;
-pub use super::super::super::uring::squeue::SubmissionQueue;
-pub use super::super::super::uring::*;
+//pub use super::super::super::uring::*;
 use super::super::fs::file::*;
 use super::super::task::*;
 use super::super::taskMgr::*;
 
 use super::super::super::linux_def::*;
 use super::super::super::socket_buf::*;
-use super::super::super::uring::util::*;
 use super::super::super::vcpu_mgr::*;
 use super::super::kernel::async_wait::*;
 use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
 use super::super::socket::hostinet::uring_socket::*;
-use super::super::Kernel::HostSpace;
+use super::super::socket::hostinet::tsotsocket::*;
 use super::super::IOURING;
 use super::super::SHARESPACE;
 use super::uring_async::*;
@@ -50,83 +44,19 @@ pub fn QUringProcessOne() -> bool {
     return IOURING.ProcessOne();
 }
 
-unsafe impl Send for Submission {}
-unsafe impl Sync for Submission {}
-
-impl IoUring {
-    pub fn SqLen(&self) -> usize {
-        let sq = self.sq.lock();
-        unsafe {
-            let head = (*sq.head).load(atomic::Ordering::Acquire);
-            let tail = unsync_load(sq.tail);
-
-            tail.wrapping_sub(head) as usize
-        }
-    }
-
-    pub fn IsFull(&self) -> bool {
-        return self.sq.lock().is_full();
-    }
-
-    pub fn FreeSlots(&self) -> usize {
-        return self.sq.lock().freeSlot();
-    }
-
-    pub fn NeedWakeup(&self) -> bool {
-        unsafe {
-            (*self.sq.lock().flags).load(atomic::Ordering::Acquire) & sys::IORING_SQ_NEED_WAKEUP
-                != 0
-        }
-    }
-
-    pub fn SubmitAndWait(&self, _want: usize) -> Result<usize> {
-        self.pendingCnt.fetch_add(1, Ordering::Release);
-
-        if SHARESPACE.HostProcessor() == 0 {
-            SHARESPACE.scheduler.VcpuArr[0].Wakeup();
-        }
-
-        return Ok(0);
-    }
-
-    pub fn Submit(&self) -> Result<usize> {
-        return self.SubmitAndWait(0);
-    }
-
-    pub fn Enter(
-        &self,
-        to_submit: u32,
-        min_complete: u32,
-        flags: u32,
-    ) -> Result<usize> {
-        let ret = HostSpace::IoUringEnter(to_submit, min_complete, flags);
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32));
-        }
-
-        return Ok(ret as usize);
-    }
-
-    pub fn Next(&mut self) -> Option<cqueue::Entry> {
-        //return self.cq.available().next()
-        return self.cq.lock().next();
-    }
-
-    pub fn CqLen(&mut self) -> usize {
-        return self.cq.lock().len();
-    }
-
-    pub fn Overflow(&self) -> u32 {
-        return self.cq.lock().overflow();
-    }
-}
+// unsafe impl Send for Submission {}
+// unsafe impl Sync for Submission {}
 
 pub type IOUringRef = ObjectRef<QUring>;
 
-#[derive(Default)]
 pub struct QUring {
-    pub uringsAddr: AtomicU64,
     pub asyncMgr: UringAsyncMgr,
+}
+
+impl Default for QUring {
+    fn default() -> Self {
+        return Self::New(MemoryDef::QURING_SIZE)
+    }
 }
 
 impl QUring {
@@ -135,7 +65,6 @@ impl QUring {
     pub fn New(size: usize) -> Self {
         let ret = QUring {
             asyncMgr: UringAsyncMgr::New(size),
-            uringsAddr: AtomicU64::new(0),
         };
 
         return ret;
@@ -143,18 +72,6 @@ impl QUring {
 
     pub fn Addr(&self) -> u64 {
         return self as *const _ as u64;
-    }
-
-    pub fn SetIOUringsAddr(&self, addr: u64) {
-        self.uringsAddr.store(addr, atomic::Ordering::SeqCst);
-    }
-
-    #[inline(always)]
-    pub fn IOUring(&self) -> &'static IoUring {
-        let addr = self.uringsAddr.load(atomic::Ordering::Relaxed);
-        let uring = unsafe { &*(addr as *const IoUring) };
-
-        return uring;
     }
 
     pub fn TimerRemove(&self, task: &Task, userData: u64) -> i64 {
@@ -341,6 +258,11 @@ impl QUring {
         IOURING.AUCall(AsyncOps::PollHostEpollWait(op));
     }
 
+    pub fn TsotPollInit(&self, tsotSocket: i32) {
+        let op = TsotPoll::New(tsotSocket);
+        IOURING.AUCall(AsyncOps::TsotPoll(op));
+    }
+
     pub fn BufSockInit(fd: i32, queue: Queue, buf: SocketBuff, isSocket: bool) -> Result<()> {
         let (addr, len) = buf.GetFreeReadBuf();
         let readop = AsyncFileRead::New(fd, queue, buf, addr, len, isSocket);
@@ -376,13 +298,32 @@ impl QUring {
         buf: SocketBuff,
         count: usize,
         ops: &UringSocketOperations,
-        iovs: &mut SocketBufIovs
+        iovs: &mut SocketBufIovs,
     ) -> Result<()> {
         let writeBuf = buf.Produce(task, count, iovs)?;
         if let Some((addr, len)) = writeBuf {
             let writeop = AsyncSend::New(fd, queue, buf, addr, len, ops);
 
             IOURING.AUCall(AsyncOps::AsyncSend(writeop));
+        }
+
+        return Ok(());
+    }
+
+    pub fn TsotSocketProduce(
+        task: &Task,
+        fd: i32,
+        queue: Queue,
+        buf: SocketBuff,
+        count: usize,
+        ops: &TsotSocketOperations,
+        iovs: &mut SocketBufIovs,
+    ) -> Result<()> {
+        let writeBuf = buf.Produce(task, count, iovs)?;
+        if let Some((addr, len)) = writeBuf {
+            let writeop = TsotAsyncSend::New(fd, queue, buf, addr, len, ops);
+
+            IOURING.AUCall(AsyncOps::TsotAsyncSend(writeop));
         }
 
         return Ok(());
@@ -407,13 +348,32 @@ impl QUring {
         return Ok(count as i64);
     }
 
+    pub fn TsotSocketSend(
+        task: &Task,
+        fd: i32,
+        queue: Queue,
+        buf: SocketBuff,
+        srcs: &[IoVec],
+        ops: &TsotSocketOperations,
+    ) -> Result<i64> {
+        let (count, writeBuf) = buf.Writev(task, srcs)?;
+
+        if let Some((addr, len)) = writeBuf {
+            let writeop = TsotAsyncSend::New(fd, queue, buf, addr, len, ops);
+
+            IOURING.AUCall(AsyncOps::TsotAsyncSend(writeop));
+        }
+
+        return Ok(count as i64);
+    }
+
     pub fn SocketConsume(
         task: &Task,
         fd: i32,
         queue: Queue,
         buf: SocketBuff,
         count: usize,
-        iovs: &mut SocketBufIovs
+        iovs: &mut SocketBufIovs,
     ) -> Result<()> {
         let trigger = buf.Consume(task, count, iovs)?;
 
@@ -462,7 +422,7 @@ impl QUring {
         return len;
     }
 
-    pub fn Process(&self, cqe: &cqueue::Entry) {
+    pub fn Process(&self, cqe: &CompleteEntry) {
         if super::super::Shutdown() {
             return;
         }
@@ -513,8 +473,13 @@ impl QUring {
     }
 
     pub fn AUCallDirect(&self, ops: &AsyncOps, id: usize) {
-        let entry = ops.SEntry().user_data(id as u64);
-        self.AUringCall(entry)
+        let uringEntry = UringEntry {
+            ops: UringOps::AsyncOps(ops.clone()),
+            userdata: id as u64,
+            linked: false,
+        };
+
+        self.AUringCall(uringEntry)
     }
 
     pub fn AUCall(&self, ops: AsyncOps) -> usize {
@@ -571,18 +536,15 @@ impl QUring {
             }
         }
 
-        let entry1 = self.asyncMgr.SetOps(index1, ops1);
+        let mut entry1 = self.asyncMgr.SetOps(index1, ops1);
+        entry1.linked = true;
         let entry2 = self.asyncMgr.SetOps(index2, ops2);
 
         self.AUringCallLinked(entry1, entry2);
     }
 
-    pub fn NextCompleteEntry(&self) -> Option<cqueue::Entry> {
-        if super::super::SHARESPACE.config.read().UringBuf {
-            return self.IOUring().completeq.pop();
-        } else {
-            return self.IOUring().cq.lock().next();
-        }
+    pub fn NextCompleteEntry(&self) -> Option<CompleteEntry> {
+        return SHARESPACE.uringQueue.completeq.pop();
     }
 
     pub fn ProcessOne(&self) -> bool {
@@ -630,86 +592,36 @@ impl QUring {
     }
 
     pub fn UringCall(&self, call: &UringCall) {
-        let entry = call.SEntry();
-        let entry = entry.user_data(call.Ptr());
-
-
-        self.UringPush(entry);
+        let uringEntry = UringEntry {
+            ops: UringOps::UringCall(*call),
+            userdata: call.Ptr(),
+            linked: false,
+        };
+        self.UringPush(uringEntry);
     }
 
-    pub fn UringPush(&self, entry: squeue::Entry) {
-        if super::super::SHARESPACE.config.read().UringBuf {
-            let mut s = self.IOUring().submitq.lock();
+    pub fn UringPush(&self, entry: UringEntry) {
+        {
+            let mut s = SHARESPACE.uringQueue.submitq.lock();
             s.push_back(entry);
-        } else {
-            loop {
-                let mut s = self.IOUring().sq.lock();
-                if s.freeSlot() < Self::SUBMISSION_QUEUE_FREE_COUNT {
-                    drop(s);
-                    super::super::super::ShareSpace::Yield();
-                    error!("AUringCall1: submission full... ");
-                    continue;
-                }
-
-                unsafe {
-                    match s.push(entry) {
-                        Ok(_) => (),
-                        Err(_) => panic!("AUringCall submission queue is full"),
-                    }
-                }
-
-                break;
-            }
         }
 
-        self.IOUring()
-            .Submit()
-            .expect("QUringIntern::submit fail");
+        SHARESPACE.Submit().expect("QUringIntern::submit fail");
         return;
     }
 
-    pub fn AUringCall(&self, entry: squeue::Entry) {
+    pub fn AUringCall(&self, entry: UringEntry) {
         self.UringPush(entry);
     }
 
-    pub fn AUringCallLinked(&self, entry1: squeue::Entry, entry2: squeue::Entry) {
-        if super::super::SHARESPACE.config.read().UringBuf {
-            let mut s = self.IOUring().submitq.lock();
-            s.push_back(entry1.flags(squeue::Flags::IO_LINK));
+    pub fn AUringCallLinked(&self, entry1: UringEntry, entry2: UringEntry) {
+        {
+            let mut s = SHARESPACE.uringQueue.submitq.lock();
+            s.push_back(entry1);
             s.push_back(entry2);
-        } else {
-            loop {
-                let mut s = self.IOUring().sq.lock();
-                if s.freeSlot() < Self::SUBMISSION_QUEUE_FREE_COUNT + 1 {
-                    drop(s);
-                    super::super::super::ShareSpace::Yield();
-                    error!("AUringCallLinked: submission full... idx");
-                    continue;
-                }
-
-                unsafe {
-                    match s.push(entry1.flags(squeue::Flags::IO_LINK)) {
-                        Ok(_) => (),
-                        Err(_e) => {
-                            panic!("AUringCallLinked push fail 1 ...");
-                        }
-                    }
-
-                    match s.push(entry2) {
-                        Ok(_) => (),
-                        Err(_e) => {
-                            panic!("AUringCallLinked push fail 2 ...");
-                        }
-                    }
-                }
-
-                break;
-            }
         }
 
-        self.IOUring()
-            .Submit()
-            .expect("QUringIntern::submit fail");
+        SHARESPACE.Submit().expect("QUringIntern::submit fail");
         return;
     }
 }

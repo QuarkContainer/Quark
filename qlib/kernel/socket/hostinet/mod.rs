@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub mod asyncsocket;
+pub mod hostsocket;
+pub mod loopbacksocket;
 pub mod rdma_socket;
 pub mod socket;
 pub mod socket_buf;
-pub mod hostsocket;
-pub mod asyncsocket;
 pub mod uring_socket;
-pub mod loopbacksocket;
+pub mod tsotsocket;
+pub mod tsot_mgr;
 
 pub fn Init() {
     self::socket::Init();

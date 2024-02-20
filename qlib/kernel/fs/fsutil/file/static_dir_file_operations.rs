@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use alloc::string::String;
+use alloc::sync::Arc;
 use core::any::Any;
 use core::ops::Deref;
-use alloc::sync::Arc;
 
 use super::super::super::super::super::common::*;
 use super::super::super::super::super::linux_def::*;
@@ -119,7 +119,7 @@ impl FileOperations for StaticDirFileOperations {
         return Ok(());
     }
 
-    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
+    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<u64> {
         return Err(Error::SysError(SysErr::ENOTTY));
     }
 

@@ -71,7 +71,8 @@ impl<T> Chan<T> {
                 }
 
                 let block = task.blocker.clone();
-                c.queue.EventRegister(task, &block.generalEntry, WRITEABLE_EVENT);
+                c.queue
+                    .EventRegister(task, &block.generalEntry, WRITEABLE_EVENT);
             }
 
             task.blocker.BlockGeneral()?;

@@ -16,6 +16,46 @@ use super::qlib::kernel::Timestamp;
 use super::qlib::vcpu_mgr::*;
 use super::task::*;
 use alloc::string::String;
+use log::{Record, Level, Metadata, SetLoggerError, LevelFilter};
+
+pub struct SimpleLogger;
+
+static LOGGER: SimpleLogger = SimpleLogger;
+
+pub fn init() -> core::result::Result<(), SetLoggerError> {
+    let res = log::set_logger(&LOGGER)
+        .map(|()| log::set_max_level(LevelFilter::Trace));
+    res
+}
+
+impl log::Log for SimpleLogger {
+    fn enabled(&self, metadata: &Metadata) -> bool {
+
+        let res = match super::SHARESPACE.config.read().DebugLevel {
+            crate::qlib::config::DebugLevel::Off =>  metadata.level() < Level::Error,
+            crate::qlib::config::DebugLevel::Error =>  metadata.level() <= Level::Error,
+            crate::qlib::config::DebugLevel::Warn =>  metadata.level() <= Level::Warn,
+            crate::qlib::config::DebugLevel::Info =>  metadata.level() <= Level::Info,
+            crate::qlib::config::DebugLevel::Debug =>  metadata.level() <= Level::Debug,
+            crate::qlib::config::DebugLevel::Trace =>  metadata.level() <= Level::Trace,            
+        };
+
+        res
+    }
+
+    fn log(&self, record: &Record) {
+        if self.enabled(record.metadata()) {
+            if crate::SHARESPACE.config.read().SyncPrint() {
+                let str = format!("[{}] {}", record.level(), record.args());
+                crate::Kernel::HostSpace::SyncPrint(crate::qlib::config::DebugLevel::Error, &str);
+            } else {
+                let str = format!("[{}] {}", record.level(), record.args());
+                crate::Kernel::HostSpace::Kprint(&str);
+            }
+        }
+    }
+    fn flush(&self) {}
+}
 
 pub fn PrintPrefix() -> String {
     let now = if super::SHARESPACE.config.read().PerfDebug {

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -22,64 +21,67 @@ use core::any::Any;
 use core::ops::Deref;
 use enum_dispatch::enum_dispatch;
 
+use crate::qlib::kernel::socket::hostinet::tsotsocket::TsotSocketOperations;
+use crate::qlib::nvproxy::frontendfd::NvFrontendFileOptions;
+use crate::qlib::mutex::*;
+use crate::qlib::nvproxy::uvmfd::UvmFileOptions;
 use super::super::super::auth::*;
 use super::super::super::common::*;
-use super::super::super::linux_def::*;
 use super::super::super::limits::*;
-use super::super::super::metric::*;
+use super::super::super::linux_def::*;
 use super::super::super::mem::block::*;
+use super::super::super::metric::*;
 use super::super::super::range::*;
+use super::super::kernel::kernel::GetKernel;
 use super::super::kernel::time::*;
 use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
-use super::super::kernel::kernel::GetKernel;
 use super::super::uid::*;
 //use super::super::socket::unix::transport::unix::*;
 use super::super::super::singleton::*;
 use super::super::fs::flags::*;
-use super::super::fs::host::hostfileop::*;
 use super::super::fs::host::fifoiops::*;
+use super::super::fs::host::hostfileop::*;
 use super::super::kernel::fasync::*;
 use super::super::memmgr::*;
 use super::super::task::*;
 use super::super::tcpip::tcpip::*;
 use crate::qlib::kernel::Kernel::HostSpace;
 
-use crate::qlib::kernel::fs::file_overlay::OverlayFileOperations;
-use crate::qlib::kernel::fs::inotify::Inotify;
-use crate::qlib::kernel::fs::timerfd::TimerOperations;
 use crate::qlib::kernel::fs::dev::full::FullFileOperations;
 use crate::qlib::kernel::fs::dev::null::NullFileOperations;
 use crate::qlib::kernel::fs::dev::proxyfile::ProxyFileOperations;
 use crate::qlib::kernel::fs::dev::random::RandomFileOperations;
 use crate::qlib::kernel::fs::dev::tty::TTYFileOperations;
 use crate::qlib::kernel::fs::dev::zero::ZeroFileOperations;
+use crate::qlib::kernel::fs::file_overlay::OverlayFileOperations;
 use crate::qlib::kernel::fs::fsutil::file::dynamic_dir_file_operations::DynamicDirFileOperations;
-use crate::qlib::kernel::fs::fsutil::file::NoReadWriteFile;
-use crate::qlib::kernel::fs::fsutil::file::static_dir_file_operations::StaticDirFileOperations;
-use crate::qlib::kernel::fs::fsutil::file::StaticFile;
 use crate::qlib::kernel::fs::fsutil::file::readonly_file::*;
+use crate::qlib::kernel::fs::fsutil::file::static_dir_file_operations::StaticDirFileOperations;
+use crate::qlib::kernel::fs::fsutil::file::NoReadWriteFile;
+use crate::qlib::kernel::fs::fsutil::file::StaticFile;
 use crate::qlib::kernel::fs::host::hostdirfops::HostDirFops;
-use crate::qlib::kernel::fs::procfs::seqfile::SeqFileOperations;
+use crate::qlib::kernel::fs::inotify::Inotify;
 use crate::qlib::kernel::fs::procfs::proc::RootProcFile;
+use crate::qlib::kernel::fs::procfs::seqfile::SeqFileOperations;
 use crate::qlib::kernel::fs::ramfs::dir::DirFileOperation;
 use crate::qlib::kernel::fs::ramfs::socket::SocketFileOps;
 use crate::qlib::kernel::fs::ramfs::symlink::SymlinkFileOperations;
+use crate::qlib::kernel::fs::timerfd::TimerOperations;
 use crate::qlib::kernel::fs::tty::dir::DirFileOperations;
 use crate::qlib::kernel::fs::tty::master::MasterFileOperations;
 use crate::qlib::kernel::fs::tty::slave::SlaveFileOperations;
-use crate::qlib::kernel::kernel::eventfd::EventOperations;
-use crate::qlib::kernel::kernel::signalfd::SignalOperation;
 use crate::qlib::kernel::kernel::epoll::epoll::EventPoll;
+use crate::qlib::kernel::kernel::eventfd::EventOperations;
 use crate::qlib::kernel::kernel::pipe::reader::Reader;
 use crate::qlib::kernel::kernel::pipe::reader_writer::ReaderWriter;
 use crate::qlib::kernel::kernel::pipe::writer::Writer;
-use crate::qlib::kernel::socket::unix::unix::UnixSocketOperations;
-use crate::qlib::kernel::socket::hostinet::uring_socket::UringSocketOperations;
-use crate::qlib::kernel::socket::hostinet::socket::SocketOperations;
-use crate::qlib::kernel::socket::hostinet::hostsocket::HostSocketOperations;
+use crate::qlib::kernel::kernel::signalfd::SignalOperation;
 use crate::qlib::kernel::socket::hostinet::asyncsocket::AsyncSocketOperations;
-
+use crate::qlib::kernel::socket::hostinet::hostsocket::HostSocketOperations;
+use crate::qlib::kernel::socket::hostinet::socket::SocketOperations;
+use crate::qlib::kernel::socket::hostinet::uring_socket::UringSocketOperations;
+use crate::qlib::kernel::socket::unix::unix::UnixSocketOperations;
 
 use super::attr::*;
 use super::dirent::*;
@@ -231,11 +233,11 @@ pub trait SockOperations: Sync + Send {
     // State returns the current state of the socket, as represented by Linux in
     // procfs. The returned state value is protocol-specific.
     fn State(&self) -> u32 {
-        return 0
+        return 0;
     }
 
     fn Type(&self) -> (i32, i32, i32) {
-        return (-1, -1, -1)
+        return (-1, -1, -1);
     }
 }
 
@@ -302,7 +304,9 @@ pub enum FileOpsType {
     DynamicDirFileOperations,
     SignalOperation,
     InotifyFileOperations,
-    ProxyFileOperations
+    ProxyFileOperations,
+    NvFrontendFileOptions,
+    UvmFileOptions
 }
 
 #[derive(Clone)]
@@ -343,50 +347,53 @@ pub enum FileOps {
     HostSocketOperations(HostSocketOperations),
     SocketOperations(SocketOperations),
     UringSocketOperations(UringSocketOperations),
+    TsotSocketOperations(TsotSocketOperations),
     UnixSocketOperations(UnixSocketOperations),
-    RootProcFile(RootProcFile)
+    RootProcFile(RootProcFile),
+    NvFrontendFileOptions(NvFrontendFileOptions),
+    UvmFileOptions(UvmFileOptions)
 }
 
 impl FileOps {
     pub fn TTYFileOps(&self) -> Option<TTYFileOps> {
         match self {
             Self::TTYFileOps(inner) => Some(inner.clone()),
-            _ => None
+            _ => None,
         }
     }
 
     pub fn UringSocketOperations(&self) -> Option<UringSocketOperations> {
         match self {
             Self::UringSocketOperations(inner) => Some(inner.clone()),
-            _ => None
+            _ => None,
         }
     }
 
     pub fn TimerOperations(&self) -> Option<TimerOperations> {
         match self {
             Self::TimerOperations(inner) => Some(inner.clone()),
-            _ => None
+            _ => None,
         }
     }
 
     pub fn SignalOperation(&self) -> Option<SignalOperation> {
         match self {
             Self::SignalOperation(inner) => Some(inner.clone()),
-            _ => None
+            _ => None,
         }
     }
-    
+
     pub fn OverlayFileOperations(&self) -> Option<OverlayFileOperations> {
         match self {
             Self::OverlayFileOperations(inner) => Some(inner.clone()),
-            _ => None
+            _ => None,
         }
     }
 
     pub fn EventPoll(&self) -> Option<EventPoll> {
         match self {
             Self::EventPoll(inner) => Some(inner.clone()),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -441,7 +448,7 @@ pub trait FileOperations: Sync + Send + Waitable + SockOperations + SpliceOperat
     fn Flush(&self, task: &Task, f: &File) -> Result<()>;
 
     fn UnstableAttr(&self, task: &Task, f: &File) -> Result<UnstableAttr>;
-    fn Ioctl(&self, task: &Task, f: &File, fd: i32, request: u64, val: u64) -> Result<()>;
+    fn Ioctl(&self, task: &Task, f: &File, fd: i32, request: u64, val: u64) -> Result<u64>;
 
     fn IterateDir(
         &self,
@@ -495,7 +502,9 @@ impl Drop for File {
         //error!("File::Drop {}", Arc::strong_count(&self.0));
         if Arc::strong_count(&self.0) == 1 {
             let fopsType = self.FileOp.FopsType();
-            if fopsType == FileOpsType::SocketOperations || fopsType == FileOpsType::UnixSocketOperations {
+            if fopsType == FileOpsType::SocketOperations
+                || fopsType == FileOpsType::UnixSocketOperations
+            {
                 GetKernel().sockets.DeleteSocket(self);
             }
 
@@ -586,7 +595,7 @@ impl Mapping for File {
 
 impl File {
     pub fn ReadRefs(&self) -> usize {
-        return Arc::strong_count(&self.0)
+        return Arc::strong_count(&self.0);
     }
 
     pub fn Readable(&self) -> bool {
@@ -655,7 +664,13 @@ impl File {
         return File(Arc::new(f));
     }
 
-    pub fn NewFileFromFd(task: &Task, fd: i32, mounter: &FileOwner, stdio: bool, isTTY: bool) -> Result<Self> {
+    pub fn NewFileFromFd(
+        task: &Task,
+        fd: i32,
+        mounter: &FileOwner,
+        stdio: bool,
+        isTTY: bool,
+    ) -> Result<Self> {
         let mut fstat = LibcStat::default();
 
         let ret = Fstat(fd, &mut fstat) as i32;
@@ -687,9 +702,23 @@ impl File {
                     false,
                 );
                 let inode = if stdio {
-                    Inode::NewStdioInode(task, &Arc::new(QMutex::new(msrc)), fd, &fstat, fileFlags.Write)?
+                    Inode::NewStdioInode(
+                        task,
+                        &Arc::new(QMutex::new(msrc)),
+                        fd,
+                        &fstat,
+                        fileFlags.Write,
+                    )?
                 } else {
-                    Inode::NewHostInode(task, &Arc::new(QMutex::new(msrc)), fd, &fstat, fileFlags.Write, false)?
+                    Inode::NewHostInode(
+                        task,
+                        &Arc::new(QMutex::new(msrc)),
+                        fd,
+                        &fstat,
+                        fileFlags.Write,
+                        false,
+                        false,
+                    )?
                 };
 
                 let name = format!("host:[{}]", inode.lock().StableAttr.InodeId);
@@ -699,7 +728,7 @@ impl File {
                 if !stdio && iops.InodeType() == InodeType::Pipe {
                     let hostiops = iops.as_any().downcast_ref::<FifoIops>().unwrap();
                     let file = hostiops.GetFile(task, &inode, &dirent, fileFlags)?;
-                    return Ok(file)
+                    return Ok(file);
                 } else {
                     let hostiops = iops.HostInodeOp().unwrap();
                     let fops = hostiops.GetHostFileOp(task);
@@ -709,7 +738,12 @@ impl File {
                         return Ok(Self::NewTTYFile(&dirent, &fileFlags, fops));
                     }
 
-                    return Ok(Self::NewHostFile(&dirent, &fileFlags, fops.into(), wouldBlock));
+                    return Ok(Self::NewHostFile(
+                        &dirent,
+                        &fileFlags,
+                        fops.into(),
+                        wouldBlock,
+                    ));
                 }
             }
         }
@@ -736,8 +770,15 @@ impl File {
             false,
         );
 
-        let inode =
-            Inode::NewHostInode(task, &Arc::new(QMutex::new(msrc)), fd, &fstat, fileFlags.Write, true)?;
+        let inode = Inode::NewHostInode(
+            task,
+            &Arc::new(QMutex::new(msrc)),
+            fd,
+            &fstat,
+            fileFlags.Write,
+            false,
+            true,
+        )?;
         let name = format!("memfd:{}", name);
         let dirent = Dirent::New(&inode, &name);
 
@@ -747,7 +788,12 @@ impl File {
         //let fops = iops.GetFileOp(task)?;
         let fops = hostiops.GetHostFileOp(task);
         let wouldBlock = inode.lock().InodeOp.WouldBlock();
-        return Ok(Self::NewHostFile(&dirent, &fileFlags, fops.into(), wouldBlock));
+        return Ok(Self::NewHostFile(
+            &dirent,
+            &fileFlags,
+            fops.into(),
+            wouldBlock,
+        ));
     }
 
     pub fn NewHostFile(
@@ -882,13 +928,18 @@ impl File {
     pub fn checkLimit(&self, task: &Task, offset: i64) -> (i64, bool) {
         if self.Dirent.Inode().StableAttr().IsRegular() {
             // Enforce size limits.
-            let fileSizeLimit = task.Thread().ThreadGroup().Limits().Get(LimitType::FileSize).Cur;
+            let fileSizeLimit = task
+                .Thread()
+                .ThreadGroup()
+                .Limits()
+                .Get(LimitType::FileSize)
+                .Cur;
             if fileSizeLimit <= i64::MAX as _ {
                 if offset >= fileSizeLimit as i64 {
-                    return (0, true)
+                    return (0, true);
                 }
 
-                return (fileSizeLimit as i64 - offset, true)
+                return (fileSizeLimit as i64 - offset, true);
             }
         }
 
@@ -914,7 +965,7 @@ impl File {
 
             let (limit, ok) = self.checkLimit(task, current);
             if ok && limit == 0 {
-                return Err(Error::ErrExceedsFileSizeLimit)
+                return Err(Error::ErrExceedsFileSizeLimit);
             }
 
             let blocking = self.Blocking();
@@ -958,7 +1009,7 @@ impl File {
 
         let (limit, ok) = self.checkLimit(task, offset);
         if ok && limit == 0 {
-            return Err(Error::ErrExceedsFileSizeLimit)
+            return Err(Error::ErrExceedsFileSizeLimit);
         }
 
         let blocking = self.Blocking();
@@ -996,7 +1047,7 @@ impl File {
         return fops.UnstableAttr(task, self);
     }
 
-    pub fn Ioctl(&self, task: &Task, fd: i32, request: u64, val: u64) -> Result<()> {
+    pub fn Ioctl(&self, task: &Task, fd: i32, request: u64, val: u64) -> Result<u64> {
         let fops = self.FileOp.clone();
         let res = fops.Ioctl(task, self, fd, request, val);
         return res;

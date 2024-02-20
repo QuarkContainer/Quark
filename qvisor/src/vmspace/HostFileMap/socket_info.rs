@@ -8,7 +8,7 @@ use super::super::super::qlib::rdmasocket::*;
 #[derive(Clone)]
 pub enum SockInfo {
     File,                             // it is not socket
-    Socket(SocketInfo),                           // normal socket
+    Socket(SocketInfo),               // normal socket
     RDMAServerSocket(RDMAServerSock), //
     RDMADataSocket(RDMADataSock),     //
     RDMAContext,

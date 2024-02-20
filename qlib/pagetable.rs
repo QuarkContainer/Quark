@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2022 Quark Container Authors / 2018 The gVisor Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,28 +14,51 @@
 
 use alloc::alloc::{alloc, dealloc, Layout};
 use alloc::collections::BTreeSet;
-use alloc::vec::Vec;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::hint::spin_loop;
+use core::sync::atomic::fence;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use x86_64::structures::paging::page_table::PageTableEntry;
-use x86_64::structures::paging::page_table::PageTableIndex;
-use x86_64::structures::paging::PageTable;
-use x86_64::structures::paging::PageTableFlags;
-use x86_64::PhysAddr;
-use x86_64::VirtAddr;
-use core::sync::atomic::fence;
-use core::hint::spin_loop;
 
-use crate::kernel_def::Invlpg;
-use crate::qlib::kernel::PAGE_MGR;
+cfg_x86_64! {
+   pub use x86_64::structures::paging::page_table::PageTableEntry;
+   pub use x86_64::structures::paging::page_table::PageTableIndex;
+   pub use x86_64::structures::paging::PageTable;
+   pub use x86_64::structures::paging::PageTableFlags;
+   pub use x86_64::PhysAddr;
+   pub use x86_64::VirtAddr;
+
+   #[inline]
+   pub fn default_table_user() -> PageTableFlags {
+       return PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE | PageTableFlags::WRITABLE;
+   }
+}
+
+cfg_aarch64! {
+   pub use super::pagetable_aarch64::PageTableEntry;
+   pub use super::pagetable_aarch64::PageTableIndex;
+   pub use super::pagetable_aarch64::PageTable;
+   pub use super::pagetable_aarch64::PageTableFlags;
+   pub use super::pagetable_aarch64::PhysAddr;
+   pub use super::pagetable_aarch64::VirtAddr;
+
+   #[inline]
+   pub fn default_table_user() -> PageTableFlags {
+       return PageTableFlags::VALID | PageTableFlags::TABLE | PageTableFlags::ACCESSED | PageTableFlags::USER_ACCESSIBLE;
+   }
+}
+
+
 use super::super::asm::*;
 use super::addr::*;
 use super::common::{Allocator, Error, Result};
 use super::kernel::Kernel::HostSpace;
 use super::linux_def::*;
 use super::mutex::*;
+use crate::kernel_def::Invlpg;
+use crate::qlib::kernel::PAGE_MGR;
 
 #[derive(Default)]
 pub struct PageTables {
@@ -97,18 +120,26 @@ impl PageTables {
         Self::Switch(addr);
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn IsActivePagetable(&self) -> bool {
         let root = self.GetRoot();
         return root == Self::CurrentCr3();
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn CurrentCr3() -> u64 {
         return CurrentCr3();
     }
 
     //switch pagetable for the cpu, Cr3
+    #[cfg(target_arch = "x86_64")]
     pub fn Switch(cr3: u64) {
         LoadCr3(cr3)
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn Switch(table: u64) {
+        LoadUserTable(table)
     }
 
     pub fn SetRoot(&self, root: u64) {
@@ -123,6 +154,7 @@ impl PageTables {
         return self.root.swap(0, Ordering::Acquire);
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn Print(&self) {
         let cr3 = CurrentCr3();
 
@@ -135,7 +167,7 @@ impl PageTables {
 
     pub fn CopyRange(&self, to: &Self, start: u64, len: u64, pagePool: &Allocator) -> Result<()> {
         if start & MemoryDef::PAGE_MASK != 0 || len & MemoryDef::PAGE_MASK != 0 {
-            return Err(Error::UnallignedAddress);
+            return Err(Error::UnallignedAddress(format!("CopyRange {:x?}", len)));
         }
 
         let mut vAddr = start;
@@ -157,7 +189,7 @@ impl PageTables {
     // The Copy On Write will be done when write to the page
     pub fn ForkRange(&self, to: &Self, start: u64, len: u64, pagePool: &Allocator) -> Result<()> {
         if start & MemoryDef::PAGE_MASK != 0 || len & MemoryDef::PAGE_MASK != 0 {
-            return Err(Error::UnallignedAddress);
+            return Err(Error::UnallignedAddress(format!("ForkRange start {:x} len {:x}", start, len)));
         }
 
         //change to read only
@@ -267,7 +299,7 @@ impl PageTables {
 
             // try to swapin page if it is swapout
             self.HandlingSwapInPage(addr, pteEntry);
-             
+
             return Ok(pteEntry);
         }
     }
@@ -338,9 +370,7 @@ impl PageTables {
                 pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
                 pgdEntry.set_addr(
                     PhysAddr::new(pudTbl as u64),
-                    PageTableFlags::PRESENT
-                        | PageTableFlags::WRITABLE
-                        | PageTableFlags::USER_ACCESSIBLE,
+                    default_table_user(),
                 );
             } else {
                 pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
@@ -353,9 +383,7 @@ impl PageTables {
                 pmdTbl = pagePool.AllocPage(true)? as *mut PageTable;
                 pudEntry.set_addr(
                     PhysAddr::new(pmdTbl as u64),
-                    PageTableFlags::PRESENT
-                        | PageTableFlags::WRITABLE
-                        | PageTableFlags::USER_ACCESSIBLE,
+                    default_table_user(),
                 );
             } else {
                 pmdTbl = pudEntry.addr().as_u64() as *mut PageTable;
@@ -368,9 +396,7 @@ impl PageTables {
                 pteTbl = pagePool.AllocPage(true)? as *mut PageTable;
                 pmdEntry.set_addr(
                     PhysAddr::new(pteTbl as u64),
-                    PageTableFlags::PRESENT
-                        | PageTableFlags::WRITABLE
-                        | PageTableFlags::USER_ACCESSIBLE,
+                    default_table_user(),
                 );
             } else {
                 pteTbl = pmdEntry.addr().as_u64() as *mut PageTable;
@@ -577,9 +603,7 @@ impl PageTables {
                     pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
                     pgdEntry.set_addr(
                         PhysAddr::new(pudTbl as u64),
-                        PageTableFlags::PRESENT
-                            | PageTableFlags::WRITABLE
-                            | PageTableFlags::USER_ACCESSIBLE,
+                        default_table_user(),
                     );
                 } else {
                     pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
@@ -681,19 +705,18 @@ impl PageTables {
         return start;
     }
 
-    pub fn UnusedEntryCount(tbl: * const PageTable) -> usize {
+    pub fn UnusedEntryCount(tbl: *const PageTable) -> usize {
         let mut count = 0;
         unsafe {
             for idx in 0..MemoryDef::ENTRY_COUNT as usize {
-                let entry: &PageTableEntry =
-                                    &(*tbl)[PageTableIndex::new(idx as u16)];
+                let entry: &PageTableEntry = &(*tbl)[PageTableIndex::new(idx as u16)];
                 if entry.is_unused() {
                     count += 1;
                 }
             }
 
             return count;
-        } 
+        }
     }
 
     pub fn Unmap(&self, start: u64, end: u64, pagePool: &Allocator) -> Result<()> {
@@ -766,7 +789,8 @@ impl PageTables {
                             p1Idx += 1;
                         }
 
-                        if clearPTEEntries + unusedPTEEntryCount == MemoryDef::ENTRY_COUNT as usize {
+                        if clearPTEEntries + unusedPTEEntryCount == MemoryDef::ENTRY_COUNT as usize
+                        {
                             let currAddr = pmdEntry.addr().as_u64();
                             let refCnt = pagePool.Deref(currAddr)?;
                             if refCnt == 0 {
@@ -833,17 +857,24 @@ impl PageTables {
         self.GetAllPagetablePagesWithRange(
             Addr(MemoryDef::PAGE_SIZE),
             Addr(MemoryDef::PHY_LOWER_ADDR),
-            pages)?;
-        
+            pages,
+        )?;
+
         self.GetAllPagetablePagesWithRange(
             Addr(MemoryDef::PHY_UPPER_ADDR),
             Addr(MemoryDef::LOWER_TOP),
-            pages)?;
+            pages,
+        )?;
 
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn GetAllPagetablePagesWithRange(&self, start: Addr, end: Addr, pages: &mut BTreeSet<u64>) -> Result<()> {
+    pub fn GetAllPagetablePagesWithRange(
+        &self,
+        start: Addr,
+        end: Addr,
+        pages: &mut BTreeSet<u64>,
+    ) -> Result<()> {
         //let mut curAddr = start;
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
         unsafe {
@@ -894,7 +925,7 @@ impl PageTables {
 
                     while Self::ToVirtualAddr(p4Idx, p3Idx, p2Idx, p1Idx).0 < end.0 {
                         let pmdEntry = &mut (*pmdTbl)[p2Idx];
-                        
+
                         if pmdEntry.is_unused() {
                             if p2Idx == PageTableIndex::new(MemoryDef::ENTRY_COUNT - 1) {
                                 p2Idx = PageTableIndex::new(0);
@@ -910,7 +941,6 @@ impl PageTables {
                             // add l4 pagetable page address
                             pages.insert(pmdEntry.addr().as_u64());
                         }
-
 
                         if p2Idx == PageTableIndex::new(MemoryDef::ENTRY_COUNT - 1) {
                             p2Idx = PageTableIndex::new(0);
@@ -1089,7 +1119,14 @@ impl PageTables {
         }
     }
 
-    pub fn SwapOutPages(&self, start: u64, len: u64, pages: &mut BTreeSet<u64>, updatePageEntry: bool) -> Result<()> {
+    #[cfg(target_arch = "x86_64")]
+    pub fn SwapOutPages(
+        &self,
+        start: u64,
+        len: u64,
+        pages: &mut BTreeSet<u64>,
+        updatePageEntry: bool,
+    ) -> Result<()> {
         let end = start + len;
 
         //self.Unmap(MemoryDef::PAGE_SIZE, MemoryDef::PHY_LOWER_ADDR, &*PAGE_MGR)?;
@@ -1098,7 +1135,7 @@ impl PageTables {
         self.Traverse(
             Addr(MemoryDef::PAGE_SIZE),
             Addr(MemoryDef::PHY_LOWER_ADDR),
-            |entry: &mut PageTableEntry , _virtualAddr| {
+            |entry: &mut PageTableEntry, _virtualAddr| {
                 let phyAddr = entry.addr().as_u64();
                 if start <= phyAddr && phyAddr < end {
                     let mut flags = entry.flags();
@@ -1110,10 +1147,10 @@ impl PageTables {
                         flags |= PageTableFlags::BIT_9;
                         entry.set_flags(flags);
                     }
-                    
+
                     if needInsert {
                         pages.insert(phyAddr);
-                    }                   
+                    }
                 }
             },
             false,
@@ -1134,14 +1171,25 @@ impl PageTables {
                         flags |= PageTableFlags::BIT_9;
                         entry.set_flags(flags);
                     }
-                    
+
                     if needInsert {
                         pages.insert(phyAddr);
-                    }                   
+                    }
                 }
             },
             false,
         );
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn SwapOutPages(
+        &self,
+        start: u64,
+        len: u64,
+        pages: &mut BTreeSet<u64>,
+        updatePageEntry: bool,
+    ) -> Result<()> {
+        Ok(())
     }
 
     // ret: >0: the swapped out page addr, 0: the page is missing
@@ -1158,7 +1206,7 @@ impl PageTables {
             let pudTbl: *mut PageTable;
 
             if pgdEntry.is_unused() {
-                return Ok(0)
+                return Ok(0);
             } else {
                 pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
             }
@@ -1167,7 +1215,7 @@ impl PageTables {
             let pmdTbl: *mut PageTable;
 
             if pudEntry.is_unused() {
-                return Ok(0)
+                return Ok(0);
             } else {
                 pmdTbl = pudEntry.addr().as_u64() as *mut PageTable;
             }
@@ -1176,7 +1224,7 @@ impl PageTables {
             let pteTbl: *mut PageTable;
 
             if pmdEntry.is_unused() {
-                return Ok(0)
+                return Ok(0);
             } else {
                 pteTbl = pmdEntry.addr().as_u64() as *mut PageTable;
             }
@@ -1184,7 +1232,7 @@ impl PageTables {
             let pteEntry = &mut (*pteTbl)[p1Idx];
 
             if pteEntry.is_unused() {
-                return Ok(0)
+                return Ok(0);
             }
 
             /*let mut flags = pteEntry.flags();
@@ -1199,10 +1247,11 @@ impl PageTables {
 
             // the page might be swapping in by another vcpu
             let addr = pteEntry.addr().as_u64();
-            return Ok(addr)
+            return Ok(addr);
         }
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
         let flags = pteEntry.flags();
         // bit9 : whether the page is swapout
@@ -1214,9 +1263,9 @@ impl PageTables {
 
                 let mut flags = pteEntry.flags();
 
-                // the page has been swaped in 
+                // the page has been swaped in
                 if flags & PageTableFlags::BIT_9 != PageTableFlags::BIT_9 {
-                    return
+                    return;
                 }
 
                 // is there another thread doing swapin?
@@ -1247,13 +1296,17 @@ impl PageTables {
 
                     // wait bit9 is cleared
                     if flags & PageTableFlags::BIT_9 != PageTableFlags::BIT_9 {
-                        return
+                        return;
                     }
-                    
+
                     spin_loop();
                 }
             }
-        } 
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
     }
 
     pub fn MProtect(
@@ -1317,9 +1370,7 @@ impl PageTables {
                     pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
                     pgdEntry.set_addr(
                         PhysAddr::new(pudTbl as u64),
-                        PageTableFlags::PRESENT
-                            | PageTableFlags::WRITABLE
-                            | PageTableFlags::USER_ACCESSIBLE,
+                        default_table_user(),
                     );
                 } else {
                     pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
@@ -1333,9 +1384,7 @@ impl PageTables {
                         pmdTbl = pagePool.AllocPage(true)? as *mut PageTable;
                         pudEntry.set_addr(
                             PhysAddr::new(pmdTbl as u64),
-                            PageTableFlags::PRESENT
-                                | PageTableFlags::WRITABLE
-                                | PageTableFlags::USER_ACCESSIBLE,
+                            default_table_user(),
                         );
                     } else {
                         pmdTbl = pudEntry.addr().as_u64() as *mut PageTable;
@@ -1349,9 +1398,7 @@ impl PageTables {
                             pteTbl = pagePool.AllocPage(true)? as *mut PageTable;
                             pmdEntry.set_addr(
                                 PhysAddr::new(pteTbl as u64),
-                                PageTableFlags::PRESENT
-                                    | PageTableFlags::WRITABLE
-                                    | PageTableFlags::USER_ACCESSIBLE,
+                                default_table_user(),
                             );
                         } else {
                             pteTbl = pmdEntry.addr().as_u64() as *mut PageTable;
@@ -1447,6 +1494,7 @@ impl PageBufAllocator {
     }
 }
 
+#[derive(Debug)]
 pub struct AlignedAllocator {
     pub size: usize,
     pub align: usize,
@@ -1463,7 +1511,7 @@ impl AlignedAllocator {
     pub fn Allocate(&self) -> Result<u64> {
         let layout = Layout::from_size_align(self.size, self.align);
         match layout {
-            Err(_e) => Err(Error::UnallignedAddress),
+            Err(_e) => Err(Error::UnallignedAddress(format!("Allocate {:?}", self))),
             Ok(l) => unsafe {
                 let addr = alloc(l);
                 Ok(addr as u64)
@@ -1474,7 +1522,7 @@ impl AlignedAllocator {
     pub fn Free(&self, addr: u64) -> Result<()> {
         let layout = Layout::from_size_align(self.size, self.align);
         match layout {
-            Err(_e) => Err(Error::UnallignedAddress),
+            Err(_e) => Err(Error::UnallignedAddress(format!("Allocate {:?}", self))),
             Ok(l) => unsafe {
                 dealloc(addr as *mut u8, l);
                 Ok(())

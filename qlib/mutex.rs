@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
+use core::arch::asm;
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::hint::spin_loop;
@@ -21,7 +22,6 @@ use core::ops::{Deref, DerefMut};
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use core::arch::asm;
 use spin::*;
 
 use super::kernel::uid::*;
@@ -74,6 +74,7 @@ impl<T, R> QMutexIntern<T, R> {
     }
 }
 
+#[cfg(target_arch = "x86_64")]
 #[inline(always)]
 pub fn CmpExchg(addr: u64, old: u64, new: u64) -> u64 {
     let mut ret: u64;
@@ -90,6 +91,12 @@ pub fn CmpExchg(addr: u64, old: u64, new: u64) -> u64 {
     return ret;
 }
 
+#[cfg(target_arch = "aarch64")]
+#[inline(always)]
+pub fn CmpExchg(addr: u64, old: u64, new: u64) -> u64 {
+    return 0;
+}
+
 #[inline(always)]
 pub fn WriteOnce(addr: u64, val: u64) {
     unsafe {
@@ -103,6 +110,7 @@ pub fn WriteOnce(addr: u64, val: u64) {
     };
 }
 
+#[cfg(target_arch = "x86_64")]
 #[inline(always)]
 pub fn LoadOnce(addr: u64) -> u64 {
     let ret: u64;
@@ -117,6 +125,12 @@ pub fn LoadOnce(addr: u64) -> u64 {
     };
 
     return ret;
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline(always)]
+pub fn LoadOnce(addr: u64) -> u64 {
+    return 0;
 }
 
 impl<T: ?Sized> QMutexIntern<T> {

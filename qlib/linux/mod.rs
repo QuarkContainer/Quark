@@ -18,6 +18,7 @@ pub mod inotify;
 pub mod ipc;
 pub mod limits;
 pub mod membarrier;
+pub mod msgqueue;
 pub mod netdevice;
 pub mod rusage;
 pub mod sem;
@@ -25,6 +26,6 @@ pub mod shm;
 pub mod signal;
 pub mod socket;
 pub mod time;
-pub mod msgqueue;
+pub mod ioctl;
 
 pub type TimeID = i32;

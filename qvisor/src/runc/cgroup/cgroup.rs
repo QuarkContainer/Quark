@@ -575,10 +575,10 @@ fn NetworkPrio(spec: &LinuxResources, path: &str) -> Result<()> {
 
 pub trait Controller {
     // optional controllers don't fail if not found.
-	fn Optional(&self) -> bool;
+    fn Optional(&self) -> bool;
     // set applies resource limits to controller.
-	fn Set(&self, linuxResource: &Option<LinuxResources>, s: &str) -> Result<()>;
+    fn Set(&self, linuxResource: &Option<LinuxResources>, s: &str) -> Result<()>;
     // skip is called when controller is not found to check if it can be safely
-	// skipped or not based on the spec.
-	fn Skip(&self, linuxResource: &Option<LinuxResources>) -> Result<()>;
+    // skipped or not based on the spec.
+    fn Skip(&self, linuxResource: &Option<LinuxResources>) -> Result<()>;
 }

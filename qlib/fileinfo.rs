@@ -28,7 +28,7 @@ use crate::qlib::*;
 #[derive(Clone)]
 pub enum SockInfo {
     File,                             // it is not socket
-    Socket(SocketInfo),                           // normal socket
+    Socket(SocketInfo),               // normal socket
     RDMAServerSocket(RDMAServerSock), //
     RDMADataSocket(RDMADataSock),     //
     RDMAContext,
@@ -56,7 +56,7 @@ impl fmt::Debug for SockInfo {
 
 impl SockInfo {
     pub fn Notify(&self, eventmask: EventMask, waitinfo: FdWaitInfo) {
-        match self {
+                match self {
             Self::File => {
                 waitinfo.Notify(eventmask);
             }
@@ -67,7 +67,6 @@ impl SockInfo {
             Self::RDMADataSocket(ref sock) => sock.Notify(eventmask, waitinfo),
             Self::RDMAContext => {
                 //RDMA.PollCompletion().expect("RDMA.PollCompletion fail");
-                //error!("RDMAContextEpoll");
             }
             Self::RDMAUDPSocket(ref sock) => sock.Notify(eventmask, waitinfo),
         }
@@ -111,9 +110,7 @@ impl Default for FdTbl {
     fn default() -> Self {
         let mut map = Vec::with_capacity(32);
         map.resize(32, None);
-        return Self {
-            map: map
-        }
+        return Self { map: map };
     }
 }
 
@@ -123,7 +120,7 @@ impl FdTbl {
         if fd > self.map.len() {
             return None;
         }
-        return self.map[fd].clone()
+        return self.map[fd].clone();
     }
 
     pub fn Remove(&mut self, fd: i32) -> Option<FdInfo> {
@@ -210,7 +207,7 @@ impl FdWaitInfo {
     }
 
     pub fn UpdateFDAsync(&self, fd: i32, epollfd: i32) -> Result<()> {
-        let op;
+                let op;
         let mask = {
             let mut fi = self.lock();
 

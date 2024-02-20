@@ -39,15 +39,12 @@ pub fn init_rootfs(spec: &Spec, rootfs: &str, cpath: &str, bind_devices: bool) -
         Some(ref linux) => match linux.rootfs_propagation.as_ref() {
             "shared" => {
                 flags |= MsFlags::MS_SHARED;
-                Ok(())
             }
             "private" => {
                 flags |= MsFlags::MS_PRIVATE;
-                Ok(())
             }
             "slave" | "" => {
                 flags |= MsFlags::MS_SLAVE;
-                Ok(())
             }
             _ => {
                 let msg = format!("invalid propogation value: {}", linux.rootfs_propagation);
@@ -56,9 +53,9 @@ pub fn init_rootfs(spec: &Spec, rootfs: &str, cpath: &str, bind_devices: bool) -
         },
         None => {
             flags |= MsFlags::MS_SLAVE;
-            Ok(())
         }
-    }?;
+    };
+
     let linux = spec.linux.as_ref().unwrap();
     mount(None::<&str>, "/", None::<&str>, flags, None::<&str>)
         .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;

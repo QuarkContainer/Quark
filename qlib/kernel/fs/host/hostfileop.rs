@@ -13,10 +13,12 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::qlib::nvproxy::frontendfd::NvFrontendFileOptions;
+use crate::qlib::nvproxy::uvmfd::UvmFileOptions;
 use alloc::string::String;
 use alloc::string::ToString;
-use core::any::Any;
 use alloc::sync::Arc;
+use core::any::Any;
 
 use super::super::super::super::addr::*;
 use super::super::super::super::bytestream::*;
@@ -65,7 +67,7 @@ impl Waitable for HostFileOp {
         );*/
 
         if !self.InodeOp.lock().WouldBlock {
-            return 0
+            return 0;
         }
 
         let fd = self.InodeOp.FD();
@@ -79,7 +81,7 @@ impl Waitable for HostFileOp {
         );*/
 
         if !self.InodeOp.lock().WouldBlock {
-            return
+            return;
         }
 
         let queue = self.InodeOp.Queue();
@@ -94,7 +96,7 @@ impl Waitable for HostFileOp {
             "HostFileOp::EventRegister is not supported"
         );*/
         if !self.InodeOp.lock().WouldBlock {
-            return
+            return;
         }
 
         let queue = self.InodeOp.Queue();
@@ -116,7 +118,8 @@ impl FileOperations for HostFileOp {
     }
 
     fn Seekable(&self) -> bool {
-        return self.InodeOp.InodeType() == InodeType::RegularFile || self.InodeOp.InodeType() == InodeType::SpecialFile;
+        return self.InodeOp.InodeType() == InodeType::RegularFile
+            || self.InodeOp.InodeType() == InodeType::SpecialFile;
     }
 
     fn Seek(&self, task: &Task, f: &File, whence: i32, current: i64, offset: i64) -> Result<i64> {
@@ -198,7 +201,7 @@ impl FileOperations for HostFileOp {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
+    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<u64> {
         return Err(Error::SysError(SysErr::ENOTTY));
     }
 
@@ -209,7 +212,7 @@ impl FileOperations for HostFileOp {
         _dirCtx: &mut DirCtx,
         _offset: i32,
     ) -> (i32, Result<i64>) {
-        return (0, Err(Error::SysError(SysErr::ENOTDIR)))
+        return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 
     fn Mappable(&self) -> Result<MMappable> {
@@ -230,6 +233,34 @@ impl PageTables {
         at: &AccessType,
     ) -> Result<()> {
         return self.MapFile(task, addr, f, fr, at, false);
+    }
+
+    pub fn MapNvFrontendFile(
+        &self,
+        task: &Task,
+        addr: u64,
+        f: &NvFrontendFileOptions,
+        fr: &Range,
+        at: &AccessType
+    ) -> Result<()> {
+        let bs = f.MapInternal(task, fr, at.Write())?;
+        self.MapHost(task, addr, &bs, at, true)?;
+        return Ok(());
+    }
+
+    pub fn MapUvmFile(
+        &self,
+        task: &Task,
+        addr: u64,
+        f: &UvmFileOptions,
+        fr: &Range,
+        at: &AccessType
+    ) -> Result<()> {
+        let bs = f.MapInternal(task, addr, fr, at.Write())?;
+        
+        self.MapHost(task, addr, &bs, at, true)?;
+        
+        return Ok(());
     }
 
     pub fn MapFile(

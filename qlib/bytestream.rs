@@ -14,14 +14,17 @@
 
 use alloc::alloc::{alloc, dealloc, Layout};
 use alloc::slice;
-use alloc::vec::Vec;
 use alloc::string::String;
-use core::sync::atomic::{AtomicU32, AtomicBool};
-use core::sync::atomic::Ordering;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::ops::Deref;
-use core::{fmt, mem};
 use core::ptr;
+use core::sync::atomic::Ordering;
+use core::sync::atomic::{AtomicBool, AtomicU32};
+use core::{fmt, mem};
+
+use crate::GLOBAL_ALLOCATOR;
+use crate::qlib::kernel::SHARESPACE;
 
 use super::common::*;
 use super::linux_def::*;
@@ -37,7 +40,7 @@ pub struct SocketBufIovs {
 impl SocketBufIovs {
     pub fn New(iovs: &[IoVec]) -> Result<Self> {
         if iovs.len() > 2 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let mut ret = Self::default();
@@ -53,7 +56,7 @@ impl SocketBufIovs {
 
     pub fn NewFromBuf(buf: &[u8]) -> Self {
         let mut iovs = SocketBufIovs::default();
-        iovs.iovs[0].start = &buf[0] as * const _ as u64;
+        iovs.iovs[0].start = &buf[0] as *const _ as u64;
         iovs.iovs[0].len = buf.len();
         iovs.cnt = 1;
         return iovs;
@@ -99,34 +102,36 @@ impl SocketBufIovs {
 
     pub fn ReadVec(&mut self, size: usize) -> Result<Vec<u8>> {
         assert!(self.Count() >= size);
-        let mut buf : Vec<u8> = Vec::with_capacity(size);
+        let mut buf: Vec<u8> = Vec::with_capacity(size);
         buf.resize(size, 0);
 
         if self.iovs[0].len >= size {
-            let src = self.iovs[0].start as * const u8;
+            let src = self.iovs[0].start as *const u8;
             let dst = buf.as_mut_ptr();
             unsafe {
                 ptr::copy_nonoverlapping(src, dst, size);
             }
         } else {
-            let src = self.iovs[0].start as * const u8;
+            let src = self.iovs[0].start as *const u8;
             let dst = buf.as_mut_ptr();
             unsafe {
                 ptr::copy_nonoverlapping(src, dst, self.iovs[0].len);
             }
-    
-            let src = self.iovs[0].start as * const u8;
+
+            let src = self.iovs[0].start as *const u8;
             unsafe {
                 let dst = buf.as_mut_ptr().add(self.iovs[0].len);
                 ptr::copy_nonoverlapping(src, dst, size - self.iovs[0].len);
             }
         }
 
-        return Ok(buf)
-    }  
+        self.Consume(size);
+        return Ok(buf);
+    }
 
     pub fn ReadString(&mut self, size: usize) -> Result<String> {
         let buf = self.ReadVec(size)?;
+        self.Consume(size);
         match String::from_utf8(buf) {
             Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
             Ok(s) => return Ok(s),
@@ -141,18 +146,18 @@ impl SocketBufIovs {
         }
 
         if self.iovs[0].len >= size {
-            let data = unsafe {*(self.iovs[0].start as * const T)};
-            return Ok(data)
+            let data = unsafe { *(self.iovs[0].start as *const T) };
+            self.Consume(size);
+            return Ok(data);
         } else {
             let buf = self.ReadVec(size);
             match buf {
                 Ok(b) => {
-                    let data = unsafe {*(&b[0] as * const _ as u64 as * const T)};
-                    return Ok(data)
-                } 
-                Err(e) => {
-                    return Err(e)
+                    let data = unsafe { *(&b[0] as *const _ as u64 as *const T) };
+                    self.Consume(size);
+                    return Ok(data);
                 }
+                Err(e) => return Err(e),
             }
         }
     }
@@ -164,7 +169,7 @@ impl SocketBufIovs {
         }
 
         let src = data.as_ptr();
-        let dst = self.iovs[0].start as * mut u8;
+        let dst = self.iovs[0].start as *mut u8;
         if self.iovs[0].len >= size {
             unsafe {
                 ptr::copy_nonoverlapping(src, dst, size);
@@ -172,20 +177,20 @@ impl SocketBufIovs {
         } else {
             unsafe {
                 ptr::copy_nonoverlapping(src, dst, self.iovs[0].len);
-            
+
                 let src = data.as_ptr().add(self.iovs[0].len);
-                let dst = self.iovs[1].start as * mut u8;
+                let dst = self.iovs[1].start as *mut u8;
                 ptr::copy_nonoverlapping(src, dst, size - self.iovs[0].len);
             }
         }
 
         self.Consume(size);
-        return Ok(())       
+        return Ok(());
     }
 
     pub fn WriteObj<T: Sized>(&mut self, obj: &T) -> Result<()> {
         let size = mem::size_of_val(obj);
-        let ptr = obj as * const _ as u64 as * const u8;
+        let ptr = obj as *const _ as u64 as *const u8;
 
         let buf = unsafe { slice::from_raw_parts(ptr, size) };
         return self.WriteSlice(buf);
@@ -283,28 +288,38 @@ impl HeapAllocator {
     pub fn FreeHeadTail(data: &'static [AtomicU32]) {
         assert!(data.len() == 2);
         let addr = &data[0] as *const _ as u64;
-        let layout = Layout::from_size_align(8, 8)
-            .expect("HeapAllocator::FreeHeadTail can't free memory");
+        let layout =
+            Layout::from_size_align(8, 8).expect("HeapAllocator::FreeHeadTail can't free memory");
         unsafe { dealloc(addr as *mut u8, layout) };
     }
 
     pub fn FreeWaitingRW(data: &'static [AtomicBool]) {
         assert!(data.len() == 2);
         let addr = &data[0] as *const _ as u64;
-        let layout = Layout::from_size_align(2, 8)
-            .expect("HeapAllocator::FreeWaitingRW can't free memory");
+        let layout =
+            Layout::from_size_align(2, 8).expect("HeapAllocator::FreeWaitingRW can't free memory");
         unsafe { dealloc(addr as *mut u8, layout) };
     }
 
     pub fn AlllocBuf(pageCount: usize) -> u64 {
         assert!(IsPowerOfTwo(pageCount));
-        let layout = Layout::from_size_align(
-            pageCount * MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-        )
-        .expect("HeapAllocator::AlllocBuf can't allocate memory");
-        let addr = unsafe { alloc(layout) };
 
+        let addr = if SHARESPACE.config.read().EnableIOBuf {
+            unsafe {
+                GLOBAL_ALLOCATOR.AllocIOBuf(pageCount * MemoryDef::PAGE_SIZE as usize)
+            }
+        } else {
+            let layout = Layout::from_size_align(
+                pageCount * MemoryDef::PAGE_SIZE as usize,
+                MemoryDef::PAGE_SIZE as usize,
+            )
+            .expect("HeapAllocator::AlllocBuf can't allocate memory");
+            unsafe { alloc(layout) }
+        };
+
+        // use crate::qlib::mem::list_allocator::HostAllocator;
+        // error!("AlllocBuf addr {:x} isIOBuf {}", addr as u64, HostAllocator ::IsIOBuf(addr as u64) );
+         
         return addr as u64;
     }
 
@@ -533,7 +548,7 @@ impl RingBuf {
     }
 
     pub fn PrepareDataIovs(&self, data: &mut SocketBufIovs) {
-        let mut iovs = &mut data.iovs;
+        let iovs = &mut data.iovs;
 
         let head = self.headtail[0].load(Ordering::Relaxed);
         let tail = self.headtail[1].load(Ordering::Acquire);
@@ -567,15 +582,16 @@ impl RingBuf {
     pub fn ConsumeWithCheck(&self, count: usize) -> Result<bool> {
         let available = self.AvailableDataSize();
         if available < count {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
-        
+
         let trigger = self.Consume(count);
         return Ok(trigger);
     }
 
     //consume count data
-    pub fn Consume(&self, count: usize) -> bool { //2
+    pub fn Consume(&self, count: usize) -> bool {
+        //2
         //TODO: Revisit memory order to loose constraints
         let head = self.headtail[0].load(Ordering::SeqCst);
         self.headtail[0].store(head.wrapping_add(count as u32), Ordering::SeqCst);
@@ -584,7 +600,7 @@ impl RingBuf {
             self.SetWaitingRead();
         }
         let trigger = self.ResetWaitingWrite();
-        return trigger
+        return trigger;
     }
     /****************************************** write *********************************************************/
 
@@ -609,7 +625,7 @@ impl RingBuf {
     }
 
     pub fn PrepareSpaceIovs(&self, data: &mut SocketBufIovs) {
-        let mut iovs = &mut data.iovs;
+        let iovs = &mut data.iovs;
 
         let head = self.headtail[0].load(Ordering::Acquire);
         let tail = self.headtail[1].load(Ordering::Relaxed);
@@ -667,9 +683,9 @@ impl RingBuf {
     pub fn ProduceWithCheck(&self, count: usize) -> Result<bool> {
         let available = self.AvailableDataSize();
         if available + count > self.Len() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
-        
+
         let trigger = self.Produce(count);
         return Ok(trigger);
     }
@@ -699,7 +715,7 @@ impl RingBuf {
             self.SetWaitingWrite();
         }
         let trigger = self.ResetWaitingRead();
-        return trigger
+        return trigger;
     }
 
     /// return: write user buffer to socket bytestream and determine whether to trigger async socket ops
@@ -716,7 +732,6 @@ impl RingBuf {
             writeSize = buf.len();
         }
 
-        
         let (firstLen, hasSecond) = {
             let toEnd = self.Len() - writePos;
             if toEnd < writeSize {
@@ -773,11 +788,7 @@ pub struct ByteStream(pub Arc<QMutex<ByteStreamIntern>>);
 
 impl fmt::Debug for ByteStream {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{:x?}",
-            self.lock().buf
-        )
+        write!(f, "{:x?}", self.lock().buf)
     }
 }
 
@@ -798,7 +809,7 @@ impl PartialEq for ByteStream {
 
 impl ByteStream {
     pub fn Init(pageCount: u64) -> Self {
-        return Self(Arc::new(QMutex::new(ByteStreamIntern::Init(pageCount))))
+        return Self(Arc::new(QMutex::new(ByteStreamIntern::Init(pageCount))));
     }
 
     pub fn InitWithShareMemory(
@@ -808,13 +819,15 @@ impl ByteStream {
         bufAddr: u64,
         init: bool,
     ) -> Self {
-        return Self(Arc::new(QMutex::new(ByteStreamIntern::InitWithShareMemory(
-            pageCount, 
-            headTailAddr,
-            waitingRWAddr,
-            bufAddr,
-            init
-        ))));
+        return Self(Arc::new(QMutex::new(
+            ByteStreamIntern::InitWithShareMemory(
+                pageCount,
+                headTailAddr,
+                waitingRWAddr,
+                bufAddr,
+                init,
+            ),
+        )));
     }
 }
 
@@ -827,11 +840,7 @@ pub struct ByteStreamIntern {
 
 impl fmt::Debug for ByteStreamIntern {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{:x?}",
-            self.buf
-        )
+        write!(f, "{:x?}", self.buf)
     }
 }
 
@@ -869,7 +878,8 @@ impl ByteStreamIntern {
             "Bytetream pagecount is not power of two: {}",
             pageCount
         );
-        let allocator = RingeBufAllocator::ShareAllocator(headTailAddr, waitingRWAddr, bufAddr, init);
+        let allocator =
+            RingeBufAllocator::ShareAllocator(headTailAddr, waitingRWAddr, bufAddr, init);
         let buf = RingBuf::New(pageCount as usize, allocator);
 
         return Self {
@@ -1008,13 +1018,13 @@ impl ByteStreamIntern {
     }
 }
 
-pub trait MessageIO : Sized {
+pub trait MessageIO: Sized {
     // data size, used for write check
     fn Size(&self) -> usize;
 
     // read obj
     fn Read(buf: &mut SocketBufIovs) -> Result<Self>;
-    
+
     // write obj
     fn Write(&self, buf: &mut SocketBufIovs) -> Result<()>;
 
@@ -1033,4 +1043,3 @@ pub trait MessageIO : Sized {
         return Self::Read(&mut iovs);
     }
 }
-

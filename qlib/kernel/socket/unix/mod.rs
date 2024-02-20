@@ -13,7 +13,7 @@
 // limitations under the License.
 
 pub mod transport;
-//pub mod hostsocket;
+pub mod host_unix;
 pub mod unix;
 //pub mod io;
 

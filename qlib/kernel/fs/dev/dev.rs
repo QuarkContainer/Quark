@@ -13,6 +13,12 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::qlib::nvproxy::frontendfd::NvFrontendDevice;
+use crate::qlib::nvproxy::nvgpu::NVIDIA_UVM_PRIMARY_MINOR_NUMBER;
+use crate::qlib::nvproxy::nvgpu::NV_CONTROL_DEVICE_MINOR;
+use crate::qlib::nvproxy::nvgpu::NV_MAJOR_DEVICE_NUMBER;
+use crate::qlib::nvproxy::nvproxy::NVProxy;
+use crate::qlib::nvproxy::uvmfd::UvmDevice;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -29,10 +35,10 @@ use super::super::ramfs::dir::*;
 use super::super::ramfs::symlink::*;
 use super::full::*;
 use super::null::*;
+use super::proxyfile::*;
 use super::random::*;
 use super::tty::*;
 use super::zero::*;
-use super::proxyfile::*;
 
 const MEM_DEV_MAJOR: u16 = 1;
 
@@ -173,6 +179,60 @@ fn NewFullDevice(iops: FullDevice, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
+fn NewNvidaFrontendDevice(iops: NvFrontendDevice, msrc: &Arc<QMutex<MountSource>>, minor: u32) -> Inode {
+    let deviceId = DEV_DEVICE.lock().id.DeviceID();
+    let inodeId = DEV_DEVICE.lock().NextIno();
+
+    let stableAttr = StableAttr {
+        Type: InodeType::CharacterDevice,
+        DeviceId: deviceId,
+        InodeId: inodeId,
+        BlockSize: MemoryDef::PAGE_SIZE as i64,
+        DeviceFileMajor: NV_MAJOR_DEVICE_NUMBER,
+        DeviceFileMinor: minor,
+    };
+
+    let inodeInternal = InodeIntern {
+        UniqueId: NewUID(),
+        InodeOp: iops.into(),
+        StableAttr: stableAttr,
+        LockCtx: LockCtx::default(),
+        MountSource: msrc.clone(),
+        Overlay: None,
+        ..Default::default()
+    };
+
+    return Inode(Arc::new(QMutex::new(inodeInternal)));
+}
+
+fn NewNvidaUvmDevice(iops: UvmDevice, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+    let id: ID = DEV_DEVICE.lock().id;
+    let deviceId = id.DeviceID();
+    let inodeId = DEV_DEVICE.lock().NextIno();
+
+    let stableAttr = StableAttr {
+        Type: InodeType::CharacterDevice,
+        DeviceId: deviceId,
+        InodeId: inodeId,
+        BlockSize: MemoryDef::PAGE_SIZE as i64,
+        DeviceFileMajor: id.Major,
+        DeviceFileMinor: NVIDIA_UVM_PRIMARY_MINOR_NUMBER,
+    };
+
+    let inodeInternal = InodeIntern {
+        UniqueId: NewUID(),
+        InodeOp: iops.into(),
+        StableAttr: stableAttr,
+        LockCtx: LockCtx::default(),
+        MountSource: msrc.clone(),
+        Overlay: None,
+        ..Default::default()
+    };
+
+    return Inode(Arc::new(QMutex::new(inodeInternal)));
+}
+
+
 fn NewRandomDevice(iops: RandomDevice, msrc: &Arc<QMutex<MountSource>>, minor: u32) -> Inode {
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
     let inodeId = DEV_DEVICE.lock().NextIno();
@@ -282,33 +342,21 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
 
     contents.insert(
         "null".to_string(),
-        NewNullDevice(
-            NullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)),
-            msrc,
-        ),
+        NewNullDevice(NullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)), msrc),
     );
 
     contents.insert(
         "proxy".to_string(),
-        NewTestProxyDevice(
-            ProxyDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)),
-            msrc,
-        ),
+        NewTestProxyDevice(ProxyDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)), msrc),
     );
 
     contents.insert(
         "zero".to_string(),
-        NewZeroDevice(
-            ZeroDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)),
-            msrc,
-        ),
+        NewZeroDevice(ZeroDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)), msrc),
     );
     contents.insert(
         "full".to_string(),
-        NewFullDevice(
-            FullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)),
-            msrc,
-        ),
+        NewFullDevice(FullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)), msrc),
     );
 
     contents.insert(
@@ -330,6 +378,34 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
             RandomDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)),
             msrc,
             URANDOM_DEV_MINOR,
+        ),
+    );
+
+    let nvp = NVProxy::default();
+    
+    contents.insert(
+        "nvidiactl".to_string(),
+        NewNvidaFrontendDevice(
+            NvFrontendDevice::New(task, &nvp, NV_CONTROL_DEVICE_MINOR, &ROOT_OWNER, &FileMode(0o0666)),
+            msrc,
+            NV_CONTROL_DEVICE_MINOR,
+        ),
+    );
+
+    contents.insert(
+        "nvidia0".to_string(),
+        NewNvidaFrontendDevice(
+            NvFrontendDevice::New(task, &nvp, 0, &ROOT_OWNER, &FileMode(0o0666)),
+            msrc,
+            0,
+        ),
+    );
+
+    contents.insert(
+        "nvidia-uvm".to_string(),
+        NewNvidaUvmDevice(
+            UvmDevice::New(task, &nvp, &ROOT_OWNER, &FileMode(0o0666)),
+            msrc
         ),
     );
 

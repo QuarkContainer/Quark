@@ -160,7 +160,7 @@ impl ScmCredentials {
 
 pub fn CopyBytes<'a, T: ?Sized>(src: &T, dst: &'a mut [u8]) -> &'a mut [u8] {
     let srclen = mem::size_of_val(src);
-    info!("CopyBytes srclen is {}", srclen);
+    // info!("CopyBytes srclen is {}", srclen);
     assert!(dst.len() >= core::mem::size_of_val(src));
     unsafe {
         ptr::copy_nonoverlapping(
@@ -194,75 +194,75 @@ pub fn PadBytes<'a>(len: usize, dst: &'a mut [u8]) -> &'a mut [u8] {
 #[derive(Default)]
 #[repr(C)]
 pub struct TCPInfo {
-    pub State   : u8,
-    pub CaState : u8,
-    pub Retransmits :u8,
-    pub Probes  : u8,
-    pub Backoff : u8,
-    pub Options : u8,
+    pub State: u8,
+    pub CaState: u8,
+    pub Retransmits: u8,
+    pub Probes: u8,
+    pub Backoff: u8,
+    pub Options: u8,
     // WindowScale is the combination of snd_wscale (first 4 bits) and rcv_wscale (second 4 bits)
-    pub WindowScale :u8,
+    pub WindowScale: u8,
     // DeliveryRateAppLimited is a boolean and only the first bit is meaningful.
-    pub DeliveryRateAppLimited :u8,
+    pub DeliveryRateAppLimited: u8,
 
-    pub RTO    : u32,
-    pub  ATO    : u32,
-    pub SndMss : u32,
-    pub RcvMss : u32,
+    pub RTO: u32,
+    pub ATO: u32,
+    pub SndMss: u32,
+    pub RcvMss: u32,
 
-    pub Unacked : u32,
-    pub Sacked  : u32,
-    pub Lost    : u32,
-    pub Retrans : u32,
-    pub Fackets : u32,
+    pub Unacked: u32,
+    pub Sacked: u32,
+    pub Lost: u32,
+    pub Retrans: u32,
+    pub Fackets: u32,
 
     // Times.
-    pub LastDataSent : u32,
-    pub LastAckSent  : u32,
-    pub LastDataRecv : u32,
-    pub LastAckRecv  : u32,
+    pub LastDataSent: u32,
+    pub LastAckSent: u32,
+    pub LastDataRecv: u32,
+    pub LastAckRecv: u32,
 
     // Metrics.
-    pub PMTU        : u32,
-    pub RcvSsthresh : u32,
-    pub RTT         : u32,
-    pub RTTVar      : u32,
-    pub SndSsthresh : u32,
-    pub SndCwnd     : u32,
-    pub Advmss      : u32,
-    pub Reordering  : u32,
+    pub PMTU: u32,
+    pub RcvSsthresh: u32,
+    pub RTT: u32,
+    pub RTTVar: u32,
+    pub SndSsthresh: u32,
+    pub SndCwnd: u32,
+    pub Advmss: u32,
+    pub Reordering: u32,
 
-    pub RcvRTT   : u32,
-    pub RcvSpace : u32,
+    pub RcvRTT: u32,
+    pub RcvSpace: u32,
 
-    pub TotalRetrans : u32,
+    pub TotalRetrans: u32,
 
-    pub PacingRate    : u64,
-    pub MaxPacingRate : u64,
+    pub PacingRate: u64,
+    pub MaxPacingRate: u64,
     // BytesAcked is RFC4898 tcpEStatsAppHCThruOctetsAcked.
-    pub BytesAcked : u64,
+    pub BytesAcked: u64,
     // BytesReceived is RFC4898 tcpEStatsAppHCThruOctetsReceived.
-    pub BytesReceived : u64,
+    pub BytesReceived: u64,
     // SegsOut is RFC4898 tcpEStatsPerfSegsOut.
-    pub SegsOut : u32,
+    pub SegsOut: u32,
     // SegsIn is RFC4898 tcpEStatsPerfSegsIn.
-    pub SegsIn : u32,
+    pub SegsIn: u32,
 
-    pub NotSentBytes : u32,
-    pub MinRTT       : u32,
+    pub NotSentBytes: u32,
+    pub MinRTT: u32,
     // DataSegsIn is RFC4898 tcpEStatsDataSegsIn.
-    pub DataSegsIn : u32,
+    pub DataSegsIn: u32,
     // DataSegsOut is RFC4898 tcpEStatsDataSegsOut.
-    pub DataSegsOut : u32,
+    pub DataSegsOut: u32,
 
-    pub DeliveryRate : u64,
+    pub DeliveryRate: u64,
 
     // BusyTime is the time in microseconds busy sending data.
-    pub BusyTime : u64,
+    pub BusyTime: u64,
     // RwndLimited is the time in microseconds limited by receive window.
-    pub RwndLimited : u64,
+    pub RwndLimited: u64,
     // SndBufLimited is the time in microseconds limited by send buffer.
-    pub SndBufLimited : u64,
+    pub SndBufLimited: u64,
 }
 
 pub const SCM_RIGHTS: i32 = 0x1;

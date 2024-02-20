@@ -16,10 +16,10 @@ pub mod buffer;
 pub mod control;
 pub mod epsocket;
 pub mod hostinet;
-pub mod socket;
-pub mod unix;
-pub mod socketopts;
 pub mod resilience;
+pub mod socket;
+pub mod socketopts;
+pub mod unix;
 
 pub fn Init() {
     self::hostinet::Init();

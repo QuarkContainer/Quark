@@ -15,8 +15,8 @@
 use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
-use core::any::Any;
 use alloc::sync::Arc;
+use core::any::Any;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
@@ -108,7 +108,14 @@ impl FileOperations for HostDirFops {
         return Err(Error::SysError(SysErr::EISDIR));
     }
 
-    fn Fsync(&self, _task: &Task, _f: &File, _start: i64, _end: i64, _syncType: SyncType) -> Result<()> {
+    fn Fsync(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _start: i64,
+        _end: i64,
+        _syncType: SyncType,
+    ) -> Result<()> {
         return Ok(());
     }
 
@@ -121,7 +128,7 @@ impl FileOperations for HostDirFops {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
+    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<u64> {
         return Err(Error::SysError(SysErr::ENOTTY));
     }
 
@@ -141,4 +148,3 @@ impl FileOperations for HostDirFops {
 }
 
 impl SockOperations for HostDirFops {}
-

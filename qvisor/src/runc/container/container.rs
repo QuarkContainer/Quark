@@ -21,21 +21,16 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::path::PathBuf;
 
 use fs2::FileExt;
 use regex::Regex;
 
+use crate::runc::container::nvidia::NvidiaDeviceList;
+
 use super::hook::*;
 use super::status::*;
 //use super::super::super::qlib::util::*;
-use super::super::cgroup::cgroup::*;
-use super::super::cmd::config::*;
-use super::super::cmd::exec::*;
-use super::super::oci::*;
-use super::super::oci::serialize::*;
-use super::super::sandbox::sandbox::*;
-use super::super::shim::container_io::*;
-use super::super::specutils::specutils::*;
 use super::super::super::qlib::auth::cap_set::*;
 use super::super::super::qlib::auth::id::*;
 use super::super::super::qlib::common::*;
@@ -43,7 +38,15 @@ use super::super::super::qlib::control_msg::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::path::*;
 use super::super::super::ucall::ucall::*;
+use super::super::cgroup::cgroup::*;
+use super::super::cmd::config::*;
+use super::super::cmd::exec::*;
+use super::super::oci::serialize::*;
+use super::super::oci::*;
 use super::super::runtime::fs::FsImageMounter;
+use super::super::sandbox::sandbox::*;
+use super::super::shim::container_io::*;
+use super::super::specutils::specutils::*;
 
 // metadataFilename is the name of the metadata file relative to the
 // container root directory that holds sandbox metadata.
@@ -169,7 +172,11 @@ pub fn ValidateID(id: &str) -> Result<()> {
 
 // maybeLockRootContainer locks the sandbox root container. It is used to
 // prevent races to create and delete child container sandboxes.
-pub fn maybeLockRootContainer(bundleDir: &str, spec: &Spec, rootDir: &str) -> Result<FileLockCleanup> {
+pub fn maybeLockRootContainer(
+    bundleDir: &str,
+    spec: &Spec,
+    rootDir: &str,
+) -> Result<FileLockCleanup> {
     if IsRoot(spec) {
         return Ok(FileLockCleanup::default());
     }
@@ -183,7 +190,14 @@ pub fn maybeLockRootContainer(bundleDir: &str, spec: &Spec, rootDir: &str) -> Re
         Some(id) => id,
     };
 
-    let sandBoxRootDir = std::path::Path::new(bundleDir).parent().unwrap().join(&sbid).join(rootDir).to_str().unwrap().to_string();
+    let sandBoxRootDir = std::path::Path::new(bundleDir)
+        .parent()
+        .unwrap()
+        .join(&sbid)
+        .join(rootDir)
+        .to_str()
+        .unwrap()
+        .to_string();
     let sb = Container::Load(&sandBoxRootDir, &sbid)?;
 
     return sb.Lock();
@@ -449,6 +463,11 @@ impl Container {
 
         let _unlockRoot = maybeLockRootContainer(bundleDir, &spec, &conf.RootDir)?;
 
+        let nvidiaDeviceList = NvidiaDeviceList(&spec)?;
+        if &nvidiaDeviceList !=  "" {
+            NVProxyHostSetup()?;
+        }
+    
         // Lock the container metadata file to prevent concurrent creations of
         // containers with the same id.
         let containerRoot = Join(&conf.RootDir, id);
@@ -470,7 +489,7 @@ impl Container {
                 Ok(s) => s.to_string(),
             };
 
-            let mut c = Self {
+            let mut c: Container = Self {
                 ID: id.to_string(),
                 Spec: spec,
                 ConsoleSocket: consoleSocket.to_string(),
@@ -549,7 +568,9 @@ impl Container {
                         c.Destroy()?;
                         return Err(e);
                     }
-                    Ok(s) => Some(s),
+                    Ok(s) => {
+                        Some(s)
+                    }
                 };
 
                 match restore {
@@ -639,7 +660,10 @@ impl Container {
         io: &ContainerIO,
         pivot: bool,
     ) -> Result<Self> {
-        info!("Create container {} in root dir: {}, bundleDir {}", id, &conf.RootDir, bundleDir);
+        info!(
+            "Create container {} in root dir: {}, bundleDir {}",
+            id, &conf.RootDir, bundleDir
+        );
         //debug!("container spec is {:?}", &spec);
         ValidateID(id)?;
 
@@ -695,7 +719,10 @@ impl Container {
                     ..Default::default()
                 });
                 c.sandboxed = true;
-                c.Sandbox.as_ref().unwrap().CreateSubContainer(conf, id, io)?;
+                c.Sandbox
+                    .as_ref()
+                    .unwrap()
+                    .CreateSubContainer(conf, id, io)?;
             } else if IsRoot(&c.Spec) {
                 // If the metadata annotations indicate that this container should be
                 // started in an existing sandbox, we must do so. The metadata will
@@ -901,7 +928,11 @@ impl Container {
         info!("Start container {}", &self.ID);
 
         let _unlockRoot = if !self.sandboxed {
-            Some(maybeLockRootContainer(&self.BundleDir, &self.Spec, &self.RootContainerDir)?)
+            Some(maybeLockRootContainer(
+                &self.BundleDir,
+                &self.Spec,
+                &self.RootContainerDir,
+            )?)
         } else {
             None
         };
@@ -970,7 +1001,11 @@ impl Container {
 
         let mut errs = Vec::new();
         let _unlockRoot = if !self.sandboxed {
-            Some(maybeLockRootContainer(&self.BundleDir, &self.Spec, &self.RootContainerDir)?)
+            Some(maybeLockRootContainer(
+                &self.BundleDir,
+                &self.Spec,
+                &self.RootContainerDir,
+            )?)
         } else {
             None
         };
@@ -998,7 +1033,11 @@ impl Container {
         let fsMounter = FsImageMounter::New(&sandboxId);
         let ret = fsMounter.UnmountContainerFs(&self.Spec, &self.ID);
         if ret.is_err() {
-            info!("umount fs for container {}, err: {}", self.ID, ret.err().unwrap());
+            info!(
+                "umount fs for container {}, err: {}",
+                self.ID,
+                ret.err().unwrap()
+            );
         }
 
         self.changeStatus(Status::Stopped);
@@ -1168,4 +1207,130 @@ impl FileDescriptors for ExecArgs {
             self.Fds.push(*fd)
         }
     }
+}
+
+fn FindIt<P>(exe_name: P) -> Option<PathBuf>
+    where P: AsRef<Path>,
+{
+    env::var_os("PATH").and_then(|paths| {
+        env::split_paths(&paths).filter_map(|dir| {
+            let full_path = dir.join(&exe_name);
+            if full_path.is_file() {
+                Some(full_path)
+            } else {
+                None
+            }
+        }).next()
+    })
+}
+
+pub fn NVProxyHostSetup() -> Result<()> {
+    // Locate binaries. For security reasons, unlike
+	// nvidia-container-runtime-hook, we don't add the container's filesystem
+	// to the search path. We also don't support
+	// /etc/nvidia-container-runtime/config.toml to avoid importing a TOML
+	// parser.
+    
+    let cliPath = match FindIt("nvidia-container-cli") {
+        None => {
+            error!("failed to locate nvidia-container-cli in PATH");
+            return Err(Error::Common("failed to locate nvidia-container-cli in PATH".to_owned()));
+        }
+        Some(p) => p,
+    };
+
+    // nvidia-container-cli --load-kmods seems to be a noop; load kernel modules ourselves.
+	NVProxyLoadKernelModules()?;
+
+    let cli = cliPath.into_os_string().into_string().unwrap();
+
+    if !Path::new("/dev/nvidiactl").exists() {
+        let output = std::process::Command::new(&cli)
+                    .arg("--load-kmods info")
+                    .output()
+                    .expect("failed to execute process /sbin/modprobe");
+        
+        if !output.status.success() {
+            warn!("nvidia-container-cli info failed, \nstdout: {:?}\nstderr: {:?}", &output.stdout, &output.stderr);
+        }
+    }
+
+    return Ok(())
+}
+
+// nvproxyLoadKernelModules loads NVIDIA-related kernel modules with modprobe.
+pub fn NVProxyLoadKernelModules() -> Result<()> {
+    for m in [
+        "nvidia",
+		"nvidia-uvm",
+    ] {
+        let output = std::process::Command::new("/sbin/modprobe")
+                    .arg(m)
+                    .output()
+                    .expect("failed to execute process /sbin/modprobe");
+        
+        if !output.status.success() {
+            warn!("modprobe {} failed, \nstdout: {:?}\nstderr: {:?}", m, &output.stdout, &output.stderr);
+        }
+    }
+
+    return Ok(())
+}
+
+pub fn NVProxySetupInUserns(rootPath: &str) -> Result<()> {
+    info!("NVProxySetupInUserns root is {}", rootPath);
+
+    let cliPath = match FindIt("nvidia-container-cli") {
+        None => {
+            error!("failed to locate nvidia-container-cli in PATH");
+            return Err(Error::Common("failed to locate nvidia-container-cli in PATH".to_owned()));
+        }
+        Some(p) => p,
+    };
+
+    let nvidiaProc = rootPath.to_owned() + "/proc/driver/nvidia";
+    fs::create_dir_all(&nvidiaProc).expect(&format!("can not create {}", &nvidiaProc));
+
+    let cli = cliPath.into_os_string().into_string().unwrap();
+
+    let ldconfigPath = if Path::new("/sbin/ldconfig.real").exists() {
+        "/sbin/ldconfig.real"
+    } else {
+        "/sbin/ldconfig"
+    };
+
+    let _devices = "all";
+    let ldconfig = format!("--ldconfig=@{}", ldconfigPath);
+    
+    let args = [
+        "--load-kmods",
+        "configure",
+        &ldconfig, 
+        "--no-cgroups",
+        "--utility",
+        "--compute",
+        "--device=all",
+        rootPath
+    ];
+
+    let output = std::process::Command::new(&cli)
+        .args(args)
+        .output()
+        .expect("failed to execute process /sbin/modprobe");
+
+    let stderr = match std::str::from_utf8(&output.stderr) {
+        Ok(v) => v,
+        Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+    };
+
+    let stdout = match std::str::from_utf8(&output.stdout) {
+        Ok(v) => v,
+        Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+    };
+
+    if !output.status.success() {
+        warn!("NVProxySetupInUserns '{} {:?}' failed, \nstdout: {:?}\nstderr: {:?}", &cli, &args, stdout, stderr);
+    }
+
+    return Ok(())
 }

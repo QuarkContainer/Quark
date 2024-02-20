@@ -59,7 +59,13 @@ impl RDMA {
             let dataSize = buf.AddConsumeReadData(cnt as u64) as usize;
             let bufSize = buf.readBuf.lock().BufSize();
             if 2 * dataSize >= bufSize {
-                let sockInfo = GlobalIOMgr().GetByHost(fd).unwrap().lock().sockInfo.lock().clone();
+                let sockInfo = GlobalIOMgr()
+                    .GetByHost(fd)
+                    .unwrap()
+                    .lock()
+                    .sockInfo
+                    .lock()
+                    .clone();
 
                 match sockInfo {
                     SockInfo::RDMADataSocket(rdmaDataScoket) => {
@@ -104,7 +110,13 @@ impl RDMA {
         if writeBuf.is_some() {
             if RDMA_ENABLE {
                 // HostSpace::RDMANotify(fd, RDMANotifyType::RDMAWrite);
-                let sockInfo = GlobalIOMgr().GetByHost(fd).unwrap().lock().sockInfo.lock().clone();
+                let sockInfo = GlobalIOMgr()
+                    .GetByHost(fd)
+                    .unwrap()
+                    .lock()
+                    .sockInfo
+                    .lock()
+                    .clone();
 
                 match sockInfo {
                     SockInfo::RDMADataSocket(rdmaDataScoket) => {

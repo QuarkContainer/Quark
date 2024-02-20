@@ -17,9 +17,9 @@ use alloc::string::ToString;
 
 use super::super::fs::dirent::*;
 use super::super::fs::file::*;
-use super::super::fs::inotify::*;
 use super::super::fs::flags::*;
 use super::super::fs::inode::*;
+use super::super::fs::inotify::*;
 use super::super::fs::lock::*;
 use super::super::kernel::fasync::*;
 use super::super::kernel::fd_table::*;
@@ -148,23 +148,24 @@ pub fn SysOpenAt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 }
 
 pub fn CleanOpenFlags(flags: i32) -> Result<i32> {
-    let mut flags = flags & (Flags::O_ACCMODE
-        | Flags::O_CREAT
-        | Flags::O_EXCL
-        | Flags::O_NOCTTY
-        | Flags::O_TRUNC
-        | Flags::O_APPEND
-        | Flags::O_NONBLOCK
-        | Flags::O_DSYNC
-        | Flags::O_ASYNC
-        | Flags::O_DIRECT
-        | Flags::O_LARGEFILE
-        | Flags::O_DIRECTORY
-        | Flags::O_NOFOLLOW
-        | Flags::O_NOATIME
-        | Flags::O_SYNC
-        | Flags::O_PATH
-        | Flags::O_TMPFILE);
+    let mut flags = flags
+        & (Flags::O_ACCMODE
+            | Flags::O_CREAT
+            | Flags::O_EXCL
+            | Flags::O_NOCTTY
+            | Flags::O_TRUNC
+            | Flags::O_APPEND
+            | Flags::O_NONBLOCK
+            | Flags::O_DSYNC
+            | Flags::O_ASYNC
+            | Flags::O_DIRECT
+            | Flags::O_LARGEFILE
+            | Flags::O_DIRECTORY
+            | Flags::O_NOFOLLOW
+            | Flags::O_NOATIME
+            | Flags::O_SYNC
+            | Flags::O_PATH
+            | Flags::O_TMPFILE);
 
     // Linux's __O_SYNC (which we call linux.O_SYNC) implies O_DSYNC.
     if flags & Flags::O_SYNC != 0 {
@@ -188,7 +189,8 @@ pub fn CleanOpenFlags(flags: i32) -> Result<i32> {
 
     // we can't read/write will readonly or writeonly
     // work around. todo: find better solution
-    if flags & Flags::O_RDWR != 0 && (flags & Flags::O_RDONLY != 0 || flags & Flags::O_WRONLY != 0) {
+    if flags & Flags::O_RDWR != 0 && (flags & Flags::O_RDONLY != 0 || flags & Flags::O_WRONLY != 0)
+    {
         //return Err(Error::SysError(SysErr::EINVAL));
         flags |= Flags::O_PATH;
     }
@@ -209,7 +211,13 @@ pub fn SysOpen(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let flags = CleanOpenFlags(flags)?;
 
     if flags & Flags::O_CREAT != 0 {
-        let res = createAt(task, ATType::AT_FDCWD, addr, flags as u32, FileMode(mode as u16))?;
+        let res = createAt(
+            task,
+            ATType::AT_FDCWD,
+            addr,
+            flags as u32,
+            FileMode(mode as u16),
+        )?;
         return Ok(res as i64);
     }
 
@@ -256,6 +264,26 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
         &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
             let mut inode = d.Inode();
 
+            // if needs write to file, check whether the inode is opened as writable
+            if inode.StableAttr().IsRegular() && fileFlags.Write {
+                let iops = inode.lock().InodeOp.clone();
+                match iops.HostInodeOp() {
+                    Some(iops) => {
+                        let mut lkiops = iops.lock();
+                        if lkiops.SkipRw() {
+                            let parent = d.Parent().unwrap();
+                            let parentIops = parent.Inode().lock().InodeOp.clone();
+                            
+                            let dirfd = parentIops.HostDirOp().expect(&format!("inodeop type is {:?}", parentIops.InodeType())).HostFd();
+                            let name = d.Name();
+                            let cstr = CString::New(&name);
+                            lkiops.TryOpenWrite(dirfd, cstr.Ptr())?;
+                        }
+                    }
+                    None => (),
+                }
+            }
+
             if !fileFlags.Path {
                 inode.CheckPermission(task, &PermMask::FromFlags(flags))?;
             }
@@ -263,6 +291,7 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
             if inode.StableAttr().IsSymlink() && !resolve && !fileFlags.Path {
                 return Err(Error::SysError(SysErr::ELOOP));
             }
+
 
             // Linux always adds the O_LARGEFILE flag when running in 64-bit mode.
             if !fileFlags.Path {
@@ -519,10 +548,28 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
             Error::None => {
                 let mut foundInode = found.Inode();
 
+                if foundInode.StableAttr().IsRegular() {
+                    let iops = foundInode.lock().InodeOp.clone();
+                    match iops.HostInodeOp() {
+                        Some(iops) => {
+                            let mut lkiops = iops.lock();
+                            let dirfd = parent.Inode().lock().InodeOp.HostDirOp().unwrap().HostFd();
+                            if lkiops.SkipRw() {
+                                let cstr = CString::New(&name);
+                                lkiops.TryOpenWrite(dirfd, cstr.Ptr())?;
+                            }
+                        }
+                        None => (),
+                    }
+                }
+
                 if flags & Flags::O_TRUNC as u32 != 0 {
                     if foundInode.StableAttr().IsDir() {
                         return Err(Error::SysError(SysErr::EISDIR))
                     }
+                    
+
+
 
                     foundInode.Truncate(task, &found, 0)?;
                 }
@@ -597,12 +644,7 @@ pub fn SysFaccessat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg1 as u64;
     let mode = args.arg2 as u16 as u32;
 
-    accessAt(
-        task,
-        dirfd,
-        addr,
-        mode,
-    )?;
+    accessAt(task, dirfd, addr, mode)?;
     return Ok(0);
 }
 
@@ -660,7 +702,7 @@ pub fn SysIoctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     return Ok(0);
 }
 
-pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
+pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<u64> {
     let file = task.GetFile(fd)?;
 
     if file.Flags().Path {
@@ -675,12 +717,12 @@ pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
         IoCtlCmd::FIONCLEX => {
             task.SetFlags(fd, &FDFlags { CloseOnExec: false })?;
 
-            return Ok(());
+            return Ok(0);
         }
         IoCtlCmd::FIOCLEX => {
             task.SetFlags(fd, &FDFlags { CloseOnExec: true })?;
 
-            return Ok(());
+            return Ok(0);
         }
         IoCtlCmd::FIONBIO => {
             let set: u32 = task.CopyInObj(val)?;
@@ -694,7 +736,7 @@ pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
             }
 
             file.SetFlags(task, flags.SettableFileFlags());
-            return Ok(());
+            return Ok(0);
         }
         IoCtlCmd::FIOASYNC => {
             let set: u32 = task.CopyInObj(val)?;
@@ -708,18 +750,18 @@ pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
             }
 
             file.SetFlags(task, flags.SettableFileFlags());
-            return Ok(());
+            return Ok(0);
         }
         IoCtlCmd::FIOSETOWN | IoCtlCmd::SIOCSPGRP => {
             let set: i32 = task.CopyInObj(val)?;
             FSetOwner(task, fd, &file, set)?;
-            return Ok(());
+            return Ok(0);
         }
         IoCtlCmd::FIOGETOWN | IoCtlCmd::SIOCGPGRP => {
             let who = FGetOwn(task, &file);
             //*task.GetTypeMut(val)? = who;
             task.CopyOutObj(&who, val)?;
-            return Ok(());
+            return Ok(0);
         }
         _ => return file.Ioctl(task, fd, request, val),
     }
@@ -867,7 +909,7 @@ pub fn SysCloseRange(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let last = args.arg1 as i32;
     let flags = args.arg2 as i32;
 
-    if first < 0 || last <0 || first > last {
+    if first < 0 || last < 0 || first > last {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
@@ -892,15 +934,13 @@ pub fn SysCloseRange(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     if cloexec {
-        let flagToApply = FDFlags {
-            CloseOnExec: true,
-        };
+        let flagToApply = FDFlags { CloseOnExec: true };
 
-        task.fdTbl.SetFlagsForRange(first, last+1, flagToApply)?;
-        return Ok(0)
+        task.fdTbl.SetFlagsForRange(first, last + 1, flagToApply)?;
+        return Ok(0);
     }
 
-    let files = task.fdTbl.RemoveRange(first, last+1);
+    let files = task.fdTbl.RemoveRange(first, last + 1);
     for f in files {
         match f.Flush(task) {
             Ok(_) => (),
@@ -910,9 +950,8 @@ pub fn SysCloseRange(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
     }
 
-    return Ok(0)
+    return Ok(0);
 }
-
 
 // Close implements linux syscall close(2).
 pub fn SysClose(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1013,7 +1052,7 @@ pub fn FGetOwnEx(task: &mut Task, file: &File) -> FOwnerEx {
             return FOwnerEx {
                 Type: F_OWNER_PGRP,
                 PID: task.Thread().PIDNamespace().IDOfProcessGroup(&processgroup),
-            }
+            };
         }
         Recipient::TG(threadgroup) => {
             let threadgroup = match threadgroup.Upgrade() {
@@ -1023,7 +1062,7 @@ pub fn FGetOwnEx(task: &mut Task, file: &File) -> FOwnerEx {
             return FOwnerEx {
                 Type: F_OWNER_PID,
                 PID: task.Thread().PIDNamespace().IDOfThreadGroup(&threadgroup),
-            }
+            };
         }
         Recipient::Thread(thread) => {
             let thread = match thread.Upgrade() {
@@ -1033,11 +1072,11 @@ pub fn FGetOwnEx(task: &mut Task, file: &File) -> FOwnerEx {
             return FOwnerEx {
                 Type: F_OWNER_TID,
                 PID: task.Thread().PIDNamespace().IDOfTask(&thread),
-            }
+            };
         }
         Recipient::None => {
             return FOwnerEx::default();
-        },
+        }
     }
 }
 
@@ -1114,7 +1153,14 @@ pub fn PosixLock(task: &Task, flockAddr: u64, file: &File, block: bool) -> Resul
             }
 
             let lock = inode.lock().LockCtx.Posix.clone();
-            if !lock.LockRegion(task, lockUniqueID, OwnerInfo::New(pid), LockType::ReadLock, &rng, block)? {
+            if !lock.LockRegion(
+                task,
+                lockUniqueID,
+                OwnerInfo::New(pid),
+                LockType::ReadLock,
+                &rng,
+                block,
+            )? {
                 return Err(Error::SysError(SysErr::EAGAIN));
             }
 
@@ -1126,7 +1172,14 @@ pub fn PosixLock(task: &Task, flockAddr: u64, file: &File, block: bool) -> Resul
             }
 
             let lock = inode.lock().LockCtx.Posix.clone();
-            if !lock.LockRegion(task, lockUniqueID, OwnerInfo::New(pid), LockType::WriteLock, &rng, block)? {
+            if !lock.LockRegion(
+                task,
+                lockUniqueID,
+                OwnerInfo::New(pid),
+                LockType::WriteLock,
+                &rng,
+                block,
+            )? {
                 return Err(Error::SysError(SysErr::EAGAIN));
             }
 
@@ -1140,7 +1193,6 @@ pub fn PosixLock(task: &Task, flockAddr: u64, file: &File, block: bool) -> Resul
         }
         _ => return Err(Error::SysError(SysErr::EINVAL)),
     }
-
 }
 
 pub fn PosixTestLock(task: &Task, flockAddr: u64, file: &File) -> Result<()> {
@@ -1149,7 +1201,7 @@ pub fn PosixTestLock(task: &Task, flockAddr: u64, file: &File) -> Result<()> {
     let typ = match flock.Type as i32 {
         F_RDLCK => LockType::ReadLock,
         F_WRLCK => LockType::WriteLock,
-        _ => return Err(Error::SysError(SysErr::EINVAL))
+        _ => return Err(Error::SysError(SysErr::EINVAL)),
     };
 
     let r = file.ComputeLockRange(task, flock.Start, flock.Len, flock.Whence as _)?;
@@ -1161,7 +1213,7 @@ pub fn PosixTestLock(task: &Task, flockAddr: u64, file: &File) -> Result<()> {
     let newFlock = lock.TestRegion(task, lockUniqueID, typ, &r);
 
     task.CopyOutObj(&newFlock, flockAddr)?;
-    return Ok(())
+    return Ok(());
 }
 
 pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1194,9 +1246,7 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             )?;
             Ok(0)
         }
-        Cmd::F_GETFL => {
-            Ok(file.Flags().ToLinux() as i64)
-        },
+        Cmd::F_GETFL => Ok(file.Flags().ToLinux() as i64),
         Cmd::F_SETFL => {
             if file.Flags().Path {
                 return Err(Error::SysError(SysErr::EBADF));
@@ -1212,7 +1262,7 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
 
             PosixLock(task, val, &file, false)?;
-            return Ok(0)
+            return Ok(0);
         }
         Cmd::F_SETLKW => {
             if file.Flags().Path {
@@ -1220,7 +1270,7 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
 
             PosixLock(task, val, &file, true)?;
-            return Ok(0)
+            return Ok(0);
         }
         Cmd::F_GETLK => {
             if file.Flags().Path {
@@ -1228,14 +1278,14 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
 
             PosixTestLock(task, val, &file)?;
-            return Ok(0)
+            return Ok(0);
         }
         Cmd::F_GETOWN => {
             if file.Flags().Path {
                 return Err(Error::SysError(SysErr::EBADF));
             }
-            return Ok(FGetOwn(task, &file) as i64)
-        },
+            return Ok(FGetOwn(task, &file) as i64);
+        }
         Cmd::F_SETOWN => {
             if file.Flags().Path {
                 return Err(Error::SysError(SysErr::EBADF));
@@ -1319,9 +1369,9 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                     return Err(Error::SysError(-ret as _));
                 }
 
-                return Ok(ret)
+                return Ok(ret);
             }
-            
+
             return Err(Error::SysError(SysErr::EINVAL));
         }
         Cmd::F_ADD_SEALS => {
@@ -1333,9 +1383,9 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                     return Err(Error::SysError(-ret as _));
                 }
 
-                return Ok(ret)
+                return Ok(ret);
             }
-            
+
             return Err(Error::SysError(SysErr::EINVAL));
         }
         Cmd::F_GETPIPE_SZ => {
@@ -1394,7 +1444,7 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 None => return Ok(0),
                 Some(async) => {
                     async.SetSignal(val as i32)?;
-                    return Ok(0)
+                    return Ok(0);
                 }
             }
         }
@@ -1810,9 +1860,9 @@ fn readlinkAt(task: &Task, dirFd: i32, addr: u64, bufAddr: u64, size: u32) -> Re
                 }
                 Err(Error::SysError(SysErr::ENOENT)) => {
                     // there is such interesting result happen when running mariadb with "/tmp" folder
-                    // work around this now 
+                    // work around this now
                     // todo: find better solution later
-                    return Err(Error::SysError(SysErr::EINVAL))
+                    return Err(Error::SysError(SysErr::EINVAL));
                 }
                 Err(e) => return Err(e),
                 Ok(s) => s,
@@ -1919,9 +1969,14 @@ pub fn SysTruncate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    let rlimitSize = task.Thread().ThreadGroup().Limits().Get(LimitType::FileSize).Cur;
+    let rlimitSize = task
+        .Thread()
+        .ThreadGroup()
+        .Limits()
+        .Get(LimitType::FileSize)
+        .Cur;
     if len as u64 > rlimitSize {
-        return Err(Error::ErrExceedsFileSizeLimit)
+        return Err(Error::ErrExceedsFileSizeLimit);
     }
 
     fileOpOn(
@@ -1951,7 +2006,7 @@ pub fn SysTruncate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             // File length modified, generate notification.
             d.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::InodeEvent);
-            return Ok(())
+            return Ok(());
         },
     )?;
 
@@ -1976,16 +2031,22 @@ pub fn SysFtruncate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    let rlimitSize = task.Thread().ThreadGroup().Limits().Get(LimitType::FileSize).Cur;
+    let rlimitSize = task
+        .Thread()
+        .ThreadGroup()
+        .Limits()
+        .Get(LimitType::FileSize)
+        .Cur;
     if len as u64 > rlimitSize {
-        return Err(Error::ErrExceedsFileSizeLimit)
+        return Err(Error::ErrExceedsFileSizeLimit);
     }
 
     let dirent = file.Dirent.clone();
     inode.Truncate(task, &dirent, len)?;
 
     // File length modified, generate notification.
-    file.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::InodeEvent);
+    file.Dirent
+        .InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::InodeEvent);
 
     return Ok(0);
 }
@@ -2117,7 +2178,7 @@ pub fn SysFchown(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let file = task.GetFile(fd)?;
     if file.Flags().Path {
-        return Err(Error::SysError(SysErr::EBADF))
+        return Err(Error::SysError(SysErr::EBADF));
     }
     let dirent = file.Dirent.clone();
     return chown(task, &dirent, uid, gid);
@@ -2409,15 +2470,21 @@ pub fn SysFallocate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EFBIG));
     }
 
-    let rlimitSize = task.Thread().ThreadGroup().Limits().Get(LimitType::FileSize).Cur;
+    let rlimitSize = task
+        .Thread()
+        .ThreadGroup()
+        .Limits()
+        .Get(LimitType::FileSize)
+        .Cur;
     if len as u64 > rlimitSize {
-        return Err(Error::ErrExceedsFileSizeLimit)
+        return Err(Error::ErrExceedsFileSizeLimit);
     }
 
     let dirent = file.Dirent.clone();
     inode.Allocate(task, &dirent, offset, len)?;
 
-    file.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::InodeEvent);
+    file.Dirent
+        .InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::InodeEvent);
 
     Ok(0)
 }
@@ -2429,7 +2496,7 @@ pub fn SysFlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
     if file.Flags().Path {
-        return Err(Error::SysError(SysErr::EBADF))
+        return Err(Error::SysError(SysErr::EBADF));
     }
 
     let nonblocking = operation & LibcConst::LOCK_NB as i32 != 0;
@@ -2459,12 +2526,26 @@ pub fn SysFlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         LibcConst::LOCK_EX => {
             if nonblocking {
                 // Since we're nonblocking we pass a nil lock.Blocker implementation.
-                if !bsd.LockRegion(task, lockUniqueId, OwnerInfo::default(), LockType::WriteLock, &rng, false)? {
+                if !bsd.LockRegion(
+                    task,
+                    lockUniqueId,
+                    OwnerInfo::default(),
+                    LockType::WriteLock,
+                    &rng,
+                    false,
+                )? {
                     return Err(Error::SysError(SysErr::EWOULDBLOCK));
                 }
             } else {
                 // Because we're blocking we will pass the task to satisfy the lock.Blocker interface.
-                if !bsd.LockRegion(task, lockUniqueId, OwnerInfo::default(), LockType::WriteLock, &rng, true)? {
+                if !bsd.LockRegion(
+                    task,
+                    lockUniqueId,
+                    OwnerInfo::default(),
+                    LockType::WriteLock,
+                    &rng,
+                    true,
+                )? {
                     return Err(Error::SysError(SysErr::EINTR));
                 }
             }
@@ -2472,12 +2553,26 @@ pub fn SysFlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         LibcConst::LOCK_SH => {
             if nonblocking {
                 // Since we're nonblocking we pass a nil lock.Blocker implementation.
-                if !bsd.LockRegion(task, lockUniqueId, OwnerInfo::default(), LockType::ReadLock, &rng, false)? {
+                if !bsd.LockRegion(
+                    task,
+                    lockUniqueId,
+                    OwnerInfo::default(),
+                    LockType::ReadLock,
+                    &rng,
+                    false,
+                )? {
                     return Err(Error::SysError(SysErr::EWOULDBLOCK));
                 }
             } else {
                 // Because we're blocking we will pass the task to satisfy the lock.Blocker interface.
-                if !bsd.LockRegion(task, lockUniqueId, OwnerInfo::default(), LockType::ReadLock, &rng, true)? {
+                if !bsd.LockRegion(
+                    task,
+                    lockUniqueId,
+                    OwnerInfo::default(),
+                    LockType::ReadLock,
+                    &rng,
+                    true,
+                )? {
                     return Err(Error::SysError(SysErr::EINTR));
                 }
             }
@@ -2491,4 +2586,3 @@ pub fn SysFlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     return Ok(0);
 }
-

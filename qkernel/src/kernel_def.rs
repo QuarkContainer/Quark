@@ -14,20 +14,23 @@
 //
 
 use core::alloc::{GlobalAlloc, Layout};
+use core::arch::asm;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use core::arch::asm;
 
 use crate::qlib::fileinfo::*;
 
+use self::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
+use self::tsot_msg::TsotMessage;
+
 use super::qlib::kernel::asm::*;
+use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 use super::qlib::kernel::taskMgr::*;
 use super::qlib::kernel::threadmgr::task_sched::*;
+use super::qlib::kernel::vcpu::*;
 use super::qlib::kernel::SHARESPACE;
 use super::qlib::kernel::TSC;
-use super::qlib::kernel::vcpu::*;
-use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 
 use super::qlib::common::*;
 use super::qlib::kernel::memmgr::pma::*;
@@ -35,14 +38,12 @@ use super::qlib::kernel::task::*;
 use super::qlib::kernel::taskMgr;
 use super::qlib::linux_def::*;
 use super::qlib::loader::*;
-use super::qlib::mem::list_allocator::*;
 use super::qlib::mem::bitmap_allocator::*;
+use super::qlib::mem::list_allocator::*;
 use super::qlib::mutex::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::qmsg::*;
 use super::qlib::task_mgr::*;
-use super::qlib::uring::util::*;
-use super::qlib::uring::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::ShareSpace;
 use super::qlib::*;
@@ -50,76 +51,6 @@ use super::syscalls::sys_file::*;
 use super::Kernel::HostSpace;
 
 use crate::GLOBAL_ALLOCATOR;
-
-impl IoUring {
-    /// Initiate asynchronous I/O.
-    #[inline]
-    pub fn submit(&self) -> Result<usize> {
-        self.submit_and_wait(0)
-    }
-
-    pub fn submit_and_wait(&self, want: usize) -> Result<usize> {
-        let len = self.sq_len();
-
-        let mut flags = 0;
-
-        if want > 0 {
-            flags |= sys::IORING_ENTER_GETEVENTS;
-        }
-
-        if self.params.0.flags & sys::IORING_SETUP_SQPOLL != 0 {
-            if self.sq_need_wakeup() {
-                if want > 0 {
-                    flags |= sys::IORING_ENTER_SQ_WAKEUP;
-                } else {
-                    HostSpace::UringWake(0);
-                    return Ok(0);
-                }
-            } else if want == 0 {
-                // fast poll
-                return Ok(len);
-            }
-        }
-
-        unsafe { self.enter(len as _, want as _, flags) }
-    }
-
-    pub unsafe fn enter(
-        &self,
-        to_submit: u32,
-        min_complete: u32,
-        flag: u32,
-    ) -> Result<usize> {
-        return io_uring_enter(to_submit, min_complete, flag);
-    }
-
-    pub fn sq_len(&self) -> usize {
-        unsafe {
-            let head = (*self.sq.lock().head).load(Ordering::Acquire);
-            let tail = unsync_load(self.sq.lock().tail);
-
-            tail.wrapping_sub(head) as usize
-        }
-    }
-
-    pub fn sq_need_wakeup(&self) -> bool {
-        unsafe { (*self.sq.lock().flags).load(Ordering::Acquire) & sys::IORING_SQ_NEED_WAKEUP != 0 }
-    }
-}
-
-pub fn io_uring_enter(
-    to_submit: u32,
-    min_complete: u32,
-    flags: u32,
-    //sig: *const sigset_t,
-) -> Result<usize> {
-    let ret = HostSpace::IoUringEnter(to_submit, min_complete, flags);
-    if ret < 0 {
-        return Err(Error::SysError(-ret as i32));
-    }
-
-    return Ok(ret as usize);
-}
 
 impl OOMHandler for ListAllocator {
     fn handleError(&self, size: u64, alignment: u64) {
@@ -223,7 +154,7 @@ pub fn switch(from: TaskId, to: TaskId) {
         toCtx.SwitchPageTable();
     }
     toCtx.SetFS();
-    
+
     fromCtx.mm.VcpuLeave();
     toCtx.mm.VcpuEnter();
 
@@ -258,6 +189,7 @@ extern "C" {
     pub fn CopyPageUnsafe(to: u64, from: u64);
 }
 
+#[cfg(target_arch = "x86_64")]
 #[inline]
 pub fn Invlpg(addr: u64) {
     if !super::SHARESPACE.config.read().KernelPagetable {
@@ -270,6 +202,22 @@ pub fn Invlpg(addr: u64) {
     }
 }
 
+#[cfg(target_arch = "aarch64")]
+#[inline]
+pub fn Invlpg(addr: u64) {
+    if !super::SHARESPACE.config.read().KernelPagetable {
+        unsafe {
+            asm!("
+            dsb ishst
+            tlbi vaae1is, {}
+            dsb ish
+            isb
+        ", in(reg) (addr >> PAGE_SHIFT));
+        };
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
 #[inline(always)]
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     unsafe {
@@ -286,7 +234,13 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
         )
     }
 }
-    
+
+#[cfg(target_arch = "aarch64")]
+#[inline(always)]
+pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
+    // TODO add HyperCall64
+}
+
 impl CPULocal {
     pub fn CpuId() -> usize {
         return GetVcpuId();
@@ -309,9 +263,6 @@ pub fn VcpuFreq() -> i64 {
 
 pub fn NewSocket(fd: i32) -> i64 {
     return HostSpace::NewSocket(fd);
-}
-pub fn UringWake(minCompleted: u64) {
-    HostSpace::UringWake(minCompleted);
 }
 
 impl HostSpace {
@@ -364,12 +315,12 @@ pub fn child_clone(userSp: u64) {
     currTask.AccountTaskEnter(SchedState::RunningApp);
     let pt = currTask.GetPtRegs();
 
-    let kernalRsp = pt as *const _ as u64;
+    let kernelRsp = pt as *const _ as u64;
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
     //currTask.mm.VcpuEnter();
     CPULocal::Myself().SetMode(VcpuMode::User);
     currTask.mm.HandleTlbShootdown();
-    SyscallRet(kernalRsp)
+    SyscallRet(kernelRsp)
 }
 
 extern "C" {
@@ -384,7 +335,7 @@ impl BitmapAllocatorWrapper {
     pub const fn New() -> Self {
         return Self {
             addr: AtomicU64::new(MemoryDef::HEAP_OFFSET),
-        }
+        };
     }
 
     pub fn Init(&self) {
@@ -396,12 +347,14 @@ impl HostAllocator {
     pub const fn New() -> Self {
         return Self {
             listHeapAddr: AtomicU64::new(0),
+            ioHeapAddr: AtomicU64::new(0),
             initialized: AtomicBool::new(true),
         };
     }
 
     pub fn Init(&self, heapAddr: u64) {
-        self.listHeapAddr.store(heapAddr, Ordering::SeqCst)
+        self.listHeapAddr.store(heapAddr, Ordering::SeqCst);
+        self.ioHeapAddr.store(heapAddr + MemoryDef::HEAP_SIZE, Ordering::SeqCst)
     }
 }
 
@@ -411,7 +364,14 @@ unsafe impl GlobalAlloc for HostAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        self.Allocator().dealloc(ptr, layout);
+        
+        let addr = ptr as u64;
+        if !Self::IsIOBuf(addr) {
+            self.Allocator().dealloc(ptr, layout);
+        } else {
+            //self.Allocator().dealloc(ptr, layout);
+            self.IOAllocator().dealloc(ptr, layout);
+        }
     }
 }
 
@@ -431,26 +391,27 @@ pub fn HugepageDontNeed(addr: u64) {
 
 impl IOMgr {
     pub fn Init() -> Result<Self> {
-        return Err(Error::Common(format!("IOMgr can't init in kernel")))
+        return Err(Error::Common(format!("IOMgr can't init in kernel")));
     }
 }
-
 
 unsafe impl GlobalAlloc for GlobalVcpuAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         if !self.init.load(Ordering::Relaxed) {
-            return GLOBAL_ALLOCATOR
-                .alloc(layout);
+            return GLOBAL_ALLOCATOR.alloc(layout);
         }
-        return CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout)
+        return CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout);
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        if !self.init.load(Ordering::Relaxed) {
-            return GLOBAL_ALLOCATOR
-                .dealloc(ptr, layout);
+        if !HostAllocator::IsHeapAddr(ptr as u64) {
+            return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
         }
-        return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout)
+
+        if !self.init.load(Ordering::Relaxed) {
+            return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
+        }
+        return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout);
     }
 }
 
@@ -463,7 +424,7 @@ impl UringAsyncMgr {
         loop {
             let id = match self.freeids.lock().pop_front() {
                 None => break,
-                Some(id) => id
+                Some(id) => id,
             };
             self.freeSlot(id as _);
         }
@@ -476,4 +437,26 @@ pub fn IsKernel() -> bool {
 
 pub fn ReapSwapIn() {
     HostSpace::SwapIn();
+}
+
+
+impl TsotSocketMgr {
+    pub fn SendMsg(&self, m: &TsotMessage) -> Result<()> {
+        let res = HostSpace::TsotSendMsg(m as * const _ as u64);
+        if res == 0 {
+            return Ok(())
+        }
+
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    pub fn RecvMsg(&self) -> Result<TsotMessage> {
+        let mut m = TsotMessage::default();
+        let res = HostSpace::TsotRecvMsg(&mut m as * mut _ as u64);
+        if res == 0 {
+            return Ok(m)
+        }
+
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
 }

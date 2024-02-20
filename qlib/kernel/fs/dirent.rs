@@ -22,23 +22,23 @@ use alloc::vec::Vec;
 use core::cmp::Eq;
 use core::cmp::PartialEq;
 use core::ops::Deref;
-use spin::*;
-use lazy_static::lazy_static;
 use hashbrown::HashMap;
+use lazy_static::lazy_static;
+use spin::*;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::singleton::*;
 use super::super::socket::unix::transport::unix::*;
 use super::super::task::*;
-use super::super::SHARESPACE;
 use super::super::uid::*;
+use super::super::SHARESPACE;
 use super::dentry::*;
 use super::file::*;
 use super::flags::*;
 use super::inode::*;
-use super::mount::*;
 use super::inotify::*;
+use super::mount::*;
 
 lazy_static! {
     pub static ref NEGATIVE_DIRENT: Dirent = Dirent::default();
@@ -134,7 +134,7 @@ impl DirentWeak {
 }
 
 #[derive(Clone, Default)]
-pub struct Dirent (Arc<DirentInternal>);
+pub struct Dirent(Arc<DirentInternal>);
 
 impl Dirent {
     pub fn Downgrade(&self) -> DirentWeak {
@@ -189,11 +189,13 @@ impl Drop for Dirent {
                 // deletion event. This may not be the case for inodes being revalidated.
                 let unlinked = watches.read().unlinked;
                 if unlinked {
-                    watches.Notify("",
-                                   InotifyEvent::IN_DELETE_SELF,
-                                   0,
-                                   EventType::InodeEvent,
-                                   false);
+                    watches.Notify(
+                        "",
+                        InotifyEvent::IN_DELETE_SELF,
+                        0,
+                        EventType::InodeEvent,
+                        false,
+                    );
                 }
 
                 // Remove references from the watch owners to the watches on this inode,
@@ -259,7 +261,6 @@ impl Dirent {
     pub fn Inode(&self) -> Inode {
         return self.inode.clone();
     }
-
 
     pub fn MyFullName(&self) -> String {
         let _a = RENAME.read();
@@ -403,7 +404,7 @@ impl Dirent {
     }
 
     pub fn IsNegative(&self) -> bool {
-        return Arc::ptr_eq(&self.0, &NEGATIVE_DIRENT1.0)
+        return Arc::ptr_eq(&self.0, &NEGATIVE_DIRENT1.0);
     }
 
     fn walk(&self, task: &Task, root: &Dirent, name: &str) -> Result<Dirent> {
@@ -432,7 +433,7 @@ impl Dirent {
         let remove = match child {
             Some(dirent) => {
                 if dirent.IsNegative() {
-                    return Err(Error::SysError(SysErr::ENOENT))
+                    return Err(Error::SysError(SysErr::ENOENT));
                 }
 
                 let mounted = dirent.main.lock().mounted;
@@ -460,12 +461,11 @@ impl Dirent {
 
         let c = match inode.Lookup(task, name) {
             Err(Error::SysError(SysErr::ENOENT)) => {
-
                 // why the negative doesn't work? todo: fix this
                 //let negative = Arc::downgrade(&(NEGATIVE_DIRENT.0));
                 //(self.0).0.lock().Children.insert(String::from(name), negative);
 
-                return Err(Error::SysError(SysErr::ENOENT))
+                return Err(Error::SysError(SysErr::ENOENT));
             }
             Err(e) => return Err(e),
             Ok(c) => c,
@@ -479,8 +479,6 @@ impl Dirent {
     }
 
     pub fn Walk(&self, task: &Task, root: &Dirent, name: &str) -> Result<Dirent> {
-        //error!("Walk 1 {}", name);
-        //defer!(error!("Walk 2 {}", name));
         let _a = RENAME.read();
         let _dm = self.dirMu.read();
 
@@ -492,43 +490,29 @@ impl Dirent {
     }
 
     pub fn IsRoot(&self) -> bool {
-        return self.main.lock().IsRoot()
+        return self.main.lock().IsRoot();
     }
 
-    pub fn AddChild(
-        &self,
-        name: String,
-        child: &Dirent,
-    ) -> Option<Dirent> {
-        assert!(
-        child.IsRoot(),
-        "Add child request the child has no parent"
-        );
+    pub fn AddChild(&self, name: String, child: &Dirent) -> Option<Dirent> {
+        assert!(child.IsRoot(), "Add child request the child has no parent");
         child.main.lock().Parent = Some(self.clone());
 
         return self.addChild(name, child);
     }
 
     pub fn Name(&self) -> String {
-        return self.main.lock().Name.clone()
+        return self.main.lock().Name.clone();
     }
 
-    pub fn addChild(
-        &self,
-        name: String,
-        child: &Dirent,
-    ) -> Option<Dirent> {
+    pub fn addChild(&self, name: String, child: &Dirent) -> Option<Dirent> {
         assert!(
-        child.Parent().unwrap() == self.clone(),
-        "Dirent addChild assumes the child already belongs to the parent"
+            child.Parent().unwrap() == self.clone(),
+            "Dirent addChild assumes the child already belongs to the parent"
         );
 
         //let name = child.0.lock().Name.clone();
         //println!("addChild the name is {}", name);
-        match self
-            .children
-            .lock()
-            .insert(name, child.Downgrade()) {
+        match self.children.lock().insert(name, child.Downgrade()) {
             None => return None,
             Some(c) => return c.Upgrade(),
         }
@@ -564,11 +548,13 @@ impl Dirent {
         self.AddChild(String::from(name), &child);
         child.ExtendReference();
         if SHARESPACE.config.read().EnableInotify {
-            self.Watches().Notify(name,
-                                   InotifyEvent::IN_CREATE,
-                                   0,
-                                   EventType::InodeEvent,
-                                   false);
+            self.Watches().Notify(
+                name,
+                InotifyEvent::IN_CREATE,
+                0,
+                EventType::InodeEvent,
+                false,
+            );
         }
 
         return Ok(file);
@@ -603,15 +589,17 @@ impl Dirent {
             let mut inode = self.Inode();
             inode.CreateLink(task, self, oldname, newname)?;
             if SHARESPACE.config.read().EnableInotify {
-                self.Watches().Notify(newname,
-                                       InotifyEvent::IN_CREATE,
-                                       0,
-                                       EventType::PathEvent,
-                                       false);
+                self.Watches().Notify(
+                    newname,
+                    InotifyEvent::IN_CREATE,
+                    0,
+                    EventType::PathEvent,
+                    false,
+                );
             }
             self.children.lock().remove(oldname);
             self.children.lock().remove(newname);
-            return Ok(())
+            return Ok(());
         });
     }
 
@@ -637,18 +625,22 @@ impl Dirent {
             self.children.lock().remove(name);
 
             if SHARESPACE.config.read().EnableInotify {
-                target.Watches().Notify("",
-                                             InotifyEvent::IN_ATTRIB,
-                                             0,
-                                             EventType::InodeEvent,
-                                             false);
-                self.Watches().Notify(name,
-                                       InotifyEvent::IN_CREATE,
-                                       0,
-                                       EventType::InodeEvent,
-                                       false);
+                target.Watches().Notify(
+                    "",
+                    InotifyEvent::IN_ATTRIB,
+                    0,
+                    EventType::InodeEvent,
+                    false,
+                );
+                self.Watches().Notify(
+                    name,
+                    InotifyEvent::IN_CREATE,
+                    0,
+                    EventType::InodeEvent,
+                    false,
+                );
             }
-            return Ok(())
+            return Ok(());
         });
     }
 
@@ -663,11 +655,13 @@ impl Dirent {
             let mut inode = self.Inode();
             let ret = inode.CreateDirectory(task, self, name, perms);
             if SHARESPACE.config.read().EnableInotify {
-                self.Watches().Notify(name,
-                                       InotifyEvent::IN_ISDIR | InotifyEvent::IN_CREATE,
-                                       0,
-                                       EventType::PathEvent,
-                                       false);
+                self.Watches().Notify(
+                    name,
+                    InotifyEvent::IN_ISDIR | InotifyEvent::IN_CREATE,
+                    0,
+                    EventType::PathEvent,
+                    false,
+                );
             }
 
             self.children.lock().remove(name);
@@ -702,11 +696,13 @@ impl Dirent {
         let childDir = self.Walk(task, root, name)?;
 
         if SHARESPACE.config.read().EnableInotify {
-            self.Watches().Notify(name,
-                                   InotifyEvent::IN_CREATE,
-                                   0,
-                                   EventType::InodeEvent,
-                                   false);
+            self.Watches().Notify(
+                name,
+                InotifyEvent::IN_CREATE,
+                0,
+                EventType::InodeEvent,
+                false,
+            );
         }
 
         return Ok(childDir);
@@ -724,13 +720,15 @@ impl Dirent {
             inode.CreateFifo(task, self, name, perms)?;
             self.children.lock().remove(name);
             if SHARESPACE.config.read().EnableInotify {
-                self.Watches().Notify(name,
-                                       InotifyEvent::IN_CREATE,
-                                       0,
-                                       EventType::InodeEvent,
-                                       false);
+                self.Watches().Notify(
+                    name,
+                    InotifyEvent::IN_CREATE,
+                    0,
+                    EventType::InodeEvent,
+                    false,
+                );
             }
-            return Ok(())
+            return Ok(());
         });
     }
 
@@ -889,11 +887,13 @@ impl Dirent {
         if SHARESPACE.config.read().EnableInotify {
             child.Watches().MarkUnlinked();
             child.Watches().Destroy();
-            self.Watches().Notify(name,
-                                   InotifyEvent::IN_ISDIR | InotifyEvent::IN_DELETE,
-                                   0,
-                                   EventType::InodeEvent,
-                                   true);
+            self.Watches().Notify(
+                name,
+                InotifyEvent::IN_ISDIR | InotifyEvent::IN_DELETE,
+                0,
+                EventType::InodeEvent,
+                true,
+            );
         }
 
         return Ok(());
@@ -1022,13 +1022,15 @@ impl Dirent {
 
         if SHARESPACE.config.read().EnableInotify {
             let isDir = newInode.StableAttr().IsDir();
-            InotifyRename(task,
-                          Some(renamed.Watches()),
-                          Some(oldParent.Watches()),
-                          Some(newParent.Watches()),
-                          oldName,
-                          newName,
-                          isDir);
+            InotifyRename(
+                task,
+                Some(renamed.Watches()),
+                Some(oldParent.Watches()),
+                Some(newParent.Watches()),
+                oldName,
+                newName,
+                isDir,
+            );
         }
 
         renamed.DropExtendedReference();
@@ -1122,14 +1124,15 @@ impl Dirent {
         // Queue inotify events for the rename.
         if SHARESPACE.config.read().EnableInotify {
             let isDir = newInode.StableAttr().IsDir();
-            InotifyRename(task,
-                          Some(renamed.Watches()),
-                          Some(parent.Watches()),
-                          Some(parent.Watches()),
-                          oldName,
-                          newName,
-                          isDir);
-
+            InotifyRename(
+                task,
+                Some(renamed.Watches()),
+                Some(parent.Watches()),
+                Some(parent.Watches()),
+                oldName,
+                newName,
+                isDir,
+            );
         }
 
         renamed.DropExtendedReference();
@@ -1220,19 +1223,13 @@ impl Dirent {
                 None => (),
                 Some(p) => {
                     let name = self.Name();
-                    p.Watches().Notify(&name,
-                                               event,
-                                               cookie,
-                                               et,
-                                               self.IsDeleted());
+                    p.Watches()
+                        .Notify(&name, event, cookie, et, self.IsDeleted());
                 }
             }
 
-            self.Watches().Notify("",
-                                   event,
-                                   cookie,
-                                   et,
-                                   self.IsDeleted());
+            self.Watches()
+                .Notify("", event, cookie, et, self.IsDeleted());
         }
     }
 
@@ -1275,7 +1272,7 @@ impl Default for DirentInternal {
             dirMu: Default::default(),
             cacheMu: Default::default(),
             children: Default::default(),
-        }
+        };
     }
 }
 

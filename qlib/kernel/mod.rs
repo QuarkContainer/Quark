@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::arch::asm;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicI64};
-use core::arch::asm;
 
 use crate::qlib::fileinfo::*;
 use crate::qlib::rdma_svc_cli::RDMASvcClient;
@@ -117,7 +117,8 @@ pub fn LoadVcpuFreq() -> i64 {
 
 #[inline]
 pub fn Shutdown() -> bool {
-    return SHARESPACE.Shutdown();
+    let ret = SHARESPACE.IsShutdown();
+    return ret;
 }
 
 #[derive(Default)]
@@ -138,6 +139,7 @@ impl Tsc {
     }
 
     #[inline(always)]
+    #[cfg(target_arch = "x86_64")]
     pub fn RawRdtsc() -> i64 {
         let rax: u64;
         let rdx: u64;
@@ -152,6 +154,19 @@ impl Tsc {
         };
 
         return rax as i64 | ((rdx as i64) << 32);
+    }
+
+    #[inline(always)]
+    #[cfg(target_arch = "aarch64")]
+    pub fn RawRdtsc() -> i64 {
+        let val: u64;
+        unsafe {
+            asm!("mrs {0}, cntvct_el0",
+            out(reg) val
+            )
+        };
+
+        return val as i64;
     }
 
     pub fn SetOffset(&self, offset: i64) {

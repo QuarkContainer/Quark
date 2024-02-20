@@ -385,7 +385,7 @@ impl MountNs {
 
             let next = match current.Walk(task, root, first) {
                 Err(e) => {
-                    current.ExtendReference();
+                    current.DropExtendedReference();
                     return Err(e);
                 }
                 Ok(n) => n,
@@ -422,6 +422,26 @@ impl MountNs {
                             remainStr = path;
                             remain = &remainStr;
                             current = next;
+                        }
+                    }
+
+                    match self.ResolvePath(task, &current, remainingTraversals)? {
+                        ResolveResult::Dirent(d) => current = d,
+                        ResolveResult::Path(context) => {
+                            contexts.push(remain.to_string());
+
+                            remainStr = context.path;
+                            remain = &remainStr;
+
+                            match self.InitPath(root, &context.wd, remain) {
+                                None => (),
+                                Some((tnext, tfirst, tremain)) => {
+                                    current = tnext;
+                                    first = tfirst;
+                                    remain = tremain;
+                                    continue;
+                                }
+                            };
                         }
                     }
                 }
@@ -482,7 +502,7 @@ impl MountNs {
             return Ok(name.to_string());
         }
 
-        let mut wd = wd.clone();
+        let mut wd = wd;
         if let Some(idx) = name.find('/') {
             if idx > 0 {
                 if wd.len() == 0 {
@@ -1202,7 +1222,13 @@ mod tests {
             return Err(Error::None);
         }
 
-        fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &[u8], _flags: u32) -> Result<()> {
+        fn Setxattr(
+            &self,
+            _dir: &mut Inode,
+            _name: &str,
+            _value: &[u8],
+            _flags: u32,
+        ) -> Result<()> {
             return Err(Error::None);
         }
 

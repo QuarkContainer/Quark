@@ -15,8 +15,8 @@
 use alloc::string::String;
 use alloc::string::ToString;
 use core::u64;
-use x86_64::structures::paging::PageTableFlags;
 
+use super::pagetable::PageTableFlags;
 use super::common::*;
 use super::linux_def::*;
 use super::range::*;
@@ -47,8 +47,9 @@ impl AccessType {
         return AccessType(0);
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn NewFromPageFlags(flags: PageTableFlags) -> Self {
-        let present = flags & PageTableFlags::PRESENT == PageTableFlags::PRESENT;
+        let present: bool = flags & PageTableFlags::PRESENT == PageTableFlags::PRESENT;
         let useraccess = flags & PageTableFlags::USER_ACCESSIBLE == PageTableFlags::USER_ACCESSIBLE;
         if !present || !useraccess {
             return Self::New(false, false, false);
@@ -59,6 +60,20 @@ impl AccessType {
         return Self::New(present, write, exec);
     }
 
+    #[cfg(target_arch = "aarch64")]
+    pub fn NewFromPageFlags(flags: PageTableFlags) -> Self {
+        let present: bool = flags & PageTableFlags::VALID == PageTableFlags::VALID;
+        let useraccess = flags & PageTableFlags::USER_ACCESSIBLE == PageTableFlags::USER_ACCESSIBLE;
+        if !present || !useraccess {
+            return Self::New(false, false, false);
+        }
+
+        let write = flags & !PageTableFlags::READ_ONLY != PageTableFlags::READ_ONLY;
+        let exec = flags & !PageTableFlags::UXN != PageTableFlags::UXN;
+        return Self::New(present, write, exec);
+    }
+
+    #[cfg(target_arch = "x86_64")]
     pub fn ToUserPageFlags(&self) -> PageTableFlags {
         let mut flags = PageTableFlags::NO_EXECUTE;
         if self.Read() {
@@ -70,10 +85,28 @@ impl AccessType {
         }
 
         if self.Exec() {
-            flags &= PageTableFlags::NO_EXECUTE;
+            flags &= !PageTableFlags::NO_EXECUTE;
         }
 
-        return flags
+        return flags;
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn ToUserPageFlags(&self) -> PageTableFlags {
+        let mut flags = PageTableFlags::UXN;
+        if self.Read() {
+            flags |= PageTableFlags::VALID | PageTableFlags::USER_ACCESSIBLE;
+        }
+
+        if !self.Write() {
+            flags |= PageTableFlags::READ_ONLY;
+        }
+
+        if self.Exec() {
+            flags &= !PageTableFlags::UXN;
+        }
+
+        return flags;
     }
 
     pub fn New(read: bool, write: bool, exec: bool) -> Self {
@@ -210,6 +243,106 @@ impl AccessType {
 
 pub struct PageOpts(PageTableFlags);
 
+#[cfg(target_arch = "aarch64")]
+impl PageOpts {
+    //const Empty : PageTableFlags = PageTableFlags::PRESENT & PageTableFlags::WRITABLE; //set 0
+    pub fn New(user: bool, write: bool, exec: bool) -> Self {
+        let mut flags = PageTableFlags::VALID;
+        if !write {
+            flags |= PageTableFlags::READ_ONLY;
+        }
+
+        if user {
+            flags |= PageTableFlags::USER_ACCESSIBLE;
+        }
+
+        if !exec {
+            flags |= PageTableFlags::UXN;
+        }
+
+        return Self(flags);
+    }
+
+    pub fn All() -> Self {
+        return PageOpts(
+            PageTableFlags::VALID | PageTableFlags::USER_ACCESSIBLE,
+        );
+    }
+
+    pub fn Zero() -> Self {
+        return PageOpts(PageTableFlags::ZERO); //set 0
+    }
+
+    pub fn Kernel() -> Self {
+        return PageOpts(
+            PageTableFlags::VALID,
+        );
+    }
+
+    pub fn UserReadOnly() -> Self {
+        return PageOpts(PageTableFlags::VALID | PageTableFlags::USER_ACCESSIBLE | PageTableFlags::READ_ONLY);
+    }
+
+    pub fn UserNonAccessable() -> Self {
+        return PageOpts(PageTableFlags::VALID | PageTableFlags::ACCESSED);
+    }
+
+    pub fn UserReadWrite() -> Self {
+        return PageOpts(
+            PageTableFlags::VALID | PageTableFlags::USER_ACCESSIBLE,
+        );
+    }
+
+    pub fn KernelReadOnly() -> Self {
+        return PageOpts(PageTableFlags::VALID | PageTableFlags::READ_ONLY);
+    }
+    
+    pub fn KernelReadWrite() -> Self {
+        return PageOpts(PageTableFlags::VALID);
+    }
+
+    pub fn Present(&self) -> bool {
+        return (self.0 & PageTableFlags::VALID) != Self::Zero().0;
+    }
+
+    pub fn Write(&self) -> bool {
+        return (self.0 & PageTableFlags::READ_ONLY) == Self::Zero().0;
+    }
+
+    pub fn Global(&self) -> bool {
+        return (self.0 & PageTableFlags::NON_GLOBAL) == Self::Zero().0;
+    }
+
+    pub fn UserAccess(&self) -> bool {
+        return (self.0 & PageTableFlags::USER_ACCESSIBLE) != Self::Zero().0;
+    }
+
+    pub fn SetPresent(&mut self) -> &mut Self {
+        self.0 |= PageTableFlags::VALID;
+        return self;
+    }
+
+    pub fn SetWrite(&mut self) -> &mut Self {
+        self.0 &= !PageTableFlags::READ_ONLY;
+        return self;
+    }
+
+    pub fn SetUserAccess(&mut self) -> &mut Self {
+        self.0 |= PageTableFlags::USER_ACCESSIBLE;
+        return self;
+    }
+
+    pub fn SetGlobal(&mut self) -> &mut Self {
+        self.0 &= !PageTableFlags::NON_GLOBAL;
+        return self;
+    }
+
+    pub fn Val(&self) -> PageTableFlags {
+        return self.0;
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
 impl PageOpts {
     //const Empty : PageTableFlags = PageTableFlags::PRESENT & PageTableFlags::WRITABLE; //set 0
     pub fn New(user: bool, write: bool, exec: bool) -> Self {
@@ -352,7 +485,7 @@ impl Addr {
 
     pub fn PageAligned(&self) -> Result<()> {
         if !self.IsPageAligned() {
-            return Err(Error::UnallignedAddress);
+            return Err(Error::UnallignedAddress(format!("PageAligned {:?}", self)));
         }
 
         Ok(())

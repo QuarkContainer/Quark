@@ -38,7 +38,6 @@ use super::super::host::hostinodeop::*;
 use super::super::inode::*;
 use super::super::mount::*;
 
-
 #[derive(Clone)]
 pub struct TaskOwnedInodeOps {
     pub iops: Arc<Iops>,
@@ -387,7 +386,8 @@ impl InodeOperations for StaticFileInodeOps {
             offset: QLock::New(0),
             FileOp: StaticFile {
                 content: self.read().content.clone(),
-            }.into(),
+            }
+            .into(),
         })));
     }
 

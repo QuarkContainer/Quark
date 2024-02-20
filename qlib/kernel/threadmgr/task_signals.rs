@@ -401,7 +401,7 @@ impl Thread {
             ..Default::default()
         };
 
-        let mut sigchld = sigchldInfo.SigChld();
+        let sigchld = sigchldInfo.SigChld();
         let pidns = tg.PIDNamespace();
         let creds = self.lock().creds.clone();
         let userns = creds.lock().UserNamespace.clone();
@@ -1153,7 +1153,10 @@ impl Task {
         }
         let fpstate = self.context.X86fpstate.as_ref().unwrap().Slice();
         if fpstate.len() > 512 {
-            userStack.PushSlice(self, &self.context.X86fpstate.as_ref().unwrap().Slice()[512..])?;
+            userStack.PushSlice(
+                self,
+                &self.context.X86fpstate.as_ref().unwrap().Slice()[512..],
+            )?;
         }
 
         let fpsw = FPSoftwareFrame {

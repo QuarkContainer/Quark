@@ -163,7 +163,7 @@ impl UserNameSpace {
     pub fn Parent(&self) -> Option<UserNameSpace> {
         match &self.lock().parent {
             None => return None,
-            Some(p) => return Some(p.clone())
+            Some(p) => return Some(p.clone()),
         }
     }
 

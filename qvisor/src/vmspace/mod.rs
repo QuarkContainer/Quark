@@ -14,6 +14,7 @@
 
 pub mod HostFileMap;
 //pub mod TimerMgr;
+pub mod hibernate;
 pub mod host_pma_keeper;
 pub mod host_uring;
 pub mod hostfdnotifier;
@@ -23,47 +24,58 @@ pub mod random;
 pub mod syscall;
 pub mod time;
 pub mod uringMgr;
-pub mod hibernate;
+pub mod nvidia;
+pub mod tsot_agent;
+pub mod xpu;
 
-use std::env::temp_dir;
-use uuid::Uuid;
+use core::arch::asm;
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
 use lazy_static::lazy_static;
 use libc::*;
 use serde_json;
+use std::env::temp_dir;
 use std::fs;
 use std::marker::Send;
 use std::os::unix::io::IntoRawFd;
 use std::slice;
 use std::str;
-use x86_64::structures::paging::PageTableFlags;
-use core::arch::asm;
+use uuid::Uuid;
 
+use crate::qlib::cstring::CString;
 use crate::qlib::fileinfo::*;
+use crate::qlib::kernel::socket::control::*;
+use crate::qlib::kernel::socket::control::Parse;
+use crate::qlib::nvproxy::frontend::FrontendIoctlCmd;
+use crate::qlib::nvproxy::frontend_type::NV_ESC_CHECK_VERSION_STR;
+use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
+use crate::qlib::range::Range;
+use crate::qlib::proxy::*;
 use crate::vmspace::kernel::GlobalIOMgr;
 use crate::vmspace::kernel::GlobalRDMASvcCli;
 
 use self::limits::*;
+use self::nvidia::NvidiaProxy;
 use self::random::*;
 use self::syscall::*;
+use self::tsot_agent::TSOT_AGENT;
+use self::tsot_msg::TsotMessage;
 use super::kvm_vcpu::HostPageAllocator;
 use super::kvm_vcpu::KVMVcpu;
 use super::namespace::MountNs;
 use super::qlib::addr::Addr;
 use super::qlib::common::{Error, Result};
 use super::qlib::control_msg::*;
-use super::qlib::kernel::util::cstring::*;
 use super::qlib::kernel::SignalProcess;
 use super::qlib::linux::membarrier::*;
 use super::qlib::linux_def::*;
 use super::qlib::pagetable::PageTables;
+use super::qlib::pagetable::PageTableFlags;
 use super::qlib::perf_tunning::*;
 use super::qlib::qmsg::*;
 use super::qlib::socket_buf::*;
 use super::qlib::task_mgr::*;
 use super::qlib::*;
-use super::runc::container::mounts::*;
 use super::runc::runtime::loader::*;
 use super::runc::runtime::signal_handle::*;
 use super::runc::specutils::specutils::*;
@@ -103,6 +115,7 @@ pub struct WaitingMsgCall {
 }
 
 pub struct VMSpace {
+    pub podUid: String,
     pub pageTables: PageTables,
     pub allocator: HostPageAllocator,
     pub hostAddrTop: u64,
@@ -126,6 +139,30 @@ unsafe impl Sync for VMSpace {}
 unsafe impl Send for VMSpace {}
 
 impl VMSpace {
+    pub fn Init() -> Self {
+        let (haveMembarrierGlobal, haveMembarrierPrivateExpedited) = Self::MembarrierInit();
+        
+        return VMSpace {
+            podUid: "".to_owned(),
+            allocator: HostPageAllocator::New(),
+            pageTables: PageTables::default(),
+            hostAddrTop: 0,
+            sharedLoasdOffset: 0x0000_5555_0000_0000,
+            vdsoAddr: 0,
+            cpuAffinit: false,
+            vcpuCount: 0,
+            vcpuMappingDelta: 0,
+            rng: RandGen::Init(),
+            args: None,
+            pivot: false,
+            waitingMsgCall: None,
+            controlSock: -1,
+            vcpus: Vec::new(),
+            haveMembarrierGlobal: haveMembarrierGlobal,
+            haveMembarrierPrivateExpedited: haveMembarrierPrivateExpedited,
+        };
+    }
+
     ///////////start of file operation//////////////////////////////////////////////
     pub fn GetOsfd(hostfd: i32) -> Option<i32> {
         return GlobalIOMgr().GetFdByHost(hostfd);
@@ -144,18 +181,9 @@ impl VMSpace {
         return fdInfo.IOReadDir(addr, len, reset);
     }
 
-    pub fn Mount(&self, id: &str, rootfs: &str) -> Result<()> {
-        let spec = &self.args.as_ref().unwrap().Spec;
-        //let rootfs : &str = &spec.root.path;
-        let cpath = format!("/{}", id);
-
-        init_rootfs(spec, rootfs, &cpath, false)?;
-        pivot_rootfs(&*rootfs)?;
-        return Ok(());
-    }
 
     pub fn PivotRoot(&self, rootfs: &str) {
-        let mns = MountNs::New(rootfs.to_string());
+                let mns = MountNs::New(rootfs.to_string());
         mns.PivotRoot();
     }
 
@@ -196,9 +224,7 @@ impl VMSpace {
     }
 
     pub fn LoadProcessKernel(&mut self, processAddr: u64) -> i64 {
-        let process = unsafe {
-            &mut *(processAddr as * mut loader::Process)
-        };
+        let process = unsafe { &mut *(processAddr as *mut loader::Process) };
         process.ID = self.args.as_ref().unwrap().ID.to_string();
         let spec = &mut self.args.as_mut().unwrap().Spec;
 
@@ -214,7 +240,7 @@ impl VMSpace {
         process.Envs.append(&mut spec.process.env);
 
         //todo: credential fix.
-        error!("LoadProcessKernel: need to study the user mapping handling...");
+        //error!("LoadProcessKernel: need to study the user mapping handling...");
         process.UID = spec.process.user.uid;
         process.GID = spec.process.user.gid;
         process
@@ -390,21 +416,59 @@ impl VMSpace {
         return (len + 1) as i64;
     }
 
-    pub unsafe fn TryOpenHelper(dirfd: i32, name: u64) -> (i32, bool) {
+    pub fn TryOpenWrite(dirfd: i32, oldfd: i32, name: u64) -> i64 {
         let flags = Flags::O_NOFOLLOW;
-        let ret = libc::openat(
-            dirfd,
-            name as *const c_char,
-            (flags | Flags::O_RDWR) as i32,
-            0,
-        );
-        if ret > 0 {
-            return (ret, true);
+
+        let fd = unsafe {
+            libc::openat(
+                dirfd,
+                name as *const c_char,
+                (flags | Flags::O_RDWR) as i32,
+                0,
+            )
+        };
+
+        if fd < 0 {
+            return fd as i64;
         }
 
-        let err = Self::GetRet(ret as i64) as i32;
-        if err == -SysErr::ENOENT {
-            return (-SysErr::ENOENT, false);
+        let ret = unsafe {
+            libc::dup2(fd, oldfd)
+        };
+
+        if ret < 0 {
+            error!("TryOpenWrite can't dup new fd to old fd with error {}", errno::errno().0);
+            unsafe {
+                libc::close(fd);
+            }
+            return ret as i64;
+        }
+
+        unsafe {
+            libc::close(fd);
+        }
+
+        return 0;
+    }
+
+    pub unsafe fn TryOpenHelper(dirfd: i32, name: u64, skiprw: bool) -> (i32, bool) {
+        let flags = Flags::O_NOFOLLOW;
+
+        if !skiprw {
+            let ret = libc::openat(
+                dirfd,
+                name as *const c_char,
+                (flags | Flags::O_RDWR) as i32,
+                0,
+            );
+            if ret > 0 {
+                return (ret, true);
+            }
+
+            let err = Self::GetRet(ret as i64) as i32;
+            if err == -SysErr::ENOENT {
+                return (-SysErr::ENOENT, false);
+            }
         }
 
         let ret = libc::openat(
@@ -415,6 +479,13 @@ impl VMSpace {
         );
         if ret > 0 {
             return (ret, false);
+        }
+
+        if skiprw {
+            let err = Self::GetRet(ret as i64) as i32;
+            if err == -SysErr::ENOENT {
+                return (-SysErr::ENOENT, false);
+            }
         }
 
         let ret = libc::openat(
@@ -440,8 +511,8 @@ impl VMSpace {
         return (Self::GetRet(ret as i64) as i32, false);
     }
 
-    pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64) -> i64 {
-        //info!("TryOpenAt: the filename is {}", Self::GetStr(name));
+    pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64, skiprw: bool) -> i64 {
+        //info!("TryOpenAt1: the filename is {}", Self::GetStr(name));
         let dirfd = if dirfd < 0 {
             dirfd
         } else {
@@ -452,23 +523,33 @@ impl VMSpace {
         };
 
         let tryOpenAt = unsafe { &mut *(addr as *mut TryOpenStruct) };
+        let ret =
+            unsafe { 
+                libc::fstatat(
+                    dirfd, 
+                    name as *const c_char,
+                    tryOpenAt.fstat as *const _ as u64 as *mut stat,
+                    libc::AT_SYMLINK_NOFOLLOW
 
-        let (fd, writeable) = unsafe { Self::TryOpenHelper(dirfd, name) };
+                ) as i64 
+            };
 
+        if ret < 0 {
+            return Self::GetRet(ret as i64);
+        }
+        
+        let (fd, writeable) = unsafe { 
+            Self::TryOpenHelper(
+                dirfd, 
+                name, 
+                skiprw && tryOpenAt.fstat.IsRegularFile()
+            ) 
+        };
+        
         //error!("TryOpenAt dirfd {}, name {} ret {}", dirfd, Self::GetStr(name), fd);
 
         if fd < 0 {
             return fd as i64;
-        }
-
-        let ret =
-            unsafe { libc::fstat(fd, tryOpenAt.fstat as *const _ as u64 as *mut stat) as i64 };
-
-        if ret < 0 {
-            unsafe {
-                libc::close(fd);
-            }
-            return Self::GetRet(ret as i64);
         }
 
         tryOpenAt.writeable = writeable;
@@ -484,14 +565,7 @@ impl VMSpace {
     pub fn OpenAt(dirfd: i32, name: u64, flags: i32, addr: u64) -> i64 {
         let tryOpenAt = unsafe { &mut *(addr as *mut TryOpenStruct) };
 
-        let ret = unsafe {
-            libc::openat(
-                dirfd,
-                name as *const c_char,
-                flags,
-                0,
-            )
-        };
+        let ret = unsafe { libc::openat(dirfd, name as *const c_char, flags, 0) };
 
         let fd = Self::GetRet(ret as i64) as i32;
         if fd < 0 {
@@ -514,6 +588,113 @@ impl VMSpace {
         }
 
         return Self::GetRet(fd as i64);
+    }
+
+    pub fn OpenDevFile(dirfd: i32, name: u64, flags: i32) -> i64 {
+        let ret = unsafe { libc::openat(dirfd, name as *const c_char, flags, 0) };
+        let fd = Self::GetRet(ret as i64) as i32;
+        if fd < 0 {
+            return fd as i64;
+        }
+
+        let hostfd = GlobalIOMgr().AddFile(fd);
+        return Self::GetRet(hostfd as i64);
+    }
+
+    pub fn NividiaDriverVersion(ioctlParamsAddr: u64) -> i64 {
+        let ioctlParams = unsafe {
+            &mut *(ioctlParamsAddr as * mut RMAPIVersion) 
+        };
+
+        let drvName = CString::New("/dev/nvidiactl");
+
+        let ret = unsafe { 
+            libc::openat(
+                -1, 
+                drvName.Ptr() as *const c_char, 
+                O_RDONLY | O_NOFOLLOW, 
+                0
+            ) 
+        };
+        let fd = Self::GetRet(ret as i64) as i32;
+        if fd < 0 {
+            return fd as i64;
+        }
+
+        // From src/nvidia/arch/nvalloc/unix/include/nv-ioctl.h:
+	    const NV_RM_API_VERSION_REPLY_RECOGNIZED : u32 = 1;
+        ioctlParams.cmd = '2' as _;
+
+        let req = FrontendIoctlCmd(NV_ESC_CHECK_VERSION_STR, core::mem::size_of::<RMAPIVersion>() as _);
+
+        let ret = unsafe {
+            ioctl(fd, req, ioctlParamsAddr)
+        };
+
+        unsafe {
+            close(fd);
+        }
+
+        return Self::GetRet(ret as i64);
+    }
+
+    pub fn NvidiaMMap(addr: u64, len: u64, prot: i32, flags: i32, fd: i32, offset: u64) -> i64 {
+        let ret = unsafe {
+            libc::mmap(addr as _, len as usize, prot, flags, fd, offset as i64) as i64
+        };
+
+        let ret: i64 = Self::GetRet(ret);
+        return ret;
+    }
+
+    pub fn RemapGuestMemRanges(len: u64, addr: u64, count: usize) -> i64 {
+        let ptr = addr as *const Range;
+        let ranges = unsafe { slice::from_raw_parts(ptr, count) };
+        let flags = libc::MAP_PRIVATE | libc::MAP_ANON;
+        let ret = unsafe {
+            libc::mmap(
+                0 as _,
+                len as usize,
+                libc::PROT_NONE,
+                flags,
+                -1,
+                0,
+            ) as i64
+        };
+
+        if ret < 0 {
+            return -errno::errno().0 as i64;
+        }
+
+        let mut addr = ret as u64;
+        let flags = libc::MREMAP_MAYMOVE | libc::MREMAP_FIXED;// | libc::MREMAP_DONTUNMAP;
+        for r in ranges {
+            let ret = unsafe {
+                libc::mremap(
+                    r.Start() as _,
+                    0, 
+                    r.len as usize, 
+                    flags,
+                    addr
+                ) as i32
+            } as i64;
+
+            if ret == -1 {
+                return -errno::errno().0 as i64;
+            }
+
+            addr += r.len;
+        }
+
+        return ret;
+    }
+
+    pub fn UnmapGuestMemRange(start: u64, len: u64) -> i64 {
+        let ret = unsafe {
+            libc::munmap(start as _, len as usize) as i64
+        };
+
+        return Self::GetRet(ret as i64);
     }
 
     pub fn CreateAt(
@@ -580,21 +761,38 @@ impl VMSpace {
             match sockInfo {
                 SockInfo::RDMADataSocket(dataSock) => {
                     // error!("VMSpace::Close, dataSock fd: {}", fd);
-                    GlobalRDMASvcCli().channelToSocketMappings.lock().remove(&dataSock.channelId);
-                    GlobalRDMASvcCli().rdmaIdToSocketMappings.lock().remove(&dataSock.rdmaId);
-                    GlobalRDMASvcCli().tcpPortAllocator.lock().Free(dataSock.localPort as u64);
+                    GlobalRDMASvcCli()
+                        .channelToSocketMappings
+                        .lock()
+                        .remove(&dataSock.channelId);
+                    GlobalRDMASvcCli()
+                        .rdmaIdToSocketMappings
+                        .lock()
+                        .remove(&dataSock.rdmaId);
+                    GlobalRDMASvcCli()
+                        .tcpPortAllocator
+                        .lock()
+                        .Free(dataSock.localPort as u64);
                     let _res = GlobalRDMASvcCli().close(dataSock.channelId);
                 }
                 SockInfo::RDMAServerSocket(serverSock) => {
-                    GlobalRDMASvcCli().rdmaIdToSocketMappings.lock().remove(&serverSock.rdmaId);
+                    GlobalRDMASvcCli()
+                        .rdmaIdToSocketMappings
+                        .lock()
+                        .remove(&serverSock.rdmaId);
                     //TODO: handle server close
                 }
                 SockInfo::RDMAUDPSocket(sock) => {
-                    GlobalRDMASvcCli().portToFdInfoMappings.lock().remove(&sock.port);
-                    GlobalRDMASvcCli().udpPortAllocator.lock().Free(sock.port as u64);
+                    GlobalRDMASvcCli()
+                        .portToFdInfoMappings
+                        .lock()
+                        .remove(&sock.port);
+                    GlobalRDMASvcCli()
+                        .udpPortAllocator
+                        .lock()
+                        .Free(sock.port as u64);
                 }
-                _ => {
-                }
+                _ => {}
             }
             0
         } else {
@@ -1088,6 +1286,150 @@ impl VMSpace {
 
     ///////////start of network operation//////////////////////////////////////////////////////////////////
 
+    pub fn HostUnixRecvMsg(fd: i32, msghdr: u64, flags: i32) -> i64 {
+        match Self::HostUnixRecvMsgHelper(fd, msghdr, flags) {
+            Err(Error::SysError(errno)) => {
+                return -errno as i64
+            }
+            Ok(()) => return 0,
+            _ => panic!("HostUnixRecvMsg impossible"),
+        }
+    }
+
+    pub fn HostUnixRecvMsgHelper(fd: i32, msghdr: u64, flags: i32) -> Result<()> {
+        let ret = unsafe {
+            libc::recvmsg(fd, msghdr as * mut _, flags)
+        };
+
+        if ret < 0 {
+            return Err(Error::SysError(Self::GetRet(ret as i64) as i32));
+        }
+
+        let hdr = unsafe {
+            &mut *(msghdr as * mut MsgHdr)
+        };
+
+        if hdr.msgControlLen > 0 {
+            let controlVec = unsafe {
+                slice::from_raw_parts_mut(hdr.msgControl as *mut u8, hdr.msgControlLen)
+            };
+
+            let ctrlMsg = Parse(controlVec)?;
+            let mut fds = Vec::new();
+            match &ctrlMsg.Rights {
+                Some(right) => {
+                    for fd in &right.0 {
+                        let fd = *fd;
+                        let mut stat = LibcStat::default();
+                        unsafe { 
+                            libc::fstat(
+                                fd, 
+                                &mut stat as * mut _ as u64 as *mut _
+                            ) as i64 
+                        };
+    
+                        if true || stat.IsRegularFile() {
+                            let hostfd = GlobalIOMgr().AddFile(fd);
+                            URING_MGR.lock().Addfd(hostfd).unwrap();
+                            fds.push(hostfd);
+                        } else {
+                            error!("HostUnixRecvMsg get unsupport fd with state {:x?}", &stat);
+                        }
+                    }
+                }
+                None => ()
+            }
+
+            let totalLen = controlVec.len();
+            let controlData = &mut controlVec[..];
+            let (controlData, _) = ControlMessageRights(fds).EncodeInto(controlData, hdr.msgFlags);
+
+            let new_size = totalLen - controlData.len();
+            hdr.msgControlLen = new_size;
+        }
+
+        return Ok(())
+    }
+
+    pub fn HostUnixConnect(type_: i32, addr: u64, len: usize) -> i64 {
+        let blockedType = type_ & (!SocketFlags::SOCK_NONBLOCK);
+
+        let fd = unsafe {
+            libc::socket(
+                AFType::AF_UNIX,
+                blockedType | SocketFlags::SOCK_CLOEXEC,
+                0
+            )
+        };
+
+        if fd < 0 {
+            return Self::GetRet(fd as i64);
+        }
+
+        let mut socketAddr = libc::sockaddr_un {
+            sun_family: libc::AF_UNIX as u16,
+            sun_path: [0; 108],
+        };
+
+        let slice = unsafe {
+            slice::from_raw_parts_mut(addr as *mut i8, len)
+        };
+
+        for i in 0..slice.len() {
+            socketAddr.sun_path[i] = slice[i]
+        };
+
+        let ret = unsafe {
+            libc::connect(fd, &socketAddr as * const _ as u64 as * const _, 108 + 2)
+        };
+
+        if ret < 0 {
+            unsafe {
+                libc::close(fd);
+            }
+            
+            return Self::GetRet(ret as i64);
+        }
+
+        unsafe {
+            let flags = fcntl(fd, Cmd::F_GETFL, 0);
+            let ret = fcntl(fd, Cmd::F_SETFL, flags | Flags::O_NONBLOCK);
+            assert!(ret == 0, "UnblockFd fail");
+        }
+
+        let hostfd = GlobalIOMgr().AddSocket(fd);
+        URING_MGR.lock().Addfd(fd).unwrap();
+        return Self::GetRet(hostfd as i64);
+    }
+
+    pub fn TsotRecvMsg(msgAddr: u64) -> i64 {
+        match TSOT_AGENT.RecvMsg() {
+            Ok(msg) => {
+                let m = unsafe {
+                    &mut *(msgAddr as * mut TsotMessage)
+                };
+                *m = msg;
+                return 0;
+            }
+            Err(_) => return -1,
+        }
+    }
+
+    pub fn TsotSendMsg(msgAddr: u64) -> i64 {
+        let msg = unsafe {
+            &*(msgAddr as * const TsotMessage)
+        };
+        match TSOT_AGENT.SendMsg(msg) {
+            Ok(()) => {
+                return 0;
+            }
+            Err(e) => {
+                error!("TsotSendMsg fail with error {:?}", e);
+                return -1;
+            }
+        }
+    }
+
     pub fn Socket(domain: i32, type_: i32, protocol: i32) -> i64 {
         let fd = unsafe {
             socket(
@@ -1204,11 +1546,9 @@ impl VMSpace {
         match super::ucall::ucall_server::ReadControlMsg(fd) {
             Err(_e) => return -1,
             Ok(msg) => {
-                let controlMsg = unsafe {
-                    &mut *(addr as * mut ControlMsg)
-                };
+                let controlMsg = unsafe { &mut *(addr as *mut ControlMsg) };
                 *controlMsg = msg;
-                return 0; 
+                return 0;
             }
         }
     }
@@ -1259,7 +1599,6 @@ impl VMSpace {
     pub fn RandomVcpuMapping(&mut self) {
         let delta = self.GetRandomU8() as usize;
         self.vcpuMappingDelta = delta % Self::VCPUCount();
-        error!("RandomVcpuMapping {}", self.vcpuMappingDelta);
     }
 
     pub fn ComputeVcpuCoreId(&self, threadId: usize) -> usize {
@@ -1395,19 +1734,22 @@ impl VMSpace {
         let file_name = format!("{}", Uuid::new_v4());
         td.push(file_name);
 
-        let fd  = if dir {
+        let fd = if dir {
             let folder = td.into_os_string().into_string().unwrap();
             let cstr = CString::New(&folder);
-            let ret = unsafe {
-                libc::mkdir(cstr.Ptr() as *const c_char, 0o777)
-            };
+            let ret = unsafe { libc::mkdir(cstr.Ptr() as *const c_char, 0o777) };
 
             if ret != 0 {
                 return Self::GetRet(ret as i64);
             }
 
             let fd = unsafe {
-                libc::openat(-100, cstr.Ptr() as *const c_char, libc::O_DIRECTORY | libc::O_RDONLY, 0o777)
+                libc::openat(
+                    -100,
+                    cstr.Ptr() as *const c_char,
+                    libc::O_DIRECTORY | libc::O_RDONLY,
+                    0o777,
+                )
             };
 
             Self::GetRet(fd as i64) as i32
@@ -1458,7 +1800,7 @@ impl VMSpace {
         let contents = fs::read_to_string(STATM).expect("Something went wrong reading the file");
 
         let output = scan!(&contents, char::is_whitespace, u64, u64);
-        let mut statm = unsafe { &mut *(buf as *mut StatmInfo) };
+        let statm = unsafe { &mut *(buf as *mut StatmInfo) };
 
         statm.vss = output.0.unwrap();
         statm.rss = output.1.unwrap();
@@ -1470,6 +1812,7 @@ impl VMSpace {
         return ret;
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn HostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
         let mut ax: u32 = axArg;
         let bx: u32;
@@ -1488,6 +1831,11 @@ impl VMSpace {
         }
 
         return (ax, bx, cx, dx);
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn HostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
+        return (0, 0, 0, 0);
     }
 
     pub fn SymLinkAt(oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {
@@ -1513,8 +1861,15 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        let ret =
-            unsafe { linkat(olddirfd, oldpath as *const c_char, newdirfd, newpath as *const c_char, flags) };
+        let ret = unsafe {
+            linkat(
+                olddirfd,
+                oldpath as *const c_char,
+                newdirfd,
+                newpath as *const c_char,
+                flags,
+            )
+        };
 
         return Self::GetRet(ret as i64);
     }
@@ -1538,7 +1893,7 @@ impl VMSpace {
         physical: Addr,
         flags: PageTableFlags,
     ) -> Result<bool> {
-        error!("KernelMap start is {:x}, end is {:x}", start.0, end.0);
+        info!("KernelMap start is {:x}, end is {:x}", start.0, end.0);
         return self
             .pageTables
             .Map(start, end, physical, flags, &mut self.allocator, true);
@@ -1551,7 +1906,7 @@ impl VMSpace {
         physical: Addr,
         flags: PageTableFlags,
     ) -> Result<bool> {
-        error!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
+        info!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
         return self
             .pageTables
             .MapWith1G(start, end, physical, flags, &mut self.allocator, true);
@@ -1559,44 +1914,35 @@ impl VMSpace {
 
     pub fn PrintStr(phAddr: u64) {
         unsafe {
+            #[cfg(target_arch = "aarch64")]
+            let ptr = phAddr as *const u8;
+            #[cfg(target_arch = "x86_64")]
+            let ptr = phAddr as *const i8;
             info!(
                 "the Str: {} ",
                 str::from_utf8_unchecked(slice::from_raw_parts(
                     phAddr as *const u8,
-                    strlen(phAddr as *const i8) + 1
+                    strlen(ptr) + 1
                 ))
             );
         }
     }
 
-    pub fn Proxy(cmd: u64, addrIn: u64, addrOut: u64) -> i64 {
-        use super::qlib::proxy::*;
-        let cmd : Command = unsafe { core::mem::transmute(cmd as u64) };
-        match cmd {
-            Command::Cmd1 => {
-                let dataIn = unsafe {
-                    &*(addrIn as * const Cmd1In)
-                };
-
-                let dataOut = unsafe {
-                    &mut *(addrOut as * mut Cmd1Out)
-                };
-
-                error!("get proxy cmd1 with val1 {}", dataIn.val);
-                dataOut.val1 = 1;
-                dataOut.val2 = 2;
+    pub fn Proxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> i64 {
+        match NvidiaProxy(cmd, parameters) {
+            Ok(v) => return v,
+            Err(e) => {
+                error!("nvidia proxy get error {:?}", e);
+                return 0;
             }
-            Command::Cmd2 => {}
         }
-
-        return 0;
     }
 
     pub fn SwapInPage(addr: u64) -> i64 {
         match SHARE_SPACE.hiberMgr.SwapIn(addr) {
             Ok(_) => return 0,
             Err(Error::SysError(e)) => return e as i64,
-            _ => panic!("imposible")
+            _ => panic!("imposible"),
         }
     }
 
@@ -1657,7 +2003,10 @@ impl VMSpace {
 
     pub fn LibcStatx(osfd: i32) {
         let statx = Statx::default();
+        #[cfg(target_arch = "x86_64")]
         let addr: i8 = 0;
+        #[cfg(target_arch = "aarch64")]
+        let addr: u8 = 0;
         let ret = unsafe {
             libc::statx(
                 osfd,
@@ -1676,9 +2025,15 @@ impl VMSpace {
         );
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn GetVcpuFreq(&self) -> i64 {
         let freq = self.vcpus[0].vcpu.get_tsc_khz().unwrap() * 1000;
         return freq as i64;
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn GetVcpuFreq(&self) -> i64 {
+        return 0;
     }
 
     pub fn Membarrier(cmd: i32) -> i32 {
@@ -1736,28 +2091,6 @@ impl VMSpace {
         return (haveMembarrierGlobal, haveMembarrierPrivateExpedited);
     }
 
-    pub fn Init() -> Self {
-        let (haveMembarrierGlobal, haveMembarrierPrivateExpedited) = Self::MembarrierInit();
-
-        return VMSpace {
-            allocator: HostPageAllocator::New(),
-            pageTables: PageTables::default(),
-            hostAddrTop: 0,
-            sharedLoasdOffset: 0x0000_5555_0000_0000,
-            vdsoAddr: 0,
-            cpuAffinit: false,
-            vcpuCount: 0,
-            vcpuMappingDelta: 0,
-            rng: RandGen::Init(),
-            args: None,
-            pivot: false,
-            waitingMsgCall: None,
-            controlSock: -1,
-            vcpus: Vec::new(),
-            haveMembarrierGlobal: haveMembarrierGlobal,
-            haveMembarrierPrivateExpedited: haveMembarrierPrivateExpedited,
-        };
-    }
 }
 
 impl PostRDMAConnect {

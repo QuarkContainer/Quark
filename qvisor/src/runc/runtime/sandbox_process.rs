@@ -13,43 +13,35 @@
 // limitations under the License.
 
 use alloc::vec::Vec;
-use std::fs::{canonicalize, create_dir_all};
+use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::fs::{canonicalize, create_dir_all};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::io::FromRawFd;
 use std::os::unix::prelude::RawFd;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::Arc;
 use std::sync::mpsc::channel;
+use std::sync::Arc;
 
-use containerd_shim::ExitSignal;
+use crate::NIVIDIA_CONTAINER_NAME;
 use containerd_shim::protos::create_task;
 use containerd_shim::protos::ttrpc::Server;
+use containerd_shim::ExitSignal;
 use kvm_ioctls::Kvm;
 use libc;
 use nix::fcntl::*;
 use nix::mount::{mount, MsFlags};
-use nix::sys::stat::{Mode, umask};
+use nix::sys::stat::{umask, Mode};
 use nix::unistd::{chdir, getcwd};
 use procfs;
 use serde_json;
 use simplelog::*;
 
+use crate::runc::container::nvidia::*;
 use crate::runc::shim::shim_task::ShimTask;
 
-use super::console::*;
-use super::loader::*;
-use super::signal_handle::*;
-use super::super::cmd::config::*;
-use super::super::container::*;
-use super::super::container::container::*;
-use super::super::container::mounts::*;
-use super::super::container::nix_ext::*;
-use super::super::oci::*;
-use super::super::shim::container_io::*;
-use super::super::specutils::specutils::*;
 use super::super::super::console::pty::*;
 use super::super::super::console::unix_socket::UnixSocket;
 use super::super::super::namespace::*;
@@ -58,10 +50,21 @@ use super::super::super::qlib::config::DebugLevel;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::path::*;
 use super::super::super::qlib::unix_socket;
-use super::super::super::QUARK_CONFIG;
 use super::super::super::ucall::ucall::*;
 use super::super::super::ucall::usocket::*;
 use super::super::super::util::*;
+use super::super::super::QUARK_CONFIG;
+use super::super::cmd::config::*;
+use super::super::container::container::*;
+use super::super::container::mounts::*;
+use super::super::container::nix_ext::*;
+use super::super::container::*;
+use super::super::oci::*;
+use super::super::shim::container_io::*;
+use super::super::specutils::specutils::*;
+use super::console::*;
+use super::loader::*;
+use super::signal_handle::*;
 use super::util::*;
 use super::vm::*;
 
@@ -246,6 +249,7 @@ impl SandboxProcess {
             let devPath = Join(&self.SandboxRootDir, "dev");
             create_dir_all(&devPath)
                 .map_err(|e| Error::IOError(format!("failed to create dir {}, {}", devPath, e)))?;
+            
             let pts_path = Join(&devPath, "pts");
             create_dir_all(&pts_path)
                 .map_err(|e| Error::IOError(format!("failed to create dir {}, {}", pts_path, e)))?;
@@ -256,13 +260,17 @@ impl SandboxProcess {
                 MsFlags::empty(),
                 None::<&str>,
             )
-                .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
-            let olddir = getcwd().map_err(|e| Error::IOError(format!("failed to get cwd {:?}", e)))?;
-            chdir(&*self.SandboxRootDir).map_err(|e| Error::IOError(format!("failed to chdir {:?}", e)))?;
+            .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+
+            let olddir =
+                getcwd().map_err(|e| Error::IOError(format!("failed to get cwd {:?}", e)))?;
+            chdir(&*self.SandboxRootDir)
+                .map_err(|e| Error::IOError(format!("failed to chdir {:?}", e)))?;
             let old_mask = umask(Mode::from_bits_truncate(0o000));
             for dev in DEFAULT_DEVICES.iter() {
                 mknod_dev(dev)?;
             }
+        
             mknod_dev(&LinuxDevice {
                 path: "/dev/ptmx".to_string(),
                 typ: LinuxDeviceType::c,
@@ -276,6 +284,7 @@ impl SandboxProcess {
             chdir(&olddir).map_err(|e| Error::IOError(format!("failed to chdir {:?}", e)))?;
             return Ok(());
         }
+
         let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
         match create_dir_all(&rootContainerPath) {
             Ok(()) => (),
@@ -341,13 +350,20 @@ impl SandboxProcess {
             SetID(0, 0)?;
         }
 
-        error!("EnableNamespace ToEnterNS is {:?}", &self.ToEnterNS);
+        info!("EnableNamespace ToEnterNS is {:?}", &self.ToEnterNS);
 
         for &(space, fd) in &self.ToEnterNS {
             if space == LinuxNamespaceType::mount as i32 {
                 // enter mount ns last
                 mountFd = fd;
                 continue;
+            }
+
+            // tsot needs to run in host network namespace
+            if QUARK_CONFIG.lock().EnableTsot && space == LinuxNamespaceType::network as i32 {
+                info!("EnableNamespace disable network namespace");
+                Close(fd)?;
+                continue
             }
 
             SetNamespace(fd, space)?;
@@ -430,6 +446,7 @@ impl SandboxProcess {
                 )?;
             } else {
                 MountFrom(m, &self.Rootfs, flags, &data, &linux.mount_label)?;
+                //continue;
             }
         }
 
@@ -449,6 +466,8 @@ impl SandboxProcess {
         }
 
         let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
+        error!("mount to {} {}", &self.Rootfs, &rootContainerPath);
+        
         match create_dir_all(&rootContainerPath) {
             Ok(()) => (),
             Err(_e) => panic!("failed to create dir to mount containerrootPath"),
@@ -456,6 +475,25 @@ impl SandboxProcess {
         let ret = Util::Mount(&self.Rootfs, &rootContainerPath, "", rbindFlags, "");
         if ret < 0 {
             panic!("InitRootfs: mount rootfs fail, error is {}", ret);
+        }
+
+        if QUARK_CONFIG.lock().EnableTsot {
+            let share = Join(&self.SandboxRootDir, "var/run/quark");
+            match create_dir_all(&share) {
+                Ok(()) => (),
+                Err(_e) => panic!("failed to create dir to mount containerrootPath"),
+            };
+
+            let shareDir = "/var/run/quark";
+
+            error!("InitRootfs1: start to mount sharefolder {} to {}", shareDir, &share);    
+            if Path::new(shareDir).exists() {
+                error!("InitRootfs2: start to mount sharefolder {} to {}", shareDir, &share);    
+                let ret = Util::Mount(shareDir, &share, "", rbindFlags, "");
+                if ret < 0 {
+                    panic!("InitRootfs: mount sharefolder fail, error is {}", ret);
+                }
+            }
         }
 
         let tmpfolder = Join(&self.SandboxRootDir, "tmp");
@@ -625,7 +663,164 @@ impl SandboxProcess {
                 File::create(&self.conf.DebugLog).unwrap(),
             ),
         ])
-            .unwrap();
+        .unwrap();
+    }
+
+    pub fn MountNvidia(&self) -> Result<()> {
+        let nvidiaList = FindAllGPUDevices()?;
+        info!("MountNvidia nvidia devices are {:?}", &nvidiaList);
+        if nvidiaList.len() == 0 {
+            return Ok(());
+        }
+
+        let mut nvidiafiles = vec![
+            "/dev/nvidiactl".to_owned(),
+            "/dev/nvidia-uvm-tools".to_owned(),
+            "/dev/nvidia-uvm".to_owned(),
+        ];
+
+        for idx in &nvidiaList {
+            nvidiafiles.push(format!("/dev/nvidia{}", idx));
+        }
+
+        for f in &nvidiafiles {
+            let m = Mount {
+                destination: f.to_owned(),
+                typ: "bind".to_owned(),
+                source: f.to_owned(),
+                options: Vec::new()
+            };
+
+            MountFrom(
+                &m,
+                &self.SandboxRootDir,
+                MsFlags::MS_BIND | MsFlags::MS_SHARED,
+                "",
+                "",
+            )?;
+        }
+
+        return Ok(())
+    }
+
+
+    pub fn CopyFile(sandboxPath: &str, file: &str) -> Result<()> {
+        let folder = Dir(file);
+
+        let targetFolder = Join(sandboxPath, &folder);
+        match fs::create_dir_all(&targetFolder) {
+            Ok(()) => (),
+            Err(e) => return Err(Error::Common(format!("failed creating directory {targetFolder} error {e}"))),
+        }
+
+        let targetfile = Join(sandboxPath, file);
+
+        match fs::copy(file, &targetfile) {
+            Ok(_) => (),
+            Err(e) => return Err(Error::Common(format!("failed copy file source {file} target {targetfile} error {e}"))),
+        }
+        
+        return Ok(())
+    }
+
+    pub fn MountFile(sandboxPath: &str, file: &str) -> Result<()> {
+        let folder = Dir(file);
+
+        let targetFolder = Join(sandboxPath, &folder);
+        match fs::create_dir_all(&targetFolder) {
+            Ok(()) => (),
+            Err(e) => return Err(Error::Common(format!("failed creating directory {targetFolder} error {e}"))),
+        }
+
+        let targetfile = Join(sandboxPath, file);
+        match File::create(&targetfile) {
+            Ok(_) => (),
+            Err(_e) => panic!("failed to create file {}", &targetfile),
+        };
+
+        let ret = Util::Mount(
+            file,
+            &targetfile,
+            "",
+            libc::MS_REC | libc::MS_BIND | libc::MS_SHARED,
+            "",
+        );
+
+        if ret < 0 {
+            panic!("InitRootfs: mount libcuda.so fail, error is {}", ret);
+        }
+        
+        return Ok(())
+    }
+
+    // danger! it will crash the dev box and have to reinstall OS. 
+    // todo: RCA this
+    pub fn MountFolder(sandboxPath: &str, folder: &str) -> Result<()> {
+        let targetFolder = Join(sandboxPath, &folder);
+        match fs::create_dir_all(&targetFolder) {
+            Ok(()) => (),
+            Err(e) => return Err(Error::Common(format!("failed creating directory {targetFolder} error {e}"))),
+        }
+
+        let ret = Util::Mount(
+            folder,
+            &targetFolder,
+            "",
+            libc::MS_REC | libc::MS_BIND | libc::MS_SHARED,
+            "",
+        );
+
+        if ret < 0 {
+            panic!("InitRootfs: mount libcuda.so fail, error is {}", ret);
+        }
+        
+        return Ok(())
+    }
+
+    pub fn MountNvidiaFiles(&self) -> Result<()> {
+        let files = [
+            "/usr/lib/x86_64-linux-gnu/libcuda.so",
+            "/usr/lib/x86_64-linux-gnu/libnvidia-ml.so",
+            "/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so",
+            //"/usr/lib/x86_64-linux-gnu/libnvidia-compiler.so",
+            "/usr/lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so",
+            
+            // the libcudart.so location changed sometime,
+            // todo: figure out good solution
+            // "/usr/lib/x86_64-linux-gnu/libcudart.so",
+            "/usr/local/cuda/lib64/libcudart.so",
+            
+            "/usr/lib/x86_64-linux-gnu/libelf.so.1"
+            //"/lib/firmware/nvidia/535.129.03/gsp_ga10x.bin",
+            //"/lib/firmware/nvidia/535.129.03/gsp_tu10x.bin"
+        ];
+
+        for f in files {
+            // Self::MountFile(&self.SandboxRootDir, f)?;
+            Self::CopyFile(&self.SandboxRootDir, f)?;
+        }
+
+        return Ok(())
+    }
+
+    pub fn MountProc(&self) -> Result<()> {
+        let procPath = Join(&self.SandboxRootDir, "proc");
+        match create_dir_all(&procPath) {
+            Ok(()) => (),
+            Err(_e) => panic!("failed to create dir to mount proc"),
+        };
+        let ret = Util::Mount(
+            &"proc".to_string(),
+            &procPath,
+            &"proc".to_string(),
+            0,
+            &"".to_string(),
+        );
+        if ret < 0 {
+            panic!("InitRootfs: mount proc fail, error is {}", ret);
+        }
+
+        return Ok(())
     }
 
     pub fn Child(&self) -> Result<()> {
@@ -636,7 +831,8 @@ impl SandboxProcess {
 
         let mut rdmaSvcCliSock = 0;
         if QUARK_CONFIG.lock().EnableRDMA {
-            rdmaSvcCliSock = unix_socket::UnixSocket::NewClient("/var/quarkrdma/rdma_srv_socket").unwrap();
+            rdmaSvcCliSock =
+                unix_socket::UnixSocket::NewClient("/var/quarkrdma/rdma_srv_socket").unwrap();
         }
 
         let addr = ControlSocketAddr(&self.containerId);
@@ -644,7 +840,8 @@ impl SandboxProcess {
         let mut controlSock = 0;
         if let Some(task_socket) = &self.TaskSocket {
             // TODO add sandbox cgroup support
-            taskSockFd = USocket::CreateServerSocket(&task_socket).expect("can't create control sock");
+            taskSockFd =
+                USocket::CreateServerSocket(&task_socket).expect("can't create control sock");
             info!("Child: succeed create socket with path {}", task_socket);
             let mut sandbox = crate::SANDBOX.lock();
             sandbox.ID = self.containerId.clone();
@@ -654,7 +851,24 @@ impl SandboxProcess {
             controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");
         }
         self.MakeSandboxRootDirectory()?;
+
+        let nvidiaDeviceList = NvidiaDeviceList(&self.spec)?;
+        if &nvidiaDeviceList !=  "" {
+            self.MountProc()?;
+
+            // use host nvidia libraries? 
+            self.MountNvidiaFiles()?;
+            self.MountNvidia()?;
+        }
+        
         self.EnableNamespace()?;
+        let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
+        
+        if &nvidiaDeviceList !=  "" {
+            *NIVIDIA_CONTAINER_NAME.lock() = self.containerId.clone();
+            NVProxySetupInUserns(&rootContainerPath)?;
+        }
+        
         if taskSockFd != 0 {
             // It seems control socket should be created in the same net ns
             controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");
@@ -694,12 +908,14 @@ impl SandboxProcess {
         server = server.add_listener(taskfd).map_err(|e| {
             Error::InvalidArgument(format!("failed to add listener {}, {:?}", taskfd, e))
         })?;
-        server.start().map_err(|e| {
-            Error::IOError(format!("failed to start task server {:?}", e))
-        })?;
+        server
+            .start()
+            .map_err(|e| Error::IOError(format!("failed to start task server {:?}", e)))?;
         std::thread::spawn(move || {
             exit.wait();
-            unsafe { libc::exit(0); }
+            unsafe {
+                libc::exit(0);
+            }
         });
         debug!("task server succeed listen at fd {}", taskfd);
         Ok(())
@@ -721,14 +937,14 @@ pub fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &st
     let dest = format! {"{}{}", rootfs, &m.destination};
 
     debug!(
-        "mounting {} to {} as {} with data '{}'",
-        &m.source, &m.destination, &m.typ, &d
+        "mounting \n {} to \n {} as {} with data '{}'",
+        &m.source, &dest, &m.typ, &d
     );
 
     let src = if m.typ == "bind" {
         let src =
             canonicalize(&m.source).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
-        let dir = if src.is_file() {
+        let dir = if !src.is_dir() {
             Path::new(&dest).parent().unwrap()
         } else {
             Path::new(&dest)
@@ -737,7 +953,7 @@ pub fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &st
             debug!("ignoring create dir fail of {:?}: {}", &dir, e)
         }
         // make sure file exists so we can bind over it
-        if src.is_file() {
+        if !src.is_dir() {
             if let Err(e) = OpenOptions::new().create(true).write(true).open(&dest) {
                 debug!("ignoring touch fail of {:?}: {}", &dest, e)
             }
@@ -777,22 +993,22 @@ pub fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &st
 
         if let Err(e) = setfilecon(&dest, label) {
             warn! {"could not set mount label of {} to {}: {:?}",
-            &m.destination, &label, e}
-            ;
+            &m.destination, &label, e};
         }
     }
 
     // remount bind mounts if they have other flags (like MsFlags::MS_RDONLY)
     if flags.contains(MsFlags::MS_BIND)
         && flags.intersects(
-        !(MsFlags::MS_REC
-            | MsFlags::MS_REMOUNT
-            | MsFlags::MS_BIND
-            | MsFlags::MS_PRIVATE
-            | MsFlags::MS_SHARED
-            | MsFlags::MS_SLAVE),
-    )
+            !(MsFlags::MS_REC
+                | MsFlags::MS_REMOUNT
+                | MsFlags::MS_BIND
+                | MsFlags::MS_PRIVATE
+                | MsFlags::MS_SHARED
+                | MsFlags::MS_SLAVE),
+        )
     {
+        error!("MountFrom remount...");
         let ret = Util::Mount(&dest, &dest, "", (flags | MsFlags::MS_REMOUNT).bits(), "");
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));

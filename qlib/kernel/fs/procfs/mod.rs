@@ -25,10 +25,10 @@ pub mod filesystems;
 pub mod loadavg;
 pub mod meminfo;
 pub mod mounts;
+pub mod net;
 pub mod stat;
 pub mod sys;
 pub mod uptime;
-pub mod net;
 
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;

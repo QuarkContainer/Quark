@@ -4,7 +4,6 @@
   "LogType"       : "Sync",
   "LogLevel"      : "Simple",
   "UringIO"       : true,
-  "UringBuf"      : true,
   "UringFixedFile": false,
   "EnableAIO"     : true,
   "PrintException": false,
@@ -25,5 +24,8 @@
   "DisableCgroup" : true,
   "CopyDataWithPf": true,
   "TlbShootdownWait": true,
-  "Sandboxed": false
+  "Sandboxed"     : false,
+  "Realtime"      : false,
+  "EnableIOBuf"   : false,
+  "EnableTsot"    : false
 }

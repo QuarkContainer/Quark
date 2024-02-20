@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::collections::BTreeSet;
 use spin::Mutex;
 use std::collections::VecDeque;
-use alloc::collections::BTreeSet;
 
 use super::super::heap_alloc::ENABLE_HUGEPAGE;
 use super::super::memmgr::*;
@@ -64,7 +64,7 @@ impl HostPMAKeeper {
             None => return None,
             Some(addr) => {
                 self.allocPages.lock().insert(addr);
-                return Some(addr)
+                return Some(addr);
             }
         }
     }
@@ -73,16 +73,24 @@ impl HostPMAKeeper {
         let alloced = self.allocPages.lock();
         for page in alloced.iter() {
             let ret = unsafe {
-                libc::madvise((*page) as _, MemoryDef::PAGE_SIZE_2M as _, libc::MADV_DONTNEED)
+                libc::madvise(
+                    (*page) as _,
+                    MemoryDef::PAGE_SIZE_2M as _,
+                    libc::MADV_DONTNEED,
+                )
             };
-    
+
             if ret == -1 {
-                info!("DontNeed get error, address is {:x} errno is {}", *page, errno::errno().0);
+                info!(
+                    "DontNeed get error, address is {:x} errno is {}",
+                    *page,
+                    errno::errno().0
+                );
                 //return Err(Error::SysError(-errno::errno().0));
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Init(&self, start: u64, len: u64) {
@@ -149,22 +157,23 @@ impl HostPMAKeeper {
         let osfd = fd;
         let mut mo = &mut MapOption::New();
 
-        //let prot = prot | MmapProt::PROT_WRITE as i32;
-
         mo = mo
             .Proto(prot)
             .FileOffset(offset)
             .FileId(osfd)
-            .Len(len)
-            .MapPrecommit()
+            .Len(len)    
             .MapFixed();
-        //mo.MapPrivate();
+        
         mo.MapShare();
+        mo.MapPrecommit();
+
+        
         //mo.MapLocked();
 
         let start = self.Allocate(len, MemoryDef::PMD_SIZE)?;
         mo.Addr(start);
-        return self.Map(&mut mo, &Range::New(start, len));
+        let ret = self.Map(&mut mo, &Range::New(start, len));
+        return ret;
     }
 
     fn RangeAllocate(&self, len: u64, alignment: u64) -> Result<u64> {
@@ -180,9 +189,9 @@ impl HostPMAKeeper {
     }
 
     fn Allocate(&self, len: u64, alignment: u64) -> Result<u64> {
-        if len != MemoryDef::PAGE_SIZE_2M {
-            error!("Allocate len is {:x} alignment {:x}", len, alignment);
-        }
+        // if len != MemoryDef::PAGE_SIZE_2M {
+        //     error!("Allocate len is {:x} alignment {:x}", len, alignment);
+        // }
 
         if len <= MemoryDef::PAGE_SIZE_2M {
             assert!(

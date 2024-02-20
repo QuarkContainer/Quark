@@ -474,9 +474,7 @@ impl InodeOperations for Dir {
     }
 
     fn Setxattr(&self, _dir: &mut Inode, name: &str, value: &[u8], _flags: u32) -> Result<()> {
-        self.write()
-            .xattrs
-            .insert(name.to_string(), value.to_vec());
+        self.write().xattrs.insert(name.to_string(), value.to_vec());
         return Ok(());
     }
 
@@ -492,7 +490,7 @@ impl InodeOperations for Dir {
     fn Removexattr(&self, _dir: &Inode, name: &str) -> Result<()> {
         match self.write().xattrs.remove(name) {
             None => return Err(Error::SysError(SysErr::ENOATTR)),
-            Some(_) => return Ok(())
+            Some(_) => return Ok(()),
         }
     }
 
@@ -566,7 +564,6 @@ impl Deref for DirFileOperation {
         &self.0
     }
 }
-
 
 pub struct DirFileOperationsInner {
     pub dirCursor: QMutex<String>,
@@ -674,7 +671,7 @@ impl FileOperations for DirFileOperation {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
+    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<u64> {
         return Err(Error::SysError(SysErr::ENOTTY));
     }
 

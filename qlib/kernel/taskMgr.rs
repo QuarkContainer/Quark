@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use alloc::string::String;
-use core::sync::atomic::{AtomicU32, Ordering};
 use core::arch::asm;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use super::super::super::kernel_def::*;
 use super::super::kernel::GlobalRDMASvcCli;
@@ -207,6 +207,7 @@ pub fn Wait() {
                 switch(current, newTask);
             }
 
+            // the context is still current, no switch needed.
             break;
         }
 
@@ -230,6 +231,7 @@ pub fn Wait() {
             }
         } else {
             if PollAsyncMsg() == 0 {
+                #[cfg(target_arch = "x86_64")]
                 unsafe {
                     asm!("pause");
                 }
@@ -258,9 +260,7 @@ impl Scheduler {
         let vcpuCount = self.vcpuCnt;
         match self.queue[0].Steal() {
             None => (),
-            Some(t) => {
-                return Some(t)
-            },
+            Some(t) => return Some(t),
         }
 
         // skip the current vcpu
@@ -268,9 +268,7 @@ impl Scheduler {
             let idx = (i + vcpuId) % vcpuCount;
             match self.queue[idx].Steal() {
                 None => (),
-                Some(t) => {
-                    return Some(t)
-                },
+                Some(t) => return Some(t),
             }
         }
 
@@ -288,8 +286,8 @@ impl Scheduler {
                 if global {
                     self.DecReadyTaskCount();
                 }
-                return Some(t)
-            },
+                return Some(t);
+            }
         }
 
         match self.Steal(vcpuId) {
@@ -301,13 +299,13 @@ impl Scheduler {
                     None => {
                         t.GetTask().SetQueueId(vcpuId);
                         t
-                    },
+                    }
                     Some(task) => {
                         self.Schedule(t, true); // reschedule the task
                         task
                     }
                 };
-                return Some(task)
+                return Some(task);
             }
         }
     }
@@ -325,7 +323,6 @@ impl Scheduler {
         return str;
     }
 
-
     pub fn Schedule(&self, taskId: TaskId, cpuAff: bool) {
         let vcpuId = taskId.GetTask().QueueId();
         //assert!(CPULocal::CpuId()==vcpuId, "cpu {}, target cpu {}", CPULocal::CpuId(), vcpuId);
@@ -340,7 +337,7 @@ impl Scheduler {
 
 pub fn Yield() {
     if SHARESPACE.scheduler.GlobalReadyTaskCnt() == 0 {
-        return
+        return;
     }
     SHARESPACE.scheduler.Schedule(Task::TaskId(), false);
     Wait();

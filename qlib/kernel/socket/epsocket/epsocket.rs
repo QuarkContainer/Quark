@@ -29,9 +29,7 @@ pub fn Ioctl(task: &Task, ep: &BoundEndpoint, _fd: i32, request: u64, val: u64) 
 
             return Ok(());
         }*/
-        LibcConst::SIOCGIFINDEX => {
-            return Err(Error::SysError(SysErr::ENODEV))
-        }
+        LibcConst::SIOCGIFINDEX => return Err(Error::SysError(SysErr::ENODEV)),
         LibcConst::SIOCGIFCONF => {
             let addr = val;
             DUMMY_HOST_SOCKET.HostIoctlIFConf(task, request, addr)?;
@@ -39,7 +37,7 @@ pub fn Ioctl(task: &Task, ep: &BoundEndpoint, _fd: i32, request: u64, val: u64) 
             return Ok(());
         }
         LibcConst::TIOCINQ => {
-            let mut v =  ep.BaseEndpoint().GetSockRecvQueueSize()?;
+            let mut v = ep.BaseEndpoint().GetSockRecvQueueSize()?;
 
             if v > i32::MAX {
                 v = i32::MAX;
@@ -49,7 +47,7 @@ pub fn Ioctl(task: &Task, ep: &BoundEndpoint, _fd: i32, request: u64, val: u64) 
             return Ok(());
         }
         LibcConst::TIOCOUTQ => {
-            let mut v =  ep.BaseEndpoint().GetSockSendQueueSize()?;
+            let mut v = ep.BaseEndpoint().GetSockSendQueueSize()?;
 
             if v > i32::MAX {
                 v = i32::MAX;
@@ -178,18 +176,18 @@ pub fn ConvertShutdown(how: i32) -> Result<ShutdownFlags> {
 }
 
 // The minimum size of the send/receive buffers.
-pub const MINIMUM_BUFFER_SIZE : usize = 4 << 10; // 4 KiB (match default in linux)
+pub const MINIMUM_BUFFER_SIZE: usize = 4 << 10; // 4 KiB (match default in linux)
 
 // The default size of the send/receive buffers.
-pub const DEFAULT_BUFFER_SIZE : usize = 208 << 10; // 208 KiB  (default in linux for net.core.wmem_default)
+pub const DEFAULT_BUFFER_SIZE: usize = 208 << 10; // 208 KiB  (default in linux for net.core.wmem_default)
 
 // The maximum permitted size for the send/receive buffers.
-pub const MAX_BUFFER_SIZE : usize = 4 << 20; // 4 MiB 4 MiB (default in linux for net.core.wmem_max)
+pub const MAX_BUFFER_SIZE: usize = 4 << 20; // 4 MiB 4 MiB (default in linux for net.core.wmem_max)
 
 pub struct SendBufferSizeOption {
     pub Min: usize,
     pub Default: usize,
-    pub Max: usize
+    pub Max: usize,
 }
 
 // getSendBufferLimits implements tcpip.GetSendBufferLimits.
@@ -205,8 +203,8 @@ pub fn GetSendBufferLimits() -> SendBufferSizeOption {
     return SendBufferSizeOption {
         Min: MINIMUM_BUFFER_SIZE,
         Default: DEFAULT_BUFFER_SIZE,
-        Max: MAX_BUFFER_SIZE
-    }
+        Max: MAX_BUFFER_SIZE,
+    };
 }
 
 // getReceiveBufferLimits implements tcpip.GetReceiveBufferLimits.
@@ -217,24 +215,24 @@ pub fn GetReceiveBufferLimits() -> SendBufferSizeOption {
     return SendBufferSizeOption {
         Min: MINIMUM_BUFFER_SIZE,
         Default: DEFAULT_BUFFER_SIZE,
-        Max: MAX_BUFFER_SIZE
-    }
+        Max: MAX_BUFFER_SIZE,
+    };
 }
 
 pub fn SendBufferLimits() -> (usize, usize) {
     let opt = GetSendBufferLimits();
-    return (opt.Min, opt.Max)
+    return (opt.Min, opt.Max);
 }
 
 pub fn ReceiveBufferLimits() -> (usize, usize) {
     let opt = GetReceiveBufferLimits();
-    return (opt.Min, opt.Max)
+    return (opt.Min, opt.Max);
 }
 
 pub fn clampBufSize(newsz: usize, min: usize, max: usize, ignoreMax: bool) -> usize {
     // packetOverheadFactor is used to multiply the value provided by the user on
     // a setsockopt(2) for setting the send/receive buffer sizes sockets.
-    const PACKET_OVERHEAD_FACTOR : usize = 2;
+    const PACKET_OVERHEAD_FACTOR: usize = 2;
 
     let mut newsz = newsz;
     if !ignoreMax && newsz > max {
@@ -250,5 +248,5 @@ pub fn clampBufSize(newsz: usize, min: usize, max: usize, ignoreMax: bool) -> us
         newsz = i32::MAX as usize
     }
 
-    return newsz
+    return newsz;
 }

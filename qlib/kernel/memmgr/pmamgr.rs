@@ -75,7 +75,7 @@ impl core::hash::Hasher for RawHasher {
     }
 }*/
 
-pub const REF_MAP_PARTITION_CNT : usize = 32;
+pub const REF_MAP_PARTITION_CNT: usize = 32;
 pub struct PagePool {
     //refCount for whole pma
     pub refCount: AtomicU64,
@@ -185,7 +185,7 @@ impl PagePool {
         let addr = self.Allocate()?;
         let pageId = Self::PageId(addr);
         let idx = pageId as usize % REF_MAP_PARTITION_CNT;
-        let mut  refs = self.refs[idx].lock();
+        let mut refs = self.refs[idx].lock();
         if incrRef {
             refs.insert(pageId, 1);
             self.refCount.fetch_add(1, Ordering::Release);
@@ -197,7 +197,7 @@ impl PagePool {
     }
 
     pub fn Allocate(&self) -> Result<u64> {
-        match CPULocal::Myself().pageAllocator.lock().AllocPage() {
+        match unsafe { (*CPULocal::Myself().pageAllocator.get()).AllocPage()} {
             Some(page) => {
                 ZeroPage(page);
                 return Ok(page);

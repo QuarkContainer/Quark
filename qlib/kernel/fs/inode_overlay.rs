@@ -40,18 +40,23 @@ pub fn OverlayHasWhiteout(task: &Task, parent: &Inode, name: &str) -> bool {
     match parent.Getxattr(task, &XattrOverlayWhiteout(name), 1) {
         Ok(s) => {
             if s.len() != 0 {
-                return false
+                return false;
             }
 
             return s[0] == 'y' as u8;
-        },
+        }
         _ => return false,
     }
 }
 
 pub fn overlayCreateWhiteout(parent: &mut Inode, name: &str) -> Result<()> {
     let iops = parent.lock().InodeOp.clone();
-    return iops.Setxattr(parent, &XattrOverlayWhiteout(name), &"y".to_string().as_bytes(), 0);
+    return iops.Setxattr(
+        parent,
+        &XattrOverlayWhiteout(name),
+        &"y".to_string().as_bytes(),
+        0,
+    );
 }
 
 pub fn overlayLookup(
@@ -181,7 +186,8 @@ pub fn OverlayCreate(
         OverlayFileOperations(Arc::new(OverlayFileOperationsInner {
             upper: QMutex::new(Some(upperFile)),
             ..Default::default()
-        })).into(),
+        }))
+        .into(),
     );
 
     return Ok(overlayFile);
@@ -525,7 +531,12 @@ pub fn overlayStableAttr(o: &Arc<RwLock<OverlayEntry>>) -> StableAttr {
     }
 }
 
-pub fn overlayGetxattr(task: &Task, o: &Arc<RwLock<OverlayEntry>>, name: &str, size: usize) -> Result<Vec<u8>> {
+pub fn overlayGetxattr(
+    task: &Task,
+    o: &Arc<RwLock<OverlayEntry>>,
+    name: &str,
+    size: usize,
+) -> Result<Vec<u8>> {
     if HasPrefix(name, &XATTR_OVERLAY_PREFIX.to_string()) {
         return Err(Error::SysError(SysErr::ENODATA));
     }
@@ -540,12 +551,14 @@ pub fn overlayGetxattr(task: &Task, o: &Arc<RwLock<OverlayEntry>>, name: &str, s
     }
 }
 
-pub fn overlaySetxattr(task: &Task,
-                       o: &Arc<RwLock<OverlayEntry>>,
-                       d: &Dirent,
-                       name: &str,
-                       value: &[u8],
-                       flags: u32) -> Result<()> {
+pub fn overlaySetxattr(
+    task: &Task,
+    o: &Arc<RwLock<OverlayEntry>>,
+    d: &Dirent,
+    name: &str,
+    value: &[u8],
+    flags: u32,
+) -> Result<()> {
     if HasPrefix(name, &XATTR_OVERLAY_PREFIX.to_string()) {
         return Err(Error::SysError(SysErr::ENODATA));
     }
@@ -580,13 +593,15 @@ pub fn overlayListxattr(o: &Arc<RwLock<OverlayEntry>>, size: usize) -> Result<Ve
     return Ok(res);
 }
 
-pub fn overlayRemovexattr(task: &Task,
-                          o: &Arc<RwLock<OverlayEntry>>,
-                          d: &Dirent,
-                          name: &str) -> Result<()> {
+pub fn overlayRemovexattr(
+    task: &Task,
+    o: &Arc<RwLock<OverlayEntry>>,
+    d: &Dirent,
+    name: &str,
+) -> Result<()> {
     // Don't allow changes to overlay xattrs through a removexattr syscall.
     if IsXattrOverlay(name) {
-        return Err(Error::SysError(SysErr::EPERM))
+        return Err(Error::SysError(SysErr::EPERM));
     }
 
     copyUp(task, d)?;

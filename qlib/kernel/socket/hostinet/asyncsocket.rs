@@ -54,10 +54,10 @@ use crate::qlib::kernel::socket::hostinet::loopbacksocket::LoopbackSocket;
 #[repr(u64)]
 #[derive(Clone)]
 pub enum SockState {
-    TCPInit,                      // Init TCP Socket, no listen and no connect
-    TCPServer(AcceptQueue),        // Uring TCP Server socket, when socket start to listen
+    TCPInit,                // Init TCP Socket, no listen and no connect
+    TCPServer(AcceptQueue), // Uring TCP Server socket, when socket start to listen
     TCPData(SocketBuff),
-    Loopback(LoopbackSocket)
+    Loopback(LoopbackSocket),
 }
 
 impl fmt::Debug for SockState {
@@ -74,20 +74,13 @@ impl fmt::Debug for SockState {
 impl SockState {
     pub fn Accept(&self, accept: AcceptSocket) -> Self {
         match self {
-            Self::TCPServer(_) => {
-                match accept {
-                    AcceptSocket::SocketBuff(socketBuf) => {
-                        return Self::TCPData(socketBuf)
-                    }
-                    AcceptSocket::LoopbackSocket(loopback) => {
-                        return Self::Loopback(loopback)
-                    }
-                    AcceptSocket::None => {
-                        panic!("UringSocketType::Accept unexpect AcceptSocket::None")
-                    }
+            Self::TCPServer(_) => match accept {
+                AcceptSocket::SocketBuff(socketBuf) => return Self::TCPData(socketBuf),
+                AcceptSocket::LoopbackSocket(loopback) => return Self::Loopback(loopback),
+                AcceptSocket::None => {
+                    panic!("UringSocketType::Accept unexpect AcceptSocket::None")
                 }
-                
-            }
+            },
             _ => {
                 panic!("UringSocketType::Accept unexpect type {:?}", self)
             }
@@ -104,7 +97,9 @@ impl SockState {
     }
 
     fn ConnectType(&self) -> Self {
-        let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT)));
+        let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(
+            MemoryDef::DEFAULT_BUF_PAGE_COUNT,
+        )));
         return Self::TCPData(socketBuf);
     }
 }
@@ -144,7 +139,7 @@ pub fn newAsyncSocketFile(
     );
 
     GetKernel().sockets.AddSocket(&file);
-    return Ok(file)
+    return Ok(file);
 }
 
 pub struct AsyncSocketOperationsIntern {
@@ -339,7 +334,7 @@ impl FileOperations for AsyncSocketOperations {
     ) -> Result<i64> {
         let size = IoVec::NumBytes(srcs);
         if size == 0 {
-            return Ok(0)
+            return Ok(0);
         }
 
         let size = IoVec::NumBytes(srcs);
@@ -374,7 +369,7 @@ impl FileOperations for AsyncSocketOperations {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<()> {
+    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<u64> {
         let flags = request as i32;
 
         let hostfd = self.fd;
@@ -393,13 +388,13 @@ impl FileOperations for AsyncSocketOperations {
                 let addr = val;
                 HostIoctlIFReq(task, hostfd, request, addr)?;
 
-                return Ok(());
+                return Ok(0);
             }
             LibcConst::SIOCGIFCONF => {
                 let addr = val;
                 HostIoctlIFConf(task, hostfd, request, addr)?;
 
-                return Ok(());
+                return Ok(0);
             }
             LibcConst::TIOCINQ => {
                 let tmp: i32 = 0;
@@ -408,7 +403,7 @@ impl FileOperations for AsyncSocketOperations {
                     return Err(Error::SysError(-res as i32));
                 }
                 task.CopyOutObj(&tmp, val)?;
-                return Ok(());
+                return Ok(0);
             }
             _ => {
                 let tmp: i32 = 0;
@@ -417,7 +412,7 @@ impl FileOperations for AsyncSocketOperations {
                     return Err(Error::SysError(-res as i32));
                 }
                 task.CopyOutObj(&tmp, val)?;
-                return Ok(());
+                return Ok(0);
             }
         }
     }
@@ -437,16 +432,15 @@ impl FileOperations for AsyncSocketOperations {
     }
 }
 
-
 impl SockOperations for AsyncSocketOperations {
     fn Connect(&self, task: &Task, sockaddr: &[u8], blocking: bool) -> Result<i64> {
         let mut socketaddr = sockaddr;
 
         if (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
             && socketaddr.len() > SIZEOF_SOCKADDR
-            {
-                socketaddr = &socketaddr[..SIZEOF_SOCKADDR]
-            }
+        {
+            socketaddr = &socketaddr[..SIZEOF_SOCKADDR]
+        }
 
         let res = Kernel::HostSpace::IOConnect(
             self.fd,
@@ -592,14 +586,14 @@ impl SockOperations for AsyncSocketOperations {
         let mut socketaddr = sockaddr;
 
         info!(
-        "hostinet socket bind {:?}, addr is {:?}",
-        self.family, socketaddr
+            "hostinet socket bind {:?}, addr is {:?}",
+            self.family, socketaddr
         );
         if (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
             && socketaddr.len() > SIZEOF_SOCKADDR
-            {
-                socketaddr = &socketaddr[..SIZEOF_SOCKADDR]
-            }
+        {
+            socketaddr = &socketaddr[..SIZEOF_SOCKADDR]
+        }
 
         let res = Kernel::HostSpace::Bind(
             self.fd,
@@ -615,11 +609,7 @@ impl SockOperations for AsyncSocketOperations {
     }
 
     fn Listen(&self, _task: &Task, backlog: i32) -> Result<i64> {
-        let len = if backlog <= 0 {
-            5
-        } else {
-            backlog
-        };
+        let len = if backlog <= 0 { 5 } else { backlog };
 
         let res = Kernel::HostSpace::Listen(self.fd, len, false);
 
@@ -793,7 +783,6 @@ impl SockOperations for AsyncSocketOperations {
                 &opt[0] as *const _ as u64,
                 optLen as u32,
             )
-
         };
 
         if res < 0 {
@@ -841,18 +830,17 @@ impl SockOperations for AsyncSocketOperations {
         senderRequested: bool,
         controlDataLen: usize,
     ) -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
-
         //todo: we don't support MSG_ERRQUEUE
         if flags
             & !(MsgType::MSG_DONTWAIT
-            | MsgType::MSG_PEEK
-            | MsgType::MSG_TRUNC
-            | MsgType::MSG_CTRUNC
-            | MsgType::MSG_WAITALL)
+                | MsgType::MSG_PEEK
+                | MsgType::MSG_TRUNC
+                | MsgType::MSG_CTRUNC
+                | MsgType::MSG_WAITALL)
             != 0
-            {
-                return Err(Error::SysError(SysErr::EINVAL));
-            }
+        {
+            return Err(Error::SysError(SysErr::EINVAL));
+        }
 
         let size = IoVec::NumBytes(dsts);
         let buf = DataBuff::New(size);
@@ -892,15 +880,13 @@ impl SockOperations for AsyncSocketOperations {
                 self.fd,
                 buf.Ptr(),
                 size,
-                flags  | MsgType::MSG_DONTWAIT,
+                flags | MsgType::MSG_DONTWAIT,
                 msgHdr.msgName,
-                &msgHdr.nameLen as * const _ as u64,
-
+                &msgHdr.nameLen as *const _ as u64,
             ) as i32
         };
 
         while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
-
             match task.blocker.BlockWithMonoTimer(true, deadline) {
                 Err(Error::ErrInterrupted) => {
                     return Err(Error::SysError(SysErr::ERESTARTSYS));
@@ -926,10 +912,9 @@ impl SockOperations for AsyncSocketOperations {
                     self.fd,
                     buf.Ptr(),
                     size,
-                    flags  | MsgType::MSG_DONTWAIT,
+                    flags | MsgType::MSG_DONTWAIT,
                     msgHdr.msgName,
-                    &msgHdr.nameLen as * const _ as u64,
-
+                    &msgHdr.nameLen as *const _ as u64,
                 ) as i32
             };
         }
@@ -942,11 +927,11 @@ impl SockOperations for AsyncSocketOperations {
         let senderAddr = if senderRequested
             // for tcp connect, recvmsg get nameLen=0 msg
             && msgHdr.nameLen >= 4
-            {
-                let addr = GetAddr(addr[0] as i16, &addr[0..msgHdr.nameLen as usize])?;
-                let l = addr.Len();
-                Some((addr, l))
-            } else {
+        {
+            let addr = GetAddr(addr[0] as i16, &addr[0..msgHdr.nameLen as usize])?;
+            let l = addr.Len();
+            Some((addr, l))
+        } else {
             None
         };
 
@@ -972,14 +957,14 @@ impl SockOperations for AsyncSocketOperations {
     ) -> Result<i64> {
         if flags
             & !(MsgType::MSG_DONTWAIT
-            | MsgType::MSG_EOR
-            | MsgType::MSG_FASTOPEN
-            | MsgType::MSG_MORE
-            | MsgType::MSG_NOSIGNAL)
+                | MsgType::MSG_EOR
+                | MsgType::MSG_FASTOPEN
+                | MsgType::MSG_MORE
+                | MsgType::MSG_NOSIGNAL)
             != 0
-            {
-                return Err(Error::SysError(SysErr::EINVAL));
-            }
+        {
+            return Err(Error::SysError(SysErr::EINVAL));
+        }
 
         let size = IoVec::NumBytes(srcs);
         let mut buf = DataBuff::New(size);
@@ -1069,15 +1054,20 @@ impl SockOperations for AsyncSocketOperations {
         let mut info = TCPInfo::default();
         let mut len = SocketSize::SIZEOF_TCPINFO;
 
-        let ret = HostSpace::GetSockOpt(self.fd,
-                                        LibcConst::SOL_TCP as _,
-                                        LibcConst::TCP_INFO as _,
-                                        &mut info as * mut _ as u64,
-                                        &mut len as * mut _ as u64) as i32;
+        let ret = HostSpace::GetSockOpt(
+            self.fd,
+            LibcConst::SOL_TCP as _,
+            LibcConst::TCP_INFO as _,
+            &mut info as *mut _ as u64,
+            &mut len as *mut _ as u64,
+        ) as i32;
 
         if ret < 0 {
             if ret != -SysErr::ENOPROTOOPT {
-                error!("fail to Failed to get TCP socket info from {} with error {}", self.fd, ret);
+                error!(
+                    "fail to Failed to get TCP socket info from {} with error {}",
+                    self.fd, ret
+                );
 
                 // For non-TCP sockets, silently ignore the failure.
                 return 0;
@@ -1092,9 +1082,6 @@ impl SockOperations for AsyncSocketOperations {
     }
 
     fn Type(&self) -> (i32, i32, i32) {
-        return (self.family, self.stype, -1)
+        return (self.family, self.stype, -1);
     }
 }
-
-
-

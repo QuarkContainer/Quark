@@ -7,6 +7,10 @@ use cache_padded::CachePadded;
 use libc::*;
 
 use crate::SHARE_SPACE;
+use crate::qlib::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
+
+use self::tsot_agent::TSOT_AGENT;
+use self::tsot_msg::TsotMessage;
 
 use super::qlib::common::*;
 use super::qlib::control_msg::*;
@@ -30,10 +34,21 @@ use super::vmspace::*;
 use super::ThreadId;
 use super::FD_NOTIFIER;
 use super::QUARK_CONFIG;
-use super::URING_MGR;
 use super::VMS;
 
 impl std::error::Error for Error {}
+
+impl From<std::io::Error> for Error {
+    fn from(item: std::io::Error) -> Self {
+        return Self::StdIOErr(format!("{:?}", item));
+    }
+}
+
+impl From<uuid::Error> for Error {
+    fn from(item: uuid::Error) -> Self {
+        return Self::StdIOErr(format!("{:?}", item));
+    }
+}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -182,8 +197,14 @@ impl ShareSpace {
                 continue;
             }
 
+            let tick = if SHARE_SPACE.config.read().Realtime {
+                REALTIME_CLOCK_TICK
+            } else {
+                CLOCK_TICK
+            };
+
             //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
-            if Tsc::Scale(now - enterAppTimestamp) * 1000 > 2 * CLOCK_TICK {
+            if Tsc::Scale(now - enterAppTimestamp) * 1000 > 2 * tick {
                 self.scheduler.VcpuArr[i].SetEnterAppTimestamp(now);
                 self.scheduler.VcpuArr[i].InterruptThreadTimeout();
                 //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
@@ -287,13 +308,6 @@ pub fn NewSocket(fd: i32) -> i64 {
     return VMSpace::NewSocket(fd);
 }
 
-pub fn UringWake(minCompleted: u64) {
-    URING_MGR
-        .lock()
-        .Wake(minCompleted as _)
-        .expect("qlib::HYPER CALL_URING_WAKE fail");
-}
-
 impl HostSpace {
     pub fn Close(fd: i32) -> i64 {
         return VMSpace::Close(fd);
@@ -347,4 +361,16 @@ pub fn IsKernel() -> bool {
 
 pub fn ReapSwapIn() {
     SHARE_SPACE.hiberMgr.ReapSwapIn().unwrap();
+}
+
+pub static TSOT_SOCKET_PATH: &'static str = "/var/run/quark/tsot-socket";
+
+impl TsotSocketMgr {
+    pub fn SendMsg(&self, m: &TsotMessage) -> Result<()> {
+        return TSOT_AGENT.SendMsg(m)
+    }
+
+    pub fn RecvMsg(&self) -> Result<TsotMessage> {
+        return TSOT_AGENT.RecvMsg()
+    }
 }

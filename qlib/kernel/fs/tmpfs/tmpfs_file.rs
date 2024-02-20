@@ -47,7 +47,7 @@ pub fn NewTmpfsFileInode(
         return Err(Error::SysError(-tmpfd));
     }
 
-    let inode = Inode::NewHostInode(task, msrc, tmpfd, &fstat, true, true)?;
+    let inode = Inode::NewHostInode(task, msrc, tmpfd, &fstat, true, false, true)?;
 
     let inodeops = inode.lock().InodeOp.clone();
     let hostiops = match inodeops.as_any().downcast_ref::<HostInodeOp>() {

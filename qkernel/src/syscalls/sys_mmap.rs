@@ -17,8 +17,8 @@ use alloc::sync::Arc;
 
 use super::super::fs::host::hostinodeop::*;
 use super::super::memmgr::mm::*;
-use super::super::memmgr::vma::*;
 use super::super::memmgr::syscalls::*;
+use super::super::memmgr::vma::*;
 use super::super::memmgr::*;
 use super::super::qlib::addr::*;
 use super::super::qlib::common::*;
@@ -39,6 +39,7 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let shared = flags & MmapFlags::MAP_SHARED != 0;
     let anon = flags & MmapFlags::MAP_ANONYMOUS != 0;
     let map32bit = flags & MmapFlags::MAP_32BIT != 0;
+
 
     // Require exactly one of MAP_PRIVATE and MAP_SHARED.
     if private == shared {

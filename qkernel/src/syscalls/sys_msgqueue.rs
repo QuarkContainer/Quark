@@ -14,12 +14,12 @@
 
 use alloc::vec::Vec;
 
+use super::super::qlib::common::*;
+use super::super::qlib::kernel::kernel::ipc_namespace::*;
+use super::super::qlib::kernel::kernel::msgqueue::*;
 use super::super::qlib::linux::ipc::*;
 use super::super::qlib::linux::msgqueue::*;
-use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
-use super::super::qlib::kernel::kernel::msgqueue::*;
-use super::super::qlib::kernel::kernel::ipc_namespace::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 
@@ -39,9 +39,9 @@ pub fn SysMsgget(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 }
 
 pub fn CopyInMsg(task: &Task, addr: u64, size: usize) -> Result<Message> {
-    let type_ : i64 = task.CopyInObj(addr)?;
-    let text : Vec<u8> = task.CopyInVec(addr+8, size)?;
-    return Ok(Message::New(type_, text))
+    let type_: i64 = task.CopyInObj(addr)?;
+    let text: Vec<u8> = task.CopyInVec(addr + 8, size)?;
+    return Ok(Message::New(type_, text));
 }
 
 // Msgsnd implements msgsnd(2).
@@ -62,7 +62,7 @@ pub fn SysMsgsnd(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let r = task.IPCNamespace().MsgqueueRegistry();
     let queue = r.FindById(id)?;
     queue.Send(task, &msg, wait, pid)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // Msgrcv implements msgrcv(2).
@@ -81,28 +81,29 @@ pub fn SysMsgrcv(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let msg = Receive(task, id, mType, size, msgCopy, wait, truncate, except)?;
     let size = msg.Size();
     CopyOutMsg(task, msgAddr, msg)?;
-    return Ok(size as _)
+    return Ok(size as _);
 }
 
 pub fn CopyOutMsg(task: &Task, addr: u64, msg: Message) -> Result<()> {
     let msg = msg.lock();
     task.CopyOutObj(&msg.Type, addr)?;
     task.CopyOutSlice(&msg.Text, addr + 8, msg.Text.len())?;
-    return Ok(())
+    return Ok(());
 }
 
 // receive returns a message from the queue with the given ID. If msgCopy is
 // true, a message is copied from the queue without being removed. Otherwise,
 // a message is removed from the queue and returned.
-pub fn Receive(task: &Task,
-               id: ID,
-               mType: i64,
-               maxSize: i64,
-               msgCopy: bool,
-               wait: bool,
-               truncate: bool,
-               except: bool) -> Result<Message> {
-
+pub fn Receive(
+    task: &Task,
+    id: ID,
+    mType: i64,
+    maxSize: i64,
+    msgCopy: bool,
+    wait: bool,
+    truncate: bool,
+    except: bool,
+) -> Result<Message> {
     let pid = task.Thread().ThreadGroup().ID();
 
     let r = task.IPCNamespace().MsgqueueRegistry();
@@ -114,7 +115,7 @@ pub fn Receive(task: &Task,
         return queue.Copy(mType);
     }
 
-    return queue.Receive(task, mType, maxSize, wait, truncate, except, pid)
+    return queue.Receive(task, mType, maxSize, wait, truncate, except, pid);
 }
 
 // Msgctl implements msgctl(2).
@@ -141,7 +142,7 @@ pub fn SysMsgctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             r.Remove(id, &creds)?;
             return Ok(0);
         }
-        _ => ()
+        _ => (),
     }
 
     // Remaining commands use a queue.
@@ -153,8 +154,7 @@ pub fn SysMsgctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         // segments on the system". Since we don't track segments in an array,
         // we'll just pretend the msqid is the index and do the same thing as
         // IPC_STAT. Linux also uses the index as the msqid.
-        MSG_STAT |
-        IPC_STAT => {
+        MSG_STAT | IPC_STAT => {
             let stat = queue.Stat(task)?;
             task.CopyOutObj(&stat, buf)?;
             return Ok(0);
@@ -165,14 +165,13 @@ pub fn SysMsgctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(0);
         }
         IPC_SET => {
-            let ds : MsqidDS = match task.CopyInObj(buf) {
+            let ds: MsqidDS = match task.CopyInObj(buf) {
                 Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
                 Ok(ds) => ds,
             };
             queue.Set(task, &ds)?;
-            return Ok(0)
+            return Ok(0);
         }
         _ => return Err(Error::SysError(SysErr::EINVAL)),
     }
 }
-

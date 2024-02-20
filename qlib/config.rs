@@ -19,7 +19,6 @@ pub struct Config {
     pub LogType: LogType,
     pub LogLevel: LogLevel,
     pub UringIO: bool,
-    pub UringBuf: bool,
     pub UringFixedFile: bool,
     pub EnableAIO: bool,
     pub PrintException: bool,
@@ -42,6 +41,9 @@ pub struct Config {
     pub TlbShootdownWait: bool,
     #[serde(default)]
     pub Sandboxed: bool,
+    pub Realtime: bool,
+    pub EnableIOBuf: bool,
+    pub EnableTsot: bool,
 }
 
 impl Config {
@@ -64,7 +66,6 @@ impl Default for Config {
             LogType: LogType::Sync,
             LogLevel: LogLevel::Simple,
             UringIO: true,
-            UringBuf: true,
             UringFixedFile: false,
             EnableAIO: false,
             PrintException: false,
@@ -85,7 +86,10 @@ impl Default for Config {
             DisableCgroup: true,
             CopyDataWithPf: false,
             TlbShootdownWait: false,
-            Sandboxed: false
+            Sandboxed: false,
+            Realtime: false,
+            EnableIOBuf: false,
+            EnableTsot: false,
         };
     }
 }

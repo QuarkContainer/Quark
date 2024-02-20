@@ -17,10 +17,9 @@ use alloc::vec::Vec;
 use core::ptr;
 use core::sync::atomic;
 
-use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::kernel::kernel::GetKernel;
+use crate::qlib::kernel::Kernel::HostSpace;
 //use crate::qlib::mem::list_allocator::*;
-use crate::qlib::linux::signal::*;
 use super::super::super::super::kernel_def::{
     StartExecProcess, StartRootContainer, StartSubContainerProcess,
 };
@@ -36,6 +35,7 @@ use super::super::IOURING;
 use super::super::LOADER;
 use super::super::SHARESPACE;
 use super::process::*;
+use crate::qlib::linux::signal::*;
 //use crate::qlib::kernel::vcpu::CPU_LOCAL;
 
 pub fn ControllerProcessHandler() -> Result<()> {
@@ -58,10 +58,10 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
     // SIGSTOP
     /*if signalArgs.Signo == 12 { //SIGSTOP.0 {
         //GetKernel().Pause();
-            
+
         GetKernel().ClearFsCache();
         HostSpace::SwapOut();
-        
+
         /*for vcpu in CPU_LOCAL.iter() {
             vcpu.AllocatorMut().Clear();
         }*/
@@ -72,28 +72,35 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
     if signalArgs.Signo == SIGSTOP.0 || signalArgs.Signo == SIGUSR2.0 {
         if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
             // if the sandbox has been paused, return
-            return
+            return;
         }
         GetKernel().Pause();
         GetKernel().ClearFsCache();
         HostSpace::SwapOut();
-        SHARESPACE.hibernatePause.store(true, atomic::Ordering::SeqCst);
-        return 
-        
+        SHARESPACE
+            .hibernatePause
+            .store(true, atomic::Ordering::SeqCst);
+        return;
+
         /*for vcpu in CPU_LOCAL.iter() {
             vcpu.AllocatorMut().Clear();
         }*/
     }
 
-    if signalArgs.Signo == SIGCONT.0 || signalArgs.Signo == SIGKILL.0 || signalArgs.Signo == SIGINT.0 { 
+    if signalArgs.Signo == SIGCONT.0
+        || signalArgs.Signo == SIGKILL.0
+        || signalArgs.Signo == SIGINT.0
+    {
         if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
-            SHARESPACE.hibernatePause.store(false, atomic::Ordering::SeqCst);
+            SHARESPACE
+                .hibernatePause
+                .store(false, atomic::Ordering::SeqCst);
             HostSpace::SwapIn();
             GetKernel().Unpause();
         }
 
         if signalArgs.Signo == SIGCONT.0 {
-            return
+            return;
         }
     }
 
@@ -154,7 +161,7 @@ pub fn ControlMsgHandler(fd: *const u8) {
 
     let task = Task::Current();
     let mut msg = ControlMsg::default();
-    Kernel::HostSpace::ReadControlMsg(fd, &mut msg as * mut _ as u64);
+    Kernel::HostSpace::ReadControlMsg(fd, &mut msg as *mut _ as u64);
 
     //info!("payload: {:?}", &msg.payload);
     //defer!(error!("payload handling ends"));

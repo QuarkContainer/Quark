@@ -17,8 +17,8 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
-use core::ops::Deref;
 use core::ops::Bound::Included;
+use core::ops::Deref;
 
 use super::super::super::IOURING;
 use super::timer::*;
@@ -31,21 +31,21 @@ pub struct TimerUnit {
 }
 
 impl TimerUnit {
-    pub const MAX : Self = Self::Max();
-    pub const MIN : Self = Self::Min();
+    pub const MAX: Self = Self::Max();
+    pub const MIN: Self = Self::Min();
 
     pub const fn Max() -> Self {
         return Self {
             timerId: u64::MAX,
             expire: i64::MAX,
-        }
+        };
     }
 
     pub const fn Min() -> Self {
         return Self {
             timerId: u64::MIN,
             expire: i64::MIN,
-        }
+        };
     }
 }
 
@@ -127,7 +127,7 @@ impl TimerStoreIntern {
 
     pub fn Trigger(&mut self) -> i64 {
         let mut now = MONOTONIC_CLOCK.Now().0;
-        while now + Self::PROCESS_TIME >= self.nextExpire  {
+        while now + Self::PROCESS_TIME >= self.nextExpire {
             let timer = self.GetFirst(now + Self::PROCESS_TIME);
             match timer {
                 Some(timer) => {
@@ -143,7 +143,12 @@ impl TimerStoreIntern {
             return -1;
         }
 
-        assert!(self.nextExpire > now, "next expire is {}, now is {}", self.nextExpire, now);
+        assert!(
+            self.nextExpire > now,
+            "next expire is {}, now is {}",
+            self.nextExpire,
+            now
+        );
         return self.nextExpire - now;
         /*if self.nextExpire != self.uringExpire {
             self.RemoveUringTimer();
@@ -220,7 +225,10 @@ impl TimerStoreIntern {
 
         let mut firstKey = None;
 
-        for (&key, _) in self.timerSeq.range((Included(&TimerUnit::MIN), Included(&TimerUnit::MAX))) {
+        for (&key, _) in self
+            .timerSeq
+            .range((Included(&TimerUnit::MIN), Included(&TimerUnit::MAX)))
+        {
             firstKey = Some(key);
             break;
         }
@@ -231,15 +239,18 @@ impl TimerStoreIntern {
         };
 
         let timer = match self.timerSeq.remove(&firstKey) {
-                None => return None,
-                Some(timer) => timer,
-            };
+            None => return None,
+            Some(timer) => timer,
+        };
 
         if self.timerSeq.len() == 0 {
             self.nextExpire = 0;
         }
 
-        for (&key, _) in self.timerSeq.range((Included(&TimerUnit::MIN), Included(&TimerUnit::MAX))) {
+        for (&key, _) in self
+            .timerSeq
+            .range((Included(&TimerUnit::MIN), Included(&TimerUnit::MAX)))
+        {
             self.nextExpire = key.expire;
             break;
         }

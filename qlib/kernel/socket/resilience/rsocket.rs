@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors 
+// Copyright (c) 2021 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,37 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::collections::btree_map::BTreeMap;
+use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use core::ops::Deref;
-use alloc::collections::vec_deque::VecDeque;
-use alloc::collections::btree_map::BTreeMap;
-use spin::Mutex;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use spin::Mutex;
 
+use super::user_msg::*;
+use crate::qlib::bytestream::*;
+use crate::qlib::common::*;
 use crate::qlib::kernel::fs::file::*;
 use crate::qlib::kernel::kernel::waiter::queue::*;
-use crate::qlib::common::*;
-use crate::qlib::linux_def::*;
-use crate::qlib::bytestream::*;
-use crate::qlib::kernel::task::Task;
-use crate::qlib::kernel::socket::socket::*;
 use crate::qlib::kernel::socket::hostinet::uring_socket::*;
-use super::user_msg::*;
+use crate::qlib::kernel::socket::socket::*;
+use crate::qlib::kernel::task::Task;
+use crate::qlib::linux_def::*;
 
 pub struct ResilienceConnInner {
     pub connection: FileOps,
     pub nextSessionId: AtomicU64,
     pub serviceSession: AtomicU64,
     pub sessions: Mutex<BTreeMap<u64, ResilienceSession>>,
-    pub requests: Mutex<VecDeque<UserMsg>>
+    pub requests: Mutex<VecDeque<UserMsg>>,
 }
 
 #[derive(Default)]
 pub struct ResilienceSessionInner {
     pub sessionId: u64,
     pub queue: Queue,
-    pub response: VecDeque<UserMsg>
+    pub response: VecDeque<UserMsg>,
 }
 
 impl ResilienceSessionInner {
@@ -52,7 +52,6 @@ impl ResilienceSessionInner {
             self.queue.Notify(READABLE_EVENT);
         }
     }
-
 }
 
 #[derive(Clone)]
@@ -88,10 +87,13 @@ impl ResilienceConnInner {
         let domain = AFType::AF_INET;
         let stype = SocketType::SOCK_STREAM;
         let protocol = 0;
-        let socket = NewSocket(task, domain, stype, protocol).expect("ResilienceSocketOps new socket fail");
+        let socket =
+            NewSocket(task, domain, stype, protocol).expect("ResilienceSocketOps new socket fail");
         let connection = socket.FileOp.clone();
 
-        connection.Connect(task, ADDR.as_bytes(), false).expect("ResilienceSocketOps new socket fail");
+        connection
+            .Connect(task, ADDR.as_bytes(), false)
+            .expect("ResilienceSocketOps new socket fail");
 
         return Self {
             connection: connection,
@@ -99,7 +101,7 @@ impl ResilienceConnInner {
             serviceSession: AtomicU64::new(0),
             sessions: Mutex::new(BTreeMap::new()),
             requests: Mutex::new(VecDeque::new()),
-        }
+        };
     }
 
     pub fn ServiceSessionId(&self) -> u64 {
@@ -122,14 +124,15 @@ impl ResilienceConnInner {
 
                     sessionId
                 }
-                UserMsg::UserFuncResp(resp) => {
-                    resp.sessionId
-                }
+                UserMsg::UserFuncResp(resp) => resp.sessionId,
             };
 
             match self.sessions.lock().get(&sessionId) {
                 None => {
-                    info!("ResilienceConnInner::recv not exist session {:?}", sessionId)
+                    info!(
+                        "ResilienceConnInner::recv not exist session {:?}",
+                        sessionId
+                    )
                 }
                 Some(session) => {
                     session.lock().InsertMsg(msg);
@@ -144,18 +147,16 @@ impl ResilienceConnInner {
             let request = requests.pop_front();
             match request {
                 None => return Ok(()),
-                Some(req) => {
-                    match self.WriteMsg(task, &req) {
-                        Err(Error::SysError(SysErr::EAGAIN)) => {
-                            requests.push_front(req);
-                            return Err(Error::SysError(SysErr::EAGAIN));
-                        }
-                        Err(e) => return Err(e),
-                        Ok(()) => ()
+                Some(req) => match self.WriteMsg(task, &req) {
+                    Err(Error::SysError(SysErr::EAGAIN)) => {
+                        requests.push_front(req);
+                        return Err(Error::SysError(SysErr::EAGAIN));
                     }
-                }
+                    Err(e) => return Err(e),
+                    Ok(()) => (),
+                },
             }
-        }        
+        }
     }
 
     pub fn ReadMsg(&self, task: &Task) -> Result<UserMsg> {
@@ -172,13 +173,13 @@ impl ResilienceConnInner {
                         // there should enough space for message len
                         if buf.Count() < 4 {
                             bs.lock().SetWaitingRead();
-                            return Err(Error::SysError(SysErr::EAGAIN))
+                            return Err(Error::SysError(SysErr::EAGAIN));
                         }
 
                         let len = buf.ReadObj::<u32>()?;
                         if buf.Count() < len as usize {
                             bs.lock().SetWaitingRead();
-                            return Err(Error::SysError(SysErr::EAGAIN))
+                            return Err(Error::SysError(SysErr::EAGAIN));
                         }
 
                         let msg = UserMsg::Read(&mut buf).expect("UserMsg readmsg fail");
@@ -186,10 +187,10 @@ impl ResilienceConnInner {
 
                         uringSock.Consume(task, len as usize + 4, &mut buf)?;
 
-                        return Ok(msg)    
+                        return Ok(msg);
                     }
                     _ => {
-                        return Err(Error::SysError(SysErr::EPIPE)); 
+                        return Err(Error::SysError(SysErr::EPIPE));
                     }
                 }
             }
@@ -217,16 +218,16 @@ impl ResilienceConnInner {
                         // there should enough space for msg len(4 bytes) and message
                         if size + 4 > buf.Count() {
                             bs.lock().SetWaitingWrite();
-                            return Err(Error::SysError(SysErr::EAGAIN))
+                            return Err(Error::SysError(SysErr::EAGAIN));
                         }
 
                         buf.WriteObj(&(size as u32)).expect("UserMsg writemsg fail");
                         msg.Write(&mut buf).expect("UserMsg writemsg fail");
                         uringSock.Produce(task, size + 4, &mut buf)?;
-                        return Ok(())        
+                        return Ok(());
                     }
                     _ => {
-                        return Err(Error::SysError(SysErr::EPIPE)); 
+                        return Err(Error::SysError(SysErr::EPIPE));
                     }
                 }
             }

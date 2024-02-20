@@ -148,7 +148,8 @@ fn doCopyup(task: &Task, next: &Dirent) -> Result<()> {
         _ => {
             panic!(
                 "copy up of invalid type {:?} on {}",
-                nextStableAttr.Type, &next.Name()
+                nextStableAttr.Type,
+                &next.Name()
             )
         }
     }

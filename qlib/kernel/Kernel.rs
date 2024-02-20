@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::kernel_def::HyperCall64;
 use super::super::common::*;
 use super::super::config::*;
 use super::super::linux_def::*;
@@ -20,6 +19,9 @@ use super::super::qmsg;
 use super::super::qmsg::*;
 use super::super::socket_buf::*;
 use super::super::*;
+use crate::kernel_def::HyperCall64;
+use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
+use crate::qlib::proxy::*;
 
 extern "C" {
     pub fn rdtsc() -> i64;
@@ -40,10 +42,6 @@ impl HostSpace {
         HyperCall64(HYPERCALL_HLT, 0, 0, 0, 0);
     }
 
-    pub fn UringWake(minCompleted: u64) {
-        HyperCall64(HYPERCALL_URING_WAKE, minCompleted, 0, 0, 0);
-    }
-
     pub fn LoadProcessKernel(processAddr: u64) -> i64 {
         let mut msg = Msg::LoadProcessKernel(LoadProcessKernel {
             processAddr: processAddr,
@@ -53,7 +51,10 @@ impl HostSpace {
     }
 
     pub fn CreateMemfd(len: i64, flags: u32) -> i64 {
-        let mut msg = Msg::CreateMemfd(CreateMemfd { len: len, flags: flags });
+        let mut msg = Msg::CreateMemfd(CreateMemfd {
+            len: len,
+            flags: flags,
+        });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -343,20 +344,17 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
-    pub fn Proxy(cmd: u64, addrIn: u64, addrOut: u64) -> i64 {
+    pub fn Proxy(cmd: ProxyCommand, parameters: ProxyParameters) -> i64 {
         let mut msg = Msg::Proxy(Proxy {
             cmd,
-            addrIn,
-            addrOut
+            parameters
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn SwapInPage(addr: u64) -> i64 {
-        let mut msg = Msg::SwapInPage(SwapInPage {
-            addr
-        });
+        let mut msg = Msg::SwapInPage(SwapInPage { addr });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
@@ -443,7 +441,7 @@ impl HostSpace {
             name,
             value,
             size,
-            flags
+            flags,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
@@ -463,20 +461,13 @@ impl HostSpace {
     }
 
     pub fn FRemoveXattr(fd: i32, name: u64) -> i64 {
-        let mut msg = Msg::FRemoveXattr(FRemoveXattr {
-            fd,
-            name,
-        });
+        let mut msg = Msg::FRemoveXattr(FRemoveXattr { fd, name });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn FListXattr(fd: i32, list: u64, size: usize) -> i64 {
-        let mut msg = Msg::FListXattr(FListXattr {
-            fd,
-            list,
-            size,
-        });
+        let mut msg = Msg::FListXattr(FListXattr { fd, list, size });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -618,11 +609,23 @@ impl HostSpace {
         HyperCall64(HYPERCALL_PANIC, &msg as *const _ as u64, 0, 0, 0);
     }
 
-    pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64) -> i64 {
+    pub fn TryOpenWrite(dirfd: i32, oldfd: i32, name: u64) -> i64 {
+        let mut msg = Msg::TryOpenWrite(TryOpenWrite {
+            dirfd: dirfd,
+            oldfd: oldfd,
+            name: name,
+        });
+
+        let ret = Self::HCall(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64, skiprw: bool) -> i64 {
         let mut msg = Msg::TryOpenAt(TryOpenAt {
             dirfd: dirfd,
             name: name,
             addr: addr,
+            skiprw: skiprw,
         });
 
         let ret = Self::HCall(&mut msg, false) as i64;
@@ -641,6 +644,103 @@ impl HostSpace {
         let ret = Self::HCall(&mut msg, false) as i64;
         return ret;
         //return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn OpenDevFile(dirfd: i32, name: u64, flags: i32) -> i64 {
+        let mut msg = Msg::OpenDevFile(OpenDevFile {
+            dirfd: dirfd,
+            name: name,
+            flags: flags,
+        });
+
+        let ret = Self::HCall(&mut msg, false) as i64;
+        return ret;
+        //return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn RemapGuestMemRanges(len: u64, addr: u64, count: usize) -> i64 {
+        let mut msg = Msg::RemapGuestMemRanges(RemapGuestMemRanges {
+            len: len,
+            addr: addr,
+            count: count
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn UnmapGuestMemRange(start: u64, len: u64) -> i64 {
+        let mut msg = Msg::UnmapGuestMemRange(UnmapGuestMemRange {
+            start: start,
+            len: len,
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn NividiaDriverVersion(version: &RMAPIVersion) -> i64 {
+        let mut msg = Msg::NividiaDriverVersion(NividiaDriverVersion {
+            ioctlParamsAddr: version as * const _ as u64
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn NvidiaMMap(addr: u64, len: u64, prot: i32, flags: i32, fd: i32, offset: u64) -> i64 {
+        let mut msg = Msg::NvidiaMMap(NvidiaMMap {
+            addr: addr,
+            len: len,
+            prot: prot,
+            flags: flags,
+            fd: fd,
+            offset: offset
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn HostUnixConnect(type_: i32, addr: u64, len: usize) -> i64 {
+        let mut msg = Msg::HostUnixConnect(HostUnixConnect {
+            type_: type_,
+            addr: addr,
+            len: len,
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn HostUnixRecvMsg(fd: i32, msghdr: u64, flags: i32) -> i64 {
+        let mut msg = Msg::HostUnixRecvMsg(HostUnixRecvMsg {
+            fd: fd,
+            msghdr: msghdr,
+            flags: flags
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn TsotRecvMsg(msgAddr: u64) -> i64 {
+        let mut msg = Msg::TsotRecvMsg(TsotRecvMsg {
+            msgAddr: msgAddr,
+        });
+
+        // TsotRecvMsg will be called in uring async process, must use HCall
+        let ret = Self::HCall(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn TsotSendMsg(msgAddr: u64) -> i64 {
+        let mut msg = Msg::TsotSendMsg(TsotSendMsg {
+            msgAddr: msgAddr,
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
     }
 
     pub fn CreateAt(
@@ -729,16 +829,6 @@ impl HostSpace {
 
     pub fn NewTmpfsFile(typ: TmpfsFileType, addr: u64) -> i64 {
         let mut msg = Msg::NewTmpfsFile(NewTmpfsFile { typ, addr });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn IoUringEnter(toSubmit: u32, minComplete: u32, flags: u32) -> i64 {
-        let mut msg = Msg::IoUringEnter(IoUringEnter {
-            toSubmit,
-            minComplete,
-            flags,
-        });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -832,18 +922,18 @@ impl HostSpace {
     }
 
     pub fn MMapFile(len: u64, fd: i32, offset: u64, prot: i32) -> i64 {
-        assert!(
-            len % MemoryDef::PMD_SIZE == 0,
-            "offset is {:x}, len is {:x}",
-            offset,
-            len
-        );
-        assert!(
-            offset % MemoryDef::PMD_SIZE == 0,
-            "offset is {:x}, len is {:x}",
-            offset,
-            len
-        );
+        // assert!(
+        //     len % MemoryDef::PMD_SIZE == 0,
+        //     "offset is {:x}, len is {:x}",
+        //     offset,
+        //     len
+        // );
+        // assert!(
+        //     offset % MemoryDef::PMD_SIZE == 0,
+        //     "offset is {:x}, len is {:x}",
+        //     offset,
+        //     len
+        // );
         let mut msg = Msg::MMapFile(MMapFile {
             len,
             fd,
@@ -852,23 +942,23 @@ impl HostSpace {
         });
 
         let res = HostSpace::HCall(&mut msg, true) as i64;
-        assert!(res as u64 % MemoryDef::PMD_SIZE == 0, "res {:x}", res);
+        //assert!(res as u64 % MemoryDef::PMD_SIZE == 0, "res {:x}", res);
         return res;
     }
 
     pub fn MUnmap(addr: u64, len: u64) {
-        assert!(
-            addr % MemoryDef::PMD_SIZE == 0,
-            "addr is {:x}, len is {:x}",
-            addr,
-            len
-        );
-        assert!(
-            len % MemoryDef::PMD_SIZE == 0,
-            "addr is {:x}, len is {:x}",
-            addr,
-            len
-        );
+        // assert!(
+        //     addr % MemoryDef::PMD_SIZE == 0,
+        //     "addr is {:x}, len is {:x}",
+        //     addr,
+        //     len
+        // );
+        // assert!(
+        //     len % MemoryDef::PMD_SIZE == 0,
+        //     "addr is {:x}, len is {:x}",
+        //     addr,
+        //     len
+        // );
         let mut msg = Msg::MUnmap(qmsg::qcall::MUnmap { addr, len });
 
         HostSpace::HCall(&mut msg, true);

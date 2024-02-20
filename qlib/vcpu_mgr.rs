@@ -1,4 +1,4 @@
-    // Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicI64, AtomicU8};
-use spin::Mutex;
+use core::cell::UnsafeCell;
 
 use super::mem::list_allocator::*;
 use super::ShareSpace;
@@ -53,14 +53,19 @@ pub struct CPULocal {
     pub data: u64, // for eventfd data writing and reading
     pub eventfd: i32,
     pub epollfd: i32,
-    pub allocator: VcpuAllocator,
-    pub pageAllocator: Mutex<PageAllocator>,
+    pub allocator: UnsafeCell<VcpuAllocator>,
+    pub pageAllocator: UnsafeCell<PageAllocator>,
 
     // it is the time to enter guest ring3. If it is in ring0, the vale will be zero
     pub enterAppTimestamp: AtomicI64,
     pub interruptMask: AtomicU64,
     pub mode: AtomicU8,
 }
+
+
+unsafe impl Send for CPULocal {}
+unsafe impl Sync for CPULocal {}
+
 
 impl CPULocal {
     pub fn State(&self) -> VcpuState {
@@ -69,40 +74,41 @@ impl CPULocal {
     }
 
     pub fn AllocatorMut(&self) -> &mut VcpuAllocator {
-        return unsafe { &mut *(&self.allocator as *const _ as u64 as *mut VcpuAllocator) };
+        //return unsafe { &mut *(&self.allocator as *const _ as u64 as *mut VcpuAllocator) };
+        return unsafe { &mut *self.allocator.get() }
     }
 
     pub fn ToSearch(&self, sharespace: &ShareSpace) -> u64 {
         assert!(
-            self.state.load(Ordering::SeqCst) != VcpuState::Searching as u64,
+            self.state.load(Ordering::Acquire) != VcpuState::Searching as u64,
             "state is {}",
-            self.state.load(Ordering::SeqCst)
+            self.state.load(Ordering::Acquire)
         );
         self.state
-            .store(VcpuState::Searching as u64, Ordering::SeqCst);
+            .store(VcpuState::Searching as u64, Ordering::Release);
         return sharespace.IncrVcpuSearching();
     }
 
     pub fn ToWaiting(&self, sharespace: &ShareSpace) -> u64 {
         assert!(
-            self.state.load(Ordering::SeqCst) == VcpuState::Searching as u64,
+            self.state.load(Ordering::Acquire) == VcpuState::Searching as u64,
             "state is {}",
-            self.state.load(Ordering::SeqCst)
+            self.state.load(Ordering::Acquire)
         );
         self.state
-            .store(VcpuState::Waiting as u64, Ordering::SeqCst);
+            .store(VcpuState::Waiting as u64, Ordering::Release);
         let searchingCnt = sharespace.DecrVcpuSearching();
         return searchingCnt;
     }
 
     pub fn ToRunning(&self, sharespace: &ShareSpace) -> u64 {
         assert!(
-            self.state.load(Ordering::SeqCst) == VcpuState::Searching as u64,
+            self.state.load(Ordering::Acquire) == VcpuState::Searching as u64,
             "state is {}",
-            self.state.load(Ordering::SeqCst)
+            self.state.load(Ordering::Acquire)
         );
         self.state
-            .store(VcpuState::Running as u64, Ordering::SeqCst);
+            .store(VcpuState::Running as u64, Ordering::Release);
         let searchingCnt = sharespace.DecrVcpuSearching();
         return searchingCnt;
     }

@@ -14,9 +14,6 @@
 
 use super::super::super::linux_def::EpollEvent;
 use super::super::super::task_mgr::*;
-use super::super::super::uring::opcode::*;
-use super::super::super::uring::squeue;
-use super::super::SHARESPACE;
 
 pub static DEFAULT_MSG: UringOp = UringOp::None;
 
@@ -46,21 +43,6 @@ impl UringCall {
     pub fn Ptr(&self) -> u64 {
         return self as *const _ as u64;
     }
-
-    pub fn SEntry(&self) -> squeue::Entry {
-        match self.msg {
-            UringOp::None => (),
-            UringOp::TimerRemove(ref msg) => return msg.SEntry(),
-            UringOp::Read(ref msg) => return msg.SEntry(),
-            UringOp::Write(ref msg) => return msg.SEntry(),
-            UringOp::Statx(ref msg) => return msg.SEntry(),
-            UringOp::Fsync(ref msg) => return msg.SEntry(),
-            UringOp::Splice(ref msg) => return msg.SEntry(),
-            UringOp::Accept(ref msg) => return msg.SEntry(),
-        };
-
-        panic!("UringCall SEntry UringOp::None")
-    }
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -86,14 +68,6 @@ pub struct TimerRemoveOp {
     pub userData: u64,
 }
 
-impl TimerRemoveOp {
-    pub fn SEntry(&self) -> squeue::Entry {
-        let op = TimeoutRemove::new(self.userData);
-
-        return op.build();
-    }
-}
-
 #[derive(Clone, Debug, Copy)]
 pub struct ReadOp {
     pub fd: i32,
@@ -102,37 +76,12 @@ pub struct ReadOp {
     pub offset: i64,
 }
 
-impl ReadOp {
-    pub fn SEntry(&self) -> squeue::Entry {
-        let op = Read::new(types::Fd(self.fd), self.addr as *mut _, self.len).offset(self.offset);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-}
-
 #[derive(Clone, Debug, Copy)]
 pub struct WriteOp {
     pub fd: i32,
     pub addr: u64,
     pub len: u32,
     pub offset: i64,
-}
-
-impl WriteOp {
-    pub fn SEntry(&self) -> squeue::Entry {
-        let op =
-            Write::new(types::Fd(self.fd), self.addr as *const _, self.len).offset(self.offset);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -144,44 +93,10 @@ pub struct StatxOp {
     pub mask: u32,
 }
 
-impl StatxOp {
-    pub fn SEntry(&self) -> squeue::Entry {
-        let op = Statx::new(
-            types::Fd(self.dirfd),
-            self.pathname as *const _,
-            self.statxBuf as *mut types::statx,
-        )
-        .flags(self.flags)
-        .mask(self.mask);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-}
-
 #[derive(Clone, Debug, Copy)]
 pub struct FsyncOp {
     pub fd: i32,
     pub dataSyncOnly: bool,
-}
-
-impl FsyncOp {
-    pub fn SEntry(&self) -> squeue::Entry {
-        let op = if self.dataSyncOnly {
-            Fsync::new(types::Fd(self.fd)).flags(types::FsyncFlags::DATASYNC)
-        } else {
-            Fsync::new(types::Fd(self.fd))
-        };
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -194,25 +109,6 @@ pub struct SpliceOp {
     pub flags: u32,
 }
 
-impl SpliceOp {
-    pub fn SEntry(&self) -> squeue::Entry {
-        let op = Splice::new(
-            types::Fixed(self.fdIn as u32),
-            self.offsetIn,
-            types::Fixed(self.fdOut as u32),
-            self.offsetOut,
-            self.len,
-        );
-
-        error!("SpliceOp {:x?}", self);
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-}
-
 #[derive(Clone, Debug, Copy)]
 pub struct EpollCtlOp {
     pub epollfd: i32,
@@ -221,39 +117,8 @@ pub struct EpollCtlOp {
     pub ev: EpollEvent,
 }
 
-impl EpollCtlOp {
-    pub fn SEntry(&self) -> squeue::Entry {
-        let op = EpollCtl::new(
-            types::Fd(self.epollfd),
-            types::Fd(self.fd),
-            self.op,
-            &self.ev as *const _ as u64 as *const types::epoll_event,
-        );
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-}
-
 #[derive(Clone, Debug, Copy)]
 pub struct AcceptOp {
     pub fd: i32,
 }
 
-impl AcceptOp {
-    pub fn SEntry(&self) -> squeue::Entry {
-        let op = Accept::new(
-            types::Fd(self.fd),
-            &0 as *const _ as u64 as *mut _,
-            &0 as *const _ as u64 as *mut _,
-        );
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-}

@@ -13,30 +13,30 @@
 // limitations under the License.
 
 use alloc::collections::BTreeMap;
-use core::ops::Deref;
 use alloc::vec::Vec;
+use core::ops::Deref;
 
 use crate::qlib::kernel::memmgr::mm::*;
-use crate::qlib::mutex::*;
 use crate::qlib::linux_def::IoVec;
+use crate::qlib::mutex::*;
 
 #[derive(Default)]
 pub struct ReapSwapFile {
-    pub fd: i32,            // the file fd 
+    pub fd: i32, // the file fd
     pub iovs: Vec<IoVec>,
 }
 
 #[derive(Default)]
 pub struct HiberMgrIntern {
-	pub pageMap: BTreeMap<u64, u64>, // pageAddr --> file offset 
-	pub memmgrs: BTreeMap<u64, MemoryManagerWeak>,
-	pub reap: bool,
-	pub reapSwapFile: ReapSwapFile,
+    pub pageMap: BTreeMap<u64, u64>, // pageAddr --> file offset
+    pub memmgrs: BTreeMap<u64, MemoryManagerWeak>,
+    pub reap: bool,
+    pub reapSwapFile: ReapSwapFile,
 }
 
 #[derive(Default)]
 pub struct HiberMgr(QMutex<HiberMgrIntern>);
- 
+
 impl Deref for HiberMgr {
     type Target = QMutex<HiberMgrIntern>;
 
@@ -46,18 +46,18 @@ impl Deref for HiberMgr {
 }
 
 impl HiberMgr {
-	pub fn AddMemMgr(&self, mm: &MemoryManager) {
-		let uid = mm.uid;
-		self.lock().memmgrs.insert(uid, mm.Downgrade());
-	}
+    pub fn AddMemMgr(&self, mm: &MemoryManager) {
+        let uid = mm.uid;
+        self.lock().memmgrs.insert(uid, mm.Downgrade());
+    }
 
-	pub fn RemoveMemMgr(&self, mm: &MemoryManager) -> bool {
-		let uid = mm.uid;
-		match self.lock().memmgrs.remove(&uid) {
-			None => return false,
-			Some(_) => return true,
-		}
-	}
+    pub fn RemoveMemMgr(&self, mm: &MemoryManager) -> bool {
+        let uid = mm.uid;
+        match self.lock().memmgrs.remove(&uid) {
+            None => return false,
+            Some(_) => return true,
+        }
+    }
 
     pub fn ContainersPage(&self, phyAddr: u64) -> bool {
         let intern = self.lock();

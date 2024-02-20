@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::sync::Arc;
 use core::any::Any;
 use core::ops::Deref;
-use alloc::sync::Arc;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
@@ -167,7 +167,7 @@ impl FileOperations for Reader {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<()> {
+    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<u64> {
         if request == IoCtlCmd::FIONREAD {
             let mut v = self.pipe.Queued();
             if v > core::i32::MAX as usize {
@@ -176,7 +176,7 @@ impl FileOperations for Reader {
             }
 
             task.CopyOutObj(&v, val)?;
-            return Ok(());
+            return Ok(0);
         }
         return Err(Error::SysError(SysErr::ENOTTY));
     }

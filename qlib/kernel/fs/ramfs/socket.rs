@@ -207,7 +207,9 @@ impl InodeOperations for SocketInodeOps {
     }
 
     fn Setxattr(&self, dir: &mut Inode, name: &str, value: &[u8], flags: u32) -> Result<()> {
-        return self.simpleExtendedAttribute.Setxattr(dir, name, value, flags);
+        return self
+            .simpleExtendedAttribute
+            .Setxattr(dir, name, value, flags);
     }
 
     fn Listxattr(&self, dir: &Inode, size: usize) -> Result<Vec<String>> {
@@ -376,7 +378,7 @@ impl FileOperations for SocketFileOps {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
+    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<u64> {
         return Err(Error::SysError(SysErr::ENOTTY));
     }
 

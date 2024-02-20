@@ -147,6 +147,40 @@ pub fn SignalProcess(cid: &str, pid: i32, signo: i32, fgProcess: bool) -> Result
     }
 }
 
+pub fn SignalExecProcess(
+    cid: &str,
+    pid: i32,
+    signo: i32,
+    fgProcess: bool,
+    sandboxId: &str,
+) -> Result<()> {
+    info!("Signal sandbox {}, exec id {}", sandboxId, pid);
+
+    let addr = ControlSocketAddr(sandboxId);
+    info!("SandboxConnect connect address is {}", &addr);
+    let client = UCallClient::Init(&addr)?;
+
+    let mut mode = SignalDeliveryMode::DeliverToProcess;
+    if fgProcess {
+        mode = SignalDeliveryMode::DeliverToForegroundProcessGroup;
+    }
+
+    let req = UCallReq::Signal(SignalArgs {
+        CID: cid.to_string(),
+        Signo: signo,
+        PID: pid,
+        Mode: mode,
+    });
+
+    let resp = client.Call(&req)?;
+    match resp {
+        UCallResp::SignalResp => return Ok(()),
+        resp => {
+            panic!("SignalProcess get unknow resp {:?}", resp);
+        }
+    }
+}
+
 // Sandbox wraps a sandbox process.
 //
 // Note: Sandbox must be immutable because a copy of it is saved for each
@@ -183,6 +217,8 @@ pub struct Sandbox {
 
     #[serde(skip_serializing, skip_deserializing)]
     pub console: Console,
+
+    pub sandboxRootDir: String,
 }
 
 impl Sandbox {
@@ -216,6 +252,7 @@ impl Sandbox {
         s.console = console;
         s.child = true;
         s.Pid = pid;
+        s.sandboxRootDir = process.SandboxRootDir.clone();
 
         return Ok(s);
     }
@@ -675,10 +712,13 @@ impl Sandbox {
     pub fn DestroyContainer(&mut self, cid: &str) -> Result<()> {
         if self.IsRootContainer(cid) {
             info!("destroying root container by destroying sandbox");
-            return self.Destroy()
+            return self.Destroy();
         }
 
-        info!("destroying subcontainer, cid: {}, sandboxId: {}", cid, &self.ID);
+        info!(
+            "destroying subcontainer, cid: {}, sandboxId: {}",
+            cid, &self.ID
+        );
 
         let client = self.SandboxConnect()?;
         let req = UCallReq::ContainerDestroy(cid.to_string());
@@ -689,7 +729,7 @@ impl Sandbox {
                 if self.IsRunning() {
                     panic!("DestroyContainer get unknow resp {:?}", resp);
                 } else {
-                    return Ok(())
+                    return Ok(());
                 }
             }
         }

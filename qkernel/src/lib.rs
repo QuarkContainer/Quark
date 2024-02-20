@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//#![feature(macro_rules)]
-#![feature(lang_items)]
+
 #![no_std]
 #![feature(proc_macro_hygiene)]
 #![feature(alloc_error_handler)]
@@ -29,7 +28,6 @@
 #![feature(core_intrinsics)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(panic_info_message)]
-#![feature(map_first_last)]
 #![allow(deprecated)]
 #![recursion_limit = "256"]
 
@@ -49,12 +47,14 @@ extern crate scopeguard;
 #[macro_use]
 extern crate serde_derive;
 extern crate spin;
+#[cfg(target_arch="x86_64")]
 extern crate x86_64;
 extern crate xmas_elf;
+extern crate log;
 
-use core::{mem, ptr};
 use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
+use core::{mem, ptr};
 
 use spin::mutex::Mutex;
 
@@ -68,42 +68,41 @@ use crate::qlib::kernel::GlobalIOMgr;
 use self::asm::*;
 use self::boot::controller::*;
 use self::boot::loader::*;
-use self::interrupt::virtualization_handler;
 use self::kernel::timer::*;
 use self::kernel_def::*;
 use self::loader::vdso::*;
 //use linked_list_allocator::LockedHeap;
 //use buddy_system_allocator::LockedHeap;
-use self::qlib::{ShareSpaceRef, SysCallID};
 use self::qlib::common::*;
 use self::qlib::config::*;
 use self::qlib::control_msg::*;
 use self::qlib::cpuid::*;
-use self::qlib::kernel::*;
 use self::qlib::kernel::arch;
 use self::qlib::kernel::asm;
 use self::qlib::kernel::boot;
 use self::qlib::kernel::fd;
 use self::qlib::kernel::fs;
 use self::qlib::kernel::kernel;
-use self::qlib::kernel::Kernel;
 use self::qlib::kernel::loader;
 use self::qlib::kernel::memmgr;
 use self::qlib::kernel::perflog;
 use self::qlib::kernel::quring;
+use self::qlib::kernel::Kernel;
+use self::qlib::kernel::*;
+use self::qlib::{ShareSpaceRef, SysCallID};
 //use self::vcpu::*;
-use self::qlib::kernel::Scale;
-use self::qlib::kernel::SignalDef;
 use self::qlib::kernel::socket;
 use self::qlib::kernel::task;
 use self::qlib::kernel::taskMgr;
 use self::qlib::kernel::threadmgr;
-use self::qlib::kernel::TSC;
 use self::qlib::kernel::util;
 use self::qlib::kernel::vcpu;
 use self::qlib::kernel::vcpu::*;
-use self::qlib::kernel::VcpuFreqInit;
 use self::qlib::kernel::version;
+use self::qlib::kernel::Scale;
+use self::qlib::kernel::SignalDef;
+use self::qlib::kernel::VcpuFreqInit;
+use self::qlib::kernel::TSC;
 use self::qlib::linux::time::*;
 use self::qlib::linux_def::MemoryDef;
 use self::qlib::loader::*;
@@ -131,12 +130,9 @@ mod syscalls;
 
 //use self::heap::QAllocator;
 //use qlib::mem::bitmap_allocator::BitmapAllocatorWrapper;
-pub const HEAP_START: usize = 0x70_2000_0000;
-pub const HEAP_SIZE: usize = 0x1000_0000;
 
 //use buddy_system_allocator::*;
 //#[global_allocator]
-
 
 #[global_allocator]
 pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
@@ -144,9 +140,8 @@ pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 //pub static GLOBAL_ALLOCATOR: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
 
-
 lazy_static! {
-    pub static ref GLOBAL_LOCK : Mutex<()> = Mutex::new(());
+    pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
 }
 
 //static ALLOCATOR: QAllocator = QAllocator::New();
@@ -161,16 +156,22 @@ lazy_static! {
     return ALLOCATOR.Print(class);
 }*/
 
+pub fn AllocIOBuf(size: usize) -> *mut u8 {
+    unsafe {
+        return GLOBAL_ALLOCATOR.AllocIOBuf(size);
+    }
+}
+
 pub fn SingletonInit() {
     unsafe {
         vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
         vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
         InitGs(0);
-        KERNEL_PAGETABLE.Init(PageTables::Init(CurrentCr3()));
+        KERNEL_PAGETABLE.Init(PageTables::Init(CurrentKernelTable()));
         //init fp state with current fp state as it is brand new vcpu
         FP_STATE.Reset();
         SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
-        SHARESPACE.SetvirtualizationHandlerAddr(virtualization_handler as u64);
+        //SHARESPACE.SetvirtualizationHandlerAddr(virtualization_handler as u64);
         IOURING.SetValue(SHARESPACE.GetIOUringAddr());
 
         // the error! can run after this point
@@ -219,6 +220,7 @@ extern "C" {
 pub fn Init() {
     self::fs::Init();
     self::socket::Init();
+    print::init().unwrap();
 }
 
 #[no_mangle]
@@ -258,7 +260,14 @@ pub extern "C" fn syscall_handler(
     let startTime = TSC.Rdtsc();
     let enterAppTimestamp = CPULocal::Myself().ResetEnterAppTimestamp() as i64;
     let worktime = Tsc::Scale(startTime - enterAppTimestamp) * 1000; // the thread has used up time slot
-    if worktime > CLOCK_TICK {
+    
+    let tick = if SHARESPACE.config.read().Realtime {
+        REALTIME_CLOCK_TICK
+    } else {
+        CLOCK_TICK
+    };
+
+    if worktime > tick {
         taskMgr::Yield();
     }
 
@@ -281,14 +290,28 @@ pub extern "C" fn syscall_handler(
 
     if debugLevel > DebugLevel::Error {
         let llevel = SHARESPACE.config.read().LogLevel;
-        callId = if nr < SysCallID::UnknowSyscall as u64 {
-            unsafe { mem::transmute(nr as u64) }
-        } else if SysCallID::sys_socket_produce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64 {
-            unsafe { mem::transmute(nr as u64) }
-        } else {
-            nr = SysCallID::UnknowSyscall as _;
-            SysCallID::UnknowSyscall
-        };
+        #[cfg(target_arch = "x86_64")]
+        {
+            callId = if nr < SysCallID::UnknowSyscall as u64 {
+                unsafe { mem::transmute(nr as u64) }
+            } else if SysCallID::sys_socket_produce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64
+            {
+                unsafe { mem::transmute(nr as u64) }
+            } else {
+                nr = SysCallID::UnknowSyscall as _;
+                SysCallID::UnknowSyscall
+            };
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        {
+            callId = if nr < SysCallID::UnknowSyscall as u64 {
+                unsafe { mem::transmute(nr as u64) }
+            } else {
+                nr = SysCallID::UnknowSyscall as _;
+                SysCallID::UnknowSyscall
+            };
+        }
 
         if llevel == LogLevel::Complex {
             tid = currTask.Thread().lock().id;
@@ -323,10 +346,13 @@ pub extern "C" fn syscall_handler(
 
     if debugLevel > DebugLevel::Error {
         let gap = if self::SHARESPACE.config.read().PerfDebug {
-            TSC.Rdtsc() - startTime
+            let gap = TSC.Rdtsc() - startTime;
+            crate::qlib::kernel::threadmgr::task_exit::SYS_CALL_TIME[nr as usize].fetch_add(gap as u64, Ordering::SeqCst);
+            gap
         } else {
             0
         };
+
         info!(
             "({}/{})------Return[{}] res is {:x}: call id {:?} ",
             tid,
@@ -337,21 +363,21 @@ pub extern "C" fn syscall_handler(
         );
     }
 
-    let kernalRsp = pt as *const _ as u64;
+    let kernelRsp = pt as *const _ as u64;
 
     /*if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();
     }*/
     //currTask.mm.VcpuEnter();
-    
+
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
     CPULocal::Myself().SetMode(VcpuMode::User);
     currTask.mm.HandleTlbShootdown();
     if !(pt.rip == pt.rcx && pt.r11 == pt.eflags) {
         //error!("iret *****, pt is {:x?}", pt);
-        IRet(kernalRsp)
+        IRet(kernelRsp)
     } else {
-        SyscallRet(kernalRsp)
+        SyscallRet(kernelRsp)
     }
 }
 
@@ -387,7 +413,6 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
             }
             TaskRunState::RunExitDone => {
                 {
-                    error!("RunExitDone 1 [{:x}] ...", currTask.taskId);
                     let thread = currTask.Thread();
                     //currTask.PerfStop();
                     currTask.SetDummy();
@@ -404,19 +429,20 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                         let dummyTask = DUMMY_TASK.read();
                         currTask.blocker = dummyTask.blocker.clone();
                     }
-                    
+
                     let mm = thread.lock().memoryMgr.clone();
                     thread.lock().memoryMgr = currTask.mm.clone();
                     CPULocal::SetPendingFreeStack(currTask.taskId);
 
-                    error!("RunExitDone xxx 2 [{:x}] ...", currTask.taskId);
                     /*if !SHARESPACE.config.read().KernelPagetable {
                         KERNEL_PAGETABLE.SwitchTo();
                     }*/
                     // mm needs to be clean as last function before SwitchToNewTask
                     // after this is called, another vcpu might drop the pagetable
                     core::mem::drop(mm);
-                    CPULocal::Myself().pageAllocator.lock().Clean();
+                    unsafe { 
+                        (*CPULocal::Myself().pageAllocator.get()).Clean(); 
+                    }
                 }
 
                 self::taskMgr::SwitchToNewTask();
@@ -488,7 +514,7 @@ pub extern "C" fn rust_main(
         GlobalIOMgr().InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
         SetVCPCount(vcpuCnt as usize);
         VDSO.Initialization(vdsoParamAddr);
-        
+
         // release other vcpus
         HyperCall64(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
     } else {
@@ -513,7 +539,7 @@ pub extern "C" fn rust_main(
     };
 
     if id == 1 {
-        error!("heap start is {:x}", heapStart);
+        info!("heap start is {:x}", heapStart);
         self::Init();
 
         if autoStart {
@@ -567,7 +593,10 @@ fn StartRootContainer(_para: *const u8) -> ! {
         let mut processArgs = LOADER.Lock(task).unwrap().Init(process);
         match LOADER.LoadRootProcess(&mut processArgs) {
             Err(e) => {
-                error!("load root process failure with error {:?}, shutting down...", e);
+                error!(
+                    "load root process failure with error {:?}, shutting down...",
+                    e
+                );
                 SHARESPACE.StoreShutdown();
                 Kernel::HostSpace::ExitVM(2);
                 panic!("exiting ...");
@@ -624,6 +653,3 @@ fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
     loop {}
 }
 
-#[lang = "eh_personality"]
-extern "C" fn eh_personality() {}
-//#[lang = "panic_fmt"] #[no_mangle] pub extern fn panic_fmt() -> ! {loop{}}

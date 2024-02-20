@@ -17,13 +17,13 @@ use std::os::unix::prelude::RawFd;
 use caps::*;
 use libc;
 use nix::fcntl::*;
-use nix::sys::socket::{AddressFamily, bind, SockAddr, socket, SockFlag, SockType, UnixAddr};
+use nix::sys::socket::{bind, socket, AddressFamily, SockAddr, SockFlag, SockType, UnixAddr};
 use nix::sys::stat::Mode;
 use nix::unistd::*;
 
-use super::super::oci::*;
 use super::super::super::qlib::common::*;
 use super::super::super::util::*;
+use super::super::oci::*;
 
 pub fn WriteIDMapping(path: &str, maps: &[LinuxIDMapping]) -> Result<()> {
     let mut data = String::new();
@@ -118,7 +118,8 @@ pub fn BindSocket(socket_path: &str) -> Result<RawFd> {
         SockType::Stream,
         SockFlag::empty(),
         None,
-    ).map_err(|e| Error::IOError(format!("failed to create socket fd, {}", e)))?;
+    )
+    .map_err(|e| Error::IOError(format!("failed to create socket fd, {}", e)))?;
     let unix_addr = UnixAddr::new(socket_path).map_err(|e| {
         close(fd).unwrap_or_default();
         Error::IOError(format!("failed to new socket {}, {}", socket_path, e))

@@ -17,9 +17,9 @@ pub mod file_range_mgr;
 pub mod socket_info;
 //pub mod rdma;
 
+use core::sync::atomic::AtomicI32;
 use libc::*;
 use spin::Mutex;
-use core::sync::atomic::AtomicI32;
 
 use crate::qlib::fileinfo::*;
 

@@ -443,7 +443,9 @@ impl TTYFileOps {
             session: None,
             fgProcessgroup: None,
             fd: fd,
-            buf: SocketBuff(Arc::new(SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT))),
+            buf: SocketBuff(Arc::new(SocketBuffIntern::Init(
+                MemoryDef::DEFAULT_BUF_PAGE_COUNT,
+            ))),
             queue: queue,
         };
 
@@ -578,7 +580,7 @@ impl FileOperations for TTYFileOps {
 
         let size = IoVec::NumBytes(srcs);
         if size == 0 {
-            return Ok(0)
+            return Ok(0);
         }
 
         if SHARESPACE.config.read().UringIO && ENABLE_RINGBUF {
@@ -586,14 +588,7 @@ impl FileOperations for TTYFileOps {
             let queue = self.lock().queue.clone();
             let ringBuf = self.lock().buf.clone();
 
-            return QUring::RingFileWrite(
-                task,
-                fd,
-                queue,
-                ringBuf,
-                srcs,
-                Arc::new(self.clone()),
-            );
+            return QUring::RingFileWrite(task, fd, queue, ringBuf, srcs, Arc::new(self.clone()));
         }
 
         let fops = self.lock().fileOps.clone();
@@ -632,7 +627,7 @@ impl FileOperations for TTYFileOps {
         return res;
     }
 
-    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<()> {
+    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<u64> {
         let fops = self.lock().fileOps.clone();
         let fd = fops
             .as_any()
@@ -652,7 +647,7 @@ impl FileOperations for TTYFileOps {
                 ioctlGetTermios(fd, &mut term)?;
                 //error!("TCGETS 2 {:x?}", term);
                 task.CopyOutObj(&term, val)?;
-                return Ok(());
+                return Ok(0);
             }
 
             IoCtlCmd::TCSETS | IoCtlCmd::TCSETSW | IoCtlCmd::TCSETSF => {
@@ -661,7 +656,7 @@ impl FileOperations for TTYFileOps {
                 let t: Termios = task.CopyInObj(val)?;
                 ioctlSetTermios(fd, ioctl, &t)?;
                 self.lock().termios.FromTermios(&t);
-                return Ok(());
+                return Ok(0);
             }
             IoCtlCmd::TIOCGPGRP => {
                 let thread = task.Thread();
@@ -675,7 +670,7 @@ impl FileOperations for TTYFileOps {
 
                 task.CopyOutObj(&pgid, val)?;
 
-                return Ok(());
+                return Ok(0);
             }
             IoCtlCmd::TIOCSPGRP => {
                 //error!("TIOCSPGRP 1");
@@ -719,7 +714,7 @@ impl FileOperations for TTYFileOps {
                 }
 
                 t.fgProcessgroup = Some(pg);
-                return Ok(());
+                return Ok(0);
             }
             IoCtlCmd::TIOCGWINSZ => {
                 //error!("TIOCGWINSZ 1");
@@ -727,11 +722,12 @@ impl FileOperations for TTYFileOps {
                 ioctlGetWinsize(fd, &mut win)?;
                 //error!("TIOCGWINSZ 2 {:x?}", win);
                 task.CopyOutObj(&win, val)?;
-                return Ok(());
+                return Ok(0);
             }
             IoCtlCmd::TIOCSWINSZ => {
                 let w: Winsize = task.CopyInObj(val)?;
-                return ioctlSetWinsize(fd, &w);
+                ioctlSetWinsize(fd, &w)?;
+                return Ok(0);
             }
             IoCtlCmd::TIOCSETD
             | IoCtlCmd::TIOCSBRK

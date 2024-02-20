@@ -21,22 +21,22 @@ use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
 
-use crate::qlib::kernel::fs::host::dirent::Dirent64;
 use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
+use crate::qlib::kernel::fs::host::dirent::Dirent64;
 //use super::super::super::super::device::*;
-use super::super::super::util::cstring::*;
 use super::super::super::kernel::time::*;
 pub use super::super::super::memmgr::vma::MMappable;
 use super::super::super::socket::unix::transport::unix::*;
-use super::super::super::task::*;
-use super::super::super::Kernel::HostSpace;
 use super::super::super::socket::unix::unix::*;
+use super::super::super::task::*;
+use super::super::super::util::cstring::*;
+use super::super::super::Kernel::HostSpace;
 use super::super::super::SHARESPACE;
 use super::super::attr::*;
-use super::super::dirent::*;
 use super::super::dentry::*;
+use super::super::dirent::*;
 use super::super::file::*;
 use super::super::flags::*;
 use super::super::inode::*;
@@ -44,7 +44,7 @@ use super::hostdirfops::*;
 use super::util::*;
 use super::*;
 
-pub const MAX_FILENAME_LEN : usize = (1 << 16) - 1;
+pub const MAX_FILENAME_LEN: usize = (1 << 16) - 1;
 
 pub struct HostDirOpIntern {
     pub mops: Arc<QMutex<MountSourceOperations>>,
@@ -82,11 +82,7 @@ impl Drop for HostDirOpIntern {
 }
 
 impl HostDirOpIntern {
-    pub fn New(
-        mops: &Arc<QMutex<MountSourceOperations>>,
-        fd: i32,
-        fstat: &LibcStat,
-    ) -> Self {
+    pub fn New(mops: &Arc<QMutex<MountSourceOperations>>, fd: i32, fstat: &LibcStat) -> Self {
         return Self {
             mops: mops.clone(),
             HostFd: fd,
@@ -117,7 +113,7 @@ impl HostDirOpIntern {
                 break;
             }
 
-            let addr = &buf[0] as * const _ as u64;
+            let addr = &buf[0] as *const _ as u64;
             let cnt: u64 = res as u64;
             let mut pos: u64 = 0;
             while pos < cnt {
@@ -180,7 +176,6 @@ impl HostDirOpIntern {
                 Ok(count) => (offset + count as i32, Ok(0)),
             };
         }
-
     }
 
     pub fn SetMaskedAttributes(&self, mask: &AttrMask, attr: &UnstableAttr) -> Result<()> {
@@ -249,14 +244,8 @@ impl Deref for HostDirOp {
 }
 
 impl HostDirOp {
-    pub fn New(
-        mops: &Arc<QMutex<MountSourceOperations>>,
-        fd: i32,
-        fstat: &LibcStat,
-    ) -> Self {
-        let intern = Arc::new(QMutex::new(HostDirOpIntern::New(
-            mops, fd, fstat
-        )));
+    pub fn New(mops: &Arc<QMutex<MountSourceOperations>>, fd: i32, fstat: &LibcStat) -> Self {
+        let intern = Arc::new(QMutex::new(HostDirOpIntern::New(mops, fd, fstat)));
 
         let ret = Self(intern);
         return ret;
@@ -350,7 +339,8 @@ impl InodeOperations for HostDirOp {
     }
 
     fn Lookup(&self, task: &Task, parent: &Inode, name: &str) -> Result<Dirent> {
-        let (fd, writeable, fstat) = match TryOpenAt(self.HostFd(), name) {
+        let skiprw = true;
+        let (fd, writeable, fstat) = match TryOpenAt(self.HostFd(), name, skiprw) {
             Err(Error::SysError(SysErr::ENOENT)) => {
                 let inode = match self.lock().overrides.get(name) {
                     None => return Err(Error::SysError(SysErr::ENOENT)),
@@ -364,8 +354,8 @@ impl InodeOperations for HostDirOp {
         };
 
         let ms = parent.lock().MountSource.clone();
-        let inode = Inode::NewHostInode(task, &ms, fd, &fstat, writeable, false)?;
-
+        let inode = Inode::NewHostInode(task, &ms, fd, &fstat, writeable, skiprw, false)?;
+        
         let ret = Ok(Dirent::New(&inode, name));
         return ret;
     }
@@ -401,7 +391,7 @@ impl InodeOperations for HostDirOp {
 
         let mountSource = dir.lock().MountSource.clone();
 
-        let inode = Inode::NewHostInode(task, &mountSource, fd, &fstat, true, false)?;
+        let inode = Inode::NewHostInode(task, &mountSource, fd, &fstat, true, false, false)?;
         let dirent = Dirent::New(&inode, name);
 
         let file = inode.GetFile(task, &dirent, flags)?;
@@ -457,16 +447,18 @@ impl InodeOperations for HostDirOp {
         target: &Inode,
         name: &str,
     ) -> Result<()> {
-        let iops = match target
-            .lock()
-            .InodeOp
-            .HostInodeOp()
-            {
-                Some(p) => p.clone(),
-                None => return Err(Error::SysError(SysErr::EPERM)),
-            };
+        let iops = match target.lock().InodeOp.HostInodeOp() {
+            Some(p) => p.clone(),
+            None => return Err(Error::SysError(SysErr::EPERM)),
+        };
 
-        let ret = LinkAt(iops.HostFd(), "", self.HostFd(), name, ATType::AT_EMPTY_PATH,);
+        let ret = LinkAt(
+            iops.HostFd(),
+            "",
+            self.HostFd(),
+            name,
+            ATType::AT_EMPTY_PATH,
+        );
 
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
@@ -504,7 +496,7 @@ impl InodeOperations for HostDirOp {
     fn Remove(&self, _task: &Task, _dir: &mut Inode, name: &str) -> Result<()> {
         match self.lock().overrides.remove(name) {
             None => (),
-            Some(_) => return Ok(())
+            Some(_) => return Ok(()),
         }
 
         let flags = 0; //ATType::AT_REMOVEDIR
@@ -542,7 +534,15 @@ impl InodeOperations for HostDirOp {
         newname: &str,
         replacement: bool,
     ) -> Result<()> {
-        return Rename(task, dir, oldParent, oldname, newParent, newname, replacement);
+        return Rename(
+            task,
+            dir,
+            oldParent,
+            oldname,
+            newParent,
+            newname,
+            replacement,
+        );
     }
 
     fn Bind(
@@ -562,7 +562,7 @@ impl InodeOperations for HostDirOp {
         let dirent = Dirent::New(&inode, name);
         self.lock().overrides.insert(String::from(name), inode);
 
-        return Ok(dirent)
+        return Ok(dirent);
     }
 
     fn BoundEndpoint(&self, _task: &Task, _inode: &Inode, _path: &str) -> Option<BoundEndpoint> {
@@ -588,24 +588,24 @@ impl InodeOperations for HostDirOp {
         let mops = self.lock().mops.clone();
         let fd = self.HostFd();
 
-        return UnstableAttr(fd, task, &mops)
+        return UnstableAttr(fd, task, &mops);
     }
 
     //fn StableAttr(&self) -> &StableAttr;
     fn Getxattr(&self, _dir: &Inode, name: &str, _size: usize) -> Result<Vec<u8>> {
-        return Getxattr(self.HostFd(), name)
+        return Getxattr(self.HostFd(), name);
     }
 
     fn Setxattr(&self, _dir: &mut Inode, name: &str, value: &[u8], flags: u32) -> Result<()> {
-        return Setxattr(self.HostFd(), name, value, flags)
+        return Setxattr(self.HostFd(), name, value, flags);
     }
 
     fn Listxattr(&self, _dir: &Inode, _size: usize) -> Result<Vec<String>> {
-        return Listxattr(self.HostFd())
+        return Listxattr(self.HostFd());
     }
 
     fn Removexattr(&self, _dir: &Inode, name: &str) -> Result<()> {
-        return Removexattr(self.HostFd(), name)
+        return Removexattr(self.HostFd(), name);
     }
 
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
@@ -667,7 +667,7 @@ impl InodeOperations for HostDirOp {
     }
 
     fn StatFS(&self, _task: &Task) -> Result<FsInfo> {
-        return StatFS(self.HostFd())
+        return StatFS(self.HostFd());
     }
 
     fn Mappable(&self) -> Result<MMappable> {

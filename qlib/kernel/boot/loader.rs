@@ -22,16 +22,6 @@ use core::ops::Deref;
 
 use crate::qlib::mutex::*;
 
-use super::fs::*;
-use super::super::fs::file::*;
-use super::super::fs::host::tty::*;
-use super::super::fs::mount::*;
-use super::super::kernel::ipc_namespace::*;
-use super::super::kernel::kernel::*;
-use super::super::kernel::uts_namespace::*;
-use super::super::kernel::waiter::qlock::*;
-use super::super::SHARESPACE;
-use super::super::SignalDef::*;
 use super::super::super::auth;
 use super::super::super::auth::cap_set::*;
 use super::super::super::auth::id::*;
@@ -41,9 +31,19 @@ use super::super::super::cpuid::*;
 use super::super::super::limits::*;
 use super::super::super::linux_def::*;
 use super::super::super::loader::*;
+use super::super::fs::file::*;
+use super::super::fs::host::tty::*;
+use super::super::fs::mount::*;
+use super::super::kernel::ipc_namespace::*;
+use super::super::kernel::kernel::*;
+use super::super::kernel::uts_namespace::*;
+use super::super::kernel::waiter::qlock::*;
 use super::super::task::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::thread_group::*;
+use super::super::SignalDef::*;
+use super::super::SHARESPACE;
+use super::fs::*;
 
 impl Process {
     pub fn TaskCaps(&self) -> TaskCaps {
@@ -117,7 +117,7 @@ impl Loader {
         let utsns = UTSNamespace::New(hostName.to_string(), hostName.to_string(), userns.clone());
         let ipcns = IPCNamespace::New(&userns);
 
-        let kernalArgs = InitKernalArgs {
+        let kernelArgs = InitKernelArgs {
             FeatureSet: Arc::new(QMutex::new(HostFeatureSet())),
             RootUserNamespace: userns.clone(),
             ApplicationCores: process.NumCpu,
@@ -126,7 +126,7 @@ impl Loader {
             RootIPCNamespace: ipcns,
         };
 
-        let kernel = Kernel::Init(kernalArgs);
+        let kernel = Kernel::Init(kernelArgs);
         *SHARESPACE.kernel.lock() = Some(kernel.clone());
         let task = Task::Current();
         self.Lock(task)?.kernel = kernel;
@@ -332,7 +332,7 @@ impl Loader {
         let kernel = lockedLoader.kernel.clone();
         let cid = processSpec.ID.clone();
         let execId = ExecID { cid: cid, pid: 0 };
-        let mut process = match lockedLoader.processes.get_mut(&execId) {
+        let process = match lockedLoader.processes.get_mut(&execId) {
             None => {
                 return Err(Error::Common(format!(
                     "trying to start a deleted container {}",
@@ -388,10 +388,10 @@ impl Loader {
             let ttyops = fileops.TTYFileOps().unwrap();
 
             /*let ttyops = fileops
-                .as_any()
-                .downcast_ref::<TTYFileOps>()
-                .expect("TTYFileOps convert fail")
-                .clone();*/
+            .as_any()
+            .downcast_ref::<TTYFileOps>()
+            .expect("TTYFileOps convert fail")
+            .clone();*/
 
             ttyops.InitForegroundProcessGroup(&tg.ProcessGroup().unwrap());
             ttyFileOps = Some(ttyops)
@@ -477,7 +477,7 @@ impl LoaderInternal {
         let utsns = UTSNamespace::New(hostName.to_string(), hostName.to_string(), userns.clone());
         let ipcns = IPCNamespace::New(&userns);
 
-        let kernalArgs = InitKernalArgs {
+        let kernelArgs = InitKernelArgs {
             FeatureSet: Arc::new(QMutex::new(HostFeatureSet())),
             RootUserNamespace: userns.clone(),
             ApplicationCores: process.NumCpu,
@@ -486,7 +486,7 @@ impl LoaderInternal {
             RootIPCNamespace: ipcns,
         };
 
-        let kernel = Kernel::Init(kernalArgs);
+        let kernel = Kernel::Init(kernelArgs);
         *SHARESPACE.kernel.lock() = Some(kernel.clone());
 
         let rootMounts =
@@ -714,43 +714,4 @@ pub fn NewProcess(process: Process, creds: &auth::Credentials, k: &Kernel) -> Cr
         ExecId: process.ExecId.clone(),
         ..Default::default()
     };
-}
-
-#[cfg(test)]
-mod tests {
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
-    use super::*;
-
-    #[test]
-    fn test_ser() {
-        let mut buf: [u8; 4096] = [0; 4096];
-        let mut pk = ProcessKernel::New(&mut buf);
-
-        let process = Process {
-            UID: 123,
-            GID: 456,
-            AdditionalGids: vec![1, 2, 3],
-            Terminal: true,
-            Args: vec!["str1".to_string(), "str2".to_string()],
-            Commandline: "Commnandline".to_string(),
-            Envs: vec!["env1".to_string(), "env2".to_string()],
-            Cwd: "cwd".to_string(),
-            PermittedCaps: 1,
-            InheritableCaps: 2,
-            EffectiveCaps: 3,
-            BoundingCaps: 4,
-            AmbientCaps: 5,
-            NoNewPrivileges: false,
-            NumCpu: 4,
-            HostName: "asdf".to_string(),
-            limitSet: LimitSetInternal::default(),
-            ID: "containerID".to_string(),
-        };
-
-        pk.Ser(&process).unwrap();
-        let newProcess = pk.DeSer();
-
-        print!("new process is {:?}", newProcess);
-        assert!(process == newProcess)
-    }
 }

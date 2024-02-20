@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::qlib::mutex::*;
-use crate::qlib::rdma_share::*;
-use crate::qlib::rdmasocket::*;
+
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -27,6 +25,9 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 
+use crate::qlib::mutex::*;
+use crate::qlib::rdma_share::*;
+use crate::qlib::rdmasocket::*;
 use super::super::super::super::common::*;
 use super::super::super::super::fileinfo::*;
 use super::super::super::super::linux::netdevice::*;
@@ -48,6 +49,8 @@ use super::super::super::kernel::kernel::GetKernel;
 use super::super::super::kernel::time::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::quring::QUring;
+use super::tsotsocket::NewTsotSocketFile;
+use super::tsotsocket::TsotSocketType;
 use crate::qlib::rdmasocket::RDMAServerSock;
 // use super::super::super::rdmasocket::*;
 use super::super::super::task::*;
@@ -553,12 +556,12 @@ impl Waitable for SocketOperations {
 
         if self.udpRDMA {
             let sockInfo = GlobalIOMgr()
-                    .GetByHost(self.fd)
-                    .unwrap()
-                    .lock()
-                    .sockInfo
-                    .lock()
-                    .clone();
+                .GetByHost(self.fd)
+                .unwrap()
+                .lock()
+                .sockInfo
+                .lock()
+                .clone();
             match sockInfo {
                 SockInfo::RDMAUDPSocket(sock) => {
                     return (sock.recvQueue.lock().Events() | WRITEABLE_EVENT) & mask;
@@ -842,7 +845,7 @@ impl FileOperations for SocketOperations {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<()> {
+    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<u64> {
         let flags = request as i32;
 
         let hostfd = self.fd;
@@ -861,19 +864,19 @@ impl FileOperations for SocketOperations {
                 let addr = val;
                 HostIoctlIFReq(task, hostfd, request, addr)?;
 
-                return Ok(());
+                return Ok(0);
             }
             LibcConst::SIOCGIFCONF => {
                 let addr = val;
                 HostIoctlIFConf(task, hostfd, request, addr)?;
 
-                return Ok(());
+                return Ok(0);
             }
             LibcConst::TIOCINQ => {
                 if self.SocketBufEnabled() {
                     let v = self.SocketBuf().readBuf.lock().AvailableDataSize() as i32;
                     task.CopyOutObj(&v, val)?;
-                    return Ok(());
+                    return Ok(0);
                 } else if self.udpRDMA {
                     let sockInfo = GlobalIOMgr()
                         .GetByHost(self.fd)
@@ -886,27 +889,34 @@ impl FileOperations for SocketOperations {
                         SockInfo::RDMAUDPSocket(udpSock) => {
                             let mut v = udpSock.recvQueue.lock().udpRecvQueue.len();
                             if v != 0 {
-                                let idx = udpSock.recvQueue.lock().udpRecvQueue.get(0).unwrap().udpBuffIdx;
-                                let udpPacket = &GlobalRDMASvcCli().cliShareRegion.lock().udpBufRecv[idx as usize];
+                                let idx = udpSock
+                                    .recvQueue
+                                    .lock()
+                                    .udpRecvQueue
+                                    .get(0)
+                                    .unwrap()
+                                    .udpBuffIdx;
+                                let udpPacket =
+                                    &GlobalRDMASvcCli().cliShareRegion.lock().udpBufRecv
+                                        [idx as usize];
                                 v = udpPacket.length as usize;
                             }
 
                             task.CopyOutObj(&v, val)?;
-                            return Ok(());
+                            return Ok(0);
                         }
                         _ => {
                             return Err(Error::SysError(SysErr::EINVAL));
                         }
                     }
-                } 
-                else {
+                } else {
                     let tmp: i32 = 0;
                     let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
                     if res < 0 {
                         return Err(Error::SysError(-res as i32));
                     }
                     task.CopyOutObj(&tmp, val)?;
-                    return Ok(());
+                    return Ok(0);
                 }
             }
             _ => {
@@ -916,7 +926,7 @@ impl FileOperations for SocketOperations {
                     return Err(Error::SysError(-res as i32));
                 }
                 task.CopyOutObj(&tmp, val)?;
-                return Ok(());
+                return Ok(0);
             }
         }
     }
@@ -967,7 +977,12 @@ impl SockOperations for SocketOperations {
                     let port = ipv4.Port.to_le();
 
                     // TODO: handle port used up!!
-                    let srcPort = (GlobalRDMASvcCli().tcpPortAllocator.lock().AllocFromCurrent().unwrap() as u16).to_be();
+                    let srcPort = (GlobalRDMASvcCli()
+                        .tcpPortAllocator
+                        .lock()
+                        .AllocFromCurrent()
+                        .unwrap() as u16)
+                        .to_be();
                     let rdmaId = GlobalRDMASvcCli()
                         .nextRDMAId
                         .fetch_add(1, Ordering::Release);
@@ -1083,11 +1098,11 @@ impl SockOperations for SocketOperations {
         //         break;
         //     }
         //     v1 = v2;
-        //     v2 = GlobalRDMASvcCli().timestamp.lock()[i];            
+        //     v2 = GlobalRDMASvcCli().timestamp.lock()[i];
         // }
 
         // GlobalRDMASvcCli().timestamp.lock().clear();
-        
+
         return Ok(0);
     }
 
@@ -1619,12 +1634,42 @@ impl SockOperations for SocketOperations {
                     panic!("Incorrect sockInfo")
                 }
             }
-            let sockAddr = SockAddr::Inet(SockAddrInet {
-                Family: AFType::AF_INET as u16,
-                Port: port,
-                Addr: ipAddr.to_be_bytes(),
-                Zero: [0; 8],
-            });
+
+            let sockAddr;
+            let addrSlice = ipAddr.to_be_bytes();
+            if self.family == AFType::AF_INET {
+                sockAddr = SockAddr::Inet(SockAddrInet {
+                    Family: AFType::AF_INET as u16,
+                    Port: port,
+                    Addr: addrSlice,
+                    Zero: [0; 8],
+                });
+            } else {
+                sockAddr = SockAddr::Inet6(SocketAddrInet6 {
+                    Family: AFType::AF_INET6 as u16,
+                    Port: port,
+                    Flowinfo: 0,
+                    Addr: [
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0xFF,
+                        0xFF,
+                        addrSlice[0],
+                        addrSlice[1],
+                        addrSlice[2],
+                        addrSlice[3],
+                    ],
+                    Scope_id: 0,
+                });
+            }
             let len = socketaddr.len() as usize;
             sockAddr.Marsh(socketaddr, len)?;
 
@@ -1992,19 +2037,22 @@ impl SockOperations for SocketOperations {
                     let len;
                     {
                         let udpPacket = &GlobalRDMASvcCli().cliShareRegion.lock().udpBufRecv
-                        [recvUdpItem.udpBuffIdx as usize];
+                            [recvUdpItem.udpBuffIdx as usize];
                         let buf = &udpPacket.buf[0..udpPacket.length as usize];
                         len = task.CopyDataOutToIovs(buf, dsts, false)?;
                         srcPort = udpPacket.srcPort.clone();
                         srcIpAddr = udpPacket.srcIpAddr.clone();
+                        debug!(
+                            "qq, RecvMsg 4.1 fd: {}, len: {}, buf {:?} ",
+                            self.fd, len, buf
+                        );
                     }
                     let _res = GlobalRDMASvcCli().returnUDPBuff(recvUdpItem.udpBuffIdx);
                     let senderAddr = if senderRequested {
                         let addr;
                         if self.remoteAddr.lock().is_some() {
                             addr = self.remoteAddr.lock().as_ref().unwrap().clone();
-                        }
-                        else {
+                        } else {
                             if self.family == AFType::AF_INET {
                                 addr = SockAddr::Inet(SockAddrInet {
                                     Family: AFType::AF_INET as u16,
@@ -2012,20 +2060,22 @@ impl SockOperations for SocketOperations {
                                     Addr: srcIpAddr.to_be_bytes(),
                                     Zero: [0; 8],
                                 });
-                            }
-                            else {
-                            // if self.family == AFType::AF_INET6 {
+                            } else {
+                                // if self.family == AFType::AF_INET6 {
                                 let srcIp = srcIpAddr.to_be_bytes();
                                 addr = SockAddr::Inet6(SocketAddrInet6 {
                                     Family: AFType::AF_INET6 as u16,
                                     Port: srcPort,
                                     Flowinfo: 0,
-                                    Addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, srcIp[0], srcIp[1], srcIp[2], srcIp[3]],
+                                    Addr: [
+                                        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, srcIp[0],
+                                        srcIp[1], srcIp[2], srcIp[3],
+                                    ],
                                     Scope_id: 0,
                                 });
                             }
                         }
-                        
+
                         let l = addr.Len();
                         Some((addr, l))
                     } else {
@@ -2156,7 +2206,12 @@ impl SockOperations for SocketOperations {
                 SockInfo::RDMAUDPSocket(sockInfo) => {
                     if sockInfo.port == 0 {
                         // TODO: handle port used up!!
-                        port = (GlobalRDMASvcCli().udpPortAllocator.lock().AllocFromCurrent().unwrap() as u16).to_be();
+                        port = (GlobalRDMASvcCli()
+                            .udpPortAllocator
+                            .lock()
+                            .AllocFromCurrent()
+                            .unwrap() as u16)
+                            .to_be();
                         *GlobalIOMgr()
                             .GetByHost(self.fd)
                             .unwrap()
@@ -2216,11 +2271,9 @@ impl SockOperations for SocketOperations {
                     )
                 }
                 .unwrap();
-            }
-            else if self.remoteAddr.lock().is_some() {
+            } else if self.remoteAddr.lock().is_some() {
                 dstAddr = self.remoteAddr.lock().as_ref().unwrap().clone();
-            }
-            else {
+            } else {
                 return Err(Error::SysError(SysErr::ENETUNREACH));
             }
 
@@ -2230,7 +2283,11 @@ impl SockOperations for SocketOperations {
                     udpPacket.dstPort = ipv4.Port.to_le();
                 }
                 SockAddr::Inet6(ipv6) => {
-                    assert!(ipv6.Addr[10]==0xFF && ipv6.Addr[11] == 0xFF, "UDP over RDMA only support send to IPv4 address, current address is {:?}", ipv6);
+                    assert!(
+                        ipv6.Addr[10] == 0xFF && ipv6.Addr[11] == 0xFF,
+                        "UDP over RDMA only support send to IPv4 address, current address is {:?}",
+                        ipv6
+                    );
                     let ipv4Bytes = [ipv6.Addr[12], ipv6.Addr[13], ipv6.Addr[14], ipv6.Addr[15]];
                     udpPacket.dstIpAddr = u32::from_be_bytes(ipv4Bytes);
                     udpPacket.dstPort = ipv6.Port.to_le();
@@ -2384,14 +2441,57 @@ impl Provider for SocketProvider {
         let nonblocking = stype & SocketFlags::SOCK_NONBLOCK != 0;
         let stype = stype & SocketType::SOCK_TYPE_MASK;
 
-        let res =
-            Kernel::HostSpace::Socket(self.family, stype | SocketFlags::SOCK_CLOEXEC, protocol);
+        // let fd = if SHARESPACE.config.read().EnableTsot {
+        //     if self.family == AFType::AF_INET && stype == SockType::SOCK_STREAM {
+        //         let general = task.blocker.generalEntry.clone();
+        //         SHARESPACE.tsotSocketMgr.CreateSocket()?;
+                
+        //         SHARESPACE.tsotSocketMgr.EventRegister(task, &general, EVENT_IN);
+        //         defer!(SHARESPACE.tsotSocketMgr.EventUnregister(task, &general));
+        //         let fd;
+        //         error!("SocketProvider 1 {:?}", CPULocal::Myself().State()); 
+        //         loop {
+        //             match SHARESPACE.tsotSocketMgr.GetSocket() {
+        //                 None => {
+        //                     error!("SocketProvider 2 {:?}", CPULocal::Myself().State()); 
+        //                     match task.blocker.BlockWithMonoTimer(true, None) {
+        //                         Err(e) => {
+        //                             return Err(e);
+        //                         }
+        //                         _ => (),
+        //                     }
+        //                 },
+        //                 Some(socket) => {
+        //                     error!("SocketProvider 3"); 
+        //                     fd = socket;
+        //                     break;
+        //                 }
+        //             }
+        //         }
+
+        //         error!("SocketProvider 4 fd is {}", fd);
+
+        //         fd
+        //     } else {
+        //         // tsot only support IPv4 tcp
+        //         return Err(Error::SysError(SysErr::ESOCKTNOSUPPORT));
+        //     }
+        // } else {
+        //     let res = Kernel::HostSpace::Socket(self.family, stype | SocketFlags::SOCK_CLOEXEC, protocol);
+        //     if res < 0 {
+        //         return Err(Error::SysError(-res as i32));
+        //     }
+
+        //     let fd = res as i32;
+        //     fd
+        // };
+
+        let res = Kernel::HostSpace::Socket(self.family, stype | SocketFlags::SOCK_CLOEXEC, protocol);
         if res < 0 {
             return Err(Error::SysError(-res as i32));
         }
 
         let fd = res as i32;
-        // error!("SocketProvider::Socket, fd: {}", fd);
 
         let file;
         let tcpRDMA = SHARESPACE.config.read().EnableRDMA
@@ -2402,7 +2502,20 @@ impl Provider for SocketProvider {
             && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
             // && self.family == AFType::AF_INET
             && (stype == SockType::SOCK_DGRAM);
-        if tcpRDMA || udpRDMA {
+
+        if SHARESPACE.config.read().EnableTsot {
+            let socketType = TsotSocketType::Init;
+            file = NewTsotSocketFile(
+                task, 
+                self.family,
+                fd,
+                stype & SocketType::SOCK_TYPE_MASK,
+                nonblocking,
+                Queue::default(),
+                socketType,
+                None,
+            )?;
+        } else if tcpRDMA || udpRDMA {
             let socketType = SocketBufType::TCPInit;
 
             file = newSocketFile(

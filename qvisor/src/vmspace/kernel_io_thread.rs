@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use libc::*;
 use core::sync::atomic::Ordering;
+use std::sync::atomic::AtomicI32;
+use libc::*;
+
+use self::host_uring::HostSubmit;
 
 use super::super::kvm_vcpu::*;
 use super::super::qlib::common::*;
@@ -27,20 +30,22 @@ use super::super::qlib::ShareSpace;
 use super::super::*;
 
 pub struct KIOThread {
-    pub eventfd: i32,
+    pub eventfd: AtomicI32,
 }
 
 pub const IO_WAIT_CYCLES: i64 = 100_000_000; // 1ms
 
 impl KIOThread {
     pub fn New() -> Self {
-        return Self { eventfd: 0 };
+        return Self { eventfd: AtomicI32::new(0) };
+    }
+
+    pub fn Eventfd(&self) -> i32 {
+        return self.eventfd.load(Ordering::Relaxed);
     }
 
     pub fn Init(&self, eventfd: i32) {
-        unsafe {
-            *(&self.eventfd as *const _ as u64 as *mut i32) = eventfd;
-        }
+        self.eventfd.store(eventfd, Ordering::SeqCst);
     }
 
     pub fn ProcessOnce(sharespace: &ShareSpace) -> usize {
@@ -49,15 +54,15 @@ impl KIOThread {
         if QUARK_CONFIG.lock().EnableRDMA {
             count += GlobalRDMASvcCli().ProcessRDMASvcMessage();
         }
-        count += IOURING.IOUring().HostSubmit().unwrap();
+        count += HostSubmit().unwrap();
         TIMER_STORE.Trigger();
-        count += IOURING.IOUring().HostSubmit().unwrap();
+        count += HostSubmit().unwrap();
         count += IOURING.DrainCompletionQueue();
-        count += IOURING.IOUring().HostSubmit().unwrap();
+        count += HostSubmit().unwrap();
         count += KVMVcpu::GuestMsgProcess(sharespace);
-        count += IOURING.IOUring().HostSubmit().unwrap();
+        count += HostSubmit().unwrap();
         count += FD_NOTIFIER.HostEpollWait() as usize;
-        count += IOURING.IOUring().HostSubmit().unwrap();
+        count += HostSubmit().unwrap();
 
         sharespace.CheckVcpuTimeout();
 
@@ -67,7 +72,7 @@ impl KIOThread {
     pub fn Process(sharespace: &ShareSpace) {
         let mut start = TSC.Rdtsc();
 
-        while !sharespace.Shutdown() {
+        while !sharespace.IsShutdown() {
             let count = Self::ProcessOnce(sharespace);
             if count > 0 {
                 start = TSC.Rdtsc()
@@ -92,16 +97,16 @@ impl KIOThread {
 
         let mut ev = epoll_event {
             events: EVENT_READ as u32 | EPOLLET as u32,
-            u64: self.eventfd as u64,
+            u64: self.Eventfd() as u64,
         };
 
-        super::VMSpace::UnblockFd(self.eventfd);
+        super::VMSpace::UnblockFd(self.Eventfd());
 
         let ret = unsafe {
             epoll_ctl(
                 epfd,
                 EPOLL_CTL_ADD,
-                self.eventfd,
+                self.Eventfd(),
                 &mut ev as *mut epoll_event,
             )
         };
@@ -165,22 +170,26 @@ impl KIOThread {
         let mut data: u64 = 0;
         loop {
             sharespace.IncrHostProcessor();
-            if sharespace.Shutdown() {
+            if sharespace.IsShutdown() {
                 return Err(Error::Exit);
             }
             if QUARK_CONFIG.lock().EnableRDMA {
-                GlobalRDMASvcCli().cliShareRegion.lock().clientBitmap.store(0, Ordering::Release);
+                GlobalRDMASvcCli()
+                    .cliShareRegion
+                    .lock()
+                    .clientBitmap
+                    .store(0, Ordering::Release);
             }
 
             Self::Process(sharespace);
 
             let ret =
-                unsafe { libc::read(self.eventfd, &mut data as *mut _ as *mut libc::c_void, 8) };
+                unsafe { libc::read(self.Eventfd(), &mut data as *mut _ as *mut libc::c_void, 8) };
 
             if ret < 0 && errno::errno().0 != SysErr::EAGAIN {
                 panic!(
                     "KIOThread::Wakeup fail... eventfd is {}, errno is {}",
-                    self.eventfd,
+                    self.Eventfd(),
                     errno::errno().0
                 );
             }
@@ -197,14 +206,18 @@ impl KIOThread {
                 if ret < 0 && errno::errno().0 != SysErr::EAGAIN {
                     panic!(
                         "KIOThread::Wakeup fail... cliEventFd is {}, errno is {}",
-                        self.eventfd,
+                        self.Eventfd(),
                         errno::errno().0
                     );
                 }
             }
 
             if QUARK_CONFIG.lock().EnableRDMA {
-                GlobalRDMASvcCli().cliShareRegion.lock().clientBitmap.store(1, Ordering::Release);
+                GlobalRDMASvcCli()
+                    .cliShareRegion
+                    .lock()
+                    .clientBitmap
+                    .store(1, Ordering::Release);
             }
 
             if sharespace.DecrHostProcessor() == 0 {
@@ -236,7 +249,7 @@ impl KIOThread {
 
     pub fn Wakeup(&self, _sharespace: &ShareSpace) {
         let val: u64 = 1;
-        let ret = unsafe { libc::write(self.eventfd, &val as *const _ as *const libc::c_void, 8) };
+        let ret = unsafe { libc::write(self.Eventfd(), &val as *const _ as *const libc::c_void, 8) };
         if ret < 0 {
             panic!("KIOThread::Wakeup fail...");
         }

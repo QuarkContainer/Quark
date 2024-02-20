@@ -30,8 +30,8 @@ use super::super::super::mount::*;
 use super::super::super::ramfs::dir::*;
 use super::super::dir_proc::*;
 use super::super::inode::*;
-use super::vm::vm::*;
 use super::net::net::*;
+use super::vm::vm::*;
 
 #[derive(Clone)]
 // ProcSysDirNode represents a /proc/sys directory.

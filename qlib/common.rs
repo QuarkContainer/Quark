@@ -146,7 +146,7 @@ pub fn ZeroPage(pageStart: u64) {
             arr[i] = 0
         }
     }
-}   
+}
 
 // Error represents an error in the netstack error space. Using a special type
 // ensures that errors outside of this space are not accidentally introduced.
@@ -362,7 +362,7 @@ pub enum Error {
     SysCallNotImplement,
     Common(String),
     CreateMMap(String),
-    UnallignedAddress,
+    UnallignedAddress(String),
     UnallignedSize,
     NoEnoughMemory,
     AddressNotInRange,
@@ -455,6 +455,9 @@ pub enum Error {
 
     InvalidArgument(String),
     ContainerdShim(String),
+
+    StdIOErr(String),
+    UUidError(String),
 }
 
 impl Error {

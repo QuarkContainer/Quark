@@ -183,16 +183,18 @@ impl InodeOperations for DirInodeOperations {
         }
 
         let n: u32 = match name.parse::<u32>() {
-            Err(_) => return Err(Error::SysError(SysErr::ENOENT)),
+            Err(_) => {
+                return Err(Error::SysError(SysErr::ENOENT))
+            }
             Ok(n) => n,
         };
 
-        let s = match &internal.slaves.get(&n) {
-            Some(s) => s.clone(),
+        match internal.slaves.get(&n) {
+        Some(s) => {
+                return Ok(Dirent::New(s, name))
+            }
             _ => return Err(Error::SysError(SysErr::ENOENT)),
         };
-
-        return Ok(Dirent::New(s, name));
     }
 
     fn Create(
@@ -492,7 +494,7 @@ impl FileOperations for DirFileOperations {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
+    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<u64> {
         return Err(Error::SysError(SysErr::ENOTTY));
     }
 

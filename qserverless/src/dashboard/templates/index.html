@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <nav>
+        <a href="{{ hosturl }}?namespace={{ namespace }}">FuncAudit</a>
+        <a href="{{ hosturl }}listpackage?namespace={{ namespace }}">Packages</a>
+        <a href="{{ hosturl }}listnode">Nodes</a>
+    </nav>
+
+    <h2>func audit</h2>
+
+    <style>
+        table, th, td {
+          border:1px solid black;
+        }
+    </style>
+    <table style="width:100%">
+    <tr>
+        <th>id</th>
+        <th>jobId</th>
+        <th>namespace</th>
+        <th>packageName</th>
+        <th>packageRevision</th>
+        <th>funcName</th>
+        <th>callerFuncId</th>
+        <th>funcState</th>
+        <th>nodeId</th>
+        <th>createTime</th>
+        <th>assignedTime</th>
+        <th>finishTime</th>
+    </tr>
+    {% for audit in audits %}
+        <tr>
+            <td>{{ audit[0] }}</td>
+            <td><a href="{{ hosturl }}?namespace={{ audit[2] }}&&jobid={{ audit[1] }}">{{ audit[1] }}</a></td>
+            <td>{{ audit[2] }}</td>
+            <td><a href="{{ hosturl }}package?namespace={{ audit[2] }}&&name={{ audit[3] }}">{{ audit[3] }}</a></td>
+            <td>{{ audit[4] }}</td>
+            <td><a href="{{ hosturl }}funclog?namespace={{ audit[2] }}&&funcId={{ audit[0] }}&&funcName={{ audit[5] }}">{{ audit[5] }}</a></td>
+            <td>{{ audit[6] }}</td>
+            <td>{{ audit[7] }}</td>
+            <td><a href="{{ hosturl }}node?name={{ audit[8] }}">{{ audit[8] }}</a></td>
+            <td>{{ audit[9] }}</td>
+            <td>{{ audit[10] }}</td>
+            <td>{{ audit[11] }}</td>
+        </tr>
+    {% endfor %}
+    </table>
+{% endblock %}

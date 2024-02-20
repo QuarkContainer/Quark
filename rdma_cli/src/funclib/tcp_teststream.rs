@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::net::SocketAddr;
+
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::net::ToSocketAddrs;
@@ -27,8 +29,10 @@ pub struct TestTCPClient {}
 
 impl TestTCPClient {
     pub async fn Connect<A: ToSocketAddrs>(appId: u64, address: A) -> Result<MsgStream> {
+        println!("Connect 1");
         let stream = TcpStream::connect(address).await?;
-
+        println!("Connect 2");
+        
         let stream = MsgStream::NewWithTcpStream(stream);
 
         let credential = Credential {
@@ -50,6 +54,13 @@ pub struct TestTCPServer {
 }
 
 impl TestTCPServer {
+    // addr: string like "127.0.0.1:8080"
+    pub async fn New(addr: String) -> Result<Self> {
+        let addr = addr.parse::<SocketAddr>().unwrap();
+        let listener = TcpListener::bind(addr).await?;
+        return Ok(Self{listener : listener})
+    }
+
     pub async fn Accept(&self) -> Result<(Credential, MsgStream)> {
         let (stream, _addr) = self.listener.accept().await?;
 
@@ -64,3 +75,4 @@ impl TestTCPServer {
         return Ok((credentail, stream));
     }
 }
+

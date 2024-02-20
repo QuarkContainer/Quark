@@ -18,10 +18,10 @@ use core::sync::atomic::Ordering;
 use lazy_static::lazy_static;
 use nix::sys::signal;
 
-use super::super::super::qlib::common::*;
 use super::super::super::qlib::backtracer;
-use super::super::super::qlib::kernel::SignalDef::*;
+use super::super::super::qlib::common::*;
 use super::super::super::qlib::control_msg::*;
+use super::super::super::qlib::kernel::SignalDef::*;
 use super::super::super::ROOT_CONTAINER_ID;
 use super::super::super::VMS;
 
@@ -57,7 +57,11 @@ pub struct SignalFaultInfo {
     pub lsb: u16,
 }
 
-extern "C" fn handle_sigintAct(signal: i32, signInfo: *mut libc::siginfo_t, addr: *mut libc::c_void) {
+extern "C" fn handle_sigintAct(
+    signal: i32,
+    signInfo: *mut libc::siginfo_t,
+    addr: *mut libc::c_void,
+) {
     if signal == 17 {
         // used for tlb shootdown
         return;
@@ -79,12 +83,10 @@ extern "C" fn handle_sigintAct(signal: i32, signInfo: *mut libc::siginfo_t, addr
     if SIGNAL_HANDLE_ENABLE.load(Ordering::Relaxed) {
         let sigfault: &SignalFaultInfo = unsafe { &*(signInfo as u64 as *const SignalFaultInfo) };
 
-        error!("get signal {}, action is {:x?}", signal, sigfault);
+        info!("get signal {}, action is {:x?}", signal, sigfault);
 
         if signal == 11 {
-            let ucontext = unsafe {
-                &*(addr as * const UContext)
-            };
+            let ucontext = unsafe { &*(addr as *const UContext) };
 
             //error!("ALLOCATOR is {:x?}", crate::ALLOCATOR);
 
@@ -93,15 +95,17 @@ extern "C" fn handle_sigintAct(signal: i32, signInfo: *mut libc::siginfo_t, addr
                 true
             });*/
 
-            error!("get signal context is {:#x?}", ucontext);
+            info!("get signal context is {:#x?}", ucontext);
 
-            backtracer::trace(ucontext.MContext.rip,
+            backtracer::trace(
+                ucontext.MContext.rip,
                 ucontext.MContext.rsp,
                 ucontext.MContext.rbp,
                 &mut |frame| {
                     print!("panic frame is {:#x?}", frame);
-                true
-                });
+                    true
+                },
+            );
             panic!("get signal 11");
         }
 

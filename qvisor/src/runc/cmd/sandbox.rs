@@ -20,10 +20,10 @@ use crate::runc::container::container::RunAction;
 use crate::runc::runtime::util::{Open, Write};
 use crate::runc::shim::container_io::ContainerIO;
 
-use super::command::*;
+use super::super::super::qlib::common::*;
 use super::super::cmd::config::*;
 use super::super::runtime::sandbox_process::*;
-use super::super::super::qlib::common::*;
+use super::command::*;
 
 #[derive(Debug)]
 pub struct SandboxCmd {
@@ -35,18 +35,9 @@ pub struct SandboxCmd {
 impl SandboxCmd {
     pub fn Init(cmd_matches: &ArgMatches) -> Result<Self> {
         return Ok(Self {
-            id: cmd_matches
-                .value_of("id")
-                .unwrap()
-                .to_string(),
-            task_socket: cmd_matches
-                .value_of("task-socket")
-                .unwrap()
-                .to_string(),
-            pid_file: cmd_matches
-                .value_of("pid-file")
-                .unwrap()
-                .to_string(),
+            id: cmd_matches.value_of("id").unwrap().to_string(),
+            task_socket: cmd_matches.value_of("task-socket").unwrap().to_string(),
+            pid_file: cmd_matches.value_of("pid-file").unwrap().to_string(),
         });
     }
 
@@ -88,7 +79,11 @@ impl SandboxCmd {
         process.TaskSocket = Some(self.task_socket.clone());
         process.SandboxRootDir = bundleDir;
         let pid = process.Execv1(&ContainerIO::None)?;
-        let pid_file_fd = Open(&self.pid_file, OFlag::O_CREAT|OFlag::O_WRONLY, Mode::empty())?;
+        let pid_file_fd = Open(
+            &self.pid_file,
+            OFlag::O_CREAT | OFlag::O_WRONLY,
+            Mode::empty(),
+        )?;
         Write(pid_file_fd, pid.to_string().as_bytes())?;
         return Ok(());
     }

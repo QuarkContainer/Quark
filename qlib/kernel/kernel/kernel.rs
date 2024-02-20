@@ -51,17 +51,17 @@ use super::fd_table::*;
 use super::ipc_namespace::*;
 use super::platform::*;
 use super::signal_handler::*;
+use super::socket_store::*;
+use super::syslog::*;
 use super::time::*;
 use super::timer::timekeeper::*;
 use super::timer::timer::*;
 use super::timer::*;
 use super::uts_namespace::*;
-use super::syslog::*;
-use super::socket_store::*;
 
 pub static ASYNC_PROCESS_TIMER: Singleton<Timer> = Singleton::<Timer>::New();
 
-const CLOCK_TICK_MS: i64 = CLOCK_TICK / MILLISECOND;
+static CLOCK_TICK_MS: i64 = CLOCK_TICK / MILLISECOND;
 
 #[inline]
 pub fn GetKernel() -> Kernel {
@@ -198,7 +198,7 @@ impl Deref for Kernel {
 }
 
 impl Kernel {
-    pub fn Init(args: InitKernalArgs) -> Self {
+    pub fn Init(args: InitKernelArgs) -> Self {
         let cpuTicker = Arc::new(KernelCPUClockTicker::New());
         let internal = KernelInternal {
             extMu: QMutex::new(()),
@@ -405,7 +405,10 @@ impl Kernel {
         envs: &Vec<String>,
         args: &mut Vec<String>,
     ) -> Result<(u64, u64, u64)> {
-        error!("LoadProcess filename: {:?} envs: {:?}, args: {:?}", fileName, envs, args);
+        info!(
+            "LoadProcess filename: {:?} envs: {:?}, args: {:?}",
+            fileName, envs, args
+        );
 
         if self.globalInit.lock().is_none() {
             panic!("kernel contains no tasks");
@@ -547,7 +550,7 @@ impl<'a> Context for CreateProcessContext<'a> {
 }
 
 #[derive(Default)]
-pub struct InitKernalArgs {
+pub struct InitKernelArgs {
     // FeatureSet is the emulated CPU feature set.
     pub FeatureSet: Arc<QMutex<FeatureSet>>,
 

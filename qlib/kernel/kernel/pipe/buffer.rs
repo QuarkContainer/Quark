@@ -76,7 +76,7 @@ impl BufferIntern {
     //
     // This must be called before use.
     pub fn Reset(&mut self) {
-        let mut b = self;
+        let b = self;
         b.read = 0;
         b.write = 0;
     }
@@ -101,7 +101,7 @@ impl BufferIntern {
 impl Buffer {
     pub fn Count(&self) -> usize {
         let b = self.borrow();
-        return b.write-b.read;
+        return b.write - b.read;
     }
 }
 

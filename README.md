@@ -53,10 +53,7 @@ rustup default nightly-2022-08-11-x86_64-unknown-linux-gnu
 
 ```
 
-After installing both Rust and Rust nightly. Please also install "cargo-xbuild" as below.
-```sh
-cargo install cargo-xbuild
-```
+
 And Installing lcap library
 ```sh
 sudo apt-get install libcap-dev
@@ -68,6 +65,16 @@ sudo apt-get install build-essential cmake gcc libudev-dev libnl-3-dev libnl-rou
 And also add the rust-src component to the current toolchain:
 ```sh
 rustup component add rust-src
+```
+
+And also install "cargo-xbuild" as below.
+```sh
+cargo install cargo-xbuild
+```
+
+And also some extra libraries for compiling GPU module:
+```sh
+sudo apt-get install libelf-dev nvidia-driver-535
 ```
 
 ### Build
@@ -95,6 +102,7 @@ sudo systemctl restart docker
 The helloworld docker sample application can be executed as below:
 ```sh
 sudo systemctl restart docker
+sudo systemctl restart docker.service
 docker run --rm --runtime=quark hello-world
 ```      
     

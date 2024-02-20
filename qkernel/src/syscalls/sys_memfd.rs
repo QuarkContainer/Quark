@@ -12,17 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 use crate::qlib::common::*;
-use crate::qlib::linux_def::*;
 use crate::qlib::kernel::fs::file::*;
-use crate::syscalls::syscalls::*;
 use crate::qlib::kernel::kernel::fd_table::FDFlags;
+use crate::qlib::linux_def::*;
+use crate::syscalls::syscalls::*;
 use crate::task::*;
 
-pub const MEMFD_PREFIX : &str = "memfd:";
-pub const MEMFD_MAX_NAME_LEN : usize = NAME_MAX - MEMFD_PREFIX.len();
-pub const MEMFD_ALL_FLAGS : u32 = MfdType::MFD_CLOEXEC | MfdType::MFD_ALLOW_SEALING;
+pub const MEMFD_PREFIX: &str = "memfd:";
+pub const MEMFD_MAX_NAME_LEN: usize = NAME_MAX - MEMFD_PREFIX.len();
+pub const MEMFD_ALL_FLAGS: u32 = MfdType::MFD_CLOEXEC | MfdType::MFD_ALLOW_SEALING;
 
 // MemfdCreate implements Linux syscall memfd_create(2).
 pub fn SysMemfdCreate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -48,5 +47,5 @@ pub fn SysMemfdCreate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             CloseOnExec: flags & Flags::O_CLOEXEC as u32 != 0,
         },
     )?;
-    return Ok(fd as i64)
+    return Ok(fd as i64);
 }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::qlib::mem::stackvec::StackVec;
 use super::super::kernel::epoll::epoll::*;
 use super::super::kernel::epoll::epoll_entry::*;
 use super::super::kernel::fd_table::*;
@@ -28,6 +27,7 @@ use super::super::task::*;
 use super::super::SignalDef::*;
 use super::sys_poll::CopyTimespecIntoDuration;
 use crate::qlib::kernel::fs::inode::InodeOperations;
+use crate::qlib::mem::stackvec::StackVec;
 
 // CreateEpoll implements the epoll_create(2) linux syscall.
 pub fn CreateEpoll(task: &Task, closeOnExec: bool) -> Result<i64> {
@@ -73,13 +73,7 @@ pub fn AddEpoll(
         Some(ep) => ep,
     };
 
-    return ep.AddEntry(
-        task,
-        file,
-        flags,
-        mask,
-        userData,
-    );
+    return ep.AddEntry(task, file, flags, mask, userData);
 }
 
 // UpdateEpoll implements the epoll_ctl(2) linux syscall when op is EPOLL_CTL_MOD.
@@ -103,13 +97,7 @@ pub fn UpdateEpoll(
         Some(ep) => ep,
     };
 
-    return ep.UpdateEntry(
-        task,
-        file,
-        flags,
-        mask,
-        userData,
-    );
+    return ep.UpdateEntry(task, file, flags, mask, userData);
 }
 
 pub fn RemoveEpoll(task: &Task, epfd: i32, fd: i32) -> Result<()> {
@@ -126,14 +114,17 @@ pub fn RemoveEpoll(task: &Task, epfd: i32, fd: i32) -> Result<()> {
     };
 
     // Try to remove the entry.
-    return ep.RemoveEntry(
-        task,
-        file,
-    );
+    return ep.RemoveEntry(task, file);
 }
 
 // WaitEpoll implements the epoll_wait(2) linux syscall.
-pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i64, events: &mut StackVec::<Event, 64>) -> Result<()> {
+pub fn WaitEpoll(
+    task: &Task,
+    epfd: i32,
+    max: i32,
+    timeout: i64,
+    events: &mut StackVec<Event, 64>,
+) -> Result<()> {
     // Get epoll from the file descriptor.
     let epollfile = task.GetFile(epfd)?;
 

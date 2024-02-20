@@ -14,19 +14,22 @@
 
 use alloc::sync::Arc;
 use alloc::sync::Weak;
-use core::ops::Deref;
 use core::fmt;
+use core::ops::Deref;
 
-use crate::qlib::common::*;
-use crate::qlib::linux_def::*;
-use crate::qlib::socket_buf::*;
 use crate::qlib::bytestream::*;
+use crate::qlib::common::*;
 use crate::qlib::kernel::kernel::waiter::Queue;
 use crate::qlib::kernel::task::Task;
+use crate::qlib::linux_def::*;
+use crate::qlib::socket_buf::*;
 
 // input: client side queue, server side queue
 // return: (client side socket, server side socket)
-pub fn LoopbackSocketPair(clientQueue: Queue, serverQueue: Queue) -> (LoopbackSocket, LoopbackSocket) {
+pub fn LoopbackSocketPair(
+    clientQueue: Queue,
+    serverQueue: Queue,
+) -> (LoopbackSocket, LoopbackSocket) {
     let buf1 = ByteStream::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT);
     let buf2 = ByteStream::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT);
 
@@ -43,9 +46,9 @@ pub fn LoopbackSocketPair(clientQueue: Queue, serverQueue: Queue) -> (LoopbackSo
         sockBuff: serverSockBuf.clone(),
         peer: clientSockBuf.Downgrade(),
         peerQueue: clientQueue,
-    })); 
+    }));
 
-    return (clientSock, serverSock)
+    return (clientSock, serverSock);
 }
 
 #[derive(Default)]
@@ -101,19 +104,17 @@ impl LoopbackSocket {
     }
 
     pub fn Peer(&self) -> Option<SocketBuff> {
-        return self.peer.Upgrade()
+        return self.peer.Upgrade();
     }
 
     pub fn Writev(&self, task: &Task, iovs: &[IoVec]) -> Result<i64> {
         let (count, databuff) = self.sockBuff.Writev(task, iovs)?;
         match databuff {
             None => (),
-            Some(_) => {
-                self.peerQueue.Notify(READABLE_EVENT)
-            }
+            Some(_) => self.peerQueue.Notify(READABLE_EVENT),
         };
 
-        return Ok(count as i64)
+        return Ok(count as i64);
     }
 
     pub fn Readv(&self, task: &Task, iovs: &mut [IoVec], peek: bool) -> Result<i64> {
@@ -122,14 +123,14 @@ impl LoopbackSocket {
             self.peerQueue.Notify(WRITEABLE_EVENT);
         }
 
-        return Ok(count as i64)
+        return Ok(count as i64);
     }
 
     pub fn SetWClosed(&self) {
         self.sockBuff.SetWClosed();
         match self.Peer() {
             Some(p) => p.SetRClosed(),
-            _ => ()
+            _ => (),
         }
     }
 
@@ -137,7 +138,7 @@ impl LoopbackSocket {
         self.sockBuff.SetRClosed();
         match self.Peer() {
             Some(p) => p.SetWClosed(),
-            _ => ()
+            _ => (),
         }
     }
 

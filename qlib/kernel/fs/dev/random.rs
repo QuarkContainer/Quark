@@ -43,7 +43,6 @@ use super::super::fsutil::inode::*;
 use super::super::inode::*;
 use super::super::mount::*;
 
-
 #[derive(Clone)]
 pub struct RandomDevice(pub Arc<QRwLock<InodeSimpleAttributesInternal>>);
 
@@ -385,7 +384,7 @@ impl FileOperations for RandomFileOperations {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
+    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<u64> {
         return Err(Error::SysError(SysErr::ENOTTY));
     }
 

@@ -14,10 +14,10 @@
 
 use crate::qlib::mutex::*;
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
-use alloc::sync::Arc;
 
 use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
@@ -36,7 +36,6 @@ use super::super::fsutil::inode::*;
 use super::super::host::hostinodeop::*;
 use super::super::inode::*;
 use super::super::mount::*;
-
 
 #[derive(Clone)]
 pub struct TTYDevice(pub Arc<QRwLock<InodeSimpleAttributesInternal>>);
@@ -367,7 +366,7 @@ impl FileOperations for TTYFileOperations {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
+    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<u64> {
         return Err(Error::SysError(SysErr::ENOTTY));
     }
 

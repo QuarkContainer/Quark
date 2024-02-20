@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::super::qlib::common::*;
+use super::super::qlib::kernel::kernel::shm::*;
 use super::super::qlib::linux::ipc::*;
 use super::super::qlib::linux::shm::*;
-use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
-use super::super::qlib::kernel::kernel::shm::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 
@@ -33,14 +33,16 @@ pub fn SysShmget(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let pid = task.Thread().ThreadGroup().ID();
     let r = task.IPCNamespace().ShmRegistry();
-    let segment = r.FindOrCreate(task,
-                                 pid,
-                                 key,
-                                 size as u64,
-                                 &mode,
-                                 private,
-                                 create,
-                                 exclusive)?;
+    let segment = r.FindOrCreate(
+        task,
+        pid,
+        key,
+        size as u64,
+        &mode,
+        private,
+        create,
+        exclusive,
+    )?;
     return Ok(segment.Id() as _);
 }
 
@@ -62,17 +64,21 @@ pub fn SysShmat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let flag = args.arg2 as u16;
 
     let segment = FindSegment(task, id)?;
-    let mut opts = segment.ConfigureAttach(task, addr, &AttachOpts {
-        Execute: flag & SHM_EXEC == SHM_EXEC,
-        ReadOnly: flag & SHM_RDONLY == SHM_RDONLY,
-        Remap: flag & SHM_REMAP == SHM_REMAP,
-    })?;
+    let mut opts = segment.ConfigureAttach(
+        task,
+        addr,
+        &AttachOpts {
+            Execute: flag & SHM_EXEC == SHM_EXEC,
+            ReadOnly: flag & SHM_RDONLY == SHM_RDONLY,
+            Remap: flag & SHM_REMAP == SHM_REMAP,
+        },
+    )?;
 
     let addr = task.mm.MMap(task, &mut opts)?;
     let pid = task.Thread().ThreadGroup().ID();
     segment.lock().lastAttachDetachPID = pid;
     segment.lock().attachTime = task.Now();
-    return Ok(addr as _)
+    return Ok(addr as _);
 }
 
 // Shmdt implements shmdt(2).
@@ -80,7 +86,7 @@ pub fn SysShmdt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg1 as u64;
 
     task.mm.DetachShm(task, addr)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // Shmctl implements shmctl(2).
@@ -97,8 +103,7 @@ pub fn SysShmctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         // segments on the system". Since we don't track segments in an array,
         // we'll just pretend the shmid is the index and do the same thing as
         // IPC_STAT. Linux also uses the index as the shmid.
-        SHM_STAT |
-        IPC_STAT => {
+        SHM_STAT | IPC_STAT => {
             let segment = FindSegment(task, id)?;
             let stat = segment.IPCStat(task)?;
             task.CopyOutObj(&stat, buf)?;
@@ -121,13 +126,13 @@ pub fn SysShmctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let segment = FindSegment(task, id)?;
     match cmd {
         IPC_SET => {
-            let ds : ShmidDS = task.CopyInObj(buf)?;
+            let ds: ShmidDS = task.CopyInObj(buf)?;
             segment.Set(task, &ds)?;
-            return Ok(0)
+            return Ok(0);
         }
         IPC_RMID => {
             segment.MarkDestroyed();
-            return Ok(0)
+            return Ok(0);
         }
         SHM_LOCK | SHM_UNLOCK => {
             // We currently do not support memory locking anywhere.
@@ -138,5 +143,5 @@ pub fn SysShmctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         _ => (),
     }
 
-    return Err(Error::SysError(SysErr::EINVAL))
+    return Err(Error::SysError(SysErr::EINVAL));
 }

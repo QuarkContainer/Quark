@@ -13,17 +13,16 @@
 // limitations under the License.
 
 use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
 use super::super::qlib::kernel::kernel::kernel::*;
+use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 
-pub const SYSLOG_ACTION_READ_ALL    : i32 = 3;
-pub const SYSLOG_ACTION_SIZE_BUFFER : i32 = 10;
+pub const SYSLOG_ACTION_READ_ALL: i32 = 3;
+pub const SYSLOG_ACTION_SIZE_BUFFER: i32 = 10;
 
 // logBufLen is the default syslog buffer size on Linux.
-const LOG_BUF_LEN : usize = 1 << 17; //128 KB
-
+const LOG_BUF_LEN: usize = 1 << 17; //128 KB
 
 // Syslog implements part of Linux syscall syslog.
 //
@@ -51,11 +50,9 @@ pub fn SysSysLog(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
 
             task.CopyOutSlice(&log[0..size], buf, size)?;
-            return Ok(size as _)
+            return Ok(size as _);
         }
-        SYSLOG_ACTION_SIZE_BUFFER => {
-            return Ok(LOG_BUF_LEN as _)
-        }
+        SYSLOG_ACTION_SIZE_BUFFER => return Ok(LOG_BUF_LEN as _),
         _ => {
             return Err(Error::SysError(SysErr::ENOSYS));
         }

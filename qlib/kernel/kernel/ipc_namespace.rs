@@ -16,17 +16,17 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use core::ops::Deref;
 
-use super::super::super::common::*;
-use super::super::super::linux_def::*;
+use super::super::super::auth::id::*;
 use super::super::super::auth::userns::*;
 use super::super::super::auth::*;
-use super::super::super::auth::id::*;
+use super::super::super::common::*;
 use super::super::super::linux::ipc::*;
+use super::super::super::linux_def::*;
 use super::super::task::*;
-use crate::qlib::mutex::*;
+use super::msgqueue;
 use super::semaphore;
 use super::shm;
-use super::msgqueue;
+use crate::qlib::mutex::*;
 
 #[derive(Clone)]
 pub struct IPCNamespace {
@@ -38,7 +38,7 @@ pub struct IPCNamespace {
 
 impl Default for IPCNamespace {
     fn default() -> Self {
-        return Self::New(&UserNameSpace::default())
+        return Self::New(&UserNameSpace::default());
     }
 }
 
@@ -57,7 +57,7 @@ impl IPCNamespace {
     }
 
     pub fn ShmRegistry(&self) -> shm::ShmRegistry {
-        return self.shms.clone()
+        return self.shms.clone();
     }
 
     pub fn MsgqueueRegistry(&self) -> msgqueue::MQRegistry {
@@ -71,7 +71,7 @@ pub type Key = i32;
 // ID is a kernel identifier for IPC objects.
 pub type ID = i32;
 
-pub struct MechanismIntern <T: Object> {
+pub struct MechanismIntern<T: Object> {
     // UserNS owning the IPC namespace this registry belongs to. Immutable.
     pub userNS: UserNameSpace,
 
@@ -94,15 +94,15 @@ pub struct MechanismIntern <T: Object> {
 }
 
 #[derive(Clone)]
-pub struct Mechanism<T: Object> (Arc<QMutex<MechanismIntern<T>>>);
+pub struct Mechanism<T: Object>(Arc<QMutex<MechanismIntern<T>>>);
 
-impl <T: Object> From<Arc<QMutex<MechanismIntern<T>>>> for Mechanism<T> {
+impl<T: Object> From<Arc<QMutex<MechanismIntern<T>>>> for Mechanism<T> {
     fn from(intern: Arc<QMutex<MechanismIntern<T>>>) -> Self {
         Mechanism(intern)
     }
 }
 
-impl <T: Object> Deref for Mechanism<T> {
+impl<T: Object> Deref for Mechanism<T> {
     type Target = Arc<QMutex<MechanismIntern<T>>>;
 
     fn deref(&self) -> &Arc<QMutex<MechanismIntern<T>>> {
@@ -110,18 +110,18 @@ impl <T: Object> Deref for Mechanism<T> {
     }
 }
 
-impl <'a, T: Object> MechanismIntern <T> {
+impl<'a, T: Object> MechanismIntern<T> {
     pub fn checkOwnership(&self, creds: &Credentials) -> bool {
         let effectiveKUID = creds.lock().EffectiveKUID;
 
         if self.owner.UID == effectiveKUID || self.creator.UID == effectiveKUID {
-            return true
+            return true;
         }
 
         // Tasks with CAP_SYS_ADMIN may bypass ownership checks. Strangely, Linux
         // doesn't use CAP_IPC_OWNER for this despite CAP_IPC_OWNER being documented
         // for use to "override IPC ownership checks".
-        return creds.HasCapabilityIn(Capability::CAP_SYS_ADMIN, &self.userNS)
+        return creds.HasCapabilityIn(Capability::CAP_SYS_ADMIN, &self.userNS);
     }
 
     // CheckPermissions verifies whether an IPC object is accessible using creds for
@@ -135,10 +135,10 @@ impl <'a, T: Object> MechanismIntern <T> {
         }
 
         if p.SupersetOf(req) {
-            return true
+            return true;
         }
 
-        return creds.HasCapabilityIn(Capability::CAP_IPC_OWNER, &self.userNS)
+        return creds.HasCapabilityIn(Capability::CAP_IPC_OWNER, &self.userNS);
     }
 
     // Set modifies attributes for an IPC object. See *ctl(IPC_SET).
@@ -150,7 +150,7 @@ impl <'a, T: Object> MechanismIntern <T> {
         if !uid.Ok() || !gid.Ok() {
             // The man pages don't specify an errno for invalid uid/gid, but EINVAL
             // is generally used for invalid arguments.
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         if !self.checkOwnership(&creds) {
@@ -159,7 +159,7 @@ impl <'a, T: Object> MechanismIntern <T> {
             //  found in msg_perm.cuid) or the owner (as found in msg_perm.uid)
             //  of the message queue, and the caller is not privileged (Linux:
             //  does not have the CAP_SYS_ADMIN capability)."
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         let mode = FileMode(perm.Mode & 0x1ff);
@@ -167,17 +167,19 @@ impl <'a, T: Object> MechanismIntern <T> {
 
         self.owner.UID = uid;
         self.owner.GID = gid;
-        return Ok(())
+        return Ok(());
     }
 }
 
-impl <T: Object> Mechanism <T> {
-    pub fn New(userns: UserNameSpace,
-               key: Key,
-               creator: &FileOwner,
-               owner: &FileOwner,
-               perms: &FilePermissions,
-               obj: T) -> Self {
+impl<T: Object> Mechanism<T> {
+    pub fn New(
+        userns: UserNameSpace,
+        key: Key,
+        creator: &FileOwner,
+        owner: &FileOwner,
+        perms: &FilePermissions,
+        obj: T,
+    ) -> Self {
         let intern = MechanismIntern {
             userNS: userns,
             id: 0,
@@ -185,14 +187,14 @@ impl <T: Object> Mechanism <T> {
             creator: *creator,
             owner: *owner,
             perms: *perms,
-            obj: obj
+            obj: obj,
         };
 
-        return Self(Arc::new(QMutex::new(intern)))
+        return Self(Arc::new(QMutex::new(intern)));
     }
 
     pub fn Id(&self) -> ID {
-        return self.lock().id
+        return self.lock().id;
     }
 }
 
@@ -215,7 +217,7 @@ pub struct RegistryInternal<T: Object> {
     pub lastIDUsed: i32,
 }
 
-impl <T: Object> RegistryInternal <T> {
+impl<T: Object> RegistryInternal<T> {
     pub fn New(userNS: &UserNameSpace) -> Self {
         return Self {
             userNS: userNS.clone(),
@@ -232,7 +234,7 @@ impl <T: Object> RegistryInternal <T> {
         while id != self.lastIDUsed {
             if !self.objects.contains_key(&id) {
                 self.lastIDUsed = id;
-                return Ok(id)
+                return Ok(id);
             }
             id = id.wrapping_add(1);
         }
@@ -244,7 +246,7 @@ impl <T: Object> RegistryInternal <T> {
         // mechanisms don't have a specific errno for running out of IDs, but they
         // return ENOSPC if the max number of objects is exceeded, so we assume that
         // it's the same case.
-        return Err(Error::SysError(SysErr::ENOSPC))
+        return Err(Error::SysError(SysErr::ENOSPC));
     }
 
     // Register adds the given object into Registry.Objects, and assigns it a new
@@ -256,7 +258,7 @@ impl <T: Object> RegistryInternal <T> {
         let key = m.lock().key;
         self.objects.insert(id, m);
         self.keyToID.insert(key, id);
-        return Ok(())
+        return Ok(());
     }
 
     // Remove removes the mechanism with the given id from the registry, and calls
@@ -278,25 +280,27 @@ impl <T: Object> RegistryInternal <T> {
 
         mechLock.obj.Destory();
 
-        return Ok(())
+        return Ok(());
     }
 
     // Find uses key to search for and return a SysV mechanism. Find returns an
     // error if an object is found by shouldn't be, or if the user doesn't have
     // permission to use the object. If no object is found, Find checks create
     // flag, and returns an error only if it's false.
-    pub fn Find(&self,
-                task: &Task,
-                key: Key,
-                mode: FileMode,
-                create: bool,
-                exclusive: bool) -> Result<Option<Mechanism<T>>> {
+    pub fn Find(
+        &self,
+        task: &Task,
+        key: Key,
+        mode: FileMode,
+        create: bool,
+        exclusive: bool,
+    ) -> Result<Option<Mechanism<T>>> {
         let me = self;
         match me.keyToID.get(&key) {
             Some(id) => {
-                let mech : Mechanism<T> = match me.objects.get(id) {
-                    None  => panic!("abc"),
-                    Some(m) => Mechanism::from(m.0.clone())
+                let mech: Mechanism<T> = match me.objects.get(id) {
+                    None => panic!("abc"),
+                    Some(m) => Mechanism::from(m.0.clone()),
                 };
                 {
                     let mechlock = mech.lock();
@@ -306,36 +310,35 @@ impl <T: Object> RegistryInternal <T> {
                         // The [calling process / user] does not have permission to access
                         // the set, and does not have the CAP_IPC_OWNER capability in the
                         // user namespace that governs its IPC namespace.
-                        return Err(Error::SysError(SysErr::EINVAL))
+                        return Err(Error::SysError(SysErr::EINVAL));
                     }
                 }
-
 
                 if create && exclusive {
                     // IPC_CREAT and IPC_EXCL were specified, but an object already
                     // exists for key.
-                    return Err(Error::SysError(SysErr::EEXIST))
+                    return Err(Error::SysError(SysErr::EEXIST));
                 }
 
-                return Ok(Some(mech))
+                return Ok(Some(mech));
             }
-            None => ()
+            None => (),
         }
 
         if !create {
             // No object exists for key and msgflg did not specify IPC_CREAT.
-            return Err(Error::SysError(SysErr::ENOENT))
+            return Err(Error::SysError(SysErr::ENOENT));
         }
 
-        return Ok(None)
+        return Ok(None);
     }
 
     // FindByID returns the mechanism with the given ID, nil if non exists.
     pub fn FindById(&self, id: ID) -> Option<Mechanism<T>> {
         return match self.objects.get(&id) {
             None => None,
-            Some(m) => Some(Mechanism::from(m.0.clone()))
-        }
+            Some(m) => Some(Mechanism::from(m.0.clone())),
+        };
     }
 
     // ForAllObjects executes a given function for all given objects.
@@ -375,9 +378,9 @@ impl <T: Object> RegistryInternal <T> {
 }
 
 #[derive(Clone)]
-pub struct Registry<T: Object> (Arc<QMutex<RegistryInternal<T>>>);
+pub struct Registry<T: Object>(Arc<QMutex<RegistryInternal<T>>>);
 
-impl <T: Object> Deref for Registry <T> {
+impl<T: Object> Deref for Registry<T> {
     type Target = Arc<QMutex<RegistryInternal<T>>>;
 
     fn deref(&self) -> &Arc<QMutex<RegistryInternal<T>>> {
@@ -385,7 +388,7 @@ impl <T: Object> Deref for Registry <T> {
     }
 }
 
-impl <T: Object> Registry <T> {
+impl<T: Object> Registry<T> {
     pub fn New(userNS: &UserNameSpace) -> Self {
         let intern = RegistryInternal {
             userNS: userNS.clone(),
@@ -394,6 +397,6 @@ impl <T: Object> Registry <T> {
             lastIDUsed: 0,
         };
 
-        return Self(Arc::new(QMutex::new(intern)))
+        return Self(Arc::new(QMutex::new(intern)));
     }
 }

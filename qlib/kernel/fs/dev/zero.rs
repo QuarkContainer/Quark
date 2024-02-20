@@ -40,7 +40,6 @@ use super::super::host::hostinodeop::*;
 use super::super::inode::*;
 use super::super::mount::*;
 
-
 #[derive(Clone)]
 pub struct ZeroDevice(pub Arc<QRwLock<InodeSimpleAttributesInternal>>);
 
@@ -368,7 +367,7 @@ impl FileOperations for ZeroFileOperations {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
+    fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<u64> {
         return Err(Error::SysError(SysErr::ENOTTY));
     }
 

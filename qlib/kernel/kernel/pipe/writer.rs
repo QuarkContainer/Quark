@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::any::Any;
 use alloc::sync::Arc;
+use core::any::Any;
 use core::ops::Deref;
 
 use super::super::super::super::common::*;
@@ -66,7 +66,7 @@ impl SpliceOperations for Writer {
             self.pipe.Notify(READABLE_EVENT)
         }
 
-        return Ok(n as i64)
+        return Ok(n as i64);
     }
 }
 
@@ -185,7 +185,7 @@ impl FileOperations for Writer {
         return inode.UnstableAttr(task);
     }
 
-    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<()> {
+    fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<u64> {
         if request == IoCtlCmd::FIONREAD {
             let mut v = self.pipe.Queued();
             if v > core::i32::MAX as usize {
@@ -195,7 +195,7 @@ impl FileOperations for Writer {
 
             //*task.GetTypeMut(val)? = v as i32;
             task.CopyOutObj(&v, val)?;
-            return Ok(());
+            return Ok(0);
         }
         return Err(Error::SysError(SysErr::ENOTTY));
     }

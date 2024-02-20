@@ -96,7 +96,7 @@ impl CalibratedClockInternal {
 
         self.params = newParams;
         self.errorNS = errorNS;
-        return true
+        return true;
     }
 }
 

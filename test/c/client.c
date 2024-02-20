@@ -18,7 +18,7 @@
 #include <unistd.h> 
 #include <string.h> 
 #include <errno.h>
-#define PORT 8080
+#define PORT 5678
 
 int Send() {
     printf("xxxxxx1\n");
@@ -56,7 +56,8 @@ int main(int argc, char const *argv[])
 {
     //printf("xxxxxx\n");
     //return Send();
-    char *addr = "127.0.0.1";
+    //char *addr = "127.0.0.1";
+    char *addr = "10.1.1.1";
     if (argc > 1)
     {
         addr = argv[1];
@@ -115,6 +116,7 @@ int main(int argc, char const *argv[])
         return -1; 
     } 
    
+    printf("serv_addr %x %x\n", serv_addr.sin_addr.s_addr, serv_addr.sin_port);
     if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) 
     { 
         printf("\nConnection Failed \n"); 
@@ -183,6 +185,8 @@ int main(int argc, char const *argv[])
         int n = sendmsg(sock, &mh, 0);
         printf("client: sendmsg sent %d bytes\n", n);
     }
+
+    close(sock);
 
     return 0;
 } 

@@ -247,11 +247,7 @@ pub fn SubmitCallback(task: &Task, id: u64, cb: &IOCallback, cbAddr: u64) -> Res
     return PerformanceCallback(task, &file, cbAddr, cb, &ctx, eventfops);
 }
 
-pub fn PerformFileOp(
-    task: &Task,
-    file: &File,
-    cb: &IOCallback
-) -> Result<i64> {
+pub fn PerformFileOp(task: &Task, file: &File, cb: &IOCallback) -> Result<i64> {
     let ret = match cb.opcode {
         IOCB_CMD_PREAD => {
             let iov = IoVec::NewFromAddr(cb.buf, cb.bytes as usize);
@@ -271,18 +267,14 @@ pub fn PerformFileOp(
             let iovs = task.IovsFromAddr(cb.buf, cb.bytes as usize)?;
             file.Pwritev(task, &iovs, cb.offset)
         }
-        IOCB_CMD_FSYNC => {
-            match file.Fsync(task, 0, FILE_MAX_OFFSET, SyncType::SyncAll) {
-                Ok(()) => Ok(0),
-                Err(e) => Err(e)
-            }
-        }
-        IOCB_CMD_FDSYNC => {
-            match file.Fsync(task, 0, FILE_MAX_OFFSET, SyncType::SyncData) {
-                Ok(()) => Ok(0),
-                Err(e) => Err(e)
-            }
-        }
+        IOCB_CMD_FSYNC => match file.Fsync(task, 0, FILE_MAX_OFFSET, SyncType::SyncAll) {
+            Ok(()) => Ok(0),
+            Err(e) => Err(e),
+        },
+        IOCB_CMD_FDSYNC => match file.Fsync(task, 0, FILE_MAX_OFFSET, SyncType::SyncData) {
+            Ok(()) => Ok(0),
+            Err(e) => Err(e),
+        },
         _ => {
             panic!("PerformanceCallback get unsupported aio {}", cb.opcode)
             //return Err(Error::SysError(SysErr::EINVAL))
@@ -310,7 +302,7 @@ pub fn PerformanceCallback(
 
     if ctx.Dead() {
         ctx.CancelPendingRequest();
-        return Ok(())
+        return Ok(());
     }
 
     let ret = PerformFileOp(task, file, cb);
