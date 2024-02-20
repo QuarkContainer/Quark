@@ -64,7 +64,9 @@ lazy_static::lazy_static! {
                 tsotSvcPort: 1235,
                 stateSvcPort: 1236,
                 cidr: "10.1.1.0/8".to_string(),
-                stateSvcAddr: "127.0.0.1:8890".to_string(),
+                stateSvcAddr: vec![
+                    "127.0.0.1:8890".to_string()
+                ],
                 singleNodeModel: true
             }
         } else {
@@ -85,8 +87,12 @@ async fn main() -> Result<()> {
     error!("config is {:#?}", &QLET_CONFIG.clone());
 
     if !QLET_CONFIG.singleNodeModel {
-        let stateSvcAddr = format!("http://{}", QLET_CONFIG.stateSvcAddr);
-        let factory = InformerFactory::New(vec![stateSvcAddr], "").await.unwrap();
+        let mut addresses = Vec::new();
+        for addr in &QLET_CONFIG.stateSvcAddr {
+            addresses.push(format!("http://{}", addr));
+        }
+
+        let factory = InformerFactory::New(addresses, "").await.unwrap();
         factory.AddInformer("node_info", &ListOption::default()).await.unwrap();
         let informer = factory.GetInformer("node_info").await.unwrap();
         let _id1 = informer.AddEventHandler(NODE_MGR.clone()).await.unwrap();

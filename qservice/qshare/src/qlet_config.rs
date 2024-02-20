@@ -29,7 +29,7 @@ pub struct QletConfig {
     pub stateSvcPort: u16,
 
     pub cidr: String,
-    pub stateSvcAddr: String,
+    pub stateSvcAddr: Vec<String>,
     pub singleNodeModel: bool,
 }
 

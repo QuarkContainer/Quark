@@ -135,7 +135,7 @@ impl Informer {
         }
     }
 
-    pub async fn InitList(&self, client: &CacherClient) -> Result<()> {
+    async fn InitList(&self, client: &CacherClient) -> Result<()> {
         let store = self.store.clone();
         
         let objType = self.objType.clone();
@@ -157,7 +157,7 @@ impl Informer {
         return Ok(())
     }
 
-    pub async fn WatchUpdate(&self, client: &CacherClient) -> Result<()> {
+    async fn WatchUpdate(&self, client: &CacherClient) -> Result<()> {
         let objType = self.objType.clone();
         let namespace = self.namespace.clone();
         let mut opts = self.opts.DeepCopy();
