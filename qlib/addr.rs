@@ -248,7 +248,8 @@ impl PageOpts {
     //const Empty : PageTableFlags = PageTableFlags::PRESENT & PageTableFlags::WRITABLE; //set 0
 
     pub fn New(user: bool, write: bool, exec: bool) -> Self {
-        let mut flags = PageTableFlags::VALID | PageTableFlags::MT_NORMAL | PageTableFlags::ACCESSED;
+        let mut flags = PageTableFlags::VALID | PageTableFlags::MT_NORMAL
+                        | PageTableFlags::ACCESSED;
         if !write {
             flags |= PageTableFlags::READ_ONLY;
         }
