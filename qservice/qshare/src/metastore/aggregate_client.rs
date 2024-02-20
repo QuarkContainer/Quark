@@ -21,7 +21,6 @@ use crate::common::*;
 use crate::metastore::informer::Informer;
 use crate::metastore::cache_store::CacheStore;
 
-use super::cacher_client::CacherClient;
 use super::data_obj::{DeltaEvent, EventType};
 use super::informer::EventHandler;
 use super::selection_predicate::ListOption;
@@ -85,55 +84,33 @@ impl AggregateClient {
     }
 
     pub fn Close(&self) {
-        self.closed.store(true, Ordering::SeqCst);
         self.closeNotify.notify_waiters();
     }
 
-    pub async fn Process(&self, client: &CacherClient, listNotify: Arc<Notify>) -> Result<()> {
-        let informer = Informer::New(client, &self.objType, &self.namespace, &ListOption::default()).await?;
+    pub async fn Process(&self, addresses: Vec<String>, listNotify: Arc<Notify>) -> Result<()> {
+        let informer = Informer::New(addresses, &self.objType, &self.namespace, &ListOption::default()).await?;
         informer.AddEventHandler(Arc::new(self.clone())).await?;
-        loop {
-            tokio::select! { 
-                _ = self.closeNotify.notified() => {
-                    return Ok(())
-                }
-                ret = informer.InitList() => {
-                    match ret {
-                        Err(e) => {
-                            error!("AggregateClient initlist fail with error {:?} {:#?}", e, self);
-
-                            // wait for network connection ready
-                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                            continue;
-                        }
-                        Ok(()) => break,
+        tokio::select! { 
+            _ = self.closeNotify.notified() => {
+                if self.closed.swap(true, Ordering::SeqCst) == false {
+                    let store = informer.store.clone();
+                    let lock = store.read();
+                    for (_k, obj) in &lock.map {
+                        self.aggregateCacher.Remove(obj)?;
                     }
+
+                    informer.Close().await?;
+                }
+                return Ok(())
+            }
+            ret = informer.Process(listNotify.clone()) => {
+                match ret {
+                    Err(e) => {
+                        error!("AggregateClient initlist fail with error {:?} {:#?}", e, self);
+                    }
+                    Ok(()) => (),
                 }
             }
-        }
-
-        listNotify.notify_waiters();
-
-        loop {
-            tokio::select! { 
-                _ = self.closeNotify.notified() => {
-                    if self.closed.swap(true, Ordering::SeqCst) == false {
-                        let store = informer.store.clone();
-                        let lock = store.read();
-                        for (_k, obj) in &lock.map {
-                            self.aggregateCacher.Remove(obj)?;
-                        }
-                    }
-                    break;
-                }
-                ret = informer.WatchUpdate() => {
-                    error!("AggregateClient WatchUpdate finish with result {:?}", ret);
-
-                }
-            }
-
-            // wait for network connection ready
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
         
         return Ok(())

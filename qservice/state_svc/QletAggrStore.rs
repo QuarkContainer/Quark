@@ -24,7 +24,6 @@ use tokio::sync::Notify;
 use core::ops::Deref;
 
 use qshare::common::*;
-use qshare::metastore::cacher_client::CacherClient;
 use qshare::metastore::cache_store::{CacheStore, ChannelRev};
 use qshare::metastore::aggregate_client::AggregateClient;
 
@@ -69,8 +68,7 @@ impl QletAggrStore {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
         let addr = format!("http://{}", STATESVC_ADDR);
-        let client = CacherClient::New(addr).await?;
-        let informer = Informer::New(&client, "node_info", "", &ListOption::default()).await?;
+        let informer = Informer::New(vec![addr], "node_info", "", &ListOption::default()).await?;
         
         informer.AddEventHandler(Arc::new(self.clone())).await?;
         let notify = Arc::new(Notify::new());
@@ -172,7 +170,6 @@ impl QletAgent {
     }
 
     pub async fn Process(&self) -> Result<()> {
-        let client = CacherClient::New(self.svcAddr.clone()).await?;
         let listNotify = Arc::new(Notify::new());
 
         tokio::select! { 
@@ -181,10 +178,10 @@ impl QletAgent {
                 self.podClient.Close();
                 return Ok(())
             }
-            _ = self.nodeClient.Process(&client, listNotify.clone()) => {
+            _ = self.nodeClient.Process(vec![self.svcAddr.clone()], listNotify.clone()) => {
 
             }
-            _ = self.podClient.Process(&client, listNotify.clone()) => {
+            _ = self.podClient.Process(vec![self.svcAddr.clone()], listNotify.clone()) => {
 
             }
         }

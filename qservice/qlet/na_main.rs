@@ -85,8 +85,8 @@ async fn main() -> Result<()> {
     error!("config is {:#?}", &QLET_CONFIG.clone());
 
     if !QLET_CONFIG.singleNodeModel {
-        let stateSvcAddr = &format!("http://{}", QLET_CONFIG.stateSvcAddr);
-        let factory = InformerFactory::New(stateSvcAddr, "").await.unwrap();
+        let stateSvcAddr = format!("http://{}", QLET_CONFIG.stateSvcAddr);
+        let factory = InformerFactory::New(vec![stateSvcAddr], "").await.unwrap();
         factory.AddInformer("node_info", &ListOption::default()).await.unwrap();
         let informer = factory.GetInformer("node_info").await.unwrap();
         let _id1 = informer.AddEventHandler(NODE_MGR.clone()).await.unwrap();
