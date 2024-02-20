@@ -362,21 +362,7 @@ impl PageTables {
         at: &AccessType,
         user: bool,
     ) -> Result<()> {
-        let pageOpts = if user {
-            if at.Write() {
-                PageOpts::UserReadWrite().Val()
-            } else if at.Read() || at.Exec() {
-                PageOpts::UserReadOnly().Val()
-            } else {
-                PageOpts::UserNonAccessable().Val()
-            }
-        } else {
-            if at.Write() {
-                PageOpts::KernelReadWrite().Val()
-            } else {
-                PageOpts::KernelReadOnly().Val()
-            }
-        };
+        let pageOpts = PageOpts::New(user, at.Write(), at.Exec()).Val();
 
         self.Map(
             Addr(addr),
