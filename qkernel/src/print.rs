@@ -46,10 +46,10 @@ impl log::Log for SimpleLogger {
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
             if crate::SHARESPACE.config.read().SyncPrint() {
-                let str = format!("[{}] {}", record.level(), record.args());
+                let str = format!("qkernel [{}] {}", record.level(), record.args());
                 crate::Kernel::HostSpace::SyncPrint(crate::qlib::config::DebugLevel::Error, &str);
             } else {
-                let str = format!("[{}] {}", record.level(), record.args());
+                let str = format!("qkernel [{}] {}", record.level(), record.args());
                 crate::Kernel::HostSpace::Kprint(&str);
             }
         }
@@ -86,7 +86,7 @@ macro_rules! raw_print {
         if $crate::SHARESPACE.config.read().DebugLevel >= $crate::qlib::config::DebugLevel::Error {
             //$crate::qlib::perf_tunning::PerfGoto($crate::qlib::perf_tunning::PerfType::Print);
             let s = &format!($($arg)*);
-            let str = format!("[Print] {}", s);
+            let str = format!("[qkernel Print] {}", s);
 
             $crate::Kernel::HostSpace::SyncPrint($crate::qlib::config::DebugLevel::Error, &str);
             //$crate::qlib::perf_tunning::PerfGofrom($crate::qlib::perf_tunning::PerfType::Print);
@@ -101,7 +101,7 @@ macro_rules! print {
             //$crate::qlib::perf_tunning::PerfGoto($crate::qlib::perf_tunning::PerfType::Print);
             let prefix = $crate::print::PrintPrefix();
             let s = &format!($($arg)*);
-            let str = format!("[Print] {} {}", prefix, s);
+            let str = format!("[qkernel Print] {} {}", prefix, s);
 
             $crate::Kernel::HostSpace::SyncPrint($crate::qlib::config::DebugLevel::Error, &str);
             //$crate::qlib::perf_tunning::PerfGofrom($crate::qlib::perf_tunning::PerfType::Print);
@@ -118,10 +118,10 @@ macro_rules! error {
             let s = &format!($($arg)*);
 
             if $crate::SHARESPACE.config.read().SyncPrint() {
-                let str = format!("[ERROR] {} {}", prefix, s);
+                let str = format!("[qkernel ERROR] {} {}", prefix, s);
                 $crate::Kernel::HostSpace::SyncPrint($crate::qlib::config::DebugLevel::Error, &str);
             } else {
-                let str = format!("[ERROR] {} {}\n", prefix, s);
+                let str = format!("[qkernel ERROR] {} {}\n", prefix, s);
                 $crate::Kernel::HostSpace::Kprint(&str);
             }
 
@@ -139,10 +139,10 @@ macro_rules! info {
             let s = &format!($($arg)*);
 
             if $crate::SHARESPACE.config.read().SyncPrint() {
-                let str = format!("[INFO] {} {}", prefix, s);
+                let str = format!("[qkernel INFO] {} {}", prefix, s);
                 $crate::Kernel::HostSpace::SyncPrint($crate::qlib::config::DebugLevel::Error, &str);
             } else {
-                 let str = format!("[INFO] {} {}\n", prefix, s);
+                 let str = format!("[qkernel INFO] {} {}\n", prefix, s);
                  $crate::Kernel::HostSpace::Kprint(&str);
             }
             //$crate::qlib::perf_tunning::PerfGofrom($crate::qlib::perf_tunning::PerfType::Print);
@@ -159,10 +159,10 @@ macro_rules! warn {
             let s = &format!($($arg)*);
 
             if $crate::SHARESPACE.config.read().SyncPrint() {
-                let str = format!("[WARN] {} {}", prefix, s);
+                let str = format!("[qkernel WARN] {} {}", prefix, s);
                 $crate::Kernel::HostSpace::SyncPrint($crate::qlib::config::DebugLevel::Error, &str);
             } else {
-                 let str = format!("[WARN] {} {}\n", prefix, s);
+                 let str = format!("[qkernel WARN] {} {}\n", prefix, s);
                  $crate::Kernel::HostSpace::Kprint(&str);
             }
             //$crate::qlib::perf_tunning::PerfGofrom($crate::qlib::perf_tunning::PerfType::Print);
@@ -179,10 +179,10 @@ macro_rules! debug {
             let s = &format!($($arg)*);
 
             if $crate::SHARESPACE.config.read().SyncPrint() {
-                let str = format!("[DEBUG] {} {}", prefix, s);
+                let str = format!("[qkernel DEBUG] {} {}", prefix, s);
                 $crate::Kernel::HostSpace::SyncPrint($crate::qlib::config::DebugLevel::Error, &str);
             } else {
-                let str = format!("[DEBUG] {} {}\n", prefix, s);
+                let str = format!("[qkernel DEBUG] {} {}\n", prefix, s);
                 $crate::Kernel::HostSpace::Kprint(&str);
             }
             //$crate::qlib::perf_tunning::PerfGofrom($crate::qlib::perf_tunning::PerfType::Print);
