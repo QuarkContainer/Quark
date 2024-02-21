@@ -230,20 +230,19 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             let func: extern "C" fn(*mut ::std::os::raw::c_char, ::std::os::raw::c_int, ::std::os::raw::c_int,) -> i32 = 
             unsafe { std::mem::transmute(handler)};
 
-            let my_str = "";
             
+            let mut pciBusId: Vec<u8> = vec![0; parameters.para2 as usize];
+
             // Convert the Rust string to a C string
-            let mut c_str = CString::new(my_str).expect("Failed to create CString");
+            let mut c_str = CString::new(pciBusId.clone()).expect("Failed to create CString");
             // Access the raw pointer to the C string
             let c_str_ptr = c_str.as_ptr() as *mut c_char;
 
             let ret = func(c_str_ptr, parameters.para2 as ::std::os::raw::c_int, parameters.para3 as ::std::os::raw::c_int);
 
-            let modified_string = unsafe { CString::from_raw(c_str_ptr) }
-                .to_string_lossy()
-                .into_owned();
+            let modifiedPciBusId = c_str.to_string_lossy().into_owned();
 
-            error!("yiwang c_str after C function call: {}", modified_string);
+            error!("yiwang PciBusId after C function call: {}", modifiedPciBusId);
 
             error!("yiwang CudaDeviceGetPCIBusId result is: {:?}, {}", ret,ret);
 
