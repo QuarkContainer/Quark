@@ -125,6 +125,17 @@ pub extern "C" fn cudaDeviceGetP2PAttribute(value: *mut c_int, attr: cudaDeviceP
     return ret; 
 }
 
+// not yet tested 
+#[no_mangle]
+pub extern "C" fn cudaDeviceGetPCIBusId(pciBusId: *mut c_char, len: c_int, device: c_int) -> usize {
+    println!("Hijacked cudaDeviceGetPCIBusId(device: {})",device);
+
+    let ret = unsafe {
+        syscall4(SYS_PROXY, ProxyCommand::CudaDeviceGetPCIBusId , pciBusId as *const _ as usize , len as usize,  device as usize)
+    };
+    return ret; 
+}
+
 #[no_mangle]
 pub extern "C" fn cudaSetDevice(device: c_int) -> usize {
     println!("Hijacked cudaSetDevice({})", device);

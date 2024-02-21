@@ -18,7 +18,7 @@ use alloc::vec::Vec;
 
 use crate::qlib::common::*;
 use crate::syscalls::syscalls::*;
-use crate::task::*;
+use crate::{parameters, task::*};
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::linux_def::SysErr;
 use crate::qlib::proxy::*;
@@ -151,7 +151,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
         ProxyCommand::CudaDeviceGetLimit => {
 
-            let mut limit: usize = 0; 
+            let mut limit:usize = 0; 
             
             parameters.para1 = &mut limit as * mut _ as u64;
 
@@ -171,8 +171,8 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
         }
         ProxyCommand::CudaDeviceGetP2PAttribute => {
-            let mut value: i32;
-            parameters.para1 = &value as * mut _ as u64;
+            let mut value:i32 = 0;
+            parameters.para1 = &mut value as * mut _ as u64;
 
             let attribute: u32 = parameters.para2 as u32;
             error!("SysProxy CudaDeviceGetP2PAttribute, query about attribute: {}", attribute);
@@ -188,6 +188,23 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
             return Ok(ret);
 
+        }
+        ProxyCommand::CudaDeviceGetPCIBusId => {
+            let mut pciBusId:i8 = 0;
+            parameters.para1 = &mut pciBusId as * mut _ as u64;
+
+            error!("SysProxy CudaDeviceGetPCIBusId, query about device:{}", parameters.para3);
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            error!("the pciBusId value should change: {}", pciBusId);
+            if ret == 0 {
+                task.CopyOutObj(&pciBusId, args.arg1 as u64)?;
+            }
+            return Ok(ret);
         }
         ProxyCommand::CudaSetDevice |
         ProxyCommand::CudaDeviceSynchronize => {
