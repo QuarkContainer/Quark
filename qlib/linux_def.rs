@@ -2975,7 +2975,7 @@ impl MemoryDef {
 
     pub const PHY_LOWER_ADDR: u64 = 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernel space
     pub const PHY_UPPER_ADDR: u64 = Self::PHY_LOWER_ADDR + 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernel space
-
+  
     pub const NVIDIA_START_ADDR: u64 = 0x200000000;
     pub const NVIDIA_ADDR_SIZE: u64 = 2 * Self::ONE_GB;
 
@@ -2997,12 +2997,9 @@ impl MemoryDef {
     // heap
     pub const HEAP_OFFSET: u64 = MemoryDef::PHY_LOWER_ADDR
         + Self::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB
-        - Self::HEAP_SIZE
-        - Self::IO_HEAP_SIZE;
+        - Self::HEAP_SIZE;
     pub const HEAP_SIZE: u64 = 10 * Self::ONE_GB;
     pub const HEAP_END: u64 = Self::HEAP_OFFSET + Self::HEAP_SIZE;
-    pub const IO_HEAP_SIZE: u64 = 1 * Self::ONE_GB;
-    pub const IO_HEAP_END: u64 = Self::HEAP_END + Self::IO_HEAP_SIZE;
     
     // Create 24GB Init memory region for KVM VM
     pub const KERNEL_MEM_INIT_REGION_SIZE: u64 = 24; // 24 GB

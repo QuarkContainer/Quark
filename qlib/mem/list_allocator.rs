@@ -249,7 +249,6 @@ impl VcpuAllocator {
 #[derive(Debug, Default)]
 pub struct HostAllocator {
     pub listHeapAddr: AtomicU64,
-    pub ioHeapAddr: AtomicU64,
     pub initialized: AtomicBool,
 }
 
@@ -258,16 +257,8 @@ impl HostAllocator {
         return unsafe { &mut *(self.listHeapAddr.load(Ordering::Relaxed) as *mut ListAllocator) };
     }
 
-    pub fn IOAllocator(&self) -> &mut ListAllocator {
-        return unsafe { &mut *(self.ioHeapAddr.load(Ordering::Relaxed) as *mut ListAllocator) };
-    }
-
     pub fn IsHeapAddr(addr: u64) -> bool {
         return addr < MemoryDef::HEAP_END;
-    }
-
-    pub fn IsIOBuf(addr: u64) -> bool {
-        return MemoryDef::HEAP_END <= addr && addr < MemoryDef::HEAP_END + MemoryDef::IO_HEAP_SIZE;
     }
 
     #[inline]
@@ -275,16 +266,7 @@ impl HostAllocator {
         let allocator = self.Allocator();
         return (allocator.heapStart, allocator.heapEnd);
     }
-
-    pub unsafe fn AllocIOBuf(&self, size: usize) -> *mut u8 {
-        let layout = Layout::from_size_align(size, size)
-            .expect("RingeBufAllocator::AllocHeadTail can't allocate memory");
-        return self.IOAllocator().alloc(layout);
-    }
-
-    unsafe fn DeallocIOBuf(&self, ptr: *mut u8, layout: Layout) {
-        self.IOAllocator().dealloc(ptr, layout);
-    }
+    
 }
 
 #[derive(Debug)]

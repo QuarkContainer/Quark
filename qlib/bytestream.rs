@@ -22,10 +22,6 @@ use core::ptr;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicU32};
 use core::{fmt, mem};
-
-use crate::GLOBAL_ALLOCATOR;
-use crate::qlib::kernel::SHARESPACE;
-
 use super::common::*;
 use super::linux_def::*;
 use super::mutex::*;
@@ -303,22 +299,9 @@ impl HeapAllocator {
 
     pub fn AlllocBuf(pageCount: usize) -> u64 {
         assert!(IsPowerOfTwo(pageCount));
-
-        let addr = if SHARESPACE.config.read().EnableIOBuf {
-            unsafe {
-                GLOBAL_ALLOCATOR.AllocIOBuf(pageCount * MemoryDef::PAGE_SIZE as usize)
-            }
-        } else {
-            let layout = Layout::from_size_align(
-                pageCount * MemoryDef::PAGE_SIZE as usize,
-                MemoryDef::PAGE_SIZE as usize,
-            )
-            .expect("HeapAllocator::AlllocBuf can't allocate memory");
-            unsafe { alloc(layout) }
-        };
-
-        // use crate::qlib::mem::list_allocator::HostAllocator;
-        // error!("AlllocBuf addr {:x} isIOBuf {}", addr as u64, HostAllocator ::IsIOBuf(addr as u64) );
+        let layout = Layout::from_size_align(pageCount * MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
+                                    .expect("HeapAllocator::AlllocBuf can't allocate memory");
+        let addr = unsafe { alloc(layout) };
          
         return addr as u64;
     }

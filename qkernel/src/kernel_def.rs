@@ -339,14 +339,12 @@ impl HostAllocator {
     pub const fn New() -> Self {
         return Self {
             listHeapAddr: AtomicU64::new(0),
-            ioHeapAddr: AtomicU64::new(0),
             initialized: AtomicBool::new(true),
         };
     }
 
     pub fn Init(&self, heapAddr: u64) {
         self.listHeapAddr.store(heapAddr, Ordering::SeqCst);
-        self.ioHeapAddr.store(heapAddr + MemoryDef::HEAP_SIZE, Ordering::SeqCst)
     }
 }
 
@@ -356,14 +354,7 @@ unsafe impl GlobalAlloc for HostAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        
-        let addr = ptr as u64;
-        if !Self::IsIOBuf(addr) {
-            self.Allocator().dealloc(ptr, layout);
-        } else {
-            //self.Allocator().dealloc(ptr, layout);
-            self.IOAllocator().dealloc(ptr, layout);
-        }
+        self.Allocator().dealloc(ptr, layout);
     }
 }
 

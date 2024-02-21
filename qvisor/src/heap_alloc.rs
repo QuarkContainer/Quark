@@ -54,13 +54,12 @@ impl HostAllocator {
     pub const fn New() -> Self {
         return Self {
             listHeapAddr: AtomicU64::new(MemoryDef::HEAP_OFFSET),
-            ioHeapAddr: AtomicU64::new(MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE),
             initialized: AtomicBool::new(false),
         };
     }
 
     pub fn Init(&self) {
-        let heapSize = MemoryDef::HEAP_SIZE as usize + MemoryDef::IO_HEAP_SIZE as usize;
+        let heapSize = MemoryDef::HEAP_SIZE as usize;
         let addr = unsafe {
             let mut flags = libc::MAP_SHARED | libc::MAP_ANON | libc::MAP_FIXED;
             if ENABLE_HUGEPAGE {
@@ -91,13 +90,9 @@ impl HostAllocator {
         let heapEnd = heapStart + MemoryDef::HEAP_SIZE as u64;
         *self.Allocator() = ListAllocator::New(heapStart as _, heapEnd);
 
-        let ioHeapEnd = heapStart + MemoryDef::HEAP_SIZE as u64 + MemoryDef::IO_HEAP_SIZE;
-        *self.IOAllocator() = ListAllocator::New(heapEnd as _, ioHeapEnd);
-
         // reserve first 4KB gor the listAllocator
         let size = core::mem::size_of::<ListAllocator>();
         self.Allocator().Add(MemoryDef::HEAP_OFFSET as usize + size, MemoryDef::HEAP_SIZE as usize - size);
-        self.IOAllocator().Add(MemoryDef::HEAP_END as usize + size, MemoryDef::IO_HEAP_SIZE as usize - size);
         self.initialized.store(true, Ordering::SeqCst);
     }
 
@@ -118,14 +113,7 @@ unsafe impl GlobalAlloc for HostAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        
-        let addr = ptr as u64;
-        if !Self::IsIOBuf(addr) {
-            self.Allocator().dealloc(ptr, layout);
-        } else {
-            //self.Allocator().dealloc(ptr, layout);
-            self.IOAllocator().dealloc(ptr, layout);
-        }
+        self.Allocator().dealloc(ptr, layout);
     }
 }
 
