@@ -166,7 +166,6 @@ pub fn SingletonInit() {
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentKernelTable()));
         //init fp state with current fp state as it is brand new vcpu
         FP_STATE.Reset();
-        SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
         //SHARESPACE.SetvirtualizationHandlerAddr(virtualization_handler as u64);
         IOURING.SetValue(SHARESPACE.GetIOUringAddr());
 

@@ -150,19 +150,6 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
     };
 }
 
-pub fn SignalHandler(_: *const u8) {
-    let msg = SHARESPACE.signalArgs.lock().take();
-    match msg {
-        None => (),
-        Some(msg) => {
-            HandleSignal(&msg);
-        }
-    }
-
-    CPULocal::SetPendingFreeStack(Task::Current().taskId);
-    super::super::taskMgr::SwitchToNewTask();
-}
-
 pub fn ControlMsgHandler(fd: *const u8) {
     let fd = fd as i32;
 

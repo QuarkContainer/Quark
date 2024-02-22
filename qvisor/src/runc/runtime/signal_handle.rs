@@ -20,10 +20,9 @@ use nix::sys::signal;
 
 use super::super::super::qlib::backtracer;
 use super::super::super::qlib::common::*;
-use super::super::super::qlib::control_msg::*;
 use super::super::super::qlib::kernel::SignalDef::*;
 use super::super::super::ROOT_CONTAINER_ID;
-use super::super::super::VMS;
+use crate::runc::sandbox::sandbox::SignalProcess;
 
 lazy_static! {
     static ref SIGNAL_HANDLE_ENABLE: AtomicBool = AtomicBool::new(false);
@@ -109,18 +108,7 @@ extern "C" fn handle_sigintAct(
             panic!("get signal 11");
         }
 
-        let signal = SignalArgs {
-            Signo: signal,
-            CID: ROOT_CONTAINER_ID.lock().clone(),
-            PID: 0,
-            Mode: if console {
-                SignalDeliveryMode::DeliverToForegroundProcessGroup
-            } else {
-                SignalDeliveryMode::DeliverToProcess
-            },
-        };
-
-        VMS.lock().Signal(signal);
+        SignalProcess(&ROOT_CONTAINER_ID.lock().clone(), 0, signal, console);
     }
 }
 

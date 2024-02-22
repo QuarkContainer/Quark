@@ -21,7 +21,6 @@ use crate::qlib::rdma_svc_cli::RDMASvcClient;
 
 use super::super::kernel_def::VcpuFreq;
 use super::super::ShareSpaceRef;
-use super::control_msg::*;
 use super::pagetable::*;
 use super::singleton::*;
 
@@ -30,7 +29,6 @@ use self::boot::loader::*;
 use self::kernel::async_process::*;
 use self::memmgr::pma::*;
 use self::quring::*;
-use self::taskMgr::*;
 
 pub mod Kernel;
 pub mod SignalDef;
@@ -180,7 +178,3 @@ impl Tsc {
     }
 }
 
-pub fn SignalProcess(signalArgs: &SignalArgs) {
-    *SHARESPACE.signalArgs.lock() = Some(signalArgs.clone());
-    CreateTask(SHARESPACE.SignalHandlerAddr(), 0 as *const u8, true);
-}
