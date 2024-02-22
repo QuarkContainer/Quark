@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::GUEST_KERNEL;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
@@ -45,7 +46,6 @@ use super::super::threadmgr::thread_group::*;
 use super::super::threadmgr::threads::*;
 use super::super::uid::NewUID;
 use super::super::SignalDef::*;
-use super::super::SHARESPACE;
 use super::cpuset::*;
 use super::fd_table::*;
 use super::ipc_namespace::*;
@@ -65,12 +65,12 @@ static CLOCK_TICK_MS: i64 = CLOCK_TICK / MILLISECOND;
 
 #[inline]
 pub fn GetKernel() -> Kernel {
-    return SHARESPACE.kernel.lock().clone().unwrap();
+    return GUEST_KERNEL.lock().clone().unwrap();
 }
 
 #[inline]
 pub fn GetKernelOption() -> Option<Kernel> {
-    return SHARESPACE.kernel.lock().clone();
+    return GUEST_KERNEL.lock().clone();
 }
 
 #[derive(Default)]

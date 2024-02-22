@@ -211,6 +211,8 @@ impl VirtualMachine {
             KERNEL_PAGETABLE.SetRoot(VMS.lock().pageTables.GetRoot());
             PAGE_MGR.SetValue(sharespace.GetPageMgrAddr());
 
+            // used for created new task from host
+            // see Create(runFnAddr: u64, para: *const u8, kernel: bool) -> &'static mut Self {
             KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
                 MemoryDef::DEFAULT_STACK_SIZE as usize,
                 MemoryDef::DEFAULT_STACK_SIZE as usize,
@@ -350,7 +352,7 @@ impl VirtualMachine {
         {
             let vms = &mut VMS.lock();
             vms.controlSock = controlSock;
-            PMA_KEEPER.InitHugePages();
+            PMA_KEEPER.InitHugePages(); 
 
             vms.hostAddrTop =
                 MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;

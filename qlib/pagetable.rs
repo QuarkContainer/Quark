@@ -1130,9 +1130,6 @@ impl PageTables {
     ) -> Result<()> {
         let end = start + len;
 
-        //self.Unmap(MemoryDef::PAGE_SIZE, MemoryDef::PHY_LOWER_ADDR, &*PAGE_MGR)?;
-        //self.Unmap(MemoryDef::PHY_UPPER_ADDR, MemoryDef::LOWER_TOP, &*PAGE_MGR)?;
-
         self.Traverse(
             Addr(MemoryDef::PAGE_SIZE),
             Addr(MemoryDef::PHY_LOWER_ADDR),

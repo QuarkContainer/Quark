@@ -42,7 +42,7 @@ use super::super::task::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::thread_group::*;
 use super::super::SignalDef::*;
-use super::super::SHARESPACE;
+use crate::GUEST_KERNEL;
 use super::fs::*;
 
 impl Process {
@@ -127,7 +127,7 @@ impl Loader {
         };
 
         let kernel = Kernel::Init(kernelArgs);
-        *SHARESPACE.kernel.lock() = Some(kernel.clone());
+        *GUEST_KERNEL.lock() = Some(kernel.clone());
         let task = Task::Current();
         self.Lock(task)?.kernel = kernel;
         Ok(())
@@ -487,7 +487,7 @@ impl LoaderInternal {
         };
 
         let kernel = Kernel::Init(kernelArgs);
-        *SHARESPACE.kernel.lock() = Some(kernel.clone());
+        *GUEST_KERNEL.lock() = Some(kernel.clone());
 
         let rootMounts =
             InitRootFs(Task::Current(), &process.Root).expect("in loader::New, InitRootfs fail");

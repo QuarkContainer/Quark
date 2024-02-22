@@ -142,6 +142,7 @@ pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
+    pub static ref GUEST_KERNEL: Mutex<Option<kernel::kernel::Kernel>> = Mutex::new(None);
 }
 
 //static ALLOCATOR: QAllocator = QAllocator::New();

@@ -103,6 +103,7 @@ use self::vmspace::hostfdnotifier::*;
 use self::vmspace::kernel_io_thread::*;
 use crate::qlib::linux_def::MemoryDef;
 //use crate::qlib::mem::bitmap_allocator::BitmapAllocatorWrapper;
+use self::qlib::kernel::kernel::kernel::Kernel;
 
 use self::vmspace::uringMgr::*;
 use crate::kvm_vcpu::KVMVcpu;
@@ -137,6 +138,7 @@ pub fn LocalVcpu() -> Option<Arc<KVMVcpu>> {
 }
 
 lazy_static! {
+
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
     pub static ref SHARE_SPACE_STRUCT: Arc<Mutex<ShareSpace>> =
         Arc::new(Mutex::new(ShareSpace::New()));
@@ -163,6 +165,8 @@ lazy_static! {
     pub static ref SANDBOX: Mutex<Sandbox> = Mutex::new(Sandbox::default());
 
     pub static ref URING: Mutex::<io_uring::IoUring> = Mutex::new(io_uring::IoUring::new(MemoryDef::QURING_SIZE as u32).expect("setup io_Uring fail"));
+    // used for keep consistancy
+    pub static ref GUEST_KERNEL: Mutex<Option<Kernel>> = Mutex::new(None);
 }
 
 pub const LOG_FILE: &'static str = "/var/log/quark/quark.log";
