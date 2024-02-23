@@ -25,6 +25,7 @@ use crate::qlib::proxy::*;
 use crate::qlib::range::Range;
 use crate::xpu::cuda::*;
 
+
 use cuda_driver_sys::*;
 use cuda_runtime_sys::{cudaDeviceP2PAttr, cudaStreamCaptureStatus, cudaStream_t};  
 use cuda_runtime_sys::{cudaDeviceProp, cudaDeviceAttr,cudaFuncCache,cudaLimit};
@@ -41,6 +42,7 @@ lazy_static! {
         (ProxyCommand::CudaDeviceGetCacheConfig,(XpuLibrary::CudaRuntime, "cudaDeviceGetCacheConfig")),
         (ProxyCommand::CudaDeviceGetLimit,(XpuLibrary::CudaRuntime, "cudaDeviceGetLimit")),
         (ProxyCommand::CudaDeviceGetP2PAttribute,(XpuLibrary::CudaRuntime, "cudaDeviceGetP2PAttribute")),
+        (ProxyCommand::CudaDeviceGetPCIBusId, (XpuLibrary::CudaRuntime, "cudaDeviceGetPCIBusId")),
         (ProxyCommand::CudaSetDevice,(XpuLibrary::CudaRuntime, "cudaSetDevice")),
         (ProxyCommand::CudaSetDeviceFlags,(XpuLibrary::CudaRuntime, "cudaSetDeviceFlags")),
         (ProxyCommand::CudaDeviceSynchronize,(XpuLibrary::CudaRuntime, "cudaDeviceSynchronize")),
@@ -229,22 +231,28 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
  
             let func: extern "C" fn(*mut ::std::os::raw::c_char, ::std::os::raw::c_int, ::std::os::raw::c_int,) -> i32 = 
             unsafe { std::mem::transmute(handler)};
-
             
-            let mut pciBusId: Vec<u8> = vec![0; parameters.para2 as usize];
-
+            let  mut pciBusId: Vec<c_char> = vec![0; parameters.para2 as usize];
+           
             // Convert the Rust string to a C string
-            let mut c_str = CString::new(pciBusId.clone()).expect("Failed to create CString");
+            // let mut c_str = CString::new(pciBusId.clone()).expect("Failed to create CString");
             // Access the raw pointer to the C string
-            let c_str_ptr = c_str.as_ptr() as *mut c_char;
+            // let c_str_ptr = c_str.as_ptr() as *mut c_char;
+            // let c_str_ptr = c_str.into_raw();
 
-            let ret = func(c_str_ptr, parameters.para2 as ::std::os::raw::c_int, parameters.para3 as ::std::os::raw::c_int);
+            let ret = func(pciBusId.as_mut_ptr(), parameters.para2 as ::std::os::raw::c_int, parameters.para3 as ::std::os::raw::c_int);
 
-            let modifiedPciBusId = c_str.to_string_lossy().into_owned();
+            // let modifiedPciBusId = c_str.to_string_lossy().into_owned();
+            // let modifiedPciBusId = unsafe { CString::from_raw(c_str_ptr) }
+            // .into_string()
+            // .expect("Failed to convert CString to String");
+            // let PCIBusId = std::str::from_utf8(pciBusId).unwrap();
 
-            error!("yiwang PciBusId after C function call: {}", modifiedPciBusId);
+            error!("yiwang PciBusId after C function call: {:#?}", pciBusId);
 
             error!("yiwang CudaDeviceGetPCIBusId result is: {:?}, {}", ret,ret);
+
+            unsafe{ *(parameters.para1 as *mut _) = &pciBusId[0]}
 
 
             return Ok(ret as i64);

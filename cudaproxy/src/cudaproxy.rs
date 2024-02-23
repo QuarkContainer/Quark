@@ -131,7 +131,7 @@ pub extern "C" fn cudaDeviceGetPCIBusId(pciBusId: *mut c_char, len: c_int, devic
     println!("Hijacked cudaDeviceGetPCIBusId(device: {})",device);
 
     let ret = unsafe {
-        syscall4(SYS_PROXY, ProxyCommand::CudaDeviceGetPCIBusId , pciBusId as *const _ as usize , len as usize,  device as usize)
+        syscall4(SYS_PROXY, ProxyCommand::CudaDeviceGetPCIBusId as usize, pciBusId as *const _ as usize , len as usize,  device as usize)
     };
     return ret; 
 }

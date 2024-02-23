@@ -105,6 +105,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let mut device: i32 = 0;
 
             parameters.para1 = &mut device as *mut _ as u64;
+            
 
             let PCIBusId = CString::ToString(task, parameters.para2)?;
             // address 
@@ -190,20 +191,23 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
         }
         ProxyCommand::CudaDeviceGetPCIBusId => {
-            let mut pciBusId:i8 = 0;
-            parameters.para1 = &mut pciBusId as * mut _ as u64;
+            let mut pciBusIdAddress:u64 = 0;
+            parameters.para1 = &mut pciBusIdAddress as * mut _ as u64;
 
-            error!("SysProxy CudaDeviceGetPCIBusId, query about device:{}", parameters.para3);
+            error!("yiwang SysProxy CudaDeviceGetPCIBusId, query about device:{}", parameters.para3);
 
             let ret = HostSpace::Proxy(
                 cmd,
                 parameters,
             );
 
-            error!("the pciBusId value should change: {}", pciBusId);
-            if ret == 0 {
-                task.CopyOutObj(&pciBusId, args.arg1 as u64)?;
-            }
+            error!("yiwang the pciBusIdAddress value should change: {}", pciBusIdAddress);
+
+        
+            
+        
+
+    
             return Ok(ret);
         }
         ProxyCommand::CudaSetDevice |
