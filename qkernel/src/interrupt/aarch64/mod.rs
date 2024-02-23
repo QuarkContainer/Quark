@@ -22,6 +22,7 @@ use crate::qlib::kernel::task;
 use crate::qlib::kernel::threadmgr::task_sched::SchedState;
 use crate::qlib::kernel::SignalDef::PtRegs;
 use crate::qlib::vcpu_mgr::*;
+use crate::kernel_def;
 use self::fault::{PageFaultHandler, PageFaultErrorCode};
 
 pub unsafe fn InitSingleton() {
