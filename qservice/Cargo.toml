@@ -34,6 +34,7 @@ scopeguard = { version = "^1.1.0", default-features = false }
 errno = "0.2.4"
 nix = "0.23.1"
 futures = "0.3"
+dns-lookup = "2.0.4"
 
 [dependencies.lazy_static]
 version = "1.0"

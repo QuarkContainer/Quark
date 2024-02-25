@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use alloc::slice;
+use alloc::string::ToString;
 
 use crate::qlib::socket_buf::SocketBuff;
 
@@ -479,6 +480,18 @@ impl Error {
         }
 
         panic!("MapRes get res {}", res);
+    }
+}
+
+impl From<String> for Error {
+    fn from(item: String) -> Self {
+        return Self::Common(item)
+    }
+}
+
+impl From<&str> for Error {
+    fn from(item: &str) -> Self {
+        return Self::Common(item.to_string())
     }
 }
 

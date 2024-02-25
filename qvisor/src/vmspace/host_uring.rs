@@ -608,6 +608,37 @@ impl UringAsyncOpsTrait for TsotPoll {
     }
 }
 
+impl UringAsyncOpsTrait for DNSRecv {
+    fn Entry(&self) -> squeue::Entry {
+        let op = opcode::RecvMsg::new(
+            types::Fd(self.fd), 
+            self.msgAddr as * mut _
+        );
+
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
+    }
+}
+
+impl UringAsyncOpsTrait for DNSSend {
+    fn Entry(&self) -> squeue::Entry {
+        let intern = self.lock();
+        let op = opcode::SendMsg::new(
+            types::Fd(intern.fd), 
+            &intern.msg as *const _ as *const _
+        );
+
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
+    }
+}
+
 impl UringAsyncOpsTrait for PollHostEpollWait {
     fn Entry(&self) -> squeue::Entry {
         let op = opcode::PollAdd::new(types::Fd(self.fd), EVENT_READ as u32);

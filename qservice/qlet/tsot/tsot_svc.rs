@@ -30,6 +30,7 @@ use super::tsot_msg::TsotMessage;
 
 use crate::pod_mgr::NAMESPACE_MGR;
 use crate::tsot::conn_svc::ConnectionSvc;
+use crate::tsot::dns_proxy::DNS_PROXY;
 use crate::tsot::tsot_msg::TSOT_SOCKET_PATH;
 use crate::QLET_CONFIG;
 
@@ -180,10 +181,13 @@ pub async fn TsotSvc() -> Result<()>{
         connectionSvc.Process().await.unwrap();
     });
 
+    let dnsProxyFuture = DNS_PROXY.Process();
+
     tokio::select! {
         _ = tsotSvcFuture => {},
         _ = tostCniSvcFuture => {},
-        _ = connectionSvcFuture => {}
+        _ = connectionSvcFuture => {},
+        _ = dnsProxyFuture => {}
     }
     info!("Tsot service finish ...");
     return Ok(())

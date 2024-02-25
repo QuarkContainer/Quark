@@ -98,7 +98,6 @@ async fn main() -> Result<()> {
         let _id1 = informer.AddEventHandler(NODE_MGR.clone()).await.unwrap();
         let notify = Arc::new(Notify::new());
         tokio::spawn(async move {
-            
             // todo: handle statesvc crash
             informer.Process(notify).await.ok();
         });

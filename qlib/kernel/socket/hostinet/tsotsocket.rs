@@ -14,6 +14,7 @@
 
 use crate::qlib::kernel::socket::epsocket::epsocket::SIZEOF_I32;
 use crate::qlib::kernel::socket::hostinet::tsot_mgr::QIPv4Addr;
+use crate::qlib::kernel::socket::unix::transport::unix::SockType;
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
@@ -223,6 +224,10 @@ impl TsotSocketOperations {
         return TsotSocketOperationsWeak(Arc::downgrade(&self.0));
     }
 
+    pub fn IsUdp(&self) -> bool {
+        return self.stype == SockType::SOCK_DGRAM;
+    }
+
     pub fn RemoteAddr(&self) -> Result<QIPv4Endpoint> {
         match *self.remoteAddr.lock() {
             None => return Err(Error::SysError(SysErr::EINVAL)),
@@ -230,7 +235,7 @@ impl TsotSocketOperations {
         }
     }
 
-    pub fn SetREmoteAddr(&self, addr: QIPv4Endpoint) {
+    pub fn SetRemoteAddr(&self, addr: QIPv4Endpoint) {
         *self.remoteAddr.lock() = Some(addr);
     }
 
@@ -910,6 +915,7 @@ impl SockOperations for TsotSocketOperations {
     }
 
     fn Bind(&self, _task: &Task, sockaddr: &[u8]) -> Result<i64> {
+        error!("bind 1...");
         let socketaddr = sockaddr;
 
         let addr = unsafe { &*(&socketaddr[0] as *const _ as u64 as *const SockAddrInet) };
@@ -953,6 +959,7 @@ impl SockOperations for TsotSocketOperations {
     fn Listen(&self, _task: &Task, backlog: i32) -> Result<i64> {
         let backlog = if backlog <= 0 { 5 } else { backlog as u32};
 
+        error!("tsot listen 1");
         let socketBuf = self.socketType.lock().clone();
         let mut qs = Vec::new();
         let acceptQueues = match socketBuf {
@@ -960,15 +967,19 @@ impl SockOperations for TsotSocketOperations {
                 let ip :QIPv4Addr = self.bindIp.load(Ordering::Relaxed).into();
                 let port = self.bindPort.load(Ordering::Relaxed);
                 let q = if ip.IsLoopback() {
+                    error!("tsot listen 2");
                     SHARESPACE.tsotSocketMgr.Listen(ip, self.fd, port, backlog, &self.queue)?
                 } else if ip.IsAny() {
+                    error!("tsot listen 3");
                     let localIp = SHARESPACE.tsotSocketMgr.LocalIpAddr();
                     let q = SHARESPACE.tsotSocketMgr.Listen(QIPv4Addr::Loopback(), self.fd, port, backlog, &self.queue)?;
                     qs.push(q);
                     SHARESPACE.tsotSocketMgr.Listen(localIp, self.fd, port, backlog, &self.queue)?
                 } else {
+                    error!("tsot listen 4");
                     SHARESPACE.tsotSocketMgr.Listen(ip, self.fd, port, backlog, &self.queue)?
                 };
+                error!("tsot listen 5");
                 qs.push(q);
                 qs
             }

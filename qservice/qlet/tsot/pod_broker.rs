@@ -36,6 +36,8 @@ use crate::pod_mgr::NAMESPACE_MGR;
 use crate::tsot::tsot_msg::*;
 
 use super::conn_svc::TcpClientConnection;
+use super::dns_proxy::DnsProxyReq;
+use super::dns_proxy::DNS_PROXY;
 use super::pod_broker_mgr::POD_BRORKER_MGRS;
 
 pub const BUFF_SIZE: usize = std::mem::size_of::<TsotMsg>();
@@ -45,6 +47,21 @@ pub struct PodIdentity {
     pub podUid: String,
     pub namespace: String,
     pub podIp: u32,
+}
+
+impl DnsReq {
+    pub fn GetDomains(&self) -> Vec<String> {
+        let namesStr = unsafe {
+            String::from_utf8_unchecked(self.names[0..self.nameslen as usize].to_vec())
+        };
+
+        let names : Vec<&str> = namesStr.split(":").collect();
+        let mut domains = Vec::new();
+        for name in names {
+            domains.push(name.to_owned());
+        }
+        return domains;
+    }
 }
 
 #[derive(Debug)]
@@ -443,6 +460,16 @@ impl PodBroker {
 
         return Ok(())
     }
+
+    pub fn ProcessDnsReq(&self, req: DnsReq) -> Result<()> {
+        let dnsProxyReq = DnsProxyReq {
+            reqId: req.reqId,
+            podBroker: self.clone(),
+            domains: req.GetDomains(),
+        };
+        DNS_PROXY.EnqMsg(dnsProxyReq);
+        return Ok(())
+    }
     
     pub fn ProcessMsg(&self, msg: TsotMsg, socket: Option<RawFd>) -> Result<()> {
         match msg {
@@ -466,6 +493,9 @@ impl PodBroker {
                     return Err(Error::CommonError(format!("ConnectReq has no socket")));
                 }
                 self.ProcessConnectReq(m, socket.unwrap())?;
+            }
+            TsotMsg::DnsReq(m) => {
+                self.ProcessDnsReq(m)?;
             }
             m => {
                 error!("ProcessMsg get unimplement msg {:?}", &m);

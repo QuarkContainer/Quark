@@ -18,4 +18,5 @@ pub mod tsot_msg;
 pub mod pod_broker;
 pub mod conn_svc;
 pub mod pod_broker_mgr;
+pub mod dns_proxy;
 mod tsot_agent;

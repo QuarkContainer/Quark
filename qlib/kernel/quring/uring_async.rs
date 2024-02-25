@@ -16,6 +16,7 @@ use crate::qlib::mutex::*;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use spin::Mutex;
 use core::marker::Send;
 use core::ops::Deref;
 use core::sync::atomic::Ordering;
@@ -42,6 +43,7 @@ use super::super::IOURING;
 use super::super::SHARESPACE;
 use super::uring_op::UringCall;
 use crate::qlib::kernel::kernel::kernel::GetKernel;
+use crate::qlib::kernel::tcpip::tcpip::SockAddrInet;
 
 pub enum UringOps {
     UringCall(UringCall),
@@ -90,6 +92,8 @@ pub enum AsyncOps {
     PollHostEpollWait(PollHostEpollWait),
     AsyncConnect(AsyncConnect),
     TsotPoll(TsotPoll),
+    DNSRecv(DNSRecv),
+    DNSSend(DNSSend),
     None(AsyncNone),
 }
 
@@ -131,6 +135,8 @@ impl AsyncOps {
             AsyncOps::PollHostEpollWait(_) => return 23,
             AsyncOps::AsyncConnect(_) => return 24,
             AsyncOps::TsotPoll(_) => return 25,
+            AsyncOps::DNSRecv(_) => return 26,
+            AsyncOps::DNSSend(_) => return 27,
             AsyncOps::None(_) => (),
         };
 
@@ -1400,6 +1406,93 @@ impl AsyncOpsTrait for TsotPoll {
 impl TsotPoll {
     pub fn New(fd: i32) -> Self {
         return Self { fd };
+    }
+}
+
+#[derive(Clone)]
+pub struct DNSRecv {
+    pub fd: i32,
+    pub msgAddr: u64,
+}
+
+impl AsyncOpsTrait for DNSRecv {
+    fn Process(&mut self, result: i32) -> bool {
+        if result < 0 {
+            error!("DNSRecv::Process result {}", result);
+        }
+
+        SHARESPACE.dnsSvc.ProcessDnsReq(result).unwrap();
+        return true;
+    }
+}
+
+
+impl DNSRecv {
+    pub fn New(fd: i32, msgAddr: u64) -> Self {
+        return Self { 
+            fd: fd,
+            msgAddr: msgAddr
+        };
+    }
+}
+
+#[derive(Debug)]
+pub struct DNSSendInner {
+    pub fd: i32,
+    pub buf: DataBuff,
+    pub iov: IoVec,
+    pub peerAddr: SockAddrInet,
+    pub msg: MsgHdr,
+}
+
+#[derive(Debug, Clone)]
+pub struct DNSSend(Arc<Mutex<DNSSendInner>>);
+
+impl Deref for DNSSend {
+    type Target = Arc<Mutex<DNSSendInner>>;
+
+    fn deref(&self) -> &Arc<Mutex<DNSSendInner>> {
+        &self.0
+    }
+}
+
+impl AsyncOpsTrait for DNSSend {
+    fn Process(&mut self, result: i32) -> bool {
+        if result < 0 {
+            error!("DNSSend::Process result {}", result);
+        }
+
+        return false;
+    }
+}
+
+impl DNSSend {
+    pub fn New(fd: i32, buf: DataBuff, peerAddr: SockAddrInet) -> Self {
+        let iov = IoVec {
+            start: &buf.buf[0] as * const _ as u64,
+            len: buf.buf.len(),
+        };
+        let inner = DNSSendInner { 
+            fd: fd,
+            buf: buf,
+            iov: iov,
+            peerAddr: peerAddr,
+            msg: MsgHdr::default()
+        };
+
+        let send = Self(Arc::new(Mutex::new(inner)));
+
+        {
+            let mut lock = send.lock();
+            let mut msg = MsgHdr::default();
+            msg.msgName = &lock.peerAddr as * const _ as u64;
+            msg.nameLen = lock.peerAddr.Len() as u32;
+            msg.iov = &lock.iov as * const _ as u64;
+            msg.iovLen  = 1;
+            lock.msg = msg;
+        }
+
+        return send
     }
 }
 

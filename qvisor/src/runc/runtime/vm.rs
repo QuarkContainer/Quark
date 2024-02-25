@@ -224,6 +224,7 @@ impl VirtualMachine {
         if SHARESPACE.config.read().EnableTsot {
             // initialize the tost_agent
             TSOT_AGENT.NextReqId();
+            SHARESPACE.dnsSvc.Init().unwrap();
         };
 
         let syncPrint = sharespace.config.read().SyncPrint();
@@ -277,8 +278,6 @@ impl VirtualMachine {
         VMS.lock().RandomVcpuMapping();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
         let controlSock = args.ControlSock;
-
-        error!("controlSock is {}", args.ControlSock);
 
         let rdmaSvcCliSock = args.RDMASvcCliSock;
 
