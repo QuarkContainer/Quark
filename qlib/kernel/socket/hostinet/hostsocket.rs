@@ -22,7 +22,6 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 
-//use super::super::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux::time::Timeval;
 use super::super::super::super::linux_def::*;

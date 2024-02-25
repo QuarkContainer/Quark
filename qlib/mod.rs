@@ -90,6 +90,7 @@ pub mod tsot_msg;
 #[cfg(target_arch = "aarch64")]
 mod pagetable_aarch64;
 
+use self::kernel::dns::dns_svc::DnsSvc;
 use self::mutex::*;
 use alloc::vec::Vec;
 use cache_padded::CachePadded;
@@ -1211,6 +1212,7 @@ pub struct ShareSpace {
     pub hostEpollfd: AtomicI32,
 
     pub tsotSocketMgr: TsotSocketMgr,
+    pub dnsSvc: DnsSvc,
     pub uringQueue: UringQueue,
 
     pub values: Vec<[AtomicU64; 2]>,
@@ -1220,6 +1222,7 @@ impl ShareSpace {
     pub fn New() -> Self {
         let ret = ShareSpace {
             ioUring: CachePadded::new(QUring::New(MemoryDef::QURING_SIZE)),
+            dnsSvc: DnsSvc::New().unwrap(),
             ioMgr: CachePadded::new(IOMgr::Init().unwrap()),
             tsotSocketMgr: TsotSocketMgr::default(),
             ..Default::default()
@@ -1364,6 +1367,10 @@ impl ShareSpace {
     pub fn DecrVcpuSearching(&self) -> u64 {
         let ret = self.VcpuSearchingCnt.fetch_sub(1, Ordering::SeqCst);
         return ret - 1;
+    }
+
+    pub fn VcpuSearchingCount(&self) -> u64 {
+        return self.VcpuSearchingCnt.load(Ordering::SeqCst);
     }
 
     #[inline]

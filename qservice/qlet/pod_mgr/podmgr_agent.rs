@@ -338,6 +338,7 @@ impl PmAgent {
 
             podAgent.Start()?;
             let qpod = podAgent.pod.clone();
+            qpod.Pod().write().unwrap().ipAddr = addr.0;
             NODEAGENT_STORE.CreatePod(&qpod)?;
             QLET_STORE.get().unwrap().CreatePod(&qpod)?;
             podAgent.Send(NodeAgentMsg::PodCreate( PodCreate {

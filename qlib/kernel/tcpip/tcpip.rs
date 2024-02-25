@@ -355,6 +355,18 @@ impl SockAddr {
     }
 }
 
+pub fn RevertU16(data: u16) -> u16 {
+    return ((data & 0xff) << 8) | (data >> 8);
+}
+
+pub fn ToIpv4(ip: u32) -> [u8; 4] {
+    let a1 = (ip >> 24) as u8;
+    let a2 = (ip >> 16) as u8;
+    let a3 = (ip >> 8) as u8;
+    let a4 = (ip >> 0) as u8;
+    return [a1, a2, a3, a4]
+}
+
 // SockAddrInet is struct sockaddr_in, from uapi/linux/in.h.
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
@@ -381,11 +393,20 @@ impl SockAddrInet {
     }
 
     pub fn Ipv4Port(&self) -> u16 {
-        let mut bytes = [0; 2];
-        bytes[0] = (self.Port >> 8) as u8;
-        bytes[1] = self.Port as u8;
-        return unsafe {
-            *(&bytes[0] as * const _ as u64 as * const u16)
+        return RevertU16(self.Port)
+    }
+
+    pub fn Ipv4Family(&self) -> u16 {
+        return RevertU16(self.Family);
+    }
+
+    pub fn New(port: u16, ip: &[u8; 4]) -> Self {
+        let family = AFType::AF_INET as u16;
+        return Self {
+            Family: family, 
+            Port: RevertU16(port),
+            Addr: ip.clone(),
+            Zero: [0; 8]
         }
     }
 }

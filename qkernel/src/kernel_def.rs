@@ -23,7 +23,7 @@ use crate::qlib::fileinfo::*;
 
 use self::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
 use self::tsot_msg::TsotMessage;
-
+use self::kernel::dns::dns_svc::DnsSvc;
 use super::qlib::kernel::asm::*;
 use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 use super::qlib::kernel::taskMgr::*;
@@ -441,7 +441,7 @@ pub fn ReapSwapIn() {
 
 
 impl TsotSocketMgr {
-    pub fn SendMsg(&self, m: &TsotMessage) -> Result<()> {
+    pub fn SendMsg(m: &TsotMessage) -> Result<()> {
         let res = HostSpace::TsotSendMsg(m as * const _ as u64);
         if res == 0 {
             return Ok(())
@@ -450,7 +450,7 @@ impl TsotSocketMgr {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    pub fn RecvMsg(&self) -> Result<TsotMessage> {
+    pub fn RecvMsg() -> Result<TsotMessage> {
         let mut m = TsotMessage::default();
         let res = HostSpace::TsotRecvMsg(&mut m as * mut _ as u64);
         if res == 0 {
@@ -458,5 +458,11 @@ impl TsotSocketMgr {
         }
 
         return Err(Error::SysError(SysErr::EINVAL));
+    }
+}
+
+impl DnsSvc {
+    pub fn Init(&self) -> Result<()> {
+        panic!("impossible");
     }
 }

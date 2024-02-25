@@ -267,6 +267,7 @@ pub struct PodDef {
     pub termination_grace_period_seconds: Option<i32>,
     pub runtime_class_name: Option<String>,
     pub security_context: Option<k8s::PodSecurityContext>,
+    pub ipAddr: u32,
     
     pub status: PodStatus,
 }

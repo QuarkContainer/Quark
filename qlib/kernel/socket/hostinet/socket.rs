@@ -346,11 +346,6 @@ impl SocketOperations {
     pub fn PostConnect(&self, _task: &Task) {
         let socketBuf;
         if self.tcpRDMA {
-            // error!(
-            //     "PostConnect 1, fd: {}, socketBuf: {:?}",
-            //     self.fd,
-            //     self.socketBuf.lock().clone()
-            // );
             socketBuf = self.socketBuf.lock().clone();
         } else {
             socketBuf = self.SocketBufType().Connect();
@@ -579,24 +574,6 @@ impl Waitable for SocketOperations {
 
         let fd = self.fd;
         return NonBlockingPoll(fd, mask);
-
-        /*let mv = MultiWait::New(task.GetTaskIdQ());
-        error!("Readiness 1");
-        let future = self.AsyncReadiness(task, mask, &mv);
-        error!("Readiness 2");
-        mv.Wait();
-        error!("Readiness 3");
-        match future.Wait() {
-            Ok(ret) => {
-                error!("Readiness 4");
-
-                return ret
-            },
-            Err(_) => {
-                error!("Readiness 5");
-                return 0
-            },
-        }*/
     }
 
     fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
@@ -971,8 +948,6 @@ impl SockOperations for SocketOperations {
             let sockAddr = GetAddr(sockaddr[0] as i16, &sockaddr[0..sockaddr.len()])?;
             match sockAddr {
                 SockAddr::Inet(ipv4) => {
-                    // GlobalRDMASvcCli().timestamp.lock().push(TSC.Rdtsc()); //2 (2)
-                    // error!("SocketOperations::Connect 0, fd: {}", self.fd);
                     let ipAddr = u32::from_be_bytes(ipv4.Addr);
                     let port = ipv4.Port.to_le();
 
@@ -1048,7 +1023,6 @@ impl SockOperations for SocketOperations {
             if self.Readiness(task, WRITEABLE_EVENT) == 0 {
                 match task.blocker.BlockWithMonoTimer(true, None) {
                     Err(Error::ErrInterrupted) => {
-                        // error!("qq, Connect ERESTARTSYS");
                         return Err(Error::SysError(SysErr::EINTR));
                     }
                     Err(e) => {
@@ -1210,7 +1184,6 @@ impl SockOperations for SocketOperations {
             socketaddr.len() as u32,
             task.Umask(),
         );
-        error!("bind result, res: {}", res);
         if res < 0 {
             return Err(Error::SysError(-res as i32));
         }
@@ -2441,57 +2414,45 @@ impl Provider for SocketProvider {
         let nonblocking = stype & SocketFlags::SOCK_NONBLOCK != 0;
         let stype = stype & SocketType::SOCK_TYPE_MASK;
 
-        // let fd = if SHARESPACE.config.read().EnableTsot {
-        //     if self.family == AFType::AF_INET && stype == SockType::SOCK_STREAM {
-        //         let general = task.blocker.generalEntry.clone();
-        //         SHARESPACE.tsotSocketMgr.CreateSocket()?;
+        let fd = if SHARESPACE.config.read().EnableTsot && stype == SockType::SOCK_STREAM {
+            if self.family == AFType::AF_INET && stype == SockType::SOCK_STREAM {
+                let general = task.blocker.generalEntry.clone();
+                SHARESPACE.tsotSocketMgr.CreateSocket()?;
                 
-        //         SHARESPACE.tsotSocketMgr.EventRegister(task, &general, EVENT_IN);
-        //         defer!(SHARESPACE.tsotSocketMgr.EventUnregister(task, &general));
-        //         let fd;
-        //         error!("SocketProvider 1 {:?}", CPULocal::Myself().State()); 
-        //         loop {
-        //             match SHARESPACE.tsotSocketMgr.GetSocket() {
-        //                 None => {
-        //                     error!("SocketProvider 2 {:?}", CPULocal::Myself().State()); 
-        //                     match task.blocker.BlockWithMonoTimer(true, None) {
-        //                         Err(e) => {
-        //                             return Err(e);
-        //                         }
-        //                         _ => (),
-        //                     }
-        //                 },
-        //                 Some(socket) => {
-        //                     error!("SocketProvider 3"); 
-        //                     fd = socket;
-        //                     break;
-        //                 }
-        //             }
-        //         }
+                SHARESPACE.tsotSocketMgr.EventRegister(task, &general, EVENT_IN);
+                defer!(SHARESPACE.tsotSocketMgr.EventUnregister(task, &general));
+                let fd;
+                loop {
+                    match SHARESPACE.tsotSocketMgr.GetSocket() {
+                        None => {
+                            match task.blocker.BlockWithMonoTimer(true, None) {
+                                Err(e) => {
+                                    return Err(e);
+                                }
+                                _ => (),
+                            }
+                        },
+                        Some(socket) => {
+                            fd = socket;
+                            break;
+                        }
+                    }
+                }
 
-        //         error!("SocketProvider 4 fd is {}", fd);
+                fd
+            } else {
+                // tsot only support IPv4 tcp
+                return Err(Error::SysError(SysErr::ESOCKTNOSUPPORT));
+            }
+        } else {
+            let res = Kernel::HostSpace::Socket(self.family, stype | SocketFlags::SOCK_CLOEXEC, protocol);
+            if res < 0 {
+                return Err(Error::SysError(-res as i32));
+            }
 
-        //         fd
-        //     } else {
-        //         // tsot only support IPv4 tcp
-        //         return Err(Error::SysError(SysErr::ESOCKTNOSUPPORT));
-        //     }
-        // } else {
-        //     let res = Kernel::HostSpace::Socket(self.family, stype | SocketFlags::SOCK_CLOEXEC, protocol);
-        //     if res < 0 {
-        //         return Err(Error::SysError(-res as i32));
-        //     }
-
-        //     let fd = res as i32;
-        //     fd
-        // };
-
-        let res = Kernel::HostSpace::Socket(self.family, stype | SocketFlags::SOCK_CLOEXEC, protocol);
-        if res < 0 {
-            return Err(Error::SysError(-res as i32));
-        }
-
-        let fd = res as i32;
+            let fd = res as i32;
+            fd
+        };
 
         let file;
         let tcpRDMA = SHARESPACE.config.read().EnableRDMA
@@ -2503,8 +2464,14 @@ impl Provider for SocketProvider {
             // && self.family == AFType::AF_INET
             && (stype == SockType::SOCK_DGRAM);
 
-        if SHARESPACE.config.read().EnableTsot {
+        // // tsot only support TCP
+        if SHARESPACE.config.read().EnableTsot && stype == SockType::SOCK_STREAM {
             let socketType = TsotSocketType::Init;
+            // if stype != SockType::SOCK_STREAM && stype != SockType::SOCK_DGRAM {
+            //     // tsot only support TCP/UDP
+            //     return Err(Error::SysError(SysErr::ENOTSUP));
+            // }
+
             file = NewTsotSocketFile(
                 task, 
                 self.family,

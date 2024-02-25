@@ -21,11 +21,14 @@ use spin::Mutex;
 use alloc::collections::VecDeque;
 use core::ops::Deref;
 use core::fmt;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 use crate::qlib::kernel::task::Task;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::common::*;
 use crate::qlib::kernel::kernel::waiter::{Queue, WaitEntry, Waitable};
+use crate::qlib::kernel::SHARESPACE;
 use crate::qlib::socket_buf::{AcceptSocket, SocketBuff, SocketBuffIntern};
 use crate::qlib::tsot_msg::*;
 use crate::qlib::linux_def::*;
@@ -243,6 +246,33 @@ impl QIPv4Endpoint {
 
 pub const SOCKET_POOL_SIZE: usize = 5;
 
+impl DnsReq {
+    pub fn New(reqId: u16, domains: &[String]) -> Result<Self> {
+        let mut names = [0; 256];
+        let mut offset = 0;
+        for domain in domains {
+            let bytes : Vec<u8> = domain.bytes().collect();
+            if bytes.len() + offset >= names.len() {
+                return Err(Error::Common(format!("DNSReq::New too long reqs {:?}", domains)));
+            }
+
+            for i in 0..bytes.len() {
+                names[offset + i] = bytes[i];
+            }
+            names[offset + bytes.len() + 1] = ':' as u8; // leave another ':' as splitter
+            offset += bytes.len() + 1; 
+        }
+
+        let req = Self {
+            reqId: reqId,
+            nameslen: (offset-1) as u16,
+            names: names,
+        };
+
+        return Ok(req);
+    }
+}
+
 // #[derive(Debug)]
 pub struct TsotSocketMgr {
     pub currReqId: AtomicU64,
@@ -322,7 +352,7 @@ impl TsotSocketMgr {
     pub fn CreateSocket(&self) -> Result<()> {
         let msg = TsotMsg::CreateSocketReq(CreateSocketReq {}).into();
 
-        self.SendMsg(&msg)?;
+        Self::SendMsg(&msg)?;
         return Ok(())
     }
 
@@ -410,7 +440,7 @@ impl TsotSocketMgr {
                 backlog: finalBacklog,
             }).into();
     
-            self.SendMsg(&msg)?;
+            Self::SendMsg(&msg)?;
         }
         
         return Ok(acceptQueue);
@@ -438,7 +468,7 @@ impl TsotSocketMgr {
                 port: port
             }).into();
     
-            self.SendMsg(&msg)?;
+            Self::SendMsg(&msg)?;
         }
 
         return Ok(())
@@ -450,7 +480,7 @@ impl TsotSocketMgr {
             port: port
         }).into();
 
-        self.SendMsg(&msg)?;
+        Self::SendMsg(&msg)?;
         return Ok(())
     }
 
@@ -468,13 +498,20 @@ impl TsotSocketMgr {
             msg: TsotMsg::ConnectReq(connectReq)
         };
 
-        self.SendMsg(&msg)?;
+        Self::SendMsg(&msg)?;
 
         self.connectingSockets.lock().insert(reqId, ops.clone());
 
         return Ok(())
     }
 
+    // caller should make sure the 
+    pub fn DnsReq(reqId: u16, domains: &[String]) -> Result<()> {
+        let req = DnsReq::New(reqId, domains)?;
+        let msg = TsotMsg::DnsReq(req).into();
+        Self::SendMsg(&msg)?;
+        return Ok(())
+    }
 
     pub fn NewPeerConnection(&self, fd: i32, peerAddr: QIPv4Addr, port: u16, sockBuf: SocketBuff) -> Result<()> {
         let sockBuf = AcceptSocket::SocketBuff(sockBuf);
@@ -514,7 +551,7 @@ impl TsotSocketMgr {
 
     pub fn Process(&self) -> Result<()> {
         loop {
-            let msg = match self.RecvMsg() {
+            let msg = match Self::RecvMsg() {
                 Err(_) => return Ok(()),
                 Ok(m) => m,
             };
@@ -546,6 +583,9 @@ impl TsotSocketMgr {
 
                     connectingSocket.SetConnErrno(-m.errorCode as _);
                     connectingSocket.queue.Notify(EVENT_OUT)
+                }
+                TsotMsg::DnsResp(m) => {
+                    SHARESPACE.dnsSvc.ProcessDnsResp(m).unwrap();
                 }
                 _ => ()
             };

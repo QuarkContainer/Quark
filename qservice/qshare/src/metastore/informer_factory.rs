@@ -53,7 +53,7 @@ impl InformerFactory {
 
     pub async fn AddInformer(&self, objType: &str, opts: &ListOption) -> Result<()> {
         let mut inner = self.write().await;
-        let addresses = self.read().await.addresses.to_vec();
+        let addresses = inner.addresses.to_vec();
         let informer = Informer::New(addresses, objType, &inner.namespace, opts).await?;
         inner.informers.insert(objType.to_string(), informer);
         return Ok(())

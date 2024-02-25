@@ -106,6 +106,9 @@ async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
         "client" => vec![
             "/test/c/client".to_owned()
         ],
+        "dns" => vec![
+            "/test/rust/dns/target/debug/dns".to_owned()
+        ],
         _ => vec![
             "/usr/bin/sleep".to_owned(),
             "1".to_owned()

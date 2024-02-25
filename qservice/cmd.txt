@@ -146,3 +146,6 @@ etcdctl get --prefix "/registry"
 sudo rm -f /var/log/quark/server.log; ./test new server
 
 sudo rm -f /var/log/quark/client.log; ./test new client 10.1.1.1
+
+sudo rm -f /var/log/quark/dns.log; ./test new dns
+

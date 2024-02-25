@@ -263,6 +263,15 @@ impl QUring {
         IOURING.AUCall(AsyncOps::TsotPoll(op));
     }
 
+    pub fn DNSRecvInit(&self, fd: i32, msgAddr: u64) {
+        let op = DNSRecv::New(fd, msgAddr);
+        IOURING.AUCall(AsyncOps::DNSRecv(op));
+    }
+
+    pub fn SendDns(&self, op: DNSSend) {
+        IOURING.AUCall(AsyncOps::DNSSend(op));
+    }
+
     pub fn BufSockInit(fd: i32, queue: Queue, buf: SocketBuff, isSocket: bool) -> Result<()> {
         let (addr, len) = buf.GetFreeReadBuf();
         let readop = AsyncFileRead::New(fd, queue, buf, addr, len, isSocket);

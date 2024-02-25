@@ -61,6 +61,7 @@ pub enum TsotMsg {
     AcceptReq(AcceptReq),
     StopListenReq(StopListenReq),
     ConnectReq(ConnectReq),
+    DnsReq(DnsReq),
 
     //////////////////////////////////////////////////////
     // from nodeagent to pod
@@ -68,6 +69,7 @@ pub enum TsotMsg {
     CreateSocketResp(CreateSocketResp),
     PeerConnectNotify(PeerConnectNotify),
     ConnectResp(ConnectResp),
+    DnsResp(DnsResp),
 }
 
 
@@ -131,6 +133,14 @@ pub struct ConnectReq {
     pub srcPort: u16,
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct DnsReq {
+    pub reqId: u16,
+    pub nameslen: u16,
+    pub names: [u8; 256]
+}
+
 //////////////////////////////////////////////////////
 // from nodeagent to pod
 
@@ -179,6 +189,13 @@ pub struct ConnectResp {
     pub errorCode: i32
 }
 
-
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DnsResp {
+    pub reqId: u16,
+    // maxinum 4 request and response
+    pub ips: [u32; 4],
+    pub count: usize,
+}
 
 
