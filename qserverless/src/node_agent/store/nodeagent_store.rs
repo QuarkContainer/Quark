@@ -222,7 +222,6 @@ impl NodeAgentStoreInner {
         }*/
 
         return Ok(Self {
-            //podStore: podStore,
             eventQueue: RingBuf::New(2000),
             podCache: podCache,
             nodeRevision: 0, 

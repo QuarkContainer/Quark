@@ -161,7 +161,7 @@ impl Informer {
         let objType = self.objType.clone();
         let namespace = self.namespace.clone();
         let mut opts = self.opts.DeepCopy();
-        opts.revision = self.revision.load(Ordering::SeqCst) + 1;
+        opts.revision = self.revision.load(Ordering::Acquire) + 1;
         let store = self.store.clone();
         let closeNotify = self.closeNotify.clone();
         
@@ -180,7 +180,8 @@ impl Informer {
 
                 let event = match event {
                     Err(e) => {
-                        error!("watch get error {:?}", e);
+                        error!("WatchUpdate type is {}/{} watch get error {:?}", 
+                            self.objType, self.revision.load(Ordering::Acquire), e);
                         break;
                     }
                     Ok(e) => {
@@ -188,6 +189,7 @@ impl Informer {
                             None => break,
                             Some(e) => {
                                 opts.revision = e.obj.Revision();
+                                self.revision.store(opts.revision, Ordering::SeqCst);
                                 let de = match e.type_ {
                                     EventType::Added => {
                                         store.Add(&e.obj)?;
