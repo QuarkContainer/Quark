@@ -377,12 +377,14 @@ impl CacheStoreInner {
     }
 
     pub fn ProcessEvent(&mut self, event: &WatchEvent) -> Result<()> {
+        let revision = event.obj.revision;
+        let channelRev = self.ChannelRev();
         let mut wcEvent = WatchCacheEvent {
             type_: event.type_.DeepCopy(),
-            obj: event.obj.clone(),
+            obj: event.obj.CopyWithRev(channelRev, revision),
             prevObj: None,
-            channelRev: self.ChannelRev(),
-            revision: event.obj.Revision(),
+            channelRev: channelRev,
+            revision: revision,
             recordTime: SystemTime::now(),
         };
 
@@ -474,7 +476,7 @@ impl CacheStoreInner {
             self.cache.buf[self.cache.OldestIdx()]
                 .as_ref()
                 .unwrap()
-                .revision
+                .channelRev
         } else {
             return Err(Error::CommonError(format!(
                 "CacheStoreInner: watch cache isn't correctly initialized self.listRevision = {} tail = {}", 

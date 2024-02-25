@@ -127,12 +127,13 @@ impl DnsProxy {
                                 if domain.ends_with(DNS_POSTFIX) {
                                     let left = domain.strip_suffix(DNS_POSTFIX).unwrap();
                                     let split : Vec<&str> = left.split(".").collect();
-                                    if split.len() != 2 {
-                                        error!("get invalid domain {}", domain);
+                                    if split.len() != 3 {
+                                        error!("get invalid domain {}/ {:?}/ {}", domain, &split, left);
                                         ips.push(0);
+                                        continue;
                                     } 
-                                    let namespace = &split[0];
-                                    let name = &split[1];
+                                    let namespace = split[1];
+                                    let name = split[0];
                                     match client.Get("pod", namespace, name, 0).await {
                                         Err(e) => {
                                             error!("DnsProxy::Process fail {:?}", e);

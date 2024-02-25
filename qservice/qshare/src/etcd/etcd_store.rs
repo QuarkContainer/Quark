@@ -247,7 +247,7 @@ impl BackendStore for EtcdStore {
     fn Register(&self, cacher: CacheStore, rev: i64, prefix: String, ready: Arc<Notify>, notify: Arc<Notify>) -> Result<()> {
         let storeClone = self.clone();
         let _future = tokio::spawn(async move{
-            storeClone.Process1(&cacher, rev, &prefix, &ready, &notify).await
+            storeClone.Process(&cacher, rev, &prefix, &ready, &notify).await
         });
 
         return Ok(())
@@ -430,13 +430,13 @@ impl EtcdStore {
             inner.cache.Reset();
 
             let channelRev = inner.ChannelRev();
-            inner.listRevision = channelRev;
             for o in list.objs {
                 let revision = o.revision;
                 error!("InitCacheStore obj is {:?}", &o);
                 let obj = o.CopyWithRev(channelRev, revision);
                 inner.Add(&obj)?;
             }
+            inner.listRevision = channelRev;
         }
 
         return Ok(list.revision)
@@ -467,7 +467,7 @@ impl EtcdStore {
         return Ok(())
     }
 
-    async fn Process1(&self, cs: &CacheStore, rev: i64, prefix: &str, ready: &Arc<Notify>, notify: &Arc<Notify>) -> Result<()> {
+    async fn Process(&self, cs: &CacheStore, rev: i64, prefix: &str, ready: &Arc<Notify>, notify: &Arc<Notify>) -> Result<()> {
         let mut listRev = self.InitCacheStore(cs, rev, &prefix).await?;
 
         ready.notify_one();
