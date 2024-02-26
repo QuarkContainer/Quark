@@ -23,6 +23,7 @@ use std::time::Duration;
 use core::ops::Deref;
 use std::time::SystemTime;
 
+use qshare::crictl::DnsConfig;
 use qshare::node::*;
 use tokio::sync::{mpsc, Notify};
 use std::sync::Arc;
@@ -648,6 +649,8 @@ impl PodAgent {
 	    // it will not calulate hostname, all these staff
         let pod = self.pod.Pod();
         let pod = pod.read().unwrap();
+
+        let namespaceSearch = format!("{}.svc.cluster.local", &pod.namespace);
         
         let podUID = pod.uid.clone();
         let mut podSandboxConfig = crictl::PodSandboxConfig {
@@ -659,10 +662,14 @@ impl PodAgent {
             }),
             labels: NewPodLabels(&pod),
             annotations: NewPodAnnotations(&pod),
+            dns_config: Some(DnsConfig {
+                servers: vec!["127.0.0.53".to_string()],
+                searches: vec![namespaceSearch],
+                options: vec!["ndots:2".to_string(), "edns0".to_string()]
+            }),
             ..Default::default()
         };
 
-        podSandboxConfig.dns_config = Some(crictl::DnsConfig::default());
         if !IsHostNetworkPod(&pod) {
             podSandboxConfig.hostname = pod.host_name.clone();
         }

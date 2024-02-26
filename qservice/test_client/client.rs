@@ -100,14 +100,28 @@ async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let mut commands = match &cmd[..] {
+        "rserver" => vec![
+            "/test/rust/dns/target/debug/server".to_owned()
+        ],
+        "rclient" => vec![
+            "/test/rust/dns/target/debug/client".to_owned()
+        ],
         "server" => vec![
-            "/test/c/server".to_owned()
+            "/test/rust/dns/target/debug/server".to_owned()
         ],
         "client" => vec![
-            "/test/c/client".to_owned()
+            "/test/rust/dns/target/debug/client".to_owned()
         ],
         "dns" => vec![
             "/test/rust/dns/target/debug/dns".to_owned()
+        ],
+        "cat" => vec![
+            "/usr/bin/cat".to_owned(),
+            "/etc/resolv.conf".to_owned(),
+        ],
+        "ping" => vec![
+            "ping".to_owned(),
+            "ping".to_owned(),
         ],
         _ => vec![
             "/usr/bin/sleep".to_owned(),

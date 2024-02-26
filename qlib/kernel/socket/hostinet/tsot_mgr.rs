@@ -582,6 +582,9 @@ impl TsotSocketMgr {
                     };
 
                     connectingSocket.SetConnErrno(-m.errorCode as _);
+                    if m.errorCode == 0 {
+                        connectingSocket.PostConnect();
+                    }
                     connectingSocket.queue.Notify(EVENT_OUT)
                 }
                 TsotMsg::DnsResp(m) => {

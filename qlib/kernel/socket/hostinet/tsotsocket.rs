@@ -761,6 +761,10 @@ impl SockOperations for TsotSocketOperations {
 
                 let addrPort = addr.Ipv4Port();
                 let ipAddr = QIPv4Addr::from(&addr.Addr);
+                self.SetRemoteAddr(QIPv4Endpoint {
+                    ip: ipAddr,
+                    port: addrPort
+                } );
                 if ipAddr.IsLoopback() {
                     let serverQueue = Queue::default();
                     let (clientSock, serverSock) =
@@ -915,14 +919,13 @@ impl SockOperations for TsotSocketOperations {
     }
 
     fn Bind(&self, _task: &Task, sockaddr: &[u8]) -> Result<i64> {
-        error!("bind 1...");
         let socketaddr = sockaddr;
 
         let addr = unsafe { &*(&socketaddr[0] as *const _ as u64 as *const SockAddrInet) };
-        info!(
-            "hostinet socket bind {:?}, addr is {:?}/{:?}",
-            self.family, addr, socketaddr
-        );
+        // info!(
+        //     "hostinet socket bind {:?}, addr is {:?}/{:?}",
+        //     self.family, addr, socketaddr
+        // );
 
         if self.family != AFType::AF_INET {
             // doesn't support ipv6 so far
