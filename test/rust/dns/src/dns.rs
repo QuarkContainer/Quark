@@ -11,7 +11,7 @@ fn main() {
     
     println!("Hello, world! {:?}", &ips);
 
-    let hostname = "localhost1";
+    let hostname = "dns";
     let ips: Vec<std::net::IpAddr> = lookup_host(hostname).unwrap();
     
     println!("Hello, world! {:?}", &ips);
