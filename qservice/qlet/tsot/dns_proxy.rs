@@ -44,20 +44,33 @@ pub struct DnsProxy {
     pub closeNotify: Arc<Notify>,
     pub closed: AtomicBool,
 
-    pub outputTx: mpsc::Sender<DnsProxyReq>,
-    pub outputRx: Mutex<Option<mpsc::Receiver<DnsProxyReq>>>,
+    pub inputTx: mpsc::Sender<DnsProxyReq>,
+    pub inputRx: Mutex<Option<mpsc::Receiver<DnsProxyReq>>>,
+
+    pub stateSvcAddresses: Vec<String>
 }
 
 impl DnsProxy {
     pub fn New() -> Self {
         let (tx, rx) = mpsc::channel::<DnsProxyReq>(30);
         
+        let mut stateSvcAddresses = Vec::new();
+        if QLET_CONFIG.singleNodeModel {
+            stateSvcAddresses.push(format!("http://127.0.0.1:{}", QLET_CONFIG.stateSvcPort));
+        } else {
+            for a in &QLET_CONFIG.stateSvcAddr {
+                stateSvcAddresses.push(format!("http://{}", a));
+            }
+        }
+
         return Self {
             closeNotify: Arc::new(Notify::new()),
             closed: AtomicBool::new(false),
 
-            outputTx: tx,
-            outputRx: Mutex::new(Some(rx)),
+            inputTx: tx,
+            inputRx: Mutex::new(Some(rx)),
+
+            stateSvcAddresses: stateSvcAddresses
         }
     }
 
@@ -66,19 +79,19 @@ impl DnsProxy {
     }
 
     pub fn EnqMsg(&self, req: DnsProxyReq) {
-        self.outputTx.try_send(req).unwrap();
+        self.inputTx.try_send(req).unwrap();
     }
 
     pub async fn GetClient(&self) -> Option<CacherClient> {
-        let size = QLET_CONFIG.stateSvcAddr.len();
+        let size = self.stateSvcAddresses.len();
         let offset: usize = rand::thread_rng().gen_range(0..size);
         loop {
             for i in 0..size {
                 let idx = (offset + i) % size;
-                let addr = format!("http://{}", &QLET_CONFIG.stateSvcAddr[idx]);
+                let addr = &self.stateSvcAddresses[idx];
 
                 tokio::select! { 
-                    out = CacherClient::New(addr.clone()) => {
+                    out = CacherClient::New(addr.to_owned()) => {
                         match out {
                             Ok(client) => return Some(client),
                             Err(e) => {
@@ -105,7 +118,7 @@ impl DnsProxy {
     }
 
     pub async fn Process(&self) {
-        let mut rx = self.outputRx.lock().unwrap().take().unwrap();
+        let mut rx = self.inputRx.lock().unwrap().take().unwrap();
         let mut client = match self.GetClient().await {
             None => return,
             Some(c) => c
