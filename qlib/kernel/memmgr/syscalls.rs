@@ -528,10 +528,10 @@ impl MemoryManager {
                 end = ar.End();
             }
 
-            self.pagetable
-                .write()
-                .pt
-                .MProtect(Addr(range.Start()), Addr(end), pageopts, false)?;
+            // self.pagetable
+            //     .write()
+            //     .pt
+            //     .MProtect(Addr(range.Start()), Addr(end), pageopts, false)?;
 
             /*match self.VirtualToPhyLocked(range.Start()) {
                 Err(_) => (),

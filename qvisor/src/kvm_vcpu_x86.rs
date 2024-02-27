@@ -302,9 +302,17 @@ impl KVMVcpu {
                             .get_regs()
                             .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
 
-                        error!("vcpu error regs is {:x?}, ioerror: {:?}", regs, e);
+                        error!("vcpu error regs is {:#x?}, ioerror: {:#?}", regs, e);
+
+                        let sregs = self
+                        .vcpu
+                        .get_sregs()
+                        .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+
+                        error!("vcpu error sregs is {:#x?}, ioerror: {:#?}", sregs, e);
+
                         backtracer::trace(regs.rip, regs.rsp, regs.rbp, &mut |frame| {
-                            print!("host frame is {:#x?}", frame);
+                            error!("host frame is {:#x?}", frame);
                             true
                         });
 
