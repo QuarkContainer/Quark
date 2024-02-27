@@ -560,7 +560,7 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                 _ => (),
             };
 
-            for i in 1..8 {
+            for i in 1..16 {
                 let addr = if vma.growsDown {
                     pageAddr - i * PAGE_SIZE
                 } else {
