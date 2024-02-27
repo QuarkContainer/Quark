@@ -165,9 +165,8 @@ impl HostPMAKeeper {
             .MapFixed();
         
         mo.MapShare();
-        mo.MapPrecommit();
+        // mo.MapPrecommit();
 
-        
         //mo.MapLocked();
 
         let start = self.Allocate(len, MemoryDef::PMD_SIZE)?;

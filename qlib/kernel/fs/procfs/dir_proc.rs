@@ -37,7 +37,7 @@ use crate::qlib::kernel::fs::procfs::proc::ProcNode;
 use crate::qlib::kernel::fs::procfs::sys::net::ipv4::Ipv4Node;
 use crate::qlib::kernel::fs::procfs::sys::net::net::SysNetDirNode;
 use crate::qlib::kernel::fs::procfs::sys::sys::ProcSysDirNode;
-use crate::qlib::kernel::fs::procfs::sys::vm::vm::ProcSysVMDirNode;
+use crate::qlib::kernel::fs::procfs::sys::vm::vm::*;
 use crate::qlib::kernel::fs::procfs::task::fds::FdDirNode;
 use crate::qlib::kernel::fs::procfs::task::fds::FdInfoDirNode;
 use crate::qlib::kernel::fs::procfs::task::subtasks::SubTasksNode;
@@ -66,6 +66,8 @@ pub enum DirDataNode {
     SysNetDirNode(SysNetDirNode),
     ProcNode(ProcNode),
     ProcSysVMDirNode(ProcSysVMDirNode),
+    ProcSysRandomDirNode(ProcSysRandomDirNode),
+    ProcSysKernelDirNode(ProcSysKernelDirNode),
     Ipv4Node(Ipv4Node),
     NetDirNode(NetDirNode),
     ProcSysDirNode(ProcSysDirNode),

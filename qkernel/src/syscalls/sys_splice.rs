@@ -322,29 +322,7 @@ pub fn DoSplice(
         opts.Length = MAX_RW_COUNT;
     }
 
-    let general = task.blocker.generalEntry.clone();
-
     loop {
-        let mut inW = false;
-        let mut outW = false;
-        if !inW && srcFile.Readiness(task, EVENT_READ) == 0 && srcFile.WouldBlock() {
-            srcFile.EventRegister(task, &general, EVENT_READ);
-            inW = true;
-        } else if !outW && dstFile.Readiness(task, EVENT_WRITE) == 0 && dstFile.WouldBlock() {
-            dstFile.EventRegister(task, &general, EVENT_WRITE);
-            outW = true;
-        }
-
-        defer!({
-            if inW {
-                srcFile.EventUnregister(task, &general)
-            }
-
-            if outW {
-                dstFile.EventUnregister(task, &general)
-            }
-        });
-
         match Splice(task, dstFile, srcFile, opts) {
             Err(e) => {
                 if e != Error::SysError(SysErr::EWOULDBLOCK) {
@@ -371,21 +349,6 @@ pub fn DoSplice(
             }
         }
 
-        // Was anything registered? If no, everything is non-blocking.
-        if !inW && !outW {
-            return Err(Error::SysError(SysErr::EWOULDBLOCK));
-        }
-
-        // Block until there's data.
-        match task.blocker.BlockWithMonoTimer(true, None) {
-            Err(Error::ErrInterrupted) => {
-                return Err(Error::SysError(SysErr::ERESTARTNOHAND));
-            }
-            Err(e) => {
-                return Err(e);
-            }
-            _ => (),
-        }
     }
 }
 
