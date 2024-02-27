@@ -70,7 +70,7 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
     }*/
 
     {
-        let hibernate_enabled = SHARESPACE.config.read().EnableHibernante;
+        let hibernate_enabled = SHARESPACE.config.read().EnableCC;
         if hibernate_enabled {
             if signalArgs.Signo == SIGSTOP.0 || signalArgs.Signo == SIGUSR2.0 {
                 if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {

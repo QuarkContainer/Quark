@@ -1251,7 +1251,7 @@ impl PageTables {
 
     #[cfg(target_arch = "x86_64")]
     pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
-        let hibernate_enabled = SHARESPACE.config.read().EnableHibernante;
+        let hibernate_enabled = SHARESPACE.config.read().EnableCC;
         if !hibernate_enabled {
             return;
         }

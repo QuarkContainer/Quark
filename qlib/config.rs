@@ -43,7 +43,7 @@ pub struct Config {
     pub Sandboxed: bool,
     pub Realtime: bool,
     pub EnableTsot: bool,
-    pub EnableHibernante: bool,
+    pub EnableCC: bool,
 }
 
 impl Config {
@@ -89,7 +89,7 @@ impl Default for Config {
             Sandboxed: false,
             Realtime: false,
             EnableTsot: false,
-            EnableHibernante: false,
+            EnableCC: false,
         };
     }
 }
