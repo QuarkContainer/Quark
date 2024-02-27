@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::qlib::kernel::SHARESPACE;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -70,4 +71,85 @@ pub fn NewVm(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     };
 
     return NewProcInode(taskDir.into(), msrc, InodeType::SpecialDirectory, None);
+}
+
+
+#[derive(Clone)]
+pub struct ProcSysKernelDirNode {}
+
+impl DirDataNodeTrait for ProcSysKernelDirNode {
+    fn Lookup(&self, d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
+        return d.Lookup(task, dir, name);
+    }
+
+    fn GetFile(
+        &self,
+        d: &Dir,
+        task: &Task,
+        dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
+        return d.GetFile(task, dir, dirent, flags);
+    }
+}
+
+pub fn NewKernel(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+    let mut contents = BTreeMap::new();
+    contents.insert("random".to_string(), NewRandom(task, msrc));
+
+    let taskDir = DirNode {
+        dir: Dir::New(
+            task,
+            contents,
+            &ROOT_OWNER,
+            &FilePermissions::FromMode(FileMode(0o0555)),
+        ),
+        data: ProcSysKernelDirNode {}.into(),
+    };
+
+    return NewProcInode(taskDir.into(), msrc, InodeType::SpecialDirectory, None);
+}
+
+#[derive(Clone)]
+pub struct ProcSysRandomDirNode {}
+
+impl DirDataNodeTrait for ProcSysRandomDirNode {
+    fn Lookup(&self, d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
+        return d.Lookup(task, dir, name);
+    }
+
+    fn GetFile(
+        &self,
+        d: &Dir,
+        task: &Task,
+        dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
+        return d.GetFile(task, dir, dirent, flags);
+    }
+}
+
+pub fn NewRandom(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+    let mut contents = BTreeMap::new();
+    contents.insert("boot_id".to_string(), NewBootId(task, msrc));
+
+    let taskDir = DirNode {
+        dir: Dir::New(
+            task,
+            contents,
+            &ROOT_OWNER,
+            &FilePermissions::FromMode(FileMode(0o0555)),
+        ),
+        data: ProcSysRandomDirNode {}.into(),
+    };
+
+    return NewProcInode(taskDir.into(), msrc, InodeType::SpecialDirectory, None);
+}
+
+pub fn NewBootId(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+    let bootid = format!("{}\n", SHARESPACE.bootId.lock());
+
+    return NewStaticProcInode(task, msrc, &Arc::new(bootid.as_bytes().to_vec()));
 }

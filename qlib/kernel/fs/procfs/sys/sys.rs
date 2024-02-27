@@ -58,6 +58,7 @@ pub fn NewSys(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let mut contents = BTreeMap::new();
     contents.insert("vm".to_string(), NewVm(task, msrc));
     contents.insert("net".to_string(), NewNet(task, msrc));
+    contents.insert("kernel".to_string(), NewKernel(task, msrc));
 
     let taskDir = DirNode {
         dir: Dir::New(

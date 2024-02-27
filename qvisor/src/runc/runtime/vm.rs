@@ -237,6 +237,8 @@ impl VirtualMachine {
             SHARESPACE.dnsSvc.Init().unwrap();
         };
 
+        *SHARESPACE.bootId.lock() = uuid::Uuid::new_v4().to_string();
+        
         let syncPrint = sharespace.config.read().SyncPrint();
         super::super::super::print::SetSyncPrint(syncPrint);
     }

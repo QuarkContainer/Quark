@@ -101,6 +101,7 @@ use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use crossbeam_queue::ArrayQueue;
 use alloc::collections::VecDeque;
+use alloc::string::String;
 
 use self::common::*;
 use self::bytestream::*;
@@ -1215,6 +1216,7 @@ pub struct ShareSpace {
     pub dnsSvc: DnsSvc,
     pub uringQueue: UringQueue,
 
+    pub bootId: QMutex<String>,
     pub values: Vec<[AtomicU64; 2]>,
 }
 
