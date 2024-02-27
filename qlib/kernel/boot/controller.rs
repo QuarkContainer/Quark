@@ -70,8 +70,8 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
     }*/
 
     {
-        let hibernate_enabled = SHARESPACE.config.read().EnableHibernante;
-        if hibernate_enabled {
+        let cc_enabled = SHARESPACE.config.read().EnableCC;
+        if !cc_enabled {
             if signalArgs.Signo == SIGSTOP.0 || signalArgs.Signo == SIGUSR2.0 {
                 if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
                     // if the sandbox has been paused, return
