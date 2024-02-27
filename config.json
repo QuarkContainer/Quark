@@ -27,5 +27,5 @@
   "Sandboxed"     : false,
   "Realtime"      : false,
   "EnableTsot"    : false,
-  "EnableHibernante": false
+  "EnableCC"      : false
 }
