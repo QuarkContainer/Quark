@@ -23,12 +23,17 @@ pub enum ProxyCommand {
     CudaDeviceGetLimit,
     CudaDeviceGetP2PAttribute,
     CudaDeviceGetPCIBusId,
+    CudaDeviceGetSharedMemConfig,
+    CudaDeviceGetStreamPriorityRange,
+    CudaDeviceReset,
+    CudaDeviceSetCacheConfig,
+    
     CudaSetDevice,
     CudaSetDeviceFlags,
     CudaDeviceSynchronize,
-    CudaDeviceReset,
+   
     CudaGetDeviceCount,
-    CudaDeviceGetStreamPriorityRange,
+    
     CudaGetDeviceProperties,
 
     CudaMalloc,

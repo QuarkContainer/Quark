@@ -11,10 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::string::String;
 use spin::Mutex;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+
+
 
 use crate::qlib::common::*;
 use crate::syscalls::syscalls::*;
@@ -88,13 +91,13 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             parameters.para1 = &mut value as * mut _ as u64;
 
             let attribute: u32 = parameters.para2 as u32;
-            error!("SysProxy CudaDeviceGetAttribute, query about attribute: {}, device: {}", attribute, parameters.para3);
+            error!("yiwang SysProxy CudaDeviceGetAttribute, query about attribute: {}, device: {}", attribute, parameters.para3);
 
             let ret = HostSpace::Proxy(
                 cmd,
                 parameters,
             );
-            error!("the value of the attribute query about should change: {}", value);
+            error!("yiwang the value of the attribute query about should change: {}", value);
             if ret == 0 {
                 task.CopyOutObj(&value, args.arg1 as u64)?; 
             }
@@ -113,14 +116,14 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             // length 
             parameters.para3 = PCIBusId.as_bytes().len() as u64;
 
-            error!("PCIBusId {}",PCIBusId);
+            error!("yiwang PCIBusId {}",PCIBusId);
 
             let ret = HostSpace::Proxy(
                 cmd,
                 parameters,
             );
 
-            error!("the device should change: {}", device);
+            error!("yiwang the device should change: {}", device);
             if ret == 0 {
                 task.CopyOutObj(&device, args.arg1 as u64)?; 
             }
@@ -142,7 +145,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 parameters,
             );
 
-            error!("the CacheConfig should change: {}", CacheConfig);
+            error!("yiwang the CacheConfig should change: {}", CacheConfig);
 
             if ret == 0 {
                 task.CopyOutObj(&CacheConfig, args.arg1 as u64)?; 
@@ -157,13 +160,13 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             parameters.para1 = &mut limit as * mut _ as u64;
 
             let attribute: u32 = parameters.para2 as u32;
-            error!("SysProxy CudaDeviceGetLimit, query about attribute: {}", attribute);
+            error!("yiwang SysProxy CudaDeviceGetLimit, query about attribute: {}", attribute);
 
             let ret = HostSpace::Proxy(
                 cmd,
                 parameters,
             );
-            error!("the value of the limit should change: {}", limit);
+            error!("yiwang the value of the limit should change: {}", limit);
             if ret == 0 {
                 task.CopyOutObj(&limit, args.arg1 as u64)?; 
             }
@@ -191,8 +194,11 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
         }
         ProxyCommand::CudaDeviceGetPCIBusId => {
-            let mut pciBusIdAddress:u64 = 0;
-            parameters.para1 = &mut pciBusIdAddress as * mut _ as u64;
+            let mut pciBusIdAddress = CString::ToString(task, parameters.para1)?;
+
+            error!("yiwang pciBusIdAddress: {}", pciBusIdAddress);
+
+            parameters.para1 = &mut pciBusIdAddress as * mut String as u64;
 
             error!("yiwang SysProxy CudaDeviceGetPCIBusId, query about device:{}", parameters.para3);
 
@@ -203,57 +209,30 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             error!("yiwang the pciBusIdAddress value should change: {}", pciBusIdAddress);
 
-        
-            
-        
+           if ret == 0 {
+            task.CopyOutString(args.arg1, parameters.para2 as usize, &pciBusIdAddress)?;
+           }
 
-    
             return Ok(ret);
         }
-        ProxyCommand::CudaSetDevice |
-        ProxyCommand::CudaDeviceSynchronize => {
-            error!("SysProxy CudaSetDevice");
-            let ret = HostSpace::Proxy(
-                cmd,
-                parameters,
-            );
-            return Ok(ret);
-        }
-        ProxyCommand::CudaSetDeviceFlags => {
-            error!("SysProxy CudaSetDeviceFlags");
-            let ret = HostSpace::Proxy(
-                cmd,
-                parameters,
-            );
-            return Ok(ret);
-        }
-        ProxyCommand::CudaDeviceReset => {
-            error!("SysProxy CudaDeviceReset");
-            let ret = HostSpace::Proxy(
-                cmd,
-                parameters,
-            );
-            return Ok(ret);
-        } 
-        ProxyCommand::CudaGetDeviceCount => {
-            let mut deviceCount:i32 = 0 ; 
-            
+        ProxyCommand::CudaDeviceGetSharedMemConfig => {
+            let mut sharedMemConfig:u32 = unsafe { *(parameters.para1 as *mut _ )};
+            error!("yiwang value of sharedMemConfig is: {}", sharedMemConfig);
 
-            parameters.para1 = &mut deviceCount as *mut _ as u64;
-
-            error!("yiwang device count is :{:x}", deviceCount);
+            parameters.para1 = &mut sharedMemConfig as *mut _ as u64;
 
             let ret = HostSpace::Proxy(
-                cmd,
+                cmd, 
                 parameters,
             );
-           
-            error!("yiwang device count should change, is :{}, ret is: {}",deviceCount, ret);
+
+            error!("yiwang value of sharedMemConfig now is: {}", sharedMemConfig);
             if ret == 0 {
-                task.CopyOutObj(&deviceCount, args.arg1 as u64)?; 
+                task.CopyOutObj(&sharedMemConfig, args.arg1 as u64)?;
             }
 
             return Ok(ret);
+
         }
         ProxyCommand::CudaDeviceGetStreamPriorityRange => {
             let mut lowPriority:i32;
@@ -284,6 +263,60 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             return Ok(ret);
 
+        }
+        ProxyCommand::CudaDeviceReset => {
+            error!("SysProxy CudaDeviceReset");
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            return Ok(ret);
+        } 
+        ProxyCommand::CudaDeviceSetCacheConfig => {
+            error!("SysProxy CudaDeviceSetCacheConfig cache configuration: {}", parameters.para1 as u32);
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            return Ok(ret);
+        }
+        ProxyCommand::CudaSetDevice |
+        ProxyCommand::CudaDeviceSynchronize => {
+            error!("SysProxy CudaSetDevice");
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            return Ok(ret);
+        }
+        ProxyCommand::CudaSetDeviceFlags => {
+            error!("SysProxy CudaSetDeviceFlags");
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            return Ok(ret);
+        }
+        ProxyCommand::CudaGetDeviceCount => {
+            let mut deviceCount:i32 = 0 ; 
+            
+
+            parameters.para1 = &mut deviceCount as *mut _ as u64;
+
+            error!("yiwang device count is :{:x}", deviceCount);
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+           
+            error!("yiwang device count should change, is :{}, ret is: {}",deviceCount, ret);
+            if ret == 0 {
+                task.CopyOutObj(&deviceCount, args.arg1 as u64)?; 
+            }
+
+            return Ok(ret);
         }
         ProxyCommand::CudaGetDeviceProperties => {
 

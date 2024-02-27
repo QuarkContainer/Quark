@@ -37,6 +37,7 @@ import signal
 import os
 import sys
 
+
 dtype = torch.float
 device = torch.device("cuda:0")
 torch.manual_seed(0)
@@ -73,17 +74,6 @@ for t in range(3):
     b -= learning_rate * grad_b
     c -= learning_rate * grad_c
     d -= learning_rate * grad_d
-    
-    #checkpoint and restore
-    if len(sys.argv)!=1 and t==2:
-        print("argv 1 is", sys.argv[1])
-        os.kill(int(sys.argv[1]), signal.SIGUSR1)
-        #import gc
-        #torch.cuda.empty_cache()
-        #gc.collect()
-        print("---------waiting for input to restore-------")
-        input()
-        os.kill(int(sys.argv[1]), signal.SIGUSR2)
 
 print(f'Result: y = {a.item()} + {b.item()} x + {c.item()} x^2 + {d.item()} x^3')
 

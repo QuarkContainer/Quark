@@ -28,7 +28,7 @@ use crate::xpu::cuda::*;
 
 use cuda_driver_sys::*;
 use cuda_runtime_sys::{cudaDeviceP2PAttr, cudaStreamCaptureStatus, cudaStream_t};  
-use cuda_runtime_sys::{cudaDeviceProp, cudaDeviceAttr,cudaFuncCache,cudaLimit};
+use cuda_runtime_sys::{cudaDeviceProp, cudaDeviceAttr,cudaFuncCache,cudaLimit,cudaSharedMemConfig};
 
 
 
@@ -43,12 +43,17 @@ lazy_static! {
         (ProxyCommand::CudaDeviceGetLimit,(XpuLibrary::CudaRuntime, "cudaDeviceGetLimit")),
         (ProxyCommand::CudaDeviceGetP2PAttribute,(XpuLibrary::CudaRuntime, "cudaDeviceGetP2PAttribute")),
         (ProxyCommand::CudaDeviceGetPCIBusId, (XpuLibrary::CudaRuntime, "cudaDeviceGetPCIBusId")),
+        (ProxyCommand::CudaDeviceGetSharedMemConfig, (XpuLibrary::CudaRuntime, "cudaDeviceGetSharedMemConfig")),
+        (ProxyCommand::CudaDeviceGetStreamPriorityRange,(XpuLibrary::CudaRuntime, "cudaDeviceGetStreamPriorityRange")),
+        (ProxyCommand::CudaDeviceReset,(XpuLibrary::CudaRuntime, "cudaDeviceReset")),
+        (ProxyCommand::CudaDeviceSetCacheConfig, (XpuLibrary::CudaRuntime, "cudaDeviceSetCacheConfig")),
         (ProxyCommand::CudaSetDevice,(XpuLibrary::CudaRuntime, "cudaSetDevice")),
         (ProxyCommand::CudaSetDeviceFlags,(XpuLibrary::CudaRuntime, "cudaSetDeviceFlags")),
         (ProxyCommand::CudaDeviceSynchronize,(XpuLibrary::CudaRuntime, "cudaDeviceSynchronize")),
-        (ProxyCommand::CudaDeviceReset,(XpuLibrary::CudaRuntime, "cudaDeviceReset")),
+        
         (ProxyCommand::CudaGetDeviceCount,(XpuLibrary::CudaRuntime, "cudaGetDeviceCount")),
-        (ProxyCommand::CudaDeviceGetStreamPriorityRange,(XpuLibrary::CudaRuntime, "cudaDeviceGetStreamPriorityRange")),
+       
+
         (ProxyCommand::CudaGetDeviceProperties,(XpuLibrary::CudaRuntime, "cudaGetDeviceProperties")),
 
         (ProxyCommand::CudaMalloc,(XpuLibrary::CudaRuntime, "cudaMalloc")),
@@ -229,7 +234,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
         }
         ProxyCommand::CudaDeviceGetPCIBusId => {
  
-            let func: extern "C" fn(*mut ::std::os::raw::c_char, ::std::os::raw::c_int, ::std::os::raw::c_int,) -> i32 = 
+            let func: extern "C" fn(*mut libc::c_char, ::std::os::raw::c_int, ::std::os::raw::c_int,) -> i32 = 
             unsafe { std::mem::transmute(handler)};
             
             let  mut pciBusId: Vec<c_char> = vec![0; parameters.para2 as usize];
@@ -252,8 +257,68 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
 
             error!("yiwang CudaDeviceGetPCIBusId result is: {:?}, {}", ret,ret);
 
-            unsafe{ *(parameters.para1 as *mut _) = &pciBusId[0]}
+            let pciBusString = String::from_utf8(pciBusId.iter().map(|&c| c as u8).collect()).unwrap();
 
+            unsafe {
+                // (*(parameters.para1 as *mut String)).clear();
+                // (*(parameters.para1 as *mut String)).push_str(&pciBusString);
+                *(parameters.para1 as *mut String) = pciBusString.to_owned();
+            }
+
+            return Ok(ret as i64);
+
+        }
+        ProxyCommand::CudaDeviceGetSharedMemConfig => {
+            let func: extern "C" fn(*mut cudaSharedMemConfig) -> i32 = unsafe { std::mem::transmute(handler) };
+            let mut sharedMemConfig: cudaSharedMemConfig = unsafe { *(parameters.para1 as *mut _)};
+
+            let ret = func(&mut sharedMemConfig);
+
+            error!("yiwang ret is :{}, {:#?}",ret, ret);
+            error!("sharedMemConfig after function call is: {}, {:?}",sharedMemConfig as u32, sharedMemConfig);
+            
+            unsafe { *(parameters.para1 as *mut _) = sharedMemConfig as u32};
+
+            return Ok(ret as i64);
+
+        }
+        ProxyCommand::CudaDeviceGetStreamPriorityRange => {
+            let mut leastPriority: ::std::os::raw::c_int;
+            let mut greatestPriority: ::std::os::raw::c_int;
+
+            unsafe{
+                leastPriority = *(parameters.para1 as *mut _); 
+                greatestPriority = *(parameters.para2 as *mut _) ;
+            } 
+
+            error!("yiwang leastPriority before function call is: {}",leastPriority);
+            error!("yiwang greatestPriority before function call is: {}",greatestPriority);
+
+            let func: extern "C" fn(*mut ::std::os::raw::c_int, *mut ::std::os::raw::c_int) -> i32 = 
+                unsafe { std::mem::transmute(handler)};
+
+            let ret = func(&mut leastPriority,&mut greatestPriority);
+
+            error!("yiwang leastPriority after function call is :{}", leastPriority);
+            error!("yiwang greatestPriority after function call is:{}",greatestPriority);
+
+            error!("yiwang result is: {:?}, {}", ret, ret);
+            
+            unsafe{
+                *(parameters.para1 as *mut _) = leastPriority;
+                *(parameters.para2 as *mut _) = greatestPriority;
+            }
+
+            return Ok(ret as i64);
+
+        }
+        ProxyCommand::CudaDeviceSetCacheConfig => {
+            let func: extern "C" fn (cudaFuncCache) -> i32 = unsafe { std::mem::transmute(handler)};
+
+            let cacheConfig  = unsafe { std::mem::transmute(parameters.para1 as u32) };
+            let ret = func(cacheConfig);
+
+            error!("result is {}, {:?}", ret, ret);
 
             return Ok(ret as i64);
 
@@ -297,36 +362,6 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             unsafe{
             *(parameters.para1 as *mut i32) = deviceCount as i32
             };
-
-            return Ok(ret as i64);
-
-        }
-        ProxyCommand::CudaDeviceGetStreamPriorityRange => {
-            let mut leastPriority: ::std::os::raw::c_int;
-            let mut greatestPriority: ::std::os::raw::c_int;
-
-            unsafe{
-                leastPriority = *(parameters.para1 as *mut _); 
-                greatestPriority = *(parameters.para2 as *mut _) ;
-            } 
-
-            error!("yiwang leastPriority before function call is: {}",leastPriority);
-            error!("yiwang greatestPriority before function call is: {}",greatestPriority);
-
-            let func: extern "C" fn(*mut ::std::os::raw::c_int, *mut ::std::os::raw::c_int) -> i32 = 
-                unsafe { std::mem::transmute(handler)};
-
-            let ret = func(&mut leastPriority,&mut greatestPriority);
-
-            error!("yiwang leastPriority after function call is :{}", leastPriority);
-            error!("yiwang greatestPriority after function call is:{}",greatestPriority);
-
-            error!("yiwang result is: {:?}, {}", ret, ret);
-            
-            unsafe{
-                *(parameters.para1 as *mut _) = leastPriority;
-                *(parameters.para2 as *mut _) = greatestPriority;
-            }
 
             return Ok(ret as i64);
 
