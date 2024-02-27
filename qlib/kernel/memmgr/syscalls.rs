@@ -514,19 +514,19 @@ impl MemoryManager {
             vseg.SetValue(vma);
             let range = vseg.Range();
 
-            let pageopts = if effectivePerms.Write() {
-                PageOpts::UserReadWrite().Val()
-            } else if effectivePerms.Read() || effectivePerms.Exec() {
-                PageOpts::UserReadOnly().Val()
-            } else {
-                PageOpts::UserNonAccessable().Val()
-            };
+            // let pageopts = if effectivePerms.Write() {
+            //     PageOpts::UserReadWrite().Val()
+            // } else if effectivePerms.Read() || effectivePerms.Exec() {
+            //     PageOpts::UserReadOnly().Val()
+            // } else {
+            //     PageOpts::UserNonAccessable().Val()
+            // };
 
             //change pagetable permission
-            let mut end = range.End();
-            if ar.End() < end {
-                end = ar.End();
-            }
+            // let mut end = range.End();
+            // if ar.End() < end {
+            //     end = ar.End();
+            // }
 
             // self.pagetable
             //     .write()
