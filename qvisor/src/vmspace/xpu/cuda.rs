@@ -27,6 +27,7 @@ lazy_static! {
     pub static ref KERNEL_INFOS:Mutex<BTreeMap<String, Arc<KernelInfo>>> = Mutex::new(BTreeMap::new());
     pub static ref MODULES:Mutex<BTreeMap<CUmoduleKey, CUmoduleAddr>> = Mutex::new(BTreeMap::new());
     pub static ref FUNCTIONS:Mutex<BTreeMap<CUhostFunction, CUfunctionAddr>> = Mutex::new(BTreeMap::new());
+    pub static ref GLOBALS:Mutex<BTreeMap<u64, CUdeviceAddr>> = Mutex::new(BTreeMap::new());
 }
 
 pub type HandlerAddr = u64;
@@ -34,6 +35,7 @@ pub type CUmoduleKey = u64;
 pub type CUmoduleAddr = u64;
 pub type CUhostFunction = u64;
 pub type CUfunctionAddr = u64;
+pub type CUdeviceAddr = u64;
 
 #[repr(C)]
 #[derive(Default, Debug)]
@@ -49,11 +51,11 @@ pub struct KernelInfo {
 pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
     let mut inputPosition = addr + fatElfHeader.header_size as u64;
     let endPosition = inputPosition + fatElfHeader.size as u64;
-    // error!("inputPosition:{:x} endPosition:{:x}", inputPosition, endPosition);
+    error!("inputPosition:{:x} endPosition:{:x}", inputPosition, endPosition);
     while inputPosition < endPosition {
         let fatTextHeader = unsafe { &*(inputPosition as *const u8 as *const FatTextHeader) };
-        // error!("fatTextHeader:{:x?}", *fatTextHeader);
-        // error!("FATBIN_FLAG_COMPRESS:{:x}, fatTextHeader.flags:{:x}, result of &:{:x}", FATBIN_FLAG_COMPRESS, fatTextHeader.flags, fatTextHeader.flags & FATBIN_FLAG_COMPRESS);
+        error!("fatTextHeader:{:x?}", *fatTextHeader);
+        error!("FATBIN_FLAG_COMPRESS:{:x}, fatTextHeader.flags:{:x}, result of &:{:x}", FATBIN_FLAG_COMPRESS, fatTextHeader.flags, fatTextHeader.flags & FATBIN_FLAG_COMPRESS);
         
         inputPosition += fatTextHeader.header_size as u64;
         if fatTextHeader.kind != 2 { // section does not cotain device code (but e.g. PTX)
@@ -61,11 +63,11 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
             continue;
         }
         if fatTextHeader.flags & FATBIN_FLAG_DEBUG > 0 {
-            // error!("fatbin contains debug information.");
+            error!("fatbin contains debug information.");
         }
 
         if (fatTextHeader.flags & FATBIN_FLAG_COMPRESS) > 0 {
-            // error!("fatbin contains compressed device code. Decompressing...");
+            error!("fatbin contains compressed device code. Decompressing...");
             todo!()
         }
 
@@ -76,7 +78,7 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
 
         inputPosition += fatTextHeader.size;
     }
-    // error!("Complete handling FatTextHeader");
+    error!("Complete handling FatTextHeader");
     Ok(0)
 }
 
@@ -108,8 +110,8 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
     }
 
     let symbol_table_data_p = unsafe { elf_getdata(ptr_section, 0 as _) };
-    // let symbol_table_data = unsafe { &*symbol_table_data_p };
-    // error!("symbol_table_data: {:?}", symbol_table_data);
+    let symbol_table_data = unsafe { &*symbol_table_data_p };
+    error!("symbol_table_data: {:?}", symbol_table_data);
     let symbol_table_size = shdr.sh_size / shdr.sh_entsize;
 
     match GetSectionByName(elf, String::from(".nv.info"), &mut ptr_section) {
@@ -121,7 +123,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
 
     let data_p = unsafe { elf_getdata(ptr_section, 0 as _) };
     let data = unsafe { &*data_p };
-    // error!("data: {:?}", data);
+    error!("data: {:?}", data);
 
     let mut secpos:usize = 0;
     let infoSize = std::mem::size_of::<NvInfoEntry>();
@@ -129,9 +131,9 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
         let position = data.d_buf as u64 + secpos as u64;
         let entry_p = position as *const u8 as *const NvInfoEntry;
         let entry = unsafe { &*entry_p };
-        // error!("entry: {:x?}", entry);
+        error!("entry: {:x?}", entry);
         if entry.values_size != 8 {
-            // error!("unexpected values_size: {:x}", entry.values_size);
+            error!("unexpected values_size: {:x}", entry.values_size);
             return Err(Error::ELFLoadError("unexpected values_size")); 
         }
 
@@ -141,7 +143,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
         }
 
         if entry.kernel_id as u64 >= symbol_table_size {
-            // error!("kernel_id {:x} out of bounds: {:x}", entry.kernel_id, symbol_table_size);
+            error!("kernel_id {:x} out of bounds: {:x}", entry.kernel_id, symbol_table_size);
             secpos += infoSize;
             continue;
         }
@@ -149,14 +151,14 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
         ptr_sym = unsafe { gelf_getsym(symbol_table_data_p, entry.kernel_id as libc::c_int, ptr_sym) };
         
         let kernel_str = unsafe { CString::FromAddr(elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*ptr_sym).st_name as usize) as u64).Str().unwrap().to_string() };
-        // error!("kernel_str: {}", kernel_str);
+        error!("kernel_str: {}", kernel_str);
 
         if KERNEL_INFOS.lock().contains_key(&kernel_str) {
             secpos += infoSize;
             continue;
         }
         
-        // error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
+        error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
 
         let mut ki = KernelInfo::default();
         ki.name = kernel_str.clone();
@@ -169,7 +171,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
                 },
             }
         }
-        // error!("ki: {:x?}", ki);
+        error!("ki: {:x?}", ki);
 
         KERNEL_INFOS.lock().insert(kernel_str.clone(), Arc::new(ki));
 
@@ -187,21 +189,21 @@ pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> 
         Ok(v) => v,
         Err(e) => return Err(e),
     };
-    // error!("GetSectionByName({}) got section: {:?}", sectionName, section);
+    error!("GetSectionByName({}) got section: {:?}", sectionName, section);
     let data = unsafe { &*(elf_getdata(*section, 0 as _)) };
-    // error!("data: {:x?}", data);
+    error!("data: {:x?}", data);
 
     let mut secpos:usize = 0;
     while secpos < data.d_size {
         let position = data.d_buf as u64 + secpos as u64;
         let entry = unsafe { &*(position as *const u8 as *const NvInfoKernelEntry) };
-        // error!("entry: {:x?}", entry);
+        error!("entry: {:x?}", entry);
         if entry.format as u64 == EIFMT_SVAL && entry.attribute as u64 == EIATTR_KPARAM_INFO {
             if entry.values_size != 0xc {
                 return Err(Error::ELFLoadError("EIATTR_KPARAM_INFO values size has not the expected value of 0xc"));
             }
             let kparam = unsafe { &*(&entry.values as *const _ as *const u8 as *const NvInfoKParamInfo) };
-            // error!("kparam: {:x?}", *kparam);
+            error!("kparam: {:x?}", *kparam);
 
             unsafe {
                 if kparam.ordinal as usize >= (*kernel).paramNum {
@@ -209,13 +211,13 @@ pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> 
                     while (*kernel).paramOffsets.len() < (*kernel).paramNum {
                         (*kernel).paramOffsets.push(0);
                         (*kernel).paramSizes.push(0);
-                        // error!("in while kernel: {:x?}", *kernel);
+                        error!("in while kernel: {:x?}", *kernel);
                     }
-                    // error!("end while kernel: {:x?}", *kernel);                    
+                    error!("end while kernel: {:x?}", *kernel);                    
                 }
                 (*kernel).paramOffsets[kparam.ordinal as usize] = kparam.offset;
                 (*kernel).paramSizes[kparam.ordinal as usize] = kparam.GetSize();
-                // error!("changed value kernel: {:x?}, kparam: {:x?}", *kernel, *kparam);
+                error!("changed value kernel: {:x?}, kparam: {:x?}", *kernel, *kparam);
             }
 
             secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4 + entry.values_size as usize;
@@ -223,7 +225,7 @@ pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> 
             unsafe { 
                 (*kernel).paramSize = entry.values_size as usize; 
             }
-            // error!("cbank_param_size: {:x}", entry.values_size);
+            error!("cbank_param_size: {:x}", entry.values_size);
             secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
         } else if entry.format as u64 == EIFMT_HVAL {
             secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
@@ -232,7 +234,7 @@ pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> 
         } else if entry.format as u64 == EIFMT_NVAL {
             secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
         } else {
-            // error!("unknown format: {:x}", entry.format);
+            error!("unknown format: {:x}", entry.format);
             secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
         }            
     }
@@ -247,7 +249,7 @@ fn GetKernelSectionFromKernelName(kernelName:String) -> String {
 
     format!(".nv.info.{}", kernelName)
 }
-
+                                                          // a mutable reference to a mutable raw pointer
 pub fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn) -> Result<i64> {
     let mut scn = 0 as u64 as *mut Elf_Scn;
     let mut size:usize = 0;
@@ -268,9 +270,9 @@ pub fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn
         let mut symtab_shdr = shdr.as_mut_ptr();
         symtab_shdr = unsafe { gelf_getshdr(scnNew, symtab_shdr) };
         let section_name = CString::FromAddr(unsafe { elf_strptr(elf, *str_section_index, (*symtab_shdr).sh_name as usize) as u64 }).Str().unwrap().to_string();
-        // error!("section_name {}", section_name);
+        error!("section_name {}", section_name);
         if name.eq(&section_name) {
-            // error!("Found section {}", section_name);
+            error!("Found section {}", section_name);
             *section = scnNew;
             found = true;
             break;
@@ -288,7 +290,7 @@ pub fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn
 pub fn CheckElf(elf: *mut Elf) -> Result<i64> {    
     let ek = unsafe { elf_kind(elf) };
     if ek != libelf::raw::Elf_Kind::ELF_K_ELF {
-        // error!("elf_kind is not ELF_K_ELF, but {}", ek);
+        error!("elf_kind is not ELF_K_ELF, but {}", ek);
         return Err(Error::ELFLoadError("elf_kind is not ELF_K_ELF"));            
     }
 
@@ -301,10 +303,10 @@ pub fn CheckElf(elf: *mut Elf) -> Result<i64> {
         return Err(Error::ELFLoadError("gelf_getclass failed"));            
     }
 
-    // let nbytes = 0 as *mut usize;
-    // let id = unsafe { elf_getident(elf, nbytes) };
-    // let idStr = CString::FromAddr(id as u64).Str().unwrap().to_string();
-    // error!("id: {:?}, nbytes: {:?}, idStr: {}", id, nbytes, idStr);
+    let nbytes = 0 as *mut usize;
+    let id = unsafe { elf_getident(elf, nbytes) };
+    let idStr = CString::FromAddr(id as u64).Str().unwrap().to_string();
+    error!("id: {:?}, nbytes: {:?}, idStr: {}", id, nbytes, idStr);
 
     let mut size:usize = 0;
     let sections_num = &mut size as *mut _ as u64 as *mut usize;
