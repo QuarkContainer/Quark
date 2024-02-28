@@ -154,7 +154,7 @@ impl PageBlockAlloc {
         // todo: if disable this, system is not stable. root cause this.
         {
             let cc_enabled = SHARESPACE.config.read().EnableCC;
-            if SHARESPACE.hiberMgr.ContainersPage(addr) && cc_enabled {
+            if SHARESPACE.hiberMgr.ContainersPage(addr) && !cc_enabled {
                 let _ret = HostSpace::SwapInPage(addr);
             }
         }

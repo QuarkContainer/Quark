@@ -1252,7 +1252,7 @@ impl PageTables {
     #[cfg(target_arch = "x86_64")]
     pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
         let cc_enabled = SHARESPACE.config.read().EnableCC;
-        if !cc_enabled {
+        if cc_enabled {
             return;
         }
 
