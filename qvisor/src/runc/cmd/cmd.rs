@@ -85,8 +85,17 @@ impl Config {
             _ => return false,
         };
 
-        let config = serde_json::from_str(&contents).expect("configuration wrong format");
+        let mut config:Config = serde_json::from_str(&contents).expect("configuration wrong format");
+
+        if config.EnableCC {
+            config.EnableRDMA = false;
+            config.EnableTsot = false;
+        }
+        
         *self = config;
+
+        
+
         return true;
     }
 

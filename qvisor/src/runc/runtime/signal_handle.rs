@@ -108,7 +108,8 @@ extern "C" fn handle_sigintAct(
             panic!("get signal 11");
         }
 
-        SignalProcess(&ROOT_CONTAINER_ID.lock().clone(), 0, signal, console);
+        let res = SignalProcess(&ROOT_CONTAINER_ID.lock().clone(), 0, signal, console);
+        debug!("SignalProcess res {:?}", res);
     }
 }
 

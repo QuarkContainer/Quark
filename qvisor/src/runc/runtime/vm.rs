@@ -317,14 +317,17 @@ impl VirtualMachine {
             MemoryDef::PHY_LOWER_ADDR,
             MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB,
         )?;
+        
+        if QUARK_CONFIG.lock().EnableCC {
+            Self::SetMemRegion(
+                2,
+                &vm_fd,
+                MemoryDef::NVIDIA_START_ADDR,
+                MemoryDef::NVIDIA_START_ADDR,
+                MemoryDef::NVIDIA_ADDR_SIZE,
+            )?;
+        }
 
-        Self::SetMemRegion(
-            2,
-            &vm_fd,
-            MemoryDef::NVIDIA_START_ADDR,
-            MemoryDef::NVIDIA_START_ADDR,
-            MemoryDef::NVIDIA_ADDR_SIZE,
-        )?;
 
         let heapStartAddr = MemoryDef::HEAP_OFFSET;
 
@@ -340,15 +343,6 @@ impl VirtualMachine {
         let podIdStr = args.ID.clone();
         let mut podId = [0u8; 64];
         podId.clone_from_slice(podIdStr.as_bytes());
-        // let mut podId: [u8; 64] = [0; 64];
-        // debug!("VM::Initxxxxx, podIdStr: {}", podIdStr);
-        // if podIdStr.len() != podId.len() {
-        //     panic!("podId len: {} is not equal to podIdStr len: {}", podId.len(), podIdStr.len());
-        // }
-
-        // podIdStr.bytes()
-        //     .zip(podId.iter_mut())
-        //     .for_each(|(b, ptr)| *ptr = b);
         {
             let vms = &mut VMS.lock();
             vms.controlSock = controlSock;
