@@ -51,6 +51,8 @@ pub struct KernelInfo {
 pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
     let mut inputPosition = addr + fatElfHeader.header_size as u64;
     let endPosition = inputPosition + fatElfHeader.size as u64;
+    let mut textDatAddr:u64 = 0;
+    let mut textDataSize:u64 = 0 ; 
     error!("inputPosition:{:x} endPosition:{:x}", inputPosition, endPosition);
     while inputPosition < endPosition {
         let fatTextHeader = unsafe { &*(inputPosition as *const u8 as *const FatTextHeader) };
@@ -65,10 +67,20 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
         if fatTextHeader.flags & FATBIN_FLAG_DEBUG > 0 {
             error!("fatbin contains debug information.");
         }
-
         if (fatTextHeader.flags & FATBIN_FLAG_COMPRESS) > 0 {
             error!("fatbin contains compressed device code. Decompressing...");
-            todo!()
+            let input_read:i64;
+
+            match DecompressSingleSection(inputPosition, &mut textDatAddr, &mut textDataSize, fatTextHeader) {
+                Ok(inputRead) => input_read = inputRead,
+                Err(error) => {
+                    return Err(error)
+                },
+            }
+
+            if input_read < 0 {
+                error!("Something went wrong while decompressing text section.");
+            }                     
         }
 
         match GetParameterInfo(fatTextHeader, inputPosition) {
@@ -80,6 +92,185 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
     }
     error!("Complete handling FatTextHeader");
     Ok(0)
+}
+
+fn DecompressSingleSection(inputPosition:u64, outputPosition:*mut u64, outputSize:*mut u64,fatTextHeader:&FatTextHeader) -> Result<i64> {
+
+    let mut padding:u64;
+    let mut inputRead:u64 = 0;
+    let mut outputWritten:u64 = 0;
+    let decompressResult;
+    let zeros: [u8; 8] = [0; 8];
+
+    // let  mut pciBusId: Vec<c_char> = vec![0; parameters.para2 as usize];   
+    // let mut data = Vec::with_capacity(decompressed_size + 7);
+
+    let decompressedByte: Vec<u8> = vec![0; (fatTextHeader.compressed_size + 7) as usize];
+    unsafe{ *outputPosition = &decompressedByte[0] as *const _ as u64 };
+
+    error!("fatTextHeader: fatbin_kind:{:x}, header_size:{:x}, size:{:x}, compressed_size:{:x}, minor:{:x}, major:{:x}, arch:{:x}, decompressed_size:{:x}, flags:{:#x?}",
+    fatTextHeader.kind,
+    fatTextHeader.header_size, 
+    fatTextHeader.size, 
+    fatTextHeader.compressed_size, 
+    fatTextHeader.minor, 
+    fatTextHeader.major, 
+    fatTextHeader.arch, 
+    fatTextHeader.decompressed_size, 
+    fatTextHeader.flags
+    );
+    error!("fatTextHeader unknown fields: unknown1: {:x}, unknown2: {:x}, zeros: {:x}", fatTextHeader.unknown1, fatTextHeader.unknown2, fatTextHeader.zero);
+
+    decompressResult = decompress(inputPosition, fatTextHeader.compressed_size as u64, outputPosition, fatTextHeader.decompressed_size);
+    if decompressResult != fatTextHeader.decompressed_size {
+        error!("Decompression failed: decompressed size is {:x}, but header says {:x}.", decompressResult, fatTextHeader.decompressed_size);
+        hexdump(inputPosition, 0x160);
+        if decompressResult >= 0x60 {
+            unsafe{
+                hexdump(*outputPosition + decompressResult - 0x60, 0x60);
+            };
+        }
+        return Err(Error::DecompressFatbinError(String::from("decompression failed")));
+    }
+
+    error!("decompressResult should equal to fatTextHeader.decompressed_size, decompressResult: {:x}, fatTextHeader.decompressed_size: {:x}", decompressResult, fatTextHeader.decompressed_size);
+    inputRead += fatTextHeader.compressed_size as u64;
+    outputWritten += fatTextHeader.decompressed_size;
+
+    padding = (8 - (inputPosition + inputRead)) % 8;
+       
+    let slice1 = unsafe{std::slice::from_raw_parts(inputPosition as *const u8, padding as usize) };
+    let slice2 = unsafe {std::slice::from_raw_parts(&zeros[0], padding as usize)};
+
+    if slice1 != slice2 {
+        error!("yiwang expected {:x} zero bytes", padding);
+        hexdump(inputPosition + inputRead, 0x60);
+        return Err(Error::DecompressFatbinError(String::from("padding length is wrong")));
+    }
+
+    inputRead += padding;
+    padding = (8 - (inputPosition + inputRead)) % 8;
+
+    unsafe{
+        std::ptr::write_bytes(outputPosition as *mut u8, 0, padding as usize)
+    };
+
+    outputWritten += padding;
+    unsafe {
+    *outputSize = outputWritten;
+    }
+    return Ok(inputRead as i64);
+}
+
+/* Decompressed a fatbin file 
+* @param inputPosition: inputPosition for compressed input data 
+* @param inputSize: Size of compressed data
+* @param output: Preallocated memory where decompressed output should be stored
+* @param outputSize: Size of output buffer. Should be equal to the size of the decompressed data
+*/
+fn decompress(inputPosition:u64, inputSize:u64, outputPosition: *mut u64, outputSize: u64) -> u64 {
+    let mut ipos:u64 = 0;
+    let mut opos:u64 = 0;
+    let mut nextNonCompressed_length:u64;
+    let mut nextCompressed_length:u64;
+    let mut backOffset:u64;
+     // may be i8, in rust, char is i8
+    while ipos < inputSize {      
+        nextNonCompressed_length = unsafe { ((*((inputPosition + ipos) as *const u8) & 0xf0) >> 4) as u64 };
+        nextCompressed_length = unsafe{ 4 + (*((inputPosition + ipos) as *const u8) & 0xf) as u64  };
+        if nextNonCompressed_length == 0xf{
+            loop {
+                ipos += 1;
+                unsafe{
+                nextNonCompressed_length += *((inputPosition + ipos) as *const u8) as u64
+                };
+                if unsafe{ *((inputPosition + ipos) as *const u8)} != 0xff  {
+                    break; 
+                }
+            }
+        }
+
+        unsafe{
+            std::ptr::copy_nonoverlapping((inputPosition + ipos + 1) as *const u8, 
+            (&*outputPosition + opos) as *mut u8,
+            nextNonCompressed_length as usize)
+        };
+
+        ipos += 1 + ipos + nextNonCompressed_length;
+        opos += nextNonCompressed_length;
+
+        if ipos >= inputSize || opos >= outputSize {
+            break;
+        }
+        // backOffset = unsafe { *((inputPosition as *mut u8).offset(ipos as isize)) as u64 + (*((inputPosition as *mut u8).offset(ipos as isize + 1)) << 8) as u64};
+        backOffset = unsafe{ (*((inputPosition + ipos) as *const u8)) as u64 + (*((inputPosition + ipos +1) as *const u8) as u64 ) << 8 };
+        ipos += 2;
+
+        if nextCompressed_length == 0xf + 4{
+            loop {
+                nextCompressed_length += unsafe{ *((inputPosition + ipos) as *const u8) as u64 };
+                ipos += 1;
+                if unsafe {*((inputPosition + ipos - 1) as *const u8)} != 0xff {
+                    break;
+                }
+            }        
+        }
+
+        if nextCompressed_length <= backOffset {
+            unsafe{
+                std::ptr::copy_nonoverlapping((&*outputPosition + opos - backOffset) as *const u8,
+                 (&*outputPosition + opos) as *mut u8,
+                 nextCompressed_length as usize)
+            };
+        }else{
+            unsafe{
+                std::ptr::copy_nonoverlapping((&*outputPosition + opos -backOffset) as *const u8 ,(&*outputPosition + opos) as *mut u8 , backOffset as usize)
+            };
+
+            for i in backOffset..nextCompressed_length {
+               unsafe {*((&*outputPosition + opos + i) as *mut u8) =  *((&*outputPosition + opos + i - backOffset) as *mut u8) };
+            }
+        }
+
+        opos += nextCompressed_length;
+
+    }
+    error!("yiwang ipos: {:x}, opos: {:x}, input size: {:x}, output size: {:x}", ipos, opos, inputSize, outputSize);
+    return opos ; 
+}
+
+fn hexdump(dataAddress: u64, size: u64){
+    let mut pos: u64 = 0;
+    while pos < size {
+        error!("yiwang hexdump debug {:#05x}", pos);
+        for i in 0..16 {
+            if pos + i < size {
+                unsafe {
+                error!("yiwang gexdump debug {:02x}", *((dataAddress + i) as *const u8))
+                };
+            } else {
+                error!(" ");
+            }
+            if i % 4 == 3 {
+                error!(" ");
+            }
+        }
+        for i in 0..16 {
+            unsafe{
+                if pos + i < size {
+                
+                if  *((dataAddress + i) as *const u8) >= 0x20 &&  *((dataAddress + i) as *const u8) <= 0x7e {
+                    error!("{}", *((dataAddress + i) as *const char));    
+                } else {
+                    error!(".");
+                }
+            } else {
+                error!("");
+            }
+        };
+        }
+        pos += 16;
+    }
 }
 
 fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i64> {

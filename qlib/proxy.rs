@@ -355,19 +355,19 @@ pub struct FatElfHeader {
 #[derive(Default, Debug)]
 pub struct FatTextHeader {
     pub kind: u16,
-    unknown1: u16,
+    pub unknown1: u16,
     pub header_size: u32,
     pub size: u64,
-    compressed_size: u32,
-    unknown2: u32,
-    minor: u16,
-    major: u16,
-    arch: u32,
-    obj_name_offset: u32,
-    obj_name_len: u32,
+    pub compressed_size: u32,
+    pub unknown2: u32,
+    pub minor: u16,
+    pub major: u16,
+    pub arch: u32,
+    pub obj_name_offset: u32,
+    pub obj_name_len: u32,
     pub flags:u64,
-    zero: u64,
-    decompressed_size: u64
+    pub zero: u64,
+    pub decompressed_size: u64
 }
 
 #[repr(C)]

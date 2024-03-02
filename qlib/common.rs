@@ -374,6 +374,7 @@ pub enum Error {
     Overflow,
     WrongELFFormat,
     ELFLoadError(&'static str),
+    DecompressFatbinError(String),
     InterpreterFileErr,
     MMampError,
     UnmatchRegion,
