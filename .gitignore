@@ -7,3 +7,4 @@ test/c/*
 test/go/*
 test/go/*.go
 .idea/
+__pycache__/
