@@ -46,7 +46,7 @@ pub struct PromptResp {
 }
 
 #[derive(Debug)]
-pub struct GatewayActorInner {
+pub struct HttpActorInner {
     pub requests: Mutex<BTreeMap<u64, oneshot::Sender<PromptResp>>>,
     pub lastReqId: AtomicU64,
 
@@ -59,21 +59,21 @@ pub struct GatewayActorInner {
 }
 
 #[derive(Debug, Clone)]
-pub struct GatewayActor(Arc<GatewayActorInner>);
+pub struct HttpActor(Arc<HttpActorInner>);
 
-impl Deref for GatewayActor {
-    type Target = Arc<GatewayActorInner>;
+impl Deref for HttpActor {
+    type Target = Arc<HttpActorInner>;
 
-    fn deref(&self) -> &Arc<GatewayActorInner> {
+    fn deref(&self) -> &Arc<HttpActorInner> {
         &self.0
     }
 }
 
-impl GatewayActor {
+impl HttpActor {
     pub fn New(gatewayActorId: &str, gatewayFunc: &str, httpPort: u16) -> Self {
         let (tx, rx) = mpsc::channel::<qactor::TellReq>(30);
         
-        let inner = GatewayActorInner {
+        let inner = HttpActorInner {
             requests: Mutex::new(BTreeMap::new()),
             lastReqId: AtomicU64::new(1),
             inputTx: tx,
@@ -115,7 +115,7 @@ impl GatewayActor {
             data: prompt.to_owned().into_bytes(),
         };
 
-        ACTOR_SYSTEM.get().unwrap().Send(tellReq).unwrap();
+        ACTOR_SYSTEM.Send(tellReq).unwrap();
 
         return rx
     }
@@ -175,7 +175,7 @@ impl GatewayActor {
 
 async fn ProcessPrompt(
     Json(payload): Json<PromptReq>,
-    State(state): State<GatewayActor>,
+    State(state): State<HttpActor>,
 ) -> impl IntoResponse {
     let rx = state.NewPrompt(&payload.prompt);
     let resp = rx.await.unwrap();

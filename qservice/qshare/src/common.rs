@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use pyo3::exceptions::PyTypeError;
+use pyo3::PyErr;
 use serde_json::Error as SerdeJsonError;
 use tonic::Status as TonicStatus;
 use std::num::ParseIntError;
@@ -224,5 +226,11 @@ impl Error {
             expectRv: expectRv,
             actualRv: actualRv
         })
+    }
+}
+
+impl Into<PyErr> for Error {
+    fn into(self) -> PyErr {
+        return PyErr::new::<PyTypeError, _>(format!("{:?}", self));
     }
 }

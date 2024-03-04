@@ -19,8 +19,14 @@ class C2:
     def add(self, a):
         self.a += a
         return self.a
-    
-#print(qactor.sum_as_string(5, 20))
-if __name__=="__main__": 
-    worker.ActorSystem.new_actor("worker1", C1)
-    worker.ActorSystem.new_http_actor("httpactor", "worker1", "run", 123)
+
+def main():
+    system = worker.ActorSystem()
+    print("main 1")
+    system.new_actor("worker1", C1)
+    print("main 2")
+    system.new_http_actor("httpactor", "worker1", "run", 123)
+    print("main 3")
+    system.wait()
+
+main()

@@ -12,33 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use core::ops::Deref;
-use tokio::sync::mpsc;
-use tokio::sync::Mutex as TMutex;
+//use tokio::sync::mpsc;
+use std::sync::mpsc;
 
 use qshare::qactor;
 
-use crate::gateway_actor::GatewayActor;
+use crate::http_actor::HttpActor;
 
 #[derive(Debug, Clone)]
-pub enum Actor {
+pub enum Actor { 
     PyActor(PyActor),
-    GatewayActor(GatewayActor),
+    HttpActor(HttpActor),
 }
 
 impl Actor {
     pub fn Tell(&self, req: qactor::TellReq) {
         match self {
             Actor::PyActor(a) => a.Tell(req),
-            Actor::GatewayActor(a) => a.Tell(req),
+            Actor::HttpActor(a) => a.Tell(req),
         }
     }
 
-    pub async fn Recv(&self) -> Option<qactor::TellReq> {
+    pub fn Recv(&self) -> Option<qactor::TellReq> {
         match self {
-            Actor::PyActor(a) => return a.Recv().await,
-            Actor::GatewayActor(a) => return a.Recv().await,
+            Actor::PyActor(a) => return a.Recv(),
+            Actor::HttpActor(_) => {
+                unreachable!()
+                //return a.Recv().await,
+            }
         }
     }
 }
@@ -46,13 +49,13 @@ impl Actor {
 
 #[derive(Debug)]
 pub struct PyActorInner {
-    pub name: String,
+    pub id: String,
     pub modName: String,
     pub className: String,
 
     pub location: LocationId,
     pub inputTx: mpsc::Sender<qactor::TellReq>,
-    pub inputRx: TMutex<mpsc::Receiver<qactor::TellReq>>,
+    pub inputRx: Mutex<mpsc::Receiver<qactor::TellReq>>,
 }
 
 #[derive(Debug, Clone)]
@@ -67,18 +70,39 @@ impl Deref for PyActor {
 }
 
 impl PyActor {
-    pub fn Tell(&self, req: qactor::TellReq) {
-        self.inputTx.try_send(req).unwrap();
+    pub fn New(id: &str, modName: &str, className: &str) -> Self {
+        //let (tx, rx) = mpsc::channel::<qactor::TellReq>(30);
+        let (tx, rx) = mpsc::channel();
+        let inner = PyActorInner {
+            id: id.to_owned(),
+            modName: modName.to_owned(),
+            className: className.to_owned(),
+            location: LocationId::default(),
+            inputRx: Mutex::new(rx),
+            inputTx: tx,
+        };
+
+        return Self(Arc::new(inner))
     }
 
-    pub async fn Recv(&self) -> Option<qactor::TellReq> {
-        let mut rx = self.inputRx.lock().await;
-        let req = rx.recv().await;
-        return req;
+    pub fn Tell(&self, req: qactor::TellReq) {
+        self.inputTx.send(req).unwrap();
+    }
+
+    pub fn Recv(&self) -> Option<qactor::TellReq> {
+        match self.inputRx.lock().unwrap().recv() {
+            Err(e) => {
+                error!("PyActor::Recv get error {:?}", e);
+                return None;
+            }
+            Ok(r) => {
+                return Some(r)
+            }
+        }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct LocationId {
     pub podIp: String,
     pub processId: u16,
