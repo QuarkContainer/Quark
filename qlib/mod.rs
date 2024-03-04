@@ -57,7 +57,6 @@ pub mod fileinfo;
 pub mod limits;
 pub mod linux;
 pub mod loader;
-pub mod lockfreebytestream;
 pub mod lrc_cache;
 pub mod mem;
 pub mod metric;

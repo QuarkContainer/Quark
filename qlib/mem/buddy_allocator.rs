@@ -233,7 +233,8 @@ impl LinkedList {
 
     /// Push `item` to the front of the list
     pub unsafe fn push(&mut self, item: *mut usize) {
-        *item = self.head as usize;
+        let a = self.head as usize;
+        *item = a;
         self.head = item;
     }
 

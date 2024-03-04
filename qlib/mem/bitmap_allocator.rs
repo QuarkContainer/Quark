@@ -16,9 +16,6 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::cmp::max;
 use core::mem::size_of;
 use core::ops::Deref;
-use core::sync::atomic;
-
-use crate::qlib::linux_def::MemoryDef;
 use crate::qlib::mutex::*;
 
 // handle total 64 * 64 = 4K blocks
@@ -837,46 +834,5 @@ unsafe impl GlobalAlloc for BitmapAllocator {
         let class = size.trailing_zeros() as usize;
 
         self.Free(class, ptr as _);
-    }
-}
-
-#[derive(Debug)]
-pub struct BitmapAllocatorWrapper {
-    pub addr: atomic::AtomicU64,
-}
-
-impl BitmapAllocatorWrapper {
-    pub fn Allocator(&self) -> &mut BitmapAllocator {
-        let mut addr = self.addr.load(atomic::Ordering::Relaxed);
-        if addr == 0 {
-            self.Init();
-            addr = self.addr.load(atomic::Ordering::Relaxed);
-            let allocator = unsafe { &mut *(addr as *mut BitmapAllocator) };
-            allocator.Bootstrap(addr);
-            return allocator;
-        }
-
-        return unsafe { &mut *(addr as *mut BitmapAllocator) };
-    }
-
-    pub fn Clear(&self) {}
-    pub fn Initializated(&self) {}
-
-    #[inline]
-    pub fn HeapRange(&self) -> (u64, u64) {
-        return (
-            MemoryDef::HEAP_OFFSET,
-            MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE,
-        );
-    }
-}
-
-unsafe impl GlobalAlloc for BitmapAllocatorWrapper {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        return self.Allocator().alloc(layout);
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        return self.Allocator().dealloc(ptr, layout);
     }
 }

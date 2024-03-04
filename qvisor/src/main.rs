@@ -102,7 +102,6 @@ use self::vmspace::host_pma_keeper::*;
 use self::vmspace::hostfdnotifier::*;
 use self::vmspace::kernel_io_thread::*;
 use crate::qlib::linux_def::MemoryDef;
-//use crate::qlib::mem::bitmap_allocator::BitmapAllocatorWrapper;
 use self::qlib::kernel::kernel::kernel::Kernel;
 
 use self::vmspace::uringMgr::*;
@@ -177,7 +176,6 @@ pub fn InitSingleton() {
 
 //pub static ALLOCATOR: HostAllocator = HostAllocator::New();
 #[global_allocator]
-//pub static GLOBAL_ALLOCATOR: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 fn main() {

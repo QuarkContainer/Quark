@@ -329,15 +329,8 @@ impl VirtualMachine {
         }
 
 
-        let heapStartAddr = MemoryDef::HEAP_OFFSET;
-
         PMA_KEEPER.Init(MemoryDef::FILE_MAP_OFFSET, MemoryDef::FILE_MAP_SIZE);
 
-        info!(
-            "set map region start={:x}, end={:x}",
-            MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::PHY_LOWER_ADDR + MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB
-        );
 
         let autoStart;
         let podIdStr = args.ID.clone();
@@ -409,7 +402,6 @@ impl VirtualMachine {
                 cpuCount,
                 &vm_fd,
                 entry,
-                heapStartAddr,
                 SHARE_SPACE.Value(),
                 autoStart,
             )?);

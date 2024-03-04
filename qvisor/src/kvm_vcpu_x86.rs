@@ -31,22 +31,15 @@ use crate::qlib::cpuid::XSAVEFeature::{XSAVEFeatureBNDCSR, XSAVEFeatureBNDREGS};
 use crate::qlib::kernel::asm::xgetbv;
 
 use super::*;
-//use super::qlib::kernel::TSC;
 use super::amd64_def::*;
-use super::qlib::buddyallocator::ZeroPage;
 use super::qlib::*;
-//use super::kvm_ctl::*;
 use super::qlib::common::*;
 use super::qlib::GetTimeCall;
-//use super::qlib::kernel::stack::*;
 use super::kvm_vcpu::KVMVcpuState;
 use super::kvm_vcpu::SetExitSignal;
 use super::qlib::linux::time::Timespec;
 use super::qlib::linux_def::*;
-use super::qlib::pagetable::*;
 use super::qlib::perf_tunning::*;
-//use super::qlib::task_mgr::*;
-//use super::qlib::vcpu_mgr::*;
 use super::runc::runtime::vm::*;
 use super::syncmgr::*;
 
@@ -58,40 +51,6 @@ pub struct SignalMaskStruct {
     _pad: u32,
 }
 
-pub struct HostPageAllocator {
-    pub allocator: AlignedAllocator,
-}
-
-impl HostPageAllocator {
-    pub fn New() -> Self {
-        return Self {
-            allocator: AlignedAllocator::New(0x1000, 0x10000),
-        };
-    }
-}
-
-impl Allocator for HostPageAllocator {
-    fn AllocPage(&self, _incrRef: bool) -> Result<u64> {
-        let ret = self.allocator.Allocate()?;
-        ZeroPage(ret);
-        return Ok(ret);
-    }
-}
-
-impl RefMgr for HostPageAllocator {
-    fn Ref(&self, _addr: u64) -> Result<u64> {
-        //panic!("HostPageAllocator doesn't support Ref");
-        return Ok(1);
-    }
-
-    fn Deref(&self, _addr: u64) -> Result<u64> {
-        panic!("HostPageAllocator doesn't support Deref");
-    }
-
-    fn GetRef(&self, _addr: u64) -> Result<u64> {
-        panic!("HostPageAllocator doesn't support GetRef");
-    }
-}
 
 impl KVMVcpu {
     fn SetupGDT(&self, sregs: &mut kvm_sregs) {
@@ -238,7 +197,7 @@ impl KVMVcpu {
             rax: 0x11,
             rbx: 0xdd,
             //arg0
-            rdi: self.heapStartAddr, // self.pageAllocatorBaseAddr + self.,
+            rdi: self.privateHeapStartAddr, // self.pageAllocatorBaseAddr + self.,
             //arg1
             rsi: self.shareSpaceAddr,
             //arg2
@@ -249,7 +208,6 @@ impl KVMVcpu {
             r8: self.vcpuCnt as u64,
             //arg5
             r9: self.autoStart as u64,
-            //rdx:
             //rcx:
             ..Default::default()
         };
@@ -282,8 +240,10 @@ impl KVMVcpu {
                 return Ok(());
             }
 
+            GLOBAL_ALLOCATOR.is_vm_lauched.store(true, Ordering::Relaxed);
             self.state
                 .store(KVMVcpuState::GUEST as u64, Ordering::Release);
+
             fence(Ordering::Acquire);
             let kvmRet = match self.vcpu.run() {
                 Ok(ret) => ret,

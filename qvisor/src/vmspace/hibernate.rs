@@ -147,6 +147,7 @@ impl HiberMgr {
         return Ok(());
     }
 
+    // SwapOut disabled in confidential computing mode
     pub fn SwapOut(&self, start: u64, len: u64) -> Result<()> {
         while !SHARE_SPACE.scheduler.ReadyForHibernate() {
             // wait until all other vcpu halt
@@ -168,23 +169,27 @@ impl HiberMgr {
         crate::PMA_KEEPER.DontNeed()?;
 
         //SHARE_SPACE.scheduler.CleanVcpPageCache();
-        let allocated1 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
-        GLOBAL_ALLOCATOR.Allocator().FreeAll();
-        let allocated2 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
+        let heap_allocated_before = GLOBAL_ALLOCATOR.HostInitAllocator().heap.lock().allocated
+            + GLOBAL_ALLOCATOR.GuestHostSharedAllocator().heap.lock().allocated
+                + GLOBAL_ALLOCATOR.GuestPrivateAllocator().heap.lock().allocated;
+        GLOBAL_ALLOCATOR.HostInitAllocator().FreeAll();
+        GLOBAL_ALLOCATOR.GuestHostSharedAllocator().FreeAll();
+        GLOBAL_ALLOCATOR.GuestPrivateAllocator().FreeAll();
+
+        let heap_allocated_after = GLOBAL_ALLOCATOR.HostInitAllocator().heap.lock().allocated
+            + GLOBAL_ALLOCATOR.GuestHostSharedAllocator().heap.lock().allocated
+                + GLOBAL_ALLOCATOR.GuestPrivateAllocator().heap.lock().allocated;
         info!(
             "free pagepool {} pages, total allocated1 {} allocated2 {} free bytes {}",
             cnt,
-            allocated1,
-            allocated2,
-            allocated1 - allocated2
+            heap_allocated_before,
+            heap_allocated_after,
+            heap_allocated_before - heap_allocated_after
         );
-        //info!("heap usage1 is {:?}", &GLOBAL_ALLOCATOR.Allocator().counts);
-        /*for i in 3..20 {
-            info!("heap usage2 is {}/{:x}/{:?}/{:?}", i, 1<<i, GLOBAL_ALLOCATOR.Allocator().counts[i], GLOBAL_ALLOCATOR.Allocator().maxnum[i]);
-        }
-        info!("heap usage3 is {:?}", &GLOBAL_ALLOCATOR.Allocator().maxnum);*/
 
-        GLOBAL_ALLOCATOR.Allocator().heap.lock().DontNeed();
+        GLOBAL_ALLOCATOR.HostInitAllocator().heap.lock().DontNeed();
+        GLOBAL_ALLOCATOR.GuestHostSharedAllocator().heap.lock().DontNeed();
+        GLOBAL_ALLOCATOR.GuestPrivateAllocator().heap.lock().DontNeed();
 
         error!("swap out done ...");
         return Ok(());

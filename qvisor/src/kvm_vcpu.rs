@@ -95,7 +95,8 @@ pub struct KVMVcpu {
     pub tssIntStackStart: u64,
     pub tssAddr: u64,
 
-    pub heapStartAddr: u64,
+    pub privateHeapStartAddr: u64,
+    pub sharedHeapStartAddr: u64,
     pub shareSpaceAddr: u64,
 
     pub autoStart: bool,
@@ -111,7 +112,6 @@ impl KVMVcpu {
         vcpuCnt: usize,
         vm_fd: &kvm_ioctls::VmFd,
         entry: u64,
-        pageAllocatorBaseAddr: u64,
         shareSpaceAddr: u64,
         autoStart: bool,
     ) -> Result<Self> {
@@ -175,7 +175,8 @@ impl KVMVcpu {
             idtAddr: idtAddr,
             tssIntStackStart: tssIntStackStart,
             tssAddr: tssAddr,
-            heapStartAddr: pageAllocatorBaseAddr,
+            privateHeapStartAddr: MemoryDef::GUEST_PRIVATE_HEAP_OFFSET,
+            sharedHeapStartAddr: MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST,
             shareSpaceAddr: shareSpaceAddr,
             autoStart: autoStart,
             interrupting: Mutex::new((false, vec![])),

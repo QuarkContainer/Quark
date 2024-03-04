@@ -129,7 +129,6 @@ pub mod rdma_def;
 mod syscalls;
 
 //use self::heap::QAllocator;
-//use qlib::mem::bitmap_allocator::BitmapAllocatorWrapper;
 
 //use buddy_system_allocator::*;
 //#[global_allocator]
@@ -138,7 +137,7 @@ mod syscalls;
 pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
-//pub static GLOBAL_ALLOCATOR: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
+
 
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
@@ -482,7 +481,7 @@ fn InitLoader() {
 
 #[no_mangle]
 pub extern "C" fn rust_main(
-    heapStart: u64,
+    privateHeapStart: u64,
     shareSpaceAddr: u64,
     id: u64,
     vdsoParamAddr: u64,
@@ -491,7 +490,7 @@ pub extern "C" fn rust_main(
 ) {
     self::qlib::kernel::asm::fninit();
     if id == 0 {
-        GLOBAL_ALLOCATOR.Init(heapStart);
+        GLOBAL_ALLOCATOR.Init(privateHeapStart, MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
         SHARESPACE.SetValue(shareSpaceAddr);
         SingletonInit();
 
@@ -534,7 +533,7 @@ pub extern "C" fn rust_main(
     };
 
     if id == 1 {
-        info!("heap start is {:x}", heapStart);
+        info!("heap start is {:x}", privateHeapStart);
         self::Init();
 
         if autoStart {
