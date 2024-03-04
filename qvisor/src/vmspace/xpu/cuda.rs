@@ -80,15 +80,20 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
 
             if input_read < 0 {
                 error!("Something went wrong while decompressing text section.");
-            }                     
+                return Err(Error::DecompressFatbinError(String::from("Something went wrong while decompressing text section.")));
+            } 
+            inputPosition = input_read as u64;                           
+        }else {
+            textDatAddr = inputPosition;
+            inputPosition += fatTextHeader.size;   
         }
 
-        match GetParameterInfo(fatTextHeader, inputPosition) {
+        match GetParameterInfo(fatTextHeader, textDatAddr) {
             Ok(v) => v,
             Err(e) => return Err(e),
         };
 
-        inputPosition += fatTextHeader.size;
+       
     }
     error!("Complete handling FatTextHeader");
     Ok(0)
@@ -139,8 +144,8 @@ fn DecompressSingleSection(inputPosition:u64, outputPosition:*mut u64, outputSiz
 
     padding = (8 - (inputPosition + inputRead)) % 8;
        
-    let slice1 = unsafe{std::slice::from_raw_parts(inputPosition as *const u8, padding as usize) };
-    let slice2 = unsafe {std::slice::from_raw_parts(&zeros[0], padding as usize)};
+    let slice1 = unsafe{std::slice::from_raw_parts((inputPosition + inputRead) as *const u8, padding as usize) };
+    let slice2 = unsafe {std::slice::from_raw_parts(&zeros[0] as *const u8, padding as usize)};
 
     if slice1 != slice2 {
         error!("yiwang expected {:x} zero bytes", padding);
@@ -149,10 +154,10 @@ fn DecompressSingleSection(inputPosition:u64, outputPosition:*mut u64, outputSiz
     }
 
     inputRead += padding;
-    padding = (8 - (inputPosition + inputRead)) % 8;
-
+    padding = (8 - fatTextHeader.decompressed_size) % 8;
+   
     unsafe{
-        std::ptr::write_bytes(outputPosition as *mut u8, 0, padding as usize)
+        std::ptr::write_bytes((*(outputPosition as *mut u8)) as *mut u8, 0, padding as usize)
     };
 
     outputWritten += padding;
@@ -196,7 +201,7 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition: *mut u64, output
             nextNonCompressed_length as usize)
         };
 
-        ipos += 1 + ipos + nextNonCompressed_length;
+        ipos += 1 + nextNonCompressed_length;
         opos += nextNonCompressed_length;
 
         if ipos >= inputSize || opos >= outputSize {
