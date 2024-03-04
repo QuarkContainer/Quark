@@ -480,6 +480,10 @@ fn InitLoader() {
     LOADER.InitKernel(process).unwrap();
 }
 
+fn InitShareMemory() {
+    todo!();
+}
+
 #[no_mangle]
 pub extern "C" fn rust_main(
     heapStart: u64,
@@ -492,6 +496,12 @@ pub extern "C" fn rust_main(
     self::qlib::kernel::asm::fninit();
     if id == 0 {
         GLOBAL_ALLOCATOR.Init(heapStart);
+        /*
+        InitShareMemory();
+        //Here should assign a page for hypercall parameters
+        //HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, 0, 0, 0, 0);
+        //Use the return parameter to set the shareSpaceAddr, vdsoParamAddr
+        */
         SHARESPACE.SetValue(shareSpaceAddr);
         SingletonInit();
 

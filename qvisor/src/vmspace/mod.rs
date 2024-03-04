@@ -135,6 +135,9 @@ pub struct VMSpace {
     pub vcpus: Vec<Arc<KVMVcpu>>,
     pub haveMembarrierGlobal: bool,
     pub haveMembarrierPrivateExpedited: bool,
+
+    pub rdmaSvcCliSock: i32,
+    pub podId: [u8;64],
 }
 
 
@@ -163,6 +166,8 @@ impl VMSpace {
             vcpus: Vec::new(),
             haveMembarrierGlobal: haveMembarrierGlobal,
             haveMembarrierPrivateExpedited: haveMembarrierPrivateExpedited,
+            rdmaSvcCliSock: 0,
+            podId: [0u8;64],
         };
     }
 
@@ -1914,6 +1919,21 @@ impl VMSpace {
             .pageTables
             .MapWith1G(start, end, physical, flags, &mut self.allocator, true);
     }
+
+    pub fn KernelMapHugeTablePrivate(
+        &mut self,
+        start: Addr,
+        end: Addr,
+        physical: Addr,
+        flags: PageTableFlags,
+        c_bit: u64,
+    ) -> Result<bool> {
+        info!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
+        return self
+            .pageTables
+            .MapWith1GPrivate(start, end, physical, flags, &mut self.allocator, c_bit, true);
+    }
+
 
     pub fn PrintStr(phAddr: u64) {
         unsafe {

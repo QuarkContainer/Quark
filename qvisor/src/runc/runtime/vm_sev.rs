@@ -24,12 +24,15 @@ use kvm_ioctls::{Cap, Kvm, VmFd};
 use lazy_static::lazy_static;
 use nix::sys::signal;
 
+use core::mem::size_of;
+use crate::qlib::cpuid::HostID;
 use crate::qlib::MAX_VCPU_COUNT;
 use crate::tsot_agent::TSOT_AGENT;
 //use crate::vmspace::hibernate::HiberMgr;
 
 use super::super::super::elf_loader::*;
 use super::super::super::kvm_vcpu::*;
+use super::vm::*;
 #[cfg(target_arch = "aarch64")]
 use super::super::super::kvm_vcpu_aarch64::KVMVcpuInit;
 use super::super::super::print::LOG;
@@ -50,6 +53,7 @@ use super::super::super::qlib::pagetable::PageTables;
 use super::super::super::qlib::perf_tunning::*;
 use super::super::super::qlib::task_mgr::*;
 use super::super::super::qlib::ShareSpace;
+use super::super::super::qlib::cc::cpuid_page::*;
 use super::super::super::runc::runtime::loader::*;
 use super::super::super::syncmgr;
 use super::super::super::vmspace::*;
@@ -60,49 +64,78 @@ use super::super::super::{
     VCPU, VMS,
 };
 
-pub const SANDBOX_UID_NAME : &str = "io.kubernetes.cri.sandbox-uid";
-
-lazy_static! {
-    static ref EXIT_STATUS: AtomicI32 = AtomicI32::new(-1);
-    static ref DUMP: AtomicU64 = AtomicU64::new(0);
+impl CpuidPage {
+    pub fn FillCpuidPage(&mut self, kvm_cpuid_entries:&CpuId ) -> Result<()> {
+        let mut has_entries = false;
+    
+        for kvm_entry in kvm_cpuid_entries.as_slice(){
+            if kvm_entry.function == 0 && kvm_entry.index == 0 && has_entries {
+                break;
+            }
+    
+            if kvm_entry.function == 0xFFFFFFFF {
+                break;
+            }
+    
+            // range check, see:
+            // SEV Secure Nested Paging Firmware ABI Specification
+            // 8.14.2.6 PAGE_TYPE_CPUID
+            if !((0..0xFFFF).contains(&kvm_entry.function)
+                || (0x8000_0000..0x8000_FFFF).contains(&kvm_entry.function))
+            {
+                continue;
+            }
+            has_entries = true;
+    
+            let mut snp_cpuid_entry = SnpCpuidFunc{
+                eax_in: kvm_entry.function,
+                ecx_in: {
+                    if (kvm_entry.flags & KVM_CPUID_FLAG_SIGNIFCANT_INDEX) != 0 {
+                        kvm_entry.index
+                    } else {
+                        0
+                    }
+                },
+                xcr0_in: 0,
+                xss_in: 0,
+                eax: kvm_entry.eax,
+                ebx: kvm_entry.ebx,
+                ecx: kvm_entry.ecx,
+                edx: kvm_entry.edx,
+                ..Default::default()
+            };
+            if snp_cpuid_entry.eax_in == 0xD
+                && (snp_cpuid_entry.ecx_in == 0x0 || snp_cpuid_entry.ecx_in == 0x1)
+            {
+                /*
+                * Guest kernels will calculate EBX themselves using the 0xD
+                * subfunctions corresponding to the individual XSAVE areas, so only
+                * encode the base XSAVE size in the initial leaves, corresponding
+                * to the initial XCR0=1 state.
+                */
+                snp_cpuid_entry.ebx = 0x240;
+                snp_cpuid_entry.xcr0_in = 1;
+                snp_cpuid_entry.xss_in = 0;
+            }
+            self.AddEntry(&snp_cpuid_entry)
+                .expect("Failed to add CPUID entry to the CPUID page");
+        }
+        Ok(())
+    }
+}
+//for assumption
+pub fn get_page_from_allocator(len: usize) -> *mut u64 {
+    todo!()
 }
 
-#[inline]
-pub fn IsRunning() -> bool {
-    return EXIT_STATUS.load(Ordering::Relaxed) == -1;
-}
-
-pub fn SetExitStatus(status: i32) {
-    EXIT_STATUS.store(status, Ordering::Release);
-}
-
-pub fn GetExitStatus() -> i32 {
-    return EXIT_STATUS.load(Ordering::Acquire);
-}
-
-pub fn Dump(id: usize) -> bool {
-    assert!(id < MAX_VCPU_COUNT);
-    return DUMP.load(Ordering::Acquire) & (0x1 << id) > 0;
-}
-
-pub fn SetDumpAll() {
-    DUMP.store(u64::MAX, Ordering::Release);
-}
-
-pub fn ClearDump(id: usize) {
-    assert!(id < MAX_VCPU_COUNT);
-    DUMP.fetch_and(!(0x1 << id), Ordering::Release);
-}
-
-pub struct VirtualMachine {
-    pub kvm: Kvm,
-    pub vmfd: VmFd,
-    pub vcpus: Vec<Arc<KVMVcpu>>,
-    pub elf: KernelELF,
+//get c_bit position
+pub fn get_c_bit() -> u64 {
+    let (_, ebx, _, _) = HostID(0x8000001f, 0);
+    return (ebx&0x3f) as u64;
 }
 
 impl VirtualMachine {
-    pub fn SetMemRegion(
+    pub fn SetMemRegionCC(
         slotId: u32,
         vm_fd: &VmFd,
         phyAddr: u64,
@@ -134,48 +167,7 @@ impl VirtualMachine {
         return Ok(());
     }
 
-    pub fn Umask() -> u32 {
-        let umask = unsafe { libc::umask(0) };
-
-        return umask;
-    }
-
-    pub const KVM_IOEVENTFD_FLAG_DATAMATCH: u32 = (1 << kvm_ioeventfd_flag_nr_datamatch);
-    pub const KVM_IOEVENTFD_FLAG_PIO: u32 = (1 << kvm_ioeventfd_flag_nr_pio);
-    pub const KVM_IOEVENTFD_FLAG_DEASSIGN: u32 = (1 << kvm_ioeventfd_flag_nr_deassign);
-    pub const KVM_IOEVENTFD_FLAG_VIRTIO_CCW_NOTIFY: u32 =
-        (1 << kvm_ioeventfd_flag_nr_virtio_ccw_notify);
-
-    pub const KVM_IOEVENTFD: u64 = 0x4040ae79;
-
-    pub fn IoEventfdAddEvent(vmfd: i32, addr: u64, eventfd: i32) {
-        let kvmIoEvent = kvm_ioeventfd {
-            addr: addr,
-            len: 8,
-            datamatch: 1,
-            fd: eventfd,
-            flags: Self::KVM_IOEVENTFD_FLAG_DATAMATCH,
-            ..Default::default()
-        };
-
-        let ret = unsafe { libc::ioctl(vmfd, Self::KVM_IOEVENTFD, &kvmIoEvent as *const _ as u64) };
-
-        assert!(
-            ret == 0,
-            "IoEventfdAddEvent ret is {}/{}/{}",
-            ret,
-            errno::errno().0,
-            vmfd.as_raw_fd()
-        );
-    }
-
-    #[cfg(debug_assertions)]
-    pub const KERNEL_IMAGE: &'static str = "/usr/local/bin/qkernel_d.bin";
-
-    #[cfg(not(debug_assertions))]
-    pub const KERNEL_IMAGE: &'static str = "/usr/local/bin/qkernel.bin";
-
-    pub fn InitShareSpace(
+    pub fn InitShareSpaceSevSnp(
         cpuCount: usize,
         controlSock: i32,
         rdmaSvcCliSock: i32,
@@ -234,15 +226,7 @@ impl VirtualMachine {
     }
 
 
-    pub fn Init_vm(args: Args, enable_cc: bool) -> Result<Self>{
-        if enable_cc {
-            return Self::InitSevSnp(args);
-        } else {
-            return Self::Init(args);
-        }
-    }
-
-    pub fn Init(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
+    pub fn InitSevSnp(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
         PerfGoto(PerfType::Other);
 
         *ROOT_CONTAINER_ID.lock() = args.ID.clone();
@@ -304,6 +288,14 @@ impl VirtualMachine {
             .get_supported_cpuid(kvm_bindings::KVM_MAX_CPUID_ENTRIES)
             .unwrap();
 
+        //get one page from private allocator
+        
+        let cpuid_page_ptr = get_page_from_allocator(0x1000);
+        let mut cpuid_page = unsafe{ *(cpuid_page_ptr as *const CpuidPage)};
+        cpuid_page.FillCpuidPage(&kvm_cpuid).expect("Fail to fill Cpuid Page!");
+        let secret_page_ptr = get_page_from_allocator(0x1000);
+        
+        //kvm.create_vm_with_type(vm_type) in sev-snp
         let vm_fd = kvm
             .create_vm()
             .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
@@ -318,12 +310,22 @@ impl VirtualMachine {
         }
 
         let mut elf = KernelELF::New()?;
+        //private region, offset 4kb,
+        Self::SetMemRegion(
+            0,
+            &vm_fd,
+            MemoryDef::PHY_LOWER_ADDR,
+            MemoryDef::KERNEL_MEM_INIT_PRIVATE_REGION_OFFSET,
+            MemoryDef::KERNEL_MEM_INIT_PRIVATE_REGION_SIZE * MemoryDef::ONE_GB,
+        )?;
+
+
         Self::SetMemRegion(
             1,
             &vm_fd,
-            MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB,
+            MemoryDef::PHY_LOWER_ADDR+MemoryDef::KERNEL_MEM_INIT_PRIVATE_REGION_SIZE * MemoryDef::ONE_GB,
+            MemoryDef::KERNEL_MEM_INIT_SHARE_REGION_OFFSET,
+            MemoryDef::KERNEL_MEM_INIT_SHARE_REGION_SIZE * MemoryDef::ONE_GB,
         )?;
 
         Self::SetMemRegion(
@@ -361,11 +363,37 @@ impl VirtualMachine {
             let vms = &mut VMS.lock();
             vms.controlSock = controlSock;
             PMA_KEEPER.InitHugePages(); 
-
             vms.hostAddrTop =
                 MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
             vms.pageTables = PageTables::New(&vms.allocator)?;
 
+            /* 
+            let c_bit = get_c_bit();
+            vms.KernelMapHugeTablePrivate(
+                addr::Addr(MemoryDef::PHY_LOWER_ADDR),
+                addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
+                addr::Addr(MemoryDef::PHY_LOWER_ADDR),
+                addr::PageOpts::Zero()
+                    .SetPresent()
+                    .SetWrite()
+                    .SetGlobal()
+                    .Val(),
+                    c_bit,
+            )?;
+            
+            vms.KernelMapHugeTablePrivate(
+                addr::Addr(MemoryDef::NVIDIA_START_ADDR),
+                addr::Addr(MemoryDef::NVIDIA_START_ADDR + MemoryDef::NVIDIA_ADDR_SIZE),
+                addr::Addr(MemoryDef::NVIDIA_START_ADDR),
+                addr::PageOpts::Zero()
+                    .SetPresent()
+                    .SetWrite()
+                    .SetGlobal()
+                    .Val(),
+                    c_bit,
+            )?;
+            */
+            
             vms.KernelMapHugeTable(
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR),
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
@@ -390,11 +418,16 @@ impl VirtualMachine {
             autoStart = args.AutoStart;
             vms.pivot = args.Pivot;
             vms.args = Some(args);
+
+            vms.rdmaSvcCliSock = rdmaSvcCliSock;
+            vms.podId = podId;
+            
+
         }
 
-        Self::InitShareSpace(cpuCount, controlSock, rdmaSvcCliSock, podId);
+        //Self::InitShareSpaceSevSnp(cpuCount, controlSock, rdmaSvcCliSock, podId);
 
-        let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
+        let entry = elf.LoadKernelwithOffset(Self::KERNEL_IMAGE, MemoryDef::PAGE_SIZE)?;
         //let vdsoMap = VDSOMemMap::Init(&"/home/brad/rust/quark/vdso/vdso.so".to_string()).unwrap();
         elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
         VMS.lock().vdsoAddr = elf.vdsoStart;
@@ -446,115 +479,4 @@ impl VirtualMachine {
         Ok(vm)
     }
 
-    pub fn run(&mut self) -> Result<i32> {
-        // start the io thread
-        let cpu = self.vcpus[0].clone();
-        SetSigusr1Handler();
-        let mut threads = Vec::new();
-        let tgid = unsafe { libc::gettid() };
-        let kvm = self.kvm.as_raw_fd();
-        let vm_fd = self.vmfd.as_raw_fd();
-        threads.push(
-            thread::Builder::new()
-                .name("0".to_string())
-                .spawn(move || {
-                    THREAD_ID.with(|f| {
-                        *f.borrow_mut() = 0;
-                    });
-                    VCPU.with(|f| {
-                        *f.borrow_mut() = Some(cpu.clone());
-                    });
-                    cpu.run(tgid, kvm, vm_fd).expect("vcpu run fail");
-                    info!("cpu0 finish");
-                })
-                .unwrap(),
-        );
-
-        syncmgr::SyncMgr::WaitShareSpaceReady();
-        info!("shareSpace ready...");
-        // start the vcpu threads
-        for i in 1..self.vcpus.len() {
-            let cpu = self.vcpus[i].clone();
-
-            threads.push(
-                thread::Builder::new()
-                    .name(format!("{}", i))
-                    .spawn(move || {
-                        THREAD_ID.with(|f| {
-                            *f.borrow_mut() = i as i32;
-                        });
-                        VCPU.with(|f| {
-                            *f.borrow_mut() = Some(cpu.clone());
-                        });
-                        info!("cpu#{} start", ThreadId());
-                        cpu.run(tgid, kvm, vm_fd).expect("vcpu run fail");
-                        info!("cpu#{} finish", ThreadId());
-                    })
-                    .unwrap(),
-            );
-        }
-
-        for t in threads {
-            t.join().expect("the working threads has panicked");
-        }
-
-        URING_MGR.lock().Close();
-        Ok(GetExitStatus())
-    }
-
-    pub fn WakeAll(shareSpace: &ShareSpace) {
-        shareSpace.scheduler.WakeAll();
-    }
-
-    pub fn Schedule(shareSpace: &ShareSpace, taskId: TaskId, cpuAff: bool) {
-        shareSpace
-            .scheduler
-            .ScheduleQ(taskId, taskId.Queue(), cpuAff);
-    }
-
-    pub fn PrintQ(shareSpace: &ShareSpace, vcpuId: u64) -> String {
-        return shareSpace.scheduler.PrintQ(vcpuId);
-    }
-}
-
-#[cfg(target_arch = "aarch64")]
-const _KVM_ARM_PREFERRED_TARGET:u64  = 0x8020aeaf;
-
-#[cfg(target_arch = "aarch64")]
-fn set_kvm_vcpu_init(vmfd: &VmFd) -> Result<()> {
-    use crate::kvm_vcpu_aarch64::KVM_VCPU_INIT;
-
-    let mut kvm_vcpu_init = KVMVcpuInit::default();
-    let raw_fd = vmfd.as_raw_fd();
-    let ret = unsafe { libc::ioctl(raw_fd, _KVM_ARM_PREFERRED_TARGET, &kvm_vcpu_init as *const _ as u64) };
-    if ret != 0 {
-        return Err(Error::SysError(ret));
-    }
-    kvm_vcpu_init.set_psci_0_2();
-    unsafe { KVM_VCPU_INIT.Init(kvm_vcpu_init); }
-    Ok(())
-}
-
-fn SetSigusr1Handler() {
-    let sig_action = signal::SigAction::new(
-        signal::SigHandler::Handler(handleSigusr1),
-        signal::SaFlags::empty(),
-        signal::SigSet::empty(),
-    );
-    unsafe {
-        signal::sigaction(signal::Signal::SIGUSR1, &sig_action)
-            .expect("sigusr1 sigaction set fail");
-    }
-}
-
-extern "C" fn handleSigusr1(_signal: i32) {
-    SetDumpAll();
-    let vms = VMS.lock();
-    for vcpu in &vms.vcpus {
-        if vcpu.state.load(Ordering::Acquire) == KVMVcpuState::HOST as u64 {
-            vcpu.dump().unwrap_or_default();
-        }
-        vcpu.Signal(Signal::SIGCHLD);
-    }
-    drop(vms);
 }

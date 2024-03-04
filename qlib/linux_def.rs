@@ -3000,9 +3000,21 @@ impl MemoryDef {
         - Self::HEAP_SIZE;
     pub const HEAP_SIZE: u64 = 10 * Self::ONE_GB;
     pub const HEAP_END: u64 = Self::HEAP_OFFSET + Self::HEAP_SIZE;
+
+    pub const SEV_INIT_HOST_HEAP_OFFSET: u64 = MemoryDef::PHY_LOWER_ADDR 
+        + Self::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB
+        + MemoryDef::ONE_GB;
+    pub const SEV_INIT_HOST_HEAP_SIZE: u64 = MemoryDef::ONE_GB;
     
     // Create 24GB Init memory region for KVM VM
     pub const KERNEL_MEM_INIT_REGION_SIZE: u64 = 24; // 24 GB
+
+    //For sev snp memory region initialization
+    pub const KERNEL_MEM_INIT_SHARE_REGION_OFFSET : u64 = Self::HEAP_OFFSET;
+    pub const KERNEL_MEM_INIT_SHARE_REGION_SIZE : u64 = 8 ;// 8 GB
+    pub const KERNEL_MEM_INIT_PRIVATE_REGION_OFFSET : u64 = MemoryDef::PHY_LOWER_ADDR - 4 * Self::ONE_KB;
+    pub const KERNEL_MEM_INIT_PRIVATE_REGION_SIZE : u64 = 16 ;// 16 GB
+
 
     // start address for memmap and dynamic load address space, there is heap address space between PHY_UPPER_ADDR + VIR_MMAP_START
     pub const VIR_MMAP_START: u64 = Self::PHY_UPPER_ADDR + 128 * Self::ONE_GB; // 512GB + 128 GB

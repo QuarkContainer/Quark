@@ -165,6 +165,104 @@ impl KernelELF {
         return Ok(entry);
     }
 
+    pub fn LoadKernelwithOffset(&mut self, fileName: &str, mapOffset: u64) -> Result<u64> {
+        let f =
+            File::open(fileName).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+        let mmap =
+            unsafe { Mmap::map(&f).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))? };
+        let fd = f.as_raw_fd();
+
+        let mut startAddr: Addr = Addr(0xfffff_fffff_fffff);
+        let mut endAddr: Addr = Addr(0);
+
+        let elfFile = ElfFile::new(&mmap).map_err(Error::ELFLoadError)?;
+
+        let entry = match &elfFile.header.pt2 {
+            HeaderPt2::Header64(pt2) => pt2.entry_point,
+            _ => return Err(Error::WrongELFFormat),
+        };
+
+        for p in elfFile.program_iter() {
+            //todo : add more check
+            if let Ph64(header) = p {
+                if header.get_type().map_err(Error::ELFLoadError)? == Type::Load {
+                    let startMem = Addr(header.virtual_addr).RoundDown()?;
+                    let endMem = Addr(header.virtual_addr)
+                        .AddLen(header.file_size)?
+                        .RoundUp()?;
+                    let pageOffset =
+                        Addr(header.virtual_addr).0 - Addr(header.virtual_addr).RoundDown()?.0;
+                    let len = Addr(header.file_size).RoundUp()?.0;
+
+                    if startMem.0 < startAddr.0 {
+                        startAddr = startMem;
+                    }
+
+                    let end = Addr(header.virtual_addr)
+                        .AddLen(header.mem_size)?
+                        .RoundUp()?;
+                    if endAddr.0 < endMem.0 {
+                        endAddr = end;
+                    }
+
+                    let mut option = &mut MapOption::New();
+                    option = option
+                        .Addr(startMem.0 - mapOffset)
+                        .Len(len)
+                        .FileId(fd)
+                        .MapFixed()
+                        .FileOffset(Addr(header.offset).RoundDown()?.0)
+                        .MapPrivate()
+                        .ProtoRead()
+                        .ProtoWrite();
+
+                    let mr = option.Map()?;
+                    assert!(mr.ptr == startMem.0 + pageOffset);
+                    self.mrs.push(mr);
+
+                    let adjust = header.virtual_addr - startMem.0;
+
+                    if adjust + header.file_size < endMem.0 - startMem.0 {
+                        let cnt = (endMem.0 - startMem.0 - (adjust + header.file_size)) as usize;
+                        let target = unsafe {
+                            slice::from_raw_parts_mut(
+                                (startMem.0 + adjust + header.file_size) as *mut u8,
+                                cnt,
+                            )
+                        };
+
+                        for i in 0..cnt {
+                            target[i] = 0;
+                        }
+                    }
+
+                    if header.mem_size > header.file_size {
+                        let bssEnd = Addr(header.virtual_addr + header.mem_size).RoundUp()?;
+                        if bssEnd.0 != endMem.0 {
+                            let mut option = &mut MapOption::New();
+                            option = option
+                                .Addr(endMem.0 - mapOffset)
+                                .Len(bssEnd.0 - endMem.0)
+                                .MapAnan()
+                                .MapPrivate()
+                                .ProtoRead()
+                                .ProtoWrite();
+
+                            let mr = option.Map()?;
+                            assert!(mr.ptr == endMem.0);
+                            self.mrs.push(mr);
+                        }
+                    }
+                }
+            }
+        }
+
+        self.startAddr = startAddr;
+        self.endAddr = endAddr;
+
+        return Ok(entry);
+    }
+
     pub fn LoadVDSO(&mut self, fileName: &String) -> Result<()> {
         let f =
             File::open(fileName).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
