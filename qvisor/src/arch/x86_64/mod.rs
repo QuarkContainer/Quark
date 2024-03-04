@@ -12,4 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::arch::vCPU;
+use crate::qlib::common::Error;
+
 pub mod context;
+
+#[derive(Default, Debug)]
+pub struct x86_64vCPU {
+    gtdAddr: u64,
+    idtAddr: u64,
+    tssIntStackStart: u64,
+    tssAddr: u64,
+}
+
+pub type ArchvCPU = x86_64vCPU;
+
+impl vCPU for x86_64vCPU {
+    fn new () -> Self {
+        Self {
+            ..Default::default()
+        }
+    }
+
+    fn init(&mut self) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn run(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
+}

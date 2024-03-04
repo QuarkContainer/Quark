@@ -11,5 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use crate::qlib::common::Error;
 
-pub mod x86_64;
+#[cfg(target_arch = "x86_64")]
+#[path = "./x86_64/mod.rs"]
+pub mod __cpu_arch;
+
+pub trait vCPU {
+    fn new () -> Self;
+    fn init(&mut self) -> Result<(), Error>;
+    fn run(&self) -> Result<(), Error>;
+}

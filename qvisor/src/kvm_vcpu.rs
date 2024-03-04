@@ -1,5 +1,6 @@
 use crate::host_uring::HostSubmit;
 
+use crate::arch::{vCPU, __cpu_arch::ArchvCPU};
 use super::qcall::AQHostCall;
 use super::qlib::buddyallocator::ZeroPage;
 use super::qlib::common::Allocator;
@@ -90,10 +91,20 @@ pub struct KVMVcpu {
     pub topStackAddr: u64,
     pub entry: u64,
 
+    //
+    //TODO remove fiels
+    //
     pub gdtAddr: u64,
     pub idtAddr: u64,
     pub tssIntStackStart: u64,
     pub tssAddr: u64,
+    //////////////////
+
+    //
+    //Generic replacer
+    //
+    pub arch_vcpu: ArchvCPU,
+
 
     pub heapStartAddr: u64,
     pub shareSpaceAddr: u64,
@@ -161,6 +172,8 @@ impl KVMVcpu {
             VMS.lock().ComputeVcpuCoreId(id) as isize
         };
 
+        let _arch_vcpu: ArchvCPU = ArchvCPU::new();
+
         return Ok(Self {
             id: id,
             cordId: vcpuCoreId,
@@ -175,6 +188,7 @@ impl KVMVcpu {
             idtAddr: idtAddr,
             tssIntStackStart: tssIntStackStart,
             tssAddr: tssAddr,
+            arch_vcpu: _arch_vcpu,
             heapStartAddr: pageAllocatorBaseAddr,
             shareSpaceAddr: shareSpaceAddr,
             autoStart: autoStart,

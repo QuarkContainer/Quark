@@ -26,6 +26,7 @@ use kvm_ioctls::VcpuExit;
 use libc::*;
 //use nix::sys::signal;
 
+use crate::arch::__cpu_arch::ArchvCPU;
 use crate::host_uring::HostSubmit;
 use crate::qlib::cpuid::XSAVEFeature::{XSAVEFeatureBNDCSR, XSAVEFeatureBNDREGS};
 use crate::qlib::kernel::asm::xgetbv;

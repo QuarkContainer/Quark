@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::super::qlib::Common::*;
-use super::super::super::qlib::limits::*;
-use super::super::super::qlib::memmgr::arch::*;
-
-pub struct Context64 {}
-
-impl Context64 {
-    pub fn NewMmapLayout(_min: u64, _max: u64, _r: &LimitSet) -> Result<MmapLayout> {
-        return Err(Error::None)
-    }
-}
+//use super::super::super::qlib::Common::*;
+//use super::super::super::qlib::limits::*;
+//use super::super::super::qlib::memmgr::arch::*;
+//use crate::qlib::kernel::memmgr::arch::MmapLayout;
+//pub struct Context64 {}
+//
+//impl Context64 {
+//    pub fn NewMmapLayout(_min: u64, _max: u64, _r: &LimitSet) -> Result<MmapLayout> {
+//        return Err(Error::None)
+//    }
+//}
