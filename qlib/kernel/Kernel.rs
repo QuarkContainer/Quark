@@ -973,11 +973,7 @@ impl HostSpace {
 
     pub fn SyncPrint(level: DebugLevel, str: &str) {
         let msg = Print { level, str };
-        if super::SHARESPACE.config.read().EnableCC {
-            
-        }else{
-            HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0, 0, 0);
-        }
+        HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0, 0, 0);
     }
 
     pub fn Kprint(str: &str) {
