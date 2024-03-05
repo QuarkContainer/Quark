@@ -11,14 +11,5 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::qlib::common::Error;
 
-#[cfg(target_arch = "x86_64")]
-#[path = "./x86_64/mod.rs"]
-pub mod __cpu_arch;
-
-pub trait vCPU {
-    fn new (kvm_vm_fd: &kvm_ioctls::VmFd, vCPU_id: usize) -> Self;
-    fn init(&mut self, id: usize) -> Result<(), Error>;
-    fn run(&self) -> Result<(), Error>;
-}
+pub mod kvm_init;

@@ -85,30 +85,11 @@ pub struct KVMVcpu {
     pub tgid: AtomicU64,
     pub state: AtomicU64,
     pub vcpuCnt: usize,
-    //index in the cpu arrary
-    pub vcpu: kvm_ioctls::VcpuFd,
-
     pub topStackAddr: u64,
     pub entry: u64,
-
-    //
-    //TODO remove fiels
-    //
-    pub gdtAddr: u64,
-    pub idtAddr: u64,
-    pub tssIntStackStart: u64,
-    pub tssAddr: u64,
-    //////////////////
-
-    //
-    //Generic replacer
-    //
     pub arch_vcpu: ArchvCPU,
-
-
     pub heapStartAddr: u64,
     pub shareSpaceAddr: u64,
-
     pub autoStart: bool,
     pub interrupting: Mutex<(bool, Vec<Sender<()>>)>,
 }
@@ -127,52 +108,18 @@ impl KVMVcpu {
         autoStart: bool,
     ) -> Result<Self> {
         const DEFAULT_STACK_PAGES: u64 = MemoryDef::DEFAULT_STACK_PAGES; //64KB
-        //let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
         let stackSize = DEFAULT_STACK_PAGES << 12;
         let stackAddr = AlignedAllocate(stackSize as usize, stackSize as usize, false).unwrap();
         let topStackAddr = stackAddr + (DEFAULT_STACK_PAGES << 12);
 
-        let gdtAddr = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-        let idtAddr = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-
-        let tssIntStackStart = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-        let tssAddr = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-
-        // info!("the tssIntStackStart is {:x}, tssAddr address is {:x}, idt addr is {:x}, gdt addr is {:x}",
-        //     tssIntStackStart, tssAddr, idtAddr, gdtAddr);
-
-        let vcpu = vm_fd
-            .create_vcpu(id as u64)
-            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))
-            .expect("create vcpu fail");
+        let mut _arch_vcpu: ArchvCPU = ArchvCPU::new(&vm_fd, id);
+        _arch_vcpu.init(id)?;
         let cpuAffinit = VMS.lock().cpuAffinit;
         let vcpuCoreId = if !cpuAffinit {
             -1
         } else {
             VMS.lock().ComputeVcpuCoreId(id) as isize
         };
-
-        let _arch_vcpu: ArchvCPU = ArchvCPU::new();
 
         return Ok(Self {
             id: id,
@@ -181,13 +128,8 @@ impl KVMVcpu {
             tgid: AtomicU64::new(0),
             state: AtomicU64::new(KVMVcpuState::HOST as u64),
             vcpuCnt,
-            vcpu,
             topStackAddr: topStackAddr,
             entry: entry,
-            gdtAddr: gdtAddr,
-            idtAddr: idtAddr,
-            tssIntStackStart: tssIntStackStart,
-            tssAddr: tssAddr,
             arch_vcpu: _arch_vcpu,
             heapStartAddr: pageAllocatorBaseAddr,
             shareSpaceAddr: shareSpaceAddr,
@@ -471,28 +413,6 @@ impl CPULocal {
             None => (),
             Some(newTask) => return Some(newTask.data),
         }
-
-        // process in vcpu worker thread will decease the throughput of redis/etcd benchmark
-        // todo: study and fix
-        /*let mut start = TSC.Rdtsc();
-        while IsRunning() {
-            match sharespace.scheduler.GetNext() {
-                None => (),
-                Some(newTask) => {
-                    return Some(newTask.data)
-                }
-            }
-
-            let count = Self::ProcessOnce(sharespace);
-            if count > 0 {
-                start = TSC.Rdtsc()
-            }
-
-            if TSC.Rdtsc() - start >= IO_WAIT_CYCLES {
-                break;
-            }
-        }*/
-
         return None;
     }
 
@@ -526,14 +446,11 @@ impl CPULocal {
                     None => (),
                     Some(newTask) => return Ok(newTask.data),
                 }
-
-                //Self::ProcessOnce(sharespace);
             }
 
             super::GLOBAL_ALLOCATOR.Clear();
 
             let _nfds = unsafe { libc::epoll_wait(self.epollfd, &mut events[0], 2, time) };
-           
             {
                 let mut data: u64 = 0;
                 let ret = unsafe {
@@ -549,7 +466,6 @@ impl CPULocal {
                 }
             }
         }
-
         return Err(Error::Exit);
     }
 }
