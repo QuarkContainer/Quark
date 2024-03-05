@@ -1,4 +1,5 @@
 use crate::host_uring::HostSubmit;
+use crate::GLOBAL_ALLOCATOR;
 
 use super::qcall::AQHostCall;
 use super::qlib::buddyallocator::ZeroPage;
@@ -16,9 +17,7 @@ use super::qlib::ShareSpace;
 use super::FD_NOTIFIER;
 use super::VMS;
 use super::vmspace::VMSpace;
-use alloc::alloc::alloc;
 use libc::ioctl;
-use core::alloc::Layout;
 use core::slice;
 use core::sync::atomic::AtomicU64;
 use nix::sys::signal;
@@ -293,22 +292,19 @@ pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64>
         "AlignedAllocate get unaligned size {:x}",
         size
     );
-    let layout = Layout::from_size_align(size, align);
-    match layout {
-        Err(_e) => Err(Error::UnallignedAddress(format!("AlignedAllocate {:?}", align))),
-        Ok(l) => unsafe {
-            let addr = alloc(l);
-            if zeroData {
-                let arr = slice::from_raw_parts_mut(addr as *mut u64, size / 8);
-                for i in 0..512 {
-                    arr[i] = 0
-                }
-            }
 
-            Ok(addr as u64)
-        },
+    unsafe {
+        let addr = GLOBAL_ALLOCATOR.AllocGuestPrivatMem(size, align);
+        if zeroData {
+            let arr = slice::from_raw_parts_mut(addr as *mut u64, size / 8);
+            for i in 0..512 {
+                arr[i] = 0
+            }
+        }
+        Ok(addr as u64)
     }
 }
+
 
 // SetVmExitSigAction set SIGCHLD as the vm exit signal,
 // the signal handler will set_kvm_immediate_exit to 1,
