@@ -14,6 +14,7 @@
 
 use alloc::alloc::{alloc, dealloc, Layout};
 use alloc::collections::BTreeSet;
+use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::hint::spin_loop;
@@ -22,14 +23,16 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use crate::qlib::kernel::SHARESPACE;
+use crate::qlib::cc::{C_BIT_MASK,get_cbit_mask};
 
 cfg_x86_64! {
    pub use x86_64::structures::paging::page_table::PageTableEntry;
    pub use x86_64::structures::paging::page_table::PageTableIndex;
    pub use x86_64::structures::paging::PageTable;
-   pub use x86_64::structures::paging::PageTableFlags;
+   pub use x86_64::structures::paging::{Page, PageTableFlags, Size1GiB, Size2MiB, Size4KiB};
    pub use x86_64::PhysAddr;
    pub use x86_64::VirtAddr;
+   pub use x86_64::instructions::tlb::flush;
 
    #[inline]
    pub fn default_table_user() -> PageTableFlags {
@@ -120,7 +123,7 @@ impl PageTables {
         let addr = self.GetRoot();
         Self::Switch(addr);
     }
-
+    
     #[cfg(target_arch = "x86_64")]
     pub fn IsActivePagetable(&self) -> bool {
         let root = self.GetRoot();
@@ -266,6 +269,7 @@ impl PageTables {
     pub fn VirtualToEntry(&self, vaddr: u64) -> Result<&PageTableEntry> {
         let addr = vaddr;
         let vaddr = VirtAddr::new(vaddr);
+        let c_bit_mask =  C_BIT_MASK.load(Ordering::Relaxed);
 
         let p4Idx = vaddr.p4_index();
         let p3Idx = vaddr.p3_index();
@@ -280,19 +284,19 @@ impl PageTables {
                 return Err(Error::AddressNotMap(addr));
             }
 
-            let pudTbl = pgdEntry.addr().as_u64() as *const PageTable;
+            let pudTbl = (pgdEntry.addr().as_u64() &!c_bit_mask) as *const PageTable;
             let pudEntry = &(*pudTbl)[p3Idx];
             if pudEntry.is_unused() {
                 return Err(Error::AddressNotMap(addr));
             }
 
-            let pmdTbl = pudEntry.addr().as_u64() as *const PageTable;
+            let pmdTbl = (pudEntry.addr().as_u64() &!c_bit_mask) as *const PageTable;
             let pmdEntry = &(*pmdTbl)[p2Idx];
             if pmdEntry.is_unused() {
                 return Err(Error::AddressNotMap(addr));
             }
 
-            let pteTbl = pmdEntry.addr().as_u64() as *mut PageTable;
+            let pteTbl = (pmdEntry.addr().as_u64() &!c_bit_mask) as *mut PageTable;
             let pteEntry = &mut (*pteTbl)[p1Idx];
             if pteEntry.is_unused() {
                 return Err(Error::AddressNotMap(addr));
@@ -1530,6 +1534,183 @@ impl PageTables {
         }
 
         return Ok(res);
+    }
+
+
+    ///smash pages, 1gb->2mb, 2mb->4kb
+    pub fn smash(&self, vaddr: VirtAddr, pagePool: &Allocator) -> Result<()>{
+        if !vaddr.is_aligned(MemoryDef::PAGE_SIZE_4K){
+            return Err(Error::UnallignedAddress(vaddr.as_u64().to_string()));
+        }
+
+        let addr = vaddr.as_u64();
+        let c_bit_mask =  get_cbit_mask();
+
+        let p4Idx = vaddr.p4_index();
+        let p3Idx = vaddr.p3_index();
+        let p2Idx = vaddr.p2_index();
+        let p1Idx = vaddr.p1_index();
+
+        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
+        
+        unsafe {
+            let pgdEntry = &(*pt)[p4Idx];
+            if pgdEntry.is_unused() {
+                return Err(Error::AddressNotMap(addr));
+            }
+
+            let pudTbl = (pgdEntry.addr().as_u64() &!c_bit_mask) as *mut PageTable;
+            let pudEntry = &mut (*pudTbl)[p3Idx];
+            if pudEntry.is_unused() {
+                return Err(Error::AddressNotMap(addr));
+            }else if pudEntry.flags().contains(PageTableFlags::HUGE_PAGE){
+                //smash 1G frames here
+                let page = Page::<Size1GiB>::containing_address(vaddr);
+                let new_pagetable = &mut *(pagePool.AllocPage(true)? as *mut PageTable);
+                let old_addr = pudEntry.addr();
+                let old_flags = pudEntry.flags();
+                new_pagetable.iter_mut().enumerate().for_each(|(i, e)| {
+                    e.set_addr(
+                        old_addr + i.checked_mul(Page::<Size2MiB>::SIZE as usize).unwrap(),
+                        old_flags,
+                    );
+                });
+                pudEntry.set_addr(
+                    PhysAddr::new(VirtAddr::from_ptr(new_pagetable).as_u64() | (old_addr.as_u64() & c_bit_mask)),
+                    old_flags & (!PageTableFlags::HUGE_PAGE),
+                );
+                flush(page.start_address());
+                return Ok(());
+
+            }
+
+            let pmdTbl = (pudEntry.addr().as_u64() &!c_bit_mask) as *mut PageTable;
+            let pmdEntry = &mut (*pmdTbl)[p2Idx];
+            if pmdEntry.is_unused() {
+                return Err(Error::AddressNotMap(addr));
+            }else if pmdEntry.flags().contains(PageTableFlags::HUGE_PAGE){
+                //smash 2M frames here
+                let page = Page::<Size2MiB>::containing_address(vaddr);
+                let new_pagetable = &mut *(pagePool.AllocPage(true)? as *mut PageTable);
+                let old_addr = pmdEntry.addr();
+                let old_flags = pmdEntry.flags() & (!PageTableFlags::HUGE_PAGE);
+                new_pagetable.iter_mut().enumerate().for_each(|(i, e)| {
+                    e.set_addr(
+                        old_addr + i.checked_mul(Page::<Size4KiB>::SIZE as usize).unwrap(),
+                        old_flags,
+                    );
+                });
+                pmdEntry.set_addr(
+                    PhysAddr::new(VirtAddr::from_ptr(new_pagetable).as_u64() | (old_addr.as_u64() & c_bit_mask)),
+                    old_flags,
+                );
+                flush(page.start_address());
+                return Ok(());
+            }
+
+            let pteTbl = (pmdEntry.addr().as_u64() &!c_bit_mask) as *mut PageTable;
+            let pteEntry = &mut (*pteTbl)[p1Idx];
+            if pteEntry.is_unused() {
+                return Err(Error::AddressNotMap(addr));
+            }
+            return Ok(());
+        }
+    }
+
+    pub fn clear_c_bit_address_range(&self, start: VirtAddr, end: VirtAddr, pagePool: &Allocator) -> Result<()>{
+        if !start.is_aligned(MemoryDef::PAGE_SIZE_4K){
+            return Err(Error::UnallignedAddress(start.as_u64().to_string()));
+        }
+
+        if !end.is_aligned(MemoryDef::PAGE_SIZE_4K){
+            return Err(Error::UnallignedAddress(end.as_u64().to_string()));
+        }
+        let c_bit_mask =  get_cbit_mask();
+        let mut current = start;
+        loop{
+            if current >= end {
+                return Ok(());
+            }
+
+            let addr = current.as_u64();
+            let p4Idx = current.p4_index();
+            let p3Idx = current.p3_index();
+            let p2Idx = current.p2_index();
+            let p1Idx = current.p1_index();
+            let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
+            unsafe {
+                let pgdEntry = &(*pt)[p4Idx];
+                if pgdEntry.is_unused() {
+                    return Err(Error::AddressNotMap(addr));
+                }
+
+                let pudTbl = (pgdEntry.addr().as_u64() &!c_bit_mask) as *mut PageTable;
+                let pudEntry = &mut (*pudTbl)[p3Idx];
+                if pudEntry.is_unused() {
+                    return Err(Error::AddressNotMap(addr));
+                }else if pudEntry.flags().contains(PageTableFlags::HUGE_PAGE){
+
+                    if ((pudEntry.addr().as_u64())&!c_bit_mask )!= current.as_u64() //frame offset is not 0
+                        || current + Page::<Size1GiB>::SIZE as usize > end {
+                        self.smash(current,pagePool)?;
+                        return self.clear_c_bit_address_range(current, end, pagePool);
+                    }
+
+                    //clear share bit of 1gb page
+                    let page = Page::<Size1GiB>::containing_address(current);
+                    let old_addr = pudEntry.addr();
+                    let old_flags = pudEntry.flags();
+                    pudEntry.set_addr(
+                        PhysAddr::new(old_addr.as_u64() & !c_bit_mask),
+                        old_flags ,
+                    );
+                    flush(page.start_address());
+                    current += Page::<Size1GiB>::SIZE;
+                    continue;
+
+                }
+
+                let pmdTbl = (pudEntry.addr().as_u64() &!c_bit_mask) as *mut PageTable;
+                let pmdEntry = &mut (*pmdTbl)[p2Idx];
+                if pmdEntry.is_unused() {
+                    return Err(Error::AddressNotMap(addr));
+                }else if pmdEntry.flags().contains(PageTableFlags::HUGE_PAGE){
+
+                    if ((pmdEntry.addr().as_u64())&!c_bit_mask )!= current.as_u64() //frame offset is not 0
+                        || current + Page::<Size2MiB>::SIZE as usize > end {
+                        self.smash(current,pagePool)?;
+                        return self.clear_c_bit_address_range(current, end, pagePool);
+                    }
+
+                    //clear share bit of 2mb page
+                    let page = Page::<Size2MiB>::containing_address(current);
+                    let old_addr = pmdEntry.addr();
+                    let old_flags = pmdEntry.flags();
+                    pmdEntry.set_addr(
+                        PhysAddr::new(old_addr.as_u64() & !c_bit_mask),
+                        old_flags,
+                    );
+                    flush(page.start_address());
+                    current += Page::<Size2MiB>::SIZE;
+                    continue;
+                }
+
+                let pteTbl = (pmdEntry.addr().as_u64() &!c_bit_mask) as *mut PageTable;
+                let pteEntry = &mut (*pteTbl)[p1Idx];
+                if pteEntry.is_unused() {
+                    return Err(Error::AddressNotMap(addr));
+                }
+                let page = Page::<Size4KiB>::containing_address(current);
+                let old_addr = pteEntry.addr();
+                let old_flags = pteEntry.flags();
+                pteEntry.set_addr(
+                    PhysAddr::new(old_addr.as_u64() & !c_bit_mask),
+                    old_flags,
+                );
+                flush(page.start_address());
+                current += Page::<Size4KiB>::SIZE;
+            }
+        }
     }
 }
 

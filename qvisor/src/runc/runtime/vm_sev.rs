@@ -14,19 +14,11 @@
 
 //use kvm_bindings::{kvm_userspace_memory_region, KVM_CAP_X86_DISABLE_EXITS, kvm_enable_cap, KVM_X86_DISABLE_EXITS_HLT, KVM_X86_DISABLE_EXITS_MWAIT};
 use alloc::sync::Arc;
-use core::sync::atomic::{AtomicI32, AtomicU64, Ordering};
-use std::os::unix::io::AsRawFd;
 use std::os::unix::io::FromRawFd;
-use std::thread;
-
 use kvm_bindings::*;
 use kvm_ioctls::{Cap, Kvm, VmFd};
-use lazy_static::lazy_static;
-use nix::sys::signal;
-
-use core::mem::size_of;
 use crate::qlib::cpuid::HostID;
-use crate::qlib::MAX_VCPU_COUNT;
+
 use crate::tsot_agent::TSOT_AGENT;
 //use crate::vmspace::hibernate::HiberMgr;
 
@@ -51,17 +43,13 @@ use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::pagetable::AlignedAllocator;
 use super::super::super::qlib::pagetable::PageTables;
 use super::super::super::qlib::perf_tunning::*;
-use super::super::super::qlib::task_mgr::*;
-use super::super::super::qlib::ShareSpace;
 use super::super::super::qlib::cc::cpuid_page::*;
 use super::super::super::runc::runtime::loader::*;
-use super::super::super::syncmgr;
 use super::super::super::vmspace::*;
 use super::super::super::SHARE_SPACE;
 use super::super::super::SHARE_SPACE_STRUCT;
 use super::super::super::{
-    ThreadId, KERNEL_IO_THREAD, PMA_KEEPER, QUARK_CONFIG, ROOT_CONTAINER_ID, THREAD_ID, URING_MGR,
-    VCPU, VMS,
+     KERNEL_IO_THREAD, PMA_KEEPER, QUARK_CONFIG, ROOT_CONTAINER_ID,  URING_MGR, VMS,
 };
 
 impl CpuidPage {
@@ -124,7 +112,7 @@ impl CpuidPage {
     }
 }
 //for assumption
-pub fn get_page_from_allocator(len: usize) -> *mut u64 {
+pub fn get_page_from_allocator(_len: usize) -> *mut u64 {
     todo!()
 }
 
@@ -293,7 +281,7 @@ impl VirtualMachine {
         let cpuid_page_ptr = get_page_from_allocator(0x1000);
         let mut cpuid_page = unsafe{ *(cpuid_page_ptr as *const CpuidPage)};
         cpuid_page.FillCpuidPage(&kvm_cpuid).expect("Fail to fill Cpuid Page!");
-        let secret_page_ptr = get_page_from_allocator(0x1000);
+        let _secret_page_ptr = get_page_from_allocator(0x1000);
         
         //kvm.create_vm_with_type(vm_type) in sev-snp
         let vm_fd = kvm

@@ -14,7 +14,7 @@
 
 use core::arch::asm;
 use core::sync::atomic::Ordering;
-use core::sync::atomic::{AtomicBool, AtomicI32, AtomicI64};
+use core::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU64};
 
 use crate::qlib::fileinfo::*;
 use crate::qlib::rdma_svc_cli::RDMASvcClient;
