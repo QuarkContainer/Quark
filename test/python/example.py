@@ -18,7 +18,7 @@ class ModelActor:
         ...
 
 # compute V100 == 10000
-@qactor(type = "xpu", devMemory = "6GB", memory = "1GB", compute = "1200")
+@qactor(role: "worker", type = "xpu", devMemory = "6GB", memory = "1GB", compute = "1200")
 class a1(nn.Model, ModelActor):
     def __init__(self, name):
         super(a1, self).__init__()
@@ -34,7 +34,7 @@ class a1(nn.Model, ModelActor):
     def deploy(self, device):
         super.to(device)
 
-@qactor(type = "xpu", devMemory = "2GB", memory = "1GB", compute = "1200")
+@qactor(role: "worker", type = "xpu", devMemory = "2GB", memory = "1GB", compute = "1200")
 class a2(nn.Model, ModelActor):
     def __init__(self, name):
         super(a2, self).__init__()
@@ -57,7 +57,7 @@ class a2(nn.Model, ModelActor):
     def deploy(self, device):
         super.to(device)
 
-@qactor(type = "cpu", memory = "10GB", compute = "1200")
+@qactor(role: "httpserver", type = "cpu", memory = "10GB", compute = "1200")
 class Gateway(ModelActor, HTTPServer):
     def __init__(self, name):
         super(Gateway, self).__init__()
@@ -80,9 +80,9 @@ class Gateway(ModelActor, HTTPServer):
 
 if __name__ == "__main__":
     system = QActorSystem()
-    system.new_actor("gateway", Gateway)
-    system.new_actor("a1", a1)
-    system.new_actor("a2", a1)
+    system.new_actor("gateway", Gateway, namespace = "default")
+    system.new_actor("a1", a1, namespace = "default")
+    system.new_actor("a2", a1, namespace = "default")
     system.httpbind("gateway", "0.0.0.0", 8080)
 
     system.deployment()

@@ -22,11 +22,12 @@
 
 #[macro_use]
 extern crate log;
+extern crate simple_logging;
 
 #[macro_use]
 extern crate scopeguard;
 
-extern crate simple_logging;
+
 
 mod tsot;
 mod pod_mgr;
