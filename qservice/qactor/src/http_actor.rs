@@ -87,8 +87,10 @@ impl HttpActor {
     }
 
     pub async fn HttpServe(&self) -> Result<()> {
+        println!("HttpServe 1");
         let clone = self.clone();
         
+        println!("HttpServe 2");
         let app = Router::new()
             .route(
                 "/prompt", 
@@ -96,14 +98,25 @@ impl HttpActor {
                 move |body| ProcessPrompt(body, State(clone))
             }));
     
+        println!("HttpServe 3");
         let addr = format!("0.0.0.0:{}", self.httpPort);
-        let listener = tokio::net::TcpListener::bind(&addr).await?;
+        println!("HttpServe 4 listen {:?}", &addr);
+        let listener = match tokio::net::TcpListener::bind(&addr).await {
+            Ok(l) => l,
+            Err(e) => {
+                println!("HttpServe 4.1 error {:?}", &e);
+                return Err(e.into());
+            }
+        };
+        println!("HttpServe 5");
         axum::serve(listener, app).await?;
-
+        println!("HttpServe 6");
+        
         return Ok(())
     }
 
     pub fn NewPrompt(&self, prompt: &str) -> oneshot::Receiver<PromptResp> {
+        print!("NewPrompt 1 {}", prompt);
         let (tx, rx) = oneshot::channel();
         let reqId = self.lastReqId.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         self.requests.lock().unwrap().insert(reqId, tx);
@@ -125,6 +138,7 @@ impl HttpActor {
     }
 
     pub async fn ProcessTell(&self) -> Result<()> {
+        println!("ProcessTell ...");
         loop {
             match self.Recv().await {
                 None => (),
@@ -136,6 +150,7 @@ impl HttpActor {
     }
 
     pub async fn Process(&self) -> Result<()> {
+        println!("http actor process ...");
         tokio::select! {
             e = self.ProcessTell() => {
                 error!("GatewayActor::ProcessTell fail with {:?}", &e);
@@ -149,8 +164,11 @@ impl HttpActor {
     }
 
     pub async fn Recv(&self) -> Option<qactor::TellReq> {
+        error!("Recv 1");
         let mut rx = self.inputRx.lock().await;
+        error!("Recv 2");
         let req = rx.recv().await;
+        error!("Recv 3");
         return req;
     }
 

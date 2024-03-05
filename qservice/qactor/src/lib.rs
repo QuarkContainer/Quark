@@ -32,8 +32,6 @@ pub mod actor;
 pub mod actor_system;
 pub mod http_actor;
 
-use std::sync::Arc;
-use core::ops::Deref;
 use std::thread;
 
 use actor_system::ACTOR_SYSTEM;
@@ -59,7 +57,7 @@ pub struct RustStruct {
 
 #[pyclass]
 #[derive(Debug, Default)]
-pub struct TellInner {
+pub struct Tell {
     #[pyo3(get, set)]
     pub actor_id: String,
     #[pyo3(get, set)]
@@ -70,28 +68,16 @@ pub struct TellInner {
     pub data: Vec<u8>
 }
 
-#[pyclass]
-#[derive(Debug, Clone, Default)]
-pub struct Tell(Arc<TellInner>);
-
-impl Deref for Tell {
-    type Target = Arc<TellInner>;
-
-    fn deref(&self) -> &Arc<TellInner> {
-        &self.0
-    }
-}
-
 impl From<TellReq> for Tell {
     fn from(msg: TellReq) -> Self {
-        let inner = TellInner {
+        let ret = Tell {
             actor_id: msg.actor_id.clone(),
             func: msg.func.clone(),
             req_id: msg.req_id,
             data: msg.data,
         };
 
-        return Self(Arc::new(inner))
+        return ret
     }
 }
 
@@ -103,7 +89,7 @@ impl Into<TellReq> for Tell {
             req_id: self.req_id.clone(),
             // there is memory copy here,
             // todo: optimize later
-            data: self.data.to_vec() 
+            data: self.data
         }
     }
 }
@@ -153,6 +139,7 @@ fn depolyment(_py: Python) -> PyResult<()> {
     thread::spawn(move || {
         use tokio::runtime;
         let rt = runtime::Builder::new_current_thread()
+                .enable_all()
                 .build()
                 .unwrap();
         rt.block_on(async move {
@@ -208,6 +195,7 @@ fn new_http_actor(
     gatewayFunc: &str, 
     httpPort: u16
 ) -> PyResult<()> {
+    println!("new_http_actor ...");
     match ACTOR_SYSTEM.NewHttpProxyActor(proxyActorId, gatewayActorId, gatewayFunc, httpPort) {
         Err(e) => return Err(e.into()),
         Ok(()) => return Ok(())

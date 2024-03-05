@@ -1,11 +1,13 @@
 from concurrent.futures import ThreadPoolExecutor
-
+import signal
+import sys
 from functools import wraps, partial
 import threading
 import qactor
 
 class ActorSystem:
     def __init__(self):
+        signal.signal(signal.SIGINT, signal_handler)
         self.tasks = []
         self.actorInstances = dict()
         self.executor = ThreadPoolExecutor(max_workers=5)
@@ -21,7 +23,7 @@ class ActorSystem:
     def new_http_actor(self, actorId, gatewayActorId, gatewayFunc, httpPort):
         qactor.new_http_actor(actorId, gatewayActorId, gatewayFunc, httpPort)
 
-    def send(self, target, funcName, reqId, data):
+    def send(target, funcName, reqId, data):
         qactor.sendto(target, funcName, reqId, data)
 
     def wait(self):
@@ -41,8 +43,10 @@ class ActorProxy:
         while True:
             tell = qactor.recvfrom(self.actorName)
             func = getattr(self.actorInst, tell.func)
-            run = partial(func, tell.reqId, tell.data)
+            run = partial(func, tell.req_id, tell.data)
             run()
 
-
+def signal_handler(signal, frame):
+    print("Closing main-thread.This will also close the background thread because is set as daemon.")
+    sys.exit(0)
 
