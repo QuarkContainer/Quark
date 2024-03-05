@@ -3,6 +3,7 @@ import signal
 import sys
 from functools import wraps, partial
 import threading
+import queue
 import qactor
 
 class ActorSystem:
@@ -15,8 +16,10 @@ class ActorSystem:
     def new_actor(self, actorId, cls):
         moduleName = cls.__module__
         className = cls.__qualname__
-        qactor.new_py_actor(actorId, moduleName, className)
-        actorInst = ActorProxy(actorId, cls)
+    
+        myqueue = queue.Queue()
+        qactor.new_py_actor(actorId, moduleName, className, myqueue)
+        actorInst = ActorProxy(actorId, cls, myqueue)
         thread = threading.Thread(target = actorInst.process, args=[])
         self.tasks.append(thread)
 
@@ -35,18 +38,18 @@ class ActorSystem:
         
 
 class ActorProxy:
-    def __init__(self, actorName, cls):
+    def __init__(self, actorName, cls, queue):
         self.actorName = actorName
         self.actorInst = cls()
+        self.queue = queue
 
     def process(self):
         while True:
-            tell = qactor.recvfrom(self.actorName)
-            func = getattr(self.actorInst, tell.func)
-            run = partial(func, tell.req_id, tell.data)
+            (func, req_id, data) = self.queue.get()
+            func = getattr(self.actorInst, func)
+            run = partial(func, req_id, data)
             run()
-
+            
 def signal_handler(signal, frame):
-    print("Closing main-thread.This will also close the background thread because is set as daemon.")
     sys.exit(0)
 

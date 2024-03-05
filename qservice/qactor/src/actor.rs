@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use core::ops::Deref;
-//use tokio::sync::mpsc;
-use std::sync::mpsc;
+
+use pyo3::prelude::*;
 
 use qshare::qactor;
 
@@ -34,16 +34,6 @@ impl Actor {
             Actor::HttpActor(a) => a.Tell(req),
         }
     }
-
-    pub fn Recv(&self) -> Option<qactor::TellReq> {
-        match self {
-            Actor::PyActor(a) => return a.Recv(),
-            Actor::HttpActor(_) => {
-                unreachable!()
-                //return a.Recv().await,
-            }
-        }
-    }
 }
 
 
@@ -54,8 +44,7 @@ pub struct PyActorInner {
     pub className: String,
 
     pub location: LocationId,
-    pub inputTx: mpsc::Sender<qactor::TellReq>,
-    pub inputRx: Mutex<mpsc::Receiver<qactor::TellReq>>,
+    pub queue: Py<PyAny>
 }
 
 #[derive(Debug, Clone)]
@@ -70,35 +59,29 @@ impl Deref for PyActor {
 }
 
 impl PyActor {
-    pub fn New(id: &str, modName: &str, className: &str) -> Self {
-        //let (tx, rx) = mpsc::channel::<qactor::TellReq>(30);
-        let (tx, rx) = mpsc::channel();
+    pub fn New(id: &str, modName: &str, className: &str, queue: &PyAny) -> Self {
         let inner = PyActorInner {
             id: id.to_owned(),
             modName: modName.to_owned(),
             className: className.to_owned(),
             location: LocationId::default(),
-            inputRx: Mutex::new(rx),
-            inputTx: tx,
+            queue: queue.into()
         };
 
         return Self(Arc::new(inner))
     }
+    
 
     pub fn Tell(&self, req: qactor::TellReq) {
-        self.inputTx.send(req).unwrap();
-    }
+        use pyo3::types::PyTuple;
 
-    pub fn Recv(&self) -> Option<qactor::TellReq> {
-        match self.inputRx.lock().unwrap().recv() {
-            Err(e) => {
-                error!("PyActor::Recv get error {:?}", e);
-                return None;
-            }
-            Ok(r) => {
-                return Some(r)
-            }
-        }
+        Python::with_gil(|py| {
+            let data = (&req.func, &req.req_id, &req.data);
+    
+            let put : Py<PyAny> = self.queue.getattr(py, "put").unwrap().into();
+            let args = PyTuple::new(py, &[data]);
+            put.call1(py, args).unwrap();
+        });
     }
 }
 

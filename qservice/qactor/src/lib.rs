@@ -37,6 +37,7 @@ use std::thread;
 use actor_system::ACTOR_SYSTEM;
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
+use pyo3::types::PyTuple;
 
 use qobject::*;
 use qshare::qactor::TellReq;
@@ -67,6 +68,13 @@ pub struct Tell {
     #[pyo3(get, set)]
     pub data: Vec<u8>
 }
+
+// impl IntoPy<PyObject> for Tell {
+//     fn into_py(self, py: Python<'_>) -> PyObject {
+//         // delegates to i32's IntoPy implementation.
+//         (self.actor_id.into_py(py), self.actor_id.into_py(py))
+//     }
+// }
 
 impl From<TellReq> for Tell {
     fn from(msg: TellReq) -> Self {
@@ -126,10 +134,10 @@ fn sum_as_string(a: usize, b: usize) -> PyResult<String> {
 fn qactor(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sum_as_string, m)?)?;
     m.add_function(wrap_pyfunction!(depolyment, m)?)?;
-    m.add_function(wrap_pyfunction!(recvfrom, m)?)?;
     m.add_function(wrap_pyfunction!(sendto, m)?)?;
     m.add_function(wrap_pyfunction!(new_http_actor, m)?)?;
     m.add_function(wrap_pyfunction!(new_py_actor, m)?)?;
+    m.add_function(wrap_pyfunction!(tryput, m)?)?;
     m.add_class::<RustStruct>()?;
     Ok(())
 }
@@ -151,29 +159,6 @@ fn depolyment(_py: Python) -> PyResult<()> {
 }
 
 #[pyfunction]
-fn recvfrom(_py: Python, actor_id: String) -> PyResult<Tell> {
-    // println!("recvfrom ... {}", actor_id.clone());
-    // let clone = actor_id.clone();
-    // defer!(println!("recvfrom 2... {}", clone));
-    // pyo3_asyncio::tokio::future_into_py(py, async {
-    //     error!("recvfrom 3");
-    //     let req: Tell = match ACTOR_SYSTEM.Recv(actor_id).await {
-    //         Err(e) => return Err(e.into()),
-    //         Ok(r) => r.into()
-    //     };
-
-    //     Ok(req)
-    // })
-
-    let req: Tell = match ACTOR_SYSTEM.Recv(actor_id) {
-        Err(e) => return Err(e.into()),
-        Ok(r) => r.into()
-    };
-    
-    Ok(req)
-}
-
-#[pyfunction]
 fn sendto(_py: Python, actorId: String, func: String, reqId: u64, data: Vec<u8>) -> PyResult<()> {
     let req = TellReq {
         actor_id: actorId,
@@ -181,6 +166,9 @@ fn sendto(_py: Python, actorId: String, func: String, reqId: u64, data: Vec<u8>)
         req_id: reqId,
         data: data 
     };
+
+    println!("sendto req is {:?}", &req);
+
     match ACTOR_SYSTEM.Send(req) {
         Err(e) => return Err(e.into()),
         Ok(()) => return Ok(())
@@ -195,7 +183,6 @@ fn new_http_actor(
     gatewayFunc: &str, 
     httpPort: u16
 ) -> PyResult<()> {
-    println!("new_http_actor ...");
     match ACTOR_SYSTEM.NewHttpProxyActor(proxyActorId, gatewayActorId, gatewayFunc, httpPort) {
         Err(e) => return Err(e.into()),
         Ok(()) => return Ok(())
@@ -207,10 +194,34 @@ fn new_py_actor(
     _py: Python, 
     id: &str, 
     modName: &str, 
-    className: &str
+    className: &str,
+    queue: &PyAny
 ) -> PyResult<()> {
-    match ACTOR_SYSTEM.NewPyActor(id, modName, className) {
+    match ACTOR_SYSTEM.NewPyActor(id, modName, className, queue) {
         Err(e) => return Err(e.into()),
         Ok(()) => return Ok(())
     }
+}
+
+#[pyfunction]
+fn tryput(_py: Python, py_queue: &PyAny) -> PyResult<()> {
+    let tell = Tell {
+        actor_id: "asdf".to_owned(),
+        ..Default::default()
+    };
+    QueuePut(py_queue, &tell);
+    return Ok(())
+}
+
+pub fn QueuePut (
+    py_queue: &PyAny, 
+    tell: &Tell
+) {
+    Python::with_gil(|py| {
+        let data = (&tell.actor_id, &tell.data);
+
+        let put : Py<PyAny> = py_queue.getattr("put").unwrap().into();
+        let args = PyTuple::new(py, &[data]);
+        put.call1(py, args).unwrap();
+    })
 }
