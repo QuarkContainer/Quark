@@ -20,6 +20,8 @@ use core::ops::Deref;
 //use once_cell::sync::OnceCell;
 use tonic::transport::Server;
 
+use pyo3::prelude::*;
+
 use qshare::common::*;
 use qshare::qactor;
 use qshare::qactor::TellReq;
@@ -90,8 +92,8 @@ impl ActorSystem {
         return Ok(())
     }
 
-    pub fn NewPyActor(&self, id: &str, modName: &str, className: &str) -> Result<()> {
-        let actor = PyActor::New(id, modName, className);
+    pub fn NewPyActor(&self, id: &str, modName: &str, className: &str, queue: &PyAny) -> Result<()> {
+        let actor = PyActor::New(id, modName, className, queue);
         self.NewActor(id, Actor::PyActor(actor))
     }
 
@@ -110,22 +112,6 @@ impl ActorSystem {
 
         actors.insert(id.to_owned(), actor.clone());
         return Ok(())
-    }
-
-    pub fn Recv(&self, actorId: String) -> Result<qactor::TellReq> {
-        let actor = match self.actors.lock().unwrap().get(&actorId) {
-            None => {
-                return Err(Error::NotExist(format!("ActorSystem::Recv actor {}", actorId)));
-            }
-            Some(a) => a.clone()
-        };
-
-        loop {
-            match actor.Recv() {
-                None => (),
-                Some(t) => return Ok(t)
-            }
-        }
     }
 
     pub fn Send(&self, req: TellReq) -> Result<()> {

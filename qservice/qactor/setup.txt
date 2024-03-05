@@ -10,4 +10,4 @@ maturin develop
 curl --header "Content-Type: application/json" \
   --request POST \
   --data '{"prompt":"xyz"}' \
-  http://localhost:6666/prompt
+  http://localhost:9876/prompt
