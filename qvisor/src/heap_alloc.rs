@@ -119,7 +119,7 @@ unsafe impl GlobalAlloc for HostAllocator {
         }
 
         let is_vm_init = self.is_vm_lauched.load(Ordering::SeqCst);
-        if is_vm_init {
+        if !is_vm_init {
             self.HostInitAllocator().alloc(layout)
         } else {
             self.GuestHostSharedAllocator().alloc(layout)

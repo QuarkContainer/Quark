@@ -235,12 +235,13 @@ impl KVMVcpu {
             "start enter guest[{}]: entry is {:x}, stack is {:x}",
             self.id, self.entry, self.topStackAddr
         );
+        info!("kvm registers state {:#x?}", regs);
         loop {
             if !super::runc::runtime::vm::IsRunning() {
                 return Ok(());
             }
 
-            GLOBAL_ALLOCATOR.is_vm_lauched.store(true, Ordering::Relaxed);
+            GLOBAL_ALLOCATOR.is_vm_lauched.store(true, Ordering::SeqCst);
             self.state
                 .store(KVMVcpuState::GUEST as u64, Ordering::Release);
 
