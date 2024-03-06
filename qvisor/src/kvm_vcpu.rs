@@ -96,7 +96,6 @@ pub struct KVMVcpu {
 
     pub privateHeapStartAddr: u64,
     pub sharedHeapStartAddr: u64,
-    pub shareSpaceAddr: u64,
 
     pub autoStart: bool,
     pub interrupting: Mutex<(bool, Vec<Sender<()>>)>,
@@ -111,7 +110,6 @@ impl KVMVcpu {
         vcpuCnt: usize,
         vm_fd: &kvm_ioctls::VmFd,
         entry: u64,
-        shareSpaceAddr: u64,
         autoStart: bool,
     ) -> Result<Self> {
         const DEFAULT_STACK_PAGES: u64 = MemoryDef::DEFAULT_STACK_PAGES; //64KB
@@ -153,11 +151,11 @@ impl KVMVcpu {
             .create_vcpu(id as u64)
             .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))
             .expect("create vcpu fail");
-        let cpuAffinit = VMS.lock().cpuAffinit;
+        let cpuAffinit = VMS.read().cpuAffinit;
         let vcpuCoreId = if !cpuAffinit {
             -1
         } else {
-            VMS.lock().ComputeVcpuCoreId(id) as isize
+            VMS.read().ComputeVcpuCoreId(id) as isize
         };
 
         return Ok(Self {
@@ -176,7 +174,6 @@ impl KVMVcpu {
             tssAddr: tssAddr,
             privateHeapStartAddr: MemoryDef::GUEST_PRIVATE_HEAP_OFFSET,
             sharedHeapStartAddr: MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST,
-            shareSpaceAddr: shareSpaceAddr,
             autoStart: autoStart,
             interrupting: Mutex::new((false, vec![])),
         });

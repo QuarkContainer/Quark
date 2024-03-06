@@ -30,6 +30,7 @@
 #![feature(panic_info_message)]
 #![allow(deprecated)]
 #![recursion_limit = "256"]
+// #![feature(thread_local)]
 
 #[macro_use]
 extern crate alloc;
@@ -63,6 +64,7 @@ use taskMgr::{CreateTask, IOWait, WaitFn};
 use vcpu::CPU_LOCAL;
 
 use crate::qlib::kernel::GlobalIOMgr;
+use crate::qlib::ShareSpace;
 
 //use self::qlib::buddyallocator::*;
 use self::asm::*;
@@ -482,7 +484,6 @@ fn InitLoader() {
 #[no_mangle]
 pub extern "C" fn rust_main(
     privateHeapStart: u64,
-    shareSpaceAddr: u64,
     id: u64,
     vdsoParamAddr: u64,
     vcpuCnt: u64,
@@ -491,13 +492,20 @@ pub extern "C" fn rust_main(
     self::qlib::kernel::asm::fninit();
     if id == 0 {
         GLOBAL_ALLOCATOR.Init(privateHeapStart, MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
-        SHARESPACE.SetValue(shareSpaceAddr);
-        SingletonInit();
+        let size = core::mem::size_of::<ShareSpace>();
+        // info!("ShareSpace size {:x}", size);
+        let shared_space = unsafe {
+            GLOBAL_ALLOCATOR.AllocSharedBuf(size, 2)
+        };
+        HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
 
+
+
+        SHARESPACE.SetValue(shared_space as u64);
+        SingletonInit();
         VCPU_ALLOCATOR.Initializated();
         InitTsc();
         InitTimeKeeper(vdsoParamAddr);
-
         {
             let kpt = &KERNEL_PAGETABLE;
 

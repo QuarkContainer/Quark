@@ -68,7 +68,8 @@ impl TimeKeeper {
             c: clockId,
         };
 
-        return Clock::TimeKeeperClock(Arc::new(c));
+        let clock = Clock::TimeKeeperClock(Arc::new(c));
+        return clock;
     }
 
     pub fn Update(&self) {

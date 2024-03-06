@@ -12,57 +12,80 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::mutex::*;
+use alloc::collections::vec_deque::VecDeque;
 use core::ops::Deref;
-use crossbeam_queue::ArrayQueue;
 
 use super::common::*;
 
-pub struct QRingQueue<T: Clone>(ArrayQueue<T>);
-
-pub const MSG_QUEUE_SIZE: usize = 256;
-
-impl<T: Clone> Default for QRingQueue<T> {
-    fn default() -> Self {
-        return Self::New(MSG_QUEUE_SIZE);
-    }
-}
+#[derive(Default)]
+pub struct QRingQueue<T: Clone>(QMutex<VecDeque<T>>);
 
 impl<T: Clone> Deref for QRingQueue<T> {
-    type Target = ArrayQueue<T>;
+    type Target = QMutex<VecDeque<T>>;
 
-    fn deref(&self) -> &ArrayQueue<T> {
+    fn deref(&self) -> &QMutex<VecDeque<T>> {
         &self.0
     }
 }
 
 impl<T: Clone> QRingQueue<T> {
     pub fn New(size: usize) -> Self {
-        return Self(ArrayQueue::new(size));
+        return Self(QMutex::new(VecDeque::with_capacity(size)));
     }
 
     pub fn Push(&self, data: &T) -> Result<()> {
-        match self.0.push(data.clone()) {
-            Err(_) => {
-                error!("QRingQueue full...");
-                return Err(Error::QueueFull);
-            }
-            _ => return Ok(()),
+        let mut p = self.lock();
+
+        if p.len() == p.capacity() {
+            return Err(Error::QueueFull);
         }
+
+        p.push_back(data.clone());
+        return Ok(());
+    }
+
+    pub fn TryPush(&self, data: &T) -> Result<()> {
+        let mut p = match self.try_lock() {
+            None => return Err(Error::NoData),
+            Some(p) => p,
+        };
+
+        if p.len() == p.capacity() {
+            return Err(Error::QueueFull);
+        }
+
+        p.push_back(data.clone());
+        return Ok(());
     }
 
     pub fn Pop(&self) -> Option<T> {
-        return self.0.pop();
+        return self.lock().pop_front();
+    }
+
+    pub fn TryPop(&self) -> Option<T> {
+        let mut p = match self.try_lock() {
+            None => return None,
+            Some(p) => p,
+        };
+
+        return p.pop_front();
     }
 
     pub fn Count(&self) -> usize {
-        return self.0.len();
+        return self.lock().len();
     }
 
     pub fn IsFull(&self) -> bool {
-        return self.0.is_full();
+        let q = self.lock();
+        return q.len() == q.capacity();
     }
 
     pub fn IsEmpty(&self) -> bool {
-        return self.0.is_empty();
+        return self.lock().len() == 0;
+    }
+
+    pub fn CountLockless(&self) -> usize {
+        return self.lock().len();
     }
 }

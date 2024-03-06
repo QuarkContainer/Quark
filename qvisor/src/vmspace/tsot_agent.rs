@@ -57,7 +57,7 @@ impl TsotAgent {
     }
 
     pub fn Register(&self) -> Result<()> {
-        let str = VMS.lock().podUid.clone();
+        let str = VMS.read().podUid.clone();
         let podUid = uuid::Uuid::from_str(&str)?;
         let mut regsiterMsg = PodRegisterReq::default();
         regsiterMsg.podUid.copy_from_slice(podUid.as_bytes());

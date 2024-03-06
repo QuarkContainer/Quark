@@ -135,6 +135,9 @@ pub struct VMSpace {
     pub vcpus: Vec<Arc<KVMVcpu>>,
     pub haveMembarrierGlobal: bool,
     pub haveMembarrierPrivateExpedited: bool,
+
+    pub rdmaSvcCliSock: i32,
+    pub podId: [u8;64],
 }
 
 
@@ -163,6 +166,8 @@ impl VMSpace {
             vcpus: Vec::new(),
             haveMembarrierGlobal: haveMembarrierGlobal,
             haveMembarrierPrivateExpedited: haveMembarrierPrivateExpedited,
+            rdmaSvcCliSock: 0,
+            podId: [0u8;64],
         };
     }
 
@@ -2048,7 +2053,7 @@ impl VMSpace {
     }
 
     pub fn HostMemoryBarrier() -> i64 {
-        let haveMembarrierPrivateExpedited = VMS.lock().haveMembarrierPrivateExpedited;
+        let haveMembarrierPrivateExpedited = VMS.read().haveMembarrierPrivateExpedited;
         let cmd = if haveMembarrierPrivateExpedited {
             MEMBARRIER_CMD_PRIVATE_EXPEDITED
         } else {

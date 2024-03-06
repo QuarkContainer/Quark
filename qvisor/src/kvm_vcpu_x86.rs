@@ -137,7 +137,7 @@ impl KVMVcpu {
 
         //vcpu_sregs.cr0 = CR0_PE | CR0_MP | CR0_AM | CR0_ET | CR0_NE | CR0_WP | CR0_PG;
         vcpu_sregs.cr0 = CR0_PE | CR0_AM | CR0_ET | CR0_PG | CR0_NE; // | CR0_WP; // | CR0_MP | CR0_NE;
-        vcpu_sregs.cr3 = VMS.lock().pageTables.GetRoot();
+        vcpu_sregs.cr3 = VMS.read().pageTables.GetRoot();
         //vcpu_sregs.cr4 = CR4_PAE | CR4_OSFXSR | CR4_OSXMMEXCPT;
         vcpu_sregs.cr4 =
             CR4_PSE | CR4_PAE | CR4_PGE | CR4_OSFXSR | CR4_OSXMMEXCPT | CR4_FSGSBASE | CR4_OSXSAVE; // | CR4_UMIP ;// CR4_PSE | | CR4_SMEP | CR4_SMAP;
@@ -183,12 +183,13 @@ impl KVMVcpu {
         );
     }
 
-    pub fn run(&self, tgid: i32) -> Result<()> {
+    pub fn run(&self, tgid: i32) ->   Result<()> {
         SetExitSignal();
         self.setup_long_mode()?;
         let tid = unsafe { gettid() };
         self.threadid.store(tid as u64, Ordering::SeqCst);
         self.tgid.store(tgid as u64, Ordering::SeqCst);
+        let mut round = 0;
 
         let regs: kvm_regs = kvm_regs {
             rflags: KERNEL_FLAGS_SET,
@@ -199,15 +200,15 @@ impl KVMVcpu {
             //arg0
             rdi: self.privateHeapStartAddr, // self.pageAllocatorBaseAddr + self.,
             //arg1
-            rsi: self.shareSpaceAddr,
+            rsi: self.id as u64,
             //arg2
-            rdx: self.id as u64,
+            rdx: VMS.read().vdsoAddr,
             //arg3
-            rcx: VMS.lock().vdsoAddr,
+            rcx: self.vcpuCnt as u64,
             //arg4
-            r8: self.vcpuCnt as u64,
+            r8: self.autoStart as u64,
             //arg5
-            r9: self.autoStart as u64,
+            // r9: 
             //rcx:
             ..Default::default()
         };
@@ -241,7 +242,11 @@ impl KVMVcpu {
                 return Ok(());
             }
 
-            GLOBAL_ALLOCATOR.is_vm_lauched.store(true, Ordering::SeqCst);
+            if round == 0 {
+                GLOBAL_ALLOCATOR.is_vm_lauched.store(true, Ordering::SeqCst);
+                round = round + 1;
+            }
+
             self.state
                 .store(KVMVcpuState::GUEST as u64, Ordering::Release);
 
@@ -358,6 +363,32 @@ impl KVMVcpu {
                         }
                         qlib::HYPERCALL_RELEASE_VCPU => {
                             SyncMgr::WakeShareSpaceReady();
+                        }
+                        qlib::HYPERCALL_SHARESPACE_INIT => {
+                            info!("VM EXIT HYPERCALL_SHARESPACE_INIT");
+
+                            let vms = VMS.read();
+                            let controlSock  = vms.controlSock;
+                            let vcpuCount = vms.vcpuCount;
+                            let rdmaSvcCliSock = vms.rdmaSvcCliSock;
+                            let podId = vms.podId;
+                            let haveMembarrierGlobal = vms.haveMembarrierGlobal;
+                            drop(vms);
+
+                            let shareSpaceAddr = para1 as *mut ShareSpace;
+                            let sharedSpace  = unsafe { &mut (*shareSpaceAddr) };
+
+                            info!("VM EXIT HYPERCALL_SHARESPACE_INIT 1");
+                            VirtualMachine::InitShareSpace(
+                                sharedSpace,
+                                vcpuCount,
+                                controlSock,
+                                rdmaSvcCliSock,
+                                podId,
+                                haveMembarrierGlobal
+                            );
+                            info!("VM EXIT HYPERCALL_SHARESPACE_INIT finished");
+
                         }
                         qlib::HYPERCALL_EXIT_VM => {
                             let exitCode = para1 as i32;

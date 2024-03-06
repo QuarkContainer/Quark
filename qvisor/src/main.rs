@@ -92,7 +92,6 @@ use self::qlib::buddyallocator::MemAllocator;
 use self::qlib::config::*;
 use self::qlib::mem::list_allocator::*;
 use self::qlib::qmsg::*;
-use self::qlib::ShareSpace;
 use self::qlib::ShareSpaceRef;
 use self::runc::cmd::command::*;
 use self::runc::sandbox::sandbox::*;
@@ -103,6 +102,7 @@ use self::vmspace::hostfdnotifier::*;
 use self::vmspace::kernel_io_thread::*;
 use crate::qlib::linux_def::MemoryDef;
 use self::qlib::kernel::kernel::kernel::Kernel;
+use spin::rwlock::RwLock;
 
 use self::vmspace::uringMgr::*;
 use crate::kvm_vcpu::KVMVcpu;
@@ -139,10 +139,8 @@ pub fn LocalVcpu() -> Option<Arc<KVMVcpu>> {
 lazy_static! {
 
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
-    pub static ref SHARE_SPACE_STRUCT: Arc<Mutex<ShareSpace>> =
-        Arc::new(Mutex::new(ShareSpace::New()));
     pub static ref SWAP_FILE: Mutex<SwapFile> = Mutex::new(SwapFile::Init().unwrap());
-    pub static ref VMS: Mutex<VMSpace> = Mutex::new(VMSpace::Init());
+    pub static ref VMS: RwLock<VMSpace> = RwLock::new(VMSpace::Init());
     pub static ref ROOT_CONTAINER_ID: Mutex<String> = Mutex::new(String::new());
     pub static ref PAGE_ALLOCATOR: MemAllocator = MemAllocator::New();
     pub static ref FD_NOTIFIER: HostFdNotifier = HostFdNotifier::New();
