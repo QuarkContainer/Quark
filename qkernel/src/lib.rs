@@ -109,6 +109,7 @@ use self::qlib::loader::*;
 use self::qlib::mem::list_allocator::*;
 use self::qlib::pagetable::*;
 use self::qlib::vcpu_mgr::*;
+use self::qlib::cc::ghcb::*;
 use self::quring::*;
 use self::syscalls::syscalls::*;
 use self::task::*;
@@ -140,6 +141,7 @@ pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 //pub static GLOBAL_ALLOCATOR: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
 
+pub static GHCB: Mutex<Option<GhcbHandle>> = Mutex::new(None);
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
     pub static ref GUEST_KERNEL: Mutex<Option<kernel::kernel::Kernel>> = Mutex::new(None);
@@ -480,8 +482,14 @@ fn InitLoader() {
     LOADER.InitKernel(process).unwrap();
 }
 
+//Need to initialize PAGEMGR(pagepool for page allcator) and kernel page table in advance 
 fn InitShareMemory() {
-    todo!();
+    *GHCB.lock() = Some(GhcbHandle::default());
+    let ghcb_option: &mut Option<GhcbHandle<'_>> = &mut *GHCB.lock();
+    let ghcb =ghcb_option.as_mut().unwrap();
+    ghcb.init();
+    ghcb.set_memory_shared(VirtAddr::new(MemoryDef::KERNEL_MEM_INIT_SHARE_REGION_OFFSET),
+     MemoryDef::KERNEL_MEM_INIT_SHARE_REGION_SIZE * MemoryDef::ONE_GB /MemoryDef::PAGE_SIZE_4K);
 }
 
 #[no_mangle]
@@ -497,6 +505,9 @@ pub extern "C" fn rust_main(
     if id == 0 {
         GLOBAL_ALLOCATOR.Init(heapStart);
         /*
+        //Need to pass PAGE_MGR addr by register
+        PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr()); 
+        KERNEL_PAGETABLE.Init(PageTables::Init(CurrentKernelTable()));
         InitShareMemory();
         //Here should assign a page for hypercall parameters
         //HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, 0, 0, 0, 0);

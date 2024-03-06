@@ -1,10 +1,74 @@
 use x86_64::registers::model_specific::Msr;
 use x86_64::{PhysAddr, VirtAddr};
 use x86_64::structures::paging::{Page, Size4KiB};
+
+use core::ptr;
+
 use super::*;
 use super::super::pagetable::PageTables;
+use super::super::mutex::*;
+use super::super::linux_def::*;
+use super::super::kernel::KERNEL_PAGETABLE;
 use crate::PAGE_MGR;
 pub struct GhcbMsr;
+pub const GHCB_ADDR:u64 = 0x100;
+
+/// GHCB page sizes
+#[derive(Copy, Clone)]
+#[repr(C)]
+#[non_exhaustive]
+enum RmpPgSize {
+    Size4k = 0,
+    // Size2m,
+}
+
+/// GHCB page operation
+#[derive(Copy, Clone)]
+#[repr(C)]
+#[non_exhaustive]
+enum RmpPgOp {
+    // Private = 1,
+    Shared = 2,
+    // PSmash,
+    // UnSmash,
+}
+
+/// GHCB page state entry
+#[derive(Debug, Copy, Clone, Default)]
+#[repr(C)]
+pub struct PscEntry {
+    entry: u64,
+}
+
+impl PscEntry {
+    #[inline(always)]
+    #[allow(clippy::integer_arithmetic)]
+    fn set_entry(&mut self, cur_page: u64, operation: RmpPgOp, pagesize: RmpPgSize) {
+        self.entry = cur_page | ((operation as u64) << 52) | ((pagesize as u64) << 56)
+    }
+}
+
+const PSC_ENTRY_LEN: u64 = 253;
+/// GHCB page state description
+#[derive(Debug, Copy, Clone)]
+#[repr(C)]
+struct SnpPscDesc {
+    pub cur_entry: u16,
+    pub end_entry: u16,
+    pub reserved: u32,
+    pub entries: [PscEntry; 253],
+}
+
+impl Default for SnpPscDesc{
+    fn default() -> Self {
+        return SnpPscDesc{
+            cur_entry: 0u16,
+            end_entry: 0u16,
+            reserved:  0u32,
+            entries:   [PscEntry::default(); 253],
+        }
+    }
+}
 
 impl GhcbMsr {
     /// The underlying model specific register.
@@ -21,6 +85,37 @@ impl GhcbMsr {
     const PSC_OP_POS: u64 = 52;
     const PSC_ERROR_POS: u64 = 32;
     const PSC_ERROR_MASK: u64 = u64::MAX >> Self::PSC_ERROR_POS;
+}
+
+/// GHCB
+#[derive(Debug, Copy, Clone)]
+#[repr(C, align(4096))]
+pub struct Ghcb {
+    save_area: GhcbSaveArea,
+    shared_buffer: [u8; 2032],
+    reserved1: [u8; 10],
+    protocol_version: u16,
+    ghcb_usage: u32,
+}
+impl Default for Ghcb{
+    fn default() -> Self {
+        return Ghcb{
+            save_area: GhcbSaveArea::default(),
+            shared_buffer: [0u8; 2032],
+            reserved1: [0u8; 10],
+            protocol_version: 0u16,
+            ghcb_usage: 0u32,
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+#[non_exhaustive]
+enum GhcbError {
+    /// Unexpected state from the VMM
+    VmmError,
+    /// Instruction caused exception
+    Exception,
 }
 
 /// GHCB Save Area
@@ -99,7 +194,8 @@ pub unsafe fn early_panic(reason: u64, value: u64) -> !{
     unreachable!();
 }
 
-pub fn ghcb_msr_make_page_shared(pt: PageTables, page_virt: VirtAddr) {
+pub fn ghcb_msr_make_page_shared(page_virt: VirtAddr) {
+    let pt = &KERNEL_PAGETABLE;
     // const SNP_PAGE_STATE_PRIVATE: u64 = 1;
     const SNP_PAGE_STATE_SHARED: u64 = 2;
 
@@ -132,6 +228,251 @@ pub fn ghcb_msr_make_page_shared(pt: PageTables, page_virt: VirtAddr) {
 
         if (ret & GhcbMsr::PSC_ERROR_MASK) != 0 {
             early_panic(4, 0x33);
+        }
+    }
+}
+
+/// A handle to the GHCB block
+pub struct GhcbHandle<'a> {
+    ghcb: &'a mut Ghcb,
+}
+
+impl<'a> Default for GhcbHandle<'a>{
+    fn default() -> Self{
+        return GhcbHandle{
+            ghcb: unsafe{&mut *(MemoryDef::KERNEL_GHCB_OFFSET as *mut Ghcb)}
+        }
+    }
+}
+
+impl<'a> GhcbHandle<'a> {
+    pub fn init(&mut self) {
+        let ghcb_virt = VirtAddr::from_ptr(self.ghcb);
+
+        ghcb_msr_make_page_shared(ghcb_virt);
+
+        unsafe {
+            let gpa = ghcb_virt.as_u64();
+
+            let ret = vmgexit_msr(GhcbMsr::GPA_REQ, gpa, GhcbMsr::GPA_RESP);
+
+            if ret != gpa {
+                early_panic(4, 0x34);
+            }
+        }
+
+        *self.ghcb = Ghcb::default();
+
+    }
+
+    /// do a vmgexit with the ghcb block
+    ///
+    /// # Safety
+    /// undefined behaviour if not everything is setup according to the GHCB protocol
+    unsafe fn vmgexit(
+        &mut self,
+        exit_code: u64,
+        exit_info_1: u64,
+        exit_info_2: u64,
+    ) -> Result<(), GhcbError> {
+        // const GHCB_PROTOCOL_MIN: u16 = 1;
+        const GHCB_PROTOCOL_MAX: u16 = 2;
+        const GHCB_DEFAULT_USAGE: u32 = 0;
+
+        self.ghcb.save_area.sw_exit_code = exit_code;
+        self.set_offset_valid(ptr::addr_of!(self.ghcb.save_area.sw_exit_code) as _);
+
+        self.ghcb.save_area.sw_exit_info1 = exit_info_1;
+        self.set_offset_valid(ptr::addr_of!(self.ghcb.save_area.sw_exit_info1) as _);
+
+        self.ghcb.save_area.sw_exit_info2 = exit_info_2;
+        self.set_offset_valid(ptr::addr_of!(self.ghcb.save_area.sw_exit_info2) as _);
+
+        self.ghcb.ghcb_usage = GHCB_DEFAULT_USAGE;
+        // FIXME: do protocol negotiation
+        self.ghcb.protocol_version = GHCB_PROTOCOL_MAX;
+
+        // prevent earlier writes from being moved beyond this point
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Release);
+
+        let gpa = VirtAddr::from_ptr(self.ghcb).as_u64();
+        let mut msr = GhcbMsr::MSR;
+
+        msr.write(gpa);
+
+        asm!("rep vmmcall", options(nostack));
+
+        // prevent later reads from being moved before this point
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::Acquire);
+
+        if (self.ghcb.save_area.sw_exit_info1 & 0xffff_ffff) == 1 {
+            const SVM_EVTINJ_VALID: u64 = 1 << 31;
+            const SVM_EVTINJ_TYPE_SHIFT: u64 = 8;
+            const SVM_EVTINJ_TYPE_MASK: u64 = 7 << SVM_EVTINJ_TYPE_SHIFT;
+            const SVM_EVTINJ_TYPE_EXEPT: u64 = 3 << SVM_EVTINJ_TYPE_SHIFT;
+            const SVM_EVTINJ_VEC_MASK: u64 = 0xff;
+            const UD: u64 = 6;
+            const GP: u64 = 13;
+
+            // VmgExitErrorCheck, see
+            // https://github.com/AMDESE/ovmf/blob/sev-snp-v6/OvmfPkg/Library/VmgExitLib/VmgExitLib.c
+            // or linux kernel arch/x86/kernel/sev-shared.c
+            let exit_info2 = self.ghcb.save_area.sw_exit_info2;
+            let vector = exit_info2 & SVM_EVTINJ_VEC_MASK;
+
+            if (exit_info2 & SVM_EVTINJ_VALID != 0)
+                && (exit_info2 & SVM_EVTINJ_TYPE_MASK == SVM_EVTINJ_TYPE_EXEPT)
+                && (vector == GP || vector == UD)
+            {
+                return Err(GhcbError::Exception);
+            }
+
+            Err(GhcbError::VmmError)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// clear all bits in the valid offset bitfield
+    pub fn invalidate(&mut self) {
+        self.ghcb.save_area.sw_exit_code = 0;
+        self.ghcb
+            .save_area
+            .valid_bitmap
+            .iter_mut()
+            .for_each(|e| *e = 0);
+    }
+
+
+    /// set a bit in the valid offset bitfield
+    pub fn set_offset_valid(&mut self, offset: usize) {
+        let offset = offset.checked_sub(self.ghcb as *const _ as usize).unwrap();
+        let offset = offset / 8;
+        self.ghcb.save_area.valid_bitmap[offset / 8] |=
+            1u8.checked_shl((offset & 0x7) as u32).unwrap();
+    }
+
+    pub fn do_io_out(&mut self, portnumber: u16, value: u16) {
+        const IOIO_TYPE_OUT: u64 = 0;
+        const IOIO_DATA_16: u64 = 1 << 5;
+        const SVM_EXIT_IOIO_PROT: u64 = 0x7B;
+
+        self.invalidate();
+
+        self.ghcb.save_area.rax = value as _;
+        let offset: usize = ptr::addr_of!(self.ghcb.save_area.rax) as _;
+        self.set_offset_valid(offset);
+
+        unsafe {
+            if self
+                .vmgexit(
+                    SVM_EXIT_IOIO_PROT,
+                    IOIO_DATA_16 | IOIO_TYPE_OUT | ((portnumber as u64).checked_shl(16).unwrap()),
+                    0,
+                )
+                .is_err()
+            {
+                early_panic(4, 0x10);
+            }
+        }
+    }
+
+
+    pub fn set_memory_shared(&mut self, virt_addr: VirtAddr, npages: u64){
+        let mut time = 0u64;
+        let mut npages_current = npages;
+        assert!(npages >= 1);
+        loop{
+            let mut stop = false;
+            let pages = if npages_current >= PSC_ENTRY_LEN {
+                PSC_ENTRY_LEN
+            }else{
+                stop = true;
+                npages_current
+            };
+            self.set_memory_shared_ghcb(
+                virt_addr+Page::<Size4KiB>::SIZE*PSC_ENTRY_LEN*time,
+                pages as usize,
+            );
+            if stop{
+                break;
+            }
+            npages_current -= PSC_ENTRY_LEN;
+            time +=1;
+        }
+    }
+
+    pub fn set_memory_shared_ghcb(&mut self, virt_addr: VirtAddr, npages: usize) {
+        const SVM_VMGEXIT_PSC: u64 = 0x80000010;
+        let pt = &KERNEL_PAGETABLE;
+        (virt_addr.as_u64()
+            ..(virt_addr + Page::<Size4KiB>::SIZE.checked_mul(npages as u64).unwrap()).as_u64())
+            .step_by(Page::<Size4KiB>::SIZE as usize)
+            .for_each(|a| {
+                let virt = VirtAddr::new(a);
+                pt.smash(virt, &*PAGE_MGR).unwrap();
+                pvalidate(virt, PvalidateSize::Size4K, false).unwrap();
+            });
+
+        pt.clear_c_bit_address_range(
+            virt_addr,
+            virt_addr + Page::<Size4KiB>::SIZE.checked_mul(npages as u64).unwrap(),
+            &*PAGE_MGR,
+        )
+        .unwrap();
+
+        // Fill in shared_buffer
+        // SnpPscDesc has the exact same size.
+        let psc_desc: &mut SnpPscDesc =
+            unsafe { &mut *(self.ghcb.shared_buffer.as_mut_ptr() as *mut SnpPscDesc) };
+
+        *psc_desc = SnpPscDesc::default();
+
+        // FIXME
+        assert!(psc_desc.entries.len() >= npages);
+
+        psc_desc.cur_entry = 0;
+        psc_desc.end_entry = (npages as u16).checked_sub(1).unwrap();
+
+        let mut pa_addr = PhysAddr::new(virt_addr.as_u64());
+
+        for i in 0..npages {
+            psc_desc.entries[i].set_entry(pa_addr.as_u64(), RmpPgOp::Shared, RmpPgSize::Size4k);
+            pa_addr += Page::<Size4KiB>::SIZE;
+        }
+
+        loop {
+            // Use `read_volatile` to be safe
+            let cur_entry = unsafe { ptr::addr_of!(psc_desc.cur_entry).read_volatile() };
+            let end_entry = unsafe { ptr::addr_of!(psc_desc.end_entry).read_volatile() };
+
+            if cur_entry > end_entry {
+                break;
+            }
+
+            self.invalidate();
+
+            let addr = ptr::addr_of!(self.ghcb.shared_buffer);
+            self.ghcb.save_area.sw_scratch = (VirtAddr::from_ptr(addr)).as_u64();
+            let offset: usize = ptr::addr_of!(self.ghcb.save_area.sw_scratch) as _;
+            self.set_offset_valid(offset);
+
+            unsafe {
+                if self.vmgexit(SVM_VMGEXIT_PSC, 0, 0).is_err() {
+                    early_panic(4, 0x33);
+                }
+            }
+
+            if psc_desc.reserved != 0 {
+                unsafe {
+                    early_panic(4, 0x35);
+                }
+            }
+            if (psc_desc.end_entry > end_entry) || (cur_entry > psc_desc.cur_entry) {
+                unsafe {
+                    early_panic(4, 0x36);
+                }
+            }
         }
     }
 }

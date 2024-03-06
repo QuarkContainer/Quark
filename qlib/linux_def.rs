@@ -3015,6 +3015,7 @@ impl MemoryDef {
     pub const KERNEL_MEM_INIT_PRIVATE_REGION_OFFSET : u64 = MemoryDef::PHY_LOWER_ADDR - 4 * Self::ONE_KB;
     pub const KERNEL_MEM_INIT_PRIVATE_REGION_SIZE : u64 = 16 ;// 16 GB
 
+    pub const KERNEL_GHCB_OFFSET : u64 = Self::HEAP_OFFSET;
 
     // start address for memmap and dynamic load address space, there is heap address space between PHY_UPPER_ADDR + VIR_MMAP_START
     pub const VIR_MMAP_START: u64 = Self::PHY_UPPER_ADDR + 128 * Self::ONE_GB; // 512GB + 128 GB
