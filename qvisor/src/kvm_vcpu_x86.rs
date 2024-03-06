@@ -17,12 +17,12 @@
 use core::mem::size_of;
 //use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use std::os::unix::io::AsRawFd;
+use std::os::unix::io::{AsRawFd, FromRawFd};
 use std::sync::atomic::fence;
 //use std::sync::mpsc::Sender;
 
 use kvm_bindings::*;
-use kvm_ioctls::VcpuExit;
+use kvm_ioctls::{Kvm, VcpuExit, VmFd};
 use libc::*;
 //use nix::sys::signal;
 
@@ -48,6 +48,7 @@ use super::qlib::perf_tunning::*;
 //use super::qlib::task_mgr::*;
 //use super::qlib::vcpu_mgr::*;
 use super::runc::runtime::vm::*;
+use super::runc::runtime::vm_sev::*;
 use super::syncmgr::*;
 
 #[repr(C)]
@@ -224,13 +225,15 @@ impl KVMVcpu {
         );
     }
 
-    pub fn run(&self, tgid: i32) -> Result<()> {
+    pub fn run(&self, tgid: i32, kvmfd: i32, vm_fd: i32) -> Result<()> {
         SetExitSignal();
         self.setup_long_mode()?;
         let tid = unsafe { gettid() };
         self.threadid.store(tid as u64, Ordering::SeqCst);
         self.tgid.store(tgid as u64, Ordering::SeqCst);
 
+        let kvm = unsafe { Kvm::from_raw_fd(kvmfd) };
+        let vm_fd =  unsafe { kvm.create_vmfd_from_rawfd(vm_fd).unwrap()};
         let regs: kvm_regs = kvm_regs {
             rflags: KERNEL_FLAGS_SET,
             rip: self.entry,
@@ -398,6 +401,18 @@ impl KVMVcpu {
                         qlib::HYPERCALL_RELEASE_VCPU => {
                             SyncMgr::WakeShareSpaceReady();
                         }
+
+                        qlib::HYPERCALL_SHARESPACE_INIT => {
+                            let vms = VMS.lock();
+                            VirtualMachine::InitShareSpaceSevSnp(
+                                vms.vcpuCount,
+                                vms.controlSock,
+                                vms.rdmaSvcCliSock,
+                                vms.podId
+                            );
+                            //elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
+                        }
+
                         qlib::HYPERCALL_EXIT_VM => {
                             let exitCode = para1 as i32;
 

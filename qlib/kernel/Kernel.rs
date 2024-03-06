@@ -973,7 +973,6 @@ impl HostSpace {
 
     pub fn SyncPrint(level: DebugLevel, str: &str) {
         let msg = Print { level, str };
-
         HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0, 0, 0);
     }
 

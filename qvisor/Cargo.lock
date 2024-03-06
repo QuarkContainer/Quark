@@ -555,8 +555,7 @@ dependencies = [
 [[package]]
 name = "kvm-bindings"
 version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a78c049190826fff959994b7c1d8a2930d0a348f1b8f3aa4f9bb34cd5d7f2952"
+source = "git+https://github.com/123abcpp/kvm-bindings.git?branch=quark#e4e93261d1c3c594a9355dce5675cf81460fcd52"
 dependencies = [
  "vmm-sys-util",
 ]
@@ -564,7 +563,7 @@ dependencies = [
 [[package]]
 name = "kvm-ioctls"
 version = "0.11.0"
-source = "git+https://github.com/QuarkContainer/kvm-ioctls.git#8e6e66b565c28bbce4770cd7efc36002ad5459b6"
+source = "git+https://github.com/123abcpp/kvm-ioctls.git#f31db75848bc3e06e2759be539bc5cb2b5f30b17"
 dependencies = [
  "kvm-bindings",
  "libc",
