@@ -245,6 +245,13 @@ impl KVMVcpu {
             if round == 0 {
                 GLOBAL_ALLOCATOR.is_vm_lauched.store(true, Ordering::SeqCst);
                 round = round + 1;
+
+                {
+                    let mut vms = VMS.write();
+
+                    let spec = vms.args.as_mut().unwrap().Spec.Copy();
+                    vms.args.as_mut().unwrap().Spec =spec; 
+                }
             }
 
             self.state

@@ -146,19 +146,6 @@ lazy_static! {
     pub static ref GUEST_KERNEL: Mutex<Option<kernel::kernel::Kernel>> = Mutex::new(None);
 }
 
-//static ALLOCATOR: QAllocator = QAllocator::New();
-//static ALLOCATOR: StackHeap = StackHeap::Empty();
-//static ALLOCATOR: ListAllocator = ListAllocator::Empty();
-//static ALLOCATOR: GuestAllocator = GuestAllocator::New();
-//static ALLOCATOR: BufHeap = BufHeap::Empty();
-//static ALLOCATOR: LockedHeap<33> = LockedHeap::empty();
-
-/*pub fn AllocatorPrint(_class: usize) -> String {
-    let class = 6;
-    return ALLOCATOR.Print(class);
-}*/
-
-
 pub fn SingletonInit() {
     unsafe {
         vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
