@@ -103,6 +103,7 @@ use self::vmspace::kernel_io_thread::*;
 use crate::qlib::linux_def::MemoryDef;
 use self::qlib::kernel::kernel::kernel::Kernel;
 use spin::rwlock::RwLock;
+use crate::qlib::object_ref::ObjectRef;
 
 use self::vmspace::uringMgr::*;
 use crate::kvm_vcpu::KVMVcpu;
@@ -119,6 +120,10 @@ pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 
 thread_local!(static THREAD_ID: RefCell<i32> = RefCell::new(0));
 thread_local!(static VCPU: RefCell<Option<Arc<KVMVcpu>>> = RefCell::new(None));
+
+
+// unusable on host
+pub static PRIVATE_VCPU_LOCAL:  ObjectRef<PrivateCPULocal> =  ObjectRef::New();
 
 pub fn ThreadId() -> i32 {
     let mut i = 0;

@@ -21,9 +21,11 @@ use core::mem::size_of;
 use core::ptr::NonNull;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
+use crate::PRIVATE_VCPU_LOCAL;
+use crate::qlib::Vec;
 
 use super::super::super::kernel_def::VcpuId;
-use super::super::kernel::vcpu::CPU_LOCAL;
+use crate::qlib::kernel::vcpu::VCPU_COUNT;
 use super::super::linux_def::*;
 use super::super::mutex::*;
 use super::super::pagetable::AlignedAllocator;
@@ -61,6 +63,37 @@ pub fn SetZeroPage(pageStart: u64) {
     }
 }
 
+
+#[derive(Debug, Default)]
+pub struct PrivateCPULocal {
+    pub allocators: Vec<VcpuAllocator>,
+}
+
+
+impl PrivateCPULocal {
+
+    pub fn New() -> Self {
+        let mut v = Vec::new();
+        let vcpu_number = VCPU_COUNT.load(Ordering::Acquire);
+
+        for _ in 0..vcpu_number {
+            let a  = VcpuAllocator::default().into();
+            v.push(a);
+        }
+        return Self {
+            allocators: v,
+        };
+    }
+
+
+    pub fn AllocatorMut(&self) -> &mut VcpuAllocator {
+
+        let a = &PRIVATE_VCPU_LOCAL.allocators[VcpuId()];
+        return unsafe { &mut *(&a as *const _ as u64 as *mut VcpuAllocator) };
+    }
+}
+
+
 #[derive(Default)]
 pub struct GlobalVcpuAllocator {
     pub init: AtomicBool,
@@ -68,17 +101,20 @@ pub struct GlobalVcpuAllocator {
 
 impl GlobalVcpuAllocator {
     pub const fn New() -> Self {
+
         return Self {
             init: AtomicBool::new(false),
         };
     }
 
     pub fn Print(&self) {
+
+   
         error!(
             "GlobalVcpuAllocator {}/{}",
             VcpuId(),
-            unsafe { (*CPU_LOCAL[VcpuId()].allocator.get()).bufs.len()}
-        )
+            PRIVATE_VCPU_LOCAL.allocators[VcpuId()].bufs.len()
+            );
     }
 
     pub fn Initializated(&self) {

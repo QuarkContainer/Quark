@@ -115,6 +115,7 @@ use self::quring::*;
 use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
+use qlib::object_ref::ObjectRef;
 
 #[macro_use]
 mod print;
@@ -140,10 +141,13 @@ pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
+pub static PRIVATE_VCPU_LOCAL:  ObjectRef<PrivateCPULocal> =  ObjectRef::New();
 
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
     pub static ref GUEST_KERNEL: Mutex<Option<kernel::kernel::Kernel>> = Mutex::new(None);
+
+    pub static ref PRIVATE_VCPU_LOCAL_HOLDER: Mutex<PrivateCPULocal> = Mutex::new(PrivateCPULocal::New());    
 }
 
 pub fn SingletonInit() {
@@ -487,10 +491,15 @@ pub extern "C" fn rust_main(
         HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
 
 
-
         SHARESPACE.SetValue(shared_space as u64);
         SingletonInit();
+
+        // 
+        let p_vcpu_addr = &(*PRIVATE_VCPU_LOCAL_HOLDER.lock()) as *const _ as u64;  
+        PRIVATE_VCPU_LOCAL.SetValue(p_vcpu_addr);
         VCPU_ALLOCATOR.Initializated();
+
+
         InitTsc();
         InitTimeKeeper(vdsoParamAddr);
         {
