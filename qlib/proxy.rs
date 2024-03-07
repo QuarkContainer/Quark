@@ -343,10 +343,10 @@ pub struct FatHeader {
 }
 
 #[repr(C)]
-#[derive(Default, Debug)]
+#[derive(Default, Debug,Copy, Clone)]
 pub struct FatElfHeader {
-    magic: u32,
-    version: u16,
+    pub magic: u32,
+    pub version: u16,
     pub header_size: u16,
     pub size: u64
 }

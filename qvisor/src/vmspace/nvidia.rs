@@ -433,6 +433,9 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
         ProxyCommand::CudaRegisterFatBinary => {
             // reference to a FatElfHeader based on the memory location described by para2
             let fatElfHeader = unsafe { &*(parameters.para2 as *const u8 as *const FatElfHeader) };
+            
+            error!("fatElfHeader magic is :{:x}, version is :{:x}, header size is :{:x}, size is :{:x}", fatElfHeader.magic, fatElfHeader.version, fatElfHeader.header_size, fatElfHeader.size);
+          
             let moduleKey = parameters.para3;
             error!("moduleKey:{:x}", moduleKey);
 
