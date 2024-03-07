@@ -137,7 +137,6 @@ pub fn LocalVcpu() -> Option<Arc<KVMVcpu>> {
 }
 
 lazy_static! {
-
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
     pub static ref SWAP_FILE: Mutex<SwapFile> = Mutex::new(SwapFile::Init().unwrap());
     pub static ref VMS: RwLock<VMSpace> = RwLock::new(VMSpace::Init());

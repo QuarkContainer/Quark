@@ -491,11 +491,8 @@ impl LoaderInternal {
 
         let rootMounts =
             InitRootFs(Task::Current(), &process.Root).expect("in loader::New, InitRootfs fail");
-        info!("init the root process 1");
         kernel.mounts.write().insert(sandboxID.clone(), rootMounts);
-        info!("init the root process 2");
         let processArgs = NewProcess(process, &creds, &kernel);
-        info!("init the root process 3");
         self.kernel = kernel;
         self.console = console;
         self.sandboxID = sandboxID;
@@ -694,68 +691,29 @@ impl LoaderInternal {
 }
 
 pub fn NewProcess(process: Process, creds: &auth::Credentials, k: &Kernel) -> CreateProcessArgs {
-    info!("NewProcess 1");
     let utsns = k.rootUTSNamespace.clone();
     let ipcns = k.rootIPCNamespace.clone();
-    info!("NewProcess 2");
     let mut stdiofds: [i32; 3] = [0; 3];
     for i in 0..3 {
         stdiofds[i] = process.Stdiofds[i];
     }
 
-    info!("NewProcess 3");
-    // let proc_args = CreateProcessArgs {
-    //     Filename: process.Args[0].to_string(),
-    //     Argv: process.Args,
-    //     Envv: process.Envs,
-    //     WorkingDirectory: process.Cwd,
-    //     Credentials: creds.clone(),
-    //     Umask: 0o22,
-    //     Limits: LimitSet(Arc::new(QMutex::new(process.limitSet))),
-    //     MaxSymlinkTraversals: MAX_SYMLINK_TRAVERSALS,
-    //     UTSNamespace: utsns,
-    //     IPCNamespace: ipcns,
-    //     ContainerID: process.ID,
-    //     Stdiofds: stdiofds,
-    //     Terminal: process.Terminal,
-    //     ExecId: process.ExecId.clone(),
-    //     ..Default::default()
-    // };
+    CreateProcessArgs {
+        Filename: process.Args[0].to_string(),
+        Argv: process.Args,
+        Envv: process.Envs,
+        WorkingDirectory: process.Cwd,
+        Credentials: creds.clone(),
+        Umask: 0o22,
+        Limits: LimitSet(Arc::new(QMutex::new(process.limitSet))),
+        MaxSymlinkTraversals: MAX_SYMLINK_TRAVERSALS,
+        UTSNamespace: utsns,
+        IPCNamespace: ipcns,
+        ContainerID: process.ID,
+        Stdiofds: stdiofds,
+        Terminal: process.Terminal,
+        ExecId: process.ExecId.clone(),
+        ..Default::default()
+    }
 
-        let mut proc_args = CreateProcessArgs::default();
-        info!("NewProcess 4 proc_args address {:p}, process address {:p} process.Args[0] {:p}", &proc_args, &process,  &process.Args[0]);
-        proc_args.Filename = "asdas".to_string();
-        info!("NewProcess 4.1 process.Args {:?}", process.Args);
-        let a = process.Args[0].to_string();
-        info!("NewProcess 4.2");
-        proc_args.Filename = a;
-        info!("NewProcess 5");
-        proc_args.Argv = process.Args;
-        info!("NewProcess 6");
-        proc_args.Envv = process.Envs;
-        info!("NewProcess 7");
-        proc_args.WorkingDirectory = process.Cwd;
-        info!("NewProcess 8");
-        proc_args.Credentials = creds.clone();
-        info!("NewProcess 9");
-        proc_args.Umask = 0o22;
-        info!("NewProcess 10");
-        proc_args.Limits = LimitSet(Arc::new(QMutex::new(process.limitSet)));
-        info!("NewProcess 11");
-        proc_args.MaxSymlinkTraversals = MAX_SYMLINK_TRAVERSALS;
-        info!("NewProcess 12");
-        proc_args.UTSNamespace = utsns;
-        info!("NewProcess 13");
-        proc_args.IPCNamespace = ipcns;
-        info!("NewProcess 14");
-        proc_args.ContainerID = process.ID;
-        info!("NewProcess 15");
-        proc_args.Stdiofds = stdiofds;
-        info!("NewProcess 16");
-        proc_args.Terminal = process.Terminal;
-        info!("NewProcess 17");
-        proc_args.ExecId = process.ExecId.clone();
-        info!("NewProcess 18");
-
-        return proc_args;
 }

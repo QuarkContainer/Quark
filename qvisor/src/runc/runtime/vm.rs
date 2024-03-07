@@ -182,8 +182,6 @@ impl VirtualMachine {
         podId: [u8; 64],
         haveMembarrierGlobal: bool,
     ) {
-
-
         let sp = ShareSpace::New();
         let sp_size = core::mem::size_of_val(&sp);
         let sharedSpace_size = core::mem::size_of_val(sharedSpace);
