@@ -134,6 +134,7 @@ mod syscalls;
 
 //use buddy_system_allocator::*;
 //#[global_allocator]
+use alloc::boxed::Box;
 
 #[global_allocator]
 pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
@@ -144,6 +145,8 @@ pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
     pub static ref GUEST_KERNEL: Mutex<Option<kernel::kernel::Kernel>> = Mutex::new(None);
+
+    pub static ref PRIVATE_VCPU_LOCAL_HOLDER: Box<PrivateCPULocal> = Box::new(PrivateCPULocal::New());    
 }
 
 pub fn SingletonInit() {
@@ -487,10 +490,14 @@ pub extern "C" fn rust_main(
         HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
 
 
-
         SHARESPACE.SetValue(shared_space as u64);
         SingletonInit();
+
+        SetVCPCount(vcpuCnt as usize);
+        VCPU_ALLOCATOR.Print();
         VCPU_ALLOCATOR.Initializated();
+
+
         InitTsc();
         InitTimeKeeper(vdsoParamAddr);
         {
@@ -501,7 +508,7 @@ pub extern "C" fn rust_main(
         }
 
         GlobalIOMgr().InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
-        SetVCPCount(vcpuCnt as usize);
+
         VDSO.Initialization(vdsoParamAddr);
 
         // release other vcpus

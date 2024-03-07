@@ -28,7 +28,6 @@ use super::qlib::kernel::asm::*;
 use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 use super::qlib::kernel::taskMgr::*;
 use super::qlib::kernel::threadmgr::task_sched::*;
-use super::qlib::kernel::vcpu::*;
 use super::qlib::kernel::SHARESPACE;
 use super::qlib::kernel::TSC;
 
@@ -48,6 +47,8 @@ use super::qlib::ShareSpace;
 use super::qlib::*;
 use super::syscalls::sys_file::*;
 use super::Kernel::HostSpace;
+
+use super::PRIVATE_VCPU_LOCAL_HOLDER;
 
 use crate::GLOBAL_ALLOCATOR;
 
@@ -383,14 +384,16 @@ unsafe impl GlobalAlloc for GlobalVcpuAllocator {
         if !self.init.load(Ordering::Relaxed) {
             return GLOBAL_ALLOCATOR.alloc(layout);
         }
-        return CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout);
+
+        return PRIVATE_VCPU_LOCAL_HOLDER.AllocatorMut().alloc(layout);
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if !self.init.load(Ordering::Relaxed) {
             return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
         }
-        return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout);
+
+        return PRIVATE_VCPU_LOCAL_HOLDER.AllocatorMut().dealloc(ptr, layout);
     }
 }
 

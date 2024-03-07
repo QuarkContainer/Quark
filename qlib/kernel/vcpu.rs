@@ -24,6 +24,7 @@ use super::SHARESPACE;
 pub static VCPU_COUNT: Singleton<AtomicUsize> = Singleton::<AtomicUsize>::New();
 pub static CPU_LOCAL: Singleton<&'static [CPULocal]> = Singleton::<&'static [CPULocal]>::New();
 
+
 pub fn SetVCPCount(cpuCnt: usize) {
     VCPU_COUNT.store(cpuCnt, Ordering::SeqCst)
 }

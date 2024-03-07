@@ -21,9 +21,11 @@ use core::mem::size_of;
 use core::ptr::NonNull;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
+use crate::qlib::Vec;
+use crate::PRIVATE_VCPU_LOCAL_HOLDER;
 
 use super::super::super::kernel_def::VcpuId;
-use super::super::kernel::vcpu::CPU_LOCAL;
+use crate::qlib::kernel::vcpu::VCPU_COUNT;
 use super::super::linux_def::*;
 use super::super::mutex::*;
 use super::super::pagetable::AlignedAllocator;
@@ -61,6 +63,42 @@ pub fn SetZeroPage(pageStart: u64) {
     }
 }
 
+use core::cell::UnsafeCell;
+
+#[derive(Debug, Default)]
+#[repr(C)]
+#[repr(align(16))]
+pub struct PrivateCPULocal {
+    pub allocators: Vec<UnsafeCell<VcpuAllocator>>,
+}
+
+unsafe impl Send for PrivateCPULocal {}
+unsafe impl Sync for PrivateCPULocal {}
+
+impl PrivateCPULocal {
+
+    pub fn New() -> Self {
+        let mut v = Vec::new();
+        let vcpu_number = VCPU_COUNT.load(Ordering::Acquire);
+
+        info!("PrivateCPULocal new, cpu number {}", vcpu_number);
+
+        for _ in 0..vcpu_number {
+            let a  = VcpuAllocator::default().into();
+            v.push(a);
+        }
+        return Self {
+            allocators: v,
+        };
+    }
+
+    pub fn AllocatorMut(&self) -> &mut VcpuAllocator {
+        //return unsafe { &mut *(&self.allocator as *const _ as u64 as *mut VcpuAllocator) };
+        return unsafe { &mut *self.allocators[VcpuId()].get() }
+    }
+}
+
+
 #[derive(Default)]
 pub struct GlobalVcpuAllocator {
     pub init: AtomicBool,
@@ -68,17 +106,19 @@ pub struct GlobalVcpuAllocator {
 
 impl GlobalVcpuAllocator {
     pub const fn New() -> Self {
+
         return Self {
             init: AtomicBool::new(false),
         };
     }
 
     pub fn Print(&self) {
+
         error!(
             "GlobalVcpuAllocator {}/{}",
             VcpuId(),
-            unsafe { (*CPU_LOCAL[VcpuId()].allocator.get()).bufs.len()}
-        )
+            unsafe { (*PRIVATE_VCPU_LOCAL_HOLDER.allocators[VcpuId()].get()).bufs.len()}
+            );
     }
 
     pub fn Initializated(&self) {
