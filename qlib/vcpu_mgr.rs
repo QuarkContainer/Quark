@@ -15,9 +15,6 @@
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicI64, AtomicU8};
-use core::cell::UnsafeCell;
-
-use super::mem::list_allocator::*;
 use super::ShareSpace;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
@@ -56,7 +53,6 @@ pub struct CPULocal {
     pub data: u64, // for eventfd data writing and reading
     pub eventfd: i32,
     pub epollfd: i32,
-    pub pageAllocator: UnsafeCell<PageAllocator>,
 
     // it is the time to enter guest ring3. If it is in ring0, the vale will be zero
     pub enterAppTimestamp: AtomicI64,

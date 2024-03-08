@@ -426,9 +426,6 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     // mm needs to be clean as last function before SwitchToNewTask
                     // after this is called, another vcpu might drop the pagetable
                     core::mem::drop(mm);
-                    unsafe { 
-                        (*CPULocal::Myself().pageAllocator.get()).Clean(); 
-                    }
                 }
 
                 self::taskMgr::SwitchToNewTask();
