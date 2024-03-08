@@ -19,6 +19,7 @@ use super::VMS;
 use super::vmspace::VMSpace;
 use alloc::alloc::alloc;
 use libc::ioctl;
+use libc::gettid;
 use core::alloc::Layout;
 use core::slice;
 use core::sync::atomic::AtomicU64;
@@ -138,6 +139,37 @@ impl KVMVcpu {
         });
     }
 
+    pub fn run(&self, tgid: i32) -> Result<()> {
+        SetExitSignal();
+        self.SignalMask();
+        let tid = unsafe { gettid() };
+        self.threadid.store(tid as u64, Ordering::SeqCst);
+        self.tgid.store(tgid as u64, Ordering::SeqCst);
+
+        if self.cordId > 0 {
+            let coreid = core_affinity::CoreId {
+                id: self.cordId as usize,
+            };
+            // print cpu id
+            core_affinity::set_for_current(coreid);
+        }
+
+        if !super::runc::runtime::vm::IsRunning() {
+            info!("The VM is not running.");
+            return Ok(());
+        }
+
+        info!(
+            "Start enter guest[{}]: entry is {:x}, stack is {:x}",
+            self.id, self.entry, self.topStackAddr
+        );
+        self.arch_vcpu.run(self.entry, self.topStackAddr, self.heapStartAddr,
+                           self.shareSpaceAddr, self.id as u64, VMS.lock().vdsoAddr,
+                           self.vcpuCnt as u64, self.autoStart)?;
+
+        Ok(())
+    }
+
     pub fn GuestMsgProcess(sharespace: &ShareSpace) -> usize {
         let mut count = 0;
         loop {
@@ -169,7 +201,6 @@ impl KVMVcpu {
                 }
                 Some(msg) => {
                     count += 1;
-                    //error!("qcall msg is {:x?}", &msg);
                     AQHostCall(msg, sharespace);
                 }
             }
@@ -226,7 +257,10 @@ impl KVMVcpu {
 
         let ret = unsafe {
             ioctl(
-                self.vcpu.as_raw_fd(),
+                self.arch_vcpu
+                    .vcpu_fd()
+                    .unwrap()
+                    .as_raw_fd(),
                 Self::KVM_SET_SIGNAL_MASK,
                 &data as *const _ as u64,
             )
@@ -237,7 +271,10 @@ impl KVMVcpu {
             "SignalMask ret is {}/{}/{}",
             ret,
             errno::errno().0,
-            self.vcpu.as_raw_fd()
+            self.arch_vcpu
+                .vcpu_fd()
+                .unwrap()
+                .as_raw_fd()
         );
     }
 }
@@ -290,7 +327,10 @@ extern "C" fn handleSigChild(signal: i32) {
     if signal == Signal::SIGCHLD {
         // used for tlb shootdown
         if let Some(vcpu) = super::LocalVcpu() {
-            vcpu.vcpu.set_kvm_immediate_exit(1);
+            vcpu.arch_vcpu
+                .vcpu_fd()
+                .unwrap()
+                .set_kvm_immediate_exit(1);
             fence(Ordering::SeqCst);
         }
     }

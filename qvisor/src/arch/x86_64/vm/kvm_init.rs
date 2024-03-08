@@ -35,7 +35,8 @@ use crate::qlib::cpuid::XSAVEFeature::{XSAVEFeatureBNDCSR,
                                        XSAVEFeatureBNDREGS};
 
 impl x86_64vCPU {
-    pub fn vcpu_reg_init(&mut self, id: usize) -> Result<(), Error> {
+   pub(in super::super::super::__cpu_arch) fn vcpu_reg_init(&mut self, id: usize)
+   -> Result<(), Error> {
         self.gdtAddr = AlignedAllocate(
             MemoryDef::PAGE_SIZE as usize,
             MemoryDef::PAGE_SIZE as usize,

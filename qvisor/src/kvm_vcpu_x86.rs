@@ -14,6 +14,7 @@
 
 use core::sync::atomic::Ordering;
 use libc::*;
+use std::os::unix::io::AsRawFd;
 use crate::arch::vCPU;
 
 use super::*;
@@ -70,7 +71,10 @@ impl KVMVcpu {
         let bounce: u32 = 20; //VirtualizationException
         let ret = unsafe {
             ioctl(
-                self.vcpu.as_raw_fd(),
+                self.arch_vcpu
+                    .vcpu_fd()
+                    .unwrap()
+                    .as_raw_fd(),
                 Self::KVM_INTERRUPT,
                 &bounce as *const _ as u64,
             )
@@ -83,35 +87,6 @@ impl KVMVcpu {
             errno::errno().0,
             self.vcpu.as_raw_fd()
         );
-    }
-
-    pub fn run(&self, tgid: i32) -> Result<()> {
-        SetExitSignal();
-        self.SignalMask();
-        let tid = unsafe { gettid() };
-        self.threadid.store(tid as u64, Ordering::SeqCst);
-        self.tgid.store(tgid as u64, Ordering::SeqCst);
-
-        if self.cordId > 0 {
-            let coreid = core_affinity::CoreId {
-                id: self.cordId as usize,
-            };
-            // print cpu id
-            core_affinity::set_for_current(coreid);
-        }
-
-        if !super::runc::runtime::vm::IsRunning() {
-            info!("The VM is not running.");
-            return Ok(());
-        }
-
-        info!(
-            "Start enter guest[{}]: entry is {:x}, stack is {:x}",
-            self.id, self.entry, self.topStackAddr
-        );
-        self.arch_vcpu.run()?;
-
-        Ok(())
     }
 
     pub fn VcpuWait(&self) -> i64 {
@@ -141,8 +116,6 @@ impl KVMVcpu {
             }
         }
     }
-
-
 
     pub fn dump(&self) -> Result<()> {
         if !Dump(self.id) {

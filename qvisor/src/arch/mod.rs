@@ -20,5 +20,8 @@ pub mod __cpu_arch;
 pub trait vCPU {
     fn new (kvm_vm_fd: &kvm_ioctls::VmFd, vCPU_id: usize) -> Self;
     fn init(&mut self, id: usize) -> Result<(), Error>;
-    fn run(&self) -> Result<(), Error>;
+    fn run(&self, entry_addr: u64, stack_start_addr: u64, heap_start_addr: u64,
+           share_space_addr: u64, id: u64, vdso_addr: u64, cpus_total: u64,
+           auto_start: bool) -> Result<(), Error>;
+    fn vcpu_fd(&self) -> Option<&kvm_ioctls::VcpuFd>;
 }
