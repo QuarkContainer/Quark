@@ -230,11 +230,19 @@ impl MemoryManager {
         };
         let gap = vmas.FindGap(MemoryDef::PHY_LOWER_ADDR);
         // kernel memory
+        let kernel_range_start = if cfg!(target_arch = "x86_64") {
+                                    MemoryDef::KVM_IOEVENTFD_BASEADDR
+                                 } else if cfg!(target_arch = "aarch64") {
+                                    MemoryDef::HYPERCALL_MMIO_BASE
+                                 } else {
+                                    panic!("VM: Unknown architecture - Can not set QKernel memory base.");
+                                 };
+        let kernel_range_length = MemoryDef::PHY_UPPER_ADDR - kernel_range_start;
         vmas.Insert(
             &gap,
             &Range::New(
-                MemoryDef::KVM_IOEVENTFD_BASEADDR,
-                MemoryDef::PHY_UPPER_ADDR - MemoryDef::KVM_IOEVENTFD_BASEADDR,
+                kernel_range_start,
+                kernel_range_length,
             ),
             vma.clone(),
         );
@@ -393,6 +401,9 @@ impl MemoryManager {
         let (mut vseg, vgap) = mapping.vmas.Find(0);
         if vgap.Ok() {
             vseg = vgap.NextSeg();
+            debug!("VM: Start clean VMAs - KEY.0 ->\nvseg:{:?}\nvgap:{:?}", vseg.Value(), vgap.Range());
+        } else {
+            debug!("VM: No VMAs to cleanup.");
         }
 
         while vseg.Ok() {
