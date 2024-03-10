@@ -1,4 +1,4 @@
-All: na ss cni test
+All: na ss cni test httpgateway 
 
 na: 
 	cargo +nightly-x86_64-unknown-linux-gnu build --bin na
@@ -8,6 +8,10 @@ cni:
 	cargo build --bin cni
 	cp -f cni_logging_config.yaml /etc/quark/
 	sudo cp -f target/debug/cni /opt/cni/bin/tsot
+
+httpgateway:	
+	cargo build --bin gateway
+	cp -f gateway_logging_config.yaml /etc/quark/
 
 ss:
 	cargo +nightly-x86_64-unknown-linux-gnu build --bin ss

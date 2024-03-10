@@ -36,6 +36,10 @@ nix = "0.23.1"
 futures = "0.3"
 dns-lookup = "2.0.4"
 
+axum = "0.7.4"
+hyper = { version = "1.0.0", features = ["full"] }
+hyper-util = { version = "0.1.1", features = ["client-legacy"] }
+
 [dependencies.lazy_static]
 version = "1.0"
 features = ["spin_no_std"]
@@ -61,5 +65,10 @@ name = "ss"
 path = "state_svc/ss_main.rs"
 
 [[bin]]
+name = "gateway"
+path = "gateway/gateway.rs"
+
+[[bin]]
 name = "test"
 path = "test_client/client.rs"
+

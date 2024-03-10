@@ -1,0 +1,26 @@
+appenders:
+  my_stdout:
+    kind: console
+    encoder:
+      pattern: "{h({d(%Y-%m-%d %H:%M:%S)(utc)} - {l}: {m}{n})}"
+  my_file_logger:
+    kind: rolling_file
+    path: "/var/log/quark/gateway.log"
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S)(utc)} - {h({l})}: {m}{n}"
+    policy:
+      trigger:
+        kind: size
+        limit: 50mb
+      roller:
+        kind: delete
+  append_logger:
+    kind: file
+    path: "/var/log/quark/gateway.log"
+    append: true
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S)(utc)} - {h({l})}: {m}{n}"
+root:
+  level: info
+  appenders:
+    - append_logger

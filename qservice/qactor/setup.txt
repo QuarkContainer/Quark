@@ -1,11 +1,11 @@
-pyenv virtualenv pyo3
-pyenv local pyo3
+pip install patchelf
+maturin develop
 
 python -m venv .env
 source .env/bin/activate
 
-pip install patchelf
-maturin develop
+####################test########################
+/rust/Quark/qservice/qactor/python$ python3 ./test1.py 
 
 curl --header "Content-Type: application/json" \
   --request POST \

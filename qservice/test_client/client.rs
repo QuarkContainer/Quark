@@ -190,7 +190,7 @@ async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
         }
     ];
 
-    let request = tonic::Request::new(CreateFuncPodReq {
+    let request: tonic::Request<CreateFuncPodReq> = tonic::Request::new(CreateFuncPodReq {
         namespace: "ns1".into(),
         name: cmd.into(), //"name1".into(),
         image: "ubuntu".into(),
