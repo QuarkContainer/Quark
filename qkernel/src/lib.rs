@@ -115,31 +115,32 @@ use self::quring::*;
 use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+use guest_host_allocator::GuestHostSharedAllocator;
 
 #[macro_use]
 mod print;
 
-//#[macro_use]
-//pub mod asm;
-//mod taskMgr;
 #[macro_use]
 mod qlib;
 #[macro_use]
 mod interrupt;
 pub mod kernel_def;
 pub mod rdma_def;
+
+mod guest_host_allocator;
 mod syscalls;
 
-//use self::heap::QAllocator;
-
-//use buddy_system_allocator::*;
-//#[global_allocator]
-use alloc::boxed::Box;
 
 #[global_allocator]
 pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
+
+pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
+
+
 
 
 lazy_static! {
@@ -493,6 +494,26 @@ pub extern "C" fn rust_main(
         SetVCPCount(vcpuCnt as usize);
         VCPU_ALLOCATOR.Print();
         VCPU_ALLOCATOR.Initializated();
+
+
+        let mut vec1: Vec<i32, _> = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
+        for i in 0..10 {
+            vec1.push(i);
+        }
+
+        debug!("vec1 {:?}", vec1);
+        drop(vec1);
+
+        let mut vec2: Vec<i32, _> = Vec:: with_capacity_in(10, GUEST_HOST_SHARED_ALLOCATOR);
+        for i in 0..10 {
+            vec2.push(i);
+        }
+
+        debug!("vec2 {:?}", vec2);
+        drop(vec2);
+
+
+
 
 
         InitTsc();
