@@ -155,6 +155,7 @@ lazy_static! {
     pub static ref URING_MGR: Arc<Mutex<UringMgr>> = {
         let uringQueueSize = 1024;
 
+        debug!("init URING_MGR");
         Arc::new(Mutex::new(UringMgr::New(uringQueueSize)))
     };
     pub static ref KERNEL_IO_THREAD: KIOThread = KIOThread::New();

@@ -189,7 +189,6 @@ impl KVMVcpu {
         let tid = unsafe { gettid() };
         self.threadid.store(tid as u64, Ordering::SeqCst);
         self.tgid.store(tgid as u64, Ordering::SeqCst);
-        let mut round = 0;
 
         let regs: kvm_regs = kvm_regs {
             rflags: KERNEL_FLAGS_SET,
@@ -240,18 +239,6 @@ impl KVMVcpu {
         loop {
             if !super::runc::runtime::vm::IsRunning() {
                 return Ok(());
-            }
-
-            if round == 0 {
-                GLOBAL_ALLOCATOR.is_vm_lauched.store(true, Ordering::SeqCst);
-                round = round + 1;
-
-                {
-                    let mut vms = VMS.write();
-
-                    let spec = vms.args.as_mut().unwrap().Spec.Copy();
-                    vms.args.as_mut().unwrap().Spec =spec; 
-                }
             }
 
             self.state
@@ -373,6 +360,13 @@ impl KVMVcpu {
                         }
                         qlib::HYPERCALL_SHARESPACE_INIT => {
                             info!("VM EXIT HYPERCALL_SHARESPACE_INIT");
+                            GLOBAL_ALLOCATOR.is_vm_lauched.store(true, Ordering::SeqCst);
+                            {
+                                let mut vms = VMS.write();
+
+                                let spec = vms.args.as_mut().unwrap().Spec.Copy();
+                                vms.args.as_mut().unwrap().Spec =spec; 
+                            }
 
                             let vms = VMS.read();
                             let controlSock  = vms.controlSock;
@@ -385,7 +379,7 @@ impl KVMVcpu {
                             let shareSpaceAddr = para1 as *mut ShareSpace;
                             let sharedSpace  = unsafe { &mut (*shareSpaceAddr) };
 
-                            info!("VM EXIT HYPERCALL_SHARESPACE_INIT 1");
+                            debug!("VM EXIT HYPERCALL_SHARESPACE_INIT 1");
                             VirtualMachine::InitShareSpace(
                                 sharedSpace,
                                 vcpuCount,
@@ -394,8 +388,7 @@ impl KVMVcpu {
                                 podId,
                                 haveMembarrierGlobal
                             );
-                            info!("VM EXIT HYPERCALL_SHARESPACE_INIT finished");
-
+                            debug!("VM EXIT HYPERCALL_SHARESPACE_INIT finished");
                         }
                         qlib::HYPERCALL_EXIT_VM => {
                             let exitCode = para1 as i32;
