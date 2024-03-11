@@ -29,7 +29,7 @@ use qshare::etcd::etcd_store::EtcdStore;
 use qshare::common::*;
 use tokio::sync::Notify;
 
-use crate::func_mgr::{FuncPackageMgr, FuncPackageSpec};
+use crate::func_mgr::*;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct NamespaceSpec {
@@ -121,6 +121,10 @@ impl NamespaceMgr {
         return Ok(mgr)
     }
 
+    pub fn ContainersNamespace(&self, namespace: &str) -> bool {
+        return self.lock().unwrap().namespaces.contains_key(namespace)
+    }
+
     pub fn AddNamespace(&self, spec: NamespaceSpec) -> Result<()> {
         let mut inner = self.lock().unwrap();
 
@@ -149,6 +153,24 @@ impl NamespaceMgr {
         return Ok(())
     }
 
+    pub fn ContainersFuncPackage(&self, namespace: &str, name: &str) -> Result<bool> {
+        if !self.ContainersNamespace(namespace) {
+            return Err(Error::NotExist(format!("ContainersFuncPackage {}", namespace)));
+        }
+ 
+        let inner = self.lock().unwrap();
+        let mgr = match inner.funcPackageMgrs.get(namespace) {
+            None => {
+                return Ok(false)
+            }
+            Some(mgr) => {
+                mgr.clone()
+            }
+        };
+
+        return Ok(mgr.ContainersFuncPackage(namespace, name));
+    }
+
     pub fn GetFuncPackageMgr(&self, namespace: &str) -> Result<FuncPackageMgr> {
         let mut inner = self.lock().unwrap();
 
@@ -164,6 +186,11 @@ impl NamespaceMgr {
         };
 
         return Ok(mgr);
+    }
+
+    pub fn GetFuncPackage(&self, namespace: &str, name: &str) -> Result<FuncPackage> {
+        let mgr = self.GetFuncPackageMgr(namespace)?;
+        return mgr.GetFuncPackage(namespace, name);
     }
 
     pub fn AddFuncPackage(&self, spec: FuncPackageSpec) -> Result<()> {
@@ -287,9 +314,9 @@ impl NamespaceStore {
         return Ok(())
     }
 
-    pub async fn DropFuncPackage(&self, funcPackage: &FuncPackageSpec) -> Result<()> {
-        let obj = funcPackage.DataObject();
-        self.store.Delete(&obj.Key(), obj.revision).await?;
+    pub async fn DropFuncPackage(&self, namespace: &str, name: &str, revision: i64) -> Result<()> {
+        let key = format!("{}/{}/{}", FuncPackageSpec::KEY, namespace, name);
+        self.store.Delete(&key, revision).await?;
         return Ok(())
     }
 }

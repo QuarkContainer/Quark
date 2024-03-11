@@ -22,6 +22,12 @@ use qshare::metastore::data_obj::*;
 use qshare::common::*;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
+pub struct FuncPackageId {
+    pub namespace: String,
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct FuncPackageSpec {
     pub namespace: String,
     pub name: String,
@@ -53,6 +59,10 @@ impl FuncPackageSpec {
         };
 
         return inner.into();
+    }
+
+    pub fn ToJson(&self) -> String {
+        serde_json::to_string_pretty(&self).unwrap()
     }
 
     pub fn Key(&self) -> String {
@@ -103,6 +113,19 @@ impl Deref for FuncPackageMgr {
 }
 
 impl FuncPackageMgr {
+    pub fn ContainersFuncPackage(&self, namespace: &str, name: &str) -> bool {
+        let key = format!("{}/{}",namespace, name);
+        return self.lock().unwrap().funcPackages.contains_key(&key);
+    }
+
+    pub fn GetFuncPackage(&self, namespace: &str, name: &str) -> Result<FuncPackage> {
+        let key = format!("{}/{}",namespace, name);
+        match self.lock().unwrap().funcPackages.get(&key) {
+            None => return Err(Error::NotExist(format!("GetFuncPackage {}", key))),
+            Some(p) => return Ok(p.clone()),
+        }
+    }
+
     pub fn Add(&self, spec: FuncPackageSpec) -> Result<()> {
         let key = spec.Key();
         let mut inner = self.lock().unwrap();

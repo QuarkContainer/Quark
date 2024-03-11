@@ -32,7 +32,7 @@ use crate::QletAggrStore::QletAggrStore;
 
 lazy_static::lazy_static! {
     //pub static ref ETCD_OBJECTS: Vec<&'static str> = vec!["pod", "podset", "package"];
-    pub static ref ETCD_OBJECTS: Vec<&'static str> = vec!["node_info"];
+    pub static ref ETCD_OBJECTS: Vec<&'static str> = vec!["node_info", "namespace_info", "funcpackage"];
 }
 
 pub const VERSION: &str = "0.1";

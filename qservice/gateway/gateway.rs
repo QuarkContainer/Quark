@@ -26,19 +26,21 @@ pub mod http_gateway;
 pub mod namespace_mgr;
 pub mod func_mgr;
 
-use namespace_mgr::NamespaceMgr;
+use namespace_mgr::{NamespaceMgr, NamespaceStore};
 use once_cell::sync::OnceCell;
 
 use qshare::common::*;
 use http_gateway::*;
 
 pub static NAMESPACE_MGR: OnceCell<NamespaceMgr> = OnceCell::new();
+pub static NAMESPACE_STORE: OnceCell<NamespaceStore> = OnceCell::new();
 
 #[tokio::main]
 async fn main() -> Result<()> {
     log4rs::init_file("/etc/quark/gateway_logging_config.yaml", Default::default()).unwrap();
     
-    NAMESPACE_MGR.set(NamespaceMgr::New(vec!["127.0.0.1:2379".to_owned()]).await?).unwrap();
+    NAMESPACE_MGR.set(NamespaceMgr::New(vec!["http://127.0.0.1:8890".to_owned()]).await?).unwrap();
+    NAMESPACE_STORE.set(NamespaceStore::New(&vec!["http://127.0.0.1:2379".to_owned()]).await?).unwrap();
     
     error!("gateway ...");
     let gateway = HttpGateway{};

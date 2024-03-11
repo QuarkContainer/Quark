@@ -651,13 +651,13 @@ impl DataObject {
             ]
         }"#;
         let podSpec: k8s::PodSpec = serde_json::from_str(podSpecStr)?;
-        let package = FuncPackage {
+        let package = FuncPackage1 {
             metadata: ObjectMeta { 
                 namespace: Some(namespace.to_string()),
                 name: Some(name.to_string()),
                 ..Default::default()
             },
-            spec: FuncPackageSpec {
+            spec: FuncPackageSpec1 {
                 template: podSpec
             },
         };
@@ -678,13 +678,13 @@ impl DataObject {
             ]
         }"#;
         let podSpec: k8s::PodSpec = serde_json::from_str(podSpecStr)?;
-        let package = FuncPackage {
+        let package = FuncPackage1 {
             metadata: ObjectMeta { 
                 namespace: Some(namespace.to_string()),
                 name: Some(name.to_string()),
                 ..Default::default()
             },
-            spec: FuncPackageSpec {
+            spec: FuncPackageSpec1 {
                 template: podSpec
             },
         };
@@ -844,12 +844,12 @@ impl Resource {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-pub struct FuncPackage {
+pub struct FuncPackage1 {
     pub metadata: ObjectMeta,
-    pub spec: FuncPackageSpec,
+    pub spec: FuncPackageSpec1,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-pub struct FuncPackageSpec {
+pub struct FuncPackageSpec1 {
     pub template: k8s::PodSpec,
 }

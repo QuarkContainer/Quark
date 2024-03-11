@@ -11,3 +11,4 @@ curl --header "Content-Type: application/json" \
   --request POST \
   --data '{"prompt":"xyz"}' \
   http://localhost:9876/prompt
+
