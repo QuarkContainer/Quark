@@ -110,6 +110,10 @@ pub fn SyscallRet(kernelRsp: u64) -> ! {
     }
 }
 
+
+//
+// NOTE: 16*18 - Size of PtRegs
+//
 #[inline]
 pub fn IRet(kernelRsp: u64) -> ! {
     unsafe {
@@ -135,7 +139,7 @@ pub fn IRet(kernelRsp: u64) -> ! {
               ldp x24, x25, [sp, #16*12]
               ldp x26, x27, [sp, #16*13]
               ldp x28, x29, [sp, #16*14]
-              add sp, sp, #16*17
+              add sp, sp, #16*18
               eret
             ",
             in("x0") kernelRsp);
