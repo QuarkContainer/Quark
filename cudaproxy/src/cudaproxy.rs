@@ -269,7 +269,7 @@ pub extern "C" fn __cudaUnregisterFatBinary(fatCubinHandle:u64) {
 }
 
 #[no_mangle]
-pub extern "C" fn __cudaRegisterFatBinaryEnd(fatCubinHandle:u64) {
+pub extern "C" fn __cudaRegisterFatBinaryEnd(fatCubinHandle:u64){
     let fatCubinPtr: *const u64 = fatCubinHandle as *const u64;
     unsafe{
     println!("Hijacked __cudaUnregisterFatBinaryEnd( the content of fatCubinHandle = {:x})", *fatCubinPtr);
@@ -425,7 +425,7 @@ pub extern "C" fn cudaMemcpyAsync(
 ) -> usize{
     println!("Hijacked cudaMemcpyAsync(size:{})",count);
 
-    if kind == cudaMemcpyKind::cudaMemcpyHostToHost{
+    if kind == cudaMemcpyKind::cudaMemcpyHostToHost {
         unsafe{
             std::ptr::copy_nonoverlapping(src, dst, count);
         }
@@ -443,8 +443,7 @@ pub extern "C" fn cudaMemcpyAsync(
 //Waits for stream tasks to complete
 #[no_mangle]
 pub extern "C" fn cudaStreamSynchronize(
-    stream:cudaStream_t
-) -> usize{
+    stream:cudaStream_t) -> usize{
     println!("Hijacked cudaStreamSynchronize stream: {:?}", stream);
 
     return unsafe{

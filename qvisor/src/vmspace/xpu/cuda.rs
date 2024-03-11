@@ -55,9 +55,9 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
     let mut textDatAddr:u64;
     let mut textDataSize:u64 = 0; 
     error!("inputPosition:{:x} endPosition:{:x}", inputPosition, endPosition);
+    let mut decompressedByte: Vec<u8>;
     while inputPosition < endPosition {
-        let fatTextHeader = unsafe { &*(inputPosition as *const u8 as *const FatTextHeader) };
-        let decompressedByte: Vec<u8> = vec![0; (fatTextHeader.compressed_size + 7) as usize];
+        let fatTextHeader = unsafe { &*(inputPosition as *const u8 as *const FatTextHeader) };        
 
         error!("fatTextHeader:{:x?}", *fatTextHeader);
         error!("FATBIN_FLAG_COMPRESS:{:x}, fatTextHeader.flags:{:x}, result of &:{:x}", FATBIN_FLAG_COMPRESS, fatTextHeader.flags, fatTextHeader.flags & FATBIN_FLAG_COMPRESS);
@@ -73,18 +73,29 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
         if (fatTextHeader.flags & FATBIN_FLAG_COMPRESS) > 0 {
             error!("fatbin contains compressed device code. Decompressing...");
             let input_read:i64;
-            
+      
+            decompressedByte = Vec::with_capacity((fatTextHeader.decompressed_size + 7) as usize);
+
+            unsafe{
+            decompressedByte.set_len((fatTextHeader.decompressed_size + 7) as usize); 
+            }
+ 
+            // decompressedByte = vec![0; (fatTextHeader.compressed_size + 7) as usize];
+           
             textDatAddr = &decompressedByte[0] as *const _ as u64;   //decompressedByte.as_ptr() as u64 ;
             error!("yiwang textDatAddr is {:x}", textDatAddr );
-
-            match DecompressSingleSection(inputPosition, textDatAddr, &mut textDataSize, fatTextHeader) {
-                Ok(inputRead) => {input_read = inputRead;  },
+            error!("textDatasize before function call is {}", textDataSize);
+                                                                            
+            match DecompressSingleSection(inputPosition, &mut decompressedByte, &mut textDataSize, fatTextHeader) {
+                Ok(inputRead) => { input_read = inputRead; },
                 Err(error) => {
                     return Err(error)
                 },
             }
+            error!("textDatasize after function call is {}", textDataSize);
 
-            error!("yiwang decompressedByte is: {:?}", decompressedByte);
+            // error!("yiwang decompressedByte is: {:?}", decompressedByte);
+          
             error!("yiwang input_read is: {:x}", input_read);
 
             if input_read < 0 {
@@ -99,7 +110,7 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
             inputPosition += fatTextHeader.size;   
         }
 
-        match GetParameterInfo(fatTextHeader, textDatAddr, textDataSize) {
+        match GetParameterInfo( textDatAddr, textDataSize) {
             Ok(v) => v,
             Err(e) => return Err(e),
         };
@@ -109,16 +120,14 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
     error!("Complete handling FatTextHeader");
     Ok(0)
 }
-                                                                                                                           //Result<(i64, Vec<u8>)>
-fn DecompressSingleSection(inputPosition:u64, outputPosition:u64, outputSize:*mut u64,fatTextHeader:&FatTextHeader) -> Result<i64> {
+                                                                                                                    
+fn DecompressSingleSection(inputPosition:u64, outputPosition:&mut Vec<u8>, outputSize:&mut u64,fatTextHeader:&FatTextHeader) -> Result<i64> {
 
     let mut padding:u64;
     let mut inputRead:u64 = 0;
     let mut outputWritten:u64 = 0;
     let decompressResult;
     let zeros: [u8; 8] = [0; 8];
-
-    // let mut decompressedByte: Vec<u8> = vec![0; (fatTextHeader.compressed_size + 7) as usize];
 
     // // unsafe{ *outputPosition = &decompressedByte[0] as *const _ as u64 };
     // unsafe{ *outputPosition = decompressedByte.as_ptr() as u64 };
@@ -135,14 +144,16 @@ fn DecompressSingleSection(inputPosition:u64, outputPosition:u64, outputSize:*mu
     fatTextHeader.flags
     );
     error!("fatTextHeader unknown fields: unknown1: {:x}, unknown2: {:x}, zeros: {:x}", fatTextHeader.unknown1, fatTextHeader.unknown2, fatTextHeader.zero);
+    // error!("outputpostion array is{:?}", outputPosition);
 
-                                                                                                                          // &mut decompressedByte 
+                                                                                                                         // &mut decompressedByte 
     decompressResult = decompress(inputPosition, fatTextHeader.compressed_size as u64, outputPosition, fatTextHeader.decompressed_size);
+
     if decompressResult != fatTextHeader.decompressed_size {
         error!("Decompression failed: decompressed size is {:x}, but header says {:x}.", decompressResult, fatTextHeader.decompressed_size);
         hexdump(inputPosition, 0x160);
         if decompressResult >= 0x60 {
-                hexdump(outputPosition + decompressResult - 0x60, 0x60); 
+                hexdump(outputPosition.as_ptr() as u64 + decompressResult - 0x60, 0x60); 
         }
         return Err(Error::DecompressFatbinError(String::from("decompression failed")));
     }
@@ -157,7 +168,7 @@ fn DecompressSingleSection(inputPosition:u64, outputPosition:u64, outputSize:*mu
     padding = 8u64.wrapping_sub(inputPosition +inputRead);
     // error!("yiwang padding after subtraction is: {:x}", padding);
     padding = padding % 8;
-    // error!("yiwang padding after %8 is {}", padding );
+    error!("yiwang padding 1 is {}", padding );
        
     let slice1 = unsafe{std::slice::from_raw_parts((inputPosition + inputRead) as *const u8, padding as usize) };
     let slice2 = unsafe {std::slice::from_raw_parts(&zeros[0] as *const u8, padding as usize)};
@@ -168,40 +179,44 @@ fn DecompressSingleSection(inputPosition:u64, outputPosition:u64, outputSize:*mu
         return Err(Error::DecompressFatbinError(String::from("padding length is wrong")));
     }
     error!("slice1 is: {:?}", slice1);
+
     error!("slice2 is: {:?}", slice2);
 
     inputRead += padding;
     
     padding = (8u64.wrapping_sub(fatTextHeader.decompressed_size)) % 8;
-    error!("yiwang padding is {}", padding );
+    error!("yiwang padding2 is {}", padding );
     
-    error!("yiwang the address gonna be write over is: {:x}", outputPosition);
-
-    unsafe{
-        std::ptr::write_bytes((outputPosition) as *mut u8, 0, padding as usize)
-    };
-   
-    outputWritten += padding;
-    unsafe {
-    *outputSize = outputWritten;
+    // unsafe{
+    //     std::ptr::write_bytes((outputPosition) as *mut u8, 0, padding as usize)
+    // };
+    for i in 0..padding {
+        outputPosition[i as usize] = 0;
     }
+    outputWritten += padding;
+
+    *outputSize = outputWritten;
     return Ok(inputRead as i64);
 }
+                                          
+// Decompressed a fatbin file 
+///
+/// # Arguments
+///
+/// * `inputPosition` - inputPosition for compressed input data.
+/// * `inputSize` - Size of compressed data.
+/// * `output` - Preallocated memory where decompressed output should be stored.
+/// * `outputSize` - Size of output buffer. Should be equal to the size of the decompressed data.
 
-/* Decompressed a fatbin file 
-* @param inputPosition: inputPosition for compressed input data 
-* @param inputSize: Size of compressed data
-* @param output: Preallocated memory where decompressed output should be stored
-* @param outputSize: Size of output buffer. Should be equal to the size of the decompressed data
-*/                                                            //&mut [u8]
-fn decompress(inputPosition:u64, inputSize:u64, outputPosition: u64, outputSize: u64) -> u64 {
+fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, outputSize: u64) -> u64 {
     let mut ipos:u64 = 0;
     let mut opos:u64 = 0;
     let mut nextNonCompressed_length:u64;
     let mut nextCompressed_length:u64;
     let mut backOffset:u64;
+  
+    error!("size of compressed data is {}",inputSize);
 
-     // may be i8, in rust, char is i8
     while ipos < inputSize {      
         nextNonCompressed_length = unsafe { ((*((inputPosition + ipos) as *const u8) & 0xf0) >> 4) as u64};
         nextCompressed_length = unsafe{ 4 + (*((inputPosition + ipos) as *const u8) & 0xf) as u64  };
@@ -219,37 +234,41 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition: u64, outputSize:
                 }
             }
         }
+        ipos += 1;
 
-        unsafe{
-            std::ptr::copy_nonoverlapping((inputPosition + ipos + 1) as *const u8, 
-            (outputPosition + opos) as *mut u8,
-            nextNonCompressed_length as usize)
-        };
-        // let slice1 = unsafe{std::slice::from_raw_parts((outputPosition + opos) as *const u8, nextNonCompressed_length as usize) };
-        // error!("yiwang decompress first copy: {:?}",slice1);
+        for i in 0..nextNonCompressed_length {
+            // Copy one element at a time
+            outputPosition[(opos + i) as usize] =  unsafe {*((inputPosition + ipos + i) as *const u8)};
+        }
+        // unsafe {
+        //     std::ptr::copy_nonoverlapping(
+        //         (inputPosition + ipos) as *const u8,
+        //         outputPosition.as_mut_ptr().offset(opos as isize),
+        //         nextNonCompressed_length as usize,
+        //     );
+        // }
 
-        ipos += 1 + nextNonCompressed_length;
+        ipos += nextNonCompressed_length;
         opos += nextNonCompressed_length;
 
         if ipos >= inputSize || opos >= outputSize {
             break;
         }
-        // backOffset = unsafe { *((inputPosition as *mut u8).offset(ipos as isize)) as u64 + (*((inputPosition as *mut u8).offset(ipos as isize + 1)) << 8) as u64};
-        // backOffset = unsafe{ (*((inputPosition + ipos) as *const u8)) as u64 + (*((inputPosition + ipos +1) as *const u8) as u64 ) << 8 };
+       
+       // backOffset = unsafe{ (*((inputPosition + ipos) as *const u8)) as u64 + (*((inputPosition + ipos +1) as *const u8) as u64 ) << 8 };
        backOffset = unsafe{ (*((inputPosition + ipos) as *const u8)) as u64 };
 
-       let mut inputvalue:u64 =unsafe{ *((inputPosition + ipos +1) as *const u8) as u64 };
+       let inputvalue:u64 =unsafe{ *((inputPosition + ipos +1) as *const u8) as u64 };
        
-
        let shiftvalue = inputvalue << 8;
-    //    error!("backOffset before shift is: {}", backOffset);
-    //    error!("input[ipos+1] is {}",inputvalue );
-    //    error!("input[ipos+1] << 8 is {}",shiftvalue);
+        // error!("backOffset before shift is: {}", backOffset);
+        // error!("input[ipos+1] is {}",inputvalue );
+        // error!("input[ipos+1] << 8 is {}",shiftvalue);
        backOffset =  backOffset + shiftvalue;
-    //    error!("backOffset after shift is {}",backOffset);
-        ipos += 2;
+       // error!("backOffset after shift is {}",backOffset);
+       ipos += 2;
 
-        if nextCompressed_length == 0xf + 4{
+       if nextCompressed_length == (0xf + 4){
             loop {
                 nextCompressed_length += unsafe{ *((inputPosition + ipos) as *const u8) as u64 };
                 ipos += 1;
@@ -260,34 +279,25 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition: u64, outputSize:
         }
 
         if nextCompressed_length <= backOffset {
-            unsafe{
-                std::ptr::copy_nonoverlapping((outputPosition + opos - backOffset) as *const u8,
-                 (outputPosition + opos) as *mut u8,
-                 nextCompressed_length as usize)
-            };
-
-            // let slice2 = unsafe{std::slice::from_raw_parts((outputPosition + opos) as *const u8, nextCompressed_length as usize) };
-            // error!("yiwang decompress if copy: {:?}",slice2);
+            for i in 0..nextCompressed_length {
+                // Copy one element at a time
+                outputPosition[(opos + i) as usize] =  outputPosition[(opos - backOffset + i) as usize];
+            }
         }else{
-            unsafe{
-                std::ptr::copy_nonoverlapping((outputPosition + opos -backOffset) as *const u8 ,(outputPosition + opos) as *mut u8 , backOffset as usize)
-            };
-            // let slice3 = unsafe{std::slice::from_raw_parts((outputPosition + opos) as *const u8, backOffset as usize) };
-            // error!("yiwang decompress else copy: {:?}",slice3);
-
+            for i in 0..backOffset {
+                outputPosition[(opos + i) as usize] =  outputPosition[(opos - backOffset + i) as usize];
+            }
+            //  unsafe{
+            //     std::ptr::copy_nonoverlapping(outputPosition.as_ptr().offset((opos -backOffset)as isize ) ,outputPosition.as_mut_ptr().offset(opos as isize), backOffset as usize)
+            // };
 
             for i in backOffset..nextCompressed_length {
-               unsafe {*((outputPosition + opos + i) as *mut u8) =  *((outputPosition + opos + i - backOffset) as *mut u8);
-            //    error!("yiwang decompress for loop: {}",*((outputPosition + opos + i) as *mut u8));
-               };
+               outputPosition[(opos + i) as usize] = outputPosition[(opos + i - backOffset) as usize];  
             }
         }
 
         opos += nextCompressed_length;
-        // error!("next_nclen is {}",nextNonCompressed_length);
-        // error!("next_clen is {}",nextCompressed_length);
-        // error!("back_offset is {}",backOffset);
-
+      
     }
     error!("yiwang ipos: {:x}, opos: {:x}, input size: {:x}, output size: {:x}", ipos, opos, inputSize, outputSize);
     return opos ; 
@@ -327,7 +337,7 @@ fn hexdump(dataAddress: u64, size: u64){
     }
 }
 
-fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64, memSize:u64) -> Result<i64> {
+fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
     let mut section:MaybeUninit<Elf_Scn>  = MaybeUninit::uninit();
     let mut ptr_section = section.as_mut_ptr();
     let mut shdr:MaybeUninit<GElf_Shdr> = MaybeUninit::uninit();
@@ -356,7 +366,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64, memSize:u64
 
     let symbol_table_data_p = unsafe { elf_getdata(ptr_section, 0 as _) };
     let symbol_table_data = unsafe { &*symbol_table_data_p };
-    error!("symbol_table_data: {:?}", symbol_table_data);
+    // error!("symbol_table_data: {:?}", symbol_table_data);
     let symbol_table_size = shdr.sh_size / shdr.sh_entsize;
 
     match GetSectionByName(elf, String::from(".nv.info"), &mut ptr_section) {
@@ -368,7 +378,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64, memSize:u64
 
     let data_p = unsafe { elf_getdata(ptr_section, 0 as _) };
     let data = unsafe { &*data_p };
-    error!("data: {:?}", data);
+    // error!("data: {:?}", data);
 
     let mut secpos:usize = 0;
     let infoSize = std::mem::size_of::<NvInfoEntry>();
@@ -376,7 +386,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64, memSize:u64
         let position = data.d_buf as u64 + secpos as u64;
         let entry_p = position as *const u8 as *const NvInfoEntry;
         let entry = unsafe { &*entry_p };
-        error!("entry: {:x?}", entry);
+        // error!("entry: {:x?}", entry);
         if entry.values_size != 8 {
             error!("unexpected values_size: {:x}", entry.values_size);
             return Err(Error::ELFLoadError("unexpected values_size")); 
@@ -396,14 +406,14 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64, memSize:u64
         ptr_sym = unsafe { gelf_getsym(symbol_table_data_p, entry.kernel_id as libc::c_int, ptr_sym) };
         
         let kernel_str = unsafe { CString::FromAddr(elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*ptr_sym).st_name as usize) as u64).Str().unwrap().to_string() };
-        error!("kernel_str: {}", kernel_str);
+        // error!("kernel_str: {}", kernel_str);
 
         if KERNEL_INFOS.lock().contains_key(&kernel_str) {
             secpos += infoSize;
             continue;
         }
         
-        error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
+        // error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
 
         let mut ki = KernelInfo::default();
         ki.name = kernel_str.clone();
@@ -419,7 +429,6 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64, memSize:u64
         error!("ki: {:x?}", ki);
 
         KERNEL_INFOS.lock().insert(kernel_str.clone(), Arc::new(ki));
-
         secpos += infoSize;
     }
 
@@ -434,9 +443,9 @@ pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> 
         Ok(v) => v,
         Err(e) => return Err(e),
     };
-    error!("GetSectionByName({}) got section: {:?}", sectionName, section);
+    // error!("GetSectionByName({}) got section: {:?}", sectionName, section);
     let data = unsafe { &*(elf_getdata(*section, 0 as _)) };
-    error!("data: {:x?}", data);
+    // error!("data: {:x?}", data);
 
     let mut secpos:usize = 0;
     while secpos < data.d_size {
@@ -456,13 +465,13 @@ pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> 
                     while (*kernel).paramOffsets.len() < (*kernel).paramNum {
                         (*kernel).paramOffsets.push(0);
                         (*kernel).paramSizes.push(0);
-                        error!("in while kernel: {:x?}", *kernel);
+                        // error!("in while kernel: {:x?}", *kernel);
                     }
-                    error!("end while kernel: {:x?}", *kernel);                    
+                    // error!("end while kernel: {:x?}", *kernel);                    
                 }
                 (*kernel).paramOffsets[kparam.ordinal as usize] = kparam.offset;
                 (*kernel).paramSizes[kparam.ordinal as usize] = kparam.GetSize();
-                error!("changed value kernel: {:x?}, kparam: {:x?}", *kernel, *kparam);
+                // error!("changed value kernel: {:x?}, kparam: {:x?}", *kernel, *kparam);
             }
 
             secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4 + entry.values_size as usize;
@@ -515,7 +524,7 @@ pub fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn
         let mut symtab_shdr = shdr.as_mut_ptr();
         symtab_shdr = unsafe { gelf_getshdr(scnNew, symtab_shdr) };
         let section_name = CString::FromAddr(unsafe { elf_strptr(elf, *str_section_index, (*symtab_shdr).sh_name as usize) as u64 }).Str().unwrap().to_string();
-        error!("section_name {}", section_name);
+        // error!("section_name {}", section_name);
         if name.eq(&section_name) {
             error!("Found section {}", section_name);
             *section = scnNew;

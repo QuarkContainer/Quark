@@ -459,6 +459,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                  module,
                  MODULES.lock()
              );
+             error!("yiwang 5");
             return Ok(ret as i64);
         }
         ProxyCommand::CudaUnregisterFatBinary => {
@@ -481,7 +482,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             error!("ret: {:?}", ret);
             // delete the module 
             MODULES.lock().remove(&moduleKey);
-            error!("modules treepmap should be empty:{:x?}",MODULES.lock());
+            
             //TODO: may need to remove the FUNCTIONS key value pair 
             return Ok(ret as i64);
 
