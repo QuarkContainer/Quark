@@ -170,3 +170,18 @@ sudo rm -f /var/log/quark/client.log; ./test new client 10.1.1.1
 
 sudo rm -f /var/log/quark/dns.log; ./test new dns
 
+6. Create namespace
+
+curl --header "Content-Type: application/json" \
+  --request POST \
+  --data '{"namespace":"ns1", "revision": 0, "disable": false}' \
+  http://localhost:4000/namespaces/
+
+curl --header "Content-Type: application/json" \
+  --request POST \
+  --data '{"namespace":"ns1", "name": "name1", "revision": 0, "image": "ubuntu", "commands": ["/test/rust/dns/target/debug/server"], "envs": []}' \
+  http://localhost:4000/funcpackages/
+
+curl http://localhost:4000/funcpackages/ns1/name1
+
+curl --request "DELETE" http://localhost:4000/funcpackages/ns1/name1

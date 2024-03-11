@@ -619,7 +619,7 @@ impl RingBuf {
                     ))
                 }
                 Some(o) => {
-                    if o.revision >= startRev && pred.Match(&o.obj)? {
+                    if o.channelRev >= startRev && pred.Match(&o.obj)? {
                         buf.push(o.clone());
                     }
                 }
