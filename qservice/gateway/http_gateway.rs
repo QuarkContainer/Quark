@@ -28,6 +28,7 @@ use axum::{
 use hyper::StatusCode;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
+use serde::{Deserialize, Serialize};
 
 //use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor};
 
@@ -58,6 +59,7 @@ impl HttpGateway {
             .route("/funcpackages/", post(PostFuncPackage))
             .route("/funcpackages/:namespace/:name", delete(DropFuncPackage))
             .route("/funcpackages/:namespace/:name", get(GetFuncPackage))
+            .route("/funccall/", post(PostFuncCall))
             .with_state(client);
         
         let listener = tokio::net::TcpListener::bind("127.0.0.1:4000")
@@ -126,14 +128,26 @@ async fn DropFuncPackage(
 }
 
 async fn GetFuncPackage(
-    Path((namespace, name)): Path<(String, String)>
+    Path((namespace, name, prompt)): Path<(String, String, String)>
 ) -> impl IntoResponse {
     error!("GetFuncPackage1 {:?}/{}", &namespace, &name);
     match NAMESPACE_MGR.get().unwrap().GetFuncPackage(&namespace, &name) {
         Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
         Ok(funcPackage) => {
             let spec = funcPackage.lock().unwrap().spec.ToJson();
-            error!("GetFuncPackage {:?}", &spec);
+            error!("GetFuncPackage {:?} prompt {}", &spec, &prompt);
+            (StatusCode::OK, Json(spec))
+        }
+    }
+}
+
+async fn PostFuncCall(
+    Json(req): Json<PromptReq>
+) -> impl IntoResponse {
+    match NAMESPACE_MGR.get().unwrap().GetFuncPackage(&req.namespace, &req.func) {
+        Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
+        Ok(funcPackage) => {
+            let spec = funcPackage.lock().unwrap().spec.ToJson();
             (StatusCode::OK, Json(spec))
         }
     }
@@ -170,4 +184,11 @@ async fn server() {
         .unwrap();
     println!("listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, app).await.unwrap();
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct PromptReq {
+    pub namespace: String,
+    pub func: String,
+    pub prompt: String,
 }

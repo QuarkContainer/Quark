@@ -30,38 +30,21 @@ use nix::sys::socket::{recvmsg, MsgFlags};
 use nix::sys::uio::IoVec;
 
 use qshare::common::*;
+use qshare::tsot_msg::*;
 
 use crate::pod_mgr::pod_sandbox::PodSandbox;
 use crate::pod_mgr::NAMESPACE_MGR;
-use crate::tsot::tsot_msg::*;
 
 use super::conn_svc::TcpClientConnection;
 use super::dns_proxy::DnsProxyReq;
 use super::dns_proxy::DNS_PROXY;
 use super::pod_broker_mgr::POD_BRORKER_MGRS;
 
-pub const BUFF_SIZE: usize = std::mem::size_of::<TsotMsg>();
-
 #[derive(Debug, Default)]
 pub struct PodIdentity {
     pub podUid: String,
     pub namespace: String,
     pub podIp: u32,
-}
-
-impl DnsReq {
-    pub fn GetDomains(&self) -> Vec<String> {
-        let namesStr = unsafe {
-            String::from_utf8_unchecked(self.names[0..self.nameslen as usize].to_vec())
-        };
-
-        let names : Vec<&str> = namesStr.split(":").collect();
-        let mut domains = Vec::new();
-        for name in names {
-            domains.push(name.to_owned());
-        }
-        return domains;
-    }
 }
 
 #[derive(Debug)]
@@ -132,7 +115,7 @@ impl PodBroker {
         return Ok(())
     }
 
-    pub async fn Init(&self) -> Result<()> {
+    pub async fn Init(&self, gatewayRegister: bool) -> Result<()> {
         let mut readBuf : [u8; BUFF_SIZE] = [0; BUFF_SIZE];
         let readbufAddr = &readBuf[0] as * const _ as u64;
         let mut offset = 0;
@@ -148,6 +131,15 @@ impl PodBroker {
 
         match msg {
             TsotMsg::PodRegisterReq(register) => {
+                if gatewayRegister {
+                    let resp = PodRegisterResp {
+                        containerIp: 0,
+                        errorCode: ErrCode::ECONNREFUSED as _,
+                    };
+    
+                    self.SendMsg(TsotMsg::PodRegisterResp(resp).into())?;
+                    return Err(Error::CommonError("Gateway register can't use PodRegisterReq".to_owned()));
+                }
                 let podUid = uuid::Uuid::from_bytes(register.podUid).to_string();
                 let podSandbox = NAMESPACE_MGR.GetPodSandbox(&podUid)?;
 
@@ -163,6 +155,30 @@ impl PodBroker {
 
                 self.SendMsg(TsotMsg::PodRegisterResp(resp).into())?;
             }
+            TsotMsg::GatewayRegisterReq(register) => {
+                if !gatewayRegister {
+                    let resp = GatewayRegisterResp {
+                        errorCode: ErrCode::ECONNREFUSED as _,
+                    };
+    
+                    self.SendMsg(TsotMsg::GatewayRegisterResp(resp).into())?;
+                    return Err(Error::CommonError("Pod register can't use GatewayRegisterReq".to_owned()));
+                }
+
+                let gatewayUid = uuid::Uuid::from_bytes(register.gatewayUid).to_string();
+                let podSandbox = PodSandbox::New(&gatewayUid, "system", "gateway", IpAddress::New(&[127, 1, 2, 3]));
+
+                *self.podSandbox.lock().unwrap() = Some(podSandbox.clone());
+
+                let inner = podSandbox.lock().unwrap();
+                POD_BRORKER_MGRS.AddPodBroker(&inner.namespace, inner.ip.0, self.clone())?;
+    
+                let resp = GatewayRegisterResp {
+                    errorCode: ErrCode::None as _,
+                };
+
+                self.SendMsg(TsotMsg::GatewayRegisterResp(resp).into())?;
+            }
             m => {
                 return Err(Error::CommonError(format!("ProcessRegisteMsg get unexpect message {:?}", m)))
             }
@@ -176,8 +192,8 @@ impl PodBroker {
         self.closeNotify.notify_waiters();
     }
 
-    pub async fn Process(&self) {
-        let res = self.Init().await;
+    pub async fn Process(&self, gatewayRegister: bool) {
+        let res = self.Init(gatewayRegister).await;
         match res {
             Ok(()) => (),
             Err(e) => {
@@ -432,12 +448,13 @@ impl PodBroker {
         }
     }
 
-    pub fn ProcessConnectReq(&self, req: ConnectReq, socket: i32) -> Result<()> {
+    pub fn ProcessConnectReq(&self, req: PodConnectReq, socket: i32) -> Result<()> {
         let sandbox = self.podSandbox.lock().unwrap();
         let sandbox = sandbox.as_ref().unwrap();
         let sandbox = sandbox.lock().unwrap();
         let connection = TcpClientConnection {
             podBroker: self.clone(),
+            isPodConnection: true,
             socket: socket,
             reqId: req.reqId,
             namespace: sandbox.namespace.clone(),
@@ -447,7 +464,38 @@ impl PodBroker {
             srcPort: req.srcPort,
         };
 
-        match self.connecting.lock().unwrap().insert(req.reqId, req.clone()) {
+        match self.connecting.lock().unwrap().insert(req.reqId, ConnectReq::PodConnectReq(req.clone())) {
+            Some(_) => {
+                panic!("ProcessConnectReq existing reqId {:?}", req);
+            }
+            None => ()
+        }
+
+        tokio::spawn(async move {
+            connection.Process().await;
+        });
+
+        return Ok(())
+    }
+
+    pub fn ProcessGatewayConnectReq(&self, req: GatewayConnectReq, socket: i32) -> Result<()> {
+        let sandbox = self.podSandbox.lock().unwrap();
+        let namespace = String::from_utf8(req.namespace.to_vec())?;
+        let sandbox = sandbox.as_ref().unwrap();
+        let sandbox = sandbox.lock().unwrap();
+        let connection = TcpClientConnection {
+            podBroker: self.clone(),
+            isPodConnection: false,
+            socket: socket,
+            reqId: req.reqId,
+            namespace: namespace,
+            dstIp: req.dstIp,
+            dstPort: req.dstPort,
+            srcIp: sandbox.ip.0,
+            srcPort: req.srcPort,
+        };
+
+        match self.connecting.lock().unwrap().insert(req.reqId, ConnectReq::GatewayConnectReq(req.clone())) {
             Some(_) => {
                 panic!("ProcessConnectReq existing reqId {:?}", req);
             }
@@ -488,7 +536,7 @@ impl PodBroker {
             TsotMsg::StopListenReq(m) => {
                 self.ProcessStopListenReq(m)?;
             }
-            TsotMsg::ConnectReq(m) => {
+            TsotMsg::PodConnectReq(m) => {
                 if socket.is_none() {
                     return Err(Error::CommonError(format!("ConnectReq has no socket")));
                 }
@@ -552,12 +600,12 @@ impl PodBroker {
             Some(_) => ()
         }
 
-        let msg = ConnectResp {
+        let msg = PodConnectResp {
             reqId: reqId,
             errorCode: errorCode,
         };
 
-        return self.EnqMsg(TsotMsg::ConnectResp(msg).into());
+        return self.EnqMsg(TsotMsg::PodConnectResp(msg).into());
     }
 
 }

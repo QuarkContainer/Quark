@@ -26,52 +26,55 @@ use qshare::common::*;
 use qshare::tsot_cni;
 
 use super::pod_broker::*;
-use super::tsot_msg::TsotMessage;
+use qshare::tsot_msg::*;
 
 use crate::pod_mgr::NAMESPACE_MGR;
 use crate::tsot::conn_svc::ConnectionSvc;
 use crate::tsot::dns_proxy::DNS_PROXY;
-use crate::tsot::tsot_msg::TSOT_SOCKET_PATH;
 use crate::QLET_CONFIG;
 
-
-impl Drop for TsotMessage {
-    fn drop(&mut self) {
-        unsafe {
-            if self.socket >= 0 {
-                libc::close(self.socket);
-            }
-        }
-    }
-}
 
 pub struct TsotSvc {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
 
+    // listen for pod connection
     pub listener: UnixListener,
+
+    // listen for gateway connection
+    pub hostListener: UnixListener,
 }
 
 impl TsotSvc {
     pub fn New() -> Result<Self> {
         let socket = Path::new(TSOT_SOCKET_PATH);
+        let hostSocket = Path::new(TSOT_HOST_SOCKET_PATH);
 
         // create the parent folder if it doesn't exist
         let path = socket.parent().unwrap();
         fs::create_dir_all(path).ok();
+        let hostpath = hostSocket.parent().unwrap();
+        fs::create_dir_all(hostpath).ok();
 
         // Delete old socket if necessary
         if socket.exists() {
             std::fs::remove_file(&socket).unwrap();
         }
 
+        // Delete old socket if necessary
+        if hostSocket.exists() {
+            std::fs::remove_file(&hostSocket).unwrap();
+        }
+
         let listener = UnixListener::bind(socket)?;
+        let hostListener = UnixListener::bind(hostSocket)?;
 
         return Ok(Self{
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
 
             listener: listener,
+            hostListener: hostListener
         })
     }
 
@@ -96,11 +99,24 @@ impl TsotSvc {
                         Ok((stream, _addr)) => {
                             tokio::spawn(async move {
                                 let podBroker = PodBroker::New(stream);
-                                podBroker.Process().await;
+                                podBroker.Process(false).await;
                             });
                         }
-                    }
-                    
+                    }  
+                }
+                res = self.hostListener.accept() => {
+                    match res {
+                        Err(e) => {
+                            error!("TsotSvc accept get error {:?}", e);
+                            continue;
+                        }
+                        Ok((stream, _addr)) => {
+                            tokio::spawn(async move {
+                                let podBroker = PodBroker::New(stream);
+                                podBroker.Process(true).await;
+                            });
+                        }
+                    }  
                 }
             }
         }

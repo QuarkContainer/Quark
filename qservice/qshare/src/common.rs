@@ -172,6 +172,15 @@ impl IpAddress {
         bytes[3] = (self.0 >> 0) as u8;
         return bytes;
     }
+
+    pub fn New(bytes: &[u8; 4]) -> Self {
+        let addr : u32 = 
+            ((bytes[0] as u32) << 24) | 
+            ((bytes[1] as u32) << 16) |
+            ((bytes[2] as u32) << 8) |
+            ((bytes[3] as u32) << 0);
+        return Self(addr);
+    }
 }
 
 #[derive(Debug)]

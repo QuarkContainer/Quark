@@ -10,7 +10,7 @@ cni:
 	sudo cp -f target/debug/cni /opt/cni/bin/tsot
 
 httpgateway:	
-	cargo build --bin gateway
+	cargo +nightly-x86_64-unknown-linux-gnu build --bin gateway
 	cp -f gateway_logging_config.yaml /etc/quark/
 
 ss:
