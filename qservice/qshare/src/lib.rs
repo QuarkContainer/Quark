@@ -18,6 +18,7 @@
 #![allow(non_camel_case_types)]
 #![allow(deprecated)]
 
+
 #[macro_use]
 extern crate scopeguard;
 
@@ -35,6 +36,7 @@ pub mod etcd;
 pub mod node;
 pub mod qlet_config;
 pub mod cadvisor_types;
+pub mod tsot_msg;
 
 pub mod crictl {
     include!("pb_gen/runtime.v1alpha2.rs");

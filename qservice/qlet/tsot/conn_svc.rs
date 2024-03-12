@@ -26,11 +26,11 @@ use tokio::net::TcpStream;
 use tokio::sync::Notify;
 
 use qshare::common::*;
+use qshare::tsot_msg::ErrCode;
 
 use super::peer_mgr::PEER_MGR;
 use super::pod_broker::PodBroker;
 use super::pod_broker_mgr::POD_BRORKER_MGRS;
-use super::tsot_msg::ErrCode;
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -221,6 +221,7 @@ impl TcpSvcConnection {
 
 pub struct TcpClientConnection {
     pub podBroker: PodBroker,
+    pub isPodConnection: bool,
 
     pub socket: i32,
 

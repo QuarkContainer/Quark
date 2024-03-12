@@ -20,7 +20,7 @@ use rand::Rng;
 use tokio::sync::{mpsc, Notify};
 
 use qshare::metastore::cacher_client::CacherClient;
-use crate::tsot::tsot_msg::*;
+use qshare::tsot_msg::*;
 use crate::QLET_CONFIG;
 
 use super::pod_broker::PodBroker;
