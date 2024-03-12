@@ -57,7 +57,6 @@ pub mod fileinfo;
 pub mod limits;
 pub mod linux;
 pub mod loader;
-pub mod lockfreebytestream;
 pub mod lrc_cache;
 pub mod mem;
 pub mod metric;
@@ -154,6 +153,7 @@ pub const HYPERCALL_VCPU_DEBUG: u16 = 21;
 pub const HYPERCALL_VCPU_PRINT: u16 = 22;
 pub const HYPERCALL_VCPU_WAIT: u16 = 23;
 pub const HYPERCALL_RELEASE_VCPU: u16 = 24;
+pub const HYPERCALL_SHARESPACE_INIT: u16 = 25;
 
 pub const DUMMY_TASKID: TaskId = TaskId::New(0xffff_ffff);
 

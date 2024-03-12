@@ -92,7 +92,6 @@ use self::qlib::buddyallocator::MemAllocator;
 use self::qlib::config::*;
 use self::qlib::mem::list_allocator::*;
 use self::qlib::qmsg::*;
-use self::qlib::ShareSpace;
 use self::qlib::ShareSpaceRef;
 use self::runc::cmd::command::*;
 use self::runc::sandbox::sandbox::*;
@@ -102,8 +101,8 @@ use self::vmspace::host_pma_keeper::*;
 use self::vmspace::hostfdnotifier::*;
 use self::vmspace::kernel_io_thread::*;
 use crate::qlib::linux_def::MemoryDef;
-//use crate::qlib::mem::bitmap_allocator::BitmapAllocatorWrapper;
 use self::qlib::kernel::kernel::kernel::Kernel;
+use spin::rwlock::RwLock;
 
 use self::vmspace::uringMgr::*;
 use crate::kvm_vcpu::KVMVcpu;
@@ -120,6 +119,8 @@ pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 
 thread_local!(static THREAD_ID: RefCell<i32> = RefCell::new(0));
 thread_local!(static VCPU: RefCell<Option<Arc<KVMVcpu>>> = RefCell::new(None));
+
+
 
 pub fn ThreadId() -> i32 {
     let mut i = 0;
@@ -138,12 +139,9 @@ pub fn LocalVcpu() -> Option<Arc<KVMVcpu>> {
 }
 
 lazy_static! {
-
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
-    pub static ref SHARE_SPACE_STRUCT: Arc<Mutex<ShareSpace>> =
-        Arc::new(Mutex::new(ShareSpace::New()));
     pub static ref SWAP_FILE: Mutex<SwapFile> = Mutex::new(SwapFile::Init().unwrap());
-    pub static ref VMS: Mutex<VMSpace> = Mutex::new(VMSpace::Init());
+    pub static ref VMS: RwLock<VMSpace> = RwLock::new(VMSpace::Init());
     pub static ref ROOT_CONTAINER_ID: Mutex<String> = Mutex::new(String::new());
     pub static ref PAGE_ALLOCATOR: MemAllocator = MemAllocator::New();
     pub static ref FD_NOTIFIER: HostFdNotifier = HostFdNotifier::New();
@@ -157,6 +155,7 @@ lazy_static! {
     pub static ref URING_MGR: Arc<Mutex<UringMgr>> = {
         let uringQueueSize = 1024;
 
+        debug!("init URING_MGR");
         Arc::new(Mutex::new(UringMgr::New(uringQueueSize)))
     };
     pub static ref KERNEL_IO_THREAD: KIOThread = KIOThread::New();
@@ -167,6 +166,8 @@ lazy_static! {
     pub static ref URING: Mutex::<io_uring::IoUring> = Mutex::new(io_uring::IoUring::new(MemoryDef::QURING_SIZE as u32).expect("setup io_Uring fail"));
     // used for keep consistancy
     pub static ref GUEST_KERNEL: Mutex<Option<Kernel>> = Mutex::new(None);
+
+    pub static ref PRIVATE_VCPU_LOCAL_HOLDER: Box<PrivateCPULocal> = Box::new(PrivateCPULocal::New());  
 }
 
 pub const LOG_FILE: &'static str = "/var/log/quark/quark.log";
@@ -177,7 +178,6 @@ pub fn InitSingleton() {
 
 //pub static ALLOCATOR: HostAllocator = HostAllocator::New();
 #[global_allocator]
-//pub static GLOBAL_ALLOCATOR: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 fn main() {

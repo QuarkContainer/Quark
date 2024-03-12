@@ -30,6 +30,7 @@
 #![feature(panic_info_message)]
 #![allow(deprecated)]
 #![recursion_limit = "256"]
+// #![feature(thread_local)]
 
 #[macro_use]
 extern crate alloc;
@@ -63,6 +64,7 @@ use taskMgr::{CreateTask, IOWait, WaitFn};
 use vcpu::CPU_LOCAL;
 
 use crate::qlib::kernel::GlobalIOMgr;
+use crate::qlib::ShareSpace;
 
 //use self::qlib::buddyallocator::*;
 use self::asm::*;
@@ -113,50 +115,40 @@ use self::quring::*;
 use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+use guest_host_allocator::GuestHostSharedAllocator;
 
 #[macro_use]
 mod print;
 
-//#[macro_use]
-//pub mod asm;
-//mod taskMgr;
 #[macro_use]
 mod qlib;
 #[macro_use]
 mod interrupt;
 pub mod kernel_def;
 pub mod rdma_def;
+
+mod guest_host_allocator;
 mod syscalls;
 
-//use self::heap::QAllocator;
-//use qlib::mem::bitmap_allocator::BitmapAllocatorWrapper;
-
-//use buddy_system_allocator::*;
-//#[global_allocator]
 
 #[global_allocator]
 pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
-//pub static GLOBAL_ALLOCATOR: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
+
+pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
+
+
+
 
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
     pub static ref GUEST_KERNEL: Mutex<Option<kernel::kernel::Kernel>> = Mutex::new(None);
+
+    pub static ref PRIVATE_VCPU_LOCAL_HOLDER: Box<PrivateCPULocal> = Box::new(PrivateCPULocal::New());    
 }
-
-//static ALLOCATOR: QAllocator = QAllocator::New();
-//static ALLOCATOR: StackHeap = StackHeap::Empty();
-//static ALLOCATOR: ListAllocator = ListAllocator::Empty();
-//static ALLOCATOR: GuestAllocator = GuestAllocator::New();
-//static ALLOCATOR: BufHeap = BufHeap::Empty();
-//static ALLOCATOR: LockedHeap<33> = LockedHeap::empty();
-
-/*pub fn AllocatorPrint(_class: usize) -> String {
-    let class = 6;
-    return ALLOCATOR.Print(class);
-}*/
-
 
 pub fn SingletonInit() {
     unsafe {
@@ -435,9 +427,6 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     // mm needs to be clean as last function before SwitchToNewTask
                     // after this is called, another vcpu might drop the pagetable
                     core::mem::drop(mm);
-                    unsafe { 
-                        (*CPULocal::Myself().pageAllocator.get()).Clean(); 
-                    }
                 }
 
                 self::taskMgr::SwitchToNewTask();
@@ -482,8 +471,7 @@ fn InitLoader() {
 
 #[no_mangle]
 pub extern "C" fn rust_main(
-    heapStart: u64,
-    shareSpaceAddr: u64,
+    privateHeapStart: u64,
     id: u64,
     vdsoParamAddr: u64,
     vcpuCnt: u64,
@@ -491,14 +479,51 @@ pub extern "C" fn rust_main(
 ) {
     self::qlib::kernel::asm::fninit();
     if id == 0 {
-        GLOBAL_ALLOCATOR.Init(heapStart);
-        SHARESPACE.SetValue(shareSpaceAddr);
+        GLOBAL_ALLOCATOR.InitPrivateAllocator(privateHeapStart);
+
+
+        // ghcb convert shared memory
+
+        
+        GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
+        let size = core::mem::size_of::<ShareSpace>();
+        // info!("ShareSpace size {:x}", size);
+        let shared_space = unsafe {
+            GLOBAL_ALLOCATOR.AllocSharedBuf(size, 2)
+        };
+        HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
+
+
+        SHARESPACE.SetValue(shared_space as u64);
         SingletonInit();
 
+        SetVCPCount(vcpuCnt as usize);
+        VCPU_ALLOCATOR.Print();
         VCPU_ALLOCATOR.Initializated();
+
+
+        let mut vec1: Vec<i32, _> = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
+        for i in 0..10 {
+            vec1.push(i);
+        }
+
+        debug!("vec1 {:?}", vec1);
+        drop(vec1);
+
+        let mut vec2: Vec<i32, _> = Vec:: with_capacity_in(10, GUEST_HOST_SHARED_ALLOCATOR);
+        for i in 0..10 {
+            vec2.push(i);
+        }
+
+        debug!("vec2 {:?}", vec2);
+        drop(vec2);
+
+
+
+
+
         InitTsc();
         InitTimeKeeper(vdsoParamAddr);
-
         {
             let kpt = &KERNEL_PAGETABLE;
 
@@ -507,7 +532,7 @@ pub extern "C" fn rust_main(
         }
 
         GlobalIOMgr().InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
-        SetVCPCount(vcpuCnt as usize);
+
         VDSO.Initialization(vdsoParamAddr);
 
         // release other vcpus
@@ -534,7 +559,7 @@ pub extern "C" fn rust_main(
     };
 
     if id == 1 {
-        info!("heap start is {:x}", heapStart);
+        info!("heap start is {:x}", privateHeapStart);
         self::Init();
 
         if autoStart {

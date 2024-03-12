@@ -189,7 +189,8 @@ impl PageBlockAlloc {
 impl RefMgr for PageBlockAlloc {
     // return ref count
     fn Ref(&self, addr: u64) -> Result<u64> {
-        let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
+        // TODO: guest and host have diffenrent view if private memory is not identical mmaped
+        let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.GuestPrivateHeapRange();
         //let heapStart = MemoryDef::HEAP_OFFSET;
         //let heapEnd = MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE;
         if addr <= heapStart || addr >= heapEnd {
@@ -206,9 +207,8 @@ impl RefMgr for PageBlockAlloc {
 
     // return ref count
     fn Deref(&self, addr: u64) -> Result<u64> {
-        let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
-        //let heapStart = MemoryDef::HEAP_OFFSET;
-        //let heapEnd = MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE;
+        // TODO: guest and host have diffenrent view if private memory is not identical mmaped
+        let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.GuestPrivateHeapRange();
         if addr <= heapStart || addr >= heapEnd {
             return Ok(1);
         }
@@ -223,7 +223,7 @@ impl RefMgr for PageBlockAlloc {
     }
 
     fn GetRef(&self, addr: u64) -> Result<u64> {
-        let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
+        let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.GuestPrivateHeapRange();
         //let heapStart = MemoryDef::HEAP_OFFSET;
         //let heapEnd = MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE;
 

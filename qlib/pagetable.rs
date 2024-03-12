@@ -22,6 +22,7 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use crate::qlib::kernel::SHARESPACE;
+use crate::GLOBAL_ALLOCATOR;
 
 cfg_x86_64! {
    pub use x86_64::structures::paging::page_table::PageTableEntry;
@@ -1511,12 +1512,19 @@ impl AlignedAllocator {
         };
     }
 
+    // allocate memory from guest private allocator
     pub fn Allocate(&self) -> Result<u64> {
         let layout = Layout::from_size_align(self.size, self.align);
         match layout {
             Err(_e) => Err(Error::UnallignedAddress(format!("Allocate {:?}", self))),
             Ok(l) => unsafe {
-                let addr = alloc(l);
+                let is_on_host = GLOBAL_ALLOCATOR.is_host_allocator.load(Ordering::SeqCst);
+
+                let addr = if is_on_host {
+                    GLOBAL_ALLOCATOR.AllocGuestPrivatMem(self.size, self.align)
+                } else {
+                    alloc(l)
+                };
                 Ok(addr as u64)
             },
         }

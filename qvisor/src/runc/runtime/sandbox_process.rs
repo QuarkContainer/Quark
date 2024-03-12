@@ -205,7 +205,7 @@ impl SandboxProcess {
             Ok(mut vm) => {
                 if taskSockFd > 0 {
                     if self.pivot {
-                        crate::VMS.lock().PivotRoot(&self.SandboxRootDir);
+                        crate::VMS.read().PivotRoot(&self.SandboxRootDir);
                     }
                     self.StartTaskService(taskSockFd as RawFd).unwrap();
                 }

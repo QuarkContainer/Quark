@@ -492,11 +492,12 @@ impl LoaderInternal {
         let rootMounts =
             InitRootFs(Task::Current(), &process.Root).expect("in loader::New, InitRootfs fail");
         kernel.mounts.write().insert(sandboxID.clone(), rootMounts);
-
         let processArgs = NewProcess(process, &creds, &kernel);
         self.kernel = kernel;
         self.console = console;
         self.sandboxID = sandboxID;
+
+        info!("init the root process finished");
         return processArgs;
     }
 
@@ -697,7 +698,7 @@ pub fn NewProcess(process: Process, creds: &auth::Credentials, k: &Kernel) -> Cr
         stdiofds[i] = process.Stdiofds[i];
     }
 
-    return CreateProcessArgs {
+    CreateProcessArgs {
         Filename: process.Args[0].to_string(),
         Argv: process.Args,
         Envv: process.Envs,
@@ -713,5 +714,6 @@ pub fn NewProcess(process: Process, creds: &auth::Credentials, k: &Kernel) -> Cr
         Terminal: process.Terminal,
         ExecId: process.ExecId.clone(),
         ..Default::default()
-    };
+    }
+
 }

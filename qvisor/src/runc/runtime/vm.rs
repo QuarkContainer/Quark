@@ -54,7 +54,6 @@ use super::super::super::runc::runtime::loader::*;
 use super::super::super::syncmgr;
 use super::super::super::vmspace::*;
 use super::super::super::SHARE_SPACE;
-use super::super::super::SHARE_SPACE_STRUCT;
 use super::super::super::{
     ThreadId, KERNEL_IO_THREAD, PMA_KEEPER, QUARK_CONFIG, ROOT_CONTAINER_ID, THREAD_ID, URING_MGR,
     VCPU, VMS,
@@ -176,16 +175,25 @@ impl VirtualMachine {
     pub const KERNEL_IMAGE: &'static str = "/usr/local/bin/qkernel.bin";
 
     pub fn InitShareSpace(
+        sharedSpace: &mut ShareSpace,
         cpuCount: usize,
         controlSock: i32,
         rdmaSvcCliSock: i32,
         podId: [u8; 64],
+        haveMembarrierGlobal: bool,
     ) {
-        SHARE_SPACE_STRUCT
-            .lock()
-            .Init(cpuCount, controlSock, rdmaSvcCliSock, podId);
+        let sp = ShareSpace::New();
+        let sp_size = core::mem::size_of_val(&sp);
+        let sharedSpace_size = core::mem::size_of_val(sharedSpace);
+        assert!(sp_size == sharedSpace_size, "sp_size != sharedSpace_size, sp_size {}, 
+                                            sharedSpace_size {}", sp_size, sharedSpace_size);
+        unsafe {
+			core::ptr::write(sharedSpace as *mut ShareSpace, sp);
+		}
 
-        let spAddr = &(*SHARE_SPACE_STRUCT.lock()) as *const _ as u64;
+        sharedSpace.Init(cpuCount, controlSock, rdmaSvcCliSock, podId, haveMembarrierGlobal);
+
+        let spAddr =  sharedSpace as *const _ as u64;
         SHARE_SPACE.SetValue(spAddr);
         SHARESPACE.SetValue(spAddr);
 
@@ -193,24 +201,23 @@ impl VirtualMachine {
             vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
         }
 
+
         let sharespace = SHARE_SPACE.Ptr();
         let logfd = super::super::super::print::LOG.Logfd();
         
         URING_MGR.lock().Addfd(logfd).unwrap();
-
         KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
-
         URING_MGR
             .lock()
             .Addfd(sharespace.HostHostEpollfd())
             .unwrap();
+
         URING_MGR.lock().Addfd(controlSock).unwrap();
         IOURING.SetValue(sharespace.GetIOUringAddr());
 
         unsafe {
-            KERNEL_PAGETABLE.SetRoot(VMS.lock().pageTables.GetRoot());
+            KERNEL_PAGETABLE.SetRoot(VMS.read().pageTables.GetRoot());
             PAGE_MGR.SetValue(sharespace.GetPageMgrAddr());
-
             // used for created new task from host
             // see Create(runFnAddr: u64, para: *const u8, kernel: bool) -> &'static mut Self {
             KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
@@ -222,7 +229,6 @@ impl VirtualMachine {
             futex::InitSingleton();
             timer::InitSingleton();
         }
-
         if SHARESPACE.config.read().EnableTsot {
             // initialize the tost_agent
             TSOT_AGENT.NextReqId();
@@ -231,6 +237,7 @@ impl VirtualMachine {
 
         let syncPrint = sharespace.config.read().SyncPrint();
         super::super::super::print::SetSyncPrint(syncPrint);
+
     }
 
 
@@ -261,27 +268,29 @@ impl VirtualMachine {
 
         if cpuCount < 2 {
             // only do cpu affinit when there more than 2 cores
-            VMS.lock().cpuAffinit = false;
+            VMS.write().cpuAffinit = false;
         } else {
-            VMS.lock().cpuAffinit = true;
+            VMS.write().cpuAffinit = true;
         }
 
 
         match args.Spec.annotations.get(SANDBOX_UID_NAME) {
             None => (),
             Some(podUid) => {
-                VMS.lock().podUid = podUid.clone();
+                VMS.write().podUid = podUid.clone();
             }
         }
 
         let cpuCount = cpuCount.max(2); // minimal 2 cpus
 
-        VMS.lock().vcpuCount = cpuCount; //VMSpace::VCPUCount();
-        VMS.lock().RandomVcpuMapping();
+        VMS.write().vcpuCount = cpuCount; //VMSpace::VCPUCount();
+        VMS.write().RandomVcpuMapping();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
         let controlSock = args.ControlSock;
 
-        let rdmaSvcCliSock = args.RDMASvcCliSock;
+        VMS.write().rdmaSvcCliSock = args.RDMASvcCliSock;
+        let podIdStr = args.ID.clone();
+        VMS.write().podId.clone_from_slice(podIdStr.as_bytes());
 
         let umask = Self::Umask();
         info!(
@@ -317,40 +326,24 @@ impl VirtualMachine {
             MemoryDef::PHY_LOWER_ADDR,
             MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB,
         )?;
+        
+        if QUARK_CONFIG.lock().EnableCC {
+            Self::SetMemRegion(
+                2,
+                &vm_fd,
+                MemoryDef::NVIDIA_START_ADDR,
+                MemoryDef::NVIDIA_START_ADDR,
+                MemoryDef::NVIDIA_ADDR_SIZE,
+            )?;
+        }
 
-        Self::SetMemRegion(
-            2,
-            &vm_fd,
-            MemoryDef::NVIDIA_START_ADDR,
-            MemoryDef::NVIDIA_START_ADDR,
-            MemoryDef::NVIDIA_ADDR_SIZE,
-        )?;
-
-        let heapStartAddr = MemoryDef::HEAP_OFFSET;
 
         PMA_KEEPER.Init(MemoryDef::FILE_MAP_OFFSET, MemoryDef::FILE_MAP_SIZE);
 
-        info!(
-            "set map region start={:x}, end={:x}",
-            MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::PHY_LOWER_ADDR + MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB
-        );
 
         let autoStart;
-        let podIdStr = args.ID.clone();
-        let mut podId = [0u8; 64];
-        podId.clone_from_slice(podIdStr.as_bytes());
-        // let mut podId: [u8; 64] = [0; 64];
-        // debug!("VM::Initxxxxx, podIdStr: {}", podIdStr);
-        // if podIdStr.len() != podId.len() {
-        //     panic!("podId len: {} is not equal to podIdStr len: {}", podId.len(), podIdStr.len());
-        // }
-
-        // podIdStr.bytes()
-        //     .zip(podId.iter_mut())
-        //     .for_each(|(b, ptr)| *ptr = b);
         {
-            let vms = &mut VMS.lock();
+            let vms = &mut VMS.write();
             vms.controlSock = controlSock;
             PMA_KEEPER.InitHugePages(); 
 
@@ -384,12 +377,10 @@ impl VirtualMachine {
             vms.args = Some(args);
         }
 
-        Self::InitShareSpace(cpuCount, controlSock, rdmaSvcCliSock, podId);
-
         let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
         //let vdsoMap = VDSOMemMap::Init(&"/home/brad/rust/quark/vdso/vdso.so".to_string()).unwrap();
         elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
-        VMS.lock().vdsoAddr = elf.vdsoStart;
+        VMS.write().vdsoAddr = elf.vdsoStart;
 
         // let p = entry as *const u8;
         // info!(
@@ -415,15 +406,13 @@ impl VirtualMachine {
                 cpuCount,
                 &vm_fd,
                 entry,
-                heapStartAddr,
-                SHARE_SPACE.Value(),
                 autoStart,
             )?);
 
             // enable cpuid in host
             #[cfg(target_arch = "x86_64")]
             vcpu.vcpu.set_cpuid2(&kvm_cpuid).unwrap();
-            VMS.lock().vcpus.push(vcpu.clone());
+            VMS.write().vcpus.push(vcpu.clone());
             vcpus.push(vcpu);
         }
 
@@ -539,7 +528,7 @@ fn SetSigusr1Handler() {
 
 extern "C" fn handleSigusr1(_signal: i32) {
     SetDumpAll();
-    let vms = VMS.lock();
+    let vms = VMS.read();
     for vcpu in &vms.vcpus {
         if vcpu.state.load(Ordering::Acquire) == KVMVcpuState::HOST as u64 {
             vcpu.dump().unwrap_or_default();

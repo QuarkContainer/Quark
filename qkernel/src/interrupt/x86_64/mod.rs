@@ -493,7 +493,7 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
             None => {
                 if cr2 > 0x1000 {
                     let map = currTask.mm.GetSnapshotLocked(currTask, false);
-                    print!("the map is {}", &map);
+                    print!("the map is {}, faulting addr 0x{:02x}", &map, cr2);
                 }
 
                 //todo: when to send sigbus/SIGSEGV

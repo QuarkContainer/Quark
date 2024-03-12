@@ -1,4 +1,5 @@
 use crate::host_uring::HostSubmit;
+use crate::GLOBAL_ALLOCATOR;
 
 use super::qcall::AQHostCall;
 use super::qlib::buddyallocator::ZeroPage;
@@ -16,9 +17,7 @@ use super::qlib::ShareSpace;
 use super::FD_NOTIFIER;
 use super::VMS;
 use super::vmspace::VMSpace;
-use alloc::alloc::alloc;
 use libc::ioctl;
-use core::alloc::Layout;
 use core::slice;
 use core::sync::atomic::AtomicU64;
 use nix::sys::signal;
@@ -95,8 +94,8 @@ pub struct KVMVcpu {
     pub tssIntStackStart: u64,
     pub tssAddr: u64,
 
-    pub heapStartAddr: u64,
-    pub shareSpaceAddr: u64,
+    pub privateHeapStartAddr: u64,
+    pub sharedHeapStartAddr: u64,
 
     pub autoStart: bool,
     pub interrupting: Mutex<(bool, Vec<Sender<()>>)>,
@@ -111,8 +110,6 @@ impl KVMVcpu {
         vcpuCnt: usize,
         vm_fd: &kvm_ioctls::VmFd,
         entry: u64,
-        pageAllocatorBaseAddr: u64,
-        shareSpaceAddr: u64,
         autoStart: bool,
     ) -> Result<Self> {
         const DEFAULT_STACK_PAGES: u64 = MemoryDef::DEFAULT_STACK_PAGES; //64KB
@@ -154,11 +151,11 @@ impl KVMVcpu {
             .create_vcpu(id as u64)
             .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))
             .expect("create vcpu fail");
-        let cpuAffinit = VMS.lock().cpuAffinit;
+        let cpuAffinit = VMS.read().cpuAffinit;
         let vcpuCoreId = if !cpuAffinit {
             -1
         } else {
-            VMS.lock().ComputeVcpuCoreId(id) as isize
+            VMS.read().ComputeVcpuCoreId(id) as isize
         };
 
         return Ok(Self {
@@ -175,8 +172,8 @@ impl KVMVcpu {
             idtAddr: idtAddr,
             tssIntStackStart: tssIntStackStart,
             tssAddr: tssAddr,
-            heapStartAddr: pageAllocatorBaseAddr,
-            shareSpaceAddr: shareSpaceAddr,
+            privateHeapStartAddr: MemoryDef::GUEST_PRIVATE_HEAP_OFFSET,
+            sharedHeapStartAddr: MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST,
             autoStart: autoStart,
             interrupting: Mutex::new((false, vec![])),
         });
@@ -292,22 +289,19 @@ pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64>
         "AlignedAllocate get unaligned size {:x}",
         size
     );
-    let layout = Layout::from_size_align(size, align);
-    match layout {
-        Err(_e) => Err(Error::UnallignedAddress(format!("AlignedAllocate {:?}", align))),
-        Ok(l) => unsafe {
-            let addr = alloc(l);
-            if zeroData {
-                let arr = slice::from_raw_parts_mut(addr as *mut u64, size / 8);
-                for i in 0..512 {
-                    arr[i] = 0
-                }
-            }
 
-            Ok(addr as u64)
-        },
+    unsafe {
+        let addr = GLOBAL_ALLOCATOR.AllocGuestPrivatMem(size, align);
+        if zeroData {
+            let arr = slice::from_raw_parts_mut(addr as *mut u64, size / 8);
+            for i in 0..512 {
+                arr[i] = 0
+            }
+        }
+        Ok(addr as u64)
     }
 }
+
 
 // SetVmExitSigAction set SIGCHLD as the vm exit signal,
 // the signal handler will set_kvm_immediate_exit to 1,

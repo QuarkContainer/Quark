@@ -28,7 +28,6 @@ use super::qlib::kernel::asm::*;
 use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 use super::qlib::kernel::taskMgr::*;
 use super::qlib::kernel::threadmgr::task_sched::*;
-use super::qlib::kernel::vcpu::*;
 use super::qlib::kernel::SHARESPACE;
 use super::qlib::kernel::TSC;
 
@@ -38,7 +37,6 @@ use super::qlib::kernel::task::*;
 use super::qlib::kernel::taskMgr;
 use super::qlib::linux_def::*;
 use super::qlib::loader::*;
-use super::qlib::mem::bitmap_allocator::*;
 use super::qlib::mem::list_allocator::*;
 use super::qlib::mutex::*;
 use super::qlib::perf_tunning::*;
@@ -50,6 +48,7 @@ use super::qlib::*;
 use super::syscalls::sys_file::*;
 use super::Kernel::HostSpace;
 
+use super::PRIVATE_VCPU_LOCAL_HOLDER;
 use crate::GLOBAL_ALLOCATOR;
 
 impl OOMHandler for ListAllocator {
@@ -323,40 +322,64 @@ pub fn InitX86FPState(data: u64, useXsave: bool) {
     unsafe { initX86FPState(data, useXsave) }
 }
 
-impl BitmapAllocatorWrapper {
-    pub const fn New() -> Self {
-        return Self {
-            addr: AtomicU64::new(MemoryDef::HEAP_OFFSET),
-        };
-    }
 
-    pub fn Init(&self) {
-        self.addr.store(MemoryDef::HEAP_OFFSET, Ordering::SeqCst);
-    }
-}
+
+
+
+
 
 impl HostAllocator {
     pub const fn New() -> Self {
         return Self {
-            listHeapAddr: AtomicU64::new(0),
+            host_initialization_heap: AtomicU64::new(0),
+            host_guest_shared_heap: AtomicU64::new(0),
+            guest_private_heap: AtomicU64::new(0),
             initialized: AtomicBool::new(true),
+            is_vm_lauched: AtomicBool::new(true),
+            is_host_allocator: AtomicBool::new(false),
         };
     }
 
-    pub fn Init(&self, heapAddr: u64) {
-        self.listHeapAddr.store(heapAddr, Ordering::SeqCst);
+    pub fn InitPrivateAllocator(&self, privateHeapAddr: u64) {
+        self.guest_private_heap.store(privateHeapAddr, Ordering::SeqCst);
     }
+
+
+    pub fn InitSharedAllocator(&self, sharedHeapAddr: u64) {
+        self.host_guest_shared_heap.store(sharedHeapAddr, Ordering::SeqCst);
+
+        let sharedHeapStart = self.host_guest_shared_heap.load(Ordering::Relaxed);
+        let shaedHeapEnd = sharedHeapStart + MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as u64;
+        *self.GuestHostSharedAllocator() = ListAllocator::New(sharedHeapStart as _, shaedHeapEnd);
+        
+        
+        // reserve first 4KB gor the listAllocator
+        let size = core::mem::size_of::<ListAllocator>();
+        self.GuestHostSharedAllocator().Add(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST as usize + size, 
+            MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as usize - size);
+    }
+
+
+
 }
 
 unsafe impl GlobalAlloc for HostAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        return self.Allocator().alloc(layout);
+        return self.GuestPrivateAllocator().alloc(layout);
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        self.Allocator().dealloc(ptr, layout);
+        let addr = ptr as u64;
+        if Self::IsGuestPrivateHeapAddr(addr) {
+            self.GuestPrivateAllocator().dealloc(ptr, layout);
+        } else {
+            self.GuestHostSharedAllocator().dealloc(ptr, layout);
+        }
     }
 }
+
+
+
 
 #[inline]
 pub fn VcpuId() -> usize {
@@ -383,18 +406,16 @@ unsafe impl GlobalAlloc for GlobalVcpuAllocator {
         if !self.init.load(Ordering::Relaxed) {
             return GLOBAL_ALLOCATOR.alloc(layout);
         }
-        return CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout);
+
+        return PRIVATE_VCPU_LOCAL_HOLDER.AllocatorMut().alloc(layout);
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        if !HostAllocator::IsHeapAddr(ptr as u64) {
-            return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
-        }
-
         if !self.init.load(Ordering::Relaxed) {
             return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
         }
-        return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout);
+
+        return PRIVATE_VCPU_LOCAL_HOLDER.AllocatorMut().dealloc(ptr, layout);
     }
 }
 

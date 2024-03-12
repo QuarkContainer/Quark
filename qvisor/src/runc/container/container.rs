@@ -454,9 +454,8 @@ impl Container {
         detach: bool,
         pivot: bool,
     ) -> Result<Self> {
-        info!("Create container {} in root dir: {}", id, &conf.RootDir);
         debug!("spec for creating container: {:#?}", &spec);
-        //debug!("container spec is {:?}", &spec);
+        info!("Create container {} in root dir: {}", id, &conf.RootDir);
         ValidateID(id)?;
 
         Self::CheckTerminal(action, spec.process.terminal, consoleSocket, detach)?;

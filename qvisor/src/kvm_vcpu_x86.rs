@@ -31,22 +31,15 @@ use crate::qlib::cpuid::XSAVEFeature::{XSAVEFeatureBNDCSR, XSAVEFeatureBNDREGS};
 use crate::qlib::kernel::asm::xgetbv;
 
 use super::*;
-//use super::qlib::kernel::TSC;
 use super::amd64_def::*;
-use super::qlib::buddyallocator::ZeroPage;
 use super::qlib::*;
-//use super::kvm_ctl::*;
 use super::qlib::common::*;
 use super::qlib::GetTimeCall;
-//use super::qlib::kernel::stack::*;
 use super::kvm_vcpu::KVMVcpuState;
 use super::kvm_vcpu::SetExitSignal;
 use super::qlib::linux::time::Timespec;
 use super::qlib::linux_def::*;
-use super::qlib::pagetable::*;
 use super::qlib::perf_tunning::*;
-//use super::qlib::task_mgr::*;
-//use super::qlib::vcpu_mgr::*;
 use super::runc::runtime::vm::*;
 use super::syncmgr::*;
 
@@ -58,40 +51,6 @@ pub struct SignalMaskStruct {
     _pad: u32,
 }
 
-pub struct HostPageAllocator {
-    pub allocator: AlignedAllocator,
-}
-
-impl HostPageAllocator {
-    pub fn New() -> Self {
-        return Self {
-            allocator: AlignedAllocator::New(0x1000, 0x10000),
-        };
-    }
-}
-
-impl Allocator for HostPageAllocator {
-    fn AllocPage(&self, _incrRef: bool) -> Result<u64> {
-        let ret = self.allocator.Allocate()?;
-        ZeroPage(ret);
-        return Ok(ret);
-    }
-}
-
-impl RefMgr for HostPageAllocator {
-    fn Ref(&self, _addr: u64) -> Result<u64> {
-        //panic!("HostPageAllocator doesn't support Ref");
-        return Ok(1);
-    }
-
-    fn Deref(&self, _addr: u64) -> Result<u64> {
-        panic!("HostPageAllocator doesn't support Deref");
-    }
-
-    fn GetRef(&self, _addr: u64) -> Result<u64> {
-        panic!("HostPageAllocator doesn't support GetRef");
-    }
-}
 
 impl KVMVcpu {
     fn SetupGDT(&self, sregs: &mut kvm_sregs) {
@@ -178,7 +137,7 @@ impl KVMVcpu {
 
         //vcpu_sregs.cr0 = CR0_PE | CR0_MP | CR0_AM | CR0_ET | CR0_NE | CR0_WP | CR0_PG;
         vcpu_sregs.cr0 = CR0_PE | CR0_AM | CR0_ET | CR0_PG | CR0_NE; // | CR0_WP; // | CR0_MP | CR0_NE;
-        vcpu_sregs.cr3 = VMS.lock().pageTables.GetRoot();
+        vcpu_sregs.cr3 = VMS.read().pageTables.GetRoot();
         //vcpu_sregs.cr4 = CR4_PAE | CR4_OSFXSR | CR4_OSXMMEXCPT;
         vcpu_sregs.cr4 =
             CR4_PSE | CR4_PAE | CR4_PGE | CR4_OSFXSR | CR4_OSXMMEXCPT | CR4_FSGSBASE | CR4_OSXSAVE; // | CR4_UMIP ;// CR4_PSE | | CR4_SMEP | CR4_SMAP;
@@ -224,7 +183,7 @@ impl KVMVcpu {
         );
     }
 
-    pub fn run(&self, tgid: i32) -> Result<()> {
+    pub fn run(&self, tgid: i32) ->   Result<()> {
         SetExitSignal();
         self.setup_long_mode()?;
         let tid = unsafe { gettid() };
@@ -238,18 +197,17 @@ impl KVMVcpu {
             rax: 0x11,
             rbx: 0xdd,
             //arg0
-            rdi: self.heapStartAddr, // self.pageAllocatorBaseAddr + self.,
+            rdi: self.privateHeapStartAddr, // self.pageAllocatorBaseAddr + self.,
             //arg1
-            rsi: self.shareSpaceAddr,
+            rsi: self.id as u64,
             //arg2
-            rdx: self.id as u64,
+            rdx: VMS.read().vdsoAddr,
             //arg3
-            rcx: VMS.lock().vdsoAddr,
+            rcx: self.vcpuCnt as u64,
             //arg4
-            r8: self.vcpuCnt as u64,
+            r8: self.autoStart as u64,
             //arg5
-            r9: self.autoStart as u64,
-            //rdx:
+            // r9: 
             //rcx:
             ..Default::default()
         };
@@ -277,6 +235,7 @@ impl KVMVcpu {
             "start enter guest[{}]: entry is {:x}, stack is {:x}",
             self.id, self.entry, self.topStackAddr
         );
+        info!("kvm registers state {:#x?}", regs);
         loop {
             if !super::runc::runtime::vm::IsRunning() {
                 return Ok(());
@@ -284,6 +243,7 @@ impl KVMVcpu {
 
             self.state
                 .store(KVMVcpuState::GUEST as u64, Ordering::Release);
+
             fence(Ordering::Acquire);
             let kvmRet = match self.vcpu.run() {
                 Ok(ret) => ret,
@@ -397,6 +357,38 @@ impl KVMVcpu {
                         }
                         qlib::HYPERCALL_RELEASE_VCPU => {
                             SyncMgr::WakeShareSpaceReady();
+                        }
+                        qlib::HYPERCALL_SHARESPACE_INIT => {
+                            info!("VM EXIT HYPERCALL_SHARESPACE_INIT");
+                            GLOBAL_ALLOCATOR.is_vm_lauched.store(true, Ordering::SeqCst);
+                            {
+                                let mut vms = VMS.write();
+
+                                let spec = vms.args.as_mut().unwrap().Spec.Copy();
+                                vms.args.as_mut().unwrap().Spec =spec; 
+                            }
+
+                            let vms = VMS.read();
+                            let controlSock  = vms.controlSock;
+                            let vcpuCount = vms.vcpuCount;
+                            let rdmaSvcCliSock = vms.rdmaSvcCliSock;
+                            let podId = vms.podId;
+                            let haveMembarrierGlobal = vms.haveMembarrierGlobal;
+                            drop(vms);
+
+                            let shareSpaceAddr = para1 as *mut ShareSpace;
+                            let sharedSpace  = unsafe { &mut (*shareSpaceAddr) };
+
+                            debug!("VM EXIT HYPERCALL_SHARESPACE_INIT 1");
+                            VirtualMachine::InitShareSpace(
+                                sharedSpace,
+                                vcpuCount,
+                                controlSock,
+                                rdmaSvcCliSock,
+                                podId,
+                                haveMembarrierGlobal
+                            );
+                            debug!("VM EXIT HYPERCALL_SHARESPACE_INIT finished");
                         }
                         qlib::HYPERCALL_EXIT_VM => {
                             let exitCode = para1 as i32;

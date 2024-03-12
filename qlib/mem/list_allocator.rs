@@ -21,9 +21,11 @@ use core::mem::size_of;
 use core::ptr::NonNull;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
+use crate::qlib::Vec;
+use crate::PRIVATE_VCPU_LOCAL_HOLDER;
 
 use super::super::super::kernel_def::VcpuId;
-use super::super::kernel::vcpu::CPU_LOCAL;
+use crate::qlib::kernel::vcpu::VCPU_COUNT;
 use super::super::linux_def::*;
 use super::super::mutex::*;
 use super::super::pagetable::AlignedAllocator;
@@ -61,6 +63,42 @@ pub fn SetZeroPage(pageStart: u64) {
     }
 }
 
+use core::cell::UnsafeCell;
+
+#[derive(Debug, Default)]
+#[repr(C)]
+#[repr(align(16))]
+pub struct PrivateCPULocal {
+    pub allocators: Vec<UnsafeCell<VcpuAllocator>>,
+}
+
+unsafe impl Send for PrivateCPULocal {}
+unsafe impl Sync for PrivateCPULocal {}
+
+impl PrivateCPULocal {
+
+    pub fn New() -> Self {
+        let mut v = Vec::new();
+        let vcpu_number = VCPU_COUNT.load(Ordering::Acquire);
+
+        info!("PrivateCPULocal new, cpu number {}", vcpu_number);
+
+        for _ in 0..vcpu_number {
+            let a  = VcpuAllocator::default().into();
+            v.push(a);
+        }
+        return Self {
+            allocators: v,
+        };
+    }
+
+    pub fn AllocatorMut(&self) -> &mut VcpuAllocator {
+        //return unsafe { &mut *(&self.allocator as *const _ as u64 as *mut VcpuAllocator) };
+        return unsafe { &mut *self.allocators[VcpuId()].get() }
+    }
+}
+
+
 #[derive(Default)]
 pub struct GlobalVcpuAllocator {
     pub init: AtomicBool,
@@ -68,17 +106,19 @@ pub struct GlobalVcpuAllocator {
 
 impl GlobalVcpuAllocator {
     pub const fn New() -> Self {
+
         return Self {
             init: AtomicBool::new(false),
         };
     }
 
     pub fn Print(&self) {
+
         error!(
             "GlobalVcpuAllocator {}/{}",
             VcpuId(),
-            unsafe { (*CPU_LOCAL[VcpuId()].allocator.get()).bufs.len()}
-        )
+            unsafe { (*PRIVATE_VCPU_LOCAL_HOLDER.allocators[VcpuId()].get()).bufs.len()}
+            );
     }
 
     pub fn Initializated(&self) {
@@ -248,25 +288,78 @@ impl VcpuAllocator {
 
 #[derive(Debug, Default)]
 pub struct HostAllocator {
-    pub listHeapAddr: AtomicU64,
+    pub host_initialization_heap: AtomicU64,
+    pub host_guest_shared_heap: AtomicU64,
+    pub guest_private_heap: AtomicU64,
     pub initialized: AtomicBool,
+    pub is_vm_lauched: AtomicBool,
+    pub is_host_allocator: AtomicBool,
+
 }
 
 impl HostAllocator {
-    pub fn Allocator(&self) -> &mut ListAllocator {
-        return unsafe { &mut *(self.listHeapAddr.load(Ordering::Relaxed) as *mut ListAllocator) };
+    pub fn HostInitAllocator(&self) -> &mut ListAllocator {
+        return unsafe { &mut *(self.host_initialization_heap.load(Ordering::Relaxed) as *mut ListAllocator) };
     }
 
-    pub fn IsHeapAddr(addr: u64) -> bool {
-        return addr < MemoryDef::HEAP_END;
+    pub fn GuestPrivateAllocator(&self) -> &mut ListAllocator {
+        return unsafe { &mut *(self.guest_private_heap.load(Ordering::Relaxed) as *mut ListAllocator) };
+    }
+
+    pub fn GuestHostSharedAllocator(&self) -> &mut ListAllocator {
+        return unsafe { &mut *(self.host_guest_shared_heap.load(Ordering::Relaxed) as *mut ListAllocator) };
+    }
+
+    pub fn IsInitHeapAddr(addr: u64) -> bool {
+        return addr < MemoryDef::HOST_INIT_HEAP_END && addr >= MemoryDef::HOST_INIT_HEAP_OFFSET;
+    }
+
+    pub fn IsHostGuestSharedHeapAddr(addr: u64) -> bool {
+        return addr < MemoryDef::GUEST_HOST_SHARED_HEAP_END && addr >= MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST;
+    }
+
+    pub fn IsGuestPrivateHeapAddr(addr: u64) -> bool {
+        return addr < MemoryDef::GUEST_PRIVATE_HEAP_END && addr >= MemoryDef::GUEST_PRIVATE_HEAP_OFFSET;
     }
 
     #[inline]
-    pub fn HeapRange(&self) -> (u64, u64) {
-        let allocator = self.Allocator();
+    pub fn HostInitHeapRange(&self) -> (u64, u64) {
+        let allocator = self.HostInitAllocator();
         return (allocator.heapStart, allocator.heapEnd);
     }
-    
+
+    #[inline]
+    pub fn HostGuestSharedHeapRange(&self) -> (u64, u64) {
+        let allocator = self.GuestHostSharedAllocator();
+        return (allocator.heapStart, allocator.heapEnd);
+    }
+
+
+    #[inline]
+    pub fn GuestPrivateHeapRange(&self) -> (u64, u64) {
+        // TODO: guest and host have diffenrent view if private memory is not identical mmaped
+        let allocator = self.GuestPrivateAllocator();
+        return (allocator.heapStart, allocator.heapEnd);
+    }
+
+    // should be called by guest if it want to get buf that can be accessed by host
+    pub unsafe fn AllocSharedBuf(&self,  size: usize, align: usize) -> *mut u8 {
+
+        let layout = Layout::from_size_align(size, align)
+            .expect("AllocSharedBuf can't allocate memory");
+
+        return self.GuestHostSharedAllocator().alloc(layout);
+    }
+
+
+    // should be called by host
+    pub unsafe fn AllocGuestPrivatMem(&self, size: usize, align: usize) -> *mut u8 {
+        let layout = Layout::from_size_align(size, align)
+            .expect("AllocGuestPrivatMem can't allocate memory");
+
+        return self.GuestPrivateAllocator().alloc(layout);
+    }
+
 }
 
 #[derive(Debug)]

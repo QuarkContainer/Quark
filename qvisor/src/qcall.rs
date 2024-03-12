@@ -52,7 +52,7 @@ impl KVMVcpu {
 
         match msg {
             Msg::LoadProcessKernel(msg) => {
-                ret = super::VMS.lock().LoadProcessKernel(msg.processAddr) as u64;
+                ret = super::VMS.write().LoadProcessKernel(msg.processAddr) as u64;
             }
             Msg::GetStdfds(msg) => {
                 ret = super::VMSpace::GetStdfds(msg.addr) as u64;
@@ -246,7 +246,7 @@ impl KVMVcpu {
                 ret = super::VMSpace::SchedGetAffinity(msg.pid, msg.cpuSetSize, msg.mask) as u64;
             }
             Msg::GetRandom(msg) => {
-                ret = super::VMS.lock().GetRandom(msg.buf, msg.len, msg.flags) as u64;
+                ret = super::VMS.write().GetRandom(msg.buf, msg.len, msg.flags) as u64;
             }
             Msg::Fchdir(msg) => {
                 ret = super::VMSpace::Fchdir(msg.fd) as u64;
@@ -276,11 +276,17 @@ impl KVMVcpu {
                 ret = super::VMSpace::SwapInPage(msg.addr) as u64;
             }
             Msg::SwapOut(_msg) => {
-                let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
+                let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.GuestPrivateHeapRange();
                 SHARE_SPACE
                     .hiberMgr
                     .SwapOut(heapStart, heapEnd - heapStart)
                     .unwrap();
+
+                let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HostGuestSharedHeapRange();
+                SHARE_SPACE
+                        .hiberMgr
+                        .SwapOut(heapStart, heapEnd - heapStart)
+                        .unwrap();
                 ret = 0;
             }
             Msg::SwapIn(_msg) => {

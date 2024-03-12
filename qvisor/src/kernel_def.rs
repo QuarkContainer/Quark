@@ -126,6 +126,7 @@ impl ShareSpace {
         controlSock: i32,
         rdmaSvcCliSock: i32,
         podId: [u8; 64],
+        haveMembarrierGlobal: bool,
     ) {
         *self.config.write() = *QUARK_CONFIG.lock();
 
@@ -151,7 +152,7 @@ impl ShareSpace {
         self.hostEpollfd
             .store(FD_NOTIFIER.Epollfd(), Ordering::SeqCst);
         self.controlSock = controlSock;
-        self.supportMemoryBarrier = VMS.lock().haveMembarrierGlobal;
+        self.supportMemoryBarrier = haveMembarrierGlobal;
         super::vmspace::VMSpace::BlockFd(controlSock);
     }
 
@@ -164,7 +165,7 @@ impl ShareSpace {
             if ((1 << i) & vcpuMask != 0)
                 && SHARE_SPACE.scheduler.VcpuArr[i].GetMode() == VcpuMode::User
             {
-                let cpu = VMS.lock().vcpus[i].clone();
+                let cpu = VMS.read().vcpus[i].clone();
                 SHARE_SPACE.scheduler.VcpuArr[i].InterruptTlbShootdown();
                 if tlbshootdown_wait {
                     let (tx, rx) = channel();
@@ -208,7 +209,7 @@ impl ShareSpace {
                 self.scheduler.VcpuArr[i].SetEnterAppTimestamp(now);
                 self.scheduler.VcpuArr[i].InterruptThreadTimeout();
                 //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
-                let vcpu = VMS.lock().vcpus[i].clone();
+                let vcpu = VMS.read().vcpus[i].clone();
                 vcpu.interrupt(None);
             }
         }
@@ -301,7 +302,7 @@ pub fn ClockGetTime(clockId: i32) -> i64 {
 }
 
 pub fn VcpuFreq() -> i64 {
-    return VMS.lock().GetVcpuFreq();
+    return VMS.read().GetVcpuFreq();
 }
 
 pub fn NewSocket(fd: i32) -> i64 {
