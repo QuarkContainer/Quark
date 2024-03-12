@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::alloc::GlobalAlloc;
+use core::mem::size_of;
+
 use super::super::common::*;
 use super::super::config::*;
 use super::super::linux_def::*;
@@ -19,9 +22,10 @@ use super::super::qmsg;
 use super::super::qmsg::*;
 use super::super::socket_buf::*;
 use super::super::*;
-use crate::kernel_def::HyperCall64;
+use crate::kernel_def::{HyperCall64, HyperCall64_init};
 use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
 use crate::qlib::proxy::*;
+use crate::GLOBAL_ALLOCATOR;
 
 extern "C" {
     pub fn rdtsc() -> i64;
@@ -35,7 +39,7 @@ impl HostSpace {
     }
 
     pub fn IOWait() {
-        HyperCall64(HYPERCALL_IOWAIT, 0, 0, 0, 0);
+        HyperCall64_init(HYPERCALL_IOWAIT, 0, 0, 0, 0);
     }
 
     pub fn Hlt() {
@@ -43,11 +47,16 @@ impl HostSpace {
     }
 
     pub fn LoadProcessKernel(processAddr: u64) -> i64 {
-        let mut msg = Msg::LoadProcessKernel(LoadProcessKernel {
-            processAddr: processAddr,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
+        let size = size_of::<Msg>();
+        let msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80) as *mut Msg };
+        unsafe{
+            (*msg_ptr) = Msg::LoadProcessKernel(LoadProcessKernel {
+                processAddr: processAddr,
+            });
+        }
+        let ret = HostSpace::Call( unsafe{&mut *msg_ptr}, false) as i64;
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(msg_ptr as *mut u8, size, 0x80);}
+        return ret;
     }
 
     pub fn CreateMemfd(len: i64, flags: u32) -> i64 {
@@ -601,12 +610,24 @@ impl HostSpace {
     }
 
     pub fn Panic(str: &str) {
-        let msg = Print {
-            level: DebugLevel::Error,
-            str: str,
-        };
-
+        
+        //copy the &str to shared buffer
+        let bytes = str.as_bytes();
+        let len  = bytes.len();
+        let new_str_ptr =  unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(len,0x80) };
+        
+        let dest_ptr: *mut u8 = new_str_ptr;
+        let src_ptr: *const u8 = bytes.as_ptr();
+        unsafe { core::ptr::copy_nonoverlapping(src_ptr, dest_ptr, len);}
+        let new_str = unsafe {alloc::str::from_utf8_unchecked(core::slice::from_raw_parts(dest_ptr,len))}; 
+        
+        let size = size_of::<Print>();
+        let msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80) as *mut Print };
+        let mut msg = unsafe {&mut *msg_ptr};
+        msg.level = DebugLevel::Error;
+        msg.str = new_str;
         HyperCall64(HYPERCALL_PANIC, &msg as *const _ as u64, 0, 0, 0);
+        
     }
 
     pub fn TryOpenWrite(dirfd: i32, oldfd: i32, name: u64) -> i64 {
@@ -823,8 +844,10 @@ impl HostSpace {
     }
 
     pub fn VcpuWait() -> i64 {
-        let mut ret: i64 = 0;
-        HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, &mut ret as *mut _ as u64, 0);
+        let ret_ptr =  unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(size_of::<i64>(),0x80) as *mut i64};
+        (HYPERCALL_VCPU_WAIT, 0, 0, ret_ptr as u64, 0);
+        let ret = unsafe{ *ret_ptr };
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(ret_ptr as *mut u8 ,size_of::<i64>(),0x80);}
         return ret as i64;
     }
 
@@ -972,9 +995,28 @@ impl HostSpace {
     }
 
     pub fn SyncPrint(level: DebugLevel, str: &str) {
-        let msg = Print { level, str };
-
+        //copy the &str to shared buffer
+        let bytes = str.as_bytes();
+        let len: usize  = bytes.len();
+        let new_str_ptr =  unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(len,0x80) };
+        
+        let dest_ptr: *mut u8 = new_str_ptr;
+        let src_ptr: *const u8 = bytes.as_ptr();
+        unsafe { core::ptr::copy_nonoverlapping(src_ptr, dest_ptr, len);}
+        let new_str = unsafe {alloc::str::from_utf8_unchecked(core::slice::from_raw_parts(dest_ptr,len))}; 
+        
+        let size = size_of::<Print>();
+        let msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80) as *mut Print };
+        let mut msg = unsafe {&mut *msg_ptr};
+        msg.level = level;
+        msg.str = new_str;
+        
         HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0, 0, 0);
+
+        unsafe{
+            GLOBAL_ALLOCATOR.DeallocShareBuf(dest_ptr, len, 0x80);
+            GLOBAL_ALLOCATOR.DeallocShareBuf(msg_ptr as *mut u8, size, 0x80);
+        }
     }
 
     pub fn Kprint(str: &str) {
@@ -995,12 +1037,13 @@ impl HostSpace {
     }
 
     pub fn KernelGetTime(clockId: i32) -> Result<i64> {
-        let call = GetTimeCall {
-            clockId,
-            ..Default::default()
-        };
+        let size = size_of::<GetTimeCall>();
+        let call_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80) as *mut GetTimeCall };
+        let mut call = unsafe {&mut *call_ptr};
+        call.clockId = clockId;
+        call.res = 0;
 
-        let addr = &call as *const _ as u64;
+        let addr = call_ptr as *const _ as u64;
         HyperCall64(HYPERCALL_GETTIME, addr, 0, 0, 0);
 
         use self::common::*;
@@ -1009,16 +1052,23 @@ impl HostSpace {
             return Err(Error::SysError(-call.res as i32));
         }
 
-        return Ok(call.res);
+        let ret = call.res;
+        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(call_ptr as *mut u8, size, 0x80) };
+        return Ok(ret);
     }
 
     pub fn KernelVcpuFreq() -> i64 {
-        let call = VcpuFeq::default();
+        let size = size_of::<VcpuFeq>();
+        let call_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80) as *mut VcpuFeq };
+        let mut call = unsafe {&mut *call_ptr};
+        call.res=0;
 
-        let addr = &call as *const _ as u64;
+        let addr = call_ptr as *const _ as u64;
         HyperCall64(HYPERCALL_VCPU_FREQ, addr, 0, 0, 0);
 
-        return call.res;
+        let ret = call.res;
+        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(call_ptr as *mut u8, size, 0x80) };
+        return ret;
     }
 
     pub fn VcpuYield() {

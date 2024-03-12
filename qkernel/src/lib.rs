@@ -479,12 +479,21 @@ pub extern "C" fn rust_main(
     self::qlib::kernel::asm::fninit();
     if id == 0 {
         GLOBAL_ALLOCATOR.Init(privateHeapStart, MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
+
+        //first 4kb in each heap is reserved for list allocator
+        let ghcb = unsafe {GLOBAL_ALLOCATOR.AllocSharedBuf(MemoryDef::PAGE_SIZE as usize,MemoryDef::PAGE_SIZE as usize)};
+        assert_eq!(ghcb as u64, MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST+MemoryDef::PAGE_SIZE);
+        
+        let share_para = unsafe {GLOBAL_ALLOCATOR.AllocSharedBuf((MemoryDef::PAGE_SIZE) as usize,MemoryDef::PAGE_SIZE as usize)};
+        assert_eq!(share_para as u64, MemoryDef::HYPERCALL_PARA_PAGE);
+        assert!(SHAREPARA_COUNT >= vcpuCnt);
+        
         let size = core::mem::size_of::<ShareSpace>();
         // info!("ShareSpace size {:x}", size);
         let shared_space = unsafe {
-            GLOBAL_ALLOCATOR.AllocSharedBuf(size, 2)
+            GLOBAL_ALLOCATOR.AllocSharedBuf(size, 0x80)
         };
-        HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
+        HyperCall64_init(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
 
 
 
@@ -505,7 +514,7 @@ pub extern "C" fn rust_main(
         VDSO.Initialization(vdsoParamAddr);
 
         // release other vcpus
-        HyperCall64(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
+        HyperCall64_init(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
     } else {
         InitGs(id);
         //PerfGoto(PerfType::Kernel);

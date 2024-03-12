@@ -3013,6 +3013,8 @@ impl MemoryDef {
     pub const GUEST_HOST_SHARED_HEAP_OFFEST: u64 =  MemoryDef::GUEST_PRIVATE_HEAP_END;
     pub const GUEST_HOST_SHARED_HEAP_END: u64 =  MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE;
 
+    pub const HYPERCALL_PARA_PAGE :u64 = MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::PAGE_SIZE*2;
+
     // Create 24GB Init memory region for KVM VM
     pub const KERNEL_MEM_INIT_REGION_SIZE: u64 = 24; // 24 GB
 

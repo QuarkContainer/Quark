@@ -18,6 +18,8 @@ use alloc::vec::Vec;
 use super::auth::cap_set::*;
 use super::limits::*;
 
+use crate::GLOBAL_ALLOCATOR;
+
 #[derive(Serialize, Deserialize, Default, Debug, Eq, PartialEq, Clone)]
 pub struct Process {
     //user
@@ -47,3 +49,21 @@ pub struct Process {
     pub Stdiofds: [i32; 3],
     pub ExecId: Option<String>,
 }
+/* 
+impl Process {
+    pub fn default_in_shared() -> Self{
+        let shared_allocator = GLOBAL_ALLOCATOR.GuestHostSharedAllocator();
+        let size = core::mem::size_of::<Process>();
+        let process_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80) as *mut Process };
+        unsafe {
+            *process_ptr = Process{
+                AdditionalGids: Vec::new_in(shared_allocator),
+                Args: Vec::new_in(shared_allocator),
+                Envs: Vec::new_in(shared_allocator),
+                ..Default::default()
+            }
+        }
+        return unsafe{*process_ptr};
+    }
+}
+*/
