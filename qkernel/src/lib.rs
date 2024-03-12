@@ -118,6 +118,7 @@ use self::threadmgr::task_sched::*;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use guest_host_allocator::GuestHostSharedAllocator;
+use memmgr::pma::PageMgr;
 
 #[macro_use]
 mod print;
@@ -147,7 +148,9 @@ lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
     pub static ref GUEST_KERNEL: Mutex<Option<kernel::kernel::Kernel>> = Mutex::new(None);
 
-    pub static ref PRIVATE_VCPU_LOCAL_HOLDER: Box<PrivateCPULocal> = Box::new(PrivateCPULocal::New());    
+    pub static ref PRIVATE_VCPU_LOCAL_HOLDER: Box<PrivateCPULocal> = Box::new(PrivateCPULocal::New());
+
+    pub static ref PAGE_MGR_HOLDER: Box<PageMgr> = Box::new(PageMgr::default());      
 }
 
 pub fn SingletonInit() {
@@ -164,7 +167,7 @@ pub fn SingletonInit() {
         // the error! can run after this point
         //error!("error message");
 
-        PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
+        PAGE_MGR.SetValue(PAGE_MGR_HOLDER.Addr());
         LOADER.Init(Loader::default());
         KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
             MemoryDef::DEFAULT_STACK_SIZE as usize,
@@ -491,7 +494,7 @@ pub extern "C" fn rust_main(
         let shared_space = unsafe {
             GLOBAL_ALLOCATOR.AllocSharedBuf(size, 2)
         };
-        HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
+        HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, PAGE_MGR_HOLDER.Addr(), 0, 0);
 
 
         SHARESPACE.SetValue(shared_space as u64);
