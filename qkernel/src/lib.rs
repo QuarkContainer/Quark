@@ -66,15 +66,12 @@ use vcpu::CPU_LOCAL;
 use crate::qlib::kernel::GlobalIOMgr;
 use crate::qlib::ShareSpace;
 
-//use self::qlib::buddyallocator::*;
 use self::asm::*;
 use self::boot::controller::*;
 use self::boot::loader::*;
 use self::kernel::timer::*;
 use self::kernel_def::*;
 use self::loader::vdso::*;
-//use linked_list_allocator::LockedHeap;
-//use buddy_system_allocator::LockedHeap;
 use self::qlib::common::*;
 use self::qlib::config::*;
 use self::qlib::control_msg::*;
@@ -520,10 +517,6 @@ pub extern "C" fn rust_main(
 
         debug!("vec2 {:?}", vec2);
         drop(vec2);
-
-
-
-
 
         InitTsc();
         InitTimeKeeper(vdsoParamAddr);
