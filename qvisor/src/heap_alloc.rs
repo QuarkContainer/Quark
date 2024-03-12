@@ -84,10 +84,6 @@ impl HostAllocator {
         let guestPrivateHeapEnd = guestPrivateHeapStart + MemoryDef::GUEST_PRIVATE_HEAP_SIZE as u64;
         *self.GuestPrivateAllocator() = ListAllocator::New(guestPrivateHeapStart as _, guestPrivateHeapEnd);
 
-        let sharedHeapStart = self.host_guest_shared_heap.load(Ordering::Relaxed);
-        let shaedHeapEnd = sharedHeapStart + MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as u64;
-        *self.GuestHostSharedAllocator() = ListAllocator::New(sharedHeapStart as _, shaedHeapEnd);
-
         let hostInitHeapStart = self.host_initialization_heap.load(Ordering::Relaxed);
         let hostInitHeapEnd = hostInitHeapStart + MemoryDef::HOST_INIT_HEAP_SIZE as u64;
         *self.HostInitAllocator() = ListAllocator::New(hostInitHeapStart as _, hostInitHeapEnd);
@@ -97,8 +93,6 @@ impl HostAllocator {
 
         self.GuestPrivateAllocator().Add(MemoryDef::GUEST_PRIVATE_HEAP_OFFSET as usize + size, 
                         MemoryDef::GUEST_PRIVATE_HEAP_SIZE as usize - size);
-        self.GuestHostSharedAllocator().Add(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST as usize + size, 
-                                        MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as usize - size);
         self.HostInitAllocator().Add(MemoryDef::HOST_INIT_HEAP_OFFSET as usize + size, 
                                             MemoryDef::HOST_INIT_HEAP_SIZE as usize - size);
         self.initialized.store(true, Ordering::SeqCst);

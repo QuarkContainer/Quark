@@ -479,7 +479,13 @@ pub extern "C" fn rust_main(
 ) {
     self::qlib::kernel::asm::fninit();
     if id == 0 {
-        GLOBAL_ALLOCATOR.Init(privateHeapStart, MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
+        GLOBAL_ALLOCATOR.InitPrivateAllocator(privateHeapStart);
+
+
+        // ghcb convert shared memory
+
+        
+        GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
         let size = core::mem::size_of::<ShareSpace>();
         // info!("ShareSpace size {:x}", size);
         let shared_space = unsafe {

@@ -340,10 +340,27 @@ impl HostAllocator {
         };
     }
 
-    pub fn Init(&self, privateHeapAddr: u64, sharedHeapAddr: u64) {
-        self.host_guest_shared_heap.store(sharedHeapAddr, Ordering::SeqCst);
+    pub fn InitPrivateAllocator(&self, privateHeapAddr: u64) {
         self.guest_private_heap.store(privateHeapAddr, Ordering::SeqCst);
     }
+
+
+    pub fn InitSharedAllocator(&self, sharedHeapAddr: u64) {
+        self.host_guest_shared_heap.store(sharedHeapAddr, Ordering::SeqCst);
+
+        let sharedHeapStart = self.host_guest_shared_heap.load(Ordering::Relaxed);
+        let shaedHeapEnd = sharedHeapStart + MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as u64;
+        *self.GuestHostSharedAllocator() = ListAllocator::New(sharedHeapStart as _, shaedHeapEnd);
+        
+        
+        // reserve first 4KB gor the listAllocator
+        let size = core::mem::size_of::<ListAllocator>();
+        self.GuestHostSharedAllocator().Add(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST as usize + size, 
+            MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as usize - size);
+    }
+
+
+
 }
 
 unsafe impl GlobalAlloc for HostAllocator {
