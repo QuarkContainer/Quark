@@ -437,9 +437,16 @@ impl KVMVcpu {
 
             qlib::HYPERCALL_VCPU_FREQ => {
                 let data = para1;
-
-                // TODO get cpu freq
-                let freq = 1000 * 1000 * 1000;
+                // TODO: the cntfreq_el0 register may not be properly programmed
+                // to represent the system counter frequency in many platforms
+                // (careless firmware implementations). There should be a sanity
+                // check here, if the cntfreq reads 0, work around it and get
+                // the actual frequency.
+                let freq = self.get_frequency().unwrap();
+                if freq == 0 {
+                    panic!("system counter frequency (cntfrq_el0) reads 0. It
+                           may not be properly programmed by the firmware");
+                }
                 unsafe {
                     let call = &mut *(data as *mut VcpuFeq);
                     call.res = freq as i64;
