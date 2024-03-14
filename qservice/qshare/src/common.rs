@@ -57,10 +57,30 @@ pub enum Error {
     EtcdError(EtcdError),
     ContextCancel,
     JoinError(JoinError),
-    
+    AxumHttpError(axum::http::Error),
+    AxumHttpUriError(axum::http::uri::InvalidUri),
+    HyperError(hyper::Error)
 }
 
 unsafe impl core::marker::Send for Error {}
+
+impl From<hyper::Error> for Error {
+    fn from(item: hyper::Error) -> Self {
+        return Self::HyperError(item)
+    }
+}
+
+impl From<axum::http::Error> for Error {
+    fn from(item: axum::http::Error) -> Self {
+        return Self::AxumHttpError(item)
+    }
+}
+
+impl From<axum::http::uri::InvalidUri> for Error {
+    fn from(item: axum::http::uri::InvalidUri) -> Self {
+        return Self::AxumHttpUriError(item)
+    }
+}
 
 impl From<JoinError> for Error {
     fn from(item: JoinError) -> Self {
@@ -129,6 +149,7 @@ impl From<SerdeJsonError> for Error {
         return Self::SerdeJsonError(item)
     }
 }
+
 
 impl From<reqwest::Error> for Error {
     fn from(item: reqwest::Error) -> Self {

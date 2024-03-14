@@ -16,7 +16,6 @@
 
 use std::collections::BTreeMap;
 use std::io::IoSlice;
-use std::net::TcpStream;
 use std::os::fd::{FromRawFd, IntoRawFd, AsRawFd, RawFd};
 use std::os::unix::net::UnixStream as StdStream;
 use std::os::unix::net::SocketAncillary;
@@ -27,7 +26,7 @@ use nix::sys::socket::ControlMessageOwned;
 use nix::sys::socket::{recvmsg, MsgFlags};
 
 // use tokio::net::TcpStream;
-use tokio::net::{TcpSocket, UnixStream};
+use tokio::net::{TcpSocket, TcpStream, UnixStream};
 use tokio::sync::oneshot;
 
 use qshare::common::*;
@@ -352,9 +351,10 @@ impl TsotClient {
                 if v.error.len() == 0 {
                     // take ownership
                     let sock = tcpSocket.into_raw_fd();
-                    let stream = unsafe {
-                        TcpStream::from_raw_fd(sock)
+                    let stdstream = unsafe {
+                        std::net::TcpStream::from_raw_fd(sock)
                     };
+                    let stream = tokio::net::TcpStream::from_std(stdstream)?;
                     return Ok(stream);
                 } else {
                     return Err(Error::CommonError(v.error));

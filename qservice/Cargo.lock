@@ -1617,6 +1617,7 @@ dependencies = [
  "errno 0.2.8",
  "futures",
  "hostname",
+ "http-body-util",
  "hyper 1.2.0",
  "hyper-util",
  "ipnetwork 0.20.0",
@@ -1649,12 +1650,14 @@ name = "qshare"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum 0.7.4",
  "chrono",
  "const_format",
  "etcd-client",
  "futures",
  "gethostname",
  "hostname",
+ "hyper 1.2.0",
  "ipnetwork 0.20.0",
  "k8s-openapi",
  "lazy_static",
