@@ -87,3 +87,14 @@ impl TsotClient {
 
     // }
 }
+
+
+impl Drop for TsotMessage {
+    fn drop(&mut self) {
+        unsafe {
+            if self.socket >= 0 {
+                libc::close(self.socket);
+            }
+        }
+    }
+}

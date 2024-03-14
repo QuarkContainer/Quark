@@ -182,6 +182,12 @@ impl TcpSockAddr {
         *ptr = addr;
         return ret;
     }
+
+    pub fn Dup(&self) -> Self {
+        return Self {
+            data: self.data.clone(),
+        }
+    }
 }
 
 pub struct QOrdering {}

@@ -13,8 +13,12 @@
 // limitations under the License.
 
 use core::mem::size_of;
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::borrow::ToOwned;
 
 pub static TSOT_SOCKET_PATH: &'static str = "/var/run/quark/tsot-socket";
+pub static TSOT_HOST_SOCKET_PATH: &'static str = "/var/run/quark_host/tsot-socket";
 
 #[repr(i32)]
 #[derive(Debug, Clone, Copy)]
@@ -30,6 +34,7 @@ pub struct TsotMessage {
     pub socket: i32,
     pub msg: TsotMsg,
 }
+
 
 impl Default for TsotMessage {
     fn default() -> Self {
@@ -55,23 +60,32 @@ impl From<TsotMsg> for TsotMessage {
 pub enum TsotMsg {
     None,
     PodRegisterReq(PodRegisterReq),
+
+    // admin gateway connection, it could connect to any namespace/pod as a client
+    GatewayRegisterReq(GatewayRegisterReq),
+
     CreateSocketReq(CreateSocketReq),
     
     ListenReq(ListenReq),
     AcceptReq(AcceptReq),
     StopListenReq(StopListenReq),
-    ConnectReq(ConnectReq),
+    PodConnectReq(PodConnectReq),
+    GatewayConnectReq(GatewayConnectReq),
     DnsReq(DnsReq),
 
     //////////////////////////////////////////////////////
     // from nodeagent to pod
     PodRegisterResp(PodRegisterResp),
+    GatewayRegisterResp(GatewayRegisterResp),
     CreateSocketResp(CreateSocketResp),
     PeerConnectNotify(PeerConnectNotify),
-    ConnectResp(ConnectResp),
+    PodConnectResp(PodConnectResp),
+    GatewayConnectResp(GatewayConnectResp),
     DnsResp(DnsResp),
 }
 
+
+pub const BUFF_SIZE: usize = core::mem::size_of::<TsotMsg>();
 
 impl TsotMsg {
     pub fn AsBytes(&self) -> &'static[u8] {
@@ -96,6 +110,13 @@ impl TsotMsg {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PodRegisterReq {
     pub podUid: [u8; 16],
+}
+
+// from pod to node agent
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GatewayRegisterReq {
+    pub gatewayUid: [u8; 16],
 }
 
 #[repr(C)]
@@ -123,11 +144,28 @@ pub struct StopListenReq {
     pub port: u16,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ConnectReq {
+    PodConnectReq(PodConnectReq),
+    GatewayConnectReq(GatewayConnectReq),
+}
+
 // send with the socket fd
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct ConnectReq {
+pub struct PodConnectReq {
     pub reqId: u32,
+    pub dstIp: u32,
+    pub dstPort: u16,
+    pub srcPort: u16,
+}
+
+// send with the socket fd
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct GatewayConnectReq {
+    pub reqId: u32,
+    pub namespace: [u8; 128],
     pub dstIp: u32,
     pub dstPort: u16,
     pub srcPort: u16,
@@ -141,6 +179,22 @@ pub struct DnsReq {
     pub names: [u8; 256]
 }
 
+
+impl DnsReq {
+    pub fn GetDomains(&self) -> Vec<String> {
+        let namesStr = unsafe {
+            String::from_utf8_unchecked(self.names[0..self.nameslen as usize].to_vec())
+        };
+
+        let names : Vec<&str> = namesStr.split(":").collect();
+        let mut domains = Vec::new();
+        for name in names {
+            domains.push(name.to_owned());
+        }
+        return domains;
+    }
+}
+
 //////////////////////////////////////////////////////
 // from nodeagent to pod
 
@@ -149,6 +203,12 @@ pub struct DnsReq {
 pub struct PodRegisterResp {
     // the pod's container IP addr
     pub containerIp: u32,
+    pub errorCode: u32
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct GatewayRegisterResp {
     pub errorCode: u32
 }
 
@@ -184,7 +244,14 @@ impl PeerConnectNotify {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct ConnectResp {
+pub struct PodConnectResp {
+    pub reqId: u32,
+    pub errorCode: i32
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct GatewayConnectResp {
     pub reqId: u32,
     pub errorCode: i32
 }

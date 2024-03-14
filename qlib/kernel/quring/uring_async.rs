@@ -714,7 +714,7 @@ pub struct AsyncAccept {
     pub fd: i32,
     pub queue: Queue,
     pub acceptQueue: AcceptQueue,
-    pub addr: TcpSockAddr,
+    pub addr: Arc<TcpSockAddr>,
     pub len: u32,
 }
 
@@ -745,7 +745,7 @@ impl AsyncOpsTrait for AsyncAccept {
         let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::default()));
         let hasSpace = self.acceptQueue.EnqSocket(
             result,
-            self.addr,
+            self.addr.Dup(),
             self.len,
             sockBuf.into(),
             Queue::default(),
@@ -763,7 +763,7 @@ impl AsyncAccept {
             fd,
             queue,
             acceptQueue,
-            addr: TcpSockAddr::default(),
+            addr: Arc::new(TcpSockAddr::default()),
             len: 16, //size of TcpSockAddr
         };
     }

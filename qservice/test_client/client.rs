@@ -16,7 +16,9 @@
 
 use std::env;
 
-use qshare::{common::IpAddress, na::{self, CreateFuncPodReq, CreateFuncPodResp, GetPodReq, TerminatePodReq}};
+use qshare::common::IpAddress;
+use qshare::na;
+use qshare::na::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
