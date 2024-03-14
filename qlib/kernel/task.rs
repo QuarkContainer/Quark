@@ -629,7 +629,6 @@ impl Task {
             ctx.rdi = para as u64;
         }
 
-        //let ioUsage = DUMMY_TASK.read().ioUsage.clone();
         let ioUsage = DUMMY_TASK.read().ioUsage.clone();
         let perfcounters = Some(THREAD_COUNTS.lock().NewCounters());
         let futexMgr = FUTEX_MGR.Fork();
