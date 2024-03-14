@@ -24,7 +24,6 @@ use spin::Mutex;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::pagetable::*;
-use super::super::super::vcpu_mgr::CPULocal;
 
 pub fn ZeroPage(pageStart: u64) {
     use alloc::slice;
@@ -181,36 +180,6 @@ impl PagePool {
         return Ok(refcount as u64);
     }
 
-    pub fn AllocPage(&self, incrRef: bool) -> Result<u64> {
-        let addr = self.Allocate()?;
-        let pageId = Self::PageId(addr);
-        let idx = pageId as usize % REF_MAP_PARTITION_CNT;
-        let mut refs = self.refs[idx].lock();
-        if incrRef {
-            refs.insert(pageId, 1);
-            self.refCount.fetch_add(1, Ordering::Release);
-        } else {
-            refs.insert(pageId, 0);
-        }
-
-        return Ok(addr);
-    }
-
-    pub fn Allocate(&self) -> Result<u64> {
-        match unsafe { (*CPULocal::Myself().pageAllocator.get()).AllocPage()} {
-            Some(page) => {
-                ZeroPage(page);
-                return Ok(page);
-            }
-            None => (),
-        }
-
-        let addr = self.allocator.Allocate()?;
-        ZeroPage(addr as u64);
-        //error!("AllocPage {:x}", addr);
-
-        return Ok(addr as u64);
-    }
 
     pub fn FreePage(&self, addr: u64) -> Result<()> {
         //CPULocal::Myself().pageAllocator.lock().FreePage(addr);

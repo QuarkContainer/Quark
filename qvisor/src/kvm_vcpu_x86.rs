@@ -40,6 +40,7 @@ use super::kvm_vcpu::SetExitSignal;
 use super::qlib::linux::time::Timespec;
 use super::qlib::linux_def::*;
 use super::qlib::perf_tunning::*;
+use super::qlib::qmsg::sharepara::*;
 use super::runc::runtime::vm::*;
 use super::syncmgr::*;
 
@@ -189,7 +190,6 @@ impl KVMVcpu {
         let tid = unsafe { gettid() };
         self.threadid.store(tid as u64, Ordering::SeqCst);
         self.tgid.store(tgid as u64, Ordering::SeqCst);
-        let mut round = 0;
 
         let regs: kvm_regs = kvm_regs {
             rflags: KERNEL_FLAGS_SET,
@@ -240,18 +240,6 @@ impl KVMVcpu {
         loop {
             if !super::runc::runtime::vm::IsRunning() {
                 return Ok(());
-            }
-
-            if round == 0 {
-                GLOBAL_ALLOCATOR.is_vm_lauched.store(true, Ordering::SeqCst);
-                round = round + 1;
-
-                {
-                    let mut vms = VMS.write();
-
-                    let spec = vms.args.as_mut().unwrap().Spec.Copy();
-                    vms.args.as_mut().unwrap().Spec =spec; 
-                }
             }
 
             self.state
@@ -322,16 +310,13 @@ impl KVMVcpu {
                         // call from user space
                         panic!("Get VcpuExit::IoOut from guest user space, Abort, vcpu_sregs is {:#x?}", vcpu_sregs)
                     }
-
-                    let regs = self
-                        .vcpu
-                        .get_regs()
-                        .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                    let para1 = regs.rsi;
-                    let para2 = regs.rcx;
-                    let para3 = regs.rdi;
-                    let para4 = regs.r10;
-
+                    
+                    let share_para_page  = unsafe{* (MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *const ShareParaPage)};
+                    let share_para = share_para_page.SharePara[self.id];
+                    let para1 = share_para.para1;
+                    let para2 = share_para.para2;
+                    let para3 = share_para.para3;
+                    let para4 = share_para.para4;
                     match addr {
                         qlib::HYPERCALL_IOWAIT => {
                             if !super::runc::runtime::vm::IsRunning() {
@@ -373,6 +358,13 @@ impl KVMVcpu {
                         }
                         qlib::HYPERCALL_SHARESPACE_INIT => {
                             info!("VM EXIT HYPERCALL_SHARESPACE_INIT");
+                            GLOBAL_ALLOCATOR.is_vm_lauched.store(true, Ordering::SeqCst);
+                            {
+                                let mut vms = VMS.write();
+
+                                let spec = vms.args.as_mut().unwrap().Spec.Copy();
+                                vms.args.as_mut().unwrap().Spec =spec; 
+                            }
 
                             let vms = VMS.read();
                             let controlSock  = vms.controlSock;
@@ -385,7 +377,7 @@ impl KVMVcpu {
                             let shareSpaceAddr = para1 as *mut ShareSpace;
                             let sharedSpace  = unsafe { &mut (*shareSpaceAddr) };
 
-                            info!("VM EXIT HYPERCALL_SHARESPACE_INIT 1");
+                            debug!("VM EXIT HYPERCALL_SHARESPACE_INIT 1");
                             VirtualMachine::InitShareSpace(
                                 sharedSpace,
                                 vcpuCount,
@@ -394,8 +386,7 @@ impl KVMVcpu {
                                 podId,
                                 haveMembarrierGlobal
                             );
-                            info!("VM EXIT HYPERCALL_SHARESPACE_INIT finished");
-
+                            debug!("VM EXIT HYPERCALL_SHARESPACE_INIT finished");
                         }
                         qlib::HYPERCALL_EXIT_VM => {
                             let exitCode = para1 as i32;
@@ -553,7 +544,7 @@ impl KVMVcpu {
 
                             let eventAddr = addr as *mut QMsg; // as &mut qlib::Event;
                             let qmsg = unsafe { &mut (*eventAddr) };
-
+                            info!("{:#?}",qmsg);
                             {
                                 let _l = if qmsg.globalLock {
                                     Some(super::GLOCK.lock())

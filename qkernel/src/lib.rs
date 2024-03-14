@@ -115,35 +115,37 @@ use self::quring::*;
 use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 #[macro_use]
 mod print;
 
-//#[macro_use]
-//pub mod asm;
-//mod taskMgr;
 #[macro_use]
 mod qlib;
 #[macro_use]
 mod interrupt;
 pub mod kernel_def;
 pub mod rdma_def;
+
 mod syscalls;
 
-//use self::heap::QAllocator;
-
-//use buddy_system_allocator::*;
-//#[global_allocator]
 
 #[global_allocator]
 pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
+pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
+
+
+
 
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
     pub static ref GUEST_KERNEL: Mutex<Option<kernel::kernel::Kernel>> = Mutex::new(None);
+
+    pub static ref PRIVATE_VCPU_LOCAL_HOLDER: Box<PrivateCPULocal> = Box::new(PrivateCPULocal::New());    
 }
 
 pub fn SingletonInit() {
@@ -423,9 +425,6 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     // mm needs to be clean as last function before SwitchToNewTask
                     // after this is called, another vcpu might drop the pagetable
                     core::mem::drop(mm);
-                    unsafe { 
-                        (*CPULocal::Myself().pageAllocator.get()).Clean(); 
-                    }
                 }
 
                 self::taskMgr::SwitchToNewTask();
@@ -478,16 +477,14 @@ pub extern "C" fn rust_main(
 ) {
     self::qlib::kernel::asm::fninit();
     if id == 0 {
-        GLOBAL_ALLOCATOR.Init(privateHeapStart, MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
+        GLOBAL_ALLOCATOR.InitPrivateAllocator(privateHeapStart);
+         // ghcb convert shared memory
 
-        //first 4kb in each heap is reserved for list allocator
-        let ghcb = unsafe {GLOBAL_ALLOCATOR.AllocSharedBuf(MemoryDef::PAGE_SIZE as usize,MemoryDef::PAGE_SIZE as usize)};
-        assert_eq!(ghcb as u64, MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST+MemoryDef::PAGE_SIZE);
         
-        let share_para = unsafe {GLOBAL_ALLOCATOR.AllocSharedBuf((MemoryDef::PAGE_SIZE) as usize,MemoryDef::PAGE_SIZE as usize)};
-        assert_eq!(share_para as u64, MemoryDef::HYPERCALL_PARA_PAGE);
-        assert!(SHAREPARA_COUNT >= vcpuCnt);
+        GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
         
+        assert!(self::qlib::qmsg::sharepara::SHAREPARA_COUNT >= vcpuCnt);
+
         let size = core::mem::size_of::<ShareSpace>();
         // info!("ShareSpace size {:x}", size);
         let shared_space = unsafe {
@@ -496,10 +493,35 @@ pub extern "C" fn rust_main(
         HyperCall64_init(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
 
 
-
         SHARESPACE.SetValue(shared_space as u64);
         SingletonInit();
+        //HyperCall64 can be called after here, since gs set in SingletonInit
+        SetVCPCount(vcpuCnt as usize);
+        VCPU_ALLOCATOR.Print();
         VCPU_ALLOCATOR.Initializated();
+
+        info!("123");
+
+        let mut vec1: Vec<i32, _> = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
+        for i in 0..10 {
+            vec1.push(i);
+        }
+
+        debug!("vec1 {:?}", vec1);
+        drop(vec1);
+
+        let mut vec2: Vec<i32, _> = Vec:: with_capacity_in(10, GUEST_HOST_SHARED_ALLOCATOR);
+        for i in 0..10 {
+            vec2.push(i);
+        }
+
+        debug!("vec2 {:?}", vec2);
+        drop(vec2);
+
+
+
+
+
         InitTsc();
         InitTimeKeeper(vdsoParamAddr);
         {
@@ -510,7 +532,7 @@ pub extern "C" fn rust_main(
         }
 
         GlobalIOMgr().InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
-        SetVCPCount(vcpuCnt as usize);
+
         VDSO.Initialization(vdsoParamAddr);
 
         // release other vcpus
@@ -586,7 +608,7 @@ fn StartRootContainer(_para: *const u8) -> ! {
     let task = Task::Current();
     let mut process = Process::default();
     Kernel::HostSpace::LoadProcessKernel(&mut process as *mut _ as u64) as usize;
-
+    info!("##Process:{:#?}",process);
     let (_tid, entry, userStackAddr, kernelStackAddr) = {
         let mut processArgs = LOADER.Lock(task).unwrap().Init(process);
         match LOADER.LoadRootProcess(&mut processArgs) {

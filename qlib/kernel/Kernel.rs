@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::alloc::GlobalAlloc;
 use core::mem::size_of;
 
 use super::super::common::*;
@@ -22,7 +21,8 @@ use super::super::qmsg;
 use super::super::qmsg::*;
 use super::super::socket_buf::*;
 use super::super::*;
-use crate::kernel_def::{HyperCall64, HyperCall64_init};
+use super::super::loader::*;
+use crate::kernel_def::HyperCall64;
 use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
 use crate::qlib::proxy::*;
 use crate::GLOBAL_ALLOCATOR;
@@ -39,44 +39,78 @@ impl HostSpace {
     }
 
     pub fn IOWait() {
-        HyperCall64_init(HYPERCALL_IOWAIT, 0, 0, 0, 0);
+        HyperCall64(HYPERCALL_IOWAIT, 0, 0, 0, 0);
     }
 
     pub fn Hlt() {
         HyperCall64(HYPERCALL_HLT, 0, 0, 0, 0);
     }
-
+    
+    /* 
     pub fn LoadProcessKernel(processAddr: u64) -> i64 {
-        let size = size_of::<Msg>();
-        let msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80) as *mut Msg };
+        info!("Start LoadProcessKernel");
+        let msg_size = size_of::<Msg>();
+        let process_size = size_of::<Process>();
+        let msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(msg_size,0x80) as *mut Msg };
+        let process_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(process_size,0x80) as *mut Process };
         unsafe{
             (*msg_ptr) = Msg::LoadProcessKernel(LoadProcessKernel {
-                processAddr: processAddr,
+                processAddr: process_ptr as u64,
             });
         }
         let ret = HostSpace::Call( unsafe{&mut *msg_ptr}, false) as i64;
-        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(msg_ptr as *mut u8, size, 0x80);}
+
+        let private_process = unsafe{&mut *(processAddr as *mut Process)};
+        private_process.clone_from_shared(process_ptr);
+        info!("Cloned Process:{:#?}",private_process);
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(process_ptr as *mut u8, process_size, 0x80);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(msg_ptr as *mut u8, msg_size, 0x80);}
         return ret;
+    }
+    */
+
+    pub fn LoadProcessKernel(processAddr: u64) -> i64 {
+        let mut msg = Msg::LoadProcessKernel(LoadProcessKernel {
+            processAddr: processAddr,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn CreateMemfd(len: i64, flags: u32) -> i64 {
-        let mut msg = Msg::CreateMemfd(CreateMemfd {
-            len: len,
-            flags: flags,
-        });
+        let msg_size = size_of::<Msg>();
+        let msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(msg_size,0x80) as *mut Msg };
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        unsafe{
+            (*msg_ptr) = Msg::CreateMemfd(CreateMemfd {
+                len: len,
+                flags: flags,
+            });
+        }
+
+        let ret = HostSpace::Call(unsafe{&mut *msg_ptr}, false) as i64;
+
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(msg_ptr as *mut u8, msg_size, 0x80);}
+        return ret;
     }
 
     pub fn Fallocate(fd: i32, mode: i32, offset: i64, len: i64) -> i64 {
-        let mut msg = Msg::Fallocate(Fallocate {
-            fd,
-            mode,
-            offset,
-            len,
-        });
+        let msg_size = size_of::<Msg>();
+        let msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(msg_size,0x80) as *mut Msg };
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        unsafe{
+            (*msg_ptr) = Msg::Fallocate(Fallocate {
+                fd,
+                mode,
+                offset,
+                len,
+            });
+        }
+
+        let ret = HostSpace::Call(unsafe{&mut *msg_ptr}, false) as i64;
+
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(msg_ptr as *mut u8, msg_size, 0x80);}
+        return ret;
     }
 
     pub fn Sysinfo(addr: u64) -> i64 {
@@ -626,7 +660,7 @@ impl HostSpace {
         let mut msg = unsafe {&mut *msg_ptr};
         msg.level = DebugLevel::Error;
         msg.str = new_str;
-        HyperCall64(HYPERCALL_PANIC, &msg as *const _ as u64, 0, 0, 0);
+        HyperCall64(HYPERCALL_PANIC, msg_ptr as u64, 0, 0, 0);
         
     }
 
@@ -1011,7 +1045,7 @@ impl HostSpace {
         msg.level = level;
         msg.str = new_str;
         
-        HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0, 0, 0);
+        HyperCall64(HYPERCALL_PRINT, msg_ptr as u64, 0, 0, 0);
 
         unsafe{
             GLOBAL_ALLOCATOR.DeallocShareBuf(dest_ptr, len, 0x80);

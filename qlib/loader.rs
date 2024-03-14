@@ -18,7 +18,6 @@ use alloc::vec::Vec;
 use super::auth::cap_set::*;
 use super::limits::*;
 
-use crate::GLOBAL_ALLOCATOR;
 
 #[derive(Serialize, Deserialize, Default, Debug, Eq, PartialEq, Clone)]
 pub struct Process {
@@ -49,21 +48,39 @@ pub struct Process {
     pub Stdiofds: [i32; 3],
     pub ExecId: Option<String>,
 }
-/* 
+
 impl Process {
-    pub fn default_in_shared() -> Self{
-        let shared_allocator = GLOBAL_ALLOCATOR.GuestHostSharedAllocator();
-        let size = core::mem::size_of::<Process>();
-        let process_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80) as *mut Process };
-        unsafe {
-            *process_ptr = Process{
-                AdditionalGids: Vec::new_in(shared_allocator),
-                Args: Vec::new_in(shared_allocator),
-                Envs: Vec::new_in(shared_allocator),
-                ..Default::default()
-            }
+    //Cannot use default trait clone here, clone uses clone method for the allocator in vec,
+    //which is the global allocator of the qvisor, not the kernel
+    pub fn clone_from_shared(&mut self, process_ptr:*mut Process){
+        let shared_process = unsafe{&*process_ptr };
+        info!("Process: {:#?}\n",shared_process);
+        let cloned_value = shared_process.AdditionalGids.clone();
+        let addr = core::ptr::addr_of!(cloned_value) as u64;
+        info!("Cloned value addr: 0x{:x}",addr);
+        self.UID = shared_process.UID;
+        self.GID = shared_process.GID;
+        self.AdditionalGids.extend(shared_process.AdditionalGids.iter());
+        self.Terminal = shared_process.Terminal;
+        //FIXME: if there is a more elegant way to initiate a String with global allocator from another String
+        for str in shared_process.Args.iter(){
+            unsafe{self.Args.push(String::from_utf8_unchecked(str.as_bytes().to_vec()));}
         }
-        return unsafe{*process_ptr};
+        for str in shared_process.Envs.iter(){
+            unsafe{self.Envs.push(String::from_utf8_unchecked(str.as_bytes().to_vec()));}
+        }
+        self.Cwd = unsafe{String::from_utf8_unchecked((&shared_process.Cwd).as_bytes().to_vec())};
+        self.Caps = shared_process.Caps;
+        self.NoNewPrivileges = shared_process.NoNewPrivileges;
+        self.NumCpu = shared_process.NumCpu;
+        self.HostName = unsafe{String::from_utf8_unchecked((&shared_process.HostName).as_bytes().to_vec())};
+        for (k, v) in &shared_process.limitSet.data {
+            self.limitSet.data.insert(*k, *v);
+        }
+        self.Stdiofds = shared_process.Stdiofds;
+        self.ExecId = match &shared_process.ExecId{
+            Some(str) => unsafe{Some(String::from_utf8_unchecked(str.as_bytes().to_vec()))},
+            _ => None,
+        };
     }
 }
-*/

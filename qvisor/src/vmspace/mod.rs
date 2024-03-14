@@ -232,6 +232,7 @@ impl VMSpace {
     }
 
     pub fn LoadProcessKernel(&mut self, processAddr: u64) -> i64 {
+        unsafe{*(processAddr as *mut loader::Process) = loader::Process::default()};
         let process = unsafe { &mut *(processAddr as *mut loader::Process) };
         process.ID = self.args.as_ref().unwrap().ID.to_string();
         let spec = &mut self.args.as_mut().unwrap().Spec;

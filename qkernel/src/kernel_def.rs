@@ -28,7 +28,6 @@ use super::qlib::kernel::asm::*;
 use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 use super::qlib::kernel::taskMgr::*;
 use super::qlib::kernel::threadmgr::task_sched::*;
-use super::qlib::kernel::vcpu::*;
 use super::qlib::kernel::SHARESPACE;
 use super::qlib::kernel::TSC;
 
@@ -46,9 +45,11 @@ use super::qlib::task_mgr::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::ShareSpace;
 use super::qlib::*;
+use super::qlib::qmsg::sharepara::*;
 use super::syscalls::sys_file::*;
 use super::Kernel::HostSpace;
 
+use super::PRIVATE_VCPU_LOCAL_HOLDER;
 use crate::GLOBAL_ALLOCATOR;
 
 impl OOMHandler for ListAllocator {
@@ -210,36 +211,13 @@ pub fn Invlpg(addr: u64) {
 
 
 
-#[derive(Debug, Copy, Clone, Default)]
-#[repr(C)]
-pub struct SharePara {
-    pub para1: u64,
-    pub para2: u64,
-    pub para3: u64,
-    pub para4: u64,
-}
 
-pub const SHAREPARA_COUNT: u64 = MemoryDef::PAGE_SIZE/core::mem::size_of::<SharePara>() as u64;
-
-#[derive(Debug, Copy, Clone)]
-#[repr(C)]
-pub struct ShareParaPage {
-    SharePara: [SharePara ;SHAREPARA_COUNT as usize],
-}
-
-impl Default for ShareParaPage{
-    fn default() -> Self{
-        return ShareParaPage{
-            SharePara: [SharePara::default() ;SHAREPARA_COUNT as usize],
-        }
-    }
-}
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     let vcpuid = GetVcpuId();
-    let share_para_page  = unsafe{* (MemoryDef::HYPERCALL_PARA_PAGE as *const ShareParaPage)};
-    let mut share_para = share_para_page.SharePara[vcpuid];
+    let share_para_page  = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
+    let mut share_para =unsafe{&mut (*share_para_page).SharePara[vcpuid]};
     share_para.para1 = para1;
     share_para.para2 = para2;
     share_para.para3 = para3;
@@ -260,8 +238,8 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 pub fn HyperCall64_init(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
-    let share_para_page  = unsafe{* (MemoryDef::HYPERCALL_PARA_PAGE as *const ShareParaPage)};
-    let mut share_para = share_para_page.SharePara[0];
+    let share_para_page  = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
+    let mut share_para =unsafe{&mut (*share_para_page).SharePara[0]};
     share_para.para1 = para1;
     share_para.para2 = para2;
     share_para.para3 = para3;
@@ -336,17 +314,25 @@ impl HostSpace {
 
     pub fn HCall(msg: &mut Msg, lock: bool) -> u64 {
         let taskId = Task::Current().GetTaskId();
-        let size = core::mem::size_of::<QMsg>();
-        let event_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80) as *mut QMsg };
+        let qmsg_size = core::mem::size_of::<QMsg>();
+        let msg_size = core::mem::size_of::<Msg>();
+        let event_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(qmsg_size,0x80) as *mut QMsg };
+
+        let new_msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(msg_size,0x80) as *mut Msg };
+        let dest_ptr: *mut u8 = new_msg_ptr as *mut u8;
+        let src_ptr: *const u8 = msg as *const Msg as *const u8;
+        unsafe { core::ptr::copy_nonoverlapping(src_ptr, dest_ptr, msg_size);}
+        let new_msg = unsafe {&mut *new_msg_ptr};
         let mut event = unsafe {&mut *event_ptr};
         event.taskId = taskId;
         event.globalLock = lock;
         event.ret = 0;
-        event.msg = msg;
+        event.msg = new_msg;
 
-        HyperCall64(HYPERCALL_HCALL, event_ptr as *const _ as u64, 0, 0, 0);
+        HyperCall64(HYPERCALL_HCALL, event_ptr as u64, 0, 0, 0);
 
-        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(event_ptr as *mut u8, size, 0x80) };
+        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(event_ptr as *mut u8, qmsg_size, 0x80) };
+        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(new_msg_ptr as *mut u8, msg_size, 0x80) };
         let ret = event.ret;
         return ret;
     }
@@ -377,6 +363,12 @@ pub fn InitX86FPState(data: u64, useXsave: bool) {
     unsafe { initX86FPState(data, useXsave) }
 }
 
+
+
+
+
+
+
 impl HostAllocator {
     pub const fn New() -> Self {
         return Self {
@@ -389,10 +381,27 @@ impl HostAllocator {
         };
     }
 
-    pub fn Init(&self, privateHeapAddr: u64, sharedHeapAddr: u64) {
-        self.host_guest_shared_heap.store(sharedHeapAddr, Ordering::SeqCst);
+    pub fn InitPrivateAllocator(&self, privateHeapAddr: u64) {
         self.guest_private_heap.store(privateHeapAddr, Ordering::SeqCst);
     }
+
+
+    pub fn InitSharedAllocator(&self, sharedHeapAddr: u64) {
+        self.host_guest_shared_heap.store(sharedHeapAddr, Ordering::SeqCst);
+
+        let sharedHeapStart = self.host_guest_shared_heap.load(Ordering::Relaxed);
+        let shaedHeapEnd = sharedHeapStart + MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as u64;
+        *self.GuestHostSharedAllocator() = ListAllocator::New(sharedHeapStart as _, shaedHeapEnd);
+        
+        
+        // reserve 4 pages for the listAllocator, ghcb blok and share para page
+        let size = 4 * MemoryDef::PAGE_SIZE as usize;
+        self.GuestHostSharedAllocator().Add(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST as usize + size, 
+            MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as usize - size);
+    }
+
+
+
 }
 
 unsafe impl GlobalAlloc for HostAllocator {
@@ -438,14 +447,16 @@ unsafe impl GlobalAlloc for GlobalVcpuAllocator {
         if !self.init.load(Ordering::Relaxed) {
             return GLOBAL_ALLOCATOR.alloc(layout);
         }
-        return CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout);
+
+        return PRIVATE_VCPU_LOCAL_HOLDER.AllocatorMut().alloc(layout);
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if !self.init.load(Ordering::Relaxed) {
             return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
         }
-        return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout);
+
+        return PRIVATE_VCPU_LOCAL_HOLDER.AllocatorMut().dealloc(ptr, layout);
     }
 }
 

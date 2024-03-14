@@ -355,6 +355,7 @@ impl UringAsyncMgr {
 pub fn Invlpg(_page: u64) {}
 
 pub fn HyperCall64(_type_: u16, _para1: u64, _para2: u64, _para3: u64, _para4: u64) {}
+pub fn HyperCall64_init(_type_: u16, _para1: u64, _para2: u64, _para3: u64, _para4: u64) {}
 
 pub fn IsKernel() -> bool {
     return false;

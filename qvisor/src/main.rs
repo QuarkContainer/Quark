@@ -23,7 +23,7 @@
 #![recursion_limit = "256"]
 //#![allow(invalid_reference_casting)]
 #![feature(unix_socket_ancillary_data)]
-
+#![feature(allocator_api)]
 extern crate alloc;
 extern crate bit_field;
 extern crate core_affinity;
@@ -120,6 +120,8 @@ pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 thread_local!(static THREAD_ID: RefCell<i32> = RefCell::new(0));
 thread_local!(static VCPU: RefCell<Option<Arc<KVMVcpu>>> = RefCell::new(None));
 
+
+
 pub fn ThreadId() -> i32 {
     let mut i = 0;
     THREAD_ID.with(|f| {
@@ -153,6 +155,7 @@ lazy_static! {
     pub static ref URING_MGR: Arc<Mutex<UringMgr>> = {
         let uringQueueSize = 1024;
 
+        debug!("init URING_MGR");
         Arc::new(Mutex::new(UringMgr::New(uringQueueSize)))
     };
     pub static ref KERNEL_IO_THREAD: KIOThread = KIOThread::New();
@@ -163,6 +166,8 @@ lazy_static! {
     pub static ref URING: Mutex::<io_uring::IoUring> = Mutex::new(io_uring::IoUring::new(MemoryDef::QURING_SIZE as u32).expect("setup io_Uring fail"));
     // used for keep consistancy
     pub static ref GUEST_KERNEL: Mutex<Option<Kernel>> = Mutex::new(None);
+
+    pub static ref PRIVATE_VCPU_LOCAL_HOLDER: Box<PrivateCPULocal> = Box::new(PrivateCPULocal::New());  
 }
 
 pub const LOG_FILE: &'static str = "/var/log/quark/quark.log";
