@@ -78,6 +78,16 @@ impl PageFaultErrorCode {
         match xxsc {
             Self::GEN_PERMISSION_FAULT  => {
                 fault_flags.set_flag(PageFaultErrorFlags::FaultPermission);
+                let exception_class = EsrDefs::GetExceptionFromESR(esr);
+                if exception_class == EsrDefs::EC_DATA_ABORT_L
+                    || exception_class == EsrDefs::EC_DATA_ABORT {
+                        if GetFaultAccessType(esr, false)
+                            == AccessType(MmapProt::PROT_WRITE) {
+                                fault_flags.set_flag(PageFaultErrorFlags::FaultWrite);
+                            }
+                    } else {
+                         fault_flags.set_flag(PageFaultErrorFlags::FaultInstruction);
+                    }
             },
             Self::GEN_ACCESS_FLAG_FAULT => {
                 fault_flags.set_flag(PageFaultErrorFlags::FaultAccessFlag);
@@ -200,6 +210,9 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
            }
         }
 
+        //
+        // PF in Kernel VMA cannot be handlet => Should not happen!
+        //
         if vma.kernel == true {
             let k_map = currTask.mm.GetSnapshotLocked(currTask, false);
             info!("VM: vma_kernel:True - k_map:{}", &k_map);
@@ -218,10 +231,10 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
             "PageFaultHandler vm-addr is not in the VM-Area range"
         );
 
-        // triggered because pagetable not mapping
-        if error_code.is_flag_set(PageFaultErrorFlags::FaultTranslation)
-        {
-
+        //
+        // Fault for not mapped page.
+        //
+        if error_code.is_flag_set(PageFaultErrorFlags::FaultTranslation) {
             info!("VM: InstallPage 1, range is {:x?}, address is {:#x}, vma.growsDown is {}",
                &range, pageAddr, vma.growsDown);
             //let startTime = TSC.Rdtsc();
@@ -311,30 +324,34 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
             return;
         }
 
-        if vma.private == false {
-            signal = Signal::SIGSEGV;
-            break;
-    }
-
-    if error_code.is_flag_set(PageFaultErrorFlags::FaultWrite) {
-        if !vma.effectivePerms.Write() && fromUser {
-            signal = Signal::SIGSEGV;
-            break;
-        }
-
-        currTask.mm.CopyOnWriteLocked(pageAddr, &vma);
-        currTask.mm.TlbShootdown();
-        if fromUser {
-            //PerfGoto(PerfType::User);
-            currTask.AccountTaskEnter(SchedState::RunningApp);
-
-            /*if SHARESPACE.config.read().KernelPagetable {
-                currTask.SwitchPageTable();
-            }*/
-        }
-    } else {
-        signal = Signal::SIGSEGV;
-        break;
+        //
+        // NOTE: Handle possible COW-modyfie events.
+        // NOTE: COW flags RO set in ForkRange() for private mappings.
+        //
+        if vma.private == true {
+            if error_code.is_flag_set(PageFaultErrorFlags::FaultPermission) &&
+                error_code.is_flag_set(PageFaultErrorFlags::FaultWrite) {
+                    if vma.effectivePerms.Write() == false  ||
+                    (vma.kernel == true &&
+                        error_code
+                        .is_flag_set(PageFaultErrorFlags::FaultUserMode)) {
+                        debug!("VM: Fault on private vma - Write access on \
+                               VMA-perms:{:?}/kernel:{:#}.", vma.realPerms.Effective(), vma.kernel);
+                        signal = Signal::SIGSEGV;
+                        break;
+                    } else {
+                       //
+                       // Handle COW write-event
+                       //
+                       debug!("VM: Handle COW-Write event.");
+                       currTask.mm.CopyOnWriteLocked(pageAddr, &vma);
+                       currTask.mm.TlbShootdown();
+                       if fromUser {
+                           //PerfGoto(PerfType::User);
+                           currTask.AccountTaskEnter(SchedState::RunningApp);
+                       }
+                    }
+            }
         }
 
         CPULocal::Myself().SetMode(VcpuMode::User);
@@ -345,7 +362,6 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
     HandleFault(currTask, fromUser, error_code, fault_address,
                 ptRegs, signal);
 }
-
 
 pub fn HandleFault(
     task: &mut Task,
