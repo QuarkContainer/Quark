@@ -25,6 +25,8 @@ extern crate scopeguard;
 #[macro_use]
 extern crate log;
 
+extern crate alloc;
+
 pub mod common;
 pub mod config;
 pub mod consts;
