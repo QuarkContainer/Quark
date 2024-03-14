@@ -1327,7 +1327,7 @@ impl UnblockBlockPollAdd {
 #[derive(Clone)]
 pub struct AsyncConnect {
     pub fd: i32,
-    pub addr: TcpSockAddr,
+    pub addr: Arc<TcpSockAddr>,
     pub len: u32,
     pub socket: UringSocketOperationsWeak,
 }
@@ -1379,7 +1379,7 @@ impl AsyncConnect {
         socket.SetConnErrno(-SysErr::EINPROGRESS);
         return Self {
             fd,
-            addr: addr,
+            addr: Arc::new(addr),
             len: len as _,
             socket: socket.Downgrade(),
         };

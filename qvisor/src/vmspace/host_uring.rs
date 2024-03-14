@@ -585,7 +585,7 @@ impl UringAsyncOpsTrait for AsyncConnect {
     fn Entry(&self) -> squeue::Entry {
         let op = opcode::Connect::new(
             types::Fd(self.fd), 
-            &self.addr as * const _ as u64 as *const _, 
+            &self.addr.data[0] as * const _ as u64 as *const _, 
             self.len
         );
 
