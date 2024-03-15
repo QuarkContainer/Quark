@@ -486,7 +486,7 @@ impl TsotSocketMgr {
 
     pub fn Connect(&self, dstIp: QIPv4Addr, dstPort: u16, srcPort: u16, socket: i32, ops: &TsotSocketOperations) -> Result<()> {
         let reqId = self.NextReqId();
-        let connectReq = ConnectReq {
+        let connectReq = PodConnectReq {
             reqId: reqId,
             dstIp: dstIp.0,
             dstPort: dstPort,
@@ -495,7 +495,7 @@ impl TsotSocketMgr {
 
         let msg = TsotMessage {
             socket: socket,
-            msg: TsotMsg::ConnectReq(connectReq)
+            msg: TsotMsg::PodConnectReq(connectReq)
         };
 
         Self::SendMsg(&msg)?;
@@ -572,7 +572,7 @@ impl TsotSocketMgr {
                         sockBuf
                     )?;
                 }
-                TsotMsg::ConnectResp(m) => {
+                TsotMsg::PodConnectResp(m) => {
                     let connectingSocket = match self.connectingSockets.lock().get(&m.reqId) {
                         None => {
                             error!("TsotSocketMgr::ConnectResp no connecting request {:?}", &m);
