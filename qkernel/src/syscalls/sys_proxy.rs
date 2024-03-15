@@ -295,13 +295,25 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             );
             return Ok(ret);
         }
+        ProxyCommand::CudaGetDevice => {
+            let mut device:i32 = 0;
+            parameters.para1 = &mut device as *mut _ as u64;
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            error!("yiwang device should change, is {}",device);
+            if ret ==0 {
+                task.CopyOutObj(&device, args.arg1 as u64)?;
+            }
+            return Ok(ret);
+        }
         ProxyCommand::CudaGetDeviceCount => {
             let mut deviceCount:i32 = 0 ; 
             
-
             parameters.para1 = &mut deviceCount as *mut _ as u64;
-
-            error!("yiwang device count is :{:x}", deviceCount);
 
             let ret = HostSpace::Proxy(
                 cmd,
@@ -404,9 +416,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                  ProxyCommand::CudaUnregisterFatBinary,
                  parameters,
             );
-            error!("fatCubinHandle from the cudaproxy is {:x}", parameters.para1 as u64);
             return Ok(ret);
-
         }
         ProxyCommand::CudaRegisterFunction => {
             let mut functionInfo = task.CopyInObj::<RegisterFunctionInfo>(parameters.para1)?;
@@ -566,7 +576,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
              );
              
             if ret == 0 {
-                task.CopyOutObj(&mode, args.arg1 as u64)?
+                task.CopyOutObj(&mode, args.arg1 as u64)?;
             }
             return Ok(ret);
 
@@ -578,6 +588,35 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 parameters,
             );
             return Ok(ret);
+        }
+        ProxyCommand::CuDevicePrimaryCtxGetState => {
+            let mut flags:u32 = 0;
+            let mut active:i32 = 0;
+
+            parameters.para2 = &mut flags as *mut _ as u64;
+            parameters.para3 = &mut active as *mut _ as u64;
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            error!("yiwang flags {}, active {}", flags, active);
+
+            if ret == 0 {
+                task.CopyOutObj(&flags, args.arg2 as u64)?;
+                task.CopyOutObj(&active, args.arg3 as u64)?;
+
+            }
+            return Ok(ret);
+        }
+        ProxyCommand::NvmlInitWithFlags => {
+            error!("SysProxy NvmlInitWithFlags");
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            return Ok(ret);
+            
         }
         _ => todo!()
     }

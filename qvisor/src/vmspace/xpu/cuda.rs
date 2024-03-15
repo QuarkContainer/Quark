@@ -144,8 +144,6 @@ fn DecompressSingleSection(inputPosition:u64, outputPosition:&mut Vec<u8>, outpu
     fatTextHeader.flags
     );
     error!("fatTextHeader unknown fields: unknown1: {:x}, unknown2: {:x}, zeros: {:x}", fatTextHeader.unknown1, fatTextHeader.unknown2, fatTextHeader.zero);
-    // error!("outputpostion array is{:?}", outputPosition);
-
                                                                                                                          // &mut decompressedByte 
     decompressResult = decompress(inputPosition, fatTextHeader.compressed_size as u64, outputPosition, fatTextHeader.decompressed_size);
 
@@ -234,8 +232,8 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, out
                 }
             }
         }
-        ipos += 1;
 
+        ipos += 1;
         for i in 0..nextNonCompressed_length {
             // Copy one element at a time
             outputPosition[(opos + i) as usize] =  unsafe {*((inputPosition + ipos + i) as *const u8)};
@@ -283,6 +281,7 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, out
                 // Copy one element at a time
                 outputPosition[(opos + i) as usize] =  outputPosition[(opos - backOffset + i) as usize];
             }
+
         }else{
             for i in 0..backOffset {
                 outputPosition[(opos + i) as usize] =  outputPosition[(opos - backOffset + i) as usize];
@@ -366,7 +365,7 @@ fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
 
     let symbol_table_data_p = unsafe { elf_getdata(ptr_section, 0 as _) };
     let symbol_table_data = unsafe { &*symbol_table_data_p };
-    // error!("symbol_table_data: {:?}", symbol_table_data);
+    error!("symbol_table_data: {:?}", symbol_table_data);
     let symbol_table_size = shdr.sh_size / shdr.sh_entsize;
 
     match GetSectionByName(elf, String::from(".nv.info"), &mut ptr_section) {
@@ -406,14 +405,14 @@ fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
         ptr_sym = unsafe { gelf_getsym(symbol_table_data_p, entry.kernel_id as libc::c_int, ptr_sym) };
         
         let kernel_str = unsafe { CString::FromAddr(elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*ptr_sym).st_name as usize) as u64).Str().unwrap().to_string() };
-        // error!("kernel_str: {}", kernel_str);
+        error!("kernel_str: {}", kernel_str);
 
         if KERNEL_INFOS.lock().contains_key(&kernel_str) {
             secpos += infoSize;
             continue;
         }
         
-        // error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
+        error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
 
         let mut ki = KernelInfo::default();
         ki.name = kernel_str.clone();
@@ -443,9 +442,9 @@ pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> 
         Ok(v) => v,
         Err(e) => return Err(e),
     };
-    // error!("GetSectionByName({}) got section: {:?}", sectionName, section);
+    error!("GetSectionByName({}) got section: {:?}", sectionName, section);
     let data = unsafe { &*(elf_getdata(*section, 0 as _)) };
-    // error!("data: {:x?}", data);
+    error!("data: {:x?}", data);
 
     let mut secpos:usize = 0;
     while secpos < data.d_size {
@@ -524,7 +523,7 @@ pub fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn
         let mut symtab_shdr = shdr.as_mut_ptr();
         symtab_shdr = unsafe { gelf_getshdr(scnNew, symtab_shdr) };
         let section_name = CString::FromAddr(unsafe { elf_strptr(elf, *str_section_index, (*symtab_shdr).sh_name as usize) as u64 }).Str().unwrap().to_string();
-        // error!("section_name {}", section_name);
+        error!("section_name {}", section_name);
         if name.eq(&section_name) {
             error!("Found section {}", section_name);
             *section = scnNew;

@@ -375,6 +375,7 @@ pub enum Error {
     WrongELFFormat,
     ELFLoadError(&'static str),
     DecompressFatbinError(String),
+    NvidiaError(u32),
     InterpreterFileErr,
     MMampError,
     UnmatchRegion,

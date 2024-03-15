@@ -51,6 +51,7 @@ b = torch.randn((), device=device, dtype=dtype)
 c = torch.randn((), device=device, dtype=dtype)
 d = torch.randn((), device=device, dtype=dtype)
 
+print(f'a = {a}, b = {b}, c = {c}, d = {d}')
 learning_rate = 1e-6
 for t in range(3):
     # Forward pass: compute predicted y

@@ -17,7 +17,7 @@ use std::ffi::CStr;
 use cuda_runtime_sys::cudaMemcpyKind;
 use cuda_runtime_sys::{cudaStream_t, cudaStreamCaptureStatus}; 
 use cuda_runtime_sys::{cudaDeviceProp, cudaDeviceAttr,cudaFuncCache,cudaLimit,cudaDeviceP2PAttr,cudaSharedMemConfig};
-
+use cuda_driver_sys::CUdevice;
 use crate::syscall::*;
 use crate::proxy::*;
 pub const SYS_PROXY: usize = 10003;
@@ -42,7 +42,7 @@ pub extern "C" fn cudaChooseDevice(device:*mut c_int, prop: *const cudaDevicePro
     };
 
     let ret = unsafe{
-        syscall3(SYS_PROXY, ProxyCommand::CudaChooseDevice as usize, device as *const _ as usize, prop as usize) 
+        syscall3(SYS_PROXY, ProxyCommand::CudaChooseDevice as usize, device as *mut _ as usize, prop as usize) 
     };
     return ret; 
 }
@@ -53,7 +53,7 @@ pub extern "C" fn cudaDeviceGetAttribute(value: *mut c_int, attr: cudaDeviceAttr
     println!("Hijacked cudaDeviceGetAttribute(device: {}, cudaDeviceAttr: {:?}) ", device, attr);
 
     let ret = unsafe{
-        syscall4(SYS_PROXY, ProxyCommand::CudaDeviceGetAttribute as usize , value as * const _ as usize, attr as usize , device as usize)
+        syscall4(SYS_PROXY, ProxyCommand::CudaDeviceGetAttribute as usize , value as *mut _ as usize, attr as usize , device as usize)
     };
 
     return ret;
@@ -72,7 +72,7 @@ pub extern "C" fn cudaDeviceGetByPCIBusId(device: *mut c_int, pciBusId: *const c
     } 
 
     let ret = unsafe{
-        syscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetByPCIBusId as usize, device as *const _ as usize, pciBusId as usize)
+        syscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetByPCIBusId as usize, device as *mut _ as usize, pciBusId as usize)
     };
 
     return ret;
@@ -87,7 +87,7 @@ pub extern "C" fn cudaDeviceGetCacheConfig(pCacheConfig: *mut cudaFuncCache) -> 
     println!("cudaFuncCache struct address is: {:x}", pCacheConfig as usize);
     
     return unsafe{
-        syscall2(SYS_PROXY, ProxyCommand::CudaDeviceGetCacheConfig as usize, pCacheConfig as *const _ as usize)    
+        syscall2(SYS_PROXY, ProxyCommand::CudaDeviceGetCacheConfig as usize, pCacheConfig as *mut _ as usize)    
     };
 }
 
@@ -99,7 +99,7 @@ pub extern "C" fn cudaDeviceGetLimit(pValue: *mut usize, limit: cudaLimit) -> us
     println!("Hijacked cudaDeviceGetLimit(limit want to query: {:?}) ", limit);
 
     let ret = unsafe{
-        syscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetLimit as usize, pValue as *const _ as usize, limit as usize)
+        syscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetLimit as usize, pValue as *mut _ as usize, limit as usize)
     };
 
     return ret;
@@ -112,7 +112,7 @@ pub extern "C" fn cudaDeviceGetP2PAttribute(value: *mut c_int, attr: cudaDeviceP
     println!("Hijacked cudaDeviceGetP2PAttribute(Queries attribute: {:?} of the link between device {} and device {}.) ",attr, srcDevice, dstDevice);
 
     let ret = unsafe { 
-        syscall5(SYS_PROXY, ProxyCommand::CudaDeviceGetP2PAttribute as usize, value as *const _ as usize, attr as usize, srcDevice as usize, dstDevice as usize)
+        syscall5(SYS_PROXY, ProxyCommand::CudaDeviceGetP2PAttribute as usize, value as *mut _ as usize, attr as usize, srcDevice as usize, dstDevice as usize)
     };
 
     return ret; 
@@ -136,7 +136,7 @@ pub extern "C" fn cudaDeviceGetSharedMemConfig(pConfig: *mut cudaSharedMemConfig
     };
 
     let ret = unsafe {
-        syscall2( SYS_PROXY, ProxyCommand::CudaDeviceGetSharedMemConfig as usize, pConfig as *const _ as usize)
+        syscall2( SYS_PROXY, ProxyCommand::CudaDeviceGetSharedMemConfig as usize, pConfig as *mut _ as usize)
     };
     
     return ret; 
@@ -150,7 +150,7 @@ pub extern "C" fn cudaDeviceGetStreamPriorityRange(leastPriority: *mut c_int, gr
     };
 
     return unsafe{
-        syscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetStreamPriorityRange as usize, leastPriority as *const _ as usize, greatestPriority as *const _ as usize)
+        syscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetStreamPriorityRange as usize, leastPriority as *mut _ as usize, greatestPriority as *mut _ as usize)
     };
 }
 
@@ -177,14 +177,14 @@ pub extern "C" fn cudaDeviceSetCacheConfig(cacheConfig: cudaFuncCache) -> usize{
 
 #[no_mangle]
 pub extern "C" fn cudaSetDevice(device: c_int) -> usize {
-    println!("Hijacked cudaSetDevice({})", device);
+    println!("Hijacked1 cudaSetDevice({})", device);
 
     let ret = unsafe {
         syscall2(SYS_PROXY, ProxyCommand::CudaSetDevice as usize, device as usize) 
     };
 
     println!("Hijacked ret({})", ret);
-    return ret;
+    return 0;
 }
 
 // not yet tested
@@ -208,7 +208,13 @@ pub extern "C" fn cudaDeviceSynchronize() -> usize {
     };
 }
 
-// not yet tested 
+#[no_mangle]
+pub extern "C" fn cudaGetDevice(device: *mut c_int) -> usize{
+    return unsafe{
+        syscall2(SYS_PROXY, ProxyCommand::CudaGetDevice as usize, device as *mut _ as usize)
+    };
+}
+
 #[no_mangle]
 pub extern "C" fn cudaGetDeviceCount(count: *mut c_int) -> usize{
     unsafe{
@@ -216,9 +222,10 @@ pub extern "C" fn cudaGetDeviceCount(count: *mut c_int) -> usize{
     };
     
     return unsafe{
-        syscall2(SYS_PROXY, ProxyCommand::CudaGetDeviceCount as usize, count as *const _ as usize )
+        syscall2(SYS_PROXY, ProxyCommand::CudaGetDeviceCount as usize, count as *mut _ as usize )
     };
 }
+
 
 // not yet tested 
 #[no_mangle]
@@ -226,30 +233,21 @@ pub extern "C" fn cudaGetDeviceProperties(prop: *mut cudaDeviceProp, device: c_i
     println!("Hijacked cudaGetDevicePropoerties(device {})",device);
     
     return unsafe{
-        syscall3(SYS_PROXY, ProxyCommand::CudaGetDeviceProperties as usize, prop as * const _ as usize , device as usize)
+        syscall3(SYS_PROXY, ProxyCommand::CudaGetDeviceProperties as usize, prop as *mut _ as usize , device as usize)
     };
 
 }
 
 #[no_mangle]
 pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) -> *mut u64 {
-    println!("Hijacked __cudaRegisterFatBinary(fatCubin:{:#x?})", fatCubin);
-    let addrFatCubin = fatCubin.text as *const _ as *const u64;
-    println!("ProxyCommand::CudaRegisterFatBinary: {:x}, fatCubin.text.header_size:{:x}, fatCubin.text.size: {:x}, addrFatCubin: {:x}", 
-    ProxyCommand::CudaRegisterFatBinary as usize, fatCubin.text.header_size as usize, fatCubin.text.size as usize, addrFatCubin as usize);
-    let addr=addrFatCubin as *const u8;
-    let len = fatCubin.text.header_size as usize + fatCubin.text.size as usize;
-    // let bytes = std::slice::from_raw_parts(fatCubin.text as *const _ as u64 as *const u8, len);
-    println!("fatCubin.text addr {:x}", fatCubin.text as *const _ as u64);
-    // println!("!!!0 {:x?}", bytes);
-    println!("addr {:x?}, addrFatCubin {:x?}",addr,addrFatCubin);
-
-    let result = &(0 as *mut u64) as *const _ as u64;
-    println!("result {:x}", result);
-    unsafe {
-        syscall4(SYS_PROXY, ProxyCommand::CudaRegisterFatBinary as usize, len, fatCubin.text as *const _ as usize, result as usize);
-    }
-    return result as *mut u64;
+      // println!("Hijacked __cudaRegisterFatBinary(fatCubin:{:#x?})", fatCubin);
+      let len = fatCubin.text.header_size as usize + fatCubin.text.size as usize;
+      let tempVaue = 0;
+      let result = &tempVaue as *const _ as u64;
+      unsafe {
+          syscall4(SYS_PROXY, ProxyCommand::CudaRegisterFatBinary as usize, len, fatCubin.text as *const _ as usize, result as usize);
+      }
+      return result as *mut u64;
 }
 
 #[no_mangle]
@@ -280,9 +278,9 @@ pub extern "C" fn __cudaRegisterFatBinaryEnd(fatCubinHandle:u64){
 pub extern "C" fn __cudaRegisterFunction(
     fatCubinHandle:u64, 
     hostFun:u64, 
-    deviceFun:u64, 
-    deviceName:u64, 
-    thread_limit:usize, 
+    deviceFun:u64,    //same thing as deviceName 
+    deviceName:u64,    //same thing as deviceName 
+    thread_limit:i32, 
     tid:u64, 
     bid:u64, 
     bDim:u64, 
@@ -293,7 +291,7 @@ pub extern "C" fn __cudaRegisterFunction(
     let info = RegisterFunctionInfo {
         fatCubinHandle: fatCubinHandle, 
         hostFun: hostFun, 
-        deviceFun: deviceFun, 
+        deviceFun: deviceFun,    
         deviceName: deviceName, 
         thread_limit: thread_limit, 
         tid: tid, 
@@ -464,7 +462,7 @@ pub extern "C" fn cudaStreamCreate(
     }
    
     return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaStreamCreate as usize, pStream as *const _ as usize)
+        syscall2(SYS_PROXY, ProxyCommand::CudaStreamCreate as usize, pStream as *mut _ as usize)
     };
 }
 
@@ -493,7 +491,7 @@ pub extern "C" fn cudaStreamIsCapturing(
     println!("captureStatus address is: {:x}", pCaptureStatus as usize);
 
     return unsafe{
-        syscall3(SYS_PROXY, ProxyCommand::CudaStreamIsCapturing as usize, stream as usize, pCaptureStatus as *const _ as usize)
+        syscall3(SYS_PROXY, ProxyCommand::CudaStreamIsCapturing as usize, stream as usize, pCaptureStatus as *mut _ as usize)
     };
 
 }
@@ -521,3 +519,40 @@ pub extern "C" fn cudaGetLastError() -> usize{
         syscall1(SYS_PROXY, ProxyCommand::CudaGetLastError as usize)
     };   
 }
+
+#[no_mangle]
+pub extern "C" fn cuDevicePrimaryCtxGetState(dev: CUdevice, flags:*mut c_uint, active: *mut c_int) -> usize{
+    println!("Hijacked cuDevicePrimaryCtxGetState device{}", dev);
+    println!("11111111111111111111111111111111111");
+    println!("11111111111111111111");
+    println!("11111111111111111111");
+    println!("11111111111111111111");
+    println!("11111111111111111111");
+
+    
+    return unsafe{
+        syscall4(SYS_PROXY, ProxyCommand::CuDevicePrimaryCtxGetState as usize, dev as usize, flags as *mut _ as usize , active as *mut _ as usize)
+    };
+    
+}
+
+//NVML
+#[no_mangle]
+pub extern "C" fn nvmlInitWithFlags(flags: c_uint) -> usize{
+    println!("Hijacked nvmlInitWithFlags( {} )", flags);
+
+    return unsafe{
+        syscall2(SYS_PROXY, ProxyCommand::NvmlInitWithFlags as usize, flags as usize)
+    };
+}
+
+#[no_mangle]
+pub extern "C" fn nvmlDeviceGetCount_v2(deviceCount: *mut c_uint) -> usize {
+    println!("Hijacked nvmlDeviceGetCount_v2()");
+    
+     // Workaround for pytorch expecting nvmlDeviceGetCount and cudaGetDeviceCount to be the same
+    return unsafe{
+        syscall2(SYS_PROXY, ProxyCommand::CudaGetDeviceCount as usize, deviceCount as *mut _ as usize)
+    };
+}
+

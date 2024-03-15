@@ -31,9 +31,9 @@ pub enum ProxyCommand {
     CudaSetDevice,
     CudaSetDeviceFlags,
     CudaDeviceSynchronize,
-   
+
+    CudaGetDevice,
     CudaGetDeviceCount,
-    
     CudaGetDeviceProperties,
 
     CudaMalloc,
@@ -46,7 +46,6 @@ pub enum ProxyCommand {
     CudaRegisterVar,
     CudaLaunchKernel,
 
-    CuInit,
     // stream management 
     CudaStreamSynchronize,
     CudaStreamCreate,
@@ -55,6 +54,13 @@ pub enum ProxyCommand {
     CuModuleGetLoadingMode,
     //Error handling
     CudaGetLastError, 
+
+    CuInit,
+    CuDevicePrimaryCtxGetState,
+
+    NvmlInitWithFlags,
+    NvmlDeviceGetCountV2,
+    
 }
 
 
@@ -64,6 +70,7 @@ pub enum XpuLibrary {
     None = 0 as u64,
     CudaRuntime,
     CudaDriver,
+    Nvml
 }
 
 // #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]
@@ -404,7 +411,7 @@ pub struct RegisterFunctionInfo {
     pub hostFun:u64, 
     pub deviceFun:u64, 
     pub deviceName:u64, 
-    pub thread_limit:usize, 
+    pub thread_limit:i32, 
     pub tid:u64, 
     pub bid:u64, 
     pub bDim:u64, 
