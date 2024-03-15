@@ -37,10 +37,8 @@ use super::super::super::qlib::addr;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::kernel::kernel::futex;
 use super::super::super::qlib::kernel::kernel::timer;
-use super::super::super::qlib::kernel::task;
 use super::super::super::qlib::kernel::vcpu;
 use super::super::super::qlib::kernel::IOURING;
-use super::super::super::qlib::kernel::KERNEL_PAGETABLE;
 use super::super::super::qlib::kernel::SHARESPACE;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::pagetable::PageTables;
@@ -216,7 +214,7 @@ impl VirtualMachine {
             futex::InitSingleton();
             timer::InitSingleton();
         }
-        
+
         if SHARESPACE.config.read().EnableTsot {
             // initialize the tost_agent
             TSOT_AGENT.NextReqId();

@@ -158,11 +158,7 @@ pub fn SingletonInit() {
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentKernelTable()));
         //init fp state with current fp state as it is brand new vcpu
         FP_STATE.Reset();
-        //SHARESPACE.SetvirtualizationHandlerAddr(virtualization_handler as u64);
         IOURING.SetValue(SHARESPACE.GetIOUringAddr());
-
-        // the error! can run after this point
-        //error!("error message");
 
         PAGE_MGR.SetValue(PAGE_MGR_HOLDER.Addr());
         LOADER.Init(Loader::default());

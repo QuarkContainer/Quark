@@ -99,7 +99,6 @@ use core::sync::atomic::AtomicU32;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use crossbeam_queue::ArrayQueue;
-use alloc::collections::VecDeque;
 
 use self::common::*;
 use self::bytestream::*;
@@ -1149,14 +1148,14 @@ impl CompleteEntry {
 }
 
 pub struct UringQueue {
-    pub submitq: QMutex<VecDeque<UringEntry>>,
+    pub submitq: ArrayQueue<UringEntry>,
     pub completeq: ArrayQueue<CompleteEntry>,
 }
 
 impl Default for UringQueue {
     fn default() -> Self {
         return Self {
-            submitq: Default::default(),
+            submitq: ArrayQueue::new(MemoryDef::QURING_SIZE),
             completeq: ArrayQueue::new(MemoryDef::QURING_SIZE)
         }
     }
@@ -1226,6 +1225,7 @@ impl ShareSpace {
             dnsSvc: DnsSvc::New().unwrap(),
             ioMgr: CachePadded::new(IOMgr::Init().unwrap()),
             tsotSocketMgr: TsotSocketMgr::default(),
+            QOutput: QRingQueue::New(MemoryDef::MSG_QLEN),
             ..Default::default()
         };
 
@@ -1233,6 +1233,7 @@ impl ShareSpace {
     }
 
     pub fn Submit(&self) -> Result<usize> {
+        info!("iouring Submit");
         if self.HostProcessor() == 0 {
             self.scheduler.VcpuArr[0].Wakeup();
         }
