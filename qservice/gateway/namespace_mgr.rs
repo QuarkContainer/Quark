@@ -153,7 +153,7 @@ impl NamespaceMgr {
         return Ok(())
     }
 
-    pub fn ContainersFuncPackage(&self, namespace: &str, name: &str) -> Result<bool> {
+    pub fn ContainsFuncPackage(&self, namespace: &str, name: &str) -> Result<bool> {
         if !self.ContainersNamespace(namespace) {
             return Err(Error::NotExist(format!("ContainersFuncPackage {}", namespace)));
         }
@@ -191,6 +191,11 @@ impl NamespaceMgr {
     pub fn GetFuncPackage(&self, namespace: &str, name: &str) -> Result<FuncPackage> {
         let mgr = self.GetFuncPackageMgr(namespace)?;
         return mgr.GetFuncPackage(namespace, name);
+    }
+
+    pub fn GetFuncPackages(&self, namespace: &str) -> Result<Vec<String>> {
+        let mgr = self.GetFuncPackageMgr(namespace)?;
+        return mgr.GetFuncPackages(namespace);
     }
 
     pub fn AddFuncPackage(&self, spec: FuncPackageSpec) -> Result<()> {
@@ -310,7 +315,7 @@ impl NamespaceStore {
 
     pub async fn UpdateFuncPackage(&self, funcPackage: &FuncPackageSpec) -> Result<()> {
         let obj = funcPackage.DataObject();
-        self.store.Update(funcPackage.revision,&obj).await?;
+        self.store.Update(funcPackage.revision, &obj).await?;
         return Ok(())
     }
 

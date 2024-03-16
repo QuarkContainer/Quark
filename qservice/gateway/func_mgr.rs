@@ -35,7 +35,27 @@ pub struct FuncPackageSpec {
 
     pub image: String,
     pub commands: Vec<String>,
-    pub envs: Vec<String>,
+    pub envs: Vec<(String, String)>,
+
+    #[serde(default, rename = "keepalive_policy")]
+    pub keepalivePolicy: KeepAlivePolicy,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct KeepAlivePolicy {
+    #[serde(default, rename = "warm_cnt")]
+    pub warmCnt: usize, // how many instance keepalive when idle
+    #[serde(rename = "keepalive_time")]
+    pub keepaliveTime: usize, // keepalive for how many second
+}
+
+impl Default for KeepAlivePolicy {
+    fn default() -> Self {
+        return Self {
+            warmCnt: 0,
+            keepaliveTime: 10, //keepalive for 10 second when idle
+        }
+    }
 }
 
 impl FuncPackageSpec {
@@ -76,12 +96,12 @@ pub struct FuncPackageInner {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct FuncPackage(Arc<Mutex<FuncPackageInner>>);
+pub struct FuncPackage(Arc<FuncPackageInner>);
 
 impl Deref for FuncPackage {
-    type Target = Arc<Mutex<FuncPackageInner>>;
+    type Target = Arc<FuncPackageInner>;
 
-    fn deref(&self) -> &Arc<Mutex<FuncPackageInner>> {
+    fn deref(&self) -> &Arc<FuncPackageInner> {
         &self.0
     }
 }
@@ -92,7 +112,7 @@ impl FuncPackage {
             spec: spec
         };
 
-        return Self(Arc::new(Mutex::new(inner)))
+        return Self(Arc::new(inner))
     }
 }
 
@@ -126,6 +146,21 @@ impl FuncPackageMgr {
         }
     }
 
+    pub fn GetFuncPackages(&self, namespace: &str) -> Result<Vec<String>> {
+        use std::ops::Bound::*;
+        let start = format!("{}/",namespace);
+        let mut vec = Vec::new();
+        for (key, _) in self.lock().unwrap().funcPackages.range::<String, _>((Included(start.clone()), Unbounded)) {
+            if key.starts_with(&start) {
+                vec.push(key.clone());
+            } else {
+                break;
+            }
+        }
+
+        return Ok(vec)
+    }
+
     pub fn Add(&self, spec: FuncPackageSpec) -> Result<()> {
         let key = spec.Key();
         let mut inner = self.lock().unwrap();
@@ -142,7 +177,7 @@ impl FuncPackageMgr {
     pub fn Update(&self, spec: FuncPackageSpec) -> Result<()> {
         let key = spec.Key();
         let mut inner = self.lock().unwrap();
-        if inner.funcPackages.contains_key(&key) {
+        if !inner.funcPackages.contains_key(&key) {
             return Err(Error::NotExist(format!("FuncPackageMgr::Update {}", key)));
         }
 
