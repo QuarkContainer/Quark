@@ -58,6 +58,7 @@ impl HttpGateway {
             .route("/funcpackages/", post(PostFuncPackage))
             .route("/funcpackages/:namespace/:name", delete(DropFuncPackage))
             .route("/funcpackages/:namespace/:name", get(GetFuncPackage))
+            .route("/funcpackages/:namespace", get(GetFuncPackages))
             .route("/funccall/", post(PostFuncCall))
             .with_state(client);
         
@@ -91,10 +92,10 @@ async fn PostNamespace(
 async fn PostFuncPackage(
     Json(payload): Json<FuncPackageSpec>
 ) -> impl IntoResponse {
-    match NAMESPACE_MGR.get().unwrap().ContainersFuncPackage(&payload.namespace, &payload.name) {
+    match NAMESPACE_MGR.get().unwrap().ContainsFuncPackage(&payload.namespace, &payload.name) {
         Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
-        Ok(containers) => {
-            if containers {
+        Ok(contains) => {
+            if contains {
                 match NAMESPACE_STORE.get().unwrap().UpdateFuncPackage(&payload).await {
                     Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
                     Ok(()) => (StatusCode::OK, Json(format!("ok"))),
@@ -116,8 +117,7 @@ async fn DropFuncPackage(
     match NAMESPACE_MGR.get().unwrap().GetFuncPackage(&namespace, &name) {
         Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
         Ok(funcPackage) => {
-            let revision = funcPackage.lock().unwrap().spec.revision;
-            error!("DropFuncPackage 2 {:?}/{}/{}", &namespace, &name, revision);
+            let revision = funcPackage.spec.revision;
             match NAMESPACE_STORE.get().unwrap().DropFuncPackage(&namespace, &name, revision).await {
                 Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
                 Ok(()) => (StatusCode::OK, Json(format!("ok"))),
@@ -127,15 +127,25 @@ async fn DropFuncPackage(
 }
 
 async fn GetFuncPackage(
-    Path((namespace, name, prompt)): Path<(String, String, String)>
+    Path((namespace, name)): Path<(String, String)>
 ) -> impl IntoResponse {
-    error!("GetFuncPackage1 {:?}/{}", &namespace, &name);
     match NAMESPACE_MGR.get().unwrap().GetFuncPackage(&namespace, &name) {
         Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
         Ok(funcPackage) => {
-            let spec = funcPackage.lock().unwrap().spec.ToJson();
-            error!("GetFuncPackage {:?} prompt {}", &spec, &prompt);
+            let spec = funcPackage.spec.ToJson();
             (StatusCode::OK, Json(spec))
+        }
+    }
+}
+
+async fn GetFuncPackages(
+    Path(namespace): Path<String>
+) -> impl IntoResponse {
+    match NAMESPACE_MGR.get().unwrap().GetFuncPackages(&namespace) {
+        Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
+        Ok(funcPackages) => {
+            let str = serde_json::to_string(&funcPackages).unwrap(); // format!("{:#?}", funcPackages);
+            (StatusCode::OK, Json(str))
         }
     }
 }
@@ -148,13 +158,9 @@ async fn PostFuncCall(
             return (StatusCode::BAD_REQUEST, Json(format!("{:?}",e)));
         } 
         Ok(funcPackage) => {
-            let spec = funcPackage.lock().unwrap().spec.clone();
-            let resp = FUNCAGENT_MGR.Call(&spec, req).await;
+            let resp = FUNCAGENT_MGR.Call(&funcPackage, req).await;
 
             return (resp.status, Json(resp.response));
-            // let spec = funcPackage.lock().unwrap().spec.ToJson();
-            // error!("PostFuncCall get funcpackage {:?}", &spec);
-            // (StatusCode::OK, Json(spec))
         }
     }
 }

@@ -184,10 +184,10 @@ curl --header "Content-Type: application/json" \
 7. CRUD funcpackage
 curl --header "Content-Type: application/json" \
   --request POST \
-  --data '{"namespace":"ns1", "name": "name1", "revision": 0, "image": "ubuntu", "commands": ["/test/rust/dns/target/debug/server"], "envs": []}' \
+  --data '{"namespace":"ns1", "name": "name1", "revision": 0, "image": "ubuntu", "commands": ["/test/rust/functest/target/debug/functest"], "envs": []}' \
   http://localhost:4000/funcpackages/
 
-curl http://localhost:4000/funcpackages/ns1/name1/
+curl http://localhost:4000/funcpackages/ns1/name1
 
 curl --request "DELETE" http://localhost:4000/funcpackages/ns1/name1/
 

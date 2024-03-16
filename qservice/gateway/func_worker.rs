@@ -31,9 +31,9 @@ use hyper_util::rt::TokioIo;
 use http_body_util::{BodyExt, Empty};
 
 use qshare::common::*;
-use qshare::na;
+use qshare::na::{self, Env};
 
-use crate::func_mgr::FuncPackageSpec;
+use crate::func_mgr::FuncPackage;
 use crate::{PromptReq, TSOT_CLIENT};
 
 lazy_static::lazy_static! {
@@ -57,14 +57,14 @@ impl Deref for FuncAgentMgr {
 }
 
 impl FuncAgentMgr {
-    pub async fn Call(&self, spec: &FuncPackageSpec, req: PromptReq) -> HttpResponse {
+    pub async fn Call(&self, funcPackage: &FuncPackage, req: PromptReq) -> HttpResponse {
         let agent = {
-            let key = spec.Key();
+            let key = funcPackage.spec.Key();
             let mut inner = self.lock().await;
             match inner.agents.get(&key) {
                 Some(agent) => agent.clone(),
                 None => {
-                    let agent = FuncAgent::New(&spec.namespace, &req.func).await;
+                    let agent = FuncAgent::New(funcPackage).await;
                     inner.agents.insert(key, agent.clone());
                     agent
                 }
@@ -103,6 +103,8 @@ pub struct FuncAgentInner {
 
     pub namespace: String,
     pub funcName: String,
+    pub funcPackge: FuncPackage,
+
     pub waitingReqs: VecDeque<FuncReq>,
     pub reqQueueTx: mpsc::Sender<FuncReq>,
     pub workerStateUpdateTx: mpsc::Sender<WorkerUpdate>,
@@ -169,14 +171,15 @@ impl Deref for FuncAgent {
 }
 
 impl FuncAgent {
-    pub async fn New(namespace: &str, funcName: &str) -> Self {
+    pub async fn New(funcPackage: &FuncPackage) -> Self {
         let (rtx, rrx) = mpsc::channel(30);
         let (wtx, wrx) = mpsc::channel(30);
         let inner = FuncAgentInner {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
-            namespace: namespace.to_owned(),
-            funcName: funcName.to_owned(),
+            namespace: funcPackage.spec.namespace.clone(),
+            funcName: funcPackage.spec.name.to_owned(),
+            funcPackge: funcPackage.clone(),
             waitingReqs: VecDeque::new(),
             reqQueueTx: rtx,
             workerStateUpdateTx: wtx,
@@ -375,7 +378,8 @@ impl FuncWorker {
         parallelLeve: usize,
         funcAgent: &FuncAgent
     ) -> Result<Self> {
-        let addr = Self::StartWorker(namespace, funcName).await?;
+        let funcPackage = funcAgent.lock().unwrap().funcPackge.clone();
+        let addr = Self::StartWorker(namespace, funcName, &funcPackage).await?;
         let (tx, rx) = mpsc::channel::<FuncReq>(parallelLeve);
         
         let inner = FuncWorkerInner {
@@ -457,8 +461,18 @@ impl FuncWorker {
             }
         });
 
+        let promptReq = PromptReq {
+            namespace: req.namespace.clone(),
+            func: req.funcName.clone(),
+            prompt: req.request.clone(),
+        };
+
+        let body = serde_json::to_string(&promptReq)?;
+        error!("http call {}", &body);
+
         let httpReq = Request::post(FUNCCALL_URL)
-            .body(req.request.clone())?;
+            .header("Content-Type", "application/json")
+            .body(body)?;
 
         
         match sender.send_request(httpReq).await {
@@ -591,7 +605,7 @@ impl FuncWorker {
         return Ok(stream)
     }
 
-    pub async fn StartWorker(namespace: &str, name: &str) -> Result<IpAddress> {
+    pub async fn StartWorker(namespace: &str, name: &str, funcPackage: &FuncPackage) -> Result<IpAddress> {
         let mut client = na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
         
         let mounts = vec![
@@ -601,16 +615,23 @@ impl FuncWorker {
             }
         ];
 
-        let commands = vec![
-            "/test/rust/functest/target/debug/functest".to_owned()
-        ];
+        let commands = funcPackage.spec.commands.clone();
+        let mut envs = Vec::new();
+
+        for e in &funcPackage.spec.envs {
+            envs.push(Env {
+                name: e.0.clone(),
+                value: e.1.clone(),
+            })
+        }
+        let _envs = funcPackage.spec.envs.clone();
 
         let request = tonic::Request::new(na::CreateFuncPodReq {
             namespace: namespace.to_owned(),
             name: name.to_owned(),
             image: "ubuntu".into(),
             commands: commands,
-            envs: Vec::new(),
+            envs: envs,
             mounts: mounts,
             ports: Vec::new(),
         });
