@@ -440,10 +440,11 @@ impl UringAsyncOpsTrait for AsyncFiletWrite {
 
 impl UringAsyncOpsTrait for AsyncAccept {
     fn Entry(&self) -> squeue::Entry {
+
         let op = opcode::Accept::new(
             types::Fd(self.fd),
-            &self.addr.data[0] as *const _ as u64 as *mut _,
-            &self.len as *const _ as u64 as *mut _,
+            &self.addr.addr.data[0] as *const _ as u64 as *mut _,
+            &self.addr.len as *const _ as u64 as *mut _,
         );
         
         if SHARESPACE.config.read().UringFixedFile {
