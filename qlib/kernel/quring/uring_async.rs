@@ -19,6 +19,7 @@ use alloc::vec::Vec;
 use spin::Mutex;
 use core::marker::Send;
 use core::ops::Deref;
+use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
 use enum_dispatch::enum_dispatch;
 
@@ -709,13 +710,27 @@ impl AsyncFiletWrite {
     }
 }
 
+#[derive(Debug)]
+pub struct AcceptAddr {
+    pub addr: TcpSockAddr,
+    pub len: AtomicU32,
+}
+
+impl AcceptAddr {
+    pub fn New() -> Self {
+        return Self {
+            addr: TcpSockAddr::default(),
+            len: AtomicU32::new(16),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct AsyncAccept {
     pub fd: i32,
     pub queue: Queue,
     pub acceptQueue: AcceptQueue,
-    pub addr: Arc<TcpSockAddr>,
-    pub len: u32,
+    pub addr: Arc<AcceptAddr>,
 }
 
 impl AsyncOpsTrait for AsyncAccept {
@@ -745,13 +760,13 @@ impl AsyncOpsTrait for AsyncAccept {
         let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::default()));
         let hasSpace = self.acceptQueue.EnqSocket(
             result,
-            self.addr.Dup(),
-            self.len,
+            self.addr.addr.Dup(),
+            self.addr.len.load(Ordering::SeqCst),
             sockBuf.into(),
             Queue::default(),
         );
 
-        self.len = 16;
+        self.addr.len.store(16, Ordering::SeqCst);
 
         return hasSpace;
     }
@@ -763,8 +778,7 @@ impl AsyncAccept {
             fd,
             queue,
             acceptQueue,
-            addr: Arc::new(TcpSockAddr::default()),
-            len: 16, //size of TcpSockAddr
+            addr: Arc::new(AcceptAddr::New()), //size of TcpSockAddr
         };
     }
 }
