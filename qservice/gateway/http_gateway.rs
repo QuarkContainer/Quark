@@ -36,13 +36,12 @@ type Client = hyper_util::client::legacy::Client<HttpConnector, Body>;
 
 use qshare::common::*;
 
-use crate::func_mgr::FuncPackageSpec;
+use crate::{func_mgr::FuncPackageSpec, func_worker::FUNCAGENT_MGR};
 use crate::namespace_mgr::NamespaceSpec;
 use crate::NAMESPACE_MGR;
 use crate::NAMESPACE_STORE;
 
 pub struct HttpGateway {
-
 }
 
 impl HttpGateway {
@@ -145,10 +144,17 @@ async fn PostFuncCall(
     Json(req): Json<PromptReq>
 ) -> impl IntoResponse {
     match NAMESPACE_MGR.get().unwrap().GetFuncPackage(&req.namespace, &req.func) {
-        Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
+        Err(e) => {
+            return (StatusCode::BAD_REQUEST, Json(format!("{:?}",e)));
+        } 
         Ok(funcPackage) => {
-            let spec = funcPackage.lock().unwrap().spec.ToJson();
-            (StatusCode::OK, Json(spec))
+            let spec = funcPackage.lock().unwrap().spec.clone();
+            let resp = FUNCAGENT_MGR.Call(&spec, req).await;
+
+            return (resp.status, Json(resp.response));
+            // let spec = funcPackage.lock().unwrap().spec.ToJson();
+            // error!("PostFuncCall get funcpackage {:?}", &spec);
+            // (StatusCode::OK, Json(spec))
         }
     }
 }

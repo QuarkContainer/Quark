@@ -165,7 +165,7 @@ pub struct PodConnectReq {
 #[derive(Debug, Clone, Copy)]
 pub struct GatewayConnectReq {
     pub reqId: u32,
-    pub namespace: [u8; 128],
+    pub namespace: [u8; 64],
     pub dstIp: u32,
     pub dstPort: u16,
     pub srcPort: u16,

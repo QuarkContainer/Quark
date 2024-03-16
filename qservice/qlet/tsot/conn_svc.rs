@@ -70,6 +70,7 @@ pub struct TsotConnResp {
     pub errcode: u32,
 }
 
+/// the service to waiting for peer tcp connection 
 pub struct ConnectionSvc {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
@@ -121,6 +122,7 @@ impl ConnectionSvc {
 
             let res = listener.accept().await;
             
+            error!("ConnectionSvc 1 get connection ...");
             match res {
                 Err(_) => continue,
                 Ok((stream, _peerAddr)) => {
@@ -149,8 +151,10 @@ impl TcpSvcConnection {
     }
 
     pub async fn ProcessConnectionInner(&self) -> Result<()> {
+        error!("TcpSvcConnection ProcessConnectionInner 1");
         let connReq = self.ReadConnReq().await?;
 
+        error!("TcpSvcConnection ProcessConnectionInner 2 {:?}", &connReq);
         let namespace = connReq.GetNamespace()?;
         let socket = self.stream.as_raw_fd();
         
@@ -234,21 +238,40 @@ pub struct TcpClientConnection {
 }
 
 impl TcpClientConnection {
-    pub async fn Process(self) {
+    pub async fn PodConnectProcess(self) {
         let podBroker = self.podBroker.clone();
+        error!("before ProcessConnection");
         match self.ProcessConnection().await {
             Ok(_stream) => {
                 // drop the TcpStream and close the socket 
-                podBroker.HandleConnectResp(self.reqId, ErrCode::None as i32).unwrap();
+                error!("before ProcessConnection 2");
+                podBroker.HandlePodConnectResp(self.reqId, ErrCode::None as i32).unwrap();
             }
             Err(_e) => {
-                podBroker.HandleConnectResp(self.reqId, ErrCode::ECONNREFUSED as i32).unwrap();
+                podBroker.HandlePodConnectResp(self.reqId, ErrCode::ECONNREFUSED as i32).unwrap();
+            }
+        }
+    }
+
+    pub async fn GatewayConnectProcess(self) {
+        let podBroker = self.podBroker.clone();
+        error!("before ProcessConnection");
+        match self.ProcessConnection().await {
+            Ok(_stream) => {
+                // drop the TcpStream and close the socket 
+                error!("before ProcessConnection 2");
+                podBroker.HandleGatewayConnectResp(self.reqId, ErrCode::None as i32).unwrap();
+            }
+            Err(_e) => {
+                podBroker.HandleGatewayConnectResp(self.reqId, ErrCode::ECONNREFUSED as i32).unwrap();
             }
         }
     }
 
     pub async fn ProcessConnection(&self) -> Result<TcpStream> {
+        error!("ProcessConnection 1");
         let stream = self.Connect().await?;
+        error!("ProcessConnection 2 {}", &self.namespace);
         let mut req = TsotConnReq {
             namespace: [0; 64],
             dstIp: self.dstIp,
@@ -263,8 +286,10 @@ impl TcpClientConnection {
 
         self.WriteConnReq(&stream, req).await?;
         
+        error!("ProcessConnection 3 {}", &self.namespace);
         let resp = self.ReadConnResp(&stream).await?;
         
+        error!("ProcessConnection 4 {}", &resp.errcode);
         if resp.errcode != TsotErrCode::Ok as u32 {
             return Err(Error::CommonError(format!("TcpClientConnection connect fail with error {:?}", resp.errcode)));
         }

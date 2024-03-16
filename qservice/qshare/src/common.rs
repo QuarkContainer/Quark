@@ -59,10 +59,17 @@ pub enum Error {
     JoinError(JoinError),
     AxumHttpError(axum::http::Error),
     AxumHttpUriError(axum::http::uri::InvalidUri),
-    HyperError(hyper::Error)
+    HyperError(hyper::Error),
+    TokioOneshotError(tokio::sync::oneshot::error::RecvError),
 }
 
 unsafe impl core::marker::Send for Error {}
+
+impl From<tokio::sync::oneshot::error::RecvError> for Error {
+    fn from(item: tokio::sync::oneshot::error::RecvError) -> Self {
+        return Self::TokioOneshotError(item)
+    }
+}
 
 impl From<hyper::Error> for Error {
     fn from(item: hyper::Error) -> Self {
