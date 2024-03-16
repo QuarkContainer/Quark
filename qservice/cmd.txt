@@ -154,9 +154,13 @@ cd Quark/qservice/target/debug
   rm -f /var/log/quark/na.log; sudo ./na
 
 multiple qlet test
+
+# state service
 rm -f /var/log/quark/ss.log; sudo ./ss
+# qlet
 rm -f /var/log/quark/na.log; sudo ./na /etc/quark/node1.json
-sudo ./na /etc/quark/node2.json
+# gateway
+sudo rm -f /var/log/quark/gateway.log; sudo ./gateway
 
 4. verify etcd configuration
 
@@ -177,11 +181,19 @@ curl --header "Content-Type: application/json" \
   --data '{"namespace":"ns1", "revision": 0, "disable": false}' \
   http://localhost:4000/namespaces/
 
+7. CRUD funcpackage
 curl --header "Content-Type: application/json" \
   --request POST \
   --data '{"namespace":"ns1", "name": "name1", "revision": 0, "image": "ubuntu", "commands": ["/test/rust/dns/target/debug/server"], "envs": []}' \
   http://localhost:4000/funcpackages/
 
-curl http://localhost:4000/funcpackages/ns1/name1
+curl http://localhost:4000/funcpackages/ns1/name1/
 
-curl --request "DELETE" http://localhost:4000/funcpackages/ns1/name1
+curl --request "DELETE" http://localhost:4000/funcpackages/ns1/name1/
+
+8. Call Func
+
+curl --header "Content-Type: application/json" \
+  --request POST \
+  --data '{"namespace":"ns1", "func": "name1", "prompt": "asdfasd"}' \
+  http://localhost:4000/funccall/

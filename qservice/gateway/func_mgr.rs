@@ -27,7 +27,7 @@ pub struct FuncPackageId {
     pub name: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct FuncPackageSpec {
     pub namespace: String,
     pub name: String,

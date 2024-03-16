@@ -17,22 +17,66 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use core::ops::Deref;
 
+use axum::response::Response;
 use tokio::net::TcpStream;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, Mutex as TMutex};
 use tokio::sync::{mpsc, Notify};
 use tokio::time::Duration;
 
 use hyper::client::conn::http1::SendRequest;
 use hyper::StatusCode;
 use hyper::Request;
-use hyper::body::Bytes;
+use hyper::body::{Bytes, Incoming};
 use hyper_util::rt::TokioIo;
 use http_body_util::{BodyExt, Empty};
 
 use qshare::common::*;
 use qshare::na;
 
-use crate::TSOT_CLIENT;
+use crate::func_mgr::FuncPackageSpec;
+use crate::{PromptReq, TSOT_CLIENT};
+
+lazy_static::lazy_static! {
+    pub static ref FUNCAGENT_MGR: FuncAgentMgr = FuncAgentMgr::default();
+}
+
+#[derive(Debug, Default)]
+pub struct FuncAgentMgrInner {
+    pub agents: BTreeMap<String, FuncAgent>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct FuncAgentMgr(Arc<TMutex<FuncAgentMgrInner>>);
+
+impl Deref for FuncAgentMgr {
+    type Target = Arc<TMutex<FuncAgentMgrInner>>;
+
+    fn deref(&self) -> &Arc<TMutex<FuncAgentMgrInner>> {
+        &self.0
+    }
+}
+
+impl FuncAgentMgr {
+    pub async fn Call(&self, spec: &FuncPackageSpec, req: PromptReq) -> HttpResponse {
+        let agent = {
+            let key = spec.Key();
+            let mut inner = self.lock().await;
+            match inner.agents.get(&key) {
+                Some(agent) => agent.clone(),
+                None => {
+                    let agent = FuncAgent::New(&spec.namespace, &req.func).await;
+                    inner.agents.insert(key, agent.clone());
+                    agent
+                }
+            }
+        };
+
+        let (tx, rx) = oneshot::channel();
+        agent.EnqReq(req, tx);
+        let resp = rx.await.unwrap();
+        return resp;
+    }
+}
 
 #[derive(Debug)]
 pub enum WorkerState {
@@ -67,6 +111,7 @@ pub struct FuncAgentInner {
     pub startingSlot: usize,
     pub workers: BTreeMap<u64, FuncWorker>,
     pub nextWorkerId: u64,
+    pub nextReqId: u64,
 }
 
 impl FuncAgentInner {
@@ -105,6 +150,11 @@ impl FuncAgentInner {
             }
         }
     }
+
+    pub fn NextReqId(&mut self) -> u64 {
+        self.nextReqId += 1;
+        return self.nextReqId;
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -135,6 +185,7 @@ impl FuncAgent {
             startingSlot: 0,
             workers: BTreeMap::new(),
             nextWorkerId: 0,
+            nextReqId: 0,
         };
 
         let ret = Self(Arc::new(Mutex::new(inner)));
@@ -147,8 +198,15 @@ impl FuncAgent {
         return ret;
     }
 
-    pub fn EnqReq(&self, req: FuncReq) {
-        self.lock().unwrap().reqQueueTx.try_send(req).unwrap();
+    pub fn EnqReq(&self, req: PromptReq, tx: oneshot::Sender<HttpResponse>) {
+        let funcReq = FuncReq {
+            reqId: self.lock().unwrap().NextReqId(),
+            namespace: req.namespace,
+            funcName: req.func,
+            request: req.prompt,
+            tx: tx,
+        };
+        self.lock().unwrap().reqQueueTx.try_send(funcReq).unwrap();
     } 
 
     pub async fn Process(
@@ -182,6 +240,7 @@ impl FuncAgent {
                                 self.IncrSlot(slot);
                                 self.lock().unwrap().startingSlot -= slot;
                                 self.lock().unwrap().priQueue.push(worker);
+                                self.TryProcessOneReq();
                             }
                             WorkerUpdate::RequestDone(_) => {
                                 self.IncrSlot(1);
@@ -241,12 +300,15 @@ impl FuncAgent {
 
     pub async fn ProcessReq(&self, req: FuncReq) {
         if self.lock().unwrap().availableSlot == 0 {
-            self.lock().unwrap().waitingReqs.push_back(req);
-
             let mut needNewWorker = false;
-            if self.lock().unwrap().waitingReqs.len() > self.lock().unwrap().startingSlot {
-                needNewWorker = false;
-                self.lock().unwrap().startingSlot += DEFAULT_PARALLEL_LEVEL;
+            {
+                let mut inner = self.lock().unwrap();
+                inner.waitingReqs.push_back(req);
+
+                if inner.waitingReqs.len() > inner.startingSlot {
+                    needNewWorker = true;
+                    inner.startingSlot += DEFAULT_PARALLEL_LEVEL;
+                }
             }
 
             let namespace = self.lock().unwrap().namespace.clone();
@@ -255,8 +317,8 @@ impl FuncAgent {
                 let id = self.lock().unwrap().NextWorkerId();
                 match FuncWorker::New(id, &namespace, &funcName, DEFAULT_PARALLEL_LEVEL, self).await {
                     Err(e) => {
-                        error!("new worker fail with error {:?}", e);
                         self.lock().unwrap().startingSlot -= DEFAULT_PARALLEL_LEVEL;
+                        error!("FuncAgent::ProcessReq new funcworker fail with error {:?}", e);
                     }
                     Ok(worker) => {
                         self.lock().unwrap().workers.insert(id, worker);
@@ -271,10 +333,9 @@ impl FuncAgent {
 }
 
 pub const DEFAULT_PARALLEL_LEVEL: usize = 1;
-pub const READINESS_PROBE_PORT: u16 = 5555;
-pub const LIVENESS_URL: &str = "http://liveness.qactor.io/liveness";
-pub const READINESS_URL: &str = "http://liveness.qactor.io/readiness";
-pub const FUNCCALL_URL: &str = "http://liveness.qactor.io/funccall";
+pub const LIVENESS_URL: &str = "http://127.0.0.1/liveness";
+pub const READINESS_URL: &str = "http://127.0.0.1/readiness";
+pub const FUNCCALL_URL: &str = "http://127.0.0.1/funccall";
 pub const RESPONSE_LIMIT: usize = 4 * 1024 * 1024; // 4MB
 pub const WORKER_PORT: u16 = 80;
 
@@ -351,17 +412,17 @@ impl FuncWorker {
     }
 
     pub async fn Process(&self, reqQueueRx: mpsc::Receiver<FuncReq>) -> Result<()> {
-        let mut livenessSender = self.WaitForPod().await?;
+        let mut client = self.WaitForPod().await?;
 
         self.funcAgent.SendWorkerStatusUpdate(WorkerUpdate::Ready(self.clone()));
 
         let mut reqQueueRx = reqQueueRx;
-
+        
         loop {
             tokio::select! {
-                e = self.ProbeLiveness(&mut livenessSender) => {
-                    error!("FuncWorker fail with error {:?}", e);
+                e = self.ProbeLiveness(&mut client) => {
                     self.funcAgent.SendWorkerStatusUpdate(WorkerUpdate::WorkerFail(self.clone()));
+                    error!("FuncWorker::Process ProbeLiveness fail with error {:?}", e);
                     break;
                 }
                 req = reqQueueRx.recv() => {
@@ -386,14 +447,20 @@ impl FuncWorker {
     }
 
     pub async fn HttpCall(&self, req: FuncReq) -> Result<()> {
-        let stream = self.ConnectPingPod().await?;
+        let stream = self.ConnectPod().await?;
         let io = TokioIo::new(stream);
-        let (mut sender, _conn) = hyper::client::conn::http1::handshake(io).await?;
+        let (mut sender, conn) = hyper::client::conn::http1::handshake(io).await?;
+
+        tokio::spawn(async move {
+            if let Err(e) = conn.await {
+                eprintln!("Error in connection: {}", e);
+            }
+        });
 
         let httpReq = Request::post(FUNCCALL_URL)
             .body(req.request.clone())?;
 
-    
+        
         match sender.send_request(httpReq).await {
             Err(e) => {
                 let resp = HttpResponse {
@@ -403,9 +470,9 @@ impl FuncWorker {
                 req.tx.send(resp).unwrap();
                 return Ok(())
             },
-            Ok(res) => {
+            Ok(mut res) => {
                 let mut output = String::new();
-                while let Some(next) = output.frame().await {
+                while let Some(next) = res.frame().await {
                     match next {
                         Err(e) => {
                             let resp = HttpResponse {
@@ -433,29 +500,27 @@ impl FuncWorker {
         }
     }
 
-    pub async fn WaitForPod(&self) -> Result<SendRequest<Empty<Bytes>>> {
-        let stream = self.ConnectPingPod().await?;
-        let io = TokioIo::new(stream);
-        let (mut sender, _conn) = hyper::client::conn::http1::handshake(io).await?;
-
-        self.WaitforLiveness(&mut sender).await?;
-
-        self.WaitforReadiness(&mut sender).await?;
-
-        return Ok(sender)
+    pub async fn WaitForPod(&self) -> Result<QHttpClient> {
+        let stream = self.ConnectPod().await?;
+        
+        let mut client = QHttpClient::New(stream).await?;
+        self.WaitforLiveness(&mut client).await?;
+        
+        self.WaitforReadiness(&mut client).await?;    
+        return Ok(client)
     }
 
-    pub async fn ProbeLiveness(&self, sender: &mut SendRequest<Empty<Bytes>>) -> Result<()> {
+    pub async fn ProbeLiveness(&self, client: &mut QHttpClient) -> Result<()> {
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
-            match self.HttpPing(sender, LIVENESS_URL).await {
+            match self.HttpPing(client, LIVENESS_URL).await {
                 Err(e) => return Err(e),
                 Ok(_s) => ()
             }
         }
     }
 
-    pub async fn HttpPing(&self, sender: &mut SendRequest<Empty<Bytes>>, url: &str) -> Result<()> {
+    pub async fn HttpPing(&self, client: &mut QHttpClient, url: &str) -> Result<()> {
         let url = url.parse::<hyper::Uri>()?;
 
         let authority = url.authority().unwrap().clone();
@@ -467,8 +532,8 @@ impl FuncWorker {
             .body(Empty::<Bytes>::new())?;
 
         // Await the response...
-        let res = sender.send_request(req).await?;
-
+        let res = client.Send(req).await?;
+        
         match res.status() {
             StatusCode::OK =>return Ok(()),
             _ => {
@@ -478,9 +543,9 @@ impl FuncWorker {
 
     }
 
-    pub async fn WaitforLiveness(&self, sender: &mut SendRequest<Empty<Bytes>>) -> Result<()> {
+    pub async fn WaitforLiveness(&self, client: &mut QHttpClient) -> Result<()> {
         for _ in 0..100 {
-            match self.HttpPing(sender, LIVENESS_URL).await {
+            match self.HttpPing(client, LIVENESS_URL).await {
                 Err(_) => (),
                 Ok(s) => return Ok(s),
             }
@@ -491,9 +556,9 @@ impl FuncWorker {
         return Err(Error::CommonError(format!("FuncWorker::ConnectPingPod timeout")));
     }
 
-    pub async fn WaitforReadiness(&self, sender: &mut SendRequest<Empty<Bytes>>) -> Result<()> {
+    pub async fn WaitforReadiness(&self, client: &mut QHttpClient) -> Result<()> {
         for _ in 0..100 {
-            match self.HttpPing(sender, READINESS_URL).await {
+            match self.HttpPing(client, READINESS_URL).await {
                 Err(_) => (),
                 Ok(s) => return Ok(s),
             }
@@ -505,11 +570,11 @@ impl FuncWorker {
     }
 
 
-    pub async fn ConnectPingPod(&self) -> Result<TcpStream> {
+    pub async fn ConnectPod(&self) -> Result<TcpStream> {
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         for _ in 0..100 {
-            match self.ConnectPod(READINESS_PROBE_PORT).await {
+            match self.TryConnectPod(WORKER_PORT).await {
                 Err(_) => (),
                 Ok(s) => return Ok(s),
             }
@@ -520,7 +585,7 @@ impl FuncWorker {
         return Err(Error::CommonError(format!("FuncWorker::ConnectPingPod timeout")));
     }
 
-    pub async fn ConnectPod(&self, port: u16) -> Result<TcpStream> {
+    pub async fn TryConnectPod(&self, port: u16) -> Result<TcpStream> {
         let addr = self.ipAddr.AsBytes();
         let stream = TSOT_CLIENT.get().unwrap().Connect(&self.namespace, addr, port).await?;
         return Ok(stream)
@@ -529,13 +594,24 @@ impl FuncWorker {
     pub async fn StartWorker(namespace: &str, name: &str) -> Result<IpAddress> {
         let mut client = na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
         
+        let mounts = vec![
+            na::Mount {
+                host_path: "/home/brad/rust/Quark/test".to_owned(),
+                mount_path: "/test".to_owned(),
+            }
+        ];
+
+        let commands = vec![
+            "/test/rust/functest/target/debug/functest".to_owned()
+        ];
+
         let request = tonic::Request::new(na::CreateFuncPodReq {
             namespace: namespace.to_owned(),
             name: name.to_owned(),
             image: "ubuntu".into(),
-            commands: Vec::new(),
+            commands: commands,
             envs: Vec::new(),
-            mounts: Vec::new(),
+            mounts: mounts,
             ports: Vec::new(),
         });
 
@@ -580,4 +656,35 @@ pub struct FuncReq {
     pub funcName: String,
     pub request: String,
     pub tx: oneshot::Sender<HttpResponse>
+}
+
+#[derive(Debug)]
+pub struct QHttpClient {
+    sender: SendRequest<Empty<Bytes>>,
+}
+
+impl QHttpClient {
+    pub async fn New(stream: TcpStream) -> Result<Self> {
+        let io = TokioIo::new(stream);
+        let (sender, conn) = hyper::client::conn::http1::handshake(io).await?;
+        tokio::spawn(async move {
+            if let Err(e) = conn.await {
+                error!("Error in connection: {}", e);
+            }
+        });
+        return Ok(Self {
+            sender: sender,
+        })
+    }
+
+    pub async fn Send(&mut self, req: Request<Empty<Bytes>>) -> Result<Response<Incoming>> {
+        tokio::select! {
+            res = self.sender.send_request(req) => {
+                match res {
+                    Err(e) => return Err(Error::CommonError(format!("Error in connection: {}", e))),
+                    Ok(r) => return Ok(r)
+                }
+            }
+        }
+    }
 }

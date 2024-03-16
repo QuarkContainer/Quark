@@ -325,7 +325,7 @@ impl TsotClient {
         let reqId = self.nextReqId.fetch_add(1, Ordering::SeqCst);
         let mut req = GatewayConnectReq {
             reqId: reqId,
-            namespace: [0; 128],
+            namespace: [0; 64],
             dstIp: IpAddress::New(&ipAddr).0,
             dstPort: port,
             srcPort: 123,

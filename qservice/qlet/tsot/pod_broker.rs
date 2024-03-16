@@ -472,7 +472,7 @@ impl PodBroker {
         }
 
         tokio::spawn(async move {
-            connection.Process().await;
+            connection.PodConnectProcess().await;
         });
 
         return Ok(())
@@ -480,7 +480,16 @@ impl PodBroker {
 
     pub fn ProcessGatewayConnectReq(&self, req: GatewayConnectReq, socket: i32) -> Result<()> {
         let sandbox = self.podSandbox.lock().unwrap();
-        let namespace = String::from_utf8(req.namespace.to_vec())?;
+
+        let mut namespacelen = 0;
+        for i in 0..req.namespace.len() {
+            if req.namespace[i] == 0 {
+                namespacelen = i;
+                break;
+            }
+        }
+
+        let namespace = String::from_utf8(req.namespace[..namespacelen].to_vec())?;
         let sandbox = sandbox.as_ref().unwrap();
         let sandbox = sandbox.lock().unwrap();
         let connection = TcpClientConnection {
@@ -503,7 +512,7 @@ impl PodBroker {
         }
 
         tokio::spawn(async move {
-            connection.Process().await;
+            connection.GatewayConnectProcess().await;
         });
 
         return Ok(())
@@ -542,9 +551,16 @@ impl PodBroker {
                 }
                 self.ProcessConnectReq(m, socket.unwrap())?;
             }
+            TsotMsg::GatewayConnectReq(m) => {
+                if socket.is_none() {
+                    return Err(Error::CommonError(format!("ConnectReq has no socket")));
+                }
+                self.ProcessGatewayConnectReq(m, socket.unwrap())?;
+            }
             TsotMsg::DnsReq(m) => {
                 self.ProcessDnsReq(m)?;
             }
+            
             m => {
                 error!("ProcessMsg get unimplement msg {:?}", &m);
                 unimplemented!()
@@ -591,7 +607,7 @@ impl PodBroker {
         return self.EnqMsg(message);
     }
 
-    pub fn HandleConnectResp(&self, reqId: u32, errorCode: i32) -> Result<()> {
+    pub fn HandlePodConnectResp(&self, reqId: u32, errorCode: i32) -> Result<()> {
         match self.connecting.lock().unwrap().remove(&reqId) {
             None => {
                 error!("HandleConnectResp get non exist reqId {}", reqId);
@@ -606,6 +622,23 @@ impl PodBroker {
         };
 
         return self.EnqMsg(TsotMsg::PodConnectResp(msg).into());
+    }
+
+    pub fn HandleGatewayConnectResp(&self, reqId: u32, errorCode: i32) -> Result<()> {
+        match self.connecting.lock().unwrap().remove(&reqId) {
+            None => {
+                error!("HandleConnectResp get non exist reqId {}", reqId);
+                return Ok(())
+            }
+            Some(_) => ()
+        }
+
+        let msg = GatewayConnectResp {
+            reqId: reqId,
+            errorCode: errorCode,
+        };
+
+        return self.EnqMsg(TsotMsg::GatewayConnectResp(msg).into());
     }
 
 }

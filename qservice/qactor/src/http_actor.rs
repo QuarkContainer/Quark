@@ -29,6 +29,7 @@ use crate::actor_system::ACTOR_SYSTEM;
 use axum::{
     response::IntoResponse,
     routing::post,
+    routing::get,
     http::StatusCode,
     Json, Router,
     extract::State,
@@ -94,7 +95,17 @@ impl HttpActor {
                 "/prompt", 
                 post({
                 move |body| ProcessPrompt(body, State(clone))
-            }));
+            }))
+            .route(
+                "/liveness", 
+                get(
+                    || async { "Ok" }
+            ))
+            .route(
+                "/readiness", 
+                get(
+                    || async { "Ok" }
+            ));
     
         let addr = format!("0.0.0.0:{}", self.httpPort);
         let listener = match tokio::net::TcpListener::bind(&addr).await {
