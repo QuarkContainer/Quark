@@ -561,8 +561,28 @@ pub extern "C" fn rust_main(
         CreateTask(ControllerProcess as u64, ptr::null(), true);
     }
 
+    if id == 2 {
+        // CreateTask(IoHanlder as u64, ptr::null(), true);
+        IoHanlder();
+
+    }
+
     WaitFn();
 }
+
+
+fn IoHanlder() {
+    loop {
+        if Shutdown() {
+            break;
+        }
+                    
+        QUringTrigger();
+    }
+}
+
+
+
 
 fn StartExecProcess(fd: i32, process: Process) -> ! {
     let (tid, entry, userStackAddr, kernelStackAddr) = { LOADER.ExecProcess(process).unwrap() };
