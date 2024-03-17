@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::arch::vCPU;
 use core::sync::atomic::Ordering;
 use libc::*;
 use std::os::unix::io::AsRawFd;
-use crate::arch::vCPU;
 
-use super::*;
 use super::qlib::common::*;
 use super::qlib::pagetable::*;
 use super::runc::runtime::vm::*;
+use super::*;
 
 #[repr(C)]
 pub struct SignalMaskStruct {
@@ -66,29 +66,6 @@ impl RefMgr for HostPageAllocator {
 }
 
 impl KVMVcpu {
-    pub const KVM_INTERRUPT: u64 = 0x4004ae86;
-    pub fn InterruptGuest(&self) {
-        let bounce: u32 = 20; //VirtualizationException
-        let ret = unsafe {
-            ioctl(
-                self.arch_vcpu
-                    .vcpu_fd()
-                    .unwrap()
-                    .as_raw_fd(),
-                Self::KVM_INTERRUPT,
-                &bounce as *const _ as u64,
-            )
-        };
-
-        assert!(
-            ret == 0,
-            "InterruptGuest ret is {}/{}/{}",
-            ret,
-            errno::errno().0,
-            self.vcpu.as_raw_fd()
-        );
-    }
-
     pub fn VcpuWait(&self) -> i64 {
         let sharespace = &SHARE_SPACE;
         loop {

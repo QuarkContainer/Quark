@@ -24,7 +24,6 @@ use core::alloc::Layout;
 use core::slice;
 use core::sync::atomic::AtomicU64;
 use nix::sys::signal;
-use spin::Mutex;
 use std::sync::atomic::{fence, Ordering};
 use std::sync::mpsc::Sender;
 use std::os::unix::io::AsRawFd;
@@ -91,8 +90,7 @@ pub struct KVMVcpu {
     pub arch_vcpu: ArchvCPU,
     pub heapStartAddr: u64,
     pub shareSpaceAddr: u64,
-    pub autoStart: bool,
-    pub interrupting: Mutex<(bool, Vec<Sender<()>>)>,
+    pub autoStart: bool
 }
 
 //for pub shareSpace: * mut Mutex<ShareSpace>
@@ -135,7 +133,6 @@ impl KVMVcpu {
             heapStartAddr: pageAllocatorBaseAddr,
             shareSpaceAddr: shareSpaceAddr,
             autoStart: autoStart,
-            interrupting: Mutex::new((false, vec![])),
         });
     }
 
@@ -210,7 +207,8 @@ impl KVMVcpu {
     }
 
     pub fn interrupt(&self, waitCh: Option<Sender<()>>) {
-        let mut interrupting = self.interrupting.lock();
+        let mut interrupting = self.arch_vcpu
+                                   .get_interrupt_lock();
         if let Some(w) = waitCh {
             interrupting.1.push(w);
         }

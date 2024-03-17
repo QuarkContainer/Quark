@@ -11,6 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+use std::sync::mpsc::Sender;
+use spin::MutexGuard;
 use crate::qlib::common::Error;
 
 #[cfg(target_arch = "x86_64")]
@@ -23,5 +26,7 @@ pub trait vCPU {
     fn run(&self, entry_addr: u64, stack_start_addr: u64, heap_start_addr: u64,
            share_space_addr: u64, id: u64, vdso_addr: u64, cpus_total: u64,
            auto_start: bool) -> Result<(), Error>;
+    fn interrupt_guest(&self);
+    fn get_interrupt_lock(&self) -> MutexGuard<'_, (bool, Vec<Sender<()>>)>;
     fn vcpu_fd(&self) -> Option<&kvm_ioctls::VcpuFd>;
 }

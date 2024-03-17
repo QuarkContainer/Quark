@@ -14,9 +14,12 @@
 
 use libc::{clock_gettime, clockid_t, timespec};
 use kvm_ioctls::VcpuExit;
+use spin::Mutex;
 use core::sync::atomic::{Ordering, fence};
 use std::convert::TryInto;
+use std::sync::mpsc::Sender;
 
+use crate::arch::vCPU;
 use crate::{SHARE_SPACE, KERNEL_IO_THREAD, Print, qlib, QMsg, GLOCK};
 use crate::syncmgr::SyncMgr;
 use crate::host_uring::HostSubmit;
@@ -364,7 +367,7 @@ impl x86_64vCPU {
                     info!("get exception");
                 }
                 VcpuExit::IrqWindowOpen => {
-                    self.InterruptGuest();
+                    self.interrupt_guest();
                     self.vcpu_fd.unwrap().set_kvm_request_interrupt_window(0);
                     fence(Ordering::SeqCst);
                     {

@@ -13,6 +13,10 @@
 // limitations under the License.
 
 use kvm_bindings::kvm_regs;
+use std::sync::mpsc::Sender;
+use std::os::unix::io::AsRawFd;
+use libc::ioctl;
+use spin::{Mutex, MutexGuard};
 
 use crate::arch::vCPU;
 use crate::qlib::common::{KERNEL_FLAGS_SET, Error};
@@ -28,11 +32,36 @@ pub struct x86_64vCPU {
     tssIntStackStart: u64,
     tssAddr: u64,
     vcpu_fd: Option<kvm_ioctls::VcpuFd>,
+    interrupting: Mutex<(bool, Vec<Sender<()>>)>
 }
 
 pub type ArchvCPU = x86_64vCPU;
 
 impl vCPU for x86_64vCPU {
+    fn interrupt_guest(&self) {
+        let kvm_interrupt: u64 = 0x4004ae86;
+        let bounce: u32 = 20; //VirtualizationException
+        let ret = unsafe {
+            ioctl(
+                self.vcpu_fd().unwrap().as_raw_fd(),
+                kvm_interrupt,
+                &bounce as *const _ as u64,
+            )
+        };
+
+        assert!(
+            ret == 0,
+            "InterruptGuest ret is {}/{}/{}",
+            ret,
+            errno::errno().0,
+            self.vcpu_fd().unwrap().as_raw_fd()
+        );
+    }
+
+    fn get_interrupt_lock(&self) -> MutexGuard<'_, (bool, Vec<Sender<()>>)> {
+        self.interrupting.lock()
+    }
+
     fn vcpu_fd(&self) -> Option<&kvm_ioctls::VcpuFd> {
         if self.vcpu_fd.is_none() {
             None
