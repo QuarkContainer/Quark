@@ -357,6 +357,8 @@ pub struct FuncWorkerInner {
 
     pub reqQueue: mpsc::Sender<FuncReq>,
     pub funcAgent: FuncAgent,
+
+    pub connPool: TMutex<Vec<QHttpCallClient>>,
 }
 
 #[derive(Debug, Clone)]
@@ -394,7 +396,8 @@ impl FuncWorker {
             parallelLevel: parallelLeve,
             ongoingReqCnt: AtomicUsize::new(0),
             reqQueue: tx,
-            funcAgent: funcAgent.clone()
+            funcAgent: funcAgent.clone(),
+            connPool: TMutex::new(Vec::new()),
         };
 
         let ret = Self(Arc::new(inner));
@@ -450,16 +453,26 @@ impl FuncWorker {
         return Ok(())
     }
 
-    pub async fn HttpCall(&self, req: FuncReq) -> Result<()> {
+    pub async fn NewHttpCallClient(&self) -> Result<QHttpCallClient> {
         let stream = self.ConnectPod().await?;
-        let io = TokioIo::new(stream);
-        let (mut sender, conn) = hyper::client::conn::http1::handshake(io).await?;
+        let client = QHttpCallClient::New(stream).await?;
+        return Ok(client)
+    }
 
-        tokio::spawn(async move {
-            if let Err(e) = conn.await {
-                eprintln!("Error in connection: {}", e);
-            }
-        });
+    pub async fn ReturnHttpCallClient(&self, client: QHttpCallClient) -> Result<()> {
+        self.connPool.lock().await.push(client);
+        return Ok(())
+    }
+
+    pub async fn GetHttpCallClient(&self) -> Result<QHttpCallClient> {
+        match self.connPool.lock().await.pop() {
+            None => return self.NewHttpCallClient().await,
+            Some(client) => return Ok(client)
+        }
+    }
+
+    pub async fn HttpCall(&self, req: FuncReq) -> Result<()> {
+        let mut client = self.GetHttpCallClient().await?;
 
         let promptReq = PromptReq {
             namespace: req.namespace.clone(),
@@ -468,14 +481,13 @@ impl FuncWorker {
         };
 
         let body = serde_json::to_string(&promptReq)?;
-        error!("http call {}", &body);
-
+        
         let httpReq = Request::post(FUNCCALL_URL)
             .header("Content-Type", "application/json")
             .body(body)?;
 
         
-        match sender.send_request(httpReq).await {
+        match client.Send(httpReq).await {
             Err(e) => {
                 let resp = HttpResponse {
                     status: StatusCode::BAD_REQUEST,
@@ -699,6 +711,37 @@ impl QHttpClient {
     }
 
     pub async fn Send(&mut self, req: Request<Empty<Bytes>>) -> Result<Response<Incoming>> {
+        tokio::select! {
+            res = self.sender.send_request(req) => {
+                match res {
+                    Err(e) => return Err(Error::CommonError(format!("Error in connection: {}", e))),
+                    Ok(r) => return Ok(r)
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct QHttpCallClient {
+    sender: SendRequest<String>,
+}
+
+impl QHttpCallClient {
+    pub async fn New(stream: TcpStream) -> Result<Self> {
+        let io = TokioIo::new(stream);
+        let (sender, conn) = hyper::client::conn::http1::handshake(io).await?;
+        tokio::spawn(async move {
+            if let Err(e) = conn.await {
+                error!("Error in connection: {}", e);
+            }
+        });
+        return Ok(Self {
+            sender: sender,
+        })
+    }
+
+    pub async fn Send(&mut self, req: Request<String>) -> Result<Response<Incoming>> {
         tokio::select! {
             res = self.sender.send_request(req) => {
                 match res {
