@@ -197,3 +197,4 @@ curl --header "Content-Type: application/json" \
   --request POST \
   --data '{"namespace":"ns1", "func": "name1", "prompt": "asdfasd"}' \
   http://localhost:4000/funccall/
+  

@@ -46,7 +46,7 @@ pub struct KeepAlivePolicy {
     #[serde(default, rename = "warm_cnt")]
     pub warmCnt: usize, // how many instance keepalive when idle
     #[serde(rename = "keepalive_time")]
-    pub keepaliveTime: usize, // keepalive for how many second
+    pub keepaliveTime: u64, // keepalive for how many second
 }
 
 impl Default for KeepAlivePolicy {
