@@ -680,6 +680,12 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
             toPtRegs.rax = 0;
         }
         toPtRegs.set_stack_pointer(userSp);
+        //
+        // NOTE: x86_64 does not set the pc.
+        //       Why it works?
+        //
+        #[cfg(target_arch = "aarch64")]
+        toTask.context.set_pc(child_clone as u64);
 
 
         toTask.context.place_on_stack(child_clone as u64);
