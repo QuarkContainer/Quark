@@ -41,7 +41,7 @@ pub enum TsotErrCode {
 
 #[derive(Debug, Clone, Copy)]
 pub struct TsotConnReq {
-    pub namespace: [u8; 64],
+    pub podNamespace: [u8; 64],
     pub dstIp: u32,
     pub dstPort: u16,
     pub srcIp: u32,
@@ -50,17 +50,17 @@ pub struct TsotConnReq {
 
 impl TsotConnReq {
     pub fn GetNamespace(&self) -> Result<String> {
-        for i in 0..self.namespace.len() {
-            if self.namespace[i] == 0 {
+        for i in 0..self.podNamespace.len() {
+            if self.podNamespace[i] == 0 {
                 if i == 0 {
                     return Ok("Default".to_owned());
                 }
-                let str = std::str::from_utf8(&self.namespace[0..i])?;
+                let str = std::str::from_utf8(&self.podNamespace[0..i])?;
                 return Ok(str.to_owned())
             }
         }
 
-        let str = std::str::from_utf8(&self.namespace)?;
+        let str = std::str::from_utf8(&self.podNamespace)?;
         return Ok(str.to_owned())
     }
 }
@@ -230,7 +230,7 @@ pub struct TcpClientConnection {
     pub socket: i32,
 
     pub reqId: u32,
-    pub namespace: String,
+    pub podNamespace: String,
     pub dstIp: u32,
     pub dstPort: u16,
     pub srcIp: u32,
@@ -271,25 +271,22 @@ impl TcpClientConnection {
     pub async fn ProcessConnection(&self) -> Result<TcpStream> {
         error!("ProcessConnection 1");
         let stream = self.Connect().await?;
-        error!("ProcessConnection 2 {}", &self.namespace);
         let mut req = TsotConnReq {
-            namespace: [0; 64],
+            podNamespace: [0; 64],
             dstIp: self.dstIp,
             dstPort: self.dstPort,
             srcIp: self.srcIp,
             srcPort: self.srcPort
         };
         
-        for i in 0..self.namespace.as_bytes().len() {
-            req.namespace[i] = self.namespace.as_bytes()[i];
+        for i in 0..self.podNamespace.as_bytes().len() {
+            req.podNamespace[i] = self.podNamespace.as_bytes()[i];
         }
 
         self.WriteConnReq(&stream, req).await?;
         
-        error!("ProcessConnection 3 {}", &self.namespace);
         let resp = self.ReadConnResp(&stream).await?;
         
-        error!("ProcessConnection 4 {}", &resp.errcode);
         if resp.errcode != TsotErrCode::Ok as u32 {
             return Err(Error::CommonError(format!("TcpClientConnection connect fail with error {:?}", resp.errcode)));
         }

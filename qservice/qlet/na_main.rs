@@ -93,7 +93,7 @@ async fn main() -> Result<()> {
             addresses.push(format!("http://{}", addr));
         }
 
-        let factory = InformerFactory::New(addresses, "").await.unwrap();
+        let factory = InformerFactory::New(addresses, "", "").await.unwrap();
         factory.AddInformer("node_info", &ListOption::default()).await.unwrap();
         let informer = factory.GetInformer("node_info").await.unwrap();
         let _id1 = informer.AddEventHandler(NODE_MGR.clone()).await.unwrap();

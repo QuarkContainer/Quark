@@ -457,7 +457,7 @@ impl PodBroker {
             isPodConnection: true,
             socket: socket,
             reqId: req.reqId,
-            namespace: sandbox.namespace.clone(),
+            podNamespace: sandbox.namespace.clone(),
             dstIp: req.dstIp,
             dstPort: req.dstPort,
             srcIp: sandbox.ip.0,
@@ -482,14 +482,14 @@ impl PodBroker {
         let sandbox = self.podSandbox.lock().unwrap();
 
         let mut namespacelen = 0;
-        for i in 0..req.namespace.len() {
-            if req.namespace[i] == 0 {
+        for i in 0..req.podNamespace.len() {
+            if req.podNamespace[i] == 0 {
                 namespacelen = i;
                 break;
             }
         }
 
-        let namespace = String::from_utf8(req.namespace[..namespacelen].to_vec())?;
+        let namespace = String::from_utf8(req.podNamespace[..namespacelen].to_vec())?;
         let sandbox = sandbox.as_ref().unwrap();
         let sandbox = sandbox.lock().unwrap();
         let connection = TcpClientConnection {
@@ -497,7 +497,7 @@ impl PodBroker {
             isPodConnection: false,
             socket: socket,
             reqId: req.reqId,
-            namespace: namespace,
+            podNamespace: namespace,
             dstIp: req.dstIp,
             dstPort: req.dstPort,
             srcIp: sandbox.ip.0,

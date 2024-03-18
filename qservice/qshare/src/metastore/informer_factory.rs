@@ -23,6 +23,7 @@ use crate::common::*;
 #[derive(Debug)]
 pub struct InformerFactoryInner {
     pub addresses: Vec<String>,
+    pub tenant: String,
     pub namespace: String,
     pub informers: BTreeMap<String, Informer>,
     pub closed: bool,
@@ -40,10 +41,11 @@ impl Deref for InformerFactory {
 }
 
 impl InformerFactory {
-    pub async fn New(addresses: Vec<String>, namespace: &str) -> Result<Self> {
+    pub async fn New(addresses: Vec<String>, tenant: &str, namespace: &str) -> Result<Self> {
         let inner = InformerFactoryInner {
             addresses: addresses,
-            namespace: namespace.to_string(),
+            tenant: tenant.to_owned(),
+            namespace: namespace.to_owned(),
             informers: BTreeMap::new(),
             closed: false,
         };
@@ -54,7 +56,7 @@ impl InformerFactory {
     pub async fn AddInformer(&self, objType: &str, opts: &ListOption) -> Result<()> {
         let mut inner = self.write().await;
         let addresses = inner.addresses.to_vec();
-        let informer = Informer::New(addresses, objType, &inner.namespace, opts).await?;
+        let informer = Informer::New(addresses, objType, &inner.tenant, &inner.namespace, opts).await?;
         inner.informers.insert(objType.to_string(), informer);
         return Ok(())
     }

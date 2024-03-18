@@ -34,6 +34,7 @@ pub struct AggregateClientInner {
     pub aggregateCacher: CacheStore,
     
     pub objType: String,
+    pub tenant: String,
     pub namespace: String,
 }
 
@@ -69,7 +70,7 @@ impl EventHandler for AggregateClient {
 }
 
 impl AggregateClient {
-    pub fn New(aggregateCacher: &CacheStore, objType: &str, namespace: &str) -> Result<Self> {
+    pub fn New(aggregateCacher: &CacheStore, objType: &str, tenant: &str, namespace: &str) -> Result<Self> {
         let inner = AggregateClientInner {
             closeNotify: Arc::new(Notify::new()),
             closed: AtomicBool::new(false),
@@ -77,6 +78,7 @@ impl AggregateClient {
             aggregateCacher: aggregateCacher.clone(),
             
             objType: objType.to_owned(),
+            tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
         };
 
@@ -88,7 +90,13 @@ impl AggregateClient {
     }
 
     pub async fn Process(&self, addresses: Vec<String>, listNotify: Arc<Notify>) -> Result<()> {
-        let informer = Informer::New(addresses, &self.objType, &self.namespace, &ListOption::default()).await?;
+        let informer = Informer::New(
+            addresses, 
+            &self.objType, 
+            &self.tenant, 
+            &self.namespace, 
+            &ListOption::default()
+        ).await?;
         informer.AddEventHandler(Arc::new(self.clone())).await?;
         tokio::select! { 
             _ = self.closeNotify.notified() => {

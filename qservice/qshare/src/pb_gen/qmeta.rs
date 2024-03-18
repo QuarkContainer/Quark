@@ -25,8 +25,10 @@ pub struct ReadFuncLogResp {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReadObjReq {
     #[prost(string, tag = "1")]
-    pub namespace: ::prost::alloc::string::String,
+    pub tenant: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
     pub name: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -52,8 +54,10 @@ pub struct ObjMeta {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListObjReq {
     #[prost(string, tag = "1")]
-    pub namespace: ::prost::alloc::string::String,
+    pub tenant: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
     pub prefix: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -93,8 +97,10 @@ pub struct Object {
     #[prost(string, tag = "1")]
     pub kind: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub namespace: ::prost::alloc::string::String,
+    pub tenant: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
     pub name: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "5")]
     pub labels: ::prost::alloc::vec::Vec<Kv>,
@@ -110,18 +116,20 @@ pub struct Obj {
     #[prost(string, tag = "1")]
     pub kind: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub namespace: ::prost::alloc::string::String,
+    pub tenant: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
     pub name: ::prost::alloc::string::String,
-    #[prost(int64, tag = "4")]
-    pub channel_rev: i64,
     #[prost(int64, tag = "5")]
+    pub channel_rev: i64,
+    #[prost(int64, tag = "6")]
     pub revision: i64,
-    #[prost(message, repeated, tag = "6")]
-    pub labels: ::prost::alloc::vec::Vec<Kv>,
     #[prost(message, repeated, tag = "7")]
+    pub labels: ::prost::alloc::vec::Vec<Kv>,
+    #[prost(message, repeated, tag = "8")]
     pub annotations: ::prost::alloc::vec::Vec<Kv>,
-    #[prost(string, tag = "8")]
+    #[prost(string, tag = "9")]
     pub data: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -158,10 +166,12 @@ pub struct GetRequestMessage {
     #[prost(string, tag = "1")]
     pub obj_type: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub namespace: ::prost::alloc::string::String,
+    pub tenant: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
     pub name: ::prost::alloc::string::String,
-    #[prost(int64, tag = "4")]
+    #[prost(int64, tag = "5")]
     pub revision: i64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -180,8 +190,10 @@ pub struct DeleteRequestMessage {
     #[prost(string, tag = "1")]
     pub obj_type: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub namespace: ::prost::alloc::string::String,
+    pub tenant: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
     pub name: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -218,12 +230,14 @@ pub struct ListRequestMessage {
     #[prost(string, tag = "1")]
     pub obj_type: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
+    pub tenant: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
     pub namespace: ::prost::alloc::string::String,
-    #[prost(int64, tag = "3")]
+    #[prost(int64, tag = "4")]
     pub revision: i64,
-    #[prost(string, tag = "4")]
-    pub label_selector: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
+    pub label_selector: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
     pub field_selector: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -244,12 +258,14 @@ pub struct WatchRequestMessage {
     #[prost(string, tag = "1")]
     pub obj_type: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
+    pub tenant: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
     pub namespace: ::prost::alloc::string::String,
-    #[prost(int64, tag = "3")]
+    #[prost(int64, tag = "4")]
     pub revision: i64,
-    #[prost(string, tag = "4")]
-    pub label_selector: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
+    pub label_selector: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
     pub field_selector: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]

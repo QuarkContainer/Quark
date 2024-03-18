@@ -55,6 +55,7 @@ async fn RemovePod() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
     
     let request = tonic::Request::new(TerminatePodReq {
+        tenant: "t1".into(),
         namespace: "ns1".into(),
         name: "name1".into()
     });
@@ -69,6 +70,7 @@ async fn GetPod() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
     
     let request = tonic::Request::new(GetPodReq {
+        tenant: "t1".into(),
         namespace: "ns1".into(),
         name: "name1".into()
     });
@@ -193,9 +195,12 @@ async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     let request: tonic::Request<CreateFuncPodReq> = tonic::Request::new(CreateFuncPodReq {
+        tenant: "t1".into(),
         namespace: "ns1".into(),
         name: cmd.into(), //"name1".into(),
         image: "ubuntu".into(),
+        labels: Vec::new(),
+        annotations: Vec::new(),
         commands: commands,
         envs: envs,
         mounts: mounts,

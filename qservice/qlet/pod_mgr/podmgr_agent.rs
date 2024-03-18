@@ -331,7 +331,7 @@ impl PmAgent {
             };
 
             let uid = pod.uid.clone();
-            let namespace = pod.namespace.clone();
+            let namespace = pod.PodNamespace();
             let podname = pod.name.clone();
             
             let addr = NAMESPACE_MGR.NewPodSandbox(&namespace, &uid, &podname)?;

@@ -29,6 +29,8 @@ pub struct FuncPackageId {
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct FuncPackageSpec {
+    #[serde(default)]
+    pub tenant: String,
     pub namespace: String,
     pub name: String,
     pub revision: i64,
@@ -39,23 +41,6 @@ pub struct FuncPackageSpec {
 
     #[serde(default, rename = "keepalive_policy")]
     pub keepalivePolicy: KeepAlivePolicy,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct KeepAlivePolicy {
-    #[serde(default, rename = "warm_cnt")]
-    pub warmCnt: usize, // how many instance keepalive when idle
-    #[serde(rename = "keepalive_time")]
-    pub keepaliveTime: u64, // keepalive for how many second
-}
-
-impl Default for KeepAlivePolicy {
-    fn default() -> Self {
-        return Self {
-            warmCnt: 0,
-            keepaliveTime: 10, //keepalive for 10 second when idle
-        }
-    }
 }
 
 impl FuncPackageSpec {
@@ -86,7 +71,24 @@ impl FuncPackageSpec {
     }
 
     pub fn Key(&self) -> String {
-        return format!("{}/{}", &self.namespace, &self.name);
+        return format!("{}/{}/{}", &self.tenant, &self.namespace, &self.name);
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct KeepAlivePolicy {
+    #[serde(default, rename = "warm_cnt")]
+    pub warmCnt: usize, // how many instance keepalive when idle
+    #[serde(rename = "keepalive_time")]
+    pub keepaliveTime: u64, // keepalive for how many second
+}
+
+impl Default for KeepAlivePolicy {
+    fn default() -> Self {
+        return Self {
+            warmCnt: 0,
+            keepaliveTime: 10, //keepalive for 10 second when idle
+        }
     }
 }
 
@@ -133,22 +135,20 @@ impl Deref for FuncPackageMgr {
 }
 
 impl FuncPackageMgr {
-    pub fn ContainersFuncPackage(&self, namespace: &str, name: &str) -> bool {
-        let key = format!("{}/{}",namespace, name);
-        return self.lock().unwrap().funcPackages.contains_key(&key);
+    pub fn ContainersFuncPackage(&self, key: &str) -> bool {
+        return self.lock().unwrap().funcPackages.contains_key(key);
     }
 
-    pub fn GetFuncPackage(&self, namespace: &str, name: &str) -> Result<FuncPackage> {
-        let key = format!("{}/{}",namespace, name);
-        match self.lock().unwrap().funcPackages.get(&key) {
+    pub fn GetFuncPackage(&self, key: &str) -> Result<FuncPackage> {
+        match self.lock().unwrap().funcPackages.get(key) {
             None => return Err(Error::NotExist(format!("GetFuncPackage {}", key))),
             Some(p) => return Ok(p.clone()),
         }
     }
 
-    pub fn GetFuncPackages(&self, namespace: &str) -> Result<Vec<String>> {
+    pub fn GetFuncPackages(&self, tenant: &str, namespace: &str) -> Result<Vec<String>> {
         use std::ops::Bound::*;
-        let start = format!("{}/",namespace);
+        let start = format!("{}/{}/",tenant, namespace);
         let mut vec = Vec::new();
         for (key, _) in self.lock().unwrap().funcPackages.range::<String, _>((Included(start.clone()), Unbounded)) {
             if key.starts_with(&start) {

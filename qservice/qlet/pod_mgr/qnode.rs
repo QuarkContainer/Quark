@@ -41,7 +41,8 @@ pub fn InitNode(qletConfig: &QletConfig) -> Result<Node> {
     let mut node = Node {
         name: qletConfig.nodeName.clone(),
         annotations: BTreeMap::new(),
-        namespace: DefaultNodeMgrNodeNameSpace.to_string(),
+        tenant: DefaultNodeMgrNodeTenant.to_owned(),
+        namespace: DefaultNodeMgrNodeNameSpace.to_owned(),
         uid: Uuid::new_v4().to_string(),
         resource_version: "0".to_owned(),
         labels: BTreeMap::new(),

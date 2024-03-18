@@ -101,6 +101,7 @@ pub struct FuncAgentInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
 
+    pub tenant: String,
     pub namespace: String,
     pub funcName: String,
     pub funcPackge: FuncPackage,
@@ -170,6 +171,7 @@ impl FuncAgent {
         let inner = FuncAgentInner {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
+            tenant: funcPackage.spec.tenant.clone(),
             namespace: funcPackage.spec.namespace.clone(),
             funcName: funcPackage.spec.name.to_owned(),
             funcPackge: funcPackage.clone(),
@@ -196,6 +198,7 @@ impl FuncAgent {
     pub fn EnqReq(&self, req: PromptReq, tx: oneshot::Sender<HttpResponse>) {
         let funcReq = FuncReq {
             reqId: self.lock().unwrap().NextReqId(),
+            tenant: req.tenant,
             namespace: req.namespace,
             funcName: req.func,
             request: req.prompt,
@@ -313,12 +316,13 @@ impl FuncAgent {
                 }
             }
 
+            let tenant = self.lock().unwrap().tenant.clone();
             let namespace = self.lock().unwrap().namespace.clone();
             let funcName = self.lock().unwrap().funcName.clone();
             if needNewWorker {
                 let id = self.lock().unwrap().NextWorkerId();
                 let keepaliveTime = self.lock().unwrap().funcPackge.spec.keepalivePolicy.keepaliveTime;
-                match FuncWorker::New(id, &namespace, &funcName, DEFAULT_PARALLEL_LEVEL, keepaliveTime, self).await {
+                match FuncWorker::New(id, &tenant, &namespace, &funcName, DEFAULT_PARALLEL_LEVEL, keepaliveTime, self).await {
                     Err(e) => {
                         self.lock().unwrap().startingSlot -= DEFAULT_PARALLEL_LEVEL;
                         error!("FuncAgent::ProcessReq new funcworker fail with error {:?}", e);
@@ -349,6 +353,8 @@ pub struct FuncWorkerInner {
 
     pub workerId: u64,
     pub workerName: String,
+
+    pub tenant: String,
     pub namespace: String,
     pub funcName: String,
     pub ipAddr: IpAddress,
@@ -386,6 +392,7 @@ impl Deref for FuncWorker {
 impl FuncWorker {
     pub async fn New(
         id: u64,
+        tenant: &str,
         namespace: &str,
         funcName: &str,
         parallelLeve: usize,
@@ -395,7 +402,7 @@ impl FuncWorker {
         let funcPackage = funcAgent.lock().unwrap().funcPackge.clone();
 
         let workerName = format!("{}_{}", funcName, id);
-        let addr = Self::StartWorker(namespace, &workerName, &funcPackage).await?;
+        let addr = Self::StartWorker(tenant, namespace, &workerName, &funcPackage).await?;
         let (tx, rx) = mpsc::channel::<FuncReq>(parallelLeve);
         let (workerTx, workerRx) = mpsc::channel::<FuncWorkerClient>(parallelLeve);
         
@@ -404,6 +411,7 @@ impl FuncWorker {
             stop: AtomicBool::new(false),
 
             workerId: id,
+            tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
             funcName: funcName.to_owned(),
             workerName: workerName.clone(),
@@ -432,7 +440,7 @@ impl FuncWorker {
     }
 
     pub async fn Close(&self) {
-        let closeNotify = self.closeNotify.clone();
+    let closeNotify = self.closeNotify.clone();
         closeNotify.notify_one();
     }
 
@@ -444,6 +452,7 @@ impl FuncWorker {
     pub fn NewFuncWorkerClient(&self) -> FuncWorkerClient {
         self.funcClientCnt.fetch_add(1, Ordering::SeqCst);
         let client = FuncWorkerClient::New(
+            &self.tenant,
             &self.namespace, 
             &self.funcName, 
             &self.ipAddr, 
@@ -611,6 +620,7 @@ impl FuncWorker {
         let mut client = self.GetHttpCallClient().await?;
 
         let promptReq = PromptReq {
+            tenant: req.tenant.clone(),
             namespace: req.namespace.clone(),
             func: req.funcName.clone(),
             prompt: req.request.clone(),
@@ -747,13 +757,17 @@ impl FuncWorker {
         return Err(Error::CommonError(format!("FuncWorker::ConnectPingPod timeout")));
     }
 
+    pub fn PodNamespace(&self) -> String {
+        return format!("{}/{}", &self.tenant, &self.namespace);
+    }
+
     pub async fn TryConnectPod(&self, port: u16) -> Result<TcpStream> {
         let addr = self.ipAddr.AsBytes();
-        let stream = TSOT_CLIENT.get().unwrap().Connect(&self.namespace, addr, port).await?;
+        let stream = TSOT_CLIENT.get().unwrap().Connect(&self.tenant, &self.namespace, addr, port).await?;
         return Ok(stream)
     }
 
-    pub async fn StartWorker(namespace: &str, name: &str, funcPackage: &FuncPackage) -> Result<IpAddress> {
+    pub async fn StartWorker(tenant: &str, namespace: &str, name: &str, funcPackage: &FuncPackage) -> Result<IpAddress> {
         let mut client = na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
         
         let mounts = vec![
@@ -775,9 +789,12 @@ impl FuncWorker {
         let _envs = funcPackage.spec.envs.clone();
 
         let request = tonic::Request::new(na::CreateFuncPodReq {
+            tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
             name: name.to_owned(),
-            image: "ubuntu".into(),
+            image: funcPackage.spec.image.clone(),
+            labels: Vec::new(),
+            annotations: Vec::new(),
             commands: commands,
             envs: envs,
             mounts: mounts,
@@ -799,7 +816,8 @@ impl FuncWorker {
         let mut client = na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888").await?;
     
         let request = tonic::Request::new(na::TerminatePodReq {
-            namespace: "ns1".into(),
+            tenant: self.tenant.clone(),
+            namespace: self.namespace.clone(),
             name: self.workerName.clone(),
         });
         let response = client.terminate_pod(request).await?;
@@ -817,6 +835,7 @@ pub struct FuncWorkerClientInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
 
+    pub tenant: String,
     pub namespace: String,
     pub funcName: String,
     pub ipAddr: IpAddress,
@@ -838,12 +857,13 @@ impl Deref for FuncWorkerClient {
 }
 
 impl FuncWorkerClient {
-    pub fn New(namespace: &str, funcName: &str, ipAddr: &IpAddress, port: u16, funcWorker: &FuncWorker) -> Self {
+    pub fn New(tenant: &str, namespace: &str, funcName: &str, ipAddr: &IpAddress, port: u16, funcWorker: &FuncWorker) -> Self {
         let (tx, rx) = mpsc::channel::<FuncReq>(1);
         let inner = FuncWorkerClientInner {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
 
+            tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
             funcName: funcName.to_owned(),
             ipAddr: ipAddr.clone(),
@@ -869,7 +889,7 @@ impl FuncWorkerClient {
 
     pub async fn TryConnectPod(&self) -> Result<QHttpCallClient> {
         let addr = self.ipAddr.AsBytes();
-        let stream = TSOT_CLIENT.get().unwrap().Connect(&self.namespace, addr, self.port).await?;
+        let stream = TSOT_CLIENT.get().unwrap().Connect(&self.tenant, &self.namespace, addr, self.port).await?;
         let client: QHttpCallClient = QHttpCallClient::New(stream).await?;
         
         return Ok(client)
@@ -904,6 +924,7 @@ impl FuncWorkerClient {
 
     pub async fn HttpCall(&self, client: &mut QHttpCallClient, req: FuncReq) -> Result<()> {
         let promptReq = PromptReq {
+            tenant: req.tenant.clone(),
             namespace: req.namespace.clone(),
             func: req.funcName.clone(),
             prompt: req.request.clone(),
@@ -964,6 +985,7 @@ pub struct HttpResponse {
 #[derive(Debug)]
 pub struct FuncReq {
     pub reqId: u64,
+    pub tenant: String,
     pub namespace: String,
     pub funcName: String,
     pub request: String,

@@ -50,29 +50,29 @@ impl CacherClient {
         return Ok(Self(Arc::new(TMutex::new(inner))));
     }
 
-    pub async fn Get(&self, objType: &str, namespace: &str, name: &str, revision: i64) -> Result<Option<DataObject>> {
+    pub async fn Get(&self, objType: &str, tenant: &str, namespace: &str, name: &str, revision: i64) -> Result<Option<DataObject>> {
         let mut inner = self.lock().await;
-        return inner.Get(objType, namespace, name, revision).await;
+        return inner.Get(objType, tenant, namespace, name, revision).await;
     }
 
-    pub async fn List(&self, objType: &str, namespace: &str, opts: &ListOption) -> Result<DataObjList> {
+    pub async fn List(&self, objType: &str, tenant: &str, namespace: &str, opts: &ListOption) -> Result<DataObjList> {
         let mut inner = self.lock().await;
-        return inner.List(objType, namespace, opts).await;
+        return inner.List(objType, tenant, namespace, opts).await;
     }
 
-    pub async fn Watch(&self, objType: &str, namespace: &str, opts: &ListOption) -> Result<WatchStream> {
+    pub async fn Watch(&self, objType: &str, tenant: &str, namespace: &str, opts: &ListOption) -> Result<WatchStream> {
         let mut inner = self.lock().await;
-        return inner.Watch(objType, namespace, opts).await;
+        return inner.Watch(objType, tenant, namespace, opts).await;
     }
 
-    pub async fn ReadObject(&self, namespace: &str, name: &str) -> Result<Vec<u8>> {
+    pub async fn ReadObject(&self, tenant: &str, namespace: &str, name: &str) -> Result<Vec<u8>> {
         let mut inner = self.lock().await;
-        return inner.ReadObject(namespace, name).await;
+        return inner.ReadObject(tenant, namespace, name).await;
     }
 
-    pub async fn ListObjects(&self, namespace: &str, prefix: &str) -> Result<Vec<ObjectMeta>> {
+    pub async fn ListObjects(&self, tenant: &str, namespace: &str, prefix: &str) -> Result<Vec<ObjectMeta>> {
         let mut inner = self.lock().await;
-        return inner.ListObjects(namespace, prefix).await;
+        return inner.ListObjects(tenant, namespace, prefix).await;
     }
 }
 
@@ -89,11 +89,12 @@ impl CacherClientInner {
         })
     }
 
-    pub async fn Get(&mut self, objType: &str, namespace: &str, name: &str, revision: i64) -> Result<Option<DataObject>> {
+    pub async fn Get(&mut self, objType: &str, tenant: &str, namespace: &str, name: &str, revision: i64) -> Result<Option<DataObject>> {
         let req = GetRequestMessage {
-            obj_type: objType.to_string(),
-            namespace: namespace.to_string(),
-            name: name.to_string(),
+            obj_type: objType.to_owned(),
+            tenant: tenant.to_owned(),
+            namespace: namespace.to_owned(),
+            name: name.to_owned(),
             revision: revision,
         };
 
@@ -111,10 +112,11 @@ impl CacherClientInner {
         return Err(Error::CommonError(resp.error.clone()))
     }
 
-    pub async fn List(&mut self, objType: &str, namespace: &str, opts: &ListOption) -> Result<DataObjList> {
+    pub async fn List(&mut self, objType: &str, tenant: &str, namespace: &str, opts: &ListOption) -> Result<DataObjList> {
         let req = ListRequestMessage {
-            obj_type: objType.to_string(),
-            namespace: namespace.to_string(),
+            obj_type: objType.to_owned(),
+            tenant: tenant.to_owned(),
+            namespace: namespace.to_owned(),
             revision: opts.revision,
             label_selector: opts.predicate.label.String(),
             field_selector: opts.predicate.field.String(),
@@ -141,10 +143,11 @@ impl CacherClientInner {
         return Err(Error::CommonError(resp.error.clone()))
     }
 
-    pub async fn Watch(&mut self, objType: &str, namespace: &str, opts: &ListOption) -> Result<WatchStream> {
+    pub async fn Watch(&mut self, objType: &str, tenant: &str, namespace: &str, opts: &ListOption) -> Result<WatchStream> {
         let req = WatchRequestMessage {
-            obj_type: objType.to_string(),
-            namespace: namespace.to_string(),
+            obj_type: objType.to_owned(),
+            tenant: tenant.to_owned(),
+            namespace: namespace.to_owned(),
             revision: opts.revision,
             label_selector: opts.predicate.label.String(),
             field_selector: opts.predicate.field.String(),
@@ -155,8 +158,9 @@ impl CacherClientInner {
         return Ok(WatchStream { stream: resp })
     }
 
-    async fn ReadObject(&mut self, namespace: &str, name: &str) -> Result<Vec<u8>> {
+    async fn ReadObject(&mut self, tenant: &str, namespace: &str, name: &str) -> Result<Vec<u8>> {
         let req = ReadObjReq {
+            tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
             name: name.to_owned(),
         };
@@ -170,8 +174,9 @@ impl CacherClientInner {
         return Err(Error::CommonError(resp.error.to_owned()))
     }
 
-    async fn ListObjects(&mut self, namespace: &str, prefix: &str) -> Result<Vec<ObjectMeta>> {
+    async fn ListObjects(&mut self, tenant: &str, namespace: &str, prefix: &str) -> Result<Vec<ObjectMeta>> {
         let req = ListObjReq {
+            tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
             prefix: prefix.to_owned(),
         };
