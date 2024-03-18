@@ -59,23 +59,6 @@ extern "C" {
     pub fn context_swap_to(_fromCxt: u64, _toCtx: u64, _one: u64, _zero: u64);
 }
 
-fn switch_to(to: TaskId) {
-    to.GetTask().AccountTaskLeave(SchedState::Blocked);
-
-    CPULocal::SetCurrentTask(to.Addr());
-    let toCtx = to.GetTask();
-
-    //toCtx.mm.VcpuEnter();
-
-    if !SHARESPACE.config.read().KernelPagetable {
-        toCtx.SwitchPageTable();
-    }
-    toCtx.SetTLS();
-    unsafe {
-        context_swap_to(0, toCtx.GetContext(), 1, 0);
-    }
-}
-
 pub const IO_WAIT_CYCLES: i64 = 20_000_000;
 
 pub const WAIT_CYCLES: i64 = 1_000_000; // 1ms
