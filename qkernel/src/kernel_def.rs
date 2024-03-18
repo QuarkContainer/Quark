@@ -333,7 +333,11 @@ pub fn child_clone(userSp: u64) {
     //currTask.mm.VcpuEnter();
     CPULocal::Myself().SetMode(VcpuMode::User);
     currTask.mm.HandleTlbShootdown();
-    SyscallRet(kernelRsp)
+    debug!("entering child task: kernelSp/PtRegs @ {:x}", kernelRsp);
+    #[cfg(target_arch = "x86_64")]
+    SyscallRet(kernelRsp);
+    #[cfg(target_arch = "aarch64")]
+    IRet(kernelRsp);
 }
 
 extern "C" {
