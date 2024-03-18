@@ -66,10 +66,23 @@ impl PodMgr {
         &self, 
         req: na::CreateFuncPodReq
     ) -> Result<IpAddress> {
+        let mut labels = BTreeMap::new();
+        for kv in req.labels {
+            labels.insert(kv.key.clone(), kv.val.clone());
+        }
+
+        let mut annotations = BTreeMap::new();
+        for kv in req.annotations {
+            annotations.insert(kv.key.clone(), kv.val.clone());
+        }
+
         let mut pod = PodDef {
+            tenant: req.tenant.to_owned(),
             namespace: req.namespace.to_owned(),
             name: req.name.to_owned(),
             uid: uuid::Uuid::new_v4().to_string(),
+            labels: labels,
+            annotations: annotations,
             ..Default::default()
         };
 
@@ -137,8 +150,8 @@ impl PodMgr {
         return Ok(())
     }
 
-    pub fn PodId(&self, namespace: &str, name: &str) -> String {
-        return format!("{}/{}", namespace, name);
+    pub fn PodId(&self, tenant: &str, namespace: &str, name: &str) -> String {
+        return format!("{}/{}/{}", tenant, namespace, name);
     }
 }
 
@@ -167,7 +180,7 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
         request: tonic::Request<na::GetPodReq>,
     ) -> SResult<tonic::Response<na::GetPodResp>, tonic::Status> {
         let req = request.into_inner();
-        let podId = &Self::PodId(&self, &req.namespace, &req.name);
+        let podId = &self.PodId(&req.tenant, & &req.namespace, &req.name);
         match NODEAGENT_STORE.GetPod(podId) {  
             Ok((rev, pod)) => {
                 error!("pod is {:?}", serde_json::to_string_pretty(&pod).unwrap());
@@ -192,7 +205,7 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
         request: tonic::Request<na::TerminatePodReq>,
     ) -> SResult<tonic::Response<na::TerminatePodResp>, tonic::Status> {
         let req = request.into_inner();
-        let podId = &Self::PodId(&self, &req.namespace, &req.name);
+        let podId = &Self::PodId(&self, &req.tenant, &req.namespace, &req.name);
         match self.pmAgent.TerminatePod(podId) {
             Err(e) => {
                 return Ok(tonic::Response::new(na::TerminatePodResp {

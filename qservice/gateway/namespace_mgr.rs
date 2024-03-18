@@ -33,6 +33,8 @@ use crate::func_mgr::*;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct NamespaceSpec {
+    #[serde(default)]
+    pub tenant: String,
     pub namespace: String,
     pub revision: i64,
     pub disable: bool,
@@ -62,13 +64,13 @@ impl NamespaceSpec {
     }
 
     pub fn Key(&self) -> String {
-        return self.namespace.clone();
+        return format!("{}/{}", &self.tenant, &self.namespace);
     }
 }
 
 #[derive(Debug)]
 pub struct NamespaceMgrInner {
-    pub funcPackageMgrs: BTreeMap<String, FuncPackageMgr>,
+    pub funcPackageMgr: FuncPackageMgr,
     pub namespaces: BTreeMap<String, NamespaceSpec>,
     
     pub factory: InformerFactory,
@@ -89,14 +91,14 @@ impl Deref for NamespaceMgr {
 
 impl NamespaceMgr {
     pub async fn New(addresses: Vec<String>) -> Result<Self> {
-        let factory = InformerFactory::New(addresses, "").await?;
+        let factory = InformerFactory::New(addresses, "", "").await?;
         factory.AddInformer(NamespaceSpec::KEY, &ListOption::default()).await?;
         let namespaceInformer = factory.GetInformer(NamespaceSpec::KEY).await?;
         factory.AddInformer(FuncPackageSpec::KEY, &ListOption::default()).await?;
         let funcPackageInformer = factory.GetInformer(FuncPackageSpec::KEY).await?;
         
         let inner = NamespaceMgrInner {
-            funcPackageMgrs: BTreeMap::new(),
+            funcPackageMgr: FuncPackageMgr::default(),
             namespaces: BTreeMap::new(),
             factory: factory,
             namespaceInformer: namespaceInformer.clone(),
@@ -121,8 +123,9 @@ impl NamespaceMgr {
         return Ok(mgr)
     }
 
-    pub fn ContainersNamespace(&self, namespace: &str) -> bool {
-        return self.lock().unwrap().namespaces.contains_key(namespace)
+    pub fn ContainersNamespace(&self, tenant: &str, namespace: &str) -> bool {
+        let podNamespace = format!("{}/{}", tenant, namespace);
+        return self.lock().unwrap().namespaces.contains_key(&podNamespace)
     }
 
     pub fn AddNamespace(&self, spec: NamespaceSpec) -> Result<()> {
@@ -153,71 +156,41 @@ impl NamespaceMgr {
         return Ok(())
     }
 
-    pub fn ContainsFuncPackage(&self, namespace: &str, name: &str) -> Result<bool> {
-        if !self.ContainersNamespace(namespace) {
-            return Err(Error::NotExist(format!("ContainersFuncPackage {}", namespace)));
+    pub fn ContainsFuncPackage(&self, tenant: &str, namespace: &str, name: &str) -> Result<bool> {
+        if !self.ContainersNamespace(tenant, namespace) {
+            return Err(Error::NotExist(format!("ContainersFuncPackage has no namespace {}/{}", tenant, namespace)));
         }
  
         let inner = self.lock().unwrap();
-        let mgr = match inner.funcPackageMgrs.get(namespace) {
-            None => {
-                return Ok(false)
-            }
-            Some(mgr) => {
-                mgr.clone()
-            }
-        };
-
-        return Ok(mgr.ContainersFuncPackage(namespace, name));
+        let key = format!("{}/{}/{}", tenant, namespace, name);
+        return Ok(inner.funcPackageMgr.ContainersFuncPackage(&key));
     }
 
-    pub fn GetFuncPackageMgr(&self, namespace: &str) -> Result<FuncPackageMgr> {
-        let mut inner = self.lock().unwrap();
-
-        let mgr = match inner.funcPackageMgrs.get(namespace) {
-            None => {
-                let mgr = FuncPackageMgr::default();
-                inner.funcPackageMgrs.insert(namespace.to_owned(), mgr.clone());
-                mgr
-            }
-            Some(mgr) => {
-                mgr.clone()
-            }
-        };
-
-        return Ok(mgr);
+    pub fn GetFuncPackage(&self, tenant: &str, namespace: &str, name: &str) -> Result<FuncPackage> {
+        let key = format!("{}/{}/{}", tenant, namespace, name);
+        let inner = self.lock().unwrap();
+        return inner.funcPackageMgr.GetFuncPackage(&key);
     }
 
-    pub fn GetFuncPackage(&self, namespace: &str, name: &str) -> Result<FuncPackage> {
-        let mgr = self.GetFuncPackageMgr(namespace)?;
-        return mgr.GetFuncPackage(namespace, name);
-    }
-
-    pub fn GetFuncPackages(&self, namespace: &str) -> Result<Vec<String>> {
-        let mgr = self.GetFuncPackageMgr(namespace)?;
-        return mgr.GetFuncPackages(namespace);
+    pub fn GetFuncPackages(&self, tenant: &str, namespace: &str) -> Result<Vec<String>> {
+        let inner = self.lock().unwrap();
+        return inner.funcPackageMgr.GetFuncPackages(tenant, namespace);
     }
 
     pub fn AddFuncPackage(&self, spec: FuncPackageSpec) -> Result<()> {
-        let mgr = self.GetFuncPackageMgr(&spec.namespace)?;
-
-        mgr.Add(spec)?;
+        self.lock().unwrap().funcPackageMgr.Add(spec)?;
 
         return Ok(())
     }
 
     pub fn UpdateFuncPackage(&self, spec: FuncPackageSpec) -> Result<()> {
-        let mgr = self.GetFuncPackageMgr(&spec.namespace)?;
-
-        mgr.Update(spec)?;
+        self.lock().unwrap().funcPackageMgr.Update(spec)?;
 
         return Ok(())
     }
 
     pub fn RemoveFuncPackage(&self, spec: FuncPackageSpec) -> Result<()> {
-        let mgr = self.GetFuncPackageMgr(&spec.namespace)?;
-
-        mgr.Remove(spec)?;
+        self.lock().unwrap().funcPackageMgr.Remove(spec)?;
         return Ok(())
     }
 
@@ -297,6 +270,7 @@ impl NamespaceStore {
 
     pub async fn DisasbleNamespace(&self, namespace: &NamespaceSpec) -> Result<()> {
         let namespace = NamespaceSpec {
+            tenant: namespace.tenant.clone(),
             namespace: namespace.namespace.clone(),
             revision: namespace.revision,
             disable: true,

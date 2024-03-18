@@ -56,9 +56,9 @@ impl HttpGateway {
             .route("/func/*request", get(ReqHandler))
             .route("/namespaces/", post(PostNamespace))
             .route("/funcpackages/", post(PostFuncPackage))
-            .route("/funcpackages/:namespace/:name", delete(DropFuncPackage))
-            .route("/funcpackages/:namespace/:name", get(GetFuncPackage))
-            .route("/funcpackages/:namespace", get(GetFuncPackages))
+            .route("/funcpackages/:tenant/:namespace/:name", delete(DropFuncPackage))
+            .route("/funcpackages/:tenant/:namespace/:name", get(GetFuncPackage))
+            .route("/funcpackages/:tenant/:namespace", get(GetFuncPackages))
             .route("/funccall/", post(PostFuncCall))
             .with_state(client);
         
@@ -73,16 +73,15 @@ impl HttpGateway {
 }
 
 async fn PostNamespace(
-    Json(payload): Json<NamespaceSpec>
+    Json(spec): Json<NamespaceSpec>
 ) -> impl IntoResponse {
-    error!("postnamespace {:?}", &payload);
-    if NAMESPACE_MGR.get().unwrap().ContainersNamespace(&payload.namespace) {
-        match NAMESPACE_STORE.get().unwrap().UpdateNamespace(&payload).await {
+    if NAMESPACE_MGR.get().unwrap().ContainersNamespace(&spec.tenant, &spec.namespace) {
+        match NAMESPACE_STORE.get().unwrap().UpdateNamespace(&spec).await {
             Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
             Ok(()) => (StatusCode::OK, Json(format!("ok"))),
         }
     } else {
-        match NAMESPACE_STORE.get().unwrap().CreateNamespace(&payload).await {
+        match NAMESPACE_STORE.get().unwrap().CreateNamespace(&spec).await {
             Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
             Ok(()) => (StatusCode::OK, Json(format!("ok"))),
         }
@@ -90,18 +89,18 @@ async fn PostNamespace(
 }
 
 async fn PostFuncPackage(
-    Json(payload): Json<FuncPackageSpec>
+    Json(spec): Json<FuncPackageSpec>
 ) -> impl IntoResponse {
-    match NAMESPACE_MGR.get().unwrap().ContainsFuncPackage(&payload.namespace, &payload.name) {
+    match NAMESPACE_MGR.get().unwrap().ContainsFuncPackage(&spec.tenant, &spec.namespace, &spec.name) {
         Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
         Ok(contains) => {
             if contains {
-                match NAMESPACE_STORE.get().unwrap().UpdateFuncPackage(&payload).await {
+                match NAMESPACE_STORE.get().unwrap().UpdateFuncPackage(&spec).await {
                     Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
                     Ok(()) => (StatusCode::OK, Json(format!("ok"))),
                 } 
             } else {
-                match NAMESPACE_STORE.get().unwrap().CreateFuncPackage(&payload).await {
+                match NAMESPACE_STORE.get().unwrap().CreateFuncPackage(&spec).await {
                     Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
                     Ok(()) => (StatusCode::OK, Json(format!("ok"))),
                 } 
@@ -111,10 +110,10 @@ async fn PostFuncPackage(
 }
 
 async fn DropFuncPackage(
-    Path((namespace, name)): Path<(String, String)>
+    Path((tenant, namespace, name)): Path<(String, String, String)>
 ) -> impl IntoResponse {
     error!("DropFuncPackage 1 {:?}/{}", &namespace, &name);
-    match NAMESPACE_MGR.get().unwrap().GetFuncPackage(&namespace, &name) {
+    match NAMESPACE_MGR.get().unwrap().GetFuncPackage(&tenant, &namespace, &name) {
         Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
         Ok(funcPackage) => {
             let revision = funcPackage.spec.revision;
@@ -127,9 +126,9 @@ async fn DropFuncPackage(
 }
 
 async fn GetFuncPackage(
-    Path((namespace, name)): Path<(String, String)>
+    Path((tenant, namespace, name)): Path<(String, String, String)>
 ) -> impl IntoResponse {
-    match NAMESPACE_MGR.get().unwrap().GetFuncPackage(&namespace, &name) {
+    match NAMESPACE_MGR.get().unwrap().GetFuncPackage(&tenant,&namespace, &name) {
         Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
         Ok(funcPackage) => {
             let spec = funcPackage.spec.ToJson();
@@ -139,9 +138,9 @@ async fn GetFuncPackage(
 }
 
 async fn GetFuncPackages(
-    Path(namespace): Path<String>
+    Path((tenant, namespace)): Path<(String, String)>
 ) -> impl IntoResponse {
-    match NAMESPACE_MGR.get().unwrap().GetFuncPackages(&namespace) {
+    match NAMESPACE_MGR.get().unwrap().GetFuncPackages(&tenant, &namespace) {
         Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
         Ok(funcPackages) => {
             let str = serde_json::to_string(&funcPackages).unwrap(); // format!("{:#?}", funcPackages);
@@ -153,7 +152,7 @@ async fn GetFuncPackages(
 async fn PostFuncCall(
     Json(req): Json<PromptReq>
 ) -> impl IntoResponse {
-    match NAMESPACE_MGR.get().unwrap().GetFuncPackage(&req.namespace, &req.func) {
+    match NAMESPACE_MGR.get().unwrap().GetFuncPackage(&req.tenant, &req.namespace, &req.func) {
         Err(e) => {
             return (StatusCode::BAD_REQUEST, Json(format!("{:?}",e)));
         } 
@@ -200,6 +199,7 @@ async fn server() {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct PromptReq {
+    pub tenant: String,
     pub namespace: String,
     pub func: String,
     pub prompt: String,

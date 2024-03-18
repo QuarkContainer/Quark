@@ -68,7 +68,7 @@ impl QletAggrStore {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
         let addr = format!("http://{}", STATESVC_ADDR);
-        let informer = Informer::New(vec![addr], "node_info", "", &ListOption::default()).await?;
+        let informer = Informer::New(vec![addr], "node_info", "", "", &ListOption::default()).await?;
         
         informer.AddEventHandler(Arc::new(self.clone())).await?;
         let notify = Arc::new(Notify::new());
@@ -157,8 +157,8 @@ impl QletAgent {
 
             nodeName: nodeName.to_owned(),
             svcAddr: svcAddr.to_owned(),
-            nodeClient: AggregateClient::New(nodeCache, "node", "")?,
-            podClient: AggregateClient::New(podCache, "pod", "")?,
+            nodeClient: AggregateClient::New(nodeCache, "node", "", "")?,
+            podClient: AggregateClient::New(podCache, "pod", "", "")?,
         };
 
         return Ok(Self(Arc::new(inner)))

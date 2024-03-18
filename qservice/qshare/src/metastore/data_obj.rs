@@ -230,6 +230,7 @@ pub struct WatchEvent {
 #[derive(Debug, Default)]
 pub struct DataObjectInner {
     pub kind: String,
+    pub tenant: String,
     pub namespace: String,
     pub name: String,
     pub lables: Labels,
@@ -247,6 +248,7 @@ pub struct DataObjectInner {
 impl PartialEq for DataObjectInner {
     fn eq(&self, other: &Self) -> bool {
         self.kind == other.kind &&
+        self.tenant == other.tenant &&
         self.namespace == other.namespace &&
         self.lables == other.lables &&
         self.annotations == other.annotations &&
@@ -260,6 +262,7 @@ impl DataObjectInner {
     pub fn CopyWithRev(&self, channelRev: i64, revision: i64) -> Self {
         return Self {
             kind: self.kind.clone(),
+            tenant: self.tenant.clone(),
             namespace: self.namespace.clone(),
             name: self.name.clone(),
             lables: self.lables.Copy(),
@@ -275,6 +278,7 @@ impl DeepCopy for DataObjectInner {
     fn DeepCopy(&self) -> Self {
         return Self {
             kind: self.kind.clone(),
+            tenant: self.tenant.clone(),
             namespace: self.namespace.clone(),
             name: self.name.clone(),
             lables: self.lables.Copy(),
@@ -300,6 +304,7 @@ impl From<&Object> for DataObjectInner {
 
         let inner = DataObjectInner {
             kind: item.kind.clone(),
+            tenant: item.tenant.clone(),
             namespace: item.namespace.clone(),
             name: item.name.clone(),
             lables: lables.into(),
@@ -327,6 +332,7 @@ impl From<&Obj> for DataObjectInner {
 
         let inner = DataObjectInner {
             kind: item.kind.clone(),
+            tenant: item.tenant.clone(),
             namespace: item.namespace.clone(),
             name: item.name.clone(),
             lables: lables.into(),
@@ -419,6 +425,7 @@ impl DataObject {
 
         let inner = DataObjectInner {
             kind: kind.to_string(),
+            tenant: "k8sObject".to_owned(),
             namespace: meta.namespace.as_deref().unwrap_or("").to_string(),
             name: meta.name.as_deref().unwrap_or("").to_string(),
             annotations: annotations.into(),
@@ -444,6 +451,7 @@ impl DataObject {
 
         let inner = DataObjectInner {
             kind: item.kind.clone(),
+            tenant: item.tenant.clone(),
             namespace: item.namespace.clone(),
             name: item.name.clone(),
             lables: lables.into(),
@@ -473,6 +481,7 @@ impl DataObject {
 
         let inner = DataObjectInner {
             kind: item.kind.clone(),
+            tenant: item.tenant.clone(),
             namespace: item.namespace.clone(),
             name: item.name.clone(),
             lables: lables.into(),
@@ -485,6 +494,10 @@ impl DataObject {
         return inner.into();
     }
 
+    pub fn Tenant(&self) -> String {
+        return self.tenant.clone();
+    }
+
     pub fn Namespace(&self) -> String {
         return self.namespace.clone();
     }
@@ -494,16 +507,17 @@ impl DataObject {
     }
 
     pub fn Key(&self) -> String {
-        return format!("{}/{}", &self.namespace, &self.name);
+        return format!("{}/{}/{}", &self.tenant, &self.namespace, &self.name);
     }
 
     pub fn StoreKey(&self) -> String {
-        return format!("{}/{}/{}", &self.kind, &self.namespace, &self.name);
+        return format!("{}/{}/{}/{}", &self.kind, &self.tenant, &self.namespace, &self.name);
     }
 
     pub fn Object(&self) -> Object {
         return Object {
             kind: self.kind.clone(),
+            tenant: self.tenant.clone(),
             namespace: self.namespace.clone(),
             name: self.name.clone(),
             labels: self.lables.ToVec(),
@@ -515,6 +529,7 @@ impl DataObject {
     pub fn Obj(&self) -> Obj {
         return Obj {
             kind: self.kind.clone(),
+            tenant: self.tenant.clone(),
             namespace: self.namespace.clone(),
             name: self.name.clone(),
             channel_rev: self.channelRev,
@@ -551,12 +566,13 @@ impl DataObject {
 impl Object {
     pub fn DeepCopy(&self) -> Self {
         return Object { 
-            kind: self.kind.to_string(), 
-            namespace: self.namespace.to_string(), 
-            name: self.name.to_string(), 
+            kind: self.kind.clone(), 
+            tenant: self.tenant.clone(),
+            namespace: self.namespace.clone(), 
+            name: self.name.clone(), 
             labels: self.labels.clone(), 
             annotations: self.annotations.clone(), 
-            data:self.data.to_string () 
+            data:self.data.clone () 
         }
     }
 

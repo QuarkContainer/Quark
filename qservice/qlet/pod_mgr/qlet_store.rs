@@ -66,6 +66,7 @@ impl QletStore {
 
         let inner = DataObjectInner {
             kind: "node".to_owned(),
+            tenant: node.tenant.clone(),
             namespace: node.namespace.clone(),
             name: node.name.clone(),
             lables: labels.into(),
@@ -108,6 +109,7 @@ impl QletStore {
 
         let inner = DataObjectInner {
             kind: "pod".to_owned(),
+            tenant: pod.tenant.clone(),
             namespace: pod.namespace.clone(),
             name: pod.name.clone(),
             lables: labels.into(),

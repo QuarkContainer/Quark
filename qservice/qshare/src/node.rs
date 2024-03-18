@@ -113,6 +113,7 @@ pub struct ObjectMeta {
 pub struct Node {
     /////////////// metadata //////////////////////////
     pub name: String,
+    pub tenant: String,
     pub namespace: String,
     pub uid: String,
     pub resource_version: String,
@@ -246,6 +247,7 @@ pub struct QNodeInner {
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct PodDef {
+    pub tenant: String,
     pub namespace: String,
     pub name: String,
     pub uid: String,
@@ -274,7 +276,11 @@ pub struct PodDef {
 
 impl PodDef {
     pub fn PodId(&self) -> String {
-        return format!("{}/{}", &self.namespace, &self.name);
+        return format!("{}/{}/{}", &self.tenant, &self.namespace, &self.name);
+    }
+
+    pub fn PodNamespace(&self) -> String {
+        return format!("{}/{}", &self.tenant, &self.namespace);
     }
 
     pub fn ToString(&self) -> String {

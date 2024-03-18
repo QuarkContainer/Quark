@@ -39,8 +39,9 @@ message ReadFuncLogResp {
 }
 
 message ReadObjReq {
-    string namespace = 1;
-    string name = 2;
+    string tenant = 1;
+    string namespace = 2;
+    string name = 3;
 }
 
 message ReadObjResp {
@@ -54,8 +55,9 @@ message ObjMeta {
 }
 
 message ListObjReq {
-    string namespace = 1;
-    string prefix = 2;
+    string tenant = 1;
+    string namespace = 2;
+    string prefix = 3;
 }
 
 message ListObjResp {
@@ -79,8 +81,9 @@ message KV {
 // use for Etcd storage, no revision 
 message Object {
     string kind = 1;
-    string namespace = 2;
-    string name = 3;
+    string tenant = 2;
+    string namespace = 3;
+    string name = 4;
 
     repeated KV labels = 5;
     repeated KV annotations = 6;
@@ -90,14 +93,15 @@ message Object {
 
 message Obj {
     string kind = 1;
-    string namespace = 2;
-    string name = 3;
-    int64 channelRev = 4;
-    int64 revision = 5;
-    repeated KV labels = 6;
-    repeated KV annotations = 7;
+    string tenant = 2;
+    string namespace = 3;
+    string name = 4;
+    int64 channelRev = 5;
+    int64 revision = 6;
+    repeated KV labels = 7;
+    repeated KV annotations = 8;
     
-    string data = 8;
+    string data = 9;
 }
 
 message ResponseHeader {
@@ -117,9 +121,10 @@ message CreateResponseMessage {
 
 message GetRequestMessage {
     string obj_type = 1;
-    string namespace = 2;
-    string name = 3;
-    int64 revision = 4;
+    string tenant = 2;
+    string namespace = 3;
+    string name = 4;
+    int64 revision = 5;
 }
 
 message GetResponseMessage {
@@ -129,8 +134,9 @@ message GetResponseMessage {
 
 message DeleteRequestMessage {
     string obj_type = 1;
-    string namespace = 2;
-    string name = 3;
+    string tenant = 2;
+    string namespace = 3;
+    string name = 5;
 }
 
 message DeleteResponseMessage {
@@ -150,10 +156,11 @@ message UpdateResponseMessage {
 
 message ListRequestMessage {
     string obj_type = 1;
-    string namespace = 2;
-    int64 revision = 3;
-    string label_selector = 4;
-    string field_selector = 5;
+    string tenant = 2;
+    string namespace = 3;
+    int64 revision = 4;
+    string label_selector = 5;
+    string field_selector = 6;
 }
 
 message ListResponseMessage {
@@ -164,10 +171,11 @@ message ListResponseMessage {
 
 message WatchRequestMessage {
     string obj_type = 1;
-    string namespace = 2;
-    int64 revision = 3;
-    string label_selector = 4;
-    string field_selector = 5;
+    string tenant = 2;
+    string namespace = 3;
+    int64 revision = 4;
+    string label_selector = 5;
+    string field_selector = 6;
 }
 
 message WEvent {

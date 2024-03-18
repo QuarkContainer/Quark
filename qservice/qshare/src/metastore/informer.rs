@@ -45,10 +45,11 @@ impl Deref for Informer {
 unsafe impl Send for Informer {}
 
 impl Informer {
-    pub async fn New(addresses: Vec<String>, objType: &str, namespace: &str, opts: &ListOption) -> Result<Self> {
+    pub async fn New(addresses: Vec<String>, objType: &str, tenant: &str, namespace: &str, opts: &ListOption) -> Result<Self> {
         let inner = InformerInner {
-            objType: objType.to_string(),
-            namespace: namespace.to_string(),
+            objType: objType.to_owned(),
+            tenant: tenant.to_owned(),
+            namespace: namespace.to_owned(),
             opts: opts.DeepCopy(),
             revision: AtomicI64::new(0),
             store: ThreadSafeStore::default(),
@@ -139,10 +140,11 @@ impl Informer {
         let store = self.store.clone();
         
         let objType = self.objType.clone();
+        let tenant = self.tenant.clone();
         let namespace = self.namespace.clone();
         let opts = self.opts.DeepCopy();
         
-        let objs = client.List(&objType, &namespace, &opts).await?;
+        let objs = client.List(&objType, &tenant, &namespace, &opts).await?;
         self.revision.store(objs.revision, Ordering::SeqCst);
         for o in objs.objs {
             store.Add(&o)?;
@@ -159,6 +161,7 @@ impl Informer {
 
     async fn WatchUpdate(&self, client: &CacherClient) -> Result<()> {
         let objType = self.objType.clone();
+        let tenant = self.tenant.clone();
         let namespace = self.namespace.clone();
         let mut opts = self.opts.DeepCopy();
         opts.revision = self.revision.load(Ordering::Acquire) + 1;
@@ -166,7 +169,7 @@ impl Informer {
         let closeNotify = self.closeNotify.clone();
         
         loop {
-            let mut ws = client.Watch(&objType, &namespace, &opts).await?;
+            let mut ws = client.Watch(&objType, &tenant, &namespace, &opts).await?;
             loop {
                 let event = tokio::select! { 
                     e = ws.Next() => {
@@ -229,7 +232,7 @@ impl Informer {
                 self.Distribute(&event).await;
             }
 
-            let objs = client.List(&objType, &namespace, &opts).await?;
+            let objs = client.List(&objType, &tenant, &namespace, &opts).await?;
             opts.revision = objs.revision + 1;
             for o in objs.objs {
                 self.Distribute(&DeltaEvent {
@@ -295,6 +298,7 @@ impl Informer {
 #[derive(Debug)]
 pub struct InformerInner {
     pub objType: String,
+    pub tenant: String,
     pub namespace: String,
     pub opts: ListOption,
 

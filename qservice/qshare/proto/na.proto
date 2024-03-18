@@ -68,14 +68,22 @@ message ContainerPort {
   int32 container_port = 2;
 }
 
+message KV {
+  string key = 1;
+  string val = 2;
+} 
+
 message CreateFuncPodReq {
-  string namespace = 1;
-  string name = 2;
-  string image = 3;
-  repeated string commands = 4;
-  repeated Env envs = 5;
-  repeated Mount mounts = 6;
-  repeated ContainerPort ports = 7;
+  string tenant = 1;
+  string namespace = 2;
+  string name = 3;
+  string image = 4;
+  repeated KV labels = 5;
+  repeated KV annotations = 6;
+  repeated string commands = 7;
+  repeated Env envs = 8;
+  repeated Mount mounts = 9;
+  repeated ContainerPort ports = 10;
 }
 
 message CreateFuncPodResp {
@@ -117,8 +125,9 @@ message CreatePodResp {
 }
 
 message TerminatePodReq {
-  string namespace = 1;
-  string name = 2;
+  string tenant = 1;
+  string namespace = 2;
+  string name = 3;
 }
 
 message TerminatePodResp {
@@ -126,8 +135,9 @@ message TerminatePodResp {
 }
 
 message GetPodReq {
-  string namespace = 1;
-  string name = 2;
+  string tenant = 1;
+  string namespace = 3;
+  string name = 4;
 }
 
 message GetPodResp {

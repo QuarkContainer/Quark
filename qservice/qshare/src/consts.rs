@@ -71,8 +71,9 @@ pub const ERROR_SOURCE_USER: i32 = 2;
 
 
 
-pub const DefaultNodeMgrNodeNameSpace: &str = "qserverless.io";
-pub const DefaultDomainName: &str = "qserverless.io";
+pub const DefaultNodeMgrNodeNameSpace: &str = "qservice";
+pub const DefaultNodeMgrNodeTenant: &str = "system";
+pub const DefaultDomainName: &str = "qservice.io";
 
 // NodePending means the node has been created/added by the system, but not configured.
 pub const NodePending : &str = "Pending";

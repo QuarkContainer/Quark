@@ -178,23 +178,23 @@ sudo rm -f /var/log/quark/dns.log; ./test new dns
 
 curl --header "Content-Type: application/json" \
   --request POST \
-  --data '{"namespace":"ns1", "revision": 0, "disable": false}' \
+  --data '{"tenant":"t1", "namespace":"ns1", "revision": 0, "disable": false}' \
   http://localhost:4000/namespaces/
 
 7. CRUD funcpackage
 curl --header "Content-Type: application/json" \
   --request POST \
-  --data '{"namespace":"ns1", "name": "name1", "revision": 0, "image": "ubuntu", "commands": ["/test/rust/functest/target/debug/functest"], "envs": []}' \
+  --data '{"tenant":"t1", "namespace":"ns1", "name": "name1", "revision": 0, "image": "ubuntu", "commands": ["/test/rust/functest/target/debug/functest"], "envs": []}' \
   http://localhost:4000/funcpackages/
 
-curl http://localhost:4000/funcpackages/ns1/name1
+curl http://localhost:4000/funcpackages/t1/ns1/name1
 
-curl --request "DELETE" http://localhost:4000/funcpackages/ns1/name1/
+curl --request "DELETE" http://localhost:4000/funcpackages/t1/ns1/name1/
 
 8. Call Func
 
 curl --header "Content-Type: application/json" \
   --request POST \
-  --data '{"namespace":"ns1", "func": "name1", "prompt": "asdfasd"}' \
+  --data '{"tenant":"t1", "namespace":"ns1", "func": "name1", "prompt": "asdfasd"}' \
   http://localhost:4000/funccall/
   

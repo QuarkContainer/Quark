@@ -99,20 +99,35 @@ pub struct ContainerPort {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Kv {
+    #[prost(string, tag = "1")]
+    pub key: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub val: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateFuncPodReq {
     #[prost(string, tag = "1")]
-    pub namespace: ::prost::alloc::string::String,
+    pub tenant: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub name: ::prost::alloc::string::String,
+    pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
     pub image: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "4")]
-    pub commands: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(message, repeated, tag = "5")]
-    pub envs: ::prost::alloc::vec::Vec<Env>,
+    pub labels: ::prost::alloc::vec::Vec<Kv>,
     #[prost(message, repeated, tag = "6")]
+    pub annotations: ::prost::alloc::vec::Vec<Kv>,
+    #[prost(string, repeated, tag = "7")]
+    pub commands: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(message, repeated, tag = "8")]
+    pub envs: ::prost::alloc::vec::Vec<Env>,
+    #[prost(message, repeated, tag = "9")]
     pub mounts: ::prost::alloc::vec::Vec<Mount>,
-    #[prost(message, repeated, tag = "7")]
+    #[prost(message, repeated, tag = "10")]
     pub ports: ::prost::alloc::vec::Vec<ContainerPort>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -187,8 +202,10 @@ pub struct CreatePodResp {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TerminatePodReq {
     #[prost(string, tag = "1")]
-    pub namespace: ::prost::alloc::string::String,
+    pub tenant: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
     pub name: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -203,8 +220,10 @@ pub struct TerminatePodResp {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetPodReq {
     #[prost(string, tag = "1")]
+    pub tenant: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
     pub namespace: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag = "4")]
     pub name: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]

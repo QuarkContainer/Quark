@@ -316,23 +316,25 @@ impl TsotClient {
         }
     }
 
-    pub async fn Connect(&self, namespace: &str, ipAddr: [u8; 4], port: u16) -> Result<TcpStream> {
+    pub async fn Connect(&self, tenant: &str, namespace: &str, ipAddr: [u8; 4], port: u16) -> Result<TcpStream> {
         let tcpSocket = TcpSocket::new_v4()?;
         let sock = tcpSocket.as_raw_fd();
+        
+        let podNamespace = format!("{}/{}", tenant, namespace);
 
-        assert!(namespace.len() < 128);
+        assert!(podNamespace.len() < 64);
 
         let reqId = self.nextReqId.fetch_add(1, Ordering::SeqCst);
         let mut req = GatewayConnectReq {
             reqId: reqId,
-            namespace: [0; 64],
+            podNamespace: [0; 64],
             dstIp: IpAddress::New(&ipAddr).0,
             dstPort: port,
             srcPort: 123,
         };
 
-        for i in 0..namespace.len() {
-            req.namespace[i] = namespace.as_bytes()[i];
+        for i in 0..podNamespace.len() {
+            req.podNamespace[i] = podNamespace.as_bytes()[i];
         }
 
         let msg = TsotMessage {
