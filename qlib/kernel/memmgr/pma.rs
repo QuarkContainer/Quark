@@ -405,7 +405,7 @@ impl PageTables {
     }
 
     pub fn UnmapAll(&self) -> Result<()> {
-        self.Unmap(MemoryDef::PAGE_SIZE, MemoryDef::PHY_LOWER_ADDR, &*PAGE_MGR)?;
+        self.Unmap(MemoryDef::PAGE_SIZE, MemoryDef::USER_UPPER_ADDR, &*PAGE_MGR)?;
         self.Unmap(MemoryDef::PHY_UPPER_ADDR, MemoryDef::LOWER_TOP, &*PAGE_MGR)?;
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
 

@@ -2971,11 +2971,13 @@ impl MemoryDef {
     pub const PAGE_SIZE_2M: u64 = (2 * Self::ONE_MB);
     pub const PAGE_SIZE_2M_MASK: u64 = !(Self::PAGE_SIZE_2M - 1);
     pub const BLOCK_SIZE: u64 = 64 * Self::ONE_GB;
-
     pub const PHY_LOWER_ADDR: u64 = 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernal space
     pub const PHY_UPPER_ADDR: u64 = Self::PHY_LOWER_ADDR + 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernal space
 
     // memory layout
+    #[cfg(target_arch = "x86_64")]
+    pub const USER_UPPER_ADDR: u64 = Self::PHY_LOWER_ADDR;
+
     // PHY_LOWER_ADDR: qkernel image 512MB
     pub const QKERNEL_IMAGE_SIZE: u64 = 512 * Self::ONE_MB;
     // RDMA Local share memory
@@ -3017,12 +3019,15 @@ impl MemoryDef {
 }
 
 #[cfg(target_arch = "aarch64")]
-impl MemoryDef{
-    // use 2 pages below PHY_LOWER_ADDR as MMIO base.
-    pub const HYPERCALL_MMIO_BASE: u64 = Self::KVM_IOEVENTFD_BASEADDR - Self::PAGE_SIZE;
-    pub const HYPERCALL_MMIO_SIZE: u64 = 0x1000;
+impl MemoryDef {
+    pub const USER_UPPER_ADDR: u64 = Self::HYPERCALL_MMIO_BASE;
+    //
+    // One (device) page, placed two pages bellow the PHY_LOWER_ADDR.
+    //
+    pub const HYPERCALL_MMIO_BASE: u64 = Self::KVM_IOEVENTFD_BASEADDR
+                                         - Self::PAGE_SIZE;
+    pub const HYPERCALL_MMIO_SIZE: u64 = Self::PAGE_SIZE;
 }
-
 
 //mmap prot
 pub struct MmapProt {}
