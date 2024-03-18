@@ -12,12 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under
 
-use std::result::Result as TResult;
 use axum::{
     body::Body,
-    extract::{Request, State},
-    http::uri::Uri,
-    response::{IntoResponse, Response},
+    response::IntoResponse,
     routing::get,
     routing::post,
     routing::delete,
@@ -41,24 +38,28 @@ use crate::namespace_mgr::NamespaceSpec;
 use crate::NAMESPACE_MGR;
 use crate::NAMESPACE_STORE;
 
+pub const FUNCPOD_TYPE: &str = "funcpodType.qservice.io";
+pub const FUNCPOD_PROMPT: &str = "prompt";
+
 pub struct HttpGateway {
 }
 
 impl HttpGateway {
     pub async fn HttpServe(&self) -> Result<()> {
-        tokio::spawn(server());
-
         let client: Client =
             hyper_util::client::legacy::Client::<(), ()>::builder(TokioExecutor::new())
                 .build(HttpConnector::new());
     
         let app = Router::new()
-            .route("/func/*request", get(ReqHandler))
             .route("/namespaces/", post(PostNamespace))
+            
             .route("/funcpackages/", post(PostFuncPackage))
             .route("/funcpackages/:tenant/:namespace/:name", delete(DropFuncPackage))
             .route("/funcpackages/:tenant/:namespace/:name", get(GetFuncPackage))
             .route("/funcpackages/:tenant/:namespace", get(GetFuncPackages))
+            
+            .route("/funcpods/:tenant/:namespace/:name", get(GetFuncPods))
+            
             .route("/funccall/", post(PostFuncCall))
             .with_state(client);
         
@@ -75,7 +76,7 @@ impl HttpGateway {
 async fn PostNamespace(
     Json(spec): Json<NamespaceSpec>
 ) -> impl IntoResponse {
-    if NAMESPACE_MGR.get().unwrap().ContainersNamespace(&spec.tenant, &spec.namespace) {
+    if NAMESPACE_MGR.get().unwrap().ContainsNamespace(&spec.tenant, &spec.namespace) {
         match NAMESPACE_STORE.get().unwrap().UpdateNamespace(&spec).await {
             Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
             Ok(()) => (StatusCode::OK, Json(format!("ok"))),
@@ -84,6 +85,18 @@ async fn PostNamespace(
         match NAMESPACE_STORE.get().unwrap().CreateNamespace(&spec).await {
             Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
             Ok(()) => (StatusCode::OK, Json(format!("ok"))),
+        }
+    }
+}
+
+async fn GetFuncPods(
+    Path((tenant, namespace, funcName)): Path<(String, String, String)>
+) -> impl IntoResponse {
+    match NAMESPACE_MGR.get().unwrap().GetFuncPods(&tenant,&namespace, &funcName) {
+        Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}",e))),
+        Ok(pods) => {
+            let pods = serde_json::to_string_pretty(&pods).unwrap();
+            (StatusCode::OK, Json(pods))
         }
     }
 }
@@ -162,39 +175,6 @@ async fn PostFuncCall(
             return (resp.status, Json(resp.response));
         }
     }
-}
-
-async fn ReqHandler(State(client): State<Client>, mut req: Request) -> TResult<Response, StatusCode> {
-    let path = req.uri().path();
-    let path_query = req
-        .uri()
-        .path_and_query()
-        .map(|v| v.as_str())
-        .unwrap_or(path);
-
-    let uri = req.uri();
-    println!("path is {:?}",uri.query());
-    println!("path is {:?}",req.uri().path_and_query());
-
-    let uri = format!("http://127.0.0.1:3000{}", path_query);
-
-    *req.uri_mut() = Uri::try_from(uri).unwrap();
-
-    Ok(client
-        .request(req)
-        .await
-        .map_err(|_| StatusCode::BAD_REQUEST)?
-        .into_response())
-}
-
-async fn server() {
-    let app = Router::new().route("/", get(|| async { "Hello, world!" }));
-
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
-        .await
-        .unwrap();
-    println!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app).await.unwrap();
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]

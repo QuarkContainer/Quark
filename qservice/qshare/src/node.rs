@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::ops::Deref;
 use std::{collections::BTreeMap, sync::Arc, time::SystemTime};
 use k8s_openapi::api::core::v1::Volume;
 use serde::{Deserialize, Serialize};
 
 use crate::cadvisor_types::MachineInfo;
 use crate::k8s;
+use crate::metastore::data_obj::{DataObject, DataObjectInner};
+use crate::common::*;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct NodeSystemInfo {
@@ -275,6 +278,8 @@ pub struct PodDef {
 }
 
 impl PodDef {
+    pub const KEY: &'static str = "pod";
+
     pub fn PodId(&self) -> String {
         return format!("{}/{}/{}", &self.tenant, &self.namespace, &self.name);
     }
@@ -285,6 +290,44 @@ impl PodDef {
 
     pub fn ToString(&self) -> String {
         return serde_json::to_string_pretty(self).unwrap();
+    }
+
+    pub fn FromDataObject(obj: DataObject) -> Result<Self> {
+        let spec = match serde_json::from_str::<Self>(&obj.data) {
+            Err(e) => return Err(Error::CommonError(format!("FuncPackageSpec::FromDataObject {:?}", e))),
+            Ok(s) => s
+        };
+        return Ok(spec);
+    }
+
+    pub fn DataObject(&self) -> DataObject {
+        let inner = DataObjectInner {
+            kind: Self::KEY.to_owned(),
+            tenant: self.tenant.clone(),
+            namespace: self.namespace.clone(),
+            name: self.name.clone(),
+            data: serde_json::to_string_pretty(&self).unwrap(),
+            ..Default::default()
+        };
+
+        return inner.into();
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct PodDefBox(Arc<PodDef>);
+
+impl Deref for PodDefBox {
+    type Target = Arc<PodDef>;
+
+    fn deref(&self) -> &Arc<PodDef> {
+        &self.0
+    }
+}
+
+impl From<PodDef> for PodDefBox {
+    fn from(item: PodDef) -> Self {
+        return Self(Arc::new(item))
     }
 }
 

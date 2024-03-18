@@ -31,10 +31,10 @@ use hyper_util::rt::TokioIo;
 use http_body_util::{BodyExt, Empty};
 
 use qshare::common::*;
-use qshare::na::{self, Env};
+use qshare::na::{self, Env, Kv};
 
 use crate::func_mgr::FuncPackage;
-use crate::{PromptReq, TSOT_CLIENT};
+use crate::{PromptReq, FUNCPOD_PROMPT, FUNCPOD_TYPE, TSOT_CLIENT};
 
 lazy_static::lazy_static! {
     pub static ref FUNCAGENT_MGR: FuncAgentMgr = FuncAgentMgr::default();
@@ -786,7 +786,12 @@ impl FuncWorker {
                 value: e.1.clone(),
             })
         }
-        let _envs = funcPackage.spec.envs.clone();
+        
+        let mut annotations = Vec::new();
+        annotations.push(Kv {
+            key: FUNCPOD_TYPE.to_owned(),
+            val: FUNCPOD_PROMPT.to_owned()
+        });
 
         let request = tonic::Request::new(na::CreateFuncPodReq {
             tenant: tenant.to_owned(),
@@ -794,7 +799,7 @@ impl FuncWorker {
             name: name.to_owned(),
             image: funcPackage.spec.image.clone(),
             labels: Vec::new(),
-            annotations: Vec::new(),
+            annotations: annotations,
             commands: commands,
             envs: envs,
             mounts: mounts,

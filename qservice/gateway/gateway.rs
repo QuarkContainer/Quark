@@ -31,6 +31,7 @@ pub mod namespace_mgr;
 pub mod func_mgr;
 pub mod func_worker;
 pub mod tsot_client;
+pub mod pod_mgr;
 
 use namespace_mgr::{NamespaceMgr, NamespaceStore};
 use once_cell::sync::OnceCell;
