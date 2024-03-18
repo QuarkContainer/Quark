@@ -116,7 +116,7 @@ pub fn WaitFn() -> ! {
             task = TaskId::default();
             Some(tmp)
         };
-
+        //info!("WaitFn, next:{:?}\n",next);
         match next {
             None => {
                 SHARESPACE.scheduler.IncreaseHaltVcpuCnt();

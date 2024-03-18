@@ -232,7 +232,8 @@ impl VMSpace {
     }
 
     pub fn LoadProcessKernel(&mut self, processAddr: u64) -> i64 {
-        unsafe{*(processAddr as *mut loader::Process) = loader::Process::default()};
+        info!("processAddr:0x{:x}",processAddr);
+        unsafe{core::ptr::write(processAddr as *mut loader::Process, loader::Process::default());};
         let process = unsafe { &mut *(processAddr as *mut loader::Process) };
         process.ID = self.args.as_ref().unwrap().ID.to_string();
         let spec = &mut self.args.as_mut().unwrap().Spec;
@@ -242,7 +243,6 @@ impl VMSpace {
             cwd = "/".to_string();
         }
         process.Cwd = cwd;
-
         SetConole(spec.process.terminal);
         process.Terminal = spec.process.terminal;
         process.Args.append(&mut spec.process.args);
@@ -264,7 +264,6 @@ impl VMSpace {
 
         process.NumCpu = self.vcpuCount as u32;
         process.ExecId = Some("".to_string());
-
         for i in 0..process.Stdiofds.len() {
             let osfd = unsafe { dup(i as i32) as i32 };
 
@@ -286,7 +285,6 @@ impl VMSpace {
         if self.pivot {
             self.PivotRoot(&rootfs);
         }
-
         StartSignalHandle();
         return 0;
     }

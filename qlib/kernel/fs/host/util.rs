@@ -27,6 +27,7 @@ use super::super::super::super::qmsg::qcall::TryOpenStruct;
 use super::super::super::kernel::time::*;
 use super::super::super::task::*;
 use super::super::super::util::cstring::*;
+use super::super::super::util::sharedstring::*;
 
 use super::super::super::super::path;
 use super::super::super::Kernel::HostSpace;
@@ -362,8 +363,8 @@ pub fn UnLinkAt(dirfd: i32, pathname: &str, flags: i32) -> i64 {
 }
 
 pub fn RenameAt(olddirfd: i32, oldpath: &str, newdirfd: i32, newpath: &str) -> i64 {
-    let oldpath = CString::New(oldpath);
-    let newpath = CString::New(newpath);
+    let oldpath = SharedString::New(oldpath);
+    let newpath = SharedString::New(newpath);
 
     return HostSpace::RenameAt(olddirfd, oldpath.Ptr(), newdirfd, newpath.Ptr());
 }

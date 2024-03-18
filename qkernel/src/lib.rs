@@ -608,7 +608,6 @@ fn StartRootContainer(_para: *const u8) -> ! {
     let task = Task::Current();
     let mut process = Process::default();
     Kernel::HostSpace::LoadProcessKernel(&mut process as *mut _ as u64) as usize;
-    info!("##Process:{:#?}",process);
     let (_tid, entry, userStackAddr, kernelStackAddr) = {
         let mut processArgs = LOADER.Lock(task).unwrap().Init(process);
         match LOADER.LoadRootProcess(&mut processArgs) {

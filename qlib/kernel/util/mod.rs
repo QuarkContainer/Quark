@@ -13,3 +13,4 @@
 // limitations under the License.
 
 pub mod cstring;
+pub mod sharedstring;

@@ -296,20 +296,35 @@ impl HostSpace {
 
     pub fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
         let current = Task::Current().GetTaskId();
+        let qmsg_size = core::mem::size_of::<QMsg>();
+        let msg_size = core::mem::size_of::<Msg>();
+        let qmsg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(qmsg_size,0x80) as *mut QMsg };
+        let new_msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(msg_size,0x80) as *mut Msg };
+        let dest_ptr: *mut u8 = new_msg_ptr as *mut u8;
+        let src_ptr: *const u8 = msg as *const Msg as *const u8;
+        unsafe { core::ptr::copy_nonoverlapping(src_ptr, dest_ptr, msg_size);}
+        let new_msg = unsafe {&mut *new_msg_ptr};
+        let mut qmsg = unsafe {&mut *qmsg_ptr};
+        qmsg.taskId = current;
+        qmsg.globalLock = true;
+        qmsg.ret = 0;
+        qmsg.msg = new_msg;
+        let addr = qmsg_ptr as u64;
 
-        let qMsg = QMsg {
-            taskId: current,
-            globalLock: true,
-            ret: 0,
-            msg: msg,
-        };
-
-        let addr = &qMsg as *const _ as u64;
-        let om = HostOutputMsg::QCall(addr);
-
-        super::SHARESPACE.AQCall(&om);
+        let om_size =  core::mem::size_of::<HostOutputMsg>();
+        let om_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(om_size,0x80) as *mut HostOutputMsg };
+        unsafe{
+            *om_ptr = HostOutputMsg::QCall(addr);
+        }
+        super::SHARESPACE.AQCall(unsafe{&*om_ptr} );
         taskMgr::Wait();
-        return qMsg.ret;
+        let ret = qmsg.ret;
+
+        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(qmsg_ptr as *mut u8, qmsg_size, 0x80) };
+        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(new_msg_ptr as *mut u8, msg_size, 0x80) };
+        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(om_ptr as *mut u8, om_size, 0x80) };
+        
+        return ret;
     }
 
     pub fn HCall(msg: &mut Msg, lock: bool) -> u64 {
@@ -328,12 +343,12 @@ impl HostSpace {
         event.globalLock = lock;
         event.ret = 0;
         event.msg = new_msg;
-
+        
         HyperCall64(HYPERCALL_HCALL, event_ptr as u64, 0, 0, 0);
-
+        let ret = event.ret;
         unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(event_ptr as *mut u8, qmsg_size, 0x80) };
         unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(new_msg_ptr as *mut u8, msg_size, 0x80) };
-        let ret = event.ret;
+        
         return ret;
     }
 }

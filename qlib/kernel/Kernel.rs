@@ -46,29 +46,23 @@ impl HostSpace {
         HyperCall64(HYPERCALL_HLT, 0, 0, 0, 0);
     }
     
-    /* 
+    //Here exists memory leak, vec in shared struct cannot be dealloc
     pub fn LoadProcessKernel(processAddr: u64) -> i64 {
-        info!("Start LoadProcessKernel");
-        let msg_size = size_of::<Msg>();
         let process_size = size_of::<Process>();
-        let msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(msg_size,0x80) as *mut Msg };
         let process_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(process_size,0x80) as *mut Process };
-        unsafe{
-            (*msg_ptr) = Msg::LoadProcessKernel(LoadProcessKernel {
-                processAddr: process_ptr as u64,
-            });
-        }
-        let ret = HostSpace::Call( unsafe{&mut *msg_ptr}, false) as i64;
-
+        let mut msg = Msg::LoadProcessKernel(LoadProcessKernel {
+            processAddr: process_ptr as u64,
+        });
+        let ret = HostSpace::Call(&mut msg, false) as i64;
         let private_process = unsafe{&mut *(processAddr as *mut Process)};
         private_process.clone_from_shared(process_ptr);
-        info!("Cloned Process:{:#?}",private_process);
+        //info!("###Cloned Process:{:#?}\n",private_process);
+        //Here could have memory leak since 
         unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(process_ptr as *mut u8, process_size, 0x80);}
-        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(msg_ptr as *mut u8, msg_size, 0x80);}
         return ret;
     }
-    */
-
+    
+    /* 
     pub fn LoadProcessKernel(processAddr: u64) -> i64 {
         let mut msg = Msg::LoadProcessKernel(LoadProcessKernel {
             processAddr: processAddr,
@@ -76,47 +70,41 @@ impl HostSpace {
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
+    */
 
     pub fn CreateMemfd(len: i64, flags: u32) -> i64 {
-        let msg_size = size_of::<Msg>();
-        let msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(msg_size,0x80) as *mut Msg };
+        let mut msg = Msg::CreateMemfd(CreateMemfd {
+            len: len,
+            flags: flags,
+        });
 
-        unsafe{
-            (*msg_ptr) = Msg::CreateMemfd(CreateMemfd {
-                len: len,
-                flags: flags,
-            });
-        }
-
-        let ret = HostSpace::Call(unsafe{&mut *msg_ptr}, false) as i64;
-
-        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(msg_ptr as *mut u8, msg_size, 0x80);}
-        return ret;
+        return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn Fallocate(fd: i32, mode: i32, offset: i64, len: i64) -> i64 {
-        let msg_size = size_of::<Msg>();
-        let msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(msg_size,0x80) as *mut Msg };
-
-        unsafe{
-            (*msg_ptr) = Msg::Fallocate(Fallocate {
-                fd,
-                mode,
-                offset,
-                len,
-            });
-        }
-
-        let ret = HostSpace::Call(unsafe{&mut *msg_ptr}, false) as i64;
-
-        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(msg_ptr as *mut u8, msg_size, 0x80);}
-        return ret;
-    }
-
-    pub fn Sysinfo(addr: u64) -> i64 {
-        let mut msg = Msg::Sysinfo(Sysinfo { addr });
+        let mut msg = Msg::Fallocate(Fallocate {
+            fd,
+            mode,
+            offset,
+            len,
+        });
 
         return HostSpace::Call(&mut msg, false) as i64;
+    }
+    
+    pub fn Sysinfo(addr: u64) -> i64 {
+        let info_size = size_of::<LibcSysinfo>();
+        let info_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(info_size,0x80) as *mut LibcSysinfo };
+        let mut msg = Msg::Sysinfo(Sysinfo {
+            addr: info_ptr as u64,
+        });
+        
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+        unsafe{
+            *(addr as *mut LibcSysinfo) = *info_ptr;
+        }
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(info_ptr as *mut u8, info_size, 0x80);}
+        return ret;
     }
 
     pub fn EventfdWrite(fd: i32) -> i64 {
@@ -224,9 +212,31 @@ impl HostSpace {
     }
 
     pub fn IOAccept(fd: i32, addr: u64, addrlen: u64) -> i64 {
-        let mut msg = Msg::IOAccept(IOAccept { fd, addr, addrlen });
+        let socket_size = size_of::<TcpSockAddr>();
+        let socket_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(socket_size,0x80) as *mut TcpSockAddr };
+        unsafe{
+            (*socket_ptr).data = [0; UNIX_PATH_MAX + 2];
+        }
+        let len_size = size_of::<u32>();
+        let len_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len_size,0x80) as *mut u32 };
+        unsafe{
+            (*len_ptr) = (*socket_ptr).data.len() as _;
+        }
 
-        return HostSpace::HCall(&mut msg, false) as i64;
+        let mut msg = Msg::IOAccept(IOAccept { fd, addr: (socket_ptr as u64), addrlen: (len_ptr as u64) });
+        
+        let ret = HostSpace::HCall(&mut msg, false) as i64;
+        let mut socket = unsafe{ &mut *(addr as *mut TcpSockAddr)} ;
+        socket.data = unsafe {(*socket_ptr).data};
+        let len = addrlen as *mut u32;
+        unsafe{
+            *len = *len_ptr;
+        }
+
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(socket_ptr as *mut u8 ,size_of::<TcpSockAddr>(),0x80);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(len_ptr as *mut u8 ,size_of::<u32>(),0x80);}
+
+        return ret;
     }
 
     pub fn IOConnect(fd: i32, addr: u64, addrlen: u32) -> i64 {
@@ -336,9 +346,24 @@ impl HostSpace {
     }
 
     pub fn Fstat(fd: i32, buff: u64) -> i64 {
-        let mut msg = Msg::Fstat(Fstat { fd, buff });
 
-        return Self::HCall(&mut msg, false) as i64;
+        let new_buff_size = size_of::<LibcStat>();
+        let new_buff_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(new_buff_size,0x80) as *mut LibcStat };
+        unsafe{
+            (*new_buff_ptr) = LibcStat::default();
+        }
+
+        let mut msg = Msg::Fstat(Fstat { fd, buff: new_buff_ptr as u64});
+
+        let ret = Self::HCall(&mut msg, false) as i64;
+
+        let buff_ptr = buff as *mut LibcStat;
+        unsafe{
+            *buff_ptr = *new_buff_ptr;
+        }
+        
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_buff_ptr as *mut u8 ,size_of::<LibcStat>(),0x80);}
+        return ret;
         //return HostSpace::Call(&mut msg, false) as i64;
     }
 
@@ -445,7 +470,7 @@ impl HostSpace {
 
     pub fn MSync(addr: u64, len: usize, flags: i32) -> i64 {
         let mut msg = Msg::MSync(MSync { addr, len, flags });
-
+        
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
@@ -479,28 +504,41 @@ impl HostSpace {
     }
 
     pub fn FSetXattr(fd: i32, name: u64, value: u64, size: usize, flags: u32) -> i64 {
+        let new_value_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80)};
+        unsafe { core::ptr::copy_nonoverlapping(value as *const u8, new_value_ptr, size);}
+        
         let mut msg = Msg::FSetXattr(FSetXattr {
             fd,
             name,
-            value,
+            value: new_value_ptr as u64,
             size,
             flags,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_value_ptr,size,0x80);}
+
+        return ret;
     }
 
     pub fn FGetXattr(fd: i32, name: u64, value: u64, size: usize) -> i64 {
+        let new_value_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80)};
+        unsafe { core::ptr::copy_nonoverlapping(value as *const u8, new_value_ptr, size);}
+
         let mut msg = Msg::FGetXattr(FGetXattr {
             fd,
             name,
-            value,
+            value: new_value_ptr as u64,
             size,
         });
 
         // FGetXattr has to be hcall as it will also be called by
         // inode::lookup --> OverlayHasWhiteout which might be called by create and hold a lock
-        return HostSpace::HCall(&mut msg, false) as i64;
+        let ret = HostSpace::HCall(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(new_value_ptr, value as *mut u8, size);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_value_ptr,size,0x80);}
+
+        return ret;
     }
 
     pub fn FRemoveXattr(fd: i32, name: u64) -> i64 {
@@ -879,7 +917,7 @@ impl HostSpace {
 
     pub fn VcpuWait() -> i64 {
         let ret_ptr =  unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(size_of::<i64>(),0x80) as *mut i64};
-        (HYPERCALL_VCPU_WAIT, 0, 0, ret_ptr as u64, 0);
+        HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, ret_ptr as u64, 0);
         let ret = unsafe{ *ret_ptr };
         unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(ret_ptr as *mut u8 ,size_of::<i64>(),0x80);}
         return ret as i64;
@@ -1033,7 +1071,6 @@ impl HostSpace {
         let bytes = str.as_bytes();
         let len: usize  = bytes.len();
         let new_str_ptr =  unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(len,0x80) };
-        
         let dest_ptr: *mut u8 = new_str_ptr;
         let src_ptr: *const u8 = bytes.as_ptr();
         unsafe { core::ptr::copy_nonoverlapping(src_ptr, dest_ptr, len);}

@@ -317,6 +317,7 @@ impl KVMVcpu {
                     let para2 = share_para.para2;
                     let para3 = share_para.para3;
                     let para4 = share_para.para4;
+                    //info!("HyperCall64 type:0x{:x}  para1:0x{:x} para2:0x{:x} para3:0x{:x} para4:0x{:x}\n",addr,para1,para2,para3,para4);
                     match addr {
                         qlib::HYPERCALL_IOWAIT => {
                             if !super::runc::runtime::vm::IsRunning() {

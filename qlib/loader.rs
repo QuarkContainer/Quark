@@ -54,10 +54,7 @@ impl Process {
     //which is the global allocator of the qvisor, not the kernel
     pub fn clone_from_shared(&mut self, process_ptr:*mut Process){
         let shared_process = unsafe{&*process_ptr };
-        info!("Process: {:#?}\n",shared_process);
-        let cloned_value = shared_process.AdditionalGids.clone();
-        let addr = core::ptr::addr_of!(cloned_value) as u64;
-        info!("Cloned value addr: 0x{:x}",addr);
+        //info!("###Process: {:#?}\n",shared_process);
         self.UID = shared_process.UID;
         self.GID = shared_process.GID;
         self.AdditionalGids.extend(shared_process.AdditionalGids.iter());
@@ -77,6 +74,8 @@ impl Process {
         for (k, v) in &shared_process.limitSet.data {
             self.limitSet.data.insert(*k, *v);
         }
+        self.ID = unsafe{String::from_utf8_unchecked((&shared_process.ID).as_bytes().to_vec())};
+        self.Root = unsafe{String::from_utf8_unchecked((&shared_process.Root).as_bytes().to_vec())};
         self.Stdiofds = shared_process.Stdiofds;
         self.ExecId = match &shared_process.ExecId{
             Some(str) => unsafe{Some(String::from_utf8_unchecked(str.as_bytes().to_vec()))},
