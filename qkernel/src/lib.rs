@@ -576,7 +576,7 @@ fn IoHanlder() {
         if Shutdown() {
             break;
         }
-                    
+
         QUringTrigger();
     }
 }

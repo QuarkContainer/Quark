@@ -23,8 +23,12 @@ use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
+use crate::qlib::linux_def::MemoryDef;
 
 use super::kernel::arch::x86_64::arch_x86::*;
+use core::ops::Deref;
+use super::common::*;
+
 
 use super::vcpu_mgr::*;
 
@@ -254,11 +258,66 @@ impl Scheduler {
     }
 }
 
+
+
+
+#[derive(Default, Debug)]
+pub struct VcpuLocalQueue<T: Clone>(VecDeque<T>);
+
+impl<T: Clone> Deref for VcpuLocalQueue<T> {
+    type Target = VecDeque<T>;
+
+    fn deref(&self) -> &VecDeque<T> {
+        &self.0
+    }
+}
+
+// impl<T: Clone> DerefMut for VcpuLocalQueue<T> {
+
+//     fn deref_mut(&mut self) -> &mut VcpuLocalQueue<T> {
+//         self
+//     }
+// }
+
+impl<T: Clone> VcpuLocalQueue<T> {
+    pub fn New(size: usize) -> Self {
+        return Self(VecDeque::with_capacity(size));
+    }
+
+    pub fn Push(&mut self, data: &T) -> Result<()> {
+
+        if self.0.len() == self.0.capacity() {
+            return Err(Error::QueueFull);
+        }
+
+        self.0.push_back(data.clone());
+        return Ok(());
+    }
+
+    pub fn Pop(&mut self) -> Option<T> {
+        return self.0.pop_front();
+    }
+
+
+    pub fn Count(&self) -> usize {
+        return self.0.len();
+    }
+
+    pub fn IsFull(&self) -> bool {
+        let q = &self.0;
+        return q.len() == q.capacity();
+    }
+
+    pub fn IsEmpty(&self) -> bool {
+        return self.0.len() == 0;
+    }
+}
+
 #[derive(Debug)]
 pub struct TaskQueueIntern {
     pub workingTask: TaskId,
     pub workingTaskReady: bool,
-    pub queue: VecDeque<TaskId>,
+    pub queue: VcpuLocalQueue<TaskId>,
 }
 
 impl Default for TaskQueueIntern {
@@ -266,7 +325,7 @@ impl Default for TaskQueueIntern {
         return Self {
             workingTask: TaskId::New(0),
             workingTaskReady: false,
-            queue: VecDeque::with_capacity(8),
+            queue: VcpuLocalQueue::New(MemoryDef::TASK_QLEN),
         };
     }
 }
@@ -299,7 +358,7 @@ impl TaskQueue {
             return Some((data.workingTask, false));
         }
 
-        match data.queue.pop_front() {
+        match data.queue.Pop() {
             None => return None,
             Some(taskId) => {
                 self.queueSize.fetch_sub(1, Ordering::Release);
@@ -343,14 +402,14 @@ impl TaskQueue {
             None => return None,
             Some(mut data) => {
                 for _ in 0..data.queue.len() {
-                    match data.queue.pop_front() {
+                    match data.queue.Pop() {
                         None => panic!("TaskQueue none task"),
                         Some(taskId) => {
                             if taskId.GetTask().context.Ready() != 0 {
                                 self.queueSize.fetch_sub(1, Ordering::Release);
                                 return Some(taskId);
                             }
-                            data.queue.push_back(taskId)
+                            data.queue.Push(&taskId).expect("queue is full")
                         }
                     }
                 }
@@ -370,7 +429,7 @@ impl TaskQueue {
             return false;
         }
 
-        data.queue.push_back(task);
+        data.queue.Push(&task).expect("queue is full");
         self.queueSize.fetch_add(1, Ordering::Release);
         return true;
     }
