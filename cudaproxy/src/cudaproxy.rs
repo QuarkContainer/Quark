@@ -17,7 +17,7 @@ use std::ffi::CStr;
 use cuda_runtime_sys::cudaMemcpyKind;
 use cuda_runtime_sys::{cudaStream_t, cudaStreamCaptureStatus}; 
 use cuda_runtime_sys::{cudaDeviceProp, cudaDeviceAttr,cudaFuncCache,cudaLimit,cudaDeviceP2PAttr,cudaSharedMemConfig};
-use cuda_driver_sys::CUdevice;
+use cuda_driver_sys::*;
 use crate::syscall::*;
 use crate::proxy::*;
 pub const SYS_PROXY: usize = 10003;
@@ -240,7 +240,7 @@ pub extern "C" fn cudaGetDeviceProperties(prop: *mut cudaDeviceProp, device: c_i
 
 #[no_mangle]
 pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) -> *mut u64 {
-      // println!("Hijacked __cudaRegisterFatBinary(fatCubin:{:#x?})", fatCubin);
+      println!("Hijacked __cudaRegisterFatBinary(fatCubin:{:#x?})", fatCubin);
       let len = fatCubin.text.header_size as usize + fatCubin.text.size as usize;
       let tempVaue = 0;
       let result = &tempVaue as *const _ as u64;
@@ -254,25 +254,25 @@ pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) -> *mut u64 {
 pub extern "C" fn __cudaUnregisterFatBinary(fatCubinHandle:u64) {
     println!("Hijacked __cudaUnregisterFatBinary(fatCubinHandle = {:x})", fatCubinHandle);
     let fatCubinPtr: *const u64 = fatCubinHandle as *const u64;
-    unsafe{
-    println!("Hijacked __cudaUnregisterFatBinary( the content of fatCubinHandle = {:x})", *fatCubinPtr);
-    }
+    // unsafe{
+    // println!("Hijacked __cudaUnregisterFatBinary( the content of fatCubinHandle = {:x})", *fatCubinPtr);
+    // }
    
     unsafe{
         //  if *fatCubinPtr != 0 {
-         println!("the content of fatCubin poninter is not 0, need to unload the module");
+        //  println!("the content of fatCubin poninter is not 0, need to unload the module");
          syscall2(SYS_PROXY, ProxyCommand::CudaUnregisterFatBinary as usize,fatCubinHandle as usize);
         //  }
     }
 }
 
-#[no_mangle]
-pub extern "C" fn __cudaRegisterFatBinaryEnd(fatCubinHandle:u64){
-    let fatCubinPtr: *const u64 = fatCubinHandle as *const u64;
-    unsafe{
-    println!("Hijacked __cudaUnregisterFatBinaryEnd( the content of fatCubinHandle = {:x})", *fatCubinPtr);
-    }
-}
+// #[no_mangle]
+// pub extern "C" fn __cudaRegisterFatBinaryEnd(fatCubinHandle:u64){
+//     let fatCubinPtr: *const u64 = fatCubinHandle as *const u64;
+//     unsafe{
+//     println!("Hijacked __cudaUnregisterFatBinaryEnd( the content of fatCubinHandle = {:x})", *fatCubinPtr);
+//     }
+// }
 
 #[no_mangle]
 pub extern "C" fn __cudaRegisterFunction(
@@ -300,7 +300,7 @@ pub extern "C" fn __cudaRegisterFunction(
         gDim: gDim, 
         wSize: wSize
     };
-    println!("RegisterFunctionInfo {:x?}", info);
+    // println!("RegisterFunctionInfo {:x?}", info);
     unsafe {
         syscall2(SYS_PROXY, ProxyCommand::CudaRegisterFunction as usize, &info as *const _ as usize);
     }
@@ -333,7 +333,7 @@ pub extern "C" fn __cudaRegisterVar(
         global: global
     };
 
-    println!("RegisterVarInfo {:x?}", info);
+    // println!("RegisterVarInfo {:x?}", info);
 
     unsafe {
         syscall2(SYS_PROXY, ProxyCommand::CudaRegisterVar as usize, &info as *const _ as usize);
@@ -521,6 +521,64 @@ pub extern "C" fn cudaGetLastError() -> usize{
 }
 
 #[no_mangle]
+pub extern "C" fn cuInit(flags: c_uint) -> usize{
+    println!("Hijacked cuInit({})",flags);
+    return 0;
+}
+#[no_mangle]
+pub extern "C" fn cuDeviceGet(device: *mut CUdevice, ordinal: c_int) -> usize{
+    println!("Hijacked cuDeviceGet");
+    return 0;
+}
+
+#[no_mangle]
+pub extern "C" fn cuDeviceGetCount(count: *mut c_int) -> usize{
+    println!("Hijacked cuDeviceGetCount");
+    return 0;
+}
+
+#[no_mangle]
+pub extern "C" fn cuDeviceGetName(name: *mut c_char, len: c_int, dev: CUdevice) -> usize{
+    println!("Hijacked cuDeviceGetName");
+    return 0;
+}
+
+#[no_mangle]
+pub extern "C" fn cuDeviceGetUuid(uuid: *mut CUuuid, dev: CUdevice) -> usize{
+    println!("Hijacked cuDeviceGetUuid");
+    return 0;
+}
+
+#[no_mangle]
+pub extern "C" fn cuDeviceGetAttribute(pi: *mut c_int, attrub: CUdevice_attribute, dev: CUdevice) -> usize{
+    println!("Hijacked cuDeviceGetAttribute");
+    return 0;
+}
+
+
+#[no_mangle]
+pub extern "C" fn cuDeviceGetProperties(prop: *mut CUdevprop, dev: CUdevice) -> usize{
+    println!("Hijacked cuDeviceGetAttribute");
+    return 0;
+}
+
+#[no_mangle]
+pub extern "C" fn cuDeviceComputeCapability(major:*mut c_int, minor: *mut c_int, dev: CUdevice) -> usize{
+    println!("Hijacked cuDeviceGetAttribute");
+    return 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+#[no_mangle]
 pub extern "C" fn cuDevicePrimaryCtxGetState(dev: CUdevice, flags:*mut c_uint, active: *mut c_int) -> usize{
     println!("Hijacked cuDevicePrimaryCtxGetState device{}", dev);
     println!("11111111111111111111111111111111111");
@@ -535,6 +593,8 @@ pub extern "C" fn cuDevicePrimaryCtxGetState(dev: CUdevice, flags:*mut c_uint, a
     };
     
 }
+
+
 
 //NVML
 #[no_mangle]
@@ -555,4 +615,6 @@ pub extern "C" fn nvmlDeviceGetCount_v2(deviceCount: *mut c_uint) -> usize {
         syscall2(SYS_PROXY, ProxyCommand::CudaGetDeviceCount as usize, deviceCount as *mut _ as usize)
     };
 }
+
+
 

@@ -32,6 +32,7 @@
 # usage:
 # LD_LIBRARY_PATH=/home/hwhiaiuser/cchen/experi/cricket/cpu LD_PRELOAD=/home/hwhiaiuser/cchen/experi/cricket/bin/cricket-client.so REMOTE_GPU_ADDRESS=127.0.0.1 python3 pytorch_minimal.py (pid)
 import torch
+# print(torch.cuda.is_available())
 import math
 import signal
 import os

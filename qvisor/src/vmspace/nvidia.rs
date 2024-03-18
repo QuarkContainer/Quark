@@ -1119,16 +1119,16 @@ impl NvidiaHandlers {
         let handle = unsafe { libc::dlopen(lib.as_ptr(), libc::RTLD_LAZY) };
         error!("libnvidia-ptxjitcompiler.so handle {:?}", handle);
 
-        let initResult = unsafe { cuda_driver_sys::cuInit(0) };
-        error!("initResult {:?}", initResult);
+        // let initResult = unsafe { cuda_driver_sys::cuInit(0) };
+        // error!("initResult {:?}", initResult);
 
-        let mut ctx: MaybeUninit<CUcontext> = MaybeUninit::uninit();
-        let ptr_ctx = ctx.as_mut_ptr();
-        let ret = unsafe { cuda_driver_sys::cuCtxCreate_v2(ptr_ctx, 0, 0) };
-        error!("cuCtxCreate ret {:?}", ret);
+        // let mut ctx: MaybeUninit<CUcontext> = MaybeUninit::uninit();
+        // let ptr_ctx = ctx.as_mut_ptr();
+        // let ret = unsafe { cuda_driver_sys::cuCtxCreate_v2(ptr_ctx, 0, 0) };
+        // error!("cuCtxCreate ret {:?}", ret);
 
-        let ret = unsafe { cuCtxPushCurrent_v2(*ptr_ctx) };
-        error!("cuCtxPushCurrent ret {:?}", ret);
+        // let ret = unsafe { cuCtxPushCurrent_v2(*ptr_ctx) };
+        // error!("cuCtxPushCurrent ret {:?}", ret);
 
         let cuda = format!("/usr/lib/x86_64-linux-gnu/libcuda.so");
         let cudalib = CString::new(&*cuda).unwrap();
@@ -1169,11 +1169,11 @@ impl NvidiaHandlers {
             handlers: handlers,
         };
 
-        // let initResult = unsafe {cuda_runtime_sys::cudaSetDevice(0) };
-        // unsafe {cuda_runtime_sys::cudaDeviceSynchronize()};
-        // if initResult as u32 != 0 {
-        //     error!("cuda runtime init error");
-        // }
+        let initResult = unsafe {cuda_runtime_sys::cudaSetDevice(0) };
+        unsafe {cuda_runtime_sys::cudaDeviceSynchronize()};
+        if initResult as u32 != 0 {
+            error!("cuda runtime init error");
+        }
 
         return Self(Mutex::new(inner));
     }
