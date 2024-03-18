@@ -57,6 +57,7 @@ impl FuncPackageSpec {
     pub fn DataObject(&self) -> DataObject {
         let inner = DataObjectInner {
             kind: Self::KEY.to_owned(),
+            tenant: self.tenant.clone(),
             namespace: self.namespace.clone(),
             name: self.name.clone(),
             data: serde_json::to_string_pretty(&self).unwrap(),
@@ -135,7 +136,7 @@ impl Deref for FuncPackageMgr {
 }
 
 impl FuncPackageMgr {
-    pub fn ContainersFuncPackage(&self, key: &str) -> bool {
+    pub fn ContainsFuncPackage(&self, key: &str) -> bool {
         return self.lock().unwrap().funcPackages.contains_key(key);
     }
 

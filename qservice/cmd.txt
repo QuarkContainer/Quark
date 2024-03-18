@@ -198,3 +198,5 @@ curl --header "Content-Type: application/json" \
   --data '{"tenant":"t1", "namespace":"ns1", "func": "name1", "prompt": "asdfasd"}' \
   http://localhost:4000/funccall/
   
+9. Get FuncPods
+curl http://localhost:4000/funcpods/t1/ns1/name1

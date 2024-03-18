@@ -23,6 +23,7 @@ use qshare::metastore::informer::Informer;
 use qshare::metastore::informer_factory::InformerFactory;
 use qshare::metastore::selection_predicate::ListOption;
 use qshare::metastore::store::ThreadSafeStore;
+use qshare::node::PodDef;
 use serde::{Deserialize, Serialize};
 
 use qshare::etcd::etcd_store::EtcdStore;
@@ -30,6 +31,7 @@ use qshare::common::*;
 use tokio::sync::Notify;
 
 use crate::func_mgr::*;
+use crate::pod_mgr::PodMgr;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct NamespaceSpec {
@@ -54,6 +56,7 @@ impl NamespaceSpec {
     pub fn DataObject(&self) -> DataObject {
         let inner = DataObjectInner {
             kind: Self::KEY.to_owned(),
+            tenant: self.tenant.clone(),
             namespace: "system".to_owned(),
             name: self.namespace.to_owned(),
             data: serde_json::to_string_pretty(&self).unwrap(),
@@ -71,7 +74,8 @@ impl NamespaceSpec {
 #[derive(Debug)]
 pub struct NamespaceMgrInner {
     pub funcPackageMgr: FuncPackageMgr,
-    pub namespaces: BTreeMap<String, NamespaceSpec>,
+    pub namespaces: Mutex<BTreeMap<String, NamespaceSpec>>,
+    pub podMgr: PodMgr,
     
     pub factory: InformerFactory,
     pub namespaceInformer: Informer,
@@ -79,12 +83,12 @@ pub struct NamespaceMgrInner {
 }
 
 #[derive(Debug, Clone)]
-pub struct NamespaceMgr(Arc<Mutex<NamespaceMgrInner>>);
+pub struct NamespaceMgr(Arc<NamespaceMgrInner>);
 
 impl Deref for NamespaceMgr {
-    type Target = Arc<Mutex<NamespaceMgrInner>>;
+    type Target = Arc<NamespaceMgrInner>;
 
-    fn deref(&self) -> &Arc<Mutex<NamespaceMgrInner>> {
+    fn deref(&self) -> &Arc<NamespaceMgrInner> {
         &self.0
     }
 }
@@ -92,22 +96,32 @@ impl Deref for NamespaceMgr {
 impl NamespaceMgr {
     pub async fn New(addresses: Vec<String>) -> Result<Self> {
         let factory = InformerFactory::New(addresses, "", "").await?;
+
+        // namespaceSpec
         factory.AddInformer(NamespaceSpec::KEY, &ListOption::default()).await?;
         let namespaceInformer = factory.GetInformer(NamespaceSpec::KEY).await?;
+
+        // funcpackageSpec
         factory.AddInformer(FuncPackageSpec::KEY, &ListOption::default()).await?;
         let funcPackageInformer = factory.GetInformer(FuncPackageSpec::KEY).await?;
+
+        // pod
+        factory.AddInformer("pod", &ListOption::default()).await?;
+        let podInformer = factory.GetInformer("pod").await?;
         
         let inner = NamespaceMgrInner {
             funcPackageMgr: FuncPackageMgr::default(),
-            namespaces: BTreeMap::new(),
+            namespaces: Mutex::new(BTreeMap::new()),
+            podMgr: PodMgr::default(),
             factory: factory,
             namespaceInformer: namespaceInformer.clone(),
             funcPackageInformer: funcPackageInformer.clone()
         };
 
-        let mgr = Self(Arc::new(Mutex::new(inner)));
+        let mgr = Self(Arc::new(inner));
         let _id1 = namespaceInformer.AddEventHandler(Arc::new(mgr.clone())).await?;
         let _id2 = funcPackageInformer.AddEventHandler(Arc::new(mgr.clone())).await?;
+        let _id3 = podInformer.AddEventHandler(Arc::new(mgr.clone())).await?;
         let notify = Arc::new(Notify::new());
         tokio::spawn(async move {
             // todo: handle statesvc crash
@@ -118,113 +132,140 @@ impl NamespaceMgr {
                 _ = funcPackageInformer.Process(notify.clone()) => {
 
                 }
+                _ = podInformer.Process(notify.clone()) => {
+
+                }
             }
         });
         return Ok(mgr)
     }
 
-    pub fn ContainersNamespace(&self, tenant: &str, namespace: &str) -> bool {
+    pub fn ContainsNamespace(&self, tenant: &str, namespace: &str) -> bool {
         let podNamespace = format!("{}/{}", tenant, namespace);
-        return self.lock().unwrap().namespaces.contains_key(&podNamespace)
+        return self.namespaces.lock().unwrap().contains_key(&podNamespace)
     }
 
     pub fn AddNamespace(&self, spec: NamespaceSpec) -> Result<()> {
-        let mut inner = self.lock().unwrap();
+        let mut inner = self.namespaces.lock().unwrap();
 
         let key = spec.Key();
 
-        if inner.namespaces.contains_key(&key) {
+        if inner.contains_key(&key) {
             return Err(Error::Exist(format!("NamespaceMgr::AddNamespace {}", &key)));
         };
 
-        inner.namespaces.insert(key, spec);
+        inner.insert(key, spec);
 
         return Ok(())
     }
 
     pub fn UpdateNamespace(&self, spec: NamespaceSpec) -> Result<()> {
-        let mut inner = self.lock().unwrap();
+        let mut inner = self.namespaces.lock().unwrap();
 
         let key = spec.Key();
 
-        if !inner.namespaces.contains_key(&key) {
+        if !inner.contains_key(&key) {
             return Err(Error::NotExist(format!("NamespaceMgr::UpdateNamespace {}", &key)));
         };
 
-        inner.namespaces.insert(key, spec);
+        inner.insert(key, spec);
 
         return Ok(())
     }
 
     pub fn ContainsFuncPackage(&self, tenant: &str, namespace: &str, name: &str) -> Result<bool> {
-        if !self.ContainersNamespace(tenant, namespace) {
+        if !self.ContainsNamespace(tenant, namespace) {
             return Err(Error::NotExist(format!("ContainersFuncPackage has no namespace {}/{}", tenant, namespace)));
         }
  
-        let inner = self.lock().unwrap();
         let key = format!("{}/{}/{}", tenant, namespace, name);
-        return Ok(inner.funcPackageMgr.ContainersFuncPackage(&key));
+        return Ok(self.funcPackageMgr.ContainsFuncPackage(&key));
     }
 
     pub fn GetFuncPackage(&self, tenant: &str, namespace: &str, name: &str) -> Result<FuncPackage> {
         let key = format!("{}/{}/{}", tenant, namespace, name);
-        let inner = self.lock().unwrap();
-        return inner.funcPackageMgr.GetFuncPackage(&key);
+        return self.funcPackageMgr.GetFuncPackage(&key);
     }
 
     pub fn GetFuncPackages(&self, tenant: &str, namespace: &str) -> Result<Vec<String>> {
-        let inner = self.lock().unwrap();
-        return inner.funcPackageMgr.GetFuncPackages(tenant, namespace);
+        return self.funcPackageMgr.GetFuncPackages(tenant, namespace);
     }
 
     pub fn AddFuncPackage(&self, spec: FuncPackageSpec) -> Result<()> {
-        self.lock().unwrap().funcPackageMgr.Add(spec)?;
+        self.funcPackageMgr.Add(spec)?;
 
         return Ok(())
     }
 
     pub fn UpdateFuncPackage(&self, spec: FuncPackageSpec) -> Result<()> {
-        self.lock().unwrap().funcPackageMgr.Update(spec)?;
+        self.funcPackageMgr.Update(spec)?;
 
         return Ok(())
     }
 
     pub fn RemoveFuncPackage(&self, spec: FuncPackageSpec) -> Result<()> {
-        self.lock().unwrap().funcPackageMgr.Remove(spec)?;
+        self.funcPackageMgr.Remove(spec)?;
         return Ok(())
+    }
+
+    pub fn GetFuncPods(&self, tenant: &str, namespace: &str, funcName: &str) -> Result<Vec<PodDef>> {
+        return self.podMgr.GetFuncPods(tenant, namespace, funcName);
     }
 
     pub fn ProcessDeltaEvent(&self, event: &DeltaEvent) -> Result<()> {
         let obj = event.obj.clone();
         match &event.type_ {
             EventType::Added => {
-                if &obj.kind == FuncPackageSpec::KEY {
-                    let spec = FuncPackageSpec::FromDataObject(obj)?;
-                    self.AddFuncPackage(spec)?;
-                } else if &obj.kind == NamespaceSpec::KEY {
-                    let spec: NamespaceSpec = NamespaceSpec::FromDataObject(obj)?;
-                    self.AddNamespace(spec)?;
-                } else {
-                    return Err(Error::CommonError(format!("NamespaceMgr::ProcessDeltaEvent {:?}", event)));
+                match &obj.kind as &str {
+                    FuncPackageSpec::KEY => {
+                        let spec = FuncPackageSpec::FromDataObject(obj)?;
+                        self.AddFuncPackage(spec)?;
+                    }
+                    NamespaceSpec::KEY => {
+                        let spec: NamespaceSpec = NamespaceSpec::FromDataObject(obj)?;
+                        self.AddNamespace(spec)?;
+                    }
+                    PodDef::KEY => {
+                        let podDef = PodDef::FromDataObject(obj)?;
+                        self.podMgr.Add(podDef)?;
+                    }
+                    _ => {
+                        return Err(Error::CommonError(format!("NamespaceMgr::ProcessDeltaEvent {:?}", event)));
+                    }
                 }
             }
             EventType::Modified => {
-                if &obj.kind == FuncPackageSpec::KEY {
-                    let spec = FuncPackageSpec::FromDataObject(obj)?;
-                    self.UpdateFuncPackage(spec)?;
-                } else if &obj.kind == NamespaceSpec::KEY {
-                    let spec: NamespaceSpec = NamespaceSpec::FromDataObject(obj)?;
-                    self.UpdateNamespace(spec)?;
-                } else {
-                    return Err(Error::CommonError(format!("NamespaceMgr::ProcessDeltaEvent {:?}", event)));
+                match &obj.kind as &str {
+                    FuncPackageSpec::KEY => {
+                        let spec = FuncPackageSpec::FromDataObject(obj)?;
+                        self.UpdateFuncPackage(spec)?;
+                    }
+                    NamespaceSpec::KEY => {
+                        let spec: NamespaceSpec = NamespaceSpec::FromDataObject(obj)?;
+                        self.UpdateNamespace(spec)?;
+                    }
+                    PodDef::KEY => {
+                        let podDef = PodDef::FromDataObject(obj)?;
+                        self.podMgr.Update(podDef)?;
+                    }
+                    _ => {
+                        return Err(Error::CommonError(format!("NamespaceMgr::ProcessDeltaEvent {:?}", event)));
+                    }
                 }
             }
             EventType::Deleted => {
-                if &obj.kind == FuncPackageSpec::KEY {
-                    let spec = FuncPackageSpec::FromDataObject(obj)?;
-                    self.RemoveFuncPackage(spec)?;
-                } else {
-                    return Err(Error::CommonError(format!("NamespaceMgr::ProcessDeltaEvent {:?}", event)));
+                match &obj.kind as &str {
+                    FuncPackageSpec::KEY => {
+                        let spec = FuncPackageSpec::FromDataObject(obj)?;
+                        self.RemoveFuncPackage(spec)?;
+                    }
+                    PodDef::KEY => {
+                        let podDef = PodDef::FromDataObject(obj)?;
+                        self.podMgr.Remove(podDef)?;
+                    }
+                    _ => {
+                        return Err(Error::CommonError(format!("NamespaceMgr::ProcessDeltaEvent {:?}", event)));
+                    }
                 }
             }
             _o => {
