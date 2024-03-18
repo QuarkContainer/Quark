@@ -21,7 +21,7 @@ use core::fmt::{LowerHex, Formatter};
 use crate::qlib::common::{Error, TaskRunState};
 use crate::qlib::vcpu_mgr::{CPULocal, VcpuMode};
 use crate::qlib::kernel::{task::Task, threadmgr::task_sched::SchedState,
-                          asm::aarch64::{SyscallRet, CurrentUserTable},
+                          asm::aarch64::{CurrentUserTable},
                           SignalDef::{PtRegs, SignalInfo}};
 use crate::interrupt::aarch64::{EsrDefs, GetFaultAccessType};
 use crate::qlib::addr::{Addr, AccessType};
@@ -130,11 +130,8 @@ impl PageFaultErrorCode {
 //
 pub fn ReturnToApp(pt: &mut PtRegs) -> ! {
     let kernelRsp = pt as *const _ as u64;
-    //
-    // TODO Implement
-    //
-    panic!("VM: PF-handled - ReturnToApp is not implemented");
-    SyscallRet(kernelRsp);
+    todo!("VM: PF-handled - ReturnToApp is not implemented");
+    // IRet(kernelRsp);
 }
 
 pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
