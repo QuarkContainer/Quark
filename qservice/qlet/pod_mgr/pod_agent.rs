@@ -650,13 +650,13 @@ impl PodAgent {
         let pod = self.pod.Pod();
         let pod = pod.read().unwrap();
 
-        let namespaceSearch = format!("{}.svc.cluster.local", &pod.namespace);
+        let namespaceSearch = format!("{}.{}.svc.cluster.local", &pod.namespace, &pod.tenant);
         
         let podUID = pod.uid.clone();
         let mut podSandboxConfig = crictl::PodSandboxConfig {
             metadata: Some(crictl::PodSandboxMetadata {
                 name: pod.name.clone(),
-                namespace: pod.namespace.clone(),
+                namespace: pod.PodNamespace().clone(),
                 uid: podUID,
                 ..Default::default()
             }),

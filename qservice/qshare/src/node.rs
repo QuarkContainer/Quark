@@ -248,6 +248,55 @@ pub struct QNodeInner {
     
 }
 
+pub enum FuncDef {
+    PythonFuncDef(PythonFuncDef),
+}
+
+pub struct PythonFuncDef {
+    pub environment: String,
+    pub envs: Vec<(String, String)>,
+    pub workingDir: Option<String>,
+    pub funcName: String,
+    pub initArgments: String,
+
+    pub resourceReq: BTreeMap<String, Quantity>,
+}
+
+pub struct Environment {
+    pub image: String,
+    pub envs: BTreeMap<String, String>,
+    pub commands: Vec<String>,
+    pub args: Vec<String>,
+    pub working_dir: String,  
+    pub volume_mounts: Vec<VolumeMount>,
+
+    pub overhead: BTreeMap<String, Quantity>,
+}
+
+pub struct EnvDeployment {
+    pub environment: String,
+    pub resource: BTreeMap<String, Quantity>,
+}
+
+pub struct FuncServiceSpec {
+    pub environments: BTreeMap<String, Environment>,
+    pub functions: BTreeMap<String, FuncDef>,
+    pub httpEntryFunc: String, // entry function name
+}
+
+pub struct FuncServiceDeployConfig {
+    pub envDeployments: BTreeMap<String, EnvDeployment>, // envDeployName --> EnvDeployment
+    pub funcMapping: BTreeMap<String, String>, // funcName --> PodName
+}
+
+pub struct FuncServiceDeployment {
+    pub envDeployments: BTreeMap<String, PodDef>, // podname --> PodDef
+}
+
+pub struct FuncServiceInstance {
+
+}
+
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct PodDef {
     pub tenant: String,
