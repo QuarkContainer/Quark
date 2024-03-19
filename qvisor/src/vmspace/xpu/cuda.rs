@@ -49,18 +49,19 @@ pub struct KernelInfo {
 }
 
 pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
-    error!("fatElfHeader magic is :{:x}, version is :{:x}, header size is :{:x}, size is :{:x}", fatElfHeader.magic, fatElfHeader.version, fatElfHeader.header_size, fatElfHeader.size);
+    // error!("fatElfHeader magic is :{:x}, version is :{:x}, header size is :{:x}, size is :{:x}", fatElfHeader.magic, fatElfHeader.version, fatElfHeader.header_size, fatElfHeader.size);
     let mut inputPosition = addr + fatElfHeader.header_size as u64;
     let endPosition = inputPosition + fatElfHeader.size as u64;
     let mut textDatAddr:u64;
     let mut textDataSize:u64 = 0; 
-    error!("inputPosition:{:x} endPosition:{:x}", inputPosition, endPosition);
+    // error!("inputPosition:{:x} endPosition:{:x}", inputPosition, endPosition);
     let mut decompressedByte: Vec<u8>;
+
     while inputPosition < endPosition {
         let fatTextHeader = unsafe { &*(inputPosition as *const u8 as *const FatTextHeader) };        
 
-        error!("fatTextHeader:{:x?}", *fatTextHeader);
-        error!("FATBIN_FLAG_COMPRESS:{:x}, fatTextHeader.flags:{:x}, result of &:{:x}", FATBIN_FLAG_COMPRESS, fatTextHeader.flags, fatTextHeader.flags & FATBIN_FLAG_COMPRESS);
+        // error!("fatTextHeader:{:x?}", *fatTextHeader);
+        // error!("FATBIN_FLAG_COMPRESS:{:x}, fatTextHeader.flags:{:x}, result of &:{:x}", FATBIN_FLAG_COMPRESS, fatTextHeader.flags, fatTextHeader.flags & FATBIN_FLAG_COMPRESS);
         
         inputPosition += fatTextHeader.header_size as u64;
         if fatTextHeader.kind != 2 { // section does not cotain device code (but e.g. PTX)
@@ -68,23 +69,20 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
             continue;
         }
         if fatTextHeader.flags & FATBIN_FLAG_DEBUG > 0 {
-            error!("fatbin contains debug information.");
+            // error!("fatbin contains debug information.");
         }
         if (fatTextHeader.flags & FATBIN_FLAG_COMPRESS) > 0 {
-            error!("fatbin contains compressed device code. Decompressing...");
+            // error!("fatbin contains compressed device code. Decompressing...");
             let input_read:i64;
       
             decompressedByte = Vec::with_capacity((fatTextHeader.decompressed_size + 7) as usize);
-
             unsafe{
             decompressedByte.set_len((fatTextHeader.decompressed_size + 7) as usize); 
             }
  
-            // decompressedByte = vec![0; (fatTextHeader.compressed_size + 7) as usize];
-           
-            textDatAddr = &decompressedByte[0] as *const _ as u64;   //decompressedByte.as_ptr() as u64 ;
-            error!("yiwang textDatAddr is {:x}", textDatAddr );
-            error!("textDatasize before function call is {}", textDataSize);
+            textDatAddr = &decompressedByte[0] as *const _ as u64;   
+            // error!("textDatAddr is {:x}", textDatAddr );
+            // error!("textDatasize before function call is {}", textDataSize);
                                                                             
             match DecompressSingleSection(inputPosition, &mut decompressedByte, &mut textDataSize, fatTextHeader) {
                 Ok(inputRead) => { input_read = inputRead; },
@@ -92,11 +90,11 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
                     return Err(error)
                 },
             }
-            error!("textDatasize after function call is {}", textDataSize);
+            // error!("textDatasize after function call is {}", textDataSize);
 
-            // error!("yiwang decompressedByte is: {:?}", decompressedByte);
+            // error!("decompressedByte is: {:?}", decompressedByte);
           
-            error!("yiwang input_read is: {:x}", input_read);
+            // error!("input_read is: {:x}", input_read);
 
             if input_read < 0 {
                 error!("Something went wrong while decompressing text section.");
@@ -117,34 +115,30 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
 
        
     }
-    error!("Complete handling FatTextHeader");
+    // error!("Complete handling FatTextHeader");
     Ok(0)
 }
                                                                                                                     
 fn DecompressSingleSection(inputPosition:u64, outputPosition:&mut Vec<u8>, outputSize:&mut u64,fatTextHeader:&FatTextHeader) -> Result<i64> {
-
     let mut padding:u64;
     let mut inputRead:u64 = 0;
     let mut outputWritten:u64 = 0;
     let decompressResult;
     let zeros: [u8; 8] = [0; 8];
 
-    // // unsafe{ *outputPosition = &decompressedByte[0] as *const _ as u64 };
-    // unsafe{ *outputPosition = decompressedByte.as_ptr() as u64 };
-
-    error!("fatTextHeader: fatbin_kind:{:x}, header_size:{:x}, size:{:x}, compressed_size:{:x}, minor:{:x}, major:{:x}, arch:{:x}, decompressed_size:{:x}, flags:{:#x?}",
-    fatTextHeader.kind,
-    fatTextHeader.header_size, 
-    fatTextHeader.size, 
-    fatTextHeader.compressed_size, 
-    fatTextHeader.minor, 
-    fatTextHeader.major, 
-    fatTextHeader.arch, 
-    fatTextHeader.decompressed_size, 
-    fatTextHeader.flags
-    );
-    error!("fatTextHeader unknown fields: unknown1: {:x}, unknown2: {:x}, zeros: {:x}", fatTextHeader.unknown1, fatTextHeader.unknown2, fatTextHeader.zero);
-                                                                                                                         // &mut decompressedByte 
+    // error!("fatTextHeader: fatbin_kind:{:x}, header_size:{:x}, size:{:x}, compressed_size:{:x}, minor:{:x}, major:{:x}, arch:{:x}, decompressed_size:{:x}, flags:{:#x?}",
+    // fatTextHeader.kind,
+    // fatTextHeader.header_size, 
+    // fatTextHeader.size, 
+    // fatTextHeader.compressed_size, 
+    // fatTextHeader.minor, 
+    // fatTextHeader.major, 
+    // fatTextHeader.arch, 
+    // fatTextHeader.decompressed_size, 
+    // fatTextHeader.flags
+    // );
+    // error!("fatTextHeader unknown fields: unknown1: {:x}, unknown2: {:x}, zeros: {:x}", fatTextHeader.unknown1, fatTextHeader.unknown2, fatTextHeader.zero);
+                                                                                                                        
     decompressResult = decompress(inputPosition, fatTextHeader.compressed_size as u64, outputPosition, fatTextHeader.decompressed_size);
 
     if decompressResult != fatTextHeader.decompressed_size {
@@ -156,44 +150,39 @@ fn DecompressSingleSection(inputPosition:u64, outputPosition:&mut Vec<u8>, outpu
         return Err(Error::DecompressFatbinError(String::from("decompression failed")));
     }
 
-    error!("decompressResult should equal to fatTextHeader.decompressed_size, decompressResult: {:x}, fatTextHeader.decompressed_size: {:x}", decompressResult, fatTextHeader.decompressed_size);
+    // error!("decompressResult should equal to fatTextHeader.decompressed_size, decompressResult: {:x}, fatTextHeader.decompressed_size: {:x}", decompressResult, fatTextHeader.decompressed_size);
     inputRead += fatTextHeader.compressed_size as u64;
     outputWritten += fatTextHeader.decompressed_size;
 
-    // error!("yiwang inputPosition is: {:x}, inputRead is: {:x}", inputPosition, inputRead);
-    // error!("yiwang inputPosition + inputRead = {:x}", inputPosition + inputRead);
-    // good 
+    // error!("inputPosition is: {:x}, inputRead is: {:x}", inputPosition, inputRead);
+    // error!("inputPosition + inputRead = {:x}", inputPosition + inputRead);
     padding = 8u64.wrapping_sub(inputPosition +inputRead);
-    // error!("yiwang padding after subtraction is: {:x}", padding);
+    // error!("padding after subtraction is: {:x}", padding);
     padding = padding % 8;
-    error!("yiwang padding 1 is {}", padding );
-       
+    
     let slice1 = unsafe{std::slice::from_raw_parts((inputPosition + inputRead) as *const u8, padding as usize) };
     let slice2 = unsafe {std::slice::from_raw_parts(&zeros[0] as *const u8, padding as usize)};
 
     if slice1 != slice2 {
-        error!("yiwang expected {:x} zero bytes", padding);
+        // error!("expected {:x} zero bytes", padding);
         hexdump(inputPosition + inputRead, 0x60);
         return Err(Error::DecompressFatbinError(String::from("padding length is wrong")));
     }
-    error!("slice1 is: {:?}", slice1);
+    // error!("slice1 is: {:?}", slice1);
 
-    error!("slice2 is: {:?}", slice2);
+    // error!("slice2 is: {:?}", slice2);
 
     inputRead += padding;
     
     padding = (8u64.wrapping_sub(fatTextHeader.decompressed_size)) % 8;
-    error!("yiwang padding2 is {}", padding );
-    
-    // unsafe{
-    //     std::ptr::write_bytes((outputPosition) as *mut u8, 0, padding as usize)
-    // };
+  
     for i in 0..padding {
         outputPosition[i as usize] = 0;
     }
-    outputWritten += padding;
 
+    outputWritten += padding;
     *outputSize = outputWritten;
+
     return Ok(inputRead as i64);
 }
                                           
@@ -213,14 +202,12 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, out
     let mut nextCompressed_length:u64;
     let mut backOffset:u64;
   
-    error!("size of compressed data is {}",inputSize);
+    // error!("size of compressed data is {}",inputSize);
 
     while ipos < inputSize {      
         nextNonCompressed_length = unsafe { ((*((inputPosition + ipos) as *const u8) & 0xf0) >> 4) as u64};
         nextCompressed_length = unsafe{ 4 + (*((inputPosition + ipos) as *const u8) & 0xf) as u64  };
-        // error!("nextNonCompressed_length is {}", nextNonCompressed_length);
-        // error!("nextCompressed_length is {}", nextCompressed_length);
-        
+         
         if nextNonCompressed_length == 0xf{
             loop {
                 ipos += 1;
@@ -235,16 +222,8 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, out
 
         ipos += 1;
         for i in 0..nextNonCompressed_length {
-            // Copy one element at a time
             outputPosition[(opos + i) as usize] =  unsafe {*((inputPosition + ipos + i) as *const u8)};
         }
-        // unsafe {
-        //     std::ptr::copy_nonoverlapping(
-        //         (inputPosition + ipos) as *const u8,
-        //         outputPosition.as_mut_ptr().offset(opos as isize),
-        //         nextNonCompressed_length as usize,
-        //     );
-        // }
 
         ipos += nextNonCompressed_length;
         opos += nextNonCompressed_length;
@@ -253,11 +232,10 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, out
             break;
         }
        
-       // backOffset = unsafe{ (*((inputPosition + ipos) as *const u8)) as u64 + (*((inputPosition + ipos +1) as *const u8) as u64 ) << 8 };
+
        backOffset = unsafe{ (*((inputPosition + ipos) as *const u8)) as u64 };
 
-       let inputvalue:u64 =unsafe{ *((inputPosition + ipos +1) as *const u8) as u64 };
-       
+       let inputvalue:u64 =unsafe{ *((inputPosition + ipos +1) as *const u8) as u64 };  
        let shiftvalue = inputvalue << 8;
         // error!("backOffset before shift is: {}", backOffset);
         // error!("input[ipos+1] is {}",inputvalue );
@@ -278,7 +256,6 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, out
 
         if nextCompressed_length <= backOffset {
             for i in 0..nextCompressed_length {
-                // Copy one element at a time
                 outputPosition[(opos + i) as usize] =  outputPosition[(opos - backOffset + i) as usize];
             }
 
@@ -286,10 +263,6 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, out
             for i in 0..backOffset {
                 outputPosition[(opos + i) as usize] =  outputPosition[(opos - backOffset + i) as usize];
             }
-            //  unsafe{
-            //     std::ptr::copy_nonoverlapping(outputPosition.as_ptr().offset((opos -backOffset)as isize ) ,outputPosition.as_mut_ptr().offset(opos as isize), backOffset as usize)
-            // };
-
             for i in backOffset..nextCompressed_length {
                outputPosition[(opos + i) as usize] = outputPosition[(opos + i - backOffset) as usize];  
             }
@@ -298,18 +271,18 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, out
         opos += nextCompressed_length;
       
     }
-    error!("yiwang ipos: {:x}, opos: {:x}, input size: {:x}, output size: {:x}", ipos, opos, inputSize, outputSize);
+    // error!("ipos: {:x}, opos: {:x}, input size: {:x}, output size: {:x}", ipos, opos, inputSize, outputSize);
     return opos ; 
 }
 
 fn hexdump(dataAddress: u64, size: u64){
     let mut pos: u64 = 0;
     while pos < size {
-        error!("yiwang hexdump debug {:#05x}", pos);
+        error!("hexdump debug {:#05x}", pos);
         for i in 0..16 {
             if pos + i < size {
                 unsafe {
-                error!("yiwang gexdump debug {:02x}", *((dataAddress + i) as *const u8))
+                error!("hexdump debug {:02x}", *((dataAddress + i) as *const u8))
                 };
             } else {
                 error!(" ");
@@ -344,7 +317,6 @@ fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
     let mut sym:MaybeUninit<GElf_Sym> = MaybeUninit::uninit();
     let mut ptr_sym = sym.as_mut_ptr();
 
-    // let memsize = fatTextHeader.size as usize;
     let elf = unsafe { elf_memory(inputPosition as *mut i8, memSize as usize) };
     match CheckElf(elf) {
         Ok(v) => v,
@@ -364,8 +336,8 @@ fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
     }
 
     let symbol_table_data_p = unsafe { elf_getdata(ptr_section, 0 as _) };
-    let symbol_table_data = unsafe { &*symbol_table_data_p };
-    error!("symbol_table_data: {:?}", symbol_table_data);
+    // let symbol_table_data = unsafe { &*symbol_table_data_p };
+    // error!("symbol_table_data: {:?}", symbol_table_data);
     let symbol_table_size = shdr.sh_size / shdr.sh_entsize;
 
     match GetSectionByName(elf, String::from(".nv.info"), &mut ptr_section) {
@@ -387,7 +359,7 @@ fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
         let entry = unsafe { &*entry_p };
         // error!("entry: {:x?}", entry);
         if entry.values_size != 8 {
-            error!("unexpected values_size: {:x}", entry.values_size);
+            // error!("unexpected values_size: {:x}", entry.values_size);
             return Err(Error::ELFLoadError("unexpected values_size")); 
         }
 
@@ -397,7 +369,7 @@ fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
         }
 
         if entry.kernel_id as u64 >= symbol_table_size {
-            error!("kernel_id {:x} out of bounds: {:x}", entry.kernel_id, symbol_table_size);
+            // error!("kernel_id {:x} out of bounds: {:x}", entry.kernel_id, symbol_table_size);
             secpos += infoSize;
             continue;
         }
@@ -405,14 +377,14 @@ fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
         ptr_sym = unsafe { gelf_getsym(symbol_table_data_p, entry.kernel_id as libc::c_int, ptr_sym) };
         
         let kernel_str = unsafe { CString::FromAddr(elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*ptr_sym).st_name as usize) as u64).Str().unwrap().to_string() };
-        error!("kernel_str: {}", kernel_str);
+        // error!("kernel_str: {}", kernel_str);
 
         if KERNEL_INFOS.lock().contains_key(&kernel_str) {
             secpos += infoSize;
             continue;
         }
         
-        error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
+        // error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
 
         let mut ki = KernelInfo::default();
         ki.name = kernel_str.clone();
@@ -425,7 +397,7 @@ fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
                 },
             }
         }
-        error!("ki: {:x?}", ki);
+        // error!("ki: {:x?}", ki);
 
         KERNEL_INFOS.lock().insert(kernel_str.clone(), Arc::new(ki));
         secpos += infoSize;
@@ -442,21 +414,21 @@ pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> 
         Ok(v) => v,
         Err(e) => return Err(e),
     };
-    error!("GetSectionByName({}) got section: {:?}", sectionName, section);
+    // error!("GetSectionByName({}) got section: {:?}", sectionName, section);
     let data = unsafe { &*(elf_getdata(*section, 0 as _)) };
-    error!("data: {:x?}", data);
+    // error!("data: {:x?}", data);
 
     let mut secpos:usize = 0;
     while secpos < data.d_size {
         let position = data.d_buf as u64 + secpos as u64;
         let entry = unsafe { &*(position as *const u8 as *const NvInfoKernelEntry) };
-        error!("entry: {:x?}", entry);
+        // error!("entry: {:x?}", entry);
         if entry.format as u64 == EIFMT_SVAL && entry.attribute as u64 == EIATTR_KPARAM_INFO {
             if entry.values_size != 0xc {
                 return Err(Error::ELFLoadError("EIATTR_KPARAM_INFO values size has not the expected value of 0xc"));
             }
             let kparam = unsafe { &*(&entry.values as *const _ as *const u8 as *const NvInfoKParamInfo) };
-            error!("kparam: {:x?}", *kparam);
+            // error!("kparam: {:x?}", *kparam);
 
             unsafe {
                 if kparam.ordinal as usize >= (*kernel).paramNum {
@@ -478,7 +450,7 @@ pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> 
             unsafe { 
                 (*kernel).paramSize = entry.values_size as usize; 
             }
-            error!("cbank_param_size: {:x}", entry.values_size);
+            // error!("cbank_param_size: {:x}", entry.values_size);
             secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
         } else if entry.format as u64 == EIFMT_HVAL {
             secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
@@ -487,7 +459,7 @@ pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> 
         } else if entry.format as u64 == EIFMT_NVAL {
             secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
         } else {
-            error!("unknown format: {:x}", entry.format);
+            // error!("unknown format: {:x}", entry.format);
             secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
         }            
     }
@@ -523,9 +495,9 @@ pub fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn
         let mut symtab_shdr = shdr.as_mut_ptr();
         symtab_shdr = unsafe { gelf_getshdr(scnNew, symtab_shdr) };
         let section_name = CString::FromAddr(unsafe { elf_strptr(elf, *str_section_index, (*symtab_shdr).sh_name as usize) as u64 }).Str().unwrap().to_string();
-        error!("section_name {}", section_name);
+        // error!("section_name {}", section_name);
         if name.eq(&section_name) {
-            error!("Found section {}", section_name);
+            // error!("Found section {}", section_name);
             *section = scnNew;
             found = true;
             break;
@@ -543,7 +515,7 @@ pub fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn
 pub fn CheckElf(elf: *mut Elf) -> Result<i64> {    
     let ek = unsafe { elf_kind(elf) };
     if ek != libelf::raw::Elf_Kind::ELF_K_ELF {
-        error!("elf_kind is not ELF_K_ELF, but {}", ek);
+        // error!("elf_kind is not ELF_K_ELF, but {}", ek);
         return Err(Error::ELFLoadError("elf_kind is not ELF_K_ELF"));            
     }
 
@@ -556,15 +528,14 @@ pub fn CheckElf(elf: *mut Elf) -> Result<i64> {
         return Err(Error::ELFLoadError("gelf_getclass failed"));            
     }
 
-    let nbytes = 0 as *mut usize;
-    let id = unsafe { elf_getident(elf, nbytes) };
-    let idStr = CString::FromAddr(id as u64).Str().unwrap().to_string();
-    error!("id: {:?}, nbytes: {:?}, idStr: {}", id, nbytes, idStr);
+    // let nbytes = 0 as *mut usize;
+    // let id = unsafe { elf_getident(elf, nbytes) };
+    // let idStr = CString::FromAddr(id as u64).Str().unwrap().to_string();
+    // error!("id: {:?}, nbytes: {:?}, idStr: {}", id, nbytes, idStr);
 
     let mut size:usize = 0;
     let sections_num = &mut size as *mut _ as u64 as *mut usize;
     let ret = unsafe { elf_getshdrnum(elf, sections_num) };
-    error!("yiwang result of elf_getshdrnum: {:?}",ret);
     if ret != 0 {
         return Err(Error::ELFLoadError("elf_getshdrnum failed"));
     }
