@@ -329,8 +329,8 @@ pub extern "C" fn cudaLaunchKernel(
     sharedMem:usize, 
     stream:u64
 ){
-    // println!("Hijacked cudaLaunchKernel(func:{:x}, gridDim:{:x?}, blockDim:{:x?}, args:{:x}, sharedMem: {}, stream: {:x?})", 
-    //     func, gridDim, blockDim, args, sharedMem, stream);
+    println!("Hijacked cudaLaunchKernel(func:{:x}, gridDim:{:x?}, blockDim:{:x?}, args:{:x}, sharedMem: {}, stream: {:x?})",
+        func, gridDim, blockDim, args, sharedMem, stream);
     let info = LaunchKernelInfo {
         func: func, 
         gridDim: gridDim, 
