@@ -59,8 +59,7 @@ pub enum ProxyCommand {
     CuDevicePrimaryCtxGetState,
 
     NvmlInitWithFlags,
-    NvmlDeviceGetCountV2,
-    
+    NvmlDeviceGetCountV2,  
 }
 
 
@@ -72,20 +71,6 @@ pub enum XpuLibrary {
     CudaDriver,
     Nvml
 }
-
-// #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]
-// #[repr(u32)]
-// pub enum CUmoduleLoadingMode {
-//     None = 0x0,
-//     CU_MODULE_EAGER_LOADING = 0x1,
-//     CU_MODULE_LAZY_LOADING = 0x2,
-// }
-
-// impl Default for CUmoduleLoadingMode {
-//     fn default() -> Self {
-//         return CUmoduleLoadingMode::None;
-//     }
-// }
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, Hash, PartialOrd, Ord, PartialEq, Eq)]
@@ -247,12 +232,6 @@ pub struct CudaDeviceProperties {
     pub directManagedMemAccessFromHost: i32,
 }
 
-// impl Default for CudaDeviceProperties {
-//     fn default() -> Self {
-//         unsafe { ::std::mem::zeroed() }
-//     }
-// }
-
 impl Default for CudaDeviceProperties {
     fn default() -> Self {
         Self {
@@ -335,7 +314,6 @@ impl Default for CudaDeviceProperties {
         }
     }
 }
-
 
 #[repr(C)]
 #[derive(Debug)]

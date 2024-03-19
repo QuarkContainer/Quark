@@ -208,13 +208,8 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
         }
         ProxyCommand::CudaDeviceGetStreamPriorityRange => {
-            let mut lowPriority:i32;
-            let mut highPriority:i32;
-
-            unsafe{
-                lowPriority = *(parameters.para1 as *mut _);
-                highPriority = *(parameters.para2 as *mut _);
-            }
+            let mut lowPriority:i32 = 0;
+            let mut highPriority:i32 = 0;
 
             parameters.para1 = &mut lowPriority as *mut _ as u64;
             parameters.para2 = &mut highPriority as *mut _ as u64;
@@ -224,13 +219,12 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 parameters,
             );
 
-            if ret == 0 {
+            if ret == 0{
                 task.CopyOutObj(&lowPriority, args.arg1)?;
-                task.CopyOutObj(&highPriority, args.arg2)?
+                task.CopyOutObj(&highPriority, args.arg2)?;
             }
 
             return Ok(ret);
-
         }
         ProxyCommand::CudaDeviceReset => {
             // error!("SysProxy CudaDeviceReset");
@@ -473,8 +467,8 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
         }
         ProxyCommand::CudaStreamCreate => {
-            unsafe{
-            let mut stream:u64 = *(parameters.para1 as *mut _);
+            
+            let mut stream:u64 = unsafe { *(parameters.para1 as *mut _) };
             
             parameters.para1 = &mut stream as *mut _ as u64;
          
@@ -490,7 +484,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 }
             
             return Ok(ret);
-            }
+            
         }
         ProxyCommand::CudaStreamDestroy => {
             // error!("stream parameter from cudaproxy is : {:x}", parameters.para1);
@@ -561,7 +555,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             if ret == 0 {
                 task.CopyOutObj(&flags, args.arg2 as u64)?;
                 task.CopyOutObj(&active, args.arg3 as u64)?;
-
             }
             return Ok(ret);
         }
@@ -572,7 +565,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 parameters,
             );
             return Ok(ret);
-            
         }
         _ => todo!()
     }
@@ -581,11 +573,10 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn CudaMemcpy(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyKind) -> Result<i64> {
     match kind {
         CUDA_MEMCPY_HOST_TO_HOST => {
-            // error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
+            error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
             return Ok(1);
         }
-        CUDA_MEMCPY_HOST_TO_DEVICE => {
-            
+        CUDA_MEMCPY_HOST_TO_DEVICE => {  
             let mut prs = Vec::new();
             task.V2P(src, count, &mut prs, true, false)?;
 
@@ -606,7 +597,6 @@ pub fn CudaMemcpy(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyK
             return Ok(ret);
         }
         CUDA_MEMCPY_DEVICE_TO_HOST => {
-            
             let mut prs = Vec::new();
             task.V2P(dst, count, &mut prs, true, false)?;
 
@@ -652,11 +642,10 @@ pub fn CudaMemcpy(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyK
 fn CudaMemcpyAsync(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyKind, stream: u64) -> Result<i64> {
     match kind {
         CUDA_MEMCPY_HOST_TO_HOST => {
-            // error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
+            error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
             return Ok(1);
         }
-        CUDA_MEMCPY_HOST_TO_DEVICE => {
-            
+        CUDA_MEMCPY_HOST_TO_DEVICE => {  
             let mut prs = Vec::new();
             task.V2P(src, count, &mut prs, true, false)?;
 
@@ -678,7 +667,6 @@ fn CudaMemcpyAsync(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpy
             return Ok(ret);
         }
         CUDA_MEMCPY_DEVICE_TO_HOST => {
-            
             let mut prs = Vec::new();
             task.V2P(dst, count, &mut prs, true, false)?;
 

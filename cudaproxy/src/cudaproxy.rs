@@ -162,7 +162,7 @@ pub extern "C" fn cudaDeviceSetCacheConfig(cacheConfig: cudaFuncCache) -> usize{
 
 #[no_mangle]
 pub extern "C" fn cudaSetDevice(device: c_int) -> usize {
-    // println!("Hijacked1 cudaSetDevice({})", device);
+    // println!("Hijacked cudaSetDevice({})", device);
 
     let ret = unsafe {
         syscall2(SYS_PROXY, ProxyCommand::CudaSetDevice as usize, device as usize) 
@@ -224,14 +224,14 @@ pub extern "C" fn cudaGetDeviceProperties(
 
 #[no_mangle]
 pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) -> *mut u64 {
-    //   println!("Hijacked __cudaRegisterFatBinary(fatCubin:{:#x?})", fatCubin);
-      let len = fatCubin.text.header_size as usize + fatCubin.text.size as usize;
-      let tempVaue = 0;
-      let result = &tempVaue as *const _ as u64;
-      unsafe {
-          syscall4(SYS_PROXY, ProxyCommand::CudaRegisterFatBinary as usize, len, fatCubin.text as *const _ as usize, result as usize);
-      }
-      return result as *mut u64;
+    // println!("Hijacked __cudaRegisterFatBinary(fatCubin:{:#x?})", fatCubin);
+    let len = fatCubin.text.header_size as usize + fatCubin.text.size as usize;
+    let tempVaue = 0;
+    let result = &tempVaue as *const _ as u64;
+    unsafe {
+        syscall4(SYS_PROXY, ProxyCommand::CudaRegisterFatBinary as usize, len, fatCubin.text as *const _ as usize, result as usize);
+    }
+    return result as *mut u64;
 }
 
 #[no_mangle]
@@ -240,7 +240,7 @@ pub extern "C" fn __cudaUnregisterFatBinary(fatCubinHandle:u64) {
    
     unsafe{
         //  if *(fatCubinHandle as *const u64) != 0 {
-        //  println!("the content of fatCubin poninter is not 0, need to unload the module");
+        //  println!("the content of fatCubin pointer is not 0, need to unload the module");
          syscall2(SYS_PROXY, ProxyCommand::CudaUnregisterFatBinary as usize,fatCubinHandle as usize);
         //  }
     }
@@ -266,7 +266,7 @@ pub extern "C" fn __cudaRegisterFunction(
     bDim:u64, 
     gDim:u64, 
     wSize:usize
-) {
+){
     // println!("Hijacked __cudaRegisterFunction(fatCubinHandle:{:x}, hostFun:{:x}, deviceFun:{:x}, deviceName:{:x}, thread_limit: {}, tid: {:x}, bid: {:x}, bDim: {:x}, gDim: {:x}, wSize: {})", fatCubinHandle, hostFun, deviceFun, deviceName, thread_limit, tid, bid, bDim, gDim, wSize);    
     let info = RegisterFunctionInfo {
         fatCubinHandle: fatCubinHandle, 
@@ -328,7 +328,7 @@ pub extern "C" fn cudaLaunchKernel(
     args:u64, 
     sharedMem:usize, 
     stream:u64
-) {
+){
     // println!("Hijacked cudaLaunchKernel(func:{:x}, gridDim:{:x?}, blockDim:{:x?}, args:{:x}, sharedMem: {}, stream: {:x?})", 
     //     func, gridDim, blockDim, args, sharedMem, stream);
     let info = LaunchKernelInfo {
