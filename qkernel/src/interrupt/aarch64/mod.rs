@@ -202,6 +202,7 @@ pub extern "C" fn exception_handler_unhandled(_ptregs_addr:usize, exception_type
 pub extern "C" fn exception_handler_el1h_sync(ptregs_addr:usize){
     let esr = GetEsrEL1();
     let ec = EsrDefs::GetExceptionFromESR(esr);
+    kernel_def::enable_access_user();
 
     match ec {
         EsrDefs::EC_DATA_ABORT => {
@@ -230,7 +231,7 @@ pub extern "C" fn exception_handler_el1h_sync(ptregs_addr:usize){
             }
             panic!("VM: exit on panic.");
         }
-    }
+     }
 }
 
 #[no_mangle]
