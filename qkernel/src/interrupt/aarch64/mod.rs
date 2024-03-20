@@ -222,16 +222,16 @@ pub extern "C" fn exception_handler_el1h_sync(ptregs_addr:usize){
                 let ctx_p = ctx_p.cast::<PtRegs>();
                 let ctx = unsafe { &mut *ctx_p };
                 unsafe {
-                     if let Some(opcode) = kernel_def::read_user_opcode(ctx.pc) {
-                         debug!("VM: current-PC: {:#x}, retrieved PC[opcode]:{:#x}.", ctx.pc, opcode);
-                     } else {
-                         debug!("VM: current-PC: {:#x}, can not retrieve PC[opcode].", ctx.pc);
-                     }
+                    if let Some(opcode) = kernel_def::read_user_opcode(ctx.pc) {
+                        debug!("VM: current-PC: {:#x}, retrieved PC[opcode]:{:#x}.", ctx.pc, opcode);
+                    } else {
+                        debug!("VM: current-PC: {:#x}, can not retrieve PC[opcode].", ctx.pc);
+                    }
                 }
             }
             panic!("VM: exit on panic.");
         }
-     }
+    }
 }
 
 #[no_mangle]
