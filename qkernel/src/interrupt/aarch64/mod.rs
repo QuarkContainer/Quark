@@ -202,6 +202,7 @@ pub extern "C" fn exception_handler_unhandled(_ptregs_addr:usize, exception_type
 pub extern "C" fn exception_handler_el1h_sync(ptregs_addr:usize){
     let esr = GetEsrEL1();
     let ec = EsrDefs::GetExceptionFromESR(esr);
+    kernel_def::enable_access_user();
 
     match ec {
         EsrDefs::EC_DATA_ABORT => {
@@ -213,9 +214,24 @@ pub extern "C" fn exception_handler_el1h_sync(ptregs_addr:usize){
             MemAbortKernel(ptregs_addr, esr, far, true);
         },
         _ => {
-            panic!("unhandled sync exception from el1: {}\n", ec);
+            debug!("unhandled sync exception from el1: {:#x}\n - ESR_EL1:{:#x}", ec, esr);
+            if ptregs_addr == 0 {
+               panic!("VM: exception frame is null pointer\n")
+            } else {
+                let ctx_p = ptregs_addr as *mut PtRegs;
+                let ctx_p = ctx_p.cast::<PtRegs>();
+                let ctx = unsafe { &mut *ctx_p };
+                unsafe {
+                     if let Some(opcode) = kernel_def::read_user_opcode(ctx.pc) {
+                         debug!("VM: current-PC: {:#x}, retrieved PC[opcode]:{:#x}.", ctx.pc, opcode);
+                     } else {
+                         debug!("VM: current-PC: {:#x}, can not retrieve PC[opcode].", ctx.pc);
+                     }
+                }
+            }
+            panic!("VM: exit on panic.");
         }
-    }
+     }
 }
 
 #[no_mangle]
