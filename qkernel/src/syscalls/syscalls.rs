@@ -1037,7 +1037,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall,  //	436
     NotImplementSyscall,  //	437
     NotImplementSyscall,  //	438
-    NotImplementSyscall,  //	439
+    SysNoSys,             //	439
     NotImplementSyscall,  //	440
     NotImplementSyscall,  //	441
     NotImplementSyscall,  //	442
