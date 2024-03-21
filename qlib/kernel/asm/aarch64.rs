@@ -100,16 +100,6 @@ pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) -> ! {
     IRet(pt as *const _ as u64);
 }
 
-#[inline]
-pub fn SyscallRet(kernelRsp: u64) -> ! {
-    unsafe {
-        asm!(
-            "nop"
-        );
-        panic!("won't reach");
-    }
-}
-
 
 //
 // NOTE: 16*18 - Size of PtRegs

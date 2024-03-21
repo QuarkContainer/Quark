@@ -673,22 +673,20 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
         toTask.archfpstate = Some(Box::new(
             fromTask.archfpstate.as_ref().unwrap().Fork(),
         ));
-
-        // TODO what is this?
+        // 1. set sys_clone return value to 0 to indicate child.
+        // 2. set child pc (return addr of current call frame)
+        //      to child_clone function
         #[cfg(target_arch = "x86_64")]
         {
             toPtRegs.rax = 0;
+            toTask.context.place_on_stack(child_clone as u64);
+        }
+        #[cfg(target_arch = "aarch64")]
+        {
+            toPtRegs.regs[0] = 0;
+            toTask.context.set_pc(child_clone as u64);
         }
         toPtRegs.set_stack_pointer(userSp);
-        //
-        // NOTE: x86_64 does not set the pc.
-        //       Why it works?
-        //
-        #[cfg(target_arch = "aarch64")]
-        toTask.context.set_pc(child_clone as u64);
-
-
-        toTask.context.place_on_stack(child_clone as u64);
     }
 }
 
