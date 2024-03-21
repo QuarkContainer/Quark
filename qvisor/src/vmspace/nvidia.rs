@@ -1151,7 +1151,7 @@ impl NvidiaHandlers {
 
         let handlers = BTreeMap::new();
 
-        // let cudart = format!("/usr/lib/x86_64-linux-gnu/libcudart.so");
+   
         let cudart = format!("/usr/local/cuda/lib64/libcudart.so");
         let cudartlib = CString::new(&*cudart).unwrap();
         let cudaRuntimeHandler =
