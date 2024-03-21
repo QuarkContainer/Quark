@@ -386,6 +386,7 @@ pub fn SetupUserStack(
         Key: AuxVec::AT_PAGESZ,
         Val: 4096,
     });
+    #[cfg(target_arch = "x86_64")]
     auxv.push(AuxEntry {
         Key: AuxVec::AT_HWCAP,
         Val: 0xbfebfbff,
