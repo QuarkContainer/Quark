@@ -282,25 +282,34 @@ impl PageOpts {
     }
 
     pub fn UserReadOnly() -> Self {
-        return PageOpts(PageTableFlags::VALID | PageTableFlags::USER_ACCESSIBLE | PageTableFlags::READ_ONLY);
+        return PageOpts(
+            PageTableFlags::VALID |
+            PageTableFlags::USER_ACCESSIBLE |
+            PageTableFlags::READ_ONLY |
+            PageTableFlags::MT_NORMAL |
+            PageTableFlags::ACCESSED
+        );
     }
 
     pub fn UserNonAccessable() -> Self {
-        return PageOpts(PageTableFlags::VALID | PageTableFlags::ACCESSED);
+        return PageOpts(PageTableFlags::VALID | PageTableFlags::ACCESSED | PageTableFlags::MT_NORMAL);
     }
 
     pub fn UserReadWrite() -> Self {
         return PageOpts(
-            PageTableFlags::VALID | PageTableFlags::USER_ACCESSIBLE,
+            PageTableFlags::VALID |
+            PageTableFlags::USER_ACCESSIBLE |
+            PageTableFlags::MT_NORMAL |
+            PageTableFlags::ACCESSED
         );
     }
 
     pub fn KernelReadOnly() -> Self {
-        return PageOpts(PageTableFlags::VALID | PageTableFlags::READ_ONLY);
+        return PageOpts(PageTableFlags::VALID | PageTableFlags::READ_ONLY | PageTableFlags::MT_NORMAL | PageTableFlags::ACCESSED);
     }
     
     pub fn KernelReadWrite() -> Self {
-        return PageOpts(PageTableFlags::VALID);
+        return PageOpts(PageTableFlags::VALID | PageTableFlags::MT_NORMAL | PageTableFlags::ACCESSED);
     }
 
     pub fn Present(&self) -> bool {
