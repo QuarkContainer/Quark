@@ -646,40 +646,172 @@ pub extern "C" fn nvmlDeviceGetCount_v2(deviceCount: *mut c_uint) -> usize {
     };
 }
 
+
 // lazy_static::lazy_static! {
-//     pub static ref DLOPEN_ORIG: Mutex<Option<unsafe extern "C" fn(*const libc::c_char, libc::c_int) -> *mut libc::c_void>> = Mutex::new(None);
-//     pub static ref DLCLOSE_ORIG: Mutex<Option<unsafe extern "C" fn(*mut libc::c_void) -> libc::c_int>> = Mutex::new(None);
-//     pub static ref DL_HANDLE: Arc<Mutex<Option<*mut libc::c_void>>> = Arc::new(Mutex::new(None));
+//     pub static ref DLOPEN_ORIG: Mutex<Option<unsafe extern "C" fn(*const c_char, c_int) -> *mut libc::c_void>> = Mutex::new(None);
+//     pub static ref DLCLOSE_ORIG: Mutex<Option<unsafe extern "C" fn(*mut libc::c_void) -> c_int>> = Mutex::new(None);
+//     pub static ref DL_HANDLE: Mutex<u64> = Mutex::new(0);
 // }
+
+
+// #[no_mangle]
+// pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
+//     let mut ret: *mut c_void  = std::ptr::null_mut();
+
+//     let c_str = unsafe {std::ffi::CStr::from_ptr(filename) };
+//     let filename_string = c_str.to_string_lossy().to_string();
+//     println!("intercepted dlopen({} {})", filename_string, flag);
+
+//     if filename.is_null() {
+//         return unsafe { DLOPEN_ORIG.unwrap()(filename, flag) };
+//     }
+    
+//     if unsafe { DLOPEN_ORIG.is_none() } {
+//         let symbol = CString::new("dlopen").unwrap();
+//         let orig = unsafe { dlsym(libc::RTLD_NEXT, symbol.as_ptr()) };
+//         if orig.is_null() {
+//             println!("[dlopen] dlsym failed");
+//         } else {
+//             // unsafe{ DLOPEN_ORIG =  Some(std::mem::transmute::<*mut c_void, unsafe extern "C" fn(*const c_char, c_int) -> *mut c_void>(orig)) };
+//             println!("11111111 dlsym successfulely");
+//             unsafe {
+//                 DLOPEN_ORIG = Some(transmute(orig));
+//             }
+//         }
+//     }
+
+//     let replace_libs = [
+//         "libcuda.so.1",
+//         "libcuda.so",
+//         "libnvidia-ml.so.1",
+//         "libcudnn_cnn_infer.so.8",
+//     ];
+
+//     if !filename.is_null() {
+//         for libs in &replace_libs{
+//             if filename_string == *libs {
+//                 println!("replacing dlopen call to {} with libcudaproxy.so", libs);
+//                 let cudaProxy = CString::new("libcudaproxy.so").unwrap();
+//                 unsafe {
+//                     DL_HANDLE = DLOPEN_ORIG.unwrap()(
+//                         cudaProxy.as_ptr(),
+//                         flag,
+//                     );
+//                 }
+//                 if unsafe { DL_HANDLE.is_null() } {
+//                     println!("failed to replaced dlooen call to libcudaproxy.so");
+//                 }
+//                 return unsafe { DL_HANDLE };
+//             }
+//         }
+//     }
+
+//     ret = unsafe { DLOPEN_ORIG.unwrap()(filename, flag) };
+//     println!("22222222");
+
+//     println!("value of ret {:#?}", ret);
+
+//     if ret.is_null() {
+//         println!("2");
+//         let err = unsafe { libc::dlerror() };
+//         let errMesg = unsafe { CString::from_raw(err) };
+//         println!(
+//             "dlopen {} failed: {}",
+//             filename_string,
+//             errMesg.to_str().unwrap_or("unknown error")
+//         );
+//     }
+//     println!("3");
+//     return ret;
+// }
+
+
+// #[no_mangle]
+// pub extern "C" fn dlclose(handle: *mut c_void) -> c_int{
+//     if handle.is_null() {
+//         println!("[dlclose] handle NULL");
+//         return -1;
+//     }else if unsafe{ DLCLOSE_ORIG.is_none() } {
+//         let symbol= CString::new("dlclose").unwrap();
+//         let orig = unsafe { dlsym(libc::RTLD_NEXT, symbol.as_ptr()) };
+//         if orig.is_null(){
+//             println!("[dlclose] dlsym failed");
+//         }else {
+//             // unsafe{ DLCLOSE_ORIG =  Some(std::mem::transmute::<*mut c_void, unsafe extern "C" fn(*mut c_void) -> *mut c_void>(orig)) };
+//             unsafe {
+//                 DLCLOSE_ORIG = Some(transmute(orig));
+//             }
+//         }
+//     }
+//     if unsafe{ DL_HANDLE == handle } {
+//         println!("[dlclose] ignore close");
+//         return 0;
+//     } else{
+//         return unsafe{ DLCLOSE_ORIG.unwrap()(handle) };
+//     }
+// }
+
+
 pub static mut DLOPEN_ORIG: Option<unsafe extern "C" fn(*const libc::c_char, libc::c_int) -> *mut libc::c_void> = None;
 pub static mut DLCLOSE_ORIG: Option<unsafe extern "C" fn(*mut libc::c_void) -> libc::c_int> = None;
 pub static mut DL_HANDLE: *mut libc::c_void = ptr::null_mut();
 
 #[no_mangle]
-#[cfg_attr(target_os = "netbsd", link_name = "__utimes50")]
 pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
-    let mut ret: *mut c_void  = std::ptr::null_mut();
+     let mut ret: *mut c_void  = std::ptr::null_mut();
 
     let c_str = unsafe {std::ffi::CStr::from_ptr(filename) };
     let filename_string = c_str.to_string_lossy().to_string();
     println!("intercepted dlopen({} {})", filename_string, flag);
-
+    
+    // let ret = unsafe{::libc::dlopen(filename, flag) };
+    // println!("ret {:x?}",ret);
+    // return ret;
+    
     if filename.is_null() {
         return unsafe { DLOPEN_ORIG.unwrap()(filename, flag) };
+       
     }
     
     if unsafe { DLOPEN_ORIG.is_none() } {
         let symbol = CString::new("dlopen").unwrap();
-        let orig = unsafe { dlsym(libc::RTLD_NEXT, symbol.as_ptr()) };
-        if orig.is_null() {
-            println!("[dlopen] dlsym failed");
-        } else {
-            // unsafe{ DLOPEN_ORIG =  Some(std::mem::transmute::<*mut c_void, unsafe extern "C" fn(*const c_char, c_int) -> *mut c_void>(orig)) };
-            unsafe {
-                DLOPEN_ORIG = Some(transmute(orig));
-            }
-        }
+        // let orig = unsafe { dlsym(libc::RTLD_NEXT, symbol.as_ptr()) };
+
+        // let a : fn(*const libc::c_char, libc::c_int) -> *mut libc::c_void = unsafe{  std::mem::transmute(
+        //     ::libc::dlsym(::libc::RTLD_NEXT, std::mem::transmute(symbol.as_ptr())) ) };
+        // let a : fn(*const libc::c_char, libc::c_int) -> *mut libc::c_void = unsafe{  std::mem::transmute(
+        //       ::libc::dlopen(filename, flag)) };
+        // ret = a(filename, flag) ;
+
+        // println!("DLopen_Orig is {:x?}", ret);
+        // return ret;
+
+        // unsafe {DLOPEN_ORIG =  std::mem::transmute(
+        //      ::libc::dlsym(::libc::RTLD_NEXT, std::mem::transmute(symbol.as_ptr())) ) };
+        
+        unsafe {DLOPEN_ORIG = Some(std::mem::transmute(::libc::dlopen(filename, flag))) };
+
+        
+        // if orig.is_null() {
+        //     println!("[dlopen] dlsym failed");
+        // } else {
+        //     // unsafe{ DLOPEN_ORIG =  Some(std::mem::transmute::<*mut c_void, unsafe extern "C" fn(*const c_char, c_int) -> *mut c_void>(orig)) };
+        //     println!("11111111 dlsym successfulely");
+        //     unsafe {
+        //         DLOPEN_ORIG = Some(transmute(orig));
+        //     }
+        // }
     }
+    if unsafe { DLOPEN_ORIG.is_none() } {
+        println!("DLopen_Orig is still none");
+        
+    }
+
+    // let real_rand = unsafe { DLOPEN_ORIG.unwrap_unchecked() };
+    // ret = unsafe { real_rand(filename, flag) };
+    // println!("DLopen_Orig is {:x?}", ret);
+     // ret = unsafe { DLOPEN_ORIG.unwrap()(filename, flag) };
+    // return ret;
 
     let replace_libs = [
         "libcuda.so.1",
@@ -708,22 +840,22 @@ pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
     }
 
     ret = unsafe { DLOPEN_ORIG.unwrap()(filename, flag) };
-    println!("1");
+    println!("22222222");
 
-    println!("value of ret {:#?}", ret);
+    // println!("value of ret {:#?}", ret);
 
-    if ret.is_null() {
-        println!("2");
-        let err = unsafe { libc::dlerror() };
-        let errMesg = unsafe { CString::from_raw(err) };
-        println!(
-            "dlopen {} failed: {}",
-            filename_string,
-            errMesg.to_str().unwrap_or("unknown error")
-        );
-    }
-    println!("3");
-    return ret;
+    // if ret.is_null() {
+    //     println!("2");
+    //     let err = unsafe { libc::dlerror() };
+    //     let errMesg = unsafe { CString::from_raw(err) };
+    //     println!(
+    //         "dlopen {} failed: {}",
+    //         filename_string,
+    //         errMesg.to_str().unwrap_or("unknown error")
+    //     );
+    // }
+    // println!("3");
+     return ret;
 }
 
 
