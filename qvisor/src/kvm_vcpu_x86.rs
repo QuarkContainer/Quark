@@ -44,6 +44,8 @@ use super::runc::runtime::vm::*;
 use super::syncmgr::*;
 use crate::qlib::kernel::PAGE_MGR;
 
+use crate::qlib::task_mgr::TaskId;
+
 #[repr(C)]
 pub struct SignalMaskStruct {
     length: u32,
@@ -578,7 +580,7 @@ impl KVMVcpu {
                             let ret = SHARE_SPACE.scheduler.WaitVcpu(&SHARE_SPACE, self.id, true);
                             match ret {
                                 Ok(taskId) => unsafe {
-                                    *(retAddr as *mut u64) = taskId as u64;
+                                    *(retAddr as *mut TaskId) = taskId;
                                 },
                                 Err(Error::Exit) => return Ok(()),
                                 Err(e) => {
@@ -717,34 +719,6 @@ impl KVMVcpu {
 
         //let mut vcpu_regs = self.vcpu_fd.get_regs()?;
         Ok(())
-    }
-
-    pub fn VcpuWait(&self) -> i64 {
-        let sharespace = &SHARE_SPACE;
-        loop {
-            if !super::runc::runtime::vm::IsRunning() {
-                return -1;
-            }
-
-            {
-                sharespace.IncrHostProcessor();
-                Self::GuestMsgProcess(sharespace);
-
-                defer!({
-                    // last processor in host
-                    if sharespace.DecrHostProcessor() == 0 {
-                        Self::GuestMsgProcess(sharespace);
-                    }
-                });
-            }
-
-            let ret = sharespace.scheduler.WaitVcpu(sharespace, self.id, true);
-            match ret {
-                Ok(taskId) => return taskId as i64,
-                Err(Error::Exit) => return -1,
-                Err(e) => panic!("HYPERCALL_HLT wait fail with error {:?}", e),
-            }
-        }
     }
 
     pub fn SetXCR0(&self) -> Result<()> {

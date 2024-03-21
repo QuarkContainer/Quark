@@ -29,35 +29,56 @@ use super::kernel::arch::x86_64::arch_x86::*;
 use core::ops::Deref;
 use super::common::*;
 
+use crate::IS_GUEST;
+use crate::qlib::kernel::task::{TaskWrapper, Task};
 
 use super::vcpu_mgr::*;
 
 #[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub struct TaskId {
-    pub data: u64,
+    pub task_addr: u64,
+    pub task_wrapper_addr: u64,
 }
 
 impl TaskId {
     #[inline]
-    pub const fn New(addr: u64) -> Self {
-        return Self { data: addr };
+    pub const fn New(task_addr: u64, task_wrapper_addr: u64) -> Self {
+        return Self { 
+                    task_addr,
+                    task_wrapper_addr
+                };
     }
 
     #[inline]
-    pub fn Addr(&self) -> u64 {
-        return self.data;
+    pub fn PrivateTaskAddr(&self) -> u64 {
+        return self.task_addr;
     }
 
     #[inline]
-    pub fn Context(&self) -> &'static Context {
-        unsafe { return &*(self.data as *const Context) }
+    pub fn SharedTaskAddr(&self) -> u64 {
+        return self.task_wrapper_addr;
+    }
+
+    #[inline]
+    pub fn GetPrivateTask(&self) -> &'static mut Task {
+        assert!(IS_GUEST == true, "GetPrivateTask is called from host");
+
+        return unsafe { &mut *(self.PrivateTaskAddr() as *mut Task) };
+    }
+
+    #[inline]
+    pub fn GetSharedTask(&self) -> &'static mut TaskWrapper {
+        info!("task GetSharedTask");
+        return unsafe { &mut *(self.SharedTaskAddr() as *mut TaskWrapper) };
     }
 
     #[inline]
     pub fn Queue(&self) -> u64 {
-        return self.Context().queueId.load(Ordering::Relaxed) as u64;
+        info!("task Queue");
+        return self.GetSharedTask().queueId.load(Ordering::Relaxed) as u64;
     }
 }
+
 
 #[derive(Debug, Default)]
 pub struct Links {
@@ -68,21 +89,19 @@ pub struct Links {
 #[derive(Debug)]
 #[repr(C)]
 pub struct Context {
-    pub rsp: u64,
-    pub r15: u64,
-    pub r14: u64,
-    pub r13: u64,
-    pub r12: u64,
-    pub rbx: u64,
-    pub rbp: u64,
-    pub rdi: u64,
+    pub rsp: u64,  // 0x00
+    pub r15: u64,  // 0x08
+    pub r14: u64,  // 0x10
+    pub r13: u64,  // 0x18
+    pub r12: u64,  // 0x20
+    pub rbx: u64,  // 0x28
+    pub rbp: u64,  // 0x30
+    pub rdi: u64,  // 0x38
 
-    pub ready: AtomicU64,
-    pub fs: u64,
-    pub savefpsate: bool,
+    pub fs: u64,   // 0x40
+    pub savefpsate: bool,  // 
     pub X86fpstate: Option<Box<X86fpstate>>,
-    // job queue id
-    pub queueId: AtomicUsize,
+
     pub links: Links,
 }
 
@@ -98,22 +117,11 @@ impl Context {
             rbp: 0,
             rdi: 0,
 
-            ready: AtomicU64::new(1),
-
             fs: 0,
             savefpsate: false,
             X86fpstate: Some(Default::default()),
-            queueId: AtomicUsize::new(0),
             links: Links::default(),
         };
-    }
-
-    pub fn Ready(&self) -> u64 {
-        return self.ready.load(Ordering::Acquire);
-    }
-
-    pub fn SetReady(&self, val: u64) {
-        return self.ready.store(val, Ordering::SeqCst);
     }
 }
 
@@ -323,7 +331,7 @@ pub struct TaskQueueIntern {
 impl Default for TaskQueueIntern {
     fn default() -> Self {
         return Self {
-            workingTask: TaskId::New(0),
+            workingTask: TaskId::New(0, 0),
             workingTaskReady: false,
             queue: VcpuLocalQueue::New(MemoryDef::TASK_QLEN),
         };
@@ -374,7 +382,7 @@ impl TaskQueue {
             data.workingTaskReady = false;
             return Some(data.workingTask);
         } else {
-            data.workingTask = TaskId::New(0);
+            data.workingTask = TaskId::New(0, 0);
             return None;
         }
     }
@@ -405,7 +413,7 @@ impl TaskQueue {
                     match data.queue.Pop() {
                         None => panic!("TaskQueue none task"),
                         Some(taskId) => {
-                            if taskId.GetTask().context.Ready() != 0 {
+                            if taskId.GetSharedTask().Ready() != 0 {
                                 self.queueSize.fetch_sub(1, Ordering::Release);
                                 return Some(taskId);
                             }

@@ -153,8 +153,6 @@ pub const HYPERCALL_VCPU_WAIT: u16 = 23;
 pub const HYPERCALL_RELEASE_VCPU: u16 = 24;
 pub const HYPERCALL_SHARESPACE_INIT: u16 = 25;
 
-pub const DUMMY_TASKID: TaskId = TaskId::New(0xffff_ffff);
-
 pub const MAX_VCPU_COUNT: usize = 64;
 
 #[cfg(target_arch = "x86_64")]

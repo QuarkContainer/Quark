@@ -117,6 +117,7 @@ use alloc::vec::Vec;
 use guest_host_allocator::GuestHostSharedAllocator;
 use memmgr::pma::PageMgr;
 
+
 #[macro_use]
 mod print;
 
@@ -138,7 +139,7 @@ pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
 
-
+pub static IS_GUEST: bool = true;
 
 
 lazy_static! {
@@ -415,7 +416,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
 
                     let mm = thread.lock().memoryMgr.clone();
                     thread.lock().memoryMgr = currTask.mm.clone();
-                    CPULocal::SetPendingFreeStack(currTask.taskId);
+                    CPULocal::SetPendingFreeStack(currTask.taskId, currTask.taskWrapperId);
 
                     /*if !SHARESPACE.config.read().KernelPagetable {
                         KERNEL_PAGETABLE.SwitchTo();

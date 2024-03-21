@@ -58,6 +58,8 @@ pub struct ThreadInternal {
     pub name: String,
 
     pub taskId: u64,
+
+    pub taskIdWrapperId: u64,
     //the task of the Task Stack
     pub blocker: Blocker,
 

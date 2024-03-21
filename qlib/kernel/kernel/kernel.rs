@@ -357,6 +357,7 @@ impl Kernel {
 
         let config = TaskConfig {
             TaskId: task.taskId,
+            TaskWrapperId: task.taskWrapperId,
             Kernel: self.clone(),
             Parent: None,
             InheritParent: None,

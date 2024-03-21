@@ -42,7 +42,7 @@ impl Default for WaiterInternal {
             mask: 0,
             idCnt: 0,
             state: WaitState::default(),
-            taskId: TaskId::New(0),
+            taskId: TaskId::New(0, 0),
         };
     }
 }
@@ -59,9 +59,9 @@ impl Deref for Waiter {
 }
 
 impl Waiter {
-    pub fn New(taskId: u64) -> Self {
+    pub fn New(taskId: TaskId) -> Self {
         let internal = WaiterInternal {
-            taskId: TaskId::New(taskId),
+            taskId: taskId,
             ..Default::default()
         };
 
