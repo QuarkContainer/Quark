@@ -24,7 +24,7 @@ pub mod random;
 pub mod syscall;
 pub mod time;
 pub mod uringMgr;
-#[cfg(cuda)]
+#[cfg(feature = "cuda")]
 pub mod nvidia;
 pub mod tsot_agent;
 pub mod xpu;
@@ -56,7 +56,7 @@ use crate::vmspace::kernel::GlobalIOMgr;
 use crate::vmspace::kernel::GlobalRDMASvcCli;
 
 use self::limits::*;
-#[cfg(cuda)]
+#[cfg(feature = "cuda")]
 use self::nvidia::NvidiaProxy;
 use self::random::*;
 use self::syscall::*;
@@ -1931,7 +1931,7 @@ impl VMSpace {
     }
 
     pub fn Proxy(_cmd: ProxyCommand, _parameters: &ProxyParameters) -> i64 {
-        #[cfg(cuda)]
+        #[cfg(feature = "cuda")]        
         match NvidiaProxy(_cmd, _parameters) {
             Ok(v) => return v,
             Err(e) => {
@@ -1939,7 +1939,7 @@ impl VMSpace {
                 return 0;
             }
         }
-        #[cfg(not(cuda))]
+        #[cfg(not(feature = "cuda"))]
         return 0;
     }
 

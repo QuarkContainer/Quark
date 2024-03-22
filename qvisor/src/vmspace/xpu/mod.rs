@@ -1,2 +1,2 @@
-#[cfg(cuda)]
+#[cfg(feature = "cuda")]
 pub mod cuda;
