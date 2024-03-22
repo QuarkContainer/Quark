@@ -72,7 +72,8 @@ And also install "cargo-xbuild" as below.
 cargo +stable install cargo-xbuild
 ```
 
-And also some extra libraries for compiling GPU module:
+And also some extra libraries for compiling GPU module:  
+(Please note, you can execute following commands even in non nvidia machine to get ability for compiling GPU module.)
 ```sh
 sudo apt-get install libelf-dev nvidia-driver-535
 ```
@@ -82,6 +83,12 @@ sudo apt-get install libelf-dev nvidia-driver-535
 git clone git@github.com:QuarkContainer/Quark.git
 cd Quark
 make
+make install
+```
+
+### Build with GPU module
+```sh
+make cuda_all
 make install
 ```
 
