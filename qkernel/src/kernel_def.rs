@@ -296,6 +296,24 @@ impl HostSpace {
 
     pub fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
         let current = Task::Current().GetTaskId();
+
+        let qMsg = QMsg {
+            taskId: current,
+            globalLock: true,
+            ret: 0,
+            msg: msg,
+        };
+
+        let addr = &qMsg as *const _ as u64;
+        let om = HostOutputMsg::QCall(addr);
+
+        super::SHARESPACE.AQCall(&om);
+        taskMgr::Wait();
+        return qMsg.ret;
+    }
+
+    pub fn Call_cc(msg: &mut Msg, _mustAsync: bool) -> u64 {
+        let current = Task::Current().GetTaskId();
         let qmsg_size = core::mem::size_of::<QMsg>();
         let msg_size = core::mem::size_of::<Msg>();
         let qmsg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(qmsg_size,0x8) as *mut QMsg };
@@ -328,6 +346,21 @@ impl HostSpace {
     }
 
     pub fn HCall(msg: &mut Msg, lock: bool) -> u64 {
+        let taskId = Task::Current().GetTaskId();
+
+        let mut event = QMsg {
+            taskId: taskId,
+            globalLock: lock,
+            ret: 0,
+            msg: msg,
+        };
+
+        HyperCall64(HYPERCALL_HCALL, &mut event as *const _ as u64, 0, 0, 0);
+
+        return event.ret;
+    }
+
+    pub fn HCall_cc(msg: &mut Msg, lock: bool) -> u64 {
         let taskId = Task::Current().GetTaskId();
         let qmsg_size = core::mem::size_of::<QMsg>();
         let msg_size = core::mem::size_of::<Msg>();

@@ -87,6 +87,7 @@ use self::qlib::kernel::memmgr;
 use self::qlib::kernel::perflog;
 use self::qlib::kernel::quring;
 use self::qlib::kernel::Kernel;
+use self::qlib::kernel::Kernel::ENABLE_CC;
 use self::qlib::kernel::*;
 use self::qlib::{ShareSpaceRef, SysCallID};
 //use self::vcpu::*;
@@ -478,8 +479,8 @@ pub extern "C" fn rust_main(
     self::qlib::kernel::asm::fninit();
     if id == 0 {
         GLOBAL_ALLOCATOR.InitPrivateAllocator(privateHeapStart);
-         // ghcb convert shared memory
-
+        // If is in sev-snp,ghcb convert shared memory and set ENABLE_CC
+        ENABLE_CC.store(true,Ordering::Release);
         
         GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
         
@@ -667,4 +668,3 @@ fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
     self::Kernel::HostSpace::Panic(&format!("alloc_error_handler layout: {:?}", layout));
     loop {}
 }
-

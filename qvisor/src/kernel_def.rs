@@ -318,8 +318,16 @@ impl HostSpace {
         panic!("HostSpace::Call msg {:x?}", msg);
     }
 
+    pub fn Call_cc(msg: &mut Msg, _mustAsync: bool) -> u64 {
+        panic!("HostSpace::Call msg {:x?}", msg);
+    }
+
     pub fn HCall(msg: &mut Msg, _lock: bool) -> u64 {
         panic!("HostSpace::HCall msg {:x?}", msg);
+    }
+    
+    pub fn HCall_cc(msg: &mut Msg, _mustAsync: bool) -> u64 {
+        panic!("HostSpace::Call msg {:x?}", msg);
     }
 }
 
