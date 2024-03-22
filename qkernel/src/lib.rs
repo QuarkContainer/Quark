@@ -66,15 +66,12 @@ use vcpu::CPU_LOCAL;
 use crate::qlib::kernel::GlobalIOMgr;
 use crate::qlib::ShareSpace;
 
-//use self::qlib::buddyallocator::*;
 use self::asm::*;
 use self::boot::controller::*;
 use self::boot::loader::*;
 use self::kernel::timer::*;
 use self::kernel_def::*;
 use self::loader::vdso::*;
-//use linked_list_allocator::LockedHeap;
-//use buddy_system_allocator::LockedHeap;
 use self::qlib::common::*;
 use self::qlib::config::*;
 use self::qlib::control_msg::*;
@@ -117,6 +114,7 @@ use self::task::*;
 use self::threadmgr::task_sched::*;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use memmgr::pma::PageMgr;
 
 #[macro_use]
 mod print;
@@ -145,7 +143,9 @@ lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
     pub static ref GUEST_KERNEL: Mutex<Option<kernel::kernel::Kernel>> = Mutex::new(None);
 
-    pub static ref PRIVATE_VCPU_LOCAL_HOLDER: Box<PrivateCPULocal> = Box::new(PrivateCPULocal::New());    
+    pub static ref PRIVATE_VCPU_LOCAL_HOLDER: Box<PrivateCPULocal> = Box::new(PrivateCPULocal::New());
+
+    pub static ref PAGE_MGR_HOLDER: Box<PageMgr> = Box::new(PageMgr::default());      
 }
 
 pub fn SingletonInit() {
@@ -162,7 +162,7 @@ pub fn SingletonInit() {
         // the error! can run after this point
         //error!("error message");
 
-        PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
+        PAGE_MGR.SetValue(PAGE_MGR_HOLDER.Addr());
         LOADER.Init(Loader::default());
         KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
             MemoryDef::DEFAULT_STACK_SIZE as usize,
@@ -490,7 +490,7 @@ pub extern "C" fn rust_main(
         let shared_space = unsafe {
             GLOBAL_ALLOCATOR.AllocSharedBuf(size, 0x80)
         };
-        HyperCall64_init(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
+        HyperCall64_init(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, PAGE_MGR_HOLDER.Addr(), 0, 0);
 
 
         SHARESPACE.SetValue(shared_space as u64);
@@ -517,10 +517,6 @@ pub extern "C" fn rust_main(
 
         debug!("vec2 {:?}", vec2);
         drop(vec2);
-
-
-
-
 
         InitTsc();
         InitTimeKeeper(vdsoParamAddr);

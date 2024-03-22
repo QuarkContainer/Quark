@@ -43,6 +43,7 @@ use super::qlib::perf_tunning::*;
 use super::qlib::qmsg::sharepara::*;
 use super::runc::runtime::vm::*;
 use super::syncmgr::*;
+use crate::qlib::kernel::PAGE_MGR;
 
 #[repr(C)]
 pub struct SignalMaskStruct {
@@ -377,6 +378,11 @@ impl KVMVcpu {
 
                             let shareSpaceAddr = para1 as *mut ShareSpace;
                             let sharedSpace  = unsafe { &mut (*shareSpaceAddr) };
+                            
+                            // note: in CC mdoe, host can't access PAGE_MGR because it is on private memory
+                            // in non-cc case,  host require PAGE_MGR to support hibernate mode
+                            // check pub fn SwapOut(&self, start: u64, len: u64) -> Result<()> 
+                            PAGE_MGR.SetValue(para1);
 
                             debug!("VM EXIT HYPERCALL_SHARESPACE_INIT 1");
                             VirtualMachine::InitShareSpace(

@@ -42,7 +42,6 @@ use super::super::super::qlib::kernel::vcpu;
 use super::super::super::qlib::kernel::IOURING;
 use super::super::super::qlib::kernel::KERNEL_PAGETABLE;
 use super::super::super::qlib::kernel::KERNEL_STACK_ALLOCATOR;
-use super::super::super::qlib::kernel::PAGE_MGR;
 use super::super::super::qlib::kernel::SHARESPACE;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::pagetable::AlignedAllocator;
@@ -217,7 +216,6 @@ impl VirtualMachine {
 
         unsafe {
             KERNEL_PAGETABLE.SetRoot(VMS.read().pageTables.GetRoot());
-            PAGE_MGR.SetValue(sharespace.GetPageMgrAddr());
             // used for created new task from host
             // see Create(runFnAddr: u64, para: *const u8, kernel: bool) -> &'static mut Self {
             KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(

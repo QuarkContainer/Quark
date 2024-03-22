@@ -109,7 +109,6 @@ use self::hiber_mgr::*;
 use self::kernel::kernel::futex::*;
 use self::kernel::kernel::timer::timekeeper::*;
 use self::kernel::kernel::timer::timer_store::*;
-use self::kernel::memmgr::pma::*;
 use self::kernel::quring::uring_mgr::QUring;
 use self::linux_def::*;
 use self::object_ref::ObjectRef;
@@ -1189,9 +1188,6 @@ pub struct ShareSpace {
     
     pub futexMgr: CachePadded<FutexMgr>,
 
-    // page handler specific
-    pub pageMgr: CachePadded<PageMgr>,
-
     pub ioMgr: CachePadded<IOMgr>,
     pub config: CachePadded<QRwLock<Config>>,
     
@@ -1274,10 +1270,6 @@ impl ShareSpace {
 
     pub fn DecrPendingWrite(&self) {
         self.pendingWrite.fetch_sub(1, Ordering::SeqCst);
-    }
-
-    pub fn GetPageMgrAddr(&self) -> u64 {
-        return self.pageMgr.Addr();
     }
 
     pub fn GetFutexMgrAddr(&self) -> u64 {

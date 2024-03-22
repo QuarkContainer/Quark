@@ -1040,30 +1040,11 @@ impl MemoryManager {
                 let vmaOffset = pageAddr - range.Start();
                 let fileOffset = vmaOffset + vma.offset; // offset in the file
                 let phyAddr = iops.MapFilePage(task, fileOffset)?;
-                //error!("fault 2.1, vma.mappable.is_some() is {}, vaddr is {:x}, paddr is {:x}",
-                //      vma.mappable.is_some(), pageAddr, phyAddr);
-
-                if vma.private {
-                    //self.MapPageReadLocked(pageAddr, phyAddr, exec);
-
-                    let writeable = vma.effectivePerms.Write();
-                    if writeable {
-                        let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
-                        CopyPage(page, phyAddr);
-                        self.MapPageWriteLocked(pageAddr, page, exec);
-                        super::super::PAGE_MGR.DerefPage(page);
-                    } else {
-                        self.MapPageReadLocked(pageAddr, phyAddr, exec);
-                    }
-                } else {
-                    let writeable = vma.effectivePerms.Write();
-                    if writeable {
-                        self.MapPageWriteLocked(pageAddr, phyAddr, exec);
-                    } else {
-                        self.MapPageReadLocked(pageAddr, phyAddr, exec);
-                    }
-                }
-
+                
+                let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
+                CopyPage(page, phyAddr);
+                self.MapPageWriteLocked(pageAddr, page, exec);
+                super::super::PAGE_MGR.DerefPage(page);
                 return Ok(());
             }
             None => {

@@ -32,6 +32,7 @@ use crate::vmspace::kernel::SHARESPACE;
 use crate::GLOBAL_ALLOCATOR;
 use crate::SHARE_SPACE;
 use crate::SWAP_FILE;
+use crate::vmspace::kernel::PAGE_MGR;
 
 impl<const ORDER: usize> Heap<ORDER> {
     pub fn DontNeed(&self) {
@@ -164,7 +165,7 @@ impl HiberMgr {
             self.ReapSwapOut(start, len, &mut map)?;
         }
 
-        let cnt = SHARE_SPACE.pageMgr.pagepool.DontneedFreePages()?;
+        let cnt = PAGE_MGR.pagepool.DontneedFreePages()?;
 
         crate::PMA_KEEPER.DontNeed()?;
 
