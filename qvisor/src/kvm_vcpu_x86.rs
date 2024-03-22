@@ -545,7 +545,7 @@ impl KVMVcpu {
 
                             let eventAddr = addr as *mut QMsg; // as &mut qlib::Event;
                             let qmsg = unsafe { &mut (*eventAddr) };
-                            info!("{:#?}",qmsg);
+                            //info!("{:#?}",qmsg);
                             {
                                 let _l = if qmsg.globalLock {
                                     Some(super::GLOCK.lock())

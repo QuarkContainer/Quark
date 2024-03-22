@@ -709,7 +709,7 @@ impl FileOperations for UringSocketOperations {
                     return Ok(0);
                 } else {
                     let tmp: i32 = 0;
-                    let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
+                    let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
                     if res < 0 {
                         return Err(Error::SysError(-res as i32));
                     }
@@ -719,7 +719,7 @@ impl FileOperations for UringSocketOperations {
             }
             _ => {
                 let tmp: i32 = 0;
-                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
+                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }

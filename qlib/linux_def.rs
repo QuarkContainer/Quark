@@ -15,6 +15,8 @@
 use alloc::slice;
 use alloc::vec::Vec;
 use core::sync::atomic::Ordering;
+use super::mem::list_allocator::GuestHostSharedAllocator;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 use super::super::kernel_def::*;
 
@@ -2453,7 +2455,7 @@ pub struct IoVec {
 
 #[derive(Debug)]
 pub struct DataBuff {
-    pub buf: Vec<u8>,
+    pub buf: Vec<u8,GuestHostSharedAllocator>,
 }
 
 use super::kernel::tcpip::tcpip::SockAddrInet;
@@ -2463,7 +2465,7 @@ impl DataBuff {
     pub fn New(size: usize) -> Self {
         // allocate memory even size is zero. So that Ptr() can get valid address
         let count = if size > 0 { size } else { 1 };
-        let mut buf = Vec::with_capacity(count);
+        let mut buf = Vec::with_capacity_in(count,GUEST_HOST_SHARED_ALLOCATOR);
         buf.resize(size, 0);
 
         return Self { buf: buf };

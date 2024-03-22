@@ -14,6 +14,9 @@
 
 use core::mem::size_of;
 
+use self::range::Range;
+
+use super::super::tsot_msg::*;
 use super::super::common::*;
 use super::super::config::*;
 use super::super::linux_def::*;
@@ -23,6 +26,7 @@ use super::super::socket_buf::*;
 use super::super::*;
 use super::super::loader::*;
 use crate::kernel_def::HyperCall64;
+use crate::qlib::control_msg::ControlMsg;
 use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
 use crate::qlib::proxy::*;
 use crate::GLOBAL_ALLOCATOR;
@@ -49,7 +53,7 @@ impl HostSpace {
     //Here exists memory leak, vec in shared struct cannot be dealloc
     pub fn LoadProcessKernel(processAddr: u64) -> i64 {
         let process_size = size_of::<Process>();
-        let process_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(process_size,0x80) as *mut Process };
+        let process_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(process_size,0x8) as *mut Process };
         let mut msg = Msg::LoadProcessKernel(LoadProcessKernel {
             processAddr: process_ptr as u64,
         });
@@ -58,7 +62,7 @@ impl HostSpace {
         private_process.clone_from_shared(process_ptr);
         //info!("###Cloned Process:{:#?}\n",private_process);
         //Here could have memory leak since 
-        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(process_ptr as *mut u8, process_size, 0x80);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(process_ptr as *mut u8, process_size, 0x8);}
         return ret;
     }
     
@@ -94,7 +98,7 @@ impl HostSpace {
     
     pub fn Sysinfo(addr: u64) -> i64 {
         let info_size = size_of::<LibcSysinfo>();
-        let info_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(info_size,0x80) as *mut LibcSysinfo };
+        let info_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(info_size,0x8) as *mut LibcSysinfo };
         let mut msg = Msg::Sysinfo(Sysinfo {
             addr: info_ptr as u64,
         });
@@ -103,7 +107,7 @@ impl HostSpace {
         unsafe{
             *(addr as *mut LibcSysinfo) = *info_ptr;
         }
-        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(info_ptr as *mut u8, info_size, 0x80);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(info_ptr as *mut u8, info_size, 0x8);}
         return ret;
     }
 
@@ -153,54 +157,97 @@ impl HostSpace {
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
-
+    
     pub fn IORead(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
-        let mut msg = Msg::IORead(IORead { fd, iovs, iovcnt });
+        let iovs_size = (size_of::<IoVec>())*(iovcnt as usize);
+        let iovs_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(iovs_size,0x8) as *mut IoVec};
+        unsafe { core::ptr::copy_nonoverlapping(iovs as *const u8, iovs_ptr as *mut u8, iovs_size);}
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let mut msg = Msg::IORead(IORead { fd, iovs: iovs_ptr as u64, iovcnt });
+
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(iovs_ptr as *mut u8, iovs_size, 0x8);}
+        return ret;
     }
 
     pub fn IOTTYRead(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
-        let mut msg = Msg::IOTTYRead(IOTTYRead { fd, iovs, iovcnt });
+        let iovs_size = (size_of::<IoVec>())*(iovcnt as usize);
+        let iovs_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(iovs_size,0x8) as *mut IoVec};
+        unsafe { core::ptr::copy_nonoverlapping(iovs as *const u8, iovs_ptr as *mut u8, iovs_size);}
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let mut msg = Msg::IOTTYRead(IOTTYRead { fd, iovs: iovs_ptr as u64, iovcnt });
+
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(iovs_ptr as *mut u8, iovs_size, 0x8);}
+        return ret;
+        
     }
 
     pub fn IOWrite(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
-        let mut msg = Msg::IOWrite(IOWrite { fd, iovs, iovcnt });
+        let iovs_size = (size_of::<IoVec>())*(iovcnt as usize);
+        let iovs_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(iovs_size,0x8) as *mut IoVec};
+        unsafe { core::ptr::copy_nonoverlapping(iovs as *const u8, iovs_ptr as *mut u8, iovs_size);}
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let mut msg = Msg::IOWrite(IOWrite { fd, iovs: iovs_ptr as u64, iovcnt });
+
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(iovs_ptr as *mut u8, iovs_size, 0x8);}
+        return ret;
     }
 
     pub fn IOReadAt(fd: i32, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
+        let iovs_size = (size_of::<IoVec>())*(iovcnt as usize);
+        let iovs_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(iovs_size,0x8) as *mut IoVec};
+        unsafe { core::ptr::copy_nonoverlapping(iovs as *const u8, iovs_ptr as *mut u8, iovs_size);}
+
         let mut msg = Msg::IOReadAt(IOReadAt {
             fd,
-            iovs,
+            iovs: iovs_ptr as u64,
             iovcnt,
             offset,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(iovs_ptr as *mut u8, iovs_size, 0x8);}
+        return ret;
     }
 
     pub fn IOWriteAt(fd: i32, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
+        let iovs_size = (size_of::<IoVec>())*(iovcnt as usize);
+        let iovs_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(iovs_size,0x8) as *mut IoVec};
+        unsafe { core::ptr::copy_nonoverlapping(iovs as *const u8, iovs_ptr as *mut u8, iovs_size);}
+
         let mut msg = Msg::IOWriteAt(IOWriteAt {
             fd,
-            iovs,
+            iovs: iovs_ptr as u64,
             iovcnt,
             offset,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(iovs_ptr as *mut u8, iovs_size, 0x8);}
+        return ret;
     }
 
     pub fn IOAppend(fd: i32, iovs: u64, iovcnt: i32) -> (i64, i64) {
-        let mut fileLen: i64 = 0;
+        let iovs_size = (size_of::<IoVec>())*(iovcnt as usize);
+        let iovs_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(iovs_size,0x8) as *mut IoVec};
+        unsafe { core::ptr::copy_nonoverlapping(iovs as *const u8, iovs_ptr as *mut u8, iovs_size);}
+
+        let file_len_size = size_of::<i64>();
+        let file_len_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(file_len_size,0x8) as *mut i64};
+        unsafe{*file_len_ptr = 0;}
+
         let mut msg = Msg::IOAppend(IOAppend {
             fd,
-            iovs,
+            iovs: iovs_ptr as u64,
             iovcnt,
-            fileLenAddr: &mut fileLen as *mut _ as u64,
+            fileLenAddr: file_len_ptr as u64,
         });
 
         let ret = HostSpace::Call(&mut msg, false) as i64;
@@ -208,17 +255,20 @@ impl HostSpace {
             return (ret, 0);
         }
 
+        let fileLen = unsafe{*file_len_ptr};
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(iovs_ptr as *mut u8, iovs_size, 0x8);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(file_len_ptr as *mut u8, file_len_size, 0x8);}
         return (ret, fileLen);
     }
 
     pub fn IOAccept(fd: i32, addr: u64, addrlen: u64) -> i64 {
         let socket_size = size_of::<TcpSockAddr>();
-        let socket_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(socket_size,0x80) as *mut TcpSockAddr };
+        let socket_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(socket_size,0x8) as *mut TcpSockAddr };
         unsafe{
             (*socket_ptr).data = [0; UNIX_PATH_MAX + 2];
         }
         let len_size = size_of::<u32>();
-        let len_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len_size,0x80) as *mut u32 };
+        let len_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len_size,0x8) as *mut u32 };
         unsafe{
             (*len_ptr) = (*socket_ptr).data.len() as _;
         }
@@ -233,99 +283,267 @@ impl HostSpace {
             *len = *len_ptr;
         }
 
-        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(socket_ptr as *mut u8 ,size_of::<TcpSockAddr>(),0x80);}
-        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(len_ptr as *mut u8 ,size_of::<u32>(),0x80);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(socket_ptr as *mut u8 ,size_of::<TcpSockAddr>(),0x8);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(len_ptr as *mut u8 ,size_of::<u32>(),0x8);}
 
         return ret;
     }
 
     pub fn IOConnect(fd: i32, addr: u64, addrlen: u32) -> i64 {
-        let mut msg = Msg::IOConnect(IOConnect { fd, addr, addrlen });
+        let socket_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(addrlen as usize,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(addr as *const u8, socket_ptr, addrlen as usize);}
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let mut msg = Msg::IOConnect(IOConnect { fd, addr: socket_ptr as u64, addrlen });
+
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+        
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(socket_ptr as *mut u8 ,addrlen as usize,0x8);}
+        return ret;
     }
 
     pub fn IORecvMsg(fd: i32, msghdr: u64, flags: i32, blocking: bool) -> i64 {
+        let mut hasName = false;
+        let mut hasControl = false;
+        let mut new_name_buff = core::ptr::null::<u8>() as *mut u8;
+        let mut new_control_buff = core::ptr::null::<u8>() as *mut u8;
+        let mut nameLen =0u32;
+        let mut msgControlLen = 0usize;
+        let new_msghdr_size = size_of::<MsgHdr>();
+        let new_msghdr_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(new_msghdr_size,0x8) as *mut MsgHdr};
+        unsafe { core::ptr::copy_nonoverlapping(msghdr as *const u8, new_msghdr_ptr as *mut u8, new_msghdr_size);}
+        let new_msghdr = unsafe{&mut *new_msghdr_ptr};
+        
+        //new_msghdr.msgName is an array if new_msghdr.nameLen is not null;
+        if new_msghdr.nameLen != 0 {
+            nameLen = new_msghdr.nameLen;
+            hasName = true;
+            new_name_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(new_msghdr.nameLen as usize,0x8)};
+            unsafe { core::ptr::copy_nonoverlapping(new_msghdr.msgName as *const u8, new_name_buff, nameLen as usize);}
+            new_msghdr.msgName = new_name_buff as u64;
+        }
+
+        //new_msghdr.msgControl is a vec in private memory,if is null msgHdr.msgControl = ptr::null::<u8>() as u64;
+        if !new_msghdr.msgControl == core::ptr::null::<u8>() as u64 {
+            msgControlLen = new_msghdr.msgControlLen;
+            hasControl = true;
+            new_control_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(new_msghdr.msgControlLen as usize,0x8)};
+            unsafe { core::ptr::copy_nonoverlapping(new_msghdr.msgControl as *const u8, new_control_buff, msgControlLen);}
+            new_msghdr.msgControl = new_control_buff as u64;
+        }
+
         let mut msg = Msg::IORecvMsg(IORecvMsg {
             fd,
-            msghdr,
+            msghdr: new_msghdr_ptr as u64,
             flags,
             blocking,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let ret =  HostSpace::Call(&mut msg, false) as i64;
+
+        let private_msghdr = unsafe {&mut *(msghdr as *mut MsgHdr)};
+        if hasName {
+            let updated_len = new_msghdr.nameLen;
+            private_msghdr.nameLen = updated_len;
+            unsafe{core::ptr::copy_nonoverlapping(new_name_buff as *const u8, private_msghdr.msgName as *mut u8, nameLen as usize)};
+            unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_name_buff as *mut u8 ,nameLen as usize,0x8);}
+        }
+        if hasControl{
+            let updated_len = new_msghdr.msgControlLen;
+            private_msghdr.msgControlLen = updated_len;
+            unsafe{core::ptr::copy_nonoverlapping(new_control_buff as *const u8, private_msghdr.msgControlLen as *mut u8, msgControlLen)};
+            unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_control_buff as *mut u8 ,msgControlLen,0x8);}
+        }
+
+        private_msghdr.msgFlags = new_msghdr.msgFlags;
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_msghdr_ptr as *mut u8 ,new_msghdr_size,0x8);}
+        return ret;
     }
 
     pub fn IORecvfrom(fd: i32, buf: u64, size: usize, flags: i32, addr: u64, len: u64) -> i64 {
+        let mut hasName = false;
+        let mut new_name_buff = core::ptr::null::<u8>() as *mut u8;
+        let mut new_len_ptr = core::ptr::null::<u32>() as *mut u32;
+        let mut nameLen =0u32;
+        let addrlen = unsafe{&mut *(len as *mut u32)};
+        if (*addrlen) != 0 {
+            nameLen = *addrlen;
+            hasName = true;
+            new_name_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf((*addrlen) as usize,0x8)};
+            new_len_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size_of::<u32>(),0x8) as *mut u32};
+            unsafe { core::ptr::copy_nonoverlapping(addr as *const u8, new_name_buff, nameLen as usize);}
+            unsafe{*new_len_ptr = nameLen;}
+        }
         let mut msg = Msg::IORecvfrom(IORecvfrom {
             fd,
             buf,
             size,
             flags,
-            addr,
-            len,
+            addr: if hasName {new_name_buff as u64} else {addr},
+            len: if hasName { new_len_ptr as u64} else {len},
         });
+        
+        let ret =  HostSpace::Call(&mut msg, false) as i64;
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        if hasName {
+            let updated_len = unsafe{*new_len_ptr};
+            (*addrlen) = updated_len;
+            unsafe{core::ptr::copy_nonoverlapping(new_name_buff as *const u8, addr as *mut u8, nameLen as usize)};
+            unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_name_buff as *mut u8 ,nameLen as usize,0x8);}
+            unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_len_ptr as *mut u8 ,size_of::<u32>(),0x8);}
+        }
+        return ret;
     }
 
     pub fn IOSendMsg(fd: i32, msghdr: u64, flags: i32, blocking: bool) -> i64 {
+        let mut hasName = false;
+        let mut hasControl = false;
+        let mut new_name_buff = core::ptr::null::<u8>() as *mut u8;
+        let mut new_control_buff = core::ptr::null::<u8>() as *mut u8;
+        let mut nameLen =0u32;
+        let mut msgControlLen = 0usize;
+        let new_msghdr_size = size_of::<MsgHdr>();
+        let new_msghdr_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(new_msghdr_size,0x8) as *mut MsgHdr};
+        unsafe { core::ptr::copy_nonoverlapping(msghdr as *const u8, new_msghdr_ptr as *mut u8, new_msghdr_size);}
+        let new_msghdr = unsafe{&mut *new_msghdr_ptr};
+
+        if new_msghdr.nameLen != 0 {
+            nameLen = new_msghdr.nameLen;
+            hasName = true;
+            new_name_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(new_msghdr.nameLen as usize,0x8)};
+            unsafe { core::ptr::copy_nonoverlapping(new_msghdr.msgName as *const u8, new_name_buff, nameLen as usize);}
+            new_msghdr.msgName = new_name_buff as u64;
+        }
+
+        if !new_msghdr.msgControl == core::ptr::null::<u8>() as u64 {
+            msgControlLen = new_msghdr.msgControlLen;
+            hasControl = true;
+            new_control_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(new_msghdr.msgControlLen as usize,0x8)};
+            unsafe { core::ptr::copy_nonoverlapping(new_msghdr.msgControl as *const u8, new_control_buff, msgControlLen);}
+            new_msghdr.msgControl = new_control_buff as u64;
+        }
+
         let mut msg = Msg::IOSendMsg(IOSendMsg {
             fd,
-            msghdr,
+            msghdr: new_msghdr_ptr as u64,
             flags,
             blocking,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+
+        let ret =  HostSpace::Call(&mut msg, false) as i64;
+
+        let private_msghdr = unsafe {&mut *(msghdr as *mut MsgHdr)};
+        if hasName {
+            let updated_len = new_msghdr.nameLen;
+            private_msghdr.nameLen = updated_len;
+            unsafe{core::ptr::copy_nonoverlapping(new_name_buff as *const u8, private_msghdr.msgName as *mut u8, nameLen as usize)};
+            unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_name_buff as *mut u8 ,nameLen as usize,0x8);}
+        }
+
+        if hasControl{
+            let updated_len = new_msghdr.msgControlLen;
+            private_msghdr.msgControlLen = updated_len;
+            unsafe{core::ptr::copy_nonoverlapping(new_control_buff as *const u8, private_msghdr.msgControlLen as *mut u8, msgControlLen)};
+            unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_control_buff as *mut u8 ,msgControlLen,0x8);}
+        }
+
+        private_msghdr.msgFlags = new_msghdr.msgFlags;
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_msghdr_ptr as *mut u8 ,new_msghdr_size,0x8);}
+        return ret;
     }
 
     pub fn IOSendto(fd: i32, buf: u64, size: usize, flags: i32, addr: u64, len: u32) -> i64 {
+        let mut hasName = false;
+        let mut new_name_buff = core::ptr::null::<u8>() as *mut u8;
+        if len != 0 {
+            hasName = true;
+            new_name_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len as usize,0x8)};
+            unsafe { core::ptr::copy_nonoverlapping(addr as *const u8, new_name_buff, len as usize);}
+        }
+
         let mut msg = Msg::IOSendto(IOSendto {
             fd,
             buf,
             size,
             flags,
-            addr,
+            addr:if hasName {new_name_buff as u64} else {addr},
             len,
         });
+        
+        let ret =HostSpace::Call(&mut msg, false) as i64;
+        if hasName {
+            unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_name_buff as *mut u8 ,len as usize,0x8);}
+        }
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return ret;
     }
 
     pub fn GetTimeOfDay(tv: u64, tz: u64) -> i64 {
-        let mut msg = Msg::GetTimeOfDay(GetTimeOfDay { tv, tz });
+        let tv_size = size_of::<super::super::linux::time::Timeval>();
+        let new_tv_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(tv_size,0x8) as *mut super::super::linux::time::Timeval};
+        unsafe { core::ptr::copy_nonoverlapping(tv as *const u8, new_tv_ptr as *mut u8, tv_size);}
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let tz_size = size_of::<u32>()*2;
+        let new_tz_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(tz_size,0x8) as *mut u32};
+        unsafe { core::ptr::copy_nonoverlapping(tz as *const u8, new_tz_ptr as *mut u8, tz_size);}
+        let mut msg = Msg::GetTimeOfDay(GetTimeOfDay { tv: new_tv_ptr as u64, tz: new_tz_ptr as u64 });
+
+        let ret =HostSpace::Call(&mut msg, false) as i64;
+
+        unsafe { core::ptr::copy_nonoverlapping(new_tv_ptr as *const u8, tv as *mut u8, tv_size);}
+        unsafe { core::ptr::copy_nonoverlapping(new_tz_ptr as *const u8, tz as *mut u8, tz_size);}
+
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_tv_ptr as *mut u8 ,tv_size ,0x8);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_tz_ptr as *mut u8 ,tz_size ,0x8);}
+        return ret;
     }
 
     pub fn ReadLinkAt(dirfd: i32, path: u64, buf: u64, bufsize: u64) -> i64 {
+        let new_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(bufsize as usize,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(buf as *const u8, new_buff as *mut u8, bufsize as usize);}
         let mut msg = Msg::ReadLinkAt(ReadLinkAt {
             dirfd,
             path,
-            buf,
+            buf: new_buff as u64,
             bufsize,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(new_buff as *const u8, buf as *mut u8, bufsize as usize);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_buff as *mut u8 ,bufsize as usize,0x8);}
+
+        return ret;
     }
 
     pub fn Fcntl(fd: i32, cmd: i32, arg: u64) -> i64 {
+        //Here arg can be used directly, flock is implemented inside the kernel
         let mut msg = Msg::Fcntl(Fcntl { fd, cmd, arg });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn IoCtl(fd: i32, cmd: u64, argp: u64) -> i64 {
-        let mut msg = Msg::IoCtl(IoCtl { fd, cmd, argp });
-
-        return HostSpace::Call(&mut msg, false) as i64;
+    pub fn IoCtl(fd: i32, cmd: u64, argp: u64, argplen: usize) -> i64 {
+        let new_argp = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(argplen,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(argp as *const u8, new_argp as *mut u8, argplen);}
+        let mut msg = Msg::IoCtl(IoCtl { fd, cmd, argp:new_argp as u64 });
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(new_argp as *const u8, argp as *mut u8, argplen);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_argp as *mut u8 ,argplen,0x8);}
+        return ret;
     }
 
     pub fn Fstatfs(fd: i32, buf: u64) -> i64 {
-        let mut msg = Msg::Fstatfs(Fstatfs { fd, buf });
+        let buff_size = size_of::<LibcStatfs>();
+        let new_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(buff_size,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(buf as *const u8, new_buff as *mut u8, buff_size);}
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let mut msg = Msg::Fstatfs(Fstatfs { fd, buf: new_buff as u64 });
+
+        let ret =  HostSpace::Call(&mut msg, false) as i64;
+
+        unsafe{ core::ptr::copy_nonoverlapping(new_buff as *const u8, buf as *mut u8, buff_size);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_buff as *mut u8 ,buff_size,0x8);}
+        return ret;
     }
 
     pub fn NewSocket(fd: i32) -> i64 {
@@ -334,6 +552,7 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, true) as i64;
     }
 
+    //not used?
     pub fn FAccessAt(dirfd: i32, pathname: u64, mode: i32, flags: i32) -> i64 {
         let mut msg = Msg::FAccessAt(FAccessAt {
             dirfd,
@@ -348,34 +567,37 @@ impl HostSpace {
     pub fn Fstat(fd: i32, buff: u64) -> i64 {
 
         let new_buff_size = size_of::<LibcStat>();
-        let new_buff_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(new_buff_size,0x80) as *mut LibcStat };
-        unsafe{
-            (*new_buff_ptr) = LibcStat::default();
-        }
+        let new_buff_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(new_buff_size,0x8) as *mut LibcStat };
+        unsafe { core::ptr::copy_nonoverlapping(buff as *const u8, new_buff_ptr as *mut u8, new_buff_size);}
 
         let mut msg = Msg::Fstat(Fstat { fd, buff: new_buff_ptr as u64});
 
         let ret = Self::HCall(&mut msg, false) as i64;
 
-        let buff_ptr = buff as *mut LibcStat;
-        unsafe{
-            *buff_ptr = *new_buff_ptr;
-        }
-        
-        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_buff_ptr as *mut u8 ,size_of::<LibcStat>(),0x80);}
+        unsafe{ core::ptr::copy_nonoverlapping(new_buff_ptr as *const u8, buff as *mut u8, new_buff_size);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_buff_ptr as *mut u8 ,size_of::<LibcStat>(),0x8);}
         return ret;
         //return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn Fstatat(dirfd: i32, pathname: u64, buff: u64, flags: i32) -> i64 {
+
+        let new_buff_size = size_of::<LibcStat>();
+        let new_buff_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(new_buff_size,0x8) as *mut LibcStat };
+        unsafe { core::ptr::copy_nonoverlapping(buff as *const u8, new_buff_ptr as *mut u8, new_buff_size);}
+
         let mut msg = Msg::Fstatat(Fstatat {
             dirfd,
             pathname,
-            buff,
+            buff: new_buff_ptr as u64,
             flags,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+        
+        unsafe{ core::ptr::copy_nonoverlapping(new_buff_ptr as *const u8, buff as *mut u8, new_buff_size);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_buff_ptr as *mut u8 ,size_of::<LibcStat>(),0x8);}
+        return ret;
     }
 
     pub fn Unlinkat(dirfd: i32, pathname: u64, flags: i32) -> i64 {
@@ -504,7 +726,7 @@ impl HostSpace {
     }
 
     pub fn FSetXattr(fd: i32, name: u64, value: u64, size: usize, flags: u32) -> i64 {
-        let new_value_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80)};
+        let new_value_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x8)};
         unsafe { core::ptr::copy_nonoverlapping(value as *const u8, new_value_ptr, size);}
         
         let mut msg = Msg::FSetXattr(FSetXattr {
@@ -516,13 +738,13 @@ impl HostSpace {
         });
 
         let ret = HostSpace::Call(&mut msg, false) as i64;
-        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_value_ptr,size,0x80);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_value_ptr,size,0x8);}
 
         return ret;
     }
 
     pub fn FGetXattr(fd: i32, name: u64, value: u64, size: usize) -> i64 {
-        let new_value_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80)};
+        let new_value_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x8)};
         unsafe { core::ptr::copy_nonoverlapping(value as *const u8, new_value_ptr, size);}
 
         let mut msg = Msg::FGetXattr(FGetXattr {
@@ -536,7 +758,7 @@ impl HostSpace {
         // inode::lookup --> OverlayHasWhiteout which might be called by create and hold a lock
         let ret = HostSpace::HCall(&mut msg, false) as i64;
         unsafe { core::ptr::copy_nonoverlapping(new_value_ptr, value as *mut u8, size);}
-        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_value_ptr,size,0x80);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_value_ptr,size,0x8);}
 
         return ret;
     }
@@ -548,23 +770,43 @@ impl HostSpace {
     }
 
     pub fn FListXattr(fd: i32, list: u64, size: usize) -> i64 {
-        let mut msg = Msg::FListXattr(FListXattr { fd, list, size });
+        let new_list_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(list as *const u8, new_list_addr, size);}
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let mut msg = Msg::FListXattr(FListXattr { fd, list: new_list_addr as u64, size });
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+
+        unsafe { core::ptr::copy_nonoverlapping(new_list_addr, list as *mut u8, size);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_list_addr,size,0x8);}
+        return ret;
     }
 
     pub fn GetRandom(buf: u64, len: u64, flags: u32) -> i64 {
-        let mut msg = Msg::GetRandom(GetRandom { buf, len, flags });
+        let new_buf_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len as usize,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(buf as *const u8, new_buf_addr, len as usize);}
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let mut msg = Msg::GetRandom(GetRandom { buf: new_buf_addr as u64, len, flags });
+
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+
+        unsafe { core::ptr::copy_nonoverlapping(new_buf_addr, buf as *mut u8, len as usize);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_buf_addr,len as usize,0x8);}
+        return ret;
     }
 
     pub fn Statm(statm: &mut StatmInfo) -> i64 {
+        let size = size_of::<StatmInfo>();
+        let info_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(statm as *const _ as u64 as *const u8, info_addr, size);}
+
         let mut msg = Msg::Statm(Statm {
-            buf: statm as *const _ as u64,
+            buf: info_addr as u64,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(info_addr, statm as *const _ as u64 as *mut u8, size);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(info_addr,size,0x8);}
+        return ret;
     }
 
     pub fn Socket(domain: i32, type_: i32, protocol: i32) -> i64 {
@@ -588,59 +830,100 @@ impl HostSpace {
     }
 
     pub fn GetSockName(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
+        let len_size = size_of::<i32>();
+        let len = unsafe{*(addrlen as *const i32)};
+        let new_len_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len_size,0x8)};
+        let new_buff_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len as usize,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(addr as *const u8, new_buff_addr, len as usize);}
+        unsafe { core::ptr::copy_nonoverlapping(addrlen as *const u8, new_len_addr, len_size);}
         let mut msg = Msg::GetSockName(GetSockName {
             sockfd,
-            addr,
-            addrlen,
+            addr: new_buff_addr as u64,
+            addrlen: new_len_addr as u64,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(new_buff_addr, addr as *mut u8, len as usize);}
+        unsafe { core::ptr::copy_nonoverlapping(new_len_addr, addrlen as *mut u8, len_size);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_buff_addr,len as usize,0x8);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_len_addr,len_size,0x8);}
+        return ret;
     }
 
     pub fn GetPeerName(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
+        let len_size = size_of::<i32>();
+        let len = unsafe{*(addrlen as *const i32)};
+        let new_len_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len_size,0x8)};
+        let new_buff_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len as usize,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(addr as *const u8, new_buff_addr, len as usize);}
+        unsafe { core::ptr::copy_nonoverlapping(addrlen as *const u8, new_len_addr, len_size);}
         let mut msg = Msg::GetPeerName(GetPeerName {
             sockfd,
-            addr,
-            addrlen,
+            addr: new_buff_addr as u64,
+            addrlen: new_len_addr as u64,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(new_buff_addr, addr as *mut u8, len as usize);}
+        unsafe { core::ptr::copy_nonoverlapping(new_len_addr, addrlen as *mut u8, len_size);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_buff_addr,len as usize,0x8);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_len_addr,len_size,0x8);}
+        return ret;
     }
 
     pub fn GetSockOpt(sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u64) -> i64 {
+        let val_size = unsafe{*(optlen as *const i32)} as usize;
+        let len_size = size_of::<i32>();
+        let new_val_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(val_size,0x8)};
+        let new_len_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len_size,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(optval as *const u8, new_val_addr, val_size);}
+        unsafe { core::ptr::copy_nonoverlapping(optlen as *const u8, new_len_addr, len_size);}
         let mut msg = Msg::GetSockOpt(GetSockOpt {
             sockfd,
             level,
             optname,
-            optval,
-            optlen,
+            optval: new_val_addr as u64,
+            optlen: new_len_addr as u64,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(new_len_addr, optlen as *mut u8, len_size);}
+        unsafe { core::ptr::copy_nonoverlapping(new_val_addr, optval as *mut u8, val_size);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_len_addr,len_size,0x8);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_val_addr,val_size,0x8);}
+        return ret;
     }
 
     pub fn SetSockOpt(sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u32) -> i64 {
+        let new_val_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(optlen as usize,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(optval as *const u8, new_val_addr, optlen as usize);}
         let mut msg = Msg::SetSockOpt(SetSockOpt {
             sockfd,
             level,
             optname,
-            optval,
+            optval: new_val_addr as u64,
             optlen,
         });
 
         //return Self::HCall(&mut msg) as i64;
-        return HostSpace::Call(&mut msg, false) as i64;
+        let ret =  HostSpace::Call(&mut msg, false) as i64;
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_val_addr,optlen as usize,0x8);}
+        return ret;
     }
 
     pub fn Bind(sockfd: i32, addr: u64, addrlen: u32, umask: u32) -> i64 {
+        let new_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(addrlen as usize,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(addr as *const u8, new_addr, addrlen as usize);}
         let mut msg = Msg::IOBind(IOBind {
             sockfd,
-            addr,
+            addr: new_addr as u64,
             addrlen,
             umask,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_addr,addrlen as usize,0x8);}
+        return ret;
     }
 
     pub fn Listen(sockfd: i32, backlog: i32, block: bool) -> i64 {
@@ -652,7 +935,7 @@ impl HostSpace {
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
-
+    
     pub fn RDMAListen(sockfd: i32, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
         let mut msg = Msg::RDMAListen(RDMAListen {
             sockfd,
@@ -686,7 +969,7 @@ impl HostSpace {
         //copy the &str to shared buffer
         let bytes = str.as_bytes();
         let len  = bytes.len();
-        let new_str_ptr =  unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(len,0x80) };
+        let new_str_ptr =  unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(len,0x8) };
         
         let dest_ptr: *mut u8 = new_str_ptr;
         let src_ptr: *const u8 = bytes.as_ptr();
@@ -694,7 +977,7 @@ impl HostSpace {
         let new_str = unsafe {alloc::str::from_utf8_unchecked(core::slice::from_raw_parts(dest_ptr,len))}; 
         
         let size = size_of::<Print>();
-        let msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80) as *mut Print };
+        let msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x8) as *mut Print };
         let mut msg = unsafe {&mut *msg_ptr};
         msg.level = DebugLevel::Error;
         msg.str = new_str;
@@ -714,27 +997,59 @@ impl HostSpace {
     }
 
     pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64, skiprw: bool) -> i64 {
+        let tryopen_size = size_of::<TryOpenStruct>();
+        let libcstat_size = size_of::<LibcStat>();
+        let new_tryopen_ptr =  unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(tryopen_size,0x8) };
+        let new_libcstat = unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(libcstat_size,0x8) };
+        let new_tryopen = unsafe{&mut *(new_tryopen_ptr as *mut TryOpenStruct)};
+        unsafe { core::ptr::copy_nonoverlapping(addr as *const u8, new_tryopen_ptr, tryopen_size);}
+        let old_libcstat = new_tryopen.fstat as *const _ as *mut u8;
+        unsafe { core::ptr::copy_nonoverlapping(old_libcstat, new_libcstat, libcstat_size);}
+        new_tryopen.fstat = unsafe{&*(new_libcstat as *mut LibcStat)};
+
         let mut msg = Msg::TryOpenAt(TryOpenAt {
             dirfd: dirfd,
             name: name,
-            addr: addr,
+            addr: new_tryopen_ptr as u64,
             skiprw: skiprw,
         });
 
         let ret = Self::HCall(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(new_libcstat, old_libcstat, libcstat_size);}
+        unsafe { core::ptr::copy_nonoverlapping(new_tryopen_ptr as *const u8, addr as *mut u8, tryopen_size);}
+        let old_tryopen = unsafe{&mut *(addr as *mut TryOpenStruct)};
+        old_tryopen.fstat = unsafe{&*(old_libcstat as *mut LibcStat)};
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_tryopen_ptr,tryopen_size,0x8);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_libcstat,libcstat_size,0x8);}
         return ret;
         //return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn OpenAt(dirfd: i32, name: u64, flags: i32, addr: u64) -> i64 {
+        let tryopen_size = size_of::<TryOpenStruct>();
+        let libcstat_size = size_of::<LibcStat>();
+        let new_tryopen_ptr =  unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(tryopen_size,0x8) };
+        let new_libcstat = unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(libcstat_size,0x8) };
+        let new_tryopen = unsafe{&mut *(new_tryopen_ptr as *mut TryOpenStruct)};
+        unsafe { core::ptr::copy_nonoverlapping(addr as *const u8, new_tryopen_ptr, tryopen_size);}
+        let old_libcstat = new_tryopen.fstat as *const _ as *mut u8;
+        unsafe { core::ptr::copy_nonoverlapping(old_libcstat, new_libcstat, libcstat_size);}
+        new_tryopen.fstat = unsafe{&*(new_libcstat as *mut LibcStat)};
+
         let mut msg = Msg::OpenAt(OpenAt {
             dirfd: dirfd,
             name: name,
             flags: flags,
-            addr: addr,
+            addr: new_tryopen_ptr as u64,
         });
 
         let ret = Self::HCall(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(new_libcstat, old_libcstat, libcstat_size);}
+        unsafe { core::ptr::copy_nonoverlapping(new_tryopen_ptr as *const u8, addr as *mut u8, tryopen_size);}
+        let old_tryopen = unsafe{&mut *(addr as *mut TryOpenStruct)};
+        old_tryopen.fstat = unsafe{&*(old_libcstat as *mut LibcStat)};
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_tryopen_ptr,tryopen_size,0x8);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_libcstat,libcstat_size,0x8);}
         return ret;
         //return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -752,13 +1067,17 @@ impl HostSpace {
     }
 
     pub fn RemapGuestMemRanges(len: u64, addr: u64, count: usize) -> i64 {
+        let range_size = size_of::<Range>();
+        let new_addr =  unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(range_size*count,0x8) };
+        unsafe { core::ptr::copy_nonoverlapping(addr as *const u8, new_addr, range_size);}
         let mut msg = Msg::RemapGuestMemRanges(RemapGuestMemRanges {
             len: len,
-            addr: addr,
+            addr: new_addr as u64,
             count: count
         });
 
         let ret = Self::Call(&mut msg, false) as i64;
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_addr,range_size*count,0x8);}
         return ret;
     }
 
@@ -773,11 +1092,16 @@ impl HostSpace {
     }
 
     pub fn NividiaDriverVersion(version: &RMAPIVersion) -> i64 {
+        let version_size = size_of::<RMAPIVersion>();
+        let new_version = unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(version_size,0x8) };
+        unsafe { core::ptr::copy_nonoverlapping(version as * const _ as *const u8 , new_version, version_size);}
         let mut msg = Msg::NividiaDriverVersion(NividiaDriverVersion {
-            ioctlParamsAddr: version as * const _ as u64
+            ioctlParamsAddr: new_version as u64
         });
 
         let ret = Self::Call(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(new_version, version as * const _ as *mut u8, version_size);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_version,version_size,0x8);}
         return ret;
     }
 
@@ -796,9 +1120,11 @@ impl HostSpace {
     }
 
     pub fn HostUnixConnect(type_: i32, addr: u64, len: usize) -> i64 {
+        let new_addr = unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(len,0x8) };
+        unsafe { core::ptr::copy_nonoverlapping(addr as *const u8 , new_addr, len);}
         let mut msg = Msg::HostUnixConnect(HostUnixConnect {
             type_: type_,
-            addr: addr,
+            addr: new_addr as u64,
             len: len,
         });
 
@@ -807,33 +1133,89 @@ impl HostSpace {
     }
 
     pub fn HostUnixRecvMsg(fd: i32, msghdr: u64, flags: i32) -> i64 {
+        let mut hasName = false;
+        let mut hasControl = false;
+        let mut new_name_buff = core::ptr::null::<u8>() as *mut u8;
+        let mut new_control_buff = core::ptr::null::<u8>() as *mut u8;
+        let mut nameLen =0u32;
+        let mut msgControlLen = 0usize;
+        let new_msghdr_size = size_of::<MsgHdr>();
+        let new_msghdr_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(new_msghdr_size,0x8) as *mut MsgHdr};
+        unsafe { core::ptr::copy_nonoverlapping(msghdr as *const u8, new_msghdr_ptr as *mut u8, new_msghdr_size);}
+        let new_msghdr = unsafe{&mut *new_msghdr_ptr};
+        
+        //new_msghdr.msgName is an array if new_msghdr.nameLen is not null;
+        if new_msghdr.nameLen != 0 {
+            nameLen = new_msghdr.nameLen;
+            hasName = true;
+            new_name_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(new_msghdr.nameLen as usize,0x8)};
+            unsafe { core::ptr::copy_nonoverlapping(new_msghdr.msgName as *const u8, new_name_buff, nameLen as usize);}
+            new_msghdr.msgName = new_name_buff as u64;
+        }
+
+        //new_msghdr.msgControl is a vec in private memory,if is null msgHdr.msgControl = ptr::null::<u8>() as u64;
+        if !new_msghdr.msgControl == core::ptr::null::<u8>() as u64 {
+            msgControlLen = new_msghdr.msgControlLen;
+            hasControl = true;
+            new_control_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(new_msghdr.msgControlLen as usize,0x8)};
+            unsafe { core::ptr::copy_nonoverlapping(new_msghdr.msgControl as *const u8, new_control_buff, msgControlLen);}
+            new_msghdr.msgControl = new_control_buff as u64;
+        }
         let mut msg = Msg::HostUnixRecvMsg(HostUnixRecvMsg {
             fd: fd,
-            msghdr: msghdr,
+            msghdr: new_msghdr_ptr as u64,
             flags: flags
         });
 
         let ret = Self::Call(&mut msg, false) as i64;
+
+        let private_msghdr = unsafe {&mut *(msghdr as *mut MsgHdr)};
+        if hasName {
+            let updated_len = new_msghdr.nameLen;
+            private_msghdr.nameLen = updated_len;
+            unsafe{core::ptr::copy_nonoverlapping(new_name_buff as *const u8, private_msghdr.msgName as *mut u8, nameLen as usize)};
+            unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_name_buff as *mut u8 ,nameLen as usize,0x8);}
+        }
+        if hasControl{
+            let updated_len = new_msghdr.msgControlLen;
+            private_msghdr.msgControlLen = updated_len;
+            unsafe{core::ptr::copy_nonoverlapping(new_control_buff as *const u8, private_msghdr.msgControlLen as *mut u8, msgControlLen)};
+            unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_control_buff as *mut u8 ,msgControlLen,0x8);}
+        }
+
+        private_msghdr.msgFlags = new_msghdr.msgFlags;
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_msghdr_ptr as *mut u8 ,new_msghdr_size,0x8);}
+
         return ret;
     }
 
     pub fn TsotRecvMsg(msgAddr: u64) -> i64 {
+        let message_size = size_of::<TsotMessage>();
+        let new_msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(message_size,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(msgAddr as *const u8, new_msg_ptr as *mut u8, message_size);}
         let mut msg = Msg::TsotRecvMsg(TsotRecvMsg {
-            msgAddr: msgAddr,
+            msgAddr: new_msg_ptr as u64,
         });
 
         // TsotRecvMsg will be called in uring async process, must use HCall
         let ret = Self::HCall(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(new_msg_ptr as *const u8, msgAddr as *mut u8, message_size);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_msg_ptr as *mut u8 ,message_size,0x8);}
         return ret;
     }
 
     pub fn TsotSendMsg(msgAddr: u64) -> i64 {
+        let message_size = size_of::<TsotMessage>();
+        let new_msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(message_size,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(msgAddr as *const u8, new_msg_ptr as *mut u8, message_size);}
         let mut msg = Msg::TsotSendMsg(TsotSendMsg {
             msgAddr: msgAddr,
         });
 
         // TsotSendMsg might be called in uring async process, must use HCall
         let ret = Self::HCall(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(new_msg_ptr as *const u8, msgAddr as *mut u8, message_size);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_msg_ptr as *mut u8 ,message_size,0x8);}
         return ret;
     }
 
@@ -846,6 +1228,10 @@ impl HostSpace {
         gid: u32,
         fstatAddr: u64,
     ) -> i64 {
+        let buff_size = size_of::<LibcStat>();
+        let new_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(buff_size,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(fstatAddr as *const u8, new_buff as *mut u8, buff_size);}
+
         let mut msg = Msg::CreateAt(CreateAt {
             dirfd,
             pathName,
@@ -853,10 +1239,13 @@ impl HostSpace {
             mode,
             uid,
             gid,
-            fstatAddr,
+            fstatAddr: new_buff as u64,
         });
 
-        return HostSpace::HCall(&mut msg, false) as i64;
+        let ret = HostSpace::HCall(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(new_buff as *const u8, fstatAddr as *mut u8, buff_size);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_buff, buff_size,0x8);}
+        return ret;
     }
 
     pub fn SchedGetAffinity(pid: i32, cpuSetSize: u64, mask: u64) -> i64 {
@@ -916,19 +1305,25 @@ impl HostSpace {
     }
 
     pub fn VcpuWait() -> i64 {
-        let ret_ptr =  unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(size_of::<i64>(),0x80) as *mut i64};
+        let ret_ptr =  unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(size_of::<i64>(),0x8) as *mut i64};
         HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, ret_ptr as u64, 0);
         let ret = unsafe{ *ret_ptr };
-        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(ret_ptr as *mut u8 ,size_of::<i64>(),0x80);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(ret_ptr as *mut u8 ,size_of::<i64>(),0x8);}
         return ret as i64;
     }
 
     pub fn NewTmpfsFile(typ: TmpfsFileType, addr: u64) -> i64 {
-        let mut msg = Msg::NewTmpfsFile(NewTmpfsFile { typ, addr });
+        let buff_size = size_of::<LibcStat>();
+        let new_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(buff_size,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(addr as *const u8, new_buff as *mut u8, buff_size);}
+        let mut msg = Msg::NewTmpfsFile(NewTmpfsFile { typ, addr:new_buff as u64 });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(new_buff as *const u8, addr as *mut u8, buff_size);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_buff, buff_size,0x8);}
+        return ret;
     }
-
+    
     pub fn Chown(pathname: u64, owner: u32, group: u32) -> i64 {
         let mut msg = Msg::Chown(Chown {
             pathname,
@@ -980,22 +1375,33 @@ impl HostSpace {
     }
 
     pub fn ReadControlMsg(fd: i32, addr: u64) -> i64 {
-        let mut msg = Msg::ReadControlMsg(ReadControlMsg { fd, addr });
+        let msg_size = size_of::<ControlMsg>();
+        let new_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(msg_size,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(addr as *const u8, new_buff as *mut u8, msg_size);}
+        let mut msg = Msg::ReadControlMsg(ReadControlMsg { fd, addr: new_buff as u64});
 
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(new_buff as *const u8, addr as *mut u8, msg_size);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_buff, msg_size,0x8);}
+        return ret;
+    }   
 
     pub fn WriteControlMsgResp(fd: i32, addr: u64, len: usize, close: bool) -> i64 {
+        let new_buff =  unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(addr as *const u8, new_buff as *mut u8, len);}
         let mut msg = Msg::WriteControlMsgResp(WriteControlMsgResp {
             fd: fd,
-            addr: addr,
+            addr: new_buff as u64,
             len: len,
             close: close,
         });
 
-        return HostSpace::HCall(&mut msg, false) as i64;
+        let ret = HostSpace::HCall(&mut msg, false) as i64;
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_buff, len,0x8);}
+        return ret;
     }
 
+    //not used yet, use an arc as shared struct, cannot used in cvm
     pub fn UpdateWaitInfo(fd: i32, waitinfo: FdWaitInfo) -> i64 {
         let mut msg = Msg::UpdateWaitInfo(UpdateWaitInfo {
             fd: fd,
@@ -1012,9 +1418,15 @@ impl HostSpace {
     }
 
     pub fn GetStdfds(addr: u64) -> i64 {
-        let mut msg = Msg::GetStdfds(GetStdfds { addr });
+        let len = size_of::<i32>()*3;
+        let new_buff =  unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len,0x8)};
+        unsafe { core::ptr::copy_nonoverlapping(addr as *const u8, new_buff as *mut u8, len);}
+        let mut msg = Msg::GetStdfds(GetStdfds { addr:new_buff as u64 });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let ret = HostSpace::Call(&mut msg, false) as i64;
+        unsafe { core::ptr::copy_nonoverlapping(new_buff as *const u8, addr as *mut u8, len);}
+        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(new_buff, len,0x8);}
+        return ret;
     }
 
     pub fn MMapFile(len: u64, fd: i32, offset: u64, prot: i32) -> i64 {
@@ -1070,14 +1482,14 @@ impl HostSpace {
         //copy the &str to shared buffer
         let bytes = str.as_bytes();
         let len: usize  = bytes.len();
-        let new_str_ptr =  unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(len,0x80) };
+        let new_str_ptr =  unsafe{ GLOBAL_ALLOCATOR.AllocSharedBuf(len,0x8) };
         let dest_ptr: *mut u8 = new_str_ptr;
         let src_ptr: *const u8 = bytes.as_ptr();
         unsafe { core::ptr::copy_nonoverlapping(src_ptr, dest_ptr, len);}
         let new_str = unsafe {alloc::str::from_utf8_unchecked(core::slice::from_raw_parts(dest_ptr,len))}; 
         
         let size = size_of::<Print>();
-        let msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80) as *mut Print };
+        let msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x8) as *mut Print };
         let mut msg = unsafe {&mut *msg_ptr};
         msg.level = level;
         msg.str = new_str;
@@ -1085,8 +1497,8 @@ impl HostSpace {
         HyperCall64(HYPERCALL_PRINT, msg_ptr as u64, 0, 0, 0);
 
         unsafe{
-            GLOBAL_ALLOCATOR.DeallocShareBuf(dest_ptr, len, 0x80);
-            GLOBAL_ALLOCATOR.DeallocShareBuf(msg_ptr as *mut u8, size, 0x80);
+            GLOBAL_ALLOCATOR.DeallocShareBuf(dest_ptr, len, 0x8);
+            GLOBAL_ALLOCATOR.DeallocShareBuf(msg_ptr as *mut u8, size, 0x8);
         }
     }
 
@@ -1109,7 +1521,7 @@ impl HostSpace {
 
     pub fn KernelGetTime(clockId: i32) -> Result<i64> {
         let size = size_of::<GetTimeCall>();
-        let call_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80) as *mut GetTimeCall };
+        let call_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x8) as *mut GetTimeCall };
         let mut call = unsafe {&mut *call_ptr};
         call.clockId = clockId;
         call.res = 0;
@@ -1124,13 +1536,13 @@ impl HostSpace {
         }
 
         let ret = call.res;
-        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(call_ptr as *mut u8, size, 0x80) };
+        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(call_ptr as *mut u8, size, 0x8) };
         return Ok(ret);
     }
 
     pub fn KernelVcpuFreq() -> i64 {
         let size = size_of::<VcpuFeq>();
-        let call_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x80) as *mut VcpuFeq };
+        let call_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size,0x8) as *mut VcpuFeq };
         let mut call = unsafe {&mut *call_ptr};
         call.res=0;
 
@@ -1138,7 +1550,7 @@ impl HostSpace {
         HyperCall64(HYPERCALL_VCPU_FREQ, addr, 0, 0, 0);
 
         let ret = call.res;
-        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(call_ptr as *mut u8, size, 0x80) };
+        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(call_ptr as *mut u8, size, 0x8) };
         return ret;
     }
 

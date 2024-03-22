@@ -19,7 +19,7 @@ use alloc::vec::Vec;
 use super::super::super::mem::list_allocator::GuestHostSharedAllocator;
 use super::super::super::common::*;
 use super::super::task::*;
-static SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 #[derive(Debug)]
 pub struct SharedString {
@@ -29,7 +29,7 @@ pub struct SharedString {
 impl SharedString {
     pub fn New(s: &str) -> Self {
         let s = s.as_bytes();
-        let mut data = Vec::with_capacity_in(s.len() + 1,SHARED_ALLOCATOR);
+        let mut data = Vec::with_capacity_in(s.len() + 1,GUEST_HOST_SHARED_ALLOCATOR);
         for i in 0..s.len() {
             data.push(s[i])
         }
@@ -43,7 +43,7 @@ impl SharedString {
     }
 
     pub fn FromAddr(addr: u64) -> Self {
-        let mut data = Vec::new_in(SHARED_ALLOCATOR);
+        let mut data = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
         for i in 0..Self::MAX_STR_LEN {
             let c = unsafe { *((addr + i as u64) as *const u8) };
             if c == 0 {

@@ -24,6 +24,7 @@ use core::sync::atomic::Ordering;
 use crate::qlib::addr::Addr;
 use crate::qlib::cstring::CString;
 use crate::qlib::kernel::fs::inode::*;
+use crate::qlib::kernel::util::sharedstring::SharedString;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::fs::file::*;
 use crate::qlib::kernel::guestfdnotifier::NonBlockingPoll;
@@ -212,7 +213,7 @@ impl InodeOperations for NvFrontendDevice {
         };
 
         let name = path::Clean(&hostpath);
-        let cstr = CString::New(&name);
+        let cstr = SharedString::New(&name);
 
         let fd = HostSpace::OpenDevFile(-1, cstr.Ptr(), flags.ToLinux()) as i32;
         if fd < 0 {

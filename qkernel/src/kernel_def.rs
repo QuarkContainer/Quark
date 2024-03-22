@@ -298,8 +298,8 @@ impl HostSpace {
         let current = Task::Current().GetTaskId();
         let qmsg_size = core::mem::size_of::<QMsg>();
         let msg_size = core::mem::size_of::<Msg>();
-        let qmsg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(qmsg_size,0x80) as *mut QMsg };
-        let new_msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(msg_size,0x80) as *mut Msg };
+        let qmsg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(qmsg_size,0x8) as *mut QMsg };
+        let new_msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(msg_size,0x8) as *mut Msg };
         let dest_ptr: *mut u8 = new_msg_ptr as *mut u8;
         let src_ptr: *const u8 = msg as *const Msg as *const u8;
         unsafe { core::ptr::copy_nonoverlapping(src_ptr, dest_ptr, msg_size);}
@@ -312,7 +312,7 @@ impl HostSpace {
         let addr = qmsg_ptr as u64;
 
         let om_size =  core::mem::size_of::<HostOutputMsg>();
-        let om_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(om_size,0x80) as *mut HostOutputMsg };
+        let om_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(om_size,0x8) as *mut HostOutputMsg };
         unsafe{
             *om_ptr = HostOutputMsg::QCall(addr);
         }
@@ -320,9 +320,9 @@ impl HostSpace {
         taskMgr::Wait();
         let ret = qmsg.ret;
 
-        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(qmsg_ptr as *mut u8, qmsg_size, 0x80) };
-        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(new_msg_ptr as *mut u8, msg_size, 0x80) };
-        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(om_ptr as *mut u8, om_size, 0x80) };
+        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(qmsg_ptr as *mut u8, qmsg_size, 0x8) };
+        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(new_msg_ptr as *mut u8, msg_size, 0x8) };
+        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(om_ptr as *mut u8, om_size, 0x8) };
         
         return ret;
     }
@@ -331,9 +331,9 @@ impl HostSpace {
         let taskId = Task::Current().GetTaskId();
         let qmsg_size = core::mem::size_of::<QMsg>();
         let msg_size = core::mem::size_of::<Msg>();
-        let event_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(qmsg_size,0x80) as *mut QMsg };
+        let event_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(qmsg_size,0x8) as *mut QMsg };
 
-        let new_msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(msg_size,0x80) as *mut Msg };
+        let new_msg_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(msg_size,0x8) as *mut Msg };
         let dest_ptr: *mut u8 = new_msg_ptr as *mut u8;
         let src_ptr: *const u8 = msg as *const Msg as *const u8;
         unsafe { core::ptr::copy_nonoverlapping(src_ptr, dest_ptr, msg_size);}
@@ -346,8 +346,8 @@ impl HostSpace {
         
         HyperCall64(HYPERCALL_HCALL, event_ptr as u64, 0, 0, 0);
         let ret = event.ret;
-        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(event_ptr as *mut u8, qmsg_size, 0x80) };
-        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(new_msg_ptr as *mut u8, msg_size, 0x80) };
+        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(event_ptr as *mut u8, qmsg_size, 0x8) };
+        unsafe { GLOBAL_ALLOCATOR.DeallocShareBuf(new_msg_ptr as *mut u8, msg_size, 0x8) };
         
         return ret;
     }
