@@ -19,7 +19,7 @@ use super::super::qmsg;
 use super::super::qmsg::*;
 use super::super::socket_buf::*;
 use super::super::*;
-use crate::kernel_def::*;
+use crate::kernel_def::HyperCall64;
 use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
 use crate::qlib::proxy::*;
 
