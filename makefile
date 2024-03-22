@@ -26,9 +26,11 @@ QUARK_BIN_RELEASE = $(QTARGET_RELASE)/$(QUARK)
 #
 MAKEFLAGS += -j4
 
-.PHONY: all release debug clean install qvisor_release qvisor_debug cuda_make
+.PHONY: all release debug clean install qvisor_release qvisor_debug cuda_make cuda_all
 
 all:: release debug
+
+cuda_all:: cuda_release cuda_debug
 
 release:: qvisor_release qkernel_release 
 
