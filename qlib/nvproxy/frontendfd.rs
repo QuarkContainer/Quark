@@ -22,7 +22,6 @@ use core::ops::Deref;
 use core::sync::atomic::Ordering;
 
 use crate::qlib::addr::Addr;
-use crate::qlib::cstring::CString;
 use crate::qlib::kernel::fs::inode::*;
 use crate::qlib::kernel::util::sharedstring::SharedString;
 use crate::qlib::kernel::Kernel::HostSpace;

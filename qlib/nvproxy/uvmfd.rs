@@ -17,7 +17,6 @@ use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
 
-use crate::qlib::cstring::CString;
 use crate::qlib::kernel::util::sharedstring::SharedString;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::fs::file::*;
