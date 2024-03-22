@@ -756,6 +756,22 @@ pub static mut DLOPEN_ORIG: Option<unsafe extern "C" fn(*const libc::c_char, lib
 pub static mut DLCLOSE_ORIG: Option<unsafe extern "C" fn(*mut libc::c_void) -> libc::c_int> = None;
 pub static mut DL_HANDLE: *mut libc::c_void = ptr::null_mut();
 
+
+// #[no_mangle]
+// pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
+//     let c_str = unsafe {std::ffi::CStr::from_ptr(filename) };
+//     let filename_string = c_str.to_string_lossy().to_string();
+//     println!("Hijacked dlopen({} {})", filename_string, flag);
+
+//     let lib = CString::new("libcudart.so").unwrap();
+//     let handle = unsafe { libc::dlopen(lib.as_ptr(), libc::RTLD_LAZY) };    
+//     let func_name = CString::new("cudaSetDevice").unwrap();
+//     let orig_func: extern "C" fn(c_int) -> cudaError_t = unsafe {
+//         std::mem::transmute(libc::dlsym(handle, func_name.as_ptr()))
+//     };
+//     orig_func(device)
+// }
+
 #[no_mangle]
 pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
      let mut ret: *mut c_void  = std::ptr::null_mut();
@@ -764,22 +780,22 @@ pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
     let filename_string = c_str.to_string_lossy().to_string();
     println!("intercepted dlopen({} {})", filename_string, flag);
     
-    // let ret = unsafe{::libc::dlopen(filename, flag) };
-    // println!("ret {:x?}",ret);
-    // return ret;
+    let ret = unsafe{::libc::dlopen(filename, flag) };
+    println!("ret {:x?}",ret);
+    return ret;
     
     if filename.is_null() {
         return unsafe { DLOPEN_ORIG.unwrap()(filename, flag) };
        
     }
-    
+    // 0x0000557620af2700
     if unsafe { DLOPEN_ORIG.is_none() } {
         let symbol = CString::new("dlopen").unwrap();
         // let orig = unsafe { dlsym(libc::RTLD_NEXT, symbol.as_ptr()) };
 
-        let a:unsafe extern "C" fn() -> std::ffi::c_int = unsafe{  std::mem::transmute(
-            ::libc::dlsym(::libc::RTLD_NEXT, std::mem::transmute(b"rand\x00".as_ptr())))  };
-        println!("{}", (unsafe { a() }) % 42);
+        // let a:unsafe extern "C" fn() -> std::ffi::c_int = unsafe{  std::mem::transmute(
+        //     ::libc::dlsym(::libc::RTLD_NEXT, std::mem::transmute(b"dlopen\x00".as_ptr())))  };
+        // println!("{}", (unsafe { a() }) % 42);
         // let a : fn(*const libc::c_char, libc::c_int) -> *mut libc::c_void = unsafe{  std::mem::transmute(
         //       ::libc::dlopen(filename, flag)) };
         
@@ -787,8 +803,11 @@ pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
         // println!("DLopen_Orig is {:x?}", ret);
         // return ret;
 
-        //  unsafe {DLOPEN_ORIG =  std::mem::transmute(
-        //       ::libc::dlsym(::libc::RTLD_NEXT, std::mem::transmute(symbol.as_ptr())) ) };
+        let func_name = CString::new("dlopen").unwrap();
+        unsafe { DLOPEN_ORIG = Some(std::mem::transmute(libc::dlsym(libc::RTLD_NEXT, func_name.as_ptr())))};
+
+        //  unsafe {DLOPEN_ORIG =  Some(std::mem::transmute(
+        //       ::libc::dlsym(::libc::RTLD_NEXT, std::mem::transmute(b"dlopen\x00".as_ptr())) )) };
         
        
 
@@ -810,7 +829,7 @@ pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
 
     // let real_rand = unsafe { DLOPEN_ORIG.unwrap_unchecked() };
     // ret = unsafe { real_rand(filename, flag) };
-    // println!("DLopen_Orig is {:x?}", ret);
+    unsafe { println!("DLopen_Orig is {:x?}", DLOPEN_ORIG); }
      // ret = unsafe { DLOPEN_ORIG.unwrap()(filename, flag) };
     // return ret;
 
@@ -840,10 +859,10 @@ pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
         }
     }
 
-    // ret = unsafe { DLOPEN_ORIG.unwrap()(filename, flag) };
+    ret = unsafe { DLOPEN_ORIG.unwrap()(filename, flag) };
     println!("22222222");
 
-    // println!("value of ret {:#?}", ret);
+    println!("value of ret {:#?}", ret);
 
     // if ret.is_null() {
     //     println!("2");
