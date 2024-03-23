@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
 use lazy_static::lazy_static;
+use std::collections::BTreeMap;
 
-use qshare::k8s;
 use qshare::crictl;
+use qshare::k8s;
 use qshare::node::PodDef;
 
 use crate::pod_mgr::runtime::k8s_const;
@@ -31,42 +31,44 @@ pub const SeccompProfileTypeRuntimeDefault: &str = "RuntimeDefault";
 pub const SeccompProfileTypeLocalhost: &str = "Localhost";
 
 pub fn DetermineEffectiveSecurityContext(
-    pod: &PodDef, 
-    container: &k8s::Container, 
-    _uid: Option<i64>, 
-    _username: &str, 
-    seccompDefault: bool, 
-    seccompProfileRoot: &str
+    pod: &PodDef,
+    container: &k8s::Container,
+    _uid: Option<i64>,
+    _username: &str,
+    seccompDefault: bool,
+    seccompProfileRoot: &str,
 ) -> crictl::LinuxContainerSecurityContext {
     let effectiveSc = determineEffectiveSecurityContext(pod, container);
     let mut synthesized = ConvertToRuntimeSecurityContext(&effectiveSc);
 
     let annotation = &pod.annotations;
     synthesized.seccomp_profile_path = GetSeccompProfilePath(
-        annotation, 
-        &container.name, 
-        &pod.security_context, 
-        &container.security_context, 
-        seccompDefault, 
-        seccompProfileRoot
+        annotation,
+        &container.name,
+        &pod.security_context,
+        &container.security_context,
+        seccompDefault,
+        seccompProfileRoot,
     );
 
     synthesized.seccomp = Some(GetSeccompProfile(
-        seccompProfileRoot, 
-        annotation, 
-        &container.name, 
-        &pod.security_context, 
-        &container.security_context, 
-        seccompDefault
+        seccompProfileRoot,
+        annotation,
+        &container.name,
+        &pod.security_context,
+        &container.security_context,
+        seccompDefault,
     ));
-    
+
     synthesized.namespace_options = Some(k8s_util::NamespacesForPod(pod));
 
     let podSc = &pod.security_context;
     if podSc != &None {
         let podSc = podSc.as_ref().unwrap();
         if podSc.fs_group.is_some() {
-            synthesized.supplemental_groups.push(podSc.fs_group.clone().unwrap());
+            synthesized
+                .supplemental_groups
+                .push(podSc.fs_group.clone().unwrap());
         }
 
         if let Some(groups) = &podSc.supplemental_groups {
@@ -76,10 +78,9 @@ pub fn DetermineEffectiveSecurityContext(
         }
     }
 
-    
     synthesized.masked_paths = ConvertToRuntimeMaskedPaths(&effectiveSc.proc_mount);
     synthesized.readonly_paths = ConvertToRuntimeMaskedPaths(&effectiveSc.proc_mount);
-    synthesized.no_new_privs = AddNoNewPrivileges(&Some(effectiveSc)); 
+    synthesized.no_new_privs = AddNoNewPrivileges(&Some(effectiveSc));
 
     return synthesized;
 }
@@ -91,14 +92,14 @@ pub fn AddNoNewPrivileges(sc: &Option<k8s::SecurityContext>) -> bool {
             if sc.allow_privilege_escalation.is_none() {
                 return false;
             }
-    
-            return !sc.allow_privilege_escalation.unwrap()
+
+            return !sc.allow_privilege_escalation.unwrap();
         }
     }
 }
 
 lazy_static! {
-    pub static ref defaultMaskedPaths : Vec<String> = vec![
+    pub static ref defaultMaskedPaths: Vec<String> = vec![
         "/proc/acpi".to_string(),
         "/proc/kcore".to_string(),
         "/proc/keys".to_string(),
@@ -109,14 +110,13 @@ lazy_static! {
         "/proc/scsi".to_string(),
         "/sys/firmware".to_string(),
     ];
-
-    pub static ref defaultReadonlyPaths : Vec<String> = vec![
-		"/proc/asound".to_string(),
-		"/proc/bus".to_string(),
-		"/proc/fs".to_string(),
-		"/proc/irq".to_string(),
-		"/proc/sys".to_string(),
-		"/proc/sysrq-trigger".to_string(),
+    pub static ref defaultReadonlyPaths: Vec<String> = vec![
+        "/proc/asound".to_string(),
+        "/proc/bus".to_string(),
+        "/proc/fs".to_string(),
+        "/proc/irq".to_string(),
+        "/proc/sys".to_string(),
+        "/proc/sysrq-trigger".to_string(),
     ];
 }
 
@@ -135,25 +135,25 @@ pub const UnmaskedProcMount: &str = "Unmasked";
 // ConvertToRuntimeMaskedPaths converts the ProcMountType to the specified or default
 // masked paths.
 pub fn ConvertToRuntimeMaskedPaths(opt: &Option<String>) -> Vec<String> {
-	if opt.is_some() && opt.as_ref().unwrap() == UnmaskedProcMount {
-		// Unmasked proc mount should have no paths set as masked.
-		return Vec::new();
-	}
+    if opt.is_some() && opt.as_ref().unwrap() == UnmaskedProcMount {
+        // Unmasked proc mount should have no paths set as masked.
+        return Vec::new();
+    }
 
-	// Otherwise, add the default masked paths to the runtime security context.
-	return defaultMaskedPaths.to_vec()
+    // Otherwise, add the default masked paths to the runtime security context.
+    return defaultMaskedPaths.to_vec();
 }
 
 // ConvertToRuntimeReadonlyPaths converts the ProcMountType to the specified or default
 // readonly paths.
 pub fn ConvertToRuntimeReadonlyPaths(opt: &Option<String>) -> Vec<String> {
-	if opt.is_some() && opt.as_ref().unwrap() == UnmaskedProcMount {
-		// Unmasked proc mount should have no paths set as readonly.
-		return Vec::new();
-	}
+    if opt.is_some() && opt.as_ref().unwrap() == UnmaskedProcMount {
+        // Unmasked proc mount should have no paths set as readonly.
+        return Vec::new();
+    }
 
-	// Otherwise, add the default readonly paths to the runtime security context.
-	return defaultReadonlyPaths.to_vec();
+    // Otherwise, add the default readonly paths to the runtime security context.
+    return defaultReadonlyPaths.to_vec();
 }
 
 pub fn SecurityContextFromPodSecurityContext(pod: &PodDef) -> Option<k8s::SecurityContext> {
@@ -169,14 +169,16 @@ pub fn SecurityContextFromPodSecurityContext(pod: &PodDef) -> Option<k8s::Securi
     synthesized.run_as_group = context.run_as_group.clone();
     synthesized.run_as_non_root = context.run_as_non_root.clone();
 
-
     return Some(synthesized);
 }
 
 // DetermineEffectiveSecurityContext returns a synthesized SecurityContext for reading effective configurations
 // from the provided pod's and container's security context. Container's fields take precedence in cases where both
 // are set
-pub fn determineEffectiveSecurityContext(pod: &PodDef, container: &k8s::Container) -> k8s::SecurityContext {
+pub fn determineEffectiveSecurityContext(
+    pod: &PodDef,
+    container: &k8s::Container,
+) -> k8s::SecurityContext {
     let effectiveSc = SecurityContextFromPodSecurityContext(pod);
     let containerSc = &container.security_context;
 
@@ -206,11 +208,12 @@ pub fn determineEffectiveSecurityContext(pod: &PodDef, container: &k8s::Containe
     effectiveSc.proc_mount = containerSc.proc_mount.clone();
 
     return effectiveSc;
-    
 }
 
 // convertToRuntimeSecurityContext converts v1.SecurityContext to criv1.SecurityContext.
-pub fn ConvertToRuntimeSecurityContext(securityContext: &k8s::SecurityContext) -> crictl::LinuxContainerSecurityContext {
+pub fn ConvertToRuntimeSecurityContext(
+    securityContext: &k8s::SecurityContext,
+) -> crictl::LinuxContainerSecurityContext {
     let mut sc = crictl::LinuxContainerSecurityContext {
         capabilities: ConvertToRuntimeCapabilities(&securityContext.capabilities),
         selinux_options: ConvertToRuntimeSELinuxOption(&securityContext.se_linux_options),
@@ -219,20 +222,12 @@ pub fn ConvertToRuntimeSecurityContext(securityContext: &k8s::SecurityContext) -
 
     match &securityContext.run_as_user {
         None => (),
-        Some(r) => {
-            sc.run_as_user = Some(crictl::Int64Value{
-                value: *r,
-            })
-        }
+        Some(r) => sc.run_as_user = Some(crictl::Int64Value { value: *r }),
     }
 
     match &securityContext.run_as_group {
         None => (),
-        Some(r) => {
-            sc.run_as_group = Some(crictl::Int64Value{
-                value: *r,
-            })
-        }
+        Some(r) => sc.run_as_group = Some(crictl::Int64Value { value: *r }),
     }
 
     match &securityContext.privileged {
@@ -252,7 +247,9 @@ pub fn ConvertToRuntimeSecurityContext(securityContext: &k8s::SecurityContext) -
     return sc;
 }
 
-pub fn ConvertToRuntimeSELinuxOption(opts: &Option<k8s::SELinuxOptions>) -> Option<crictl::SeLinuxOption> {
+pub fn ConvertToRuntimeSELinuxOption(
+    opts: &Option<k8s::SELinuxOptions>,
+) -> Option<crictl::SeLinuxOption> {
     if opts.is_none() {
         return None;
     }
@@ -266,11 +263,13 @@ pub fn ConvertToRuntimeSELinuxOption(opts: &Option<k8s::SELinuxOptions>) -> Opti
         level: opts.level.as_deref().unwrap_or("").to_string(),
     };
 
-    return Some(option)
+    return Some(option);
 }
 
 // convertToRuntimeCapabilities converts v1.Capabilities to criv1.Capability.
-pub fn ConvertToRuntimeCapabilities(opts: &Option<k8s::Capabilities>) -> Option<crictl::Capability> {
+pub fn ConvertToRuntimeCapabilities(
+    opts: &Option<k8s::Capabilities>,
+) -> Option<crictl::Capability> {
     if opts.is_none() {
         return None;
     }
@@ -289,10 +288,14 @@ pub fn ConvertToRuntimeCapabilities(opts: &Option<k8s::Capabilities>) -> Option<
     return Some(capacity);
 }
 
-pub fn FieldProfile(scmp: &Option<k8s::SeccompProfile>, profileRootPath: &str, fallbackToRuntimeDefault: bool) -> String {
+pub fn FieldProfile(
+    scmp: &Option<k8s::SeccompProfile>,
+    profileRootPath: &str,
+    fallbackToRuntimeDefault: bool,
+) -> String {
     if scmp.is_none() {
         if fallbackToRuntimeDefault {
-            return k8s_const::SeccompProfileRuntimeDefault.to_string()
+            return k8s_const::SeccompProfileRuntimeDefault.to_string();
         }
 
         return "".to_string();
@@ -303,10 +306,15 @@ pub fn FieldProfile(scmp: &Option<k8s::SeccompProfile>, profileRootPath: &str, f
         return k8s_const::SeccompProfileRuntimeDefault.to_string();
     }
 
-    if &scmp.type_ == SeccompProfileTypeLocalhost 
-        && scmp.localhost_profile.is_some() 
-        && scmp.localhost_profile.as_ref().unwrap().len() > 0 {
-        let fname = format!("{}/{}", profileRootPath, scmp.localhost_profile.as_ref().unwrap());
+    if &scmp.type_ == SeccompProfileTypeLocalhost
+        && scmp.localhost_profile.is_some()
+        && scmp.localhost_profile.as_ref().unwrap().len() > 0
+    {
+        let fname = format!(
+            "{}/{}",
+            profileRootPath,
+            scmp.localhost_profile.as_ref().unwrap()
+        );
         return format!("{}/{}", k8s_const::SeccompLocalhostProfileNamePrefix, fname);
     }
 
@@ -319,7 +327,9 @@ pub fn FieldProfile(scmp: &Option<k8s::SeccompProfile>, profileRootPath: &str, f
 
 pub fn AnnotationProfile(profile: &str, profileRootPath: &str) -> String {
     if profile.starts_with(k8s_const::SeccompLocalhostProfileNamePrefix) {
-        let name = profile.strip_prefix(k8s_const::SeccompLocalhostProfileNamePrefix).unwrap();
+        let name = profile
+            .strip_prefix(k8s_const::SeccompLocalhostProfileNamePrefix)
+            .unwrap();
         let fname = format!("{}/{}", profileRootPath, name);
         return k8s_const::SeccompLocalhostProfileNamePrefix.to_string() + &fname;
     }
@@ -328,24 +338,33 @@ pub fn AnnotationProfile(profile: &str, profileRootPath: &str) -> String {
 }
 
 pub fn GetSeccompProfilePath(
-    annotations: &BTreeMap<String, String>, 
+    annotations: &BTreeMap<String, String>,
     containerName: &str,
-	podSecContext: &Option<k8s::PodSecurityContext>, 
-    containerSecContext: &Option<k8s::SecurityContext>, 
-    fallbackToRuntimeDefault: bool, 
-    seccompProfileRoot: &str) -> String {
+    podSecContext: &Option<k8s::PodSecurityContext>,
+    containerSecContext: &Option<k8s::SecurityContext>,
+    fallbackToRuntimeDefault: bool,
+    seccompProfileRoot: &str,
+) -> String {
     // container fields are applied first
-    if containerSecContext.is_some() && containerSecContext.as_ref().unwrap().seccomp_profile.is_some() {
+    if containerSecContext.is_some()
+        && containerSecContext
+            .as_ref()
+            .unwrap()
+            .seccomp_profile
+            .is_some()
+    {
         return FieldProfile(
-            &containerSecContext.as_ref().unwrap().seccomp_profile, 
-            seccompProfileRoot, 
-            fallbackToRuntimeDefault
+            &containerSecContext.as_ref().unwrap().seccomp_profile,
+            seccompProfileRoot,
+            fallbackToRuntimeDefault,
         );
     }
 
     // if container field does not exist, try container annotation (deprecated)
-	if containerName !=  "" {
-        match annotations.get(&(k8s_const::SeccompContainerAnnotationKeyPrefix.to_string() + containerName)) {
+    if containerName != "" {
+        match annotations
+            .get(&(k8s_const::SeccompContainerAnnotationKeyPrefix.to_string() + containerName))
+        {
             None => (),
             Some(profile) => {
                 return AnnotationProfile(profile, seccompProfileRoot);
@@ -354,16 +373,16 @@ pub fn GetSeccompProfilePath(
     }
 
     // when container seccomp is not defined, try to apply from pod field
-	if podSecContext.is_some() && podSecContext.as_ref().unwrap().seccomp_profile.is_some() {
+    if podSecContext.is_some() && podSecContext.as_ref().unwrap().seccomp_profile.is_some() {
         return FieldProfile(
-            &podSecContext.as_ref().unwrap().seccomp_profile, 
-            seccompProfileRoot, 
-            fallbackToRuntimeDefault
+            &podSecContext.as_ref().unwrap().seccomp_profile,
+            seccompProfileRoot,
+            fallbackToRuntimeDefault,
         );
     }
 
     // as last resort, try to apply pod annotation (deprecated)
-	match annotations.get(k8s_const::SeccompPodAnnotationKey) {
+    match annotations.get(k8s_const::SeccompPodAnnotationKey) {
         None => (),
         Some(profile) => {
             return AnnotationProfile(profile, seccompProfileRoot);
@@ -377,70 +396,85 @@ pub fn GetSeccompProfilePath(
     return "".to_string();
 }
 
-pub fn FieldSeccompProfile(scmp: &Option<k8s::SeccompProfile>, profileRootPath: &str, fallbackToRuntimeDefault: bool) -> crictl::SecurityProfile {
+pub fn FieldSeccompProfile(
+    scmp: &Option<k8s::SeccompProfile>,
+    profileRootPath: &str,
+    fallbackToRuntimeDefault: bool,
+) -> crictl::SecurityProfile {
     match scmp {
         None => {
             if fallbackToRuntimeDefault {
                 return crictl::SecurityProfile {
                     profile_type: crictl::security_profile::ProfileType::RuntimeDefault as i32,
                     ..Default::default()
-                }
+                };
             }
 
             return crictl::SecurityProfile {
                 profile_type: crictl::security_profile::ProfileType::Unconfined as i32,
                 ..Default::default()
-            }
+            };
         }
         Some(t) => {
             if t.type_ == SeccompProfileTypeRuntimeDefault {
                 return crictl::SecurityProfile {
                     profile_type: crictl::security_profile::ProfileType::RuntimeDefault as i32,
                     ..Default::default()
-                }
+                };
             }
 
-            if t.type_ == SeccompProfileTypeLocalhost 
-                && t.localhost_profile.is_some() 
-                && t.localhost_profile.as_ref().unwrap().len() > 0 {
-                let fname = format!("{}/{}", profileRootPath, t.localhost_profile.as_ref().unwrap());
+            if t.type_ == SeccompProfileTypeLocalhost
+                && t.localhost_profile.is_some()
+                && t.localhost_profile.as_ref().unwrap().len() > 0
+            {
+                let fname = format!(
+                    "{}/{}",
+                    profileRootPath,
+                    t.localhost_profile.as_ref().unwrap()
+                );
                 return crictl::SecurityProfile {
                     profile_type: crictl::security_profile::ProfileType::RuntimeDefault as i32,
                     localhost_ref: fname,
-                }
+                };
             }
 
             return crictl::SecurityProfile {
                 profile_type: crictl::security_profile::ProfileType::Unconfined as i32,
                 ..Default::default()
-            }
+            };
         }
     }
 }
 
 pub fn GetSeccompProfile(
-    seccompProfileRoot: &str, 
-    _annotations: &BTreeMap<String, String>, 
+    seccompProfileRoot: &str,
+    _annotations: &BTreeMap<String, String>,
     _containerName: &str,
-	podSecContext: &Option<k8s::PodSecurityContext>, 
-    containerSecContext: &Option<k8s::SecurityContext>, 
-    fallbackToRuntimeDefault: bool) -> crictl::SecurityProfile {
-    
+    podSecContext: &Option<k8s::PodSecurityContext>,
+    containerSecContext: &Option<k8s::SecurityContext>,
+    fallbackToRuntimeDefault: bool,
+) -> crictl::SecurityProfile {
     // container fields are applied first
-    if containerSecContext.is_some() && containerSecContext.as_ref().unwrap().seccomp_profile.is_some() {
+    if containerSecContext.is_some()
+        && containerSecContext
+            .as_ref()
+            .unwrap()
+            .seccomp_profile
+            .is_some()
+    {
         return FieldSeccompProfile(
             &containerSecContext.as_ref().unwrap().seccomp_profile,
-            seccompProfileRoot, 
-            fallbackToRuntimeDefault
+            seccompProfileRoot,
+            fallbackToRuntimeDefault,
         );
     }
 
     // when container seccomp is not defined, try to apply from pod field
-	if podSecContext.is_some() && podSecContext.as_ref().unwrap().seccomp_profile.is_some() {
+    if podSecContext.is_some() && podSecContext.as_ref().unwrap().seccomp_profile.is_some() {
         return FieldSeccompProfile(
             &podSecContext.as_ref().unwrap().seccomp_profile,
-            seccompProfileRoot, 
-            fallbackToRuntimeDefault
+            seccompProfileRoot,
+            fallbackToRuntimeDefault,
         );
     }
 
@@ -448,12 +482,11 @@ pub fn GetSeccompProfile(
         return crictl::SecurityProfile {
             profile_type: crictl::security_profile::ProfileType::RuntimeDefault as i32,
             ..Default::default()
-        }
+        };
     }
 
     return crictl::SecurityProfile {
         profile_type: crictl::security_profile::ProfileType::Unconfined as i32,
         ..Default::default()
-    }
+    };
 }
-    

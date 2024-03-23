@@ -15,15 +15,15 @@
 use qshare::node::*;
 use qshare::types::RuntimePod;
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, RwLock};
 use std::collections::BTreeMap;
-use std::sync::Mutex;
-use std::time::SystemTime;
 use std::ops::Deref;
+use std::sync::Mutex;
+use std::sync::{Arc, RwLock};
+use std::time::SystemTime;
 
 use qshare::common::*;
-use qshare::k8s;
 use qshare::consts::*;
+use qshare::k8s;
 
 use super::qcontainer::*;
 
@@ -38,7 +38,6 @@ pub fn ValidateConfigMap(_configMap: &k8s::ConfigMap) -> Result<()> {
 pub fn ValidateSecret(_secret: &k8s::Secret) -> Result<()> {
     return Ok(());
 }
-
 
 // PodInitialized means that all init containers in the pod have started successfully.
 pub const PodInitialized: &str = "Initialized";
@@ -133,7 +132,7 @@ impl QuarkPod {
 
         let runtimePod = match &inner.runtimePod {
             None => None,
-            Some(p) => Some(p.as_ref().clone())
+            Some(p) => Some(p.as_ref().clone()),
         };
 
         return QuarkPodJson {
@@ -145,7 +144,7 @@ impl QuarkPod {
             runtimePod: runtimePod,
             containers: map,
             lastTransitionTime: inner.lastTransitionTime,
-        }
+        };
     }
 
     pub fn FromQuarkPodJosn(pod: QuarkPodJson) -> Self {
@@ -157,7 +156,7 @@ impl QuarkPod {
             configMap: pod.configMap,
             runtimePod: match pod.runtimePod {
                 None => None,
-                Some(p) => Some(Arc::new(p))
+                Some(p) => Some(Arc::new(p)),
             },
             containers: {
                 let mut map = BTreeMap::new();
@@ -169,7 +168,7 @@ impl QuarkPod {
             lastTransitionTime: pod.lastTransitionTime,
         };
 
-        return Self(Arc::new(Mutex::new(inner)))
+        return Self(Arc::new(Mutex::new(inner)));
     }
 
     pub fn Pod(&self) -> Arc<RwLock<PodDef>> {
@@ -194,8 +193,8 @@ impl QuarkPod {
 
     pub fn PodInTerminating(&self) -> bool {
         let state = self.PodState();
-        return state == PodState::Terminating 
-            || state == PodState::Terminated 
+        return state == PodState::Terminating
+            || state == PodState::Terminated
             || state == PodState::Cleanup;
     }
 
@@ -206,8 +205,8 @@ impl QuarkPod {
 
     pub fn PodInTransitState(&self) -> bool {
         let state = self.PodState();
-        return state == PodState::Creating 
-            || state == PodState::Evacuating 
+        return state == PodState::Creating
+            || state == PodState::Evacuating
             || state == PodState::Terminating
             || state == PodState::Created;
     }
@@ -255,18 +254,16 @@ impl QuarkPod {
 
     pub fn SetPodStatus(&self, node: Option<&Node>) {
         let pod = self.Pod();
-        
+
         pod.write().unwrap().status.phase = self.ToPhase();
         if let Some(node) = node {
             pod.write().unwrap().status.host_ip = node.status.addresses[0].address.clone();
-        }   
-    
+        }
+
         let hasDeleted = pod.write().unwrap().deletion_timestamp.is_some();
         let phase = pod.write().unwrap().status.phase.clone();
-        if (phase == PodSucceeded 
-            || phase == PodFailed)
-            &&  !hasDeleted {
-                pod.write().unwrap().deletion_timestamp = Some(SystemTime::now());
+        if (phase == PodSucceeded || phase == PodFailed) && !hasDeleted {
+            pod.write().unwrap().deletion_timestamp = Some(SystemTime::now());
         }
 
         pod.write().unwrap().status.conditions = self.GetPodConditions();
@@ -287,7 +284,8 @@ impl QuarkPod {
     }
 
     pub fn Containers(&self) -> Vec<QuarkContainer> {
-        let containers: Vec<QuarkContainer> = self.lock().unwrap().containers.values().cloned().collect();
+        let containers: Vec<QuarkContainer> =
+            self.lock().unwrap().containers.values().cloned().collect();
         return containers;
     }
 
@@ -303,7 +301,7 @@ impl QuarkPod {
             reason: "".to_owned(),
             message: "".to_owned(),
         };
-        
+
         let mut containerReadyCondition = PodCondition {
             type_: ContainersReady.to_string(),
             status: ConditionUnknown.to_string(),
@@ -312,7 +310,7 @@ impl QuarkPod {
             reason: "".to_owned(),
             message: "".to_owned(),
         };
-        
+
         let mut podReadyCondition = PodCondition {
             type_: PodReady.to_string(),
             status: ConditionUnknown.to_string(),
@@ -321,7 +319,7 @@ impl QuarkPod {
             reason: "".to_owned(),
             message: "".to_owned(),
         };
-        
+
         let podScheduledCondition = PodCondition {
             type_: PodScheduled.to_string(),
             status: ConditionTrue.to_string(),
@@ -331,9 +329,9 @@ impl QuarkPod {
             message: "".to_owned(),
         };
 
-
         let mut allInitContainerNormal = true;
-        let containers: Vec<QuarkContainer> = self.lock().unwrap().containers.values().cloned().collect();
+        let containers: Vec<QuarkContainer> =
+            self.lock().unwrap().containers.values().cloned().collect();
         for v in &containers {
             let c = v.lock().unwrap();
             if c.initContainer {
@@ -345,14 +343,15 @@ impl QuarkPod {
                     break;
                 }
 
-                if ContainerExitAbnormal(&c.containerStatus) { 
+                if ContainerExitAbnormal(&c.containerStatus) {
                     containerReadyCondition.status = ConditionFalse.to_string();
                     containerReadyCondition.message = "init container exit abnormally".to_string();
                     containerReadyCondition.reason = "init container exit abnormally".to_string();
                     allInitContainerNormal = false;
                     break;
                 }
-                allInitContainerNormal = allInitContainerNormal && ContainerExitNormal(&c.containerStatus);
+                allInitContainerNormal =
+                    allInitContainerNormal && ContainerExitNormal(&c.containerStatus);
             }
         }
 
@@ -361,18 +360,17 @@ impl QuarkPod {
             initReadyCondition.message = "init container exit normally".to_string();
             initReadyCondition.reason = "init container exit normally".to_string();
         }
-        
-        
+
         let mut allContainerNormal = true;
         //let mut allContainerReady = true;
 
         // todo: fix
-        /* 
-        if fppod.RuntimePod == nil || (len(fppod.Pod.Spec.Containers)+len(fppod.Pod.Spec.InitContainers) != len(fppod.RuntimePod.Containers)) {
-		containerReadyCondition.Status = v1.ConditionFalse
-		containerReadyCondition.Message = "missing some containers"
-		containerReadyCondition.Reason = "missing some containers"
-	} else { */
+        /*
+            if fppod.RuntimePod == nil || (len(fppod.Pod.Spec.Containers)+len(fppod.Pod.Spec.InitContainers) != len(fppod.RuntimePod.Containers)) {
+            containerReadyCondition.Status = v1.ConditionFalse
+            containerReadyCondition.Message = "missing some containers"
+            containerReadyCondition.Reason = "missing some containers"
+        } else { */
         for v in &containers {
             let c = v.lock().unwrap();
             if !c.initContainer {
@@ -396,7 +394,9 @@ impl QuarkPod {
             containerReadyCondition.reason = "all pod containers are running".to_string();
         }
 
-        if &containerReadyCondition.status == ConditionTrue && &initReadyCondition.status == ConditionTrue {
+        if &containerReadyCondition.status == ConditionTrue
+            && &initReadyCondition.status == ConditionTrue
+        {
             if self.PodState() == PodState::Running {
                 podReadyCondition.status = ConditionTrue.to_string();
                 podReadyCondition.message = "all pod containers are ready".to_string();
@@ -422,7 +422,7 @@ impl QuarkPod {
                         newCondition.last_transition_time = oldCondition.last_probe_time.clone();
                     }
                 }
-                None => ()
+                None => (),
             }
         }
 
@@ -431,4 +431,3 @@ impl QuarkPod {
         return newConditions;
     }
 }
-

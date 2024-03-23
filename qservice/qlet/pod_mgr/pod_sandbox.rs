@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::ops::Deref;
 use std::sync::Arc;
 use std::sync::Mutex;
-use core::ops::Deref;
 
 use qshare::common::*;
 
 #[derive(Debug, Default)]
 pub struct PodSandboxInner {
-    pub podUid: String, 
+    pub podUid: String,
     pub namespace: String,
     pub name: String,
     pub ip: IpAddress,
@@ -38,16 +38,14 @@ impl Deref for PodSandbox {
 }
 
 impl PodSandbox {
-    pub fn New(uid: &str, namespace: &str, name: &str, addr: IpAddress) -> Self  {
+    pub fn New(uid: &str, namespace: &str, name: &str, addr: IpAddress) -> Self {
         let inner = PodSandboxInner {
             podUid: uid.to_owned(),
             namespace: namespace.to_owned(),
             name: name.to_owned(),
-            ip: addr
+            ip: addr,
         };
 
         return Self(Arc::new(Mutex::new(inner)));
     }
 }
-
-

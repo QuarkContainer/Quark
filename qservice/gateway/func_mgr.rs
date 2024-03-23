@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::ops::Deref;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::Mutex;
-use serde::{Deserialize, Serialize};
-use core::ops::Deref;
 
-use qshare::metastore::data_obj::*;
 use qshare::common::*;
+use qshare::metastore::data_obj::*;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct FuncPackageId {
@@ -45,11 +45,16 @@ pub struct FuncPackageSpec {
 
 impl FuncPackageSpec {
     pub const KEY: &'static str = "funcpackage";
-    
+
     pub fn FromDataObject(obj: DataObject) -> Result<Self> {
         let spec = match serde_json::from_str::<Self>(&obj.data) {
-            Err(e) => return Err(Error::CommonError(format!("FuncPackageSpec::FromDataObject {:?}", e))),
-            Ok(s) => s
+            Err(e) => {
+                return Err(Error::CommonError(format!(
+                    "FuncPackageSpec::FromDataObject {:?}",
+                    e
+                )))
+            }
+            Ok(s) => s,
         };
         return Ok(spec);
     }
@@ -89,7 +94,7 @@ impl Default for KeepAlivePolicy {
         return Self {
             warmCnt: 0,
             keepaliveTime: 10, //keepalive for 10 second when idle
-        }
+        };
     }
 }
 
@@ -111,11 +116,9 @@ impl Deref for FuncPackage {
 
 impl FuncPackage {
     pub fn New(spec: FuncPackageSpec) -> Self {
-        let inner = FuncPackageInner {
-            spec: spec
-        };
+        let inner = FuncPackageInner { spec: spec };
 
-        return Self(Arc::new(inner))
+        return Self(Arc::new(inner));
     }
 }
 
@@ -149,9 +152,14 @@ impl FuncPackageMgr {
 
     pub fn GetFuncPackages(&self, tenant: &str, namespace: &str) -> Result<Vec<String>> {
         use std::ops::Bound::*;
-        let start = format!("{}/{}/",tenant, namespace);
+        let start = format!("{}/{}/", tenant, namespace);
         let mut vec = Vec::new();
-        for (key, _) in self.lock().unwrap().funcPackages.range::<String, _>((Included(start.clone()), Unbounded)) {
+        for (key, _) in self
+            .lock()
+            .unwrap()
+            .funcPackages
+            .range::<String, _>((Included(start.clone()), Unbounded))
+        {
             if key.starts_with(&start) {
                 vec.push(key.clone());
             } else {
@@ -159,7 +167,7 @@ impl FuncPackageMgr {
             }
         }
 
-        return Ok(vec)
+        return Ok(vec);
     }
 
     pub fn Add(&self, spec: FuncPackageSpec) -> Result<()> {
@@ -172,7 +180,7 @@ impl FuncPackageMgr {
         let package = FuncPackage::New(spec);
         inner.funcPackages.insert(key, package);
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Update(&self, spec: FuncPackageSpec) -> Result<()> {
@@ -187,10 +195,10 @@ impl FuncPackageMgr {
 
         // todo: clean all the package instance
 
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn Remove(&self, spec: FuncPackageSpec) -> Result<()> { 
+    pub fn Remove(&self, spec: FuncPackageSpec) -> Result<()> {
         let key = spec.Key();
         let mut inner = self.lock().unwrap();
         if inner.funcPackages.contains_key(&key) {
@@ -201,6 +209,6 @@ impl FuncPackageMgr {
 
         // todo: clean all the package instance
 
-        return Ok(())
+        return Ok(());
     }
 }

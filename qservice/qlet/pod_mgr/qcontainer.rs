@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::ops::Deref;
 use qshare::node::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::sync::Mutex;
-use core::ops::Deref;
 
 use qshare::crictl;
 use qshare::types::*;
@@ -52,7 +52,7 @@ impl Deref for QuarkContainer {
 
 impl QuarkContainer {
     pub fn State(&self) -> RuntimeContainerState {
-        return self.lock().unwrap().state
+        return self.lock().unwrap().state;
     }
 
     pub fn SetState(&self, state: RuntimeContainerState) {
@@ -69,34 +69,34 @@ impl QuarkContainer {
 
     pub fn ContainerExit(&self) -> bool {
         let status = self.lock().unwrap().containerStatus.clone();
-        return ContainerExit(&status); 
+        return ContainerExit(&status);
     }
 
     pub fn ContainerExitNormal(&self) -> bool {
         let status = self.lock().unwrap().containerStatus.clone();
-        return ContainerExitNormal(&status); 
+        return ContainerExitNormal(&status);
     }
 
     pub fn ContainerExitAbnormal(&self) -> bool {
         let status = self.lock().unwrap().containerStatus.clone();
-        return ContainerExitAbnormal(&status); 
+        return ContainerExitAbnormal(&status);
     }
 
     pub fn ContainerStatusUnknown(&self) -> bool {
         let status = self.lock().unwrap().containerStatus.clone();
-        return ContainerStatusUnknown(&status); 
+        return ContainerStatusUnknown(&status);
     }
 
     pub fn ContainerRunning(&self) -> bool {
         let status = self.lock().unwrap().containerStatus.clone();
-        return ContainerRunning(&status); 
+        return ContainerRunning(&status);
     }
 }
 
-
 pub fn ContainerExit(status: &Option<crictl::ContainerStatus>) -> bool {
     if let Some(status) = status {
-        return status.finished_at != 0 && status.state == crictl::ContainerState::ContainerExited as i32;
+        return status.finished_at != 0
+            && status.state == crictl::ContainerState::ContainerExited as i32;
     }
 
     return false;

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under
 
-pub mod tsot_svc;
+pub mod conn_svc;
+pub mod dns_proxy;
 pub mod peer_mgr;
 pub mod pod_broker;
-pub mod conn_svc;
 pub mod pod_broker_mgr;
-pub mod dns_proxy;
 mod tsot_agent;
+pub mod tsot_svc;

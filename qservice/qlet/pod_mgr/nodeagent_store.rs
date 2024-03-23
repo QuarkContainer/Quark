@@ -12,21 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::ops::Deref;
 use std::sync::Mutex;
 use std::{collections::BTreeMap, sync::Arc};
-use std::ops::Deref;
 
 use qshare::node::*;
-use tokio::sync::{mpsc::Receiver};
 use tokio::sync::mpsc::channel;
-use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::error::TrySendError;
+use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::Sender;
 
-use qshare::na as NmMsg;
 use qshare::common::*;
+use qshare::na as NmMsg;
 
-use super::qpod::*;
 use super::qnode::*;
+use super::qpod::*;
 use super::NODEAGENT_STORE;
 
 //use super::rocksdb::{RocksObjStore, RocksStore};
@@ -46,7 +46,7 @@ impl EventType {
             Self::Added => return Self::Added,
             Self::Modified => return Self::Modified,
             Self::Deleted => return Self::Deleted,
-       }
+        }
     }
 
     pub fn ToGrpcEventType(&self) -> NmMsg::EventType {
@@ -87,7 +87,9 @@ impl WatchEvent {
                     revision: self.revision,
                     node: serde_json::to_string(&node)?,
                 };
-                return Ok(NmMsg::node_agent_stream_msg::EventBody::NodeUpdate(nodeUpdate));
+                return Ok(NmMsg::node_agent_stream_msg::EventBody::NodeUpdate(
+                    nodeUpdate,
+                ));
             }
         }
     }
@@ -112,7 +114,7 @@ impl RingBuf {
         for _i in 0..cap {
             buf.push(None);
         }
-        
+
         return Self {
             buf: buf,
             head: 0,
@@ -129,10 +131,7 @@ impl RingBuf {
         self.tail = 0;
     }
 
-    pub fn GetAllEvents(
-        &self,
-        startRev: i64,
-    ) -> Result<Vec<WatchEvent>> {
+    pub fn GetAllEvents(&self, startRev: i64) -> Result<Vec<WatchEvent>> {
         let mut buf = Vec::new();
         for i in self.head..self.tail {
             let idx = i % self.buf.capacity();
@@ -191,7 +190,6 @@ impl RingBuf {
 #[derive(Debug)]
 pub struct NodeAgentStoreInner {
     //pub podStore: RocksObjStore<QuarkPodJson>,
-    
     pub eventQueue: RingBuf,
 
     pub podCache: BTreeMap<String, PodDef>,
@@ -225,13 +223,13 @@ impl NodeAgentStoreInner {
             //podStore: podStore,
             eventQueue: RingBuf::New(2000),
             podCache: podCache,
-            nodeRevision: 0, 
+            nodeRevision: 0,
             nodeCache: None,
             revision: 0,
             listRevision: 0,
             lastWatcherId: 0,
             watchers: BTreeMap::new(),
-        })
+        });
     }
 
     pub fn GetNode(&self) -> Node {
@@ -244,25 +242,25 @@ impl NodeAgentStoreInner {
         self.nodeRevision = self.revision;
         assert!(self.nodeCache.is_none());
         self.nodeCache = Some(node.clone());
-        return Ok(())
+        return Ok(());
     }
 
     pub fn UpdateNode(&mut self, node: &QuarkNode) -> Result<()> {
         assert!(self.nodeCache.is_some());
         self.revision += 1;
         node.node.lock().unwrap().resource_version = format!("{}", self.revision);
-        
+
         let k8sNode = node.node.lock().unwrap().clone();
 
         let event = WatchEvent {
             type_: EventType::Modified,
             revision: self.revision,
-            obj: NodeAgentEventObj::Node(k8sNode.clone())
+            obj: NodeAgentEventObj::Node(k8sNode.clone()),
         };
 
         self.nodeCache = Some(k8sNode);
         self.ProcessEvent(event)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn CreatePod(&mut self, obj: &QuarkPod) -> Result<()> {
@@ -274,7 +272,7 @@ impl NodeAgentStoreInner {
         let event = WatchEvent {
             type_: EventType::Added,
             revision: self.revision,
-            obj: NodeAgentEventObj::Pod(jsonObj.pod.clone())
+            obj: NodeAgentEventObj::Pod(jsonObj.pod.clone()),
         };
 
         if self.podCache.contains_key(&key) {
@@ -283,7 +281,7 @@ impl NodeAgentStoreInner {
         self.podCache.insert(key.to_string(), jsonObj.pod.clone());
         //self.podStore.Save(self.revision, &key, &jsonObj)?;
         self.ProcessEvent(event)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn GetPod(&self, id: &str) -> Result<(i64, PodDef)> {
@@ -309,12 +307,12 @@ impl NodeAgentStoreInner {
             let event = WatchEvent {
                 type_: EventType::Modified,
                 revision: self.revision,
-                obj: NodeAgentEventObj::Pod(jsonObj.pod.clone())
+                obj: NodeAgentEventObj::Pod(jsonObj.pod.clone()),
             };
             self.ProcessEvent(event)?;
         }
-        
-        return Ok(())
+
+        return Ok(());
     }
 
     pub fn DeletePod(&mut self, obj: &QuarkPod) -> Result<()> {
@@ -328,7 +326,7 @@ impl NodeAgentStoreInner {
         let event = WatchEvent {
             type_: EventType::Modified,
             revision: self.revision,
-            obj: NodeAgentEventObj::Pod(jsonObj.pod.clone())
+            obj: NodeAgentEventObj::Pod(jsonObj.pod.clone()),
         };
 
         //self.podStore.Remove(self.revision, key)?;
@@ -341,19 +339,16 @@ impl NodeAgentStoreInner {
         let event = WatchEvent {
             type_: EventType::Deleted,
             revision: self.revision,
-            obj: NodeAgentEventObj::Pod(jsonObj.pod.clone())
+            obj: NodeAgentEventObj::Pod(jsonObj.pod.clone()),
         };
         self.ProcessEvent(event)?;
 
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn GetAllEvents(
-        &self,
-        revision: i64
-    ) -> Result<Vec<WatchEvent>> {
+    pub fn GetAllEvents(&self, revision: i64) -> Result<Vec<WatchEvent>> {
         let size = self.eventQueue.Size();
-        
+
         let oldest = if self.listRevision > 0 && self.eventQueue.tail == 0 {
             // If no event was removed from the buffer since last relist, the oldest watch
             // event we can deliver is one greater than the resource version of the list.
@@ -385,27 +380,24 @@ impl NodeAgentStoreInner {
             )));
         }
 
-        return self.eventQueue.GetAllEvents(revision); 
+        return self.eventQueue.GetAllEvents(revision);
     }
 
-    pub fn GetAllEventsFromStore(
-        &self,
-        revision: i64
-    ) -> Result<Vec<WatchEvent>> {
+    pub fn GetAllEventsFromStore(&self, revision: i64) -> Result<Vec<WatchEvent>> {
         let mut buf = Vec::new();
 
         for (_, pod) in &self.podCache {
             buf.push(WatchEvent {
                 type_: EventType::Added,
                 revision: revision,
-                obj: NodeAgentEventObj::Pod(pod.clone())
+                obj: NodeAgentEventObj::Pod(pod.clone()),
             });
         }
 
         buf.push(WatchEvent {
             type_: EventType::Added,
             revision: revision,
-            obj: NodeAgentEventObj::Node(self.nodeCache.as_ref().unwrap().clone())
+            obj: NodeAgentEventObj::Node(self.nodeCache.as_ref().unwrap().clone()),
         });
 
         return Ok(buf);
@@ -428,7 +420,7 @@ impl NodeAgentStoreInner {
 
         self.eventQueue.Push(event);
 
-        return Ok(())
+        return Ok(());
     }
 
     pub const DEFAULT_CACHE_COUNT: usize = 2000;
@@ -454,10 +446,10 @@ impl NodeAgentStoreInner {
     }
 
     pub fn List(&self) -> PodList {
-        let pods : Vec<PodDef> = self.podCache.values().cloned().collect();
-        return PodList { 
-            revision: self.revision, 
-            pods: pods 
+        let pods: Vec<PodDef> = self.podCache.values().cloned().collect();
+        return PodList {
+            revision: self.revision,
+            pods: pods,
         };
     }
 }
@@ -483,7 +475,7 @@ impl NodeAgentStore {
     pub fn New() -> Result<Self> {
         let inner = NodeAgentStoreInner::New()?;
         let store = Self(Arc::new(Mutex::new(inner)));
-        return Ok(store)
+        return Ok(store);
     }
 
     pub fn GetNode(&self) -> Node {
@@ -536,15 +528,9 @@ pub struct StoreWatcher {
 impl StoreWatcher {
     pub fn New(id: u64, channelSize: usize) -> (Self, StoreWatchStream) {
         let (tx, rx) = channel(channelSize);
-        let w = Self {
-            id: id,
-            sender: tx, 
-        };
+        let w = Self { id: id, sender: tx };
 
-        return (w, StoreWatchStream {
-            id: id,
-            stream: rx,
-        })
+        return (w, StoreWatchStream { id: id, stream: rx });
     }
 
     pub fn SendWatchEvent(&mut self, event: WatchEvent) -> Result<()> {

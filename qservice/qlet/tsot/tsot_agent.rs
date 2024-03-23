@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
-use std::sync::atomic::*;
 use core::ops::Deref;
+use std::sync::atomic::*;
+use std::sync::Arc;
 
 use tokio::io::Interest;
 use tokio::net::UnixStream;
-use tokio::sync::Notify;
 use tokio::sync::mpsc;
+use tokio::sync::Notify;
 
 use qshare::common::*;
 use qshare::databuf::*;
@@ -37,9 +37,7 @@ pub struct PayloadLen {
 
 impl PayloadLen {
     pub fn Size(&self) -> usize {
-        return unsafe {
-            *(&self.bytes[0] as * const _ as u64 as * const usize)
-        }
+        return unsafe { *(&self.bytes[0] as *const _ as u64 as *const usize) };
     }
 }
 
@@ -56,7 +54,7 @@ impl Payload {
         return Self {
             bytes: bytes,
             offset: 0,
-        }
+        };
     }
 }
 
@@ -65,7 +63,7 @@ pub struct TsotAgentInner {
     pub stop: AtomicBool,
 
     pub stream: UnixStream,
-    pub tsotSvc: mpsc::Sender<TsotMsg>, 
+    pub tsotSvc: mpsc::Sender<TsotMsg>,
     pub agentChann: mpsc::Sender<TsotMsg>,
 }
 
@@ -84,7 +82,7 @@ impl TsotAgent {
     pub fn New(tsotSvc: mpsc::Sender<TsotMsg>, stream: UnixStream) -> Result<Self> {
         let (tx, rx) = mpsc::channel::<TsotMsg>(30);
 
-        let inner = TsotAgentInner{
+        let inner = TsotAgentInner {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
 
@@ -101,18 +99,16 @@ impl TsotAgent {
             clone.Process(rx).await.unwrap();
         });
 
-        return Ok(ret)
+        return Ok(ret);
     }
 
     pub async fn Process(&self, mut rx: mpsc::Receiver<TsotMsg>) -> Result<()> {
         let mut state = AgentState::PayloadLen(PayloadLen::default());
-        
+
         loop {
-            let ready = self.stream.ready(
-                Interest::READABLE | 
-                Interest::WRITABLE |
-                Interest::ERROR
-            );
+            let ready = self
+                .stream
+                .ready(Interest::READABLE | Interest::WRITABLE | Interest::ERROR);
 
             tokio::select! {
                 _ = self.closeNotify.notified() => {
@@ -148,7 +144,7 @@ impl TsotAgent {
                                 Ok(n) => {
                                     p.offset += n;
                                     if p.offset == p.bytes.len() {
-                                        
+
                                         state = AgentState::PayloadLen(PayloadLen::default());
                                     }
                                 }
@@ -164,7 +160,7 @@ impl TsotAgent {
                 }
             }
         }
-        
-        return Ok(())
+
+        return Ok(());
     }
 }
