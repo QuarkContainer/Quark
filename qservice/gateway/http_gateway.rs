@@ -32,7 +32,8 @@ use crate::NAMESPACE_MGR;
 use crate::NAMESPACE_STORE;
 use crate::{func_mgr::FuncPackageSpec, func_worker::FUNCAGENT_MGR};
 
-pub const FUNCPOD_TYPE: &str = "funcpodType.qservice.io";
+pub const FUNCPOD_TYPE: &str = "funcpod_type.qservice.io";
+pub const FUNCPOD_FUNCNAME: &str = "fun_name.qservice.io";
 pub const FUNCPOD_PROMPT: &str = "prompt";
 
 pub struct HttpGateway {}
@@ -139,7 +140,6 @@ async fn PostFuncPackage(Json(spec): Json<FuncPackageSpec>) -> impl IntoResponse
 async fn DropFuncPackage(
     Path((tenant, namespace, name)): Path<(String, String, String)>,
 ) -> impl IntoResponse {
-    error!("DropFuncPackage 1 {:?}/{}", &namespace, &name);
     match NAMESPACE_MGR
         .get()
         .unwrap()

@@ -34,7 +34,7 @@ use qshare::common::*;
 use qshare::na::{self, Env, Kv};
 
 use crate::func_mgr::FuncPackage;
-use crate::{PromptReq, FUNCPOD_PROMPT, FUNCPOD_TYPE, TSOT_CLIENT};
+use crate::{PromptReq, FUNCPOD_FUNCNAME, FUNCPOD_PROMPT, FUNCPOD_TYPE, TSOT_CLIENT};
 
 lazy_static::lazy_static! {
     pub static ref FUNCAGENT_MGR: FuncAgentMgr = FuncAgentMgr::default();
@@ -419,7 +419,8 @@ impl FuncWorker {
         let funcPackage = funcAgent.lock().unwrap().funcPackge.clone();
 
         let workerName = format!("{}_{}", funcName, id);
-        let addr = Self::StartWorker(tenant, namespace, &workerName, &funcPackage).await?;
+        let addr =
+            Self::StartWorker(tenant, namespace, funcName, &workerName, &funcPackage).await?;
         let (tx, rx) = mpsc::channel::<FuncReq>(parallelLeve);
         let (workerTx, workerRx) = mpsc::channel::<FuncWorkerClient>(parallelLeve);
 
@@ -798,7 +799,8 @@ impl FuncWorker {
     pub async fn StartWorker(
         tenant: &str,
         namespace: &str,
-        name: &str,
+        funcName: &str,
+        workerName: &str,
         funcPackage: &FuncPackage,
     ) -> Result<IpAddress> {
         let mut client =
@@ -826,10 +828,15 @@ impl FuncWorker {
             val: FUNCPOD_PROMPT.to_owned(),
         });
 
+        annotations.push(Kv {
+            key: FUNCPOD_FUNCNAME.to_owned(),
+            val: funcName.to_owned(),
+        });
+
         let request = tonic::Request::new(na::CreateFuncPodReq {
             tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
-            name: name.to_owned(),
+            name: workerName.to_owned(),
             image: funcPackage.spec.image.clone(),
             labels: Vec::new(),
             annotations: annotations,
