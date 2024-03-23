@@ -12,24 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
 use core::ops::Deref;
+use std::sync::Arc;
 
 use async_trait::async_trait;
-use etcd_client::{GetOptions, PutOptions};
 use etcd_client::{
     Client, CompactionOptions, Compare, CompareOp, DeleteOptions, Txn, TxnOp, TxnOpResponse,
 };
-use tokio::sync::Notify;
+use etcd_client::{GetOptions, PutOptions};
 use std::fmt::Debug;
+use tokio::sync::Notify;
 
+use crate::common::*;
 use crate::etcd::etcd_client::EtcdClient;
 use crate::etcd::watch::{WatchReader, Watcher};
-use crate::common::*;
 use crate::metastore::cache_store::{BackendStore, CacheStore};
+use crate::metastore::data_obj::*;
 use crate::metastore::selection_predicate::*;
 use crate::qmeta::*;
-use crate::metastore::data_obj::*;
 
 pub const PATH_PREFIX: &str = "/registry";
 
@@ -244,13 +244,22 @@ impl BackendStore for EtcdStore {
         return Ok(DataObjList::New(v, returnedRV, None, -1));
     }
 
-    fn Register(&self, cacher: CacheStore, rev: i64, prefix: String, ready: Arc<Notify>, notify: Arc<Notify>) -> Result<()> {
+    fn Register(
+        &self,
+        cacher: CacheStore,
+        rev: i64,
+        prefix: String,
+        ready: Arc<Notify>,
+        notify: Arc<Notify>,
+    ) -> Result<()> {
         let storeClone = self.clone();
-        let _future = tokio::spawn(async move{
-            storeClone.Process(&cacher, rev, &prefix, &ready, &notify).await
+        let _future = tokio::spawn(async move {
+            storeClone
+                .Process(&cacher, rev, &prefix, &ready, &notify)
+                .await
         });
 
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -284,11 +293,7 @@ impl EtcdStore {
         }
     }
 
-    pub async fn Update(
-        &self,
-        expectedRev: i64,
-        obj: &DataObject,
-    ) -> Result<DataObject> {
+    pub async fn Update(&self, expectedRev: i64, obj: &DataObject) -> Result<DataObject> {
         let key = obj.StoreKey();
         let preparedKey = self.PrepareKey(&key)?;
         let keyVec: &str = &preparedKey;
@@ -379,7 +384,7 @@ impl EtcdStore {
             pagingEnable,
         };
 
-        return Ok(Self(Arc::new(inner))); 
+        return Ok(Self(Arc::new(inner)));
     }
 
     pub async fn New(addr: &str, pagingEnable: bool) -> Result<Self> {
@@ -395,18 +400,39 @@ impl EtcdStore {
     }
 
     pub async fn LeaseGrant(&self, ttl: i64) -> Result<i64> {
-        let resp = self.client.client.lock().await.lease_client().grant(ttl, None).await?;
+        let resp = self
+            .client
+            .client
+            .lock()
+            .await
+            .lease_client()
+            .grant(ttl, None)
+            .await?;
         return Ok(resp.id());
     }
 
     pub async fn LeaseRevoke(&self, leaseId: i64) -> Result<()> {
-        let _resp = self.client.client.lock().await.lease_client().revoke(leaseId).await?;
-        return Ok(())
+        let _resp = self
+            .client
+            .client
+            .lock()
+            .await
+            .lease_client()
+            .revoke(leaseId)
+            .await?;
+        return Ok(());
     }
 
-    pub async fn LeaseKeepalive(&self, leaseId: i64) -> Result<()> { 
-        let _resp = self.client.client.lock().await.lease_client().keep_alive(leaseId).await?;
-        return Ok(())
+    pub async fn LeaseKeepalive(&self, leaseId: i64) -> Result<()> {
+        let _resp = self
+            .client
+            .client
+            .lock()
+            .await
+            .lease_client()
+            .keep_alive(leaseId)
+            .await?;
+        return Ok(());
     }
 
     async fn InitCacheStore(&self, cs: &CacheStore, rev: i64, prefix: &str) -> Result<i64> {
@@ -439,10 +465,16 @@ impl EtcdStore {
             inner.listRevision = channelRev;
         }
 
-        return Ok(list.revision)
+        return Ok(list.revision);
     }
 
-    async fn UpdateCacheStore(&self, cs: &CacheStore, prefix: &str, listRev: i64, notify: &Arc<Notify>) -> Result<()> {
+    async fn UpdateCacheStore(
+        &self,
+        cs: &CacheStore,
+        prefix: &str,
+        listRev: i64,
+        notify: &Arc<Notify>,
+    ) -> Result<()> {
         let (mut w, r) = self.Watch(&prefix, listRev, SelectionPredicate::default())?;
 
         loop {
@@ -464,10 +496,17 @@ impl EtcdStore {
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
-    async fn Process(&self, cs: &CacheStore, rev: i64, prefix: &str, ready: &Arc<Notify>, notify: &Arc<Notify>) -> Result<()> {
+    async fn Process(
+        &self,
+        cs: &CacheStore,
+        rev: i64,
+        prefix: &str,
+        ready: &Arc<Notify>,
+        notify: &Arc<Notify>,
+    ) -> Result<()> {
         let mut listRev = self.InitCacheStore(cs, rev, &prefix).await?;
 
         ready.notify_one();
@@ -478,8 +517,8 @@ impl EtcdStore {
                 }
                 Ok(()) => {
                     // the watching stop by user
-                    return Ok(())
-                },
+                    return Ok(());
+                }
             }
 
             listRev = self.InitCacheStore(cs, rev, prefix).await?;
@@ -510,7 +549,6 @@ impl EtcdStore {
 
         return Ok(());
     }
-
 
     pub async fn Clear(&mut self, prefix: &str) -> Result<i64> {
         let preparedKey = self.PrepareKey(prefix)?;

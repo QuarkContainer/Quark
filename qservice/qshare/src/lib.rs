@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Quark Container Authors 
+// Copyright (c) 2023 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@
 #![allow(non_camel_case_types)]
 #![allow(deprecated)]
 
-
 #[macro_use]
 extern crate scopeguard;
 
@@ -27,18 +26,18 @@ extern crate log;
 
 extern crate alloc;
 
+pub mod cadvisor_types;
 pub mod common;
 pub mod config;
 pub mod consts;
-pub mod types;
-pub mod k8s_util;
 pub mod databuf;
-pub mod metastore;
 pub mod etcd;
+pub mod k8s_util;
+pub mod metastore;
 pub mod node;
 pub mod qlet_config;
-pub mod cadvisor_types;
 pub mod tsot_msg;
+pub mod types;
 
 pub mod crictl {
     include!("pb_gen/runtime.v1alpha2.rs");
@@ -65,4 +64,4 @@ pub mod qactor {
 }
 
 pub use k8s_openapi::api::core::v1 as k8s;
-pub use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta as ObjectMeta;
+pub use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;

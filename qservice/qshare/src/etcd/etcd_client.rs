@@ -44,8 +44,8 @@ impl EtcdClient {
     pub async fn NewWithEndpoints(endpoints: &[String]) -> Result<Self> {
         let client = Client::connect(endpoints, None).await?;
         return Ok(Self {
-            client: Arc::new(TMutex::new(client))
-        })
+            client: Arc::new(TMutex::new(client)),
+        });
     }
 
     pub fn New(client: Client) -> Self {
@@ -55,17 +55,35 @@ impl EtcdClient {
     }
 
     pub async fn LeaseGrant(&self, ttl: i64) -> Result<i64> {
-        let resp = self.client.lock().await.lease_client().grant(ttl, None).await?;
+        let resp = self
+            .client
+            .lock()
+            .await
+            .lease_client()
+            .grant(ttl, None)
+            .await?;
         return Ok(resp.id());
     }
 
     pub async fn LeaseRevoke(&self, leaseId: i64) -> Result<()> {
-        let _resp = self.client.lock().await.lease_client().revoke(leaseId).await?;
-        return Ok(())
+        let _resp = self
+            .client
+            .lock()
+            .await
+            .lease_client()
+            .revoke(leaseId)
+            .await?;
+        return Ok(());
     }
 
-    pub async fn LeaseKeepalive(&self, leaseId: i64) -> Result<()> { 
-        let _resp = self.client.lock().await.lease_client().keep_alive(leaseId).await?;
-        return Ok(())
+    pub async fn LeaseKeepalive(&self, leaseId: i64) -> Result<()> {
+        let _resp = self
+            .client
+            .lock()
+            .await
+            .lease_client()
+            .keep_alive(leaseId)
+            .await?;
+        return Ok(());
     }
 }

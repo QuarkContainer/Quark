@@ -18,8 +18,8 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 
 use crate::common::*;
-use crate::metastore::informer::Informer;
 use crate::metastore::cache_store::CacheStore;
+use crate::metastore::informer::Informer;
 
 use super::data_obj::{DeltaEvent, EventType};
 use super::informer::EventHandler;
@@ -32,7 +32,7 @@ pub struct AggregateClientInner {
     pub closed: AtomicBool,
 
     pub aggregateCacher: CacheStore,
-    
+
     pub objType: String,
     pub tenant: String,
     pub namespace: String,
@@ -66,17 +66,21 @@ impl EventHandler for AggregateClient {
             }
         }
     }
-    
 }
 
 impl AggregateClient {
-    pub fn New(aggregateCacher: &CacheStore, objType: &str, tenant: &str, namespace: &str) -> Result<Self> {
+    pub fn New(
+        aggregateCacher: &CacheStore,
+        objType: &str,
+        tenant: &str,
+        namespace: &str,
+    ) -> Result<Self> {
         let inner = AggregateClientInner {
             closeNotify: Arc::new(Notify::new()),
             closed: AtomicBool::new(false),
 
             aggregateCacher: aggregateCacher.clone(),
-            
+
             objType: objType.to_owned(),
             tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
@@ -91,14 +95,15 @@ impl AggregateClient {
 
     pub async fn Process(&self, addresses: Vec<String>, listNotify: Arc<Notify>) -> Result<()> {
         let informer = Informer::New(
-            addresses, 
-            &self.objType, 
-            &self.tenant, 
-            &self.namespace, 
-            &ListOption::default()
-        ).await?;
+            addresses,
+            &self.objType,
+            &self.tenant,
+            &self.namespace,
+            &ListOption::default(),
+        )
+        .await?;
         informer.AddEventHandler(Arc::new(self.clone())).await?;
-        tokio::select! { 
+        tokio::select! {
             _ = self.closeNotify.notified() => {
                 if self.closed.swap(true, Ordering::SeqCst) == false {
                     let store = informer.store.clone();
@@ -120,8 +125,7 @@ impl AggregateClient {
                 }
             }
         }
-        
-        return Ok(())
+
+        return Ok(());
     }
 }
-
