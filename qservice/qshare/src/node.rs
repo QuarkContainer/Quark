@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Quark Container Authors 
+// Copyright (c) 2023 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::ops::Deref;
-use std::{collections::BTreeMap, sync::Arc, time::SystemTime};
 use k8s_openapi::api::core::v1::Volume;
 use serde::{Deserialize, Serialize};
+use std::ops::Deref;
+use std::{collections::BTreeMap, sync::Arc, time::SystemTime};
 
 use crate::cadvisor_types::MachineInfo;
+use crate::common::*;
 use crate::k8s;
 use crate::metastore::data_obj::{DataObject, DataObjectInner};
-use crate::common::*;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct NodeSystemInfo {
@@ -57,7 +57,7 @@ pub struct NodeAddress {
 }
 
 // CPU, in cores. (500m = .5 cores)
-pub const ResourceCPU :&str = "cpu";
+pub const ResourceCPU: &str = "cpu";
 // Memory, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
 pub const ResourceMemory: &str = "memory";
 // Volume size, in bytes (e,g. 5Gi = 5GiB = 5 * 1024 * 1024 * 1024)
@@ -162,7 +162,7 @@ pub struct NodeDef {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct NodeStatus {
     pub phase: String,
-    
+
     /// List of addresses reachable to the node
     pub addresses: Vec<NodeAddress>,
 
@@ -172,17 +172,15 @@ pub struct NodeStatus {
     /// Capacity represents the total resources of a node
     pub capacity: std::collections::BTreeMap<String, Quantity>,
 
-    /// Conditions is an array of current observed node conditions. 
+    /// Conditions is an array of current observed node conditions.
     pub conditions: Vec<NodeCondition>,
 
     // pub config: QletConfig,
-
     /// List of container images on this node
     pub images: Vec<ContainerImage>,
 
     /// Set of ids/uuids to uniquely identify the node
     pub node_info: NodeSystemInfo,
-
     // /// List of volumes that are attached to the node.
     // pub volumes_attached: Option<Vec<crate::api::core::v1::AttachedVolume>>,
 
@@ -192,8 +190,14 @@ pub struct NodeStatus {
 
 pub fn ResourceListFromMachineInfo(info: &Arc<MachineInfo>) -> BTreeMap<String, Quantity> {
     let mut map = BTreeMap::new();
-    map.insert(ResourceCPU.to_string(), Quantity(info.NumCores as i64 * 1000));
-    map.insert(ResourceMemory.to_string(), Quantity(info.MemoryCapacity as i64));
+    map.insert(
+        ResourceCPU.to_string(),
+        Quantity(info.NumCores as i64 * 1000),
+    );
+    map.insert(
+        ResourceMemory.to_string(),
+        Quantity(info.MemoryCapacity as i64),
+    );
     return map;
 }
 
@@ -227,26 +231,29 @@ pub struct NodeInfo {
 impl NodeInfo {
     pub fn NewFromCadvisorInfo(info: &MachineInfo) -> Self {
         let mut map = BTreeMap::new();
-        map.insert(ResourceCPU.to_string(), Quantity(info.NumCores as i64 * 1000));
-        map.insert(ResourceMemory.to_string(), Quantity(info.MemoryCapacity as i64));
-    
+        map.insert(
+            ResourceCPU.to_string(),
+            Quantity(info.NumCores as i64 * 1000),
+        );
+        map.insert(
+            ResourceMemory.to_string(),
+            Quantity(info.MemoryCapacity as i64),
+        );
 
         return Self {
             architecture: "amd64".to_owned(),
             boot_id: info.BootID.clone(),
             container_runtime_version: "".to_owned(), // todo:...
-            kernel_version: "".to_owned(), // todo:...
+            kernel_version: "".to_owned(),            // todo:...
             machine_id: info.MachineID.clone(),
             operating_system: "linux".to_owned(),
-            system_uuid: info.SystemUUID.clone(),    
-            capacity: map,   
-        }
+            system_uuid: info.SystemUUID.clone(),
+            capacity: map,
+        };
     }
 }
 
-pub struct QNodeInner {
-    
-}
+pub struct QNodeInner {}
 
 pub enum FuncDef {
     PythonFuncDef(PythonFuncDef),
@@ -267,7 +274,7 @@ pub struct Environment {
     pub envs: BTreeMap<String, String>,
     pub commands: Vec<String>,
     pub args: Vec<String>,
-    pub working_dir: String,  
+    pub working_dir: String,
     pub volume_mounts: Vec<VolumeMount>,
 
     pub overhead: BTreeMap<String, Quantity>,
@@ -286,16 +293,14 @@ pub struct FuncServiceSpec {
 
 pub struct FuncServiceDeployConfig {
     pub envDeployments: BTreeMap<String, EnvDeployment>, // envDeployName --> EnvDeployment
-    pub funcMapping: BTreeMap<String, String>, // funcName --> PodName
+    pub funcMapping: BTreeMap<String, String>,           // funcName --> PodName
 }
 
 pub struct FuncServiceDeployment {
     pub envDeployments: BTreeMap<String, PodDef>, // podname --> PodDef
 }
 
-pub struct FuncServiceInstance {
-
-}
+pub struct FuncServiceInstance {}
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct PodDef {
@@ -322,7 +327,7 @@ pub struct PodDef {
     pub runtime_class_name: Option<String>,
     pub security_context: Option<k8s::PodSecurityContext>,
     pub ipAddr: u32,
-    
+
     pub status: PodStatus,
 }
 
@@ -343,8 +348,13 @@ impl PodDef {
 
     pub fn FromDataObject(obj: DataObject) -> Result<Self> {
         let spec = match serde_json::from_str::<Self>(&obj.data) {
-            Err(e) => return Err(Error::CommonError(format!("FuncPackageSpec::FromDataObject {:?}", e))),
-            Ok(s) => s
+            Err(e) => {
+                return Err(Error::CommonError(format!(
+                    "FuncPackageSpec::FromDataObject {:?}",
+                    e
+                )))
+            }
+            Ok(s) => s,
         };
         return Ok(spec);
     }
@@ -376,7 +386,7 @@ impl Deref for PodDefBox {
 
 impl From<PodDef> for PodDefBox {
     fn from(item: PodDef) -> Self {
-        return Self(Arc::new(item))
+        return Self(Arc::new(item));
     }
 }
 
@@ -470,7 +480,7 @@ pub struct ContainerDef {
     pub envs: BTreeMap<String, String>,
     pub commands: Vec<String>,
     pub args: Vec<String>,
-    pub working_dir: String,   
+    pub working_dir: String,
     pub volume_mounts: Vec<VolumeMount>,
     pub stdin: bool,
     pub stdin_once: bool,

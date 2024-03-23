@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::net::IpAddr;
 use local_ip_address::list_afinet_netifas;
 use qshare::node::NodeAddress;
+use std::net::IpAddr;
 
 // NodeHostName identifies a name of the node. Although every node can be assumed
 // to have a NodeAddress of this type, its exact syntax and semantics are not
 // defined, and are not consistent between different clusters.
-pub const NodeHostName : &str = "Hostname";
+pub const NodeHostName: &str = "Hostname";
 
 // NodeInternalIP identifies an IP address which is assigned to one of the node's
 // network interfaces. Every node should have at least one address of this type.
@@ -32,7 +32,7 @@ pub const NodeHostName : &str = "Hostname";
 // NodeInternalIP is the default type of node IP, and does not necessarily imply
 // that the IP is ONLY reachable internally. If a node has multiple internal IPs,
 // no specific semantics are assigned to the additional IPs.
-pub const  NodeInternalIP : &str = "InternalIP";
+pub const NodeInternalIP: &str = "InternalIP";
 
 // NodeExternalIP identifies an IP address which is, in some way, intended to be
 // more usable from outside the cluster then an internal IP, though no specific
@@ -43,19 +43,19 @@ pub const  NodeInternalIP : &str = "InternalIP";
 // NodeInternalIP, or alternatively, packets sent to the external IP may be NAT'ed
 // to an internal node IP rather than being delivered directly (making the IP less
 // efficient for node-to-node traffic than a NodeInternalIP).
-pub const  NodeExternalIP : &str = "ExternalIP";
+pub const NodeExternalIP: &str = "ExternalIP";
 
 // NodeInternalDNS identifies a DNS name which resolves to an IP address which has
 // the characteristics of a NodeInternalIP. The IP it resolves to may or may not
 // be a listed NodeInternalIP address.
-pub const  NodeInternalDNS : &str = "InternalDNS";
+pub const NodeInternalDNS: &str = "InternalDNS";
 
 // NodeExternalDNS identifies a DNS name which resolves to an IP address which has
 // the characteristics of a NodeExternalIP. The IP it resolves to may or may not
 // be a listed NodeExternalIP address.
-pub const  NodeExternalDNS : &str = "ExternalDNS";
+pub const NodeExternalDNS: &str = "ExternalDNS";
 
-pub struct LocalNetworkAddressProvider{
+pub struct LocalNetworkAddressProvider {
     pub nodeIPs: Vec<NodeAddress>,
     pub hostname: String,
 }

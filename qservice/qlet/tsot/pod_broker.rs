@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use tokio::net::TcpSocket;
-use tokio::net::UnixStream;
-use tokio::sync::mpsc;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::atomic::*;
-use std::sync::Mutex;
-use tokio::sync::Notify;
-use std::os::unix::net::SocketAncillary;
-use std::os::fd::{FromRawFd, IntoRawFd, AsRawFd, RawFd};
-use std::os::unix::net::UnixStream as StdStream;
-use std::io::IoSlice;
 use core::ops::Deref;
 use nix::sys::socket::ControlMessageOwned;
 use nix::sys::socket::{recvmsg, MsgFlags};
 use nix::sys::uio::IoVec;
+use std::collections::HashMap;
+use std::io::IoSlice;
+use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
+use std::os::unix::net::SocketAncillary;
+use std::os::unix::net::UnixStream as StdStream;
+use std::sync::atomic::*;
+use std::sync::Arc;
+use std::sync::Mutex;
+use tokio::net::TcpSocket;
+use tokio::net::UnixStream;
+use tokio::sync::mpsc;
+use tokio::sync::Notify;
 
 use qshare::common::*;
 use qshare::tsot_msg::*;
@@ -82,7 +82,7 @@ impl Deref for PodBroker {
 impl PodBroker {
     pub fn New(stream: UnixStream) -> Self {
         let (tx, rx) = mpsc::channel::<TsotMessage>(30);
-        
+
         let inner = PodBrokerInner {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
@@ -94,10 +94,10 @@ impl PodBroker {
             outputTx: tx,
             outputRx: Mutex::new(Some(rx)),
 
-            podSandbox: Mutex::new(None),  
+            podSandbox: Mutex::new(None),
 
-            listeningPorts: Mutex::new(HashMap::new()),  
-            connecting: Mutex::new(HashMap::new()),       
+            listeningPorts: Mutex::new(HashMap::new()),
+            connecting: Mutex::new(HashMap::new()),
         };
 
         return Self(Arc::new(inner));
@@ -109,15 +109,15 @@ impl PodBroker {
                 let inner = podSandbox.lock().unwrap();
                 POD_BRORKER_MGRS.RemoveBroker(&inner.namespace, inner.ip.0)?;
             }
-            None => ()
+            None => (),
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub async fn Init(&self, gatewayRegister: bool) -> Result<()> {
-        let mut readBuf : [u8; BUFF_SIZE] = [0; BUFF_SIZE];
-        let readbufAddr = &readBuf[0] as * const _ as u64;
+        let mut readBuf: [u8; BUFF_SIZE] = [0; BUFF_SIZE];
+        let readbufAddr = &readBuf[0] as *const _ as u64;
         let mut offset = 0;
         while offset != BUFF_SIZE {
             self.stream.readable().await?;
@@ -125,9 +125,7 @@ impl PodBroker {
             offset += cnt;
         }
 
-        let msg = unsafe {
-            *(readbufAddr as * const TsotMsg)
-        };
+        let msg = unsafe { *(readbufAddr as *const TsotMsg) };
 
         match msg {
             TsotMsg::PodRegisterReq(register) => {
@@ -136,9 +134,11 @@ impl PodBroker {
                         containerIp: 0,
                         errorCode: ErrCode::ECONNREFUSED as _,
                     };
-    
+
                     self.SendMsg(TsotMsg::PodRegisterResp(resp).into())?;
-                    return Err(Error::CommonError("Gateway register can't use PodRegisterReq".to_owned()));
+                    return Err(Error::CommonError(
+                        "Gateway register can't use PodRegisterReq".to_owned(),
+                    ));
                 }
                 let podUid = uuid::Uuid::from_bytes(register.podUid).to_string();
                 let podSandbox = NAMESPACE_MGR.GetPodSandbox(&podUid)?;
@@ -147,7 +147,7 @@ impl PodBroker {
 
                 let inner = podSandbox.lock().unwrap();
                 POD_BRORKER_MGRS.AddPodBroker(&inner.namespace, inner.ip.0, self.clone())?;
-    
+
                 let resp = PodRegisterResp {
                     containerIp: inner.ip.0,
                     errorCode: ErrCode::None as _,
@@ -160,19 +160,26 @@ impl PodBroker {
                     let resp = GatewayRegisterResp {
                         errorCode: ErrCode::ECONNREFUSED as _,
                     };
-    
+
                     self.SendMsg(TsotMsg::GatewayRegisterResp(resp).into())?;
-                    return Err(Error::CommonError("Pod register can't use GatewayRegisterReq".to_owned()));
+                    return Err(Error::CommonError(
+                        "Pod register can't use GatewayRegisterReq".to_owned(),
+                    ));
                 }
 
                 let gatewayUid = uuid::Uuid::from_bytes(register.gatewayUid).to_string();
-                let podSandbox = PodSandbox::New(&gatewayUid, "system", "gateway", IpAddress::New(&[127, 1, 2, 3]));
+                let podSandbox = PodSandbox::New(
+                    &gatewayUid,
+                    "system",
+                    "gateway",
+                    IpAddress::New(&[127, 1, 2, 3]),
+                );
 
                 *self.podSandbox.lock().unwrap() = Some(podSandbox.clone());
 
                 let inner = podSandbox.lock().unwrap();
                 POD_BRORKER_MGRS.AddPodBroker(&inner.namespace, inner.ip.0, self.clone())?;
-    
+
                 let resp = GatewayRegisterResp {
                     errorCode: ErrCode::None as _,
                 };
@@ -180,11 +187,14 @@ impl PodBroker {
                 self.SendMsg(TsotMsg::GatewayRegisterResp(resp).into())?;
             }
             m => {
-                return Err(Error::CommonError(format!("ProcessRegisteMsg get unexpect message {:?}", m)))
+                return Err(Error::CommonError(format!(
+                    "ProcessRegisteMsg get unexpect message {:?}",
+                    m
+                )))
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Close(&self) {
@@ -201,12 +211,12 @@ impl PodBroker {
                 return;
             }
         }
-        
+
         match self.ProcessMsgs().await {
             Ok(()) => (),
             Err(Error::SocketClose) => {
                 self.stop.store(false, Ordering::SeqCst);
-            },
+            }
             Err(e) => {
                 error!("podBroker process fail with error {:?}", e);
                 return;
@@ -225,8 +235,8 @@ impl PodBroker {
     pub async fn ProcessMsgs(&self) -> Result<()> {
         let mut rx = self.outputRx.lock().unwrap().take().unwrap();
 
-        let mut msg : Option<TsotMessage> = None;
-        
+        let mut msg: Option<TsotMessage> = None;
+
         loop {
             match msg.take() {
                 None => {
@@ -268,31 +278,29 @@ impl PodBroker {
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn EnqMsg(&self, msg: TsotMessage) -> Result<()> {
         match self.outputTx.try_send(msg) {
             Ok(()) => return Ok(()),
             Err(_e) => {
-                return Err(Error::MpscSendFull(format!("PodBroker Enqueue message fulll")));
+                return Err(Error::MpscSendFull(format!(
+                    "PodBroker Enqueue message fulll"
+                )));
             }
         }
     }
 
     pub fn SendMsg(&self, msg: TsotMessage) -> Result<()> {
         let socket = msg.socket;
-        let msgAddr = &msg.msg as * const _ as u64 as * const u8;
-        let writeBuf = unsafe {
-            std::slice::from_raw_parts(msgAddr, BUFF_SIZE)
-        };
+        let msgAddr = &msg.msg as *const _ as u64 as *const u8;
+        let writeBuf = unsafe { std::slice::from_raw_parts(msgAddr, BUFF_SIZE) };
 
-        let bufs = &[
-            IoSlice::new(writeBuf)
-        ][..];
+        let bufs = &[IoSlice::new(writeBuf)][..];
 
         let raw_fd: RawFd = self.stream.as_raw_fd();
-        let stdStream : StdStream = unsafe { StdStream::from_raw_fd(raw_fd) };
+        let stdStream: StdStream = unsafe { StdStream::from_raw_fd(raw_fd) };
 
         let mut ancillary_buffer = [0; 128];
         let mut ancillary = SocketAncillary::new(&mut ancillary_buffer[..]);
@@ -311,12 +319,12 @@ impl PodBroker {
             Err(e) => {
                 return Err(e.into());
             }
-            Ok(s) => s
+            Ok(s) => s,
         };
 
         assert!(size == BUFF_SIZE);
 
-        return Ok(())
+        return Ok(());
     }
 
     const MAX_FILES: usize = 16 * 4;
@@ -330,25 +338,21 @@ impl PodBroker {
 
                 let mut iter = msg.cmsgs();
                 match iter.next() {
-                    Some(ControlMessageOwned::ScmRights(fds)) => {
-                        return Ok((cnt, fds.to_vec()))
-                    }
+                    Some(ControlMessageOwned::ScmRights(fds)) => return Ok((cnt, fds.to_vec())),
                     None => return Ok((cnt, Vec::new())),
                     _ => return Ok((cnt, Vec::new())),
                 }
             }
-            Err(errno) => {
-                return Err(Error::SysError(errno as i32))
-            }
+            Err(errno) => return Err(Error::SysError(errno as i32)),
         };
     }
 
     pub fn ProcessRead(&self) -> Result<()> {
-        let mut readBuf : [u8; BUFF_SIZE*2] = [0; BUFF_SIZE*2];
-        let readbufAddr = &readBuf[0] as * const _ as u64;
+        let mut readBuf: [u8; BUFF_SIZE * 2] = [0; BUFF_SIZE * 2];
+        let readbufAddr = &readBuf[0] as *const _ as u64;
         let raw_fd: RawFd = self.stream.as_raw_fd();
-        
-        defer!(          
+
+        defer!(
             // reset the tokio::unixstream state
             let mut buf =[0; 0];
             self.stream.try_read(&mut buf).ok();
@@ -368,38 +372,32 @@ impl PodBroker {
             return Err(Error::SocketClose);
         }
 
-        let msg = unsafe {
-            *(readbufAddr as * const TsotMsg)
-        };
+        let msg = unsafe { *(readbufAddr as *const TsotMsg) };
 
         if fds.len() == 0 {
             self.ProcessMsg(msg, None)?;
         } else {
             self.ProcessMsg(msg, Some(fds[0]))?;
         }
-        
-        return Ok(())
+
+        return Ok(());
     }
 
     pub fn ProcessPodRegisterReq(&self, req: PodRegisterReq) -> Result<()> {
         let podUid = uuid::Uuid::from_bytes(req.podUid).to_string();
         let resp = match NAMESPACE_MGR.GetPodSandbox(&podUid) {
-            Err(_e) => {
-                PodRegisterResp {
-                    containerIp: 0,
-                    errorCode: ErrCode::PodUidDonotExisit as _,
-                }
-            }
-            Ok(podSandbox) => {
-                PodRegisterResp {
-                    containerIp: podSandbox.lock().unwrap().ip.0,
-                    errorCode: ErrCode::PodUidDonotExisit as _,
-                }
-            }
+            Err(_e) => PodRegisterResp {
+                containerIp: 0,
+                errorCode: ErrCode::PodUidDonotExisit as _,
+            },
+            Ok(podSandbox) => PodRegisterResp {
+                containerIp: podSandbox.lock().unwrap().ip.0,
+                errorCode: ErrCode::PodUidDonotExisit as _,
+            },
         };
 
         self.SendMsg(TsotMsg::PodRegisterResp(resp).into())?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn ProcessCreateSocketReq(&self, _req: CreateSocketReq) -> Result<()> {
@@ -416,11 +414,16 @@ impl PodBroker {
     }
 
     pub fn ProcessListenReq(&self, req: ListenReq) -> Result<()> {
-        match self.listeningPorts.lock().unwrap().insert(req.port, req.backlog) {
+        match self
+            .listeningPorts
+            .lock()
+            .unwrap()
+            .insert(req.port, req.backlog)
+        {
             None => return Ok(()),
             Some(port) => {
                 error!("ProcessListenReq existing port {}", port);
-                return Ok(())
+                return Ok(());
             }
         }
     }
@@ -435,7 +438,7 @@ impl PodBroker {
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn ProcessStopListenReq(&self, req: StopListenReq) -> Result<()> {
@@ -443,7 +446,7 @@ impl PodBroker {
             Some(_) => return Ok(()),
             None => {
                 error!("ProcessStopListenReq not existing port {}", req.port);
-                return Ok(())
+                return Ok(());
             }
         }
     }
@@ -464,18 +467,23 @@ impl PodBroker {
             srcPort: req.srcPort,
         };
 
-        match self.connecting.lock().unwrap().insert(req.reqId, ConnectReq::PodConnectReq(req.clone())) {
+        match self
+            .connecting
+            .lock()
+            .unwrap()
+            .insert(req.reqId, ConnectReq::PodConnectReq(req.clone()))
+        {
             Some(_) => {
                 panic!("ProcessConnectReq existing reqId {:?}", req);
             }
-            None => ()
+            None => (),
         }
 
         tokio::spawn(async move {
             connection.PodConnectProcess().await;
         });
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn ProcessGatewayConnectReq(&self, req: GatewayConnectReq, socket: i32) -> Result<()> {
@@ -504,18 +512,23 @@ impl PodBroker {
             srcPort: req.srcPort,
         };
 
-        match self.connecting.lock().unwrap().insert(req.reqId, ConnectReq::GatewayConnectReq(req.clone())) {
+        match self
+            .connecting
+            .lock()
+            .unwrap()
+            .insert(req.reqId, ConnectReq::GatewayConnectReq(req.clone()))
+        {
             Some(_) => {
                 panic!("ProcessConnectReq existing reqId {:?}", req);
             }
-            None => ()
+            None => (),
         }
 
         tokio::spawn(async move {
             connection.GatewayConnectProcess().await;
         });
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn ProcessDnsReq(&self, req: DnsReq) -> Result<()> {
@@ -525,9 +538,9 @@ impl PodBroker {
             domains: req.GetDomains(),
         };
         DNS_PROXY.EnqMsg(dnsProxyReq);
-        return Ok(())
+        return Ok(());
     }
-    
+
     pub fn ProcessMsg(&self, msg: TsotMsg, socket: Option<RawFd>) -> Result<()> {
         match msg {
             TsotMsg::PodRegisterReq(m) => {
@@ -536,9 +549,7 @@ impl PodBroker {
             TsotMsg::CreateSocketReq(m) => {
                 self.ProcessCreateSocketReq(m)?;
             }
-            TsotMsg::ListenReq(m) => {
-                self.ProcessListenReq(m)?
-            }
+            TsotMsg::ListenReq(m) => self.ProcessListenReq(m)?,
             TsotMsg::AcceptReq(m) => {
                 self.ProcessAccept(m)?;
             }
@@ -560,14 +571,14 @@ impl PodBroker {
             TsotMsg::DnsReq(m) => {
                 self.ProcessDnsReq(m)?;
             }
-            
+
             m => {
                 error!("ProcessMsg get unimplement msg {:?}", &m);
                 unimplemented!()
-            }            
+            }
         }
-        
-        return Ok(())
+
+        return Ok(());
     }
 
     pub fn HandlePodRegisterResp(&self, containerIp: u32, errorCode: u32) -> Result<()> {
@@ -579,24 +590,34 @@ impl PodBroker {
         return self.EnqMsg(TsotMsg::PodRegisterResp(msg).into());
     }
 
-    pub fn HandleNewPeerConnection(&self, peerIp: u32, peerPort: u16, dstPort: u16, socket: i32) -> Result<()> {
+    pub fn HandleNewPeerConnection(
+        &self,
+        peerIp: u32,
+        peerPort: u16,
+        dstPort: u16,
+        socket: i32,
+    ) -> Result<()> {
         match self.listeningPorts.lock().unwrap().get_mut(&dstPort) {
             Some(count) => {
                 if *count == 0 {
-                    return Err(Error::NotExist(format!("target container doesn't listening the port {dstPort}")));
+                    return Err(Error::NotExist(format!(
+                        "target container doesn't listening the port {dstPort}"
+                    )));
                 }
 
                 *count -= 1;
             }
             None => {
-                return Err(Error::NotExist(format!("target container doesn't listening the port {dstPort}")));
+                return Err(Error::NotExist(format!(
+                    "target container doesn't listening the port {dstPort}"
+                )));
             }
-        } 
+        }
 
         let msg = PeerConnectNotify {
             peerIp: peerIp,
-            peerPort:peerPort,
-            localPort: dstPort
+            peerPort: peerPort,
+            localPort: dstPort,
         };
 
         let message = TsotMessage {
@@ -611,9 +632,9 @@ impl PodBroker {
         match self.connecting.lock().unwrap().remove(&reqId) {
             None => {
                 error!("HandleConnectResp get non exist reqId {}", reqId);
-                return Ok(())
+                return Ok(());
             }
-            Some(_) => ()
+            Some(_) => (),
         }
 
         let msg = PodConnectResp {
@@ -628,9 +649,9 @@ impl PodBroker {
         match self.connecting.lock().unwrap().remove(&reqId) {
             None => {
                 error!("HandleConnectResp get non exist reqId {}", reqId);
-                return Ok(())
+                return Ok(());
             }
-            Some(_) => ()
+            Some(_) => (),
         }
 
         let msg = GatewayConnectResp {
@@ -640,5 +661,4 @@ impl PodBroker {
 
         return self.EnqMsg(TsotMsg::GatewayConnectResp(msg).into());
     }
-
 }

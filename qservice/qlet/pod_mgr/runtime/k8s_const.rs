@@ -37,7 +37,8 @@ pub const SeccompPodAnnotationKey: &str = "seccomp.security.alpha.kubernetes.io/
 // SeccompContainerAnnotationKeyPrefix represents the key of a seccomp profile applied
 // to one container of a pod.
 // Deprecated: set a container security context `seccompProfile` field.
-pub const SeccompContainerAnnotationKeyPrefix: &str = "container.seccomp.security.alpha.kubernetes.io/";
+pub const SeccompContainerAnnotationKeyPrefix: &str =
+    "container.seccomp.security.alpha.kubernetes.io/";
 
 // SeccompProfileRuntimeDefault represents the default seccomp profile used by container runtime.
 // Deprecated: set a pod or container security context `seccompProfile` of type "RuntimeDefault" instead.
@@ -50,11 +51,14 @@ pub const SeccompProfileNameUnconfined: &str = "unconfined";
 pub const SeccompLocalhostProfileNamePrefix: &str = "localhost/";
 
 // AppArmorBetaContainerAnnotationKeyPrefix is the prefix to an annotation key specifying a container's apparmor profile.
-pub const AppArmorBetaContainerAnnotationKeyPrefix: &str = "container.apparmor.security.beta.kubernetes.io/";
+pub const AppArmorBetaContainerAnnotationKeyPrefix: &str =
+    "container.apparmor.security.beta.kubernetes.io/";
 // AppArmorBetaDefaultProfileAnnotatoinKey is the annotation key specifying the default AppArmor profile.
-pub const AppArmorBetaDefaultProfileAnnotationKey: &str = "apparmor.security.beta.kubernetes.io/defaultProfileName";
+pub const AppArmorBetaDefaultProfileAnnotationKey: &str =
+    "apparmor.security.beta.kubernetes.io/defaultProfileName";
 // AppArmorBetaAllowedProfileAnnotationKey is the annotation key specifying the allowed AppArmor profiles.
-pub const AppArmorBetaAllowedProfilesAnnotationKey: &str = "apparmor.security.beta.kubernetes.io/allowedProfileNames";
+pub const AppArmorBetaAllowedProfilesAnnotationKey: &str =
+    "apparmor.security.beta.kubernetes.io/allowedProfileNames";
 
 // AppArmorBetaProfileRuntimeDefault is the profile specifying the runtime default.
 pub const AppArmorBetaProfileRuntimeDefault: &str = "runtime/default";
@@ -85,7 +89,8 @@ pub const kubectlPrefix: &str = "kubectl.kubernetes.io/";
 
 // LastAppliedConfigAnnotation is the annotation used to store the previous
 // configuration of a resource for use in a three way diff by UpdateApplyAnnotation.
-pub static LastAppliedConfigAnnotation: &str = formatcp!("{}/{}", kubectlPrefix, "last-applied-configuration");
+pub static LastAppliedConfigAnnotation: &str =
+    formatcp!("{}/{}", kubectlPrefix, "last-applied-configuration");
 
 // AnnotationLoadBalancerSourceRangesKey is the key of the annotation on a service to set allowed ingress ranges on their LoadBalancers
 //
@@ -94,7 +99,8 @@ pub static LastAppliedConfigAnnotation: &str = formatcp!("{}/{}", kubectlPrefix,
 // access only from the CIDRs currently allocated to MIT & the USPS.
 //
 // Not all cloud providers support this annotation, though AWS & GCE do.
-pub const AnnotationLoadBalancerSourceRangesKey: &str = "service.beta.kubernetes.io/load-balancer-source-ranges";
+pub const AnnotationLoadBalancerSourceRangesKey: &str =
+    "service.beta.kubernetes.io/load-balancer-source-ranges";
 
 // EndpointsLastChangeTriggerTime is the annotation key, set for endpoints objects, that
 // represents the timestamp (stored as RFC 3339 date-time string, e.g. '2018-10-22T19:32:52.1Z')

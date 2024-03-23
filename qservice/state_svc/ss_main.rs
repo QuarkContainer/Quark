@@ -22,19 +22,18 @@
 extern crate log;
 extern crate simple_logging;
 
-pub mod state_svc;
 pub mod QletAggrStore;
+pub mod state_svc;
 
 use qshare::common::*;
 
 use self::state_svc::StateService;
 
-
 #[tokio::main]
 async fn main() -> Result<()> {
     log4rs::init_file("/etc/quark/ss_logging_config.yaml", Default::default()).unwrap();
-    
+
     StateService().await.unwrap();
 
-    return Ok(())
+    return Ok(());
 }

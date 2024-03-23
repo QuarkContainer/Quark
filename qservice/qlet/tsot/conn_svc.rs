@@ -56,12 +56,12 @@ impl TsotConnReq {
                     return Ok("Default".to_owned());
                 }
                 let str = std::str::from_utf8(&self.podNamespace[0..i])?;
-                return Ok(str.to_owned())
+                return Ok(str.to_owned());
             }
         }
 
         let str = std::str::from_utf8(&self.podNamespace)?;
-        return Ok(str.to_owned())
+        return Ok(str.to_owned());
     }
 }
 
@@ -70,7 +70,7 @@ pub struct TsotConnResp {
     pub errcode: u32,
 }
 
-/// the service to waiting for peer tcp connection 
+/// the service to waiting for peer tcp connection
 pub struct ConnectionSvc {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
@@ -84,7 +84,7 @@ impl ConnectionSvc {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
             port: port,
-        }
+        };
     }
 
     pub fn Close(&self) {
@@ -121,7 +121,7 @@ impl ConnectionSvc {
             // }
 
             let res = listener.accept().await;
-            
+
             error!("ConnectionSvc 1 get connection ...");
             match res {
                 Err(_) => continue,
@@ -129,7 +129,9 @@ impl ConnectionSvc {
                     tokio::spawn(async move {
                         let conn = TcpSvcConnection::New(stream);
                         match conn.Process().await {
-                            Err(e) => error!("ConnectionSvc::ProcessConnection fail with error {:?}", e),
+                            Err(e) => {
+                                error!("ConnectionSvc::ProcessConnection fail with error {:?}", e)
+                            }
                             Ok(_) => (),
                         }
                     });
@@ -145,9 +147,7 @@ pub struct TcpSvcConnection {
 
 impl TcpSvcConnection {
     pub fn New(stream: TcpStream) -> Self {
-        return Self {
-            stream: stream
-        }
+        return Self { stream: stream };
     }
 
     pub async fn ProcessConnectionInner(&self) -> Result<()> {
@@ -157,9 +157,16 @@ impl TcpSvcConnection {
         error!("TcpSvcConnection ProcessConnectionInner 2 {:?}", &connReq);
         let namespace = connReq.GetNamespace()?;
         let socket = self.stream.as_raw_fd();
-        
-        POD_BRORKER_MGRS.HandlePeerConnect(&namespace, connReq.dstIp, connReq.dstPort, connReq.srcIp, connReq.srcPort, socket)?;
-        return Ok(())
+
+        POD_BRORKER_MGRS.HandlePeerConnect(
+            &namespace,
+            connReq.dstIp,
+            connReq.dstPort,
+            connReq.srcIp,
+            connReq.srcPort,
+            socket,
+        )?;
+        return Ok(());
     }
 
     pub async fn Process(self) -> Result<()> {
@@ -168,27 +175,27 @@ impl TcpSvcConnection {
                 let resp = TsotConnResp {
                     errcode: TsotErrCode::Reject as _,
                 };
-                
+
                 self.WriteConnResp(resp).await?;
-                return Ok(())
+                return Ok(());
             }
             Ok(()) => {
                 let resp = TsotConnResp {
                     errcode: TsotErrCode::Ok as _,
                 };
-                
+
                 self.WriteConnResp(resp).await?;
                 let stdStream = self.stream.into_std().unwrap();
 
                 // take the ownership of the TcpStream to avoid fd close
                 let _fd = stdStream.into_raw_fd();
-                return Ok(())
+                return Ok(());
             }
         }
     }
 
     pub async fn ReadConnReq(&self) -> Result<TsotConnReq> {
-        const REQ_SIZE : usize = std::mem::size_of::<TsotConnReq>();
+        const REQ_SIZE: usize = std::mem::size_of::<TsotConnReq>();
         let mut readBuf = [0; REQ_SIZE];
         let mut offset = 0;
 
@@ -198,19 +205,15 @@ impl TcpSvcConnection {
             offset += cnt;
         }
 
-        let msg = unsafe {
-            *(&readBuf[0] as * const _ as u64 as * const TsotConnReq)
-        };
+        let msg = unsafe { *(&readBuf[0] as *const _ as u64 as *const TsotConnReq) };
 
-        return Ok(msg)
+        return Ok(msg);
     }
 
     pub async fn WriteConnResp(&self, resp: TsotConnResp) -> Result<()> {
-        const RESP_SIZE : usize = std::mem::size_of::<TsotConnResp>();
-        let addr = &resp as * const _ as u64 as * const u8;
-        let buf = unsafe {
-            std::slice::from_raw_parts(addr, RESP_SIZE)
-        };
+        const RESP_SIZE: usize = std::mem::size_of::<TsotConnResp>();
+        let addr = &resp as *const _ as u64 as *const u8;
+        let buf = unsafe { std::slice::from_raw_parts(addr, RESP_SIZE) };
         let mut offset = 0;
 
         while offset < RESP_SIZE {
@@ -219,7 +222,7 @@ impl TcpSvcConnection {
             offset += cnt;
         }
 
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -243,12 +246,16 @@ impl TcpClientConnection {
         error!("before ProcessConnection");
         match self.ProcessConnection().await {
             Ok(_stream) => {
-                // drop the TcpStream and close the socket 
+                // drop the TcpStream and close the socket
                 error!("before ProcessConnection 2");
-                podBroker.HandlePodConnectResp(self.reqId, ErrCode::None as i32).unwrap();
+                podBroker
+                    .HandlePodConnectResp(self.reqId, ErrCode::None as i32)
+                    .unwrap();
             }
             Err(_e) => {
-                podBroker.HandlePodConnectResp(self.reqId, ErrCode::ECONNREFUSED as i32).unwrap();
+                podBroker
+                    .HandlePodConnectResp(self.reqId, ErrCode::ECONNREFUSED as i32)
+                    .unwrap();
             }
         }
     }
@@ -258,12 +265,16 @@ impl TcpClientConnection {
         error!("before ProcessConnection");
         match self.ProcessConnection().await {
             Ok(_stream) => {
-                // drop the TcpStream and close the socket 
+                // drop the TcpStream and close the socket
                 error!("before ProcessConnection 2");
-                podBroker.HandleGatewayConnectResp(self.reqId, ErrCode::None as i32).unwrap();
+                podBroker
+                    .HandleGatewayConnectResp(self.reqId, ErrCode::None as i32)
+                    .unwrap();
             }
             Err(_e) => {
-                podBroker.HandleGatewayConnectResp(self.reqId, ErrCode::ECONNREFUSED as i32).unwrap();
+                podBroker
+                    .HandleGatewayConnectResp(self.reqId, ErrCode::ECONNREFUSED as i32)
+                    .unwrap();
             }
         }
     }
@@ -276,33 +287,34 @@ impl TcpClientConnection {
             dstIp: self.dstIp,
             dstPort: self.dstPort,
             srcIp: self.srcIp,
-            srcPort: self.srcPort
+            srcPort: self.srcPort,
         };
-        
+
         for i in 0..self.podNamespace.as_bytes().len() {
             req.podNamespace[i] = self.podNamespace.as_bytes()[i];
         }
 
         self.WriteConnReq(&stream, req).await?;
-        
+
         let resp = self.ReadConnResp(&stream).await?;
-        
+
         if resp.errcode != TsotErrCode::Ok as u32 {
-            return Err(Error::CommonError(format!("TcpClientConnection connect fail with error {:?}", resp.errcode)));
+            return Err(Error::CommonError(format!(
+                "TcpClientConnection connect fail with error {:?}",
+                resp.errcode
+            )));
         }
 
-        return Ok(stream)
+        return Ok(stream);
     }
 
     pub async fn Connect(&self) -> Result<TcpStream> {
         let peer = PEER_MGR.LookforPeer(self.dstIp)?;
         let ip = Ipv4Addr::from(peer.hostIp);
-        
+
         let socketv4Addr = SocketAddrV4::new(ip, peer.port);
 
-        let socket = unsafe {
-            TcpSocket::from_raw_fd(self.socket)
-        };
+        let socket = unsafe { TcpSocket::from_raw_fd(self.socket) };
 
         //let addr = "127.0.0.1:1235".parse().unwrap();
         let stream = match socket.connect(socketv4Addr.into()).await {
@@ -316,7 +328,7 @@ impl TcpClientConnection {
     }
 
     pub async fn ReadConnResp(&self, stream: &TcpStream) -> Result<TsotConnResp> {
-        const RESP_SIZE : usize = std::mem::size_of::<TsotConnResp>();
+        const RESP_SIZE: usize = std::mem::size_of::<TsotConnResp>();
         let mut readBuf = [0; RESP_SIZE];
         let mut offset = 0;
 
@@ -326,19 +338,15 @@ impl TcpClientConnection {
             offset += cnt;
         }
 
-        let msg = unsafe {
-            *(&readBuf[0] as * const _ as u64 as * const TsotConnResp)
-        };
+        let msg = unsafe { *(&readBuf[0] as *const _ as u64 as *const TsotConnResp) };
 
-        return Ok(msg)
+        return Ok(msg);
     }
 
     pub async fn WriteConnReq(&self, stream: &TcpStream, resp: TsotConnReq) -> Result<()> {
-        const REQ_SIZE : usize = std::mem::size_of::<TsotConnReq>();
-        let addr = &resp as * const _ as u64 as * const u8;
-        let buf = unsafe {
-            std::slice::from_raw_parts(addr, REQ_SIZE)
-        };
+        const REQ_SIZE: usize = std::mem::size_of::<TsotConnReq>();
+        let addr = &resp as *const _ as u64 as *const u8;
+        let buf = unsafe { std::slice::from_raw_parts(addr, REQ_SIZE) };
         let mut offset = 0;
 
         while offset < REQ_SIZE {
@@ -347,6 +355,6 @@ impl TcpClientConnection {
             offset += cnt;
         }
 
-        return Ok(())
+        return Ok(());
     }
 }

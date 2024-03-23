@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap; 
+use std::collections::HashMap;
 use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::Mutex;
-
 
 use qshare::common::*;
 
@@ -58,13 +57,13 @@ impl Namespace {
         let inner = self.lock().unwrap();
         let addr = inner.cidr.Allocate()?;
 
-        return Ok(addr)
+        return Ok(addr);
     }
 
     pub fn RemovePodSandboxAddr(&self, addr: IpAddress) -> Result<()> {
         let inner = self.lock().unwrap();
         inner.cidr.Free(addr)?;
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -80,14 +79,18 @@ pub struct NamespaceMgrInner {
 impl NamespaceMgrInner {
     pub fn RemovePodSandbox(&mut self, uid: &str) -> Result<()> {
         match self.podSandboxes.remove(uid) {
-            None => return Err(Error::NotExist(format!("RemovePodSandbox has no podsandbox with uid {uid}"))),
+            None => {
+                return Err(Error::NotExist(format!(
+                    "RemovePodSandbox has no podsandbox with uid {uid}"
+                )))
+            }
             Some(sandbox) => {
                 let ns = sandbox.lock().unwrap().namespace.clone();
                 let addr = sandbox.lock().unwrap().ip.clone();
                 let namespace = self.GetNamespace(&ns)?;
                 namespace.RemovePodSandboxAddr(addr)?;
-                
-                return Ok(())
+
+                return Ok(());
             }
         }
     }
@@ -95,7 +98,9 @@ impl NamespaceMgrInner {
     pub fn GetNamespace(&self, namespace: &str) -> Result<Namespace> {
         match self.namespaces.get(namespace) {
             None => {
-                return Err(Error::NotExist(format!("NamespaceMgr namespace {namespace} doesn't exist")))
+                return Err(Error::NotExist(format!(
+                    "NamespaceMgr namespace {namespace} doesn't exist"
+                )))
             }
             Some(ns) => {
                 return Ok(ns.clone());
@@ -127,7 +132,7 @@ impl NamespaceMgr {
             podSandboxes: HashMap::new(),
         };
 
-        return Self(Arc::new(Mutex::new(inner)))
+        return Self(Arc::new(Mutex::new(inner)));
     }
 
     pub fn GetOrCreateNamespace(&self, namespace: &str) -> Namespace {
@@ -157,11 +162,13 @@ impl NamespaceMgr {
         match inner.podSandboxes.insert(uid.to_owned(), podsandbox) {
             None => (),
             Some(_) => {
-                return Err(Error::Exist(format!("NewPodSandbox exist podsandbox with uid {uid}")))
+                return Err(Error::Exist(format!(
+                    "NewPodSandbox exist podsandbox with uid {uid}"
+                )))
             }
         }
 
-        return Ok(addr)
+        return Ok(addr);
     }
 
     pub fn RemovePodSandbox(&self, uid: &str) -> Result<()> {
@@ -170,12 +177,14 @@ impl NamespaceMgr {
 
     pub fn GetPodSandbox(&self, uid: &str) -> Result<PodSandbox> {
         let inner = self.lock().unwrap();
-        
+
         match inner.podSandboxes.get(uid) {
-            None => return Err(Error::NotExist(format!("the podsandbox with uid {uid} not exist"))),
-            Some(podsandbox) => {
-                return Ok(podsandbox.clone())
+            None => {
+                return Err(Error::NotExist(format!(
+                    "the podsandbox with uid {uid} not exist"
+                )))
             }
+            Some(podsandbox) => return Ok(podsandbox.clone()),
         }
     }
 

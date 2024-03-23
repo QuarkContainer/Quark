@@ -14,7 +14,7 @@
 
 use std::time::Duration;
 
-use super::{qpod::QuarkPod, qcontainer::QuarkContainer};
+use super::{qcontainer::QuarkContainer, qpod::QuarkPod};
 
 pub enum MsgType {
     Node,

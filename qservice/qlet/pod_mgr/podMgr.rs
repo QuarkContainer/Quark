@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
-use std::result::Result as SResult;
 use podMgr::node_register::NodeRegister;
 use podMgr::qlet_store::QletStateService;
 use qshare::k8s::ConfigMap;
@@ -21,22 +19,24 @@ use qshare::k8s::HostPathVolumeSource;
 use qshare::k8s::Volume;
 use qshare::node::ContainerPort;
 use qshare::node::*;
+use std::collections::BTreeMap;
+use std::result::Result as SResult;
 use tonic::transport::Server;
 
 use podMgr::podmgr_agent::PmAgent;
+use qshare::common::*;
 use qshare::consts::ConfigMapFromString;
 use qshare::consts::NodeFromString;
 use qshare::consts::PodFromString;
-use qshare::na;
 use qshare::crictl;
-use qshare::common::*;
+use qshare::na;
 
 use crate::pod_mgr::*;
 use crate::QLET_CONFIG;
 
-use super::qnode::QuarkNode;
-use super::{CADVISOR_PROVIDER, RUNTIME_MGR, QLET_STORE};
 use super::cadvisor::provider::CadvisorInfoProvider;
+use super::qnode::QuarkNode;
+use super::{CADVISOR_PROVIDER, QLET_STORE, RUNTIME_MGR};
 
 pub struct PodMgr {
     pub pmAgent: PmAgent,
@@ -44,28 +44,27 @@ pub struct PodMgr {
 
 impl PodMgr {
     pub async fn New() -> Result<Self> {
-        CADVISOR_PROVIDER.set(CadvisorInfoProvider::New().await.unwrap()).unwrap();
+        CADVISOR_PROVIDER
+            .set(CadvisorInfoProvider::New().await.unwrap())
+            .unwrap();
         RUNTIME_MGR.set(RuntimeMgr::New(10).await.unwrap()).unwrap();
-        IMAGE_MGR.set(ImageMgr::New(crictl::AuthConfig::default()).await.unwrap()).unwrap();
+        IMAGE_MGR
+            .set(ImageMgr::New(crictl::AuthConfig::default()).await.unwrap())
+            .unwrap();
         QLET_STORE.set(QletStore::New().await.unwrap()).unwrap();
-        
+
         let config = &NODE_CONFIG;
         let nodename = &QLET_CONFIG.nodeName;
 
         PmAgent::CleanPods(nodename).await?;
-    
+
         let quarkNode = QuarkNode::NewQuarkNode(&QLET_CONFIG, &config)?;
         let pmAgent = PmAgent::New(&quarkNode)?;
         pmAgent.Start().await?;
-        return Ok(Self {
-            pmAgent: pmAgent
-        });
+        return Ok(Self { pmAgent: pmAgent });
     }
 
-    pub fn CreateFuncPod(
-        &self, 
-        req: na::CreateFuncPodReq
-    ) -> Result<IpAddress> {
+    pub fn CreateFuncPod(&self, req: na::CreateFuncPodReq) -> Result<IpAddress> {
         let mut labels = BTreeMap::new();
         for kv in req.labels {
             labels.insert(kv.key.clone(), kv.val.clone());
@@ -88,12 +87,12 @@ impl PodMgr {
 
         let mut volumes = Vec::new();
         let mut volumeMounts: Vec<VolumeMount> = Vec::new();
-        
+
         for mount in &req.mounts {
             let volume = Volume {
                 name: mount.host_path.clone(), // "/home/brad/rust/Quark/test".to_owned(),
-                host_path: Some(HostPathVolumeSource{
-                    path: mount.host_path.clone(),// "/home/brad/rust/Quark/test".to_owned(),
+                host_path: Some(HostPathVolumeSource {
+                    path: mount.host_path.clone(), // "/home/brad/rust/Quark/test".to_owned(),
                     ..Default::default()
                 }),
                 ..Default::default()
@@ -140,14 +139,13 @@ impl PodMgr {
 
         let addr = self.pmAgent.CreatePod(&pod, &configMap)?;
         return Ok(addr);
-        
     }
 
     pub fn CreatePod(&self, req: na::CreatePodReq) -> Result<()> {
         let pod = PodFromString(&req.pod)?;
         let configMap = ConfigMapFromString(&req.config_map)?;
         self.pmAgent.CreatePod(&pod, &configMap)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn PodId(&self, tenant: &str, namespace: &str, name: &str) -> String {
@@ -162,7 +160,7 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
         request: tonic::Request<na::CreatePodReq>,
     ) -> SResult<tonic::Response<na::CreatePodResp>, tonic::Status> {
         let req = request.into_inner();
-        match self.CreatePod(req) {  
+        match self.CreatePod(req) {
             Ok(()) => (),
             Err(e) => {
                 return Ok(tonic::Response::new(na::CreatePodResp {
@@ -171,8 +169,8 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
             }
         }
         return Ok(tonic::Response::new(na::CreatePodResp {
-            error: "".to_owned()
-        }))
+            error: "".to_owned(),
+        }));
     }
 
     async fn get_pod(
@@ -180,15 +178,15 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
         request: tonic::Request<na::GetPodReq>,
     ) -> SResult<tonic::Response<na::GetPodResp>, tonic::Status> {
         let req = request.into_inner();
-        let podId = &self.PodId(&req.tenant, & &req.namespace, &req.name);
-        match NODEAGENT_STORE.GetPod(podId) {  
+        let podId = &self.PodId(&req.tenant, &&req.namespace, &req.name);
+        match NODEAGENT_STORE.GetPod(podId) {
             Ok((rev, pod)) => {
                 error!("pod is {:?}", serde_json::to_string_pretty(&pod).unwrap());
                 return Ok(tonic::Response::new(na::GetPodResp {
                     error: "".to_owned(),
                     pod: serde_json::to_string_pretty(&pod).unwrap(),
                     revision: rev,
-                }))
+                }));
             }
             Err(e) => {
                 return Ok(tonic::Response::new(na::GetPodResp {
@@ -197,9 +195,8 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
                 }))
             }
         }
-
     }
-    
+
     async fn terminate_pod(
         &self,
         request: tonic::Request<na::TerminatePodReq>,
@@ -214,7 +211,7 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
             }
             Ok(()) => {
                 return Ok(tonic::Response::new(na::TerminatePodResp {
-                    error: "".to_owned()
+                    error: "".to_owned(),
                 }));
             }
         }
@@ -226,9 +223,7 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
     ) -> SResult<tonic::Response<na::CreateFuncPodResp>, tonic::Status> {
         let req = request.into_inner();
 
-        match self.CreateFuncPod(
-            req
-        ) {
+        match self.CreateFuncPod(req) {
             Err(e) => {
                 return Ok(tonic::Response::new(na::CreateFuncPodResp {
                     error: format!("fail: {:?}", e),
@@ -255,11 +250,9 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
                     error: format!("fail: {:?}", e),
                 }))
             }
-            Ok(n) => {
-                n
-            }
+            Ok(n) => n,
         };
-        
+
         match self.pmAgent.NodeConfigure(&node).await {
             Err(e) => {
                 return Ok(tonic::Response::new(na::NodeConfigResp {
@@ -268,7 +261,7 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
             }
             Ok(()) => {
                 return Ok(tonic::Response::new(na::NodeConfigResp {
-                    error: "".to_owned()
+                    error: "".to_owned(),
                 }))
             }
         }
@@ -281,17 +274,19 @@ pub async fn PodMgrSvc() -> Result<()> {
     let podMgrAddr = format!("0.0.0.0:{}", QLET_CONFIG.podMgrPort);
 
     let podMgrSvcFuture = Server::builder()
-        .add_service(na::node_agent_service_server::NodeAgentServiceServer::new(podMgr))
+        .add_service(na::node_agent_service_server::NodeAgentServiceServer::new(
+            podMgr,
+        ))
         .serve(podMgrAddr.parse().unwrap());
 
     let nodeRegister = NodeRegister::New(
-        &QLET_CONFIG.etcdAddresses, 
-        &QLET_CONFIG.nodeName, 
+        &QLET_CONFIG.etcdAddresses,
+        &QLET_CONFIG.nodeName,
         &QLET_CONFIG.nodeIp,
-        QLET_CONFIG.podMgrPort, 
+        QLET_CONFIG.podMgrPort,
         QLET_CONFIG.tsotSvcPort,
         QLET_CONFIG.stateSvcPort,
-        &QLET_CONFIG.cidr
+        &QLET_CONFIG.cidr,
     );
 
     let nodeRegisterFuture = nodeRegister.Process();
@@ -311,6 +306,6 @@ pub async fn PodMgrSvc() -> Result<()> {
         }
     }
     info!("pod manager finish ...");
-    
-    return Ok(())
+
+    return Ok(());
 }

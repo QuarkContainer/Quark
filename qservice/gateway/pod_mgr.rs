@@ -38,11 +38,21 @@ impl Deref for PodMgr {
 }
 
 impl PodMgr {
-    pub fn GetFuncPods(&self, tenant: &str, namespace: &str, funcname: &str) -> Result<Vec<PodDef>> {
+    pub fn GetFuncPods(
+        &self,
+        tenant: &str,
+        namespace: &str,
+        funcname: &str,
+    ) -> Result<Vec<PodDef>> {
         use std::ops::Bound::*;
-        let start = format!("{}/{}/{}_",tenant, namespace, funcname);
+        let start = format!("{}/{}/{}_", tenant, namespace, funcname);
         let mut vec = Vec::new();
-        for (key, val) in self.lock().unwrap().pods.range::<String, _>((Included(start.clone()), std::ops::Bound::Unbounded)) {
+        for (key, val) in self
+            .lock()
+            .unwrap()
+            .pods
+            .range::<String, _>((Included(start.clone()), std::ops::Bound::Unbounded))
+        {
             if key.starts_with(&start) {
                 vec.push(val.as_ref().clone());
             } else {
@@ -50,7 +60,7 @@ impl PodMgr {
             }
         }
 
-        return Ok(vec)
+        return Ok(vec);
     }
 
     pub fn Add(&self, podDef: PodDef) -> Result<()> {
@@ -61,9 +71,9 @@ impl PodMgr {
         }
 
         inner.pods.insert(key, podDef.into());
-        
-        return Ok(())
-    } 
+
+        return Ok(());
+    }
 
     pub fn Update(&self, podDef: PodDef) -> Result<()> {
         let key = format!("{}/{}/{}", &podDef.tenant, &podDef.namespace, &podDef.name);
@@ -73,8 +83,8 @@ impl PodMgr {
         }
 
         inner.pods.insert(key, podDef.into());
-        
-        return Ok(())
+
+        return Ok(());
     }
 
     pub fn Remove(&self, podDef: PodDef) -> Result<()> {
@@ -85,7 +95,7 @@ impl PodMgr {
         }
 
         inner.pods.remove(&key);
-        
-        return Ok(())
-    } 
+
+        return Ok(());
+    }
 }

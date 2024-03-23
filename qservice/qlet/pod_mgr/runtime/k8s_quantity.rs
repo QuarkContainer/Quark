@@ -1,4 +1,4 @@
-/* 
+/*
 MIT License
 
 Copyright (c) 2022 Alejandro Llanes
@@ -30,7 +30,7 @@ use std::collections::BTreeMap;
 use qshare::node::Quantity;
 
 // CPU, in cores. (500m = .5 cores)
-pub const ResourceCPU :&str = "cpu";
+pub const ResourceCPU: &str = "cpu";
 // Memory, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
 pub const ResourceMemory: &str = "memory";
 // Volume size, in bytes (e,g. 5Gi = 5GiB = 5 * 1024 * 1024 * 1024)
@@ -53,7 +53,10 @@ impl QuarkResource {
         ret.insert(ResourceCPU.to_string(), Quantity(self.cpu));
         ret.insert(ResourceMemory.to_string(), Quantity(self.memory));
         ret.insert(ResourceStorage.to_string(), Quantity(self.storage));
-        ret.insert(ResourceEphemeralStorage.to_string(), Quantity(self.ephemeralStorage));
+        ret.insert(
+            ResourceEphemeralStorage.to_string(),
+            Quantity(self.ephemeralStorage),
+        );
         return ret;
     }
 
@@ -83,7 +86,7 @@ impl QuarkResource {
             memory: memory,
             storage: storage,
             ephemeralStorage: ephemeralStorage,
-        }
+        };
     }
 
     pub fn Add(&mut self, r: &QuarkResource) {
@@ -142,7 +145,7 @@ impl QuantityMemoryUnits {
 //     let mt = cap.unwrap().get(0).unwrap();
 //     let unit_str = unit_str.replace(mt.as_str(), "");
 //     Ok(unit_str.parse::<i64>()?)
-// } 
+// }
 
 // pub fn QuantityToBytes(q: &Quantity) -> Result<i64> {
 //     let unit_str = &q.0;
@@ -230,4 +233,3 @@ impl QuantityMemoryUnits {
 //         None => Err(Error::CommonError("Invalid unit".to_string())),
 //     }
 // }
-

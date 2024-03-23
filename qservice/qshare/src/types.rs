@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -25,12 +24,12 @@ pub struct NodeInfo {
     pub podMgrPort: u16,
     pub tsotSvcPort: u16,
     pub stateSvcPort: u16,
-    pub cidr: String
+    pub cidr: String,
 }
 
 pub enum PodType {
     Normal,
-    Python(String)
+    Python(String),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -53,7 +52,7 @@ pub struct RuntimeContainer {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RuntimePodStatus {
     pub sandboxStatus: cri::PodSandboxStatus,
-    pub containerStatus: BTreeMap<String, cri::ContainerStatus>
+    pub containerStatus: BTreeMap<String, cri::ContainerStatus>,
 }
 
 // ContainerStatus represents the cri status of a container and nodeagent status.

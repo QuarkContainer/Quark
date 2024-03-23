@@ -24,73 +24,77 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use serde_derive::{Deserialize, Serialize};  
-use std::{sync::Arc, collections::BTreeMap};
-use std::ops::{Deref};
-use std::ops::Add;
-use std::ops::Sub;
 use regex::Regex;
+use serde_derive::{Deserialize, Serialize};
+use std::ops::Add;
+use std::ops::Deref;
+use std::ops::Sub;
+use std::{collections::BTreeMap, sync::Arc};
 
 use prost::Message;
 
 use crate::common::*;
+use crate::k8s;
 use crate::qmeta::*;
 use crate::ObjectMeta;
-use crate::k8s;
 // use crate::system_types::{FuncPackage, FuncPackageSpec};
 // use crate::func;
 
-use super::selector::Labels;
 use super::selection_predicate::*;
+use super::selector::Labels;
 
-
-pub const QMETASVC_PORT : u16 = 8890; 
-pub const GATEWAY_PORT : u16 = 8889;
-pub const NODEMGRSVC_ADDR : &str = "127.0.0.1:8888";
-pub const STATESVC_ADDR : &str = "127.0.0.1:8890";
-pub const FUNCSVC_ADDR : &str = "127.0.0.1:8891";
+pub const QMETASVC_PORT: u16 = 8890;
+pub const GATEWAY_PORT: u16 = 8889;
+pub const NODEMGRSVC_ADDR: &str = "127.0.0.1:8888";
+pub const STATESVC_ADDR: &str = "127.0.0.1:8890";
+pub const FUNCSVC_ADDR: &str = "127.0.0.1:8891";
 pub const AUDITDB_ADDR: &str = "postgresql://audit_user:123456@localhost/auditdb";
 pub const OBJECTDB_ADDR: &str = "postgresql://blob_user:123456@localhost/blobdb";
 
-pub const QUARK_POD : &str = "qpod";
-pub const QUARK_NODE : &str = "qnode";
+pub const QUARK_POD: &str = "qpod";
+pub const QUARK_NODE: &str = "qnode";
 
-pub const POD_DELETION_GRACE_PERIOD_LABEL           : &str = "io.kubernetes.pod.deletionGracePeriod";
-pub const POD_TERMINATION_GRACE_PERIOD_LABEL        : &str = "io.kubernetes.pod.terminationGracePeriod";
+pub const POD_DELETION_GRACE_PERIOD_LABEL: &str = "io.kubernetes.pod.deletionGracePeriod";
+pub const POD_TERMINATION_GRACE_PERIOD_LABEL: &str = "io.kubernetes.pod.terminationGracePeriod";
 
-pub const CONTAINER_HASH_LABEL                      : &str = "io.kubernetes.container.hash";
-pub const CONTAINER_RESTART_COUNT_LABEL             : &str = "io.kubernetes.container.restartCount";
-pub const CONTAINER_TERMINATION_MESSAGE_PATH_LABEL  : &str = "io.kubernetes.container.terminationMessagePath";
-pub const CONTAINER_TERMINATION_MESSAGE_POLICY_LABEL: &str = "io.kubernetes.container.terminationMessagePolicy";
-pub const CONTAINER_PRE_STOP_HANDLER_LABEL          : &str = "io.kubernetes.container.preStopHandler";
-pub const CONTAINER_PORTS_LABEL                     : &str = "io.kubernetes.container.ports";
+pub const CONTAINER_HASH_LABEL: &str = "io.kubernetes.container.hash";
+pub const CONTAINER_RESTART_COUNT_LABEL: &str = "io.kubernetes.container.restartCount";
+pub const CONTAINER_TERMINATION_MESSAGE_PATH_LABEL: &str =
+    "io.kubernetes.container.terminationMessagePath";
+pub const CONTAINER_TERMINATION_MESSAGE_POLICY_LABEL: &str =
+    "io.kubernetes.container.terminationMessagePolicy";
+pub const CONTAINER_PRE_STOP_HANDLER_LABEL: &str = "io.kubernetes.container.preStopHandler";
+pub const CONTAINER_PORTS_LABEL: &str = "io.kubernetes.container.ports";
 
-pub const KUBERNETES_POD_NAME_LABEL         : &str = "io.kubernetes.pod.name";
-pub const KUBERNETES_POD_NAMESPACE_LABEL    : &str = "io.kubernetes.pod.namespace";
-pub const KUBERNETES_POD_UIDLABEL           : &str = "io.kubernetes.pod.uid";
-pub const KUBERNETES_CONTAINER_NAME_LABEL   : &str = "io.kubernetes.container.name";
+pub const KUBERNETES_POD_NAME_LABEL: &str = "io.kubernetes.pod.name";
+pub const KUBERNETES_POD_NAMESPACE_LABEL: &str = "io.kubernetes.pod.namespace";
+pub const KUBERNETES_POD_UIDLABEL: &str = "io.kubernetes.pod.uid";
+pub const KUBERNETES_CONTAINER_NAME_LABEL: &str = "io.kubernetes.container.name";
 
-pub const LabelNodeMgrNodeDaemon              : &str = "daemon.qserverless.quarksoft.io";
-pub const LabelNodeMgrApplication             : &str = "application.core.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrNode               : &str = "node.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrPod                : &str = "pod.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrCreationUnixMicro  : &str = "create.unixmicro.core.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrSessionService     : &str = "sessionservice.core.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrApplicationSession : &str = "applicationsession.core.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrNodeRevision       : &str = "noderevision.core.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrHibernatePod       : &str = "hibernatepod.core.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrSessionServicePod  : &str = "sessionservicepod.core.qserverless.quarksoft.io";
-pub const AnnotationFuncPodPackageName        : &str = "packagename.qserverless.quarksoft.io";
-pub const AnnotationFuncPodPackageType        : &str = "packagetype.qserverless.quarksoft.io";
-pub const AnnotationFuncPodPyPackageId        : &str = "pypackageid.qserverless.quarksoft.io";
-pub const EnvVarNodeMgrPodId                  : &str = "qserverless_podid";
-pub const EnvVarNodeMgrNamespace              : &str = "qserverless_namespace";
-pub const EnvVarNodeMgrPackageId              : &str = "qserverless_packageid";
-pub const EnvVarNodeAgentAddr                 : &str = "qserverless_nodeagentaddr";
-pub const DefaultNodeAgentAddr                : &str = "unix:///var/lib/quark/nodeagent/sock";
-pub const DefaultNodeFuncLogFolder            : &str = "/var/log/quark";
+pub const LabelNodeMgrNodeDaemon: &str = "daemon.qserverless.quarksoft.io";
+pub const LabelNodeMgrApplication: &str = "application.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrNode: &str = "node.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrPod: &str = "pod.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrCreationUnixMicro: &str =
+    "create.unixmicro.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrSessionService: &str = "sessionservice.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrApplicationSession: &str =
+    "applicationsession.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrNodeRevision: &str = "noderevision.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrHibernatePod: &str = "hibernatepod.core.qserverless.quarksoft.io";
+pub const AnnotationNodeMgrSessionServicePod: &str =
+    "sessionservicepod.core.qserverless.quarksoft.io";
+pub const AnnotationFuncPodPackageName: &str = "packagename.qserverless.quarksoft.io";
+pub const AnnotationFuncPodPackageType: &str = "packagetype.qserverless.quarksoft.io";
+pub const AnnotationFuncPodPyPackageId: &str = "pypackageid.qserverless.quarksoft.io";
+pub const EnvVarNodeMgrPodId: &str = "qserverless_podid";
+pub const EnvVarNodeMgrNamespace: &str = "qserverless_namespace";
+pub const EnvVarNodeMgrPackageId: &str = "qserverless_packageid";
+pub const EnvVarNodeAgentAddr: &str = "qserverless_nodeagentaddr";
+pub const DefaultNodeAgentAddr: &str = "unix:///var/lib/quark/nodeagent/sock";
+pub const DefaultNodeFuncLogFolder: &str = "/var/log/quark";
 
-pub const BLOB_LOCAL_HOST                     : &str = "local";
+pub const BLOB_LOCAL_HOST: &str = "local";
 
 pub const ERROR_SOURCE_SYSTEM: i32 = 1;
 pub const ERROR_SOURCE_USER: i32 = 2;
@@ -183,7 +187,6 @@ pub trait DeepCopy {
     fn DeepCopy(&self) -> Self;
 }
 
-
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EventType {
     None,
@@ -247,13 +250,13 @@ pub struct DataObjectInner {
 
 impl PartialEq for DataObjectInner {
     fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind &&
-        self.tenant == other.tenant &&
-        self.namespace == other.namespace &&
-        self.lables == other.lables &&
-        self.annotations == other.annotations &&
-        self.revision == other.revision &&
-        self.data == other.data
+        self.kind == other.kind
+            && self.tenant == other.tenant
+            && self.namespace == other.namespace
+            && self.lables == other.lables
+            && self.annotations == other.annotations
+            && self.revision == other.revision
+            && self.data == other.data
     }
 }
 impl Eq for DataObjectInner {}
@@ -270,7 +273,7 @@ impl DataObjectInner {
             channelRev: channelRev,
             revision: revision,
             data: self.data.clone(),
-        }
+        };
     }
 }
 
@@ -284,9 +287,9 @@ impl DeepCopy for DataObjectInner {
             lables: self.lables.Copy(),
             annotations: self.annotations.Copy(),
             channelRev: self.channelRev,
-            revision:self.revision,
+            revision: self.revision,
             data: self.data.clone(),
-        }
+        };
     }
 }
 
@@ -355,13 +358,18 @@ pub struct DataObjList {
 }
 
 impl DataObjList {
-    pub fn New(objs: Vec<DataObject>, revision: i64, continue_: Option<Continue>, remainCount: i64) -> Self {
+    pub fn New(
+        objs: Vec<DataObject>,
+        revision: i64,
+        continue_: Option<Continue>,
+        remainCount: i64,
+    ) -> Self {
         return Self {
             objs: objs,
-            revision:  revision,
+            revision: revision,
             continue_: continue_,
             remainCount: remainCount,
-        }
+        };
     }
 }
 
@@ -431,7 +439,12 @@ impl DataObject {
             annotations: annotations.into(),
             lables: labels.into(),
             channelRev: 0,
-            revision: meta.resource_version.as_deref().unwrap_or("0").parse::<i64>().unwrap_or(0),
+            revision: meta
+                .resource_version
+                .as_deref()
+                .unwrap_or("0")
+                .parse::<i64>()
+                .unwrap_or(0),
             data: data,
         };
 
@@ -511,7 +524,10 @@ impl DataObject {
     }
 
     pub fn StoreKey(&self) -> String {
-        return format!("{}/{}/{}/{}", &self.kind, &self.tenant, &self.namespace, &self.name);
+        return format!(
+            "{}/{}/{}/{}",
+            &self.kind, &self.tenant, &self.namespace, &self.name
+        );
     }
 
     pub fn Object(&self) -> Object {
@@ -523,7 +539,7 @@ impl DataObject {
             labels: self.lables.ToVec(),
             annotations: self.annotations.ToVec(),
             data: self.data.clone(),
-        }
+        };
     }
 
     pub fn Obj(&self) -> Obj {
@@ -537,7 +553,7 @@ impl DataObject {
             labels: self.lables.ToVec(),
             annotations: self.annotations.ToVec(),
             data: self.data.clone(),
-        }
+        };
     }
 
     pub fn Revision(&self) -> i64 {
@@ -550,42 +566,42 @@ impl DataObject {
     }*/
 
     pub fn Encode(&self) -> Result<Vec<u8>> {
-        let mut buf : Vec<u8> = Vec::new();
+        let mut buf: Vec<u8> = Vec::new();
         let obj = self.Object();
         buf.reserve(obj.encoded_len());
         obj.encode(&mut buf)?;
-        return Ok(buf)
+        return Ok(buf);
     }
 
     pub fn Labels(&self) -> Labels {
         let lables = self.lables.clone();
-        return lables
+        return lables;
     }
 }
 
 impl Object {
     pub fn DeepCopy(&self) -> Self {
-        return Object { 
-            kind: self.kind.clone(), 
+        return Object {
+            kind: self.kind.clone(),
             tenant: self.tenant.clone(),
-            namespace: self.namespace.clone(), 
-            name: self.name.clone(), 
-            labels: self.labels.clone(), 
-            annotations: self.annotations.clone(), 
-            data:self.data.clone () 
-        }
+            namespace: self.namespace.clone(),
+            name: self.name.clone(),
+            labels: self.labels.clone(),
+            annotations: self.annotations.clone(),
+            data: self.data.clone(),
+        };
     }
 
     pub fn Encode(&self) -> Result<Vec<u8>> {
-        let mut buf : Vec<u8> = Vec::new();
+        let mut buf: Vec<u8> = Vec::new();
         buf.reserve(self.encoded_len());
         self.encode(&mut buf)?;
-        return Ok(buf)
+        return Ok(buf);
     }
 
     pub fn Decode(buf: &[u8]) -> Result<Self> {
         let o = Self::decode(buf)?;
-        return Ok(o)
+        return Ok(o);
     }
 }
 
@@ -594,14 +610,14 @@ impl Object {
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Spec {
     // NodeName is a request to schedule this pod onto a specific node.  If it is non-empty,
-	// the scheduler simply schedules this pod onto that node, assuming that it fits resource
-	// requirements.
-	// +optional
-	pub nodename: String,
-	// Specifies the hostname of the Pod.
-	// If not specified, the pod's hostname will be set to a system-defined value.
-	// +optional
-	pub hostname: String,
+    // the scheduler simply schedules this pod onto that node, assuming that it fits resource
+    // requirements.
+    // +optional
+    pub nodename: String,
+    // Specifies the hostname of the Pod.
+    // If not specified, the pod's hostname will be set to a system-defined value.
+    // +optional
+    pub hostname: String,
 }
 
 impl DeepCopy for Pod {
@@ -610,27 +626,27 @@ impl DeepCopy for Pod {
             spec: Spec {
                 nodename: self.spec.nodename.clone(),
                 hostname: self.spec.hostname.clone(),
-            }
-        } 
+            },
+        };
     }
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Pod {
-    spec: Spec
+    spec: Spec,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Podset {
     // NodeName is a request to schedule this pod onto a specific node.  If it is non-empty,
-	// the scheduler simply schedules this pod onto that node, assuming that it fits resource
-	// requirements.
-	// +optional
-	pub nodename: String,
-	// Specifies the hostname of the Pod.
-	// If not specified, the pod's hostname will be set to a system-defined value.
-	// +optional
-	pub hostname: String,
+    // the scheduler simply schedules this pod onto that node, assuming that it fits resource
+    // requirements.
+    // +optional
+    pub nodename: String,
+    // Specifies the hostname of the Pod.
+    // If not specified, the pod's hostname will be set to a system-defined value.
+    // +optional
+    pub hostname: String,
 }
 
 impl DeepCopy for Podset {
@@ -638,7 +654,7 @@ impl DeepCopy for Podset {
         return Self {
             nodename: self.nodename.clone(),
             hostname: self.hostname.clone(),
-        }
+        };
     }
 }
 
@@ -647,12 +663,11 @@ impl DataObject {
         let mut pod = k8s::Pod::default();
         pod.metadata.namespace = Some(namespace.to_string());
         pod.metadata.name = Some(name.to_string());
-        
 
         let podStr = serde_json::to_string(&pod)?;
         let obj = DataObject::NewFromK8sObj("pod", &pod.metadata, podStr);
 
-        return Ok(obj)
+        return Ok(obj);
     }
 
     pub fn NewFuncPackage1(namespace: &str, name: &str) -> Result<Self> {
@@ -668,14 +683,12 @@ impl DataObject {
         }"#;
         let podSpec: k8s::PodSpec = serde_json::from_str(podSpecStr)?;
         let package = FuncPackage1 {
-            metadata: ObjectMeta { 
+            metadata: ObjectMeta {
                 namespace: Some(namespace.to_string()),
                 name: Some(name.to_string()),
                 ..Default::default()
             },
-            spec: FuncPackageSpec1 {
-                template: podSpec
-            },
+            spec: FuncPackageSpec1 { template: podSpec },
         };
         let packageStr = serde_json::to_string(&package)?;
         let obj = DataObject::NewFromK8sObj("package", &package.metadata, packageStr);
@@ -695,14 +708,12 @@ impl DataObject {
         }"#;
         let podSpec: k8s::PodSpec = serde_json::from_str(podSpecStr)?;
         let package = FuncPackage1 {
-            metadata: ObjectMeta { 
+            metadata: ObjectMeta {
                 namespace: Some(namespace.to_string()),
                 name: Some(name.to_string()),
                 ..Default::default()
             },
-            spec: FuncPackageSpec1 {
-                template: podSpec
-            },
+            spec: FuncPackageSpec1 { template: podSpec },
         };
         let packageStr = serde_json::to_string_pretty(&package)?;
         error!("packageStr is {}", packageStr);
@@ -710,7 +721,6 @@ impl DataObject {
         return Ok(obj);
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct PackageId {
@@ -724,18 +734,20 @@ impl ToString for PackageId {
     }
 }
 
-
 impl PackageId {
     pub fn New(packetIdStr: &str) -> Result<Self> {
-        let strs : Vec<&str> = packetIdStr.splitn(2, "/").collect();
+        let strs: Vec<&str> = packetIdStr.splitn(2, "/").collect();
         if strs.len() != 2 {
-            return Err(Error::CommonError(format!("invalid PackageId str {:?}", packetIdStr)));
+            return Err(Error::CommonError(format!(
+                "invalid PackageId str {:?}",
+                packetIdStr
+            )));
         }
 
         return Ok(Self {
             namespace: strs[0].to_string(),
             packageName: strs[1].to_string(),
-        })
+        });
     }
 }
 
@@ -763,10 +775,9 @@ impl PartialEq for PackageId {
 
 impl Eq for PackageId {}
 
-
 #[derive(Debug, Clone, Copy)]
 pub struct Resource {
-    pub mem: i64, // 
+    pub mem: i64, //
     pub cpu: i32,
 }
 
@@ -775,7 +786,7 @@ impl Resource {
         return Resource {
             mem: memory as _,
             cpu: (cpucores * 1000) as _,
-        }
+        };
     }
 
     pub fn NewFromStr(memStr: &str, cpuStr: &str) -> Result<Self> {
@@ -784,7 +795,7 @@ impl Resource {
         return Ok(Resource {
             mem: mem as _,
             cpu: cpu as _,
-        })
+        });
     }
 
     pub fn ParseMemoryString(memStr: &str) -> Result<u64> {
@@ -792,16 +803,24 @@ impl Resource {
         if let Some(captures) = re.captures(memStr) {
             let value: u64 = captures.get(1).unwrap().as_str().parse()?;
             let unit = captures.get(2).map(|m| m.as_str()).unwrap_or("");
-    
+
             match unit {
                 "" => Ok(value),
                 "K" | "Ki" => Ok(value * 1024),
                 "M" | "Mi" => Ok(value * 1024 * 1024),
                 "G" | "Gi" => Ok(value * 1024 * 1024 * 1024),
-                _ => return Err(Error::CommonError(format!("ParseMemoryString fail with memory {:?}", memStr))),
+                _ => {
+                    return Err(Error::CommonError(format!(
+                        "ParseMemoryString fail with memory {:?}",
+                        memStr
+                    )))
+                }
             }
         } else {
-            return Err(Error::CommonError(format!("ParseMemoryString fail with memory {:?}", memStr)));
+            return Err(Error::CommonError(format!(
+                "ParseMemoryString fail with memory {:?}",
+                memStr
+            )));
         }
     }
 
@@ -816,17 +835,17 @@ impl Resource {
                 Ok(value * 1000)
             }
         } else {
-            return Err(Error::CommonError(format!("ParseCpuStr fail with cpuStr {:?}", cpuStr)));
+            return Err(Error::CommonError(format!(
+                "ParseCpuStr fail with cpuStr {:?}",
+                cpuStr
+            )));
         }
     }
 }
 
 impl Default for Resource {
     fn default() -> Self {
-        return Self {
-            mem: 0,
-            cpu: 0,
-        }
+        return Self { mem: 0, cpu: 0 };
     }
 }
 
@@ -845,7 +864,12 @@ impl Sub for Resource {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self::Output {
-        assert!(self.mem >= other.mem && self.cpu >= other.cpu, "Resource::sub {:?} - {:?}", &self, &other);
+        assert!(
+            self.mem >= other.mem && self.cpu >= other.cpu,
+            "Resource::sub {:?} - {:?}",
+            &self,
+            &other
+        );
         Self {
             mem: self.mem - other.mem,
             cpu: self.cpu - other.cpu,

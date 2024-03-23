@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
-use std::sync::Arc; 
-use std::sync::RwLock;
 use core::ops::Deref;
+use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::Arc;
+use std::sync::RwLock;
 
 use qshare::common::*;
 
@@ -28,7 +28,7 @@ lazy_static::lazy_static! {
         let ipv4 = ipnetwork::Ipv4Network::from_str(&cidrStr).unwrap();
         //let localIp = local_ip_address::local_ip().unwrap();
         let pm = PeerMgr::New(ipv4.prefix() as _);
-        
+
         if QLET_CONFIG.singleNodeModel {
             let localIp : u32 = ipnetwork::Ipv4Network::from_str(&QLET_CONFIG.nodeIp).unwrap().ip().into();
             let localPort = QLET_CONFIG.tsotSvcPort;
@@ -53,7 +53,7 @@ impl Peer {
         let inner = PeerInner {
             hostIp: hostIp,
             port: port,
-            cidrAddr: cidrAddr
+            cidrAddr: cidrAddr,
         };
 
         return Self(Arc::new(inner));
@@ -105,20 +105,26 @@ impl PeerMgr {
         let peer = Peer::New(hostIp, port, cidrAddr);
         let mut inner = self.write().unwrap();
         if inner.peers.contains_key(&cidrAddr) {
-            return Err(Error::Exist(format!("PeerMgr::AddPeer get existing peer {:?}", peer)));
+            return Err(Error::Exist(format!(
+                "PeerMgr::AddPeer get existing peer {:?}",
+                peer
+            )));
         }
 
         inner.peers.insert(cidrAddr, peer);
-        return Ok(())
+        return Ok(());
     }
 
     pub fn RemovePeer(&self, cidrAddr: u32) -> Result<()> {
         let mut inner = self.write().unwrap();
         match inner.peers.remove(&cidrAddr) {
-            None => return Err(Error::NotExist(format!("PeerMgr::RemovePeer peer {:?} not existing", cidrAddr))),
-            Some(_peer) => {
-                return Ok(())
+            None => {
+                return Err(Error::NotExist(format!(
+                    "PeerMgr::RemovePeer peer {:?} not existing",
+                    cidrAddr
+                )))
             }
+            Some(_peer) => return Ok(()),
         }
     }
 
@@ -126,7 +132,12 @@ impl PeerMgr {
         let inner = self.read().unwrap();
         let cidrAddr = ip & inner.mask;
         match inner.peers.get(&cidrAddr).cloned() {
-            None => return Err(Error::NotExist(format!("PeerMgr::LookforPeer peer {:x} doesn't exist", ip))),
+            None => {
+                return Err(Error::NotExist(format!(
+                    "PeerMgr::LookforPeer peer {:x} doesn't exist",
+                    ip
+                )))
+            }
             Some(peer) => return Ok(peer.clone()),
         }
     }

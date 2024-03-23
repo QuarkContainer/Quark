@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
-use lazy_static::lazy_static;
-use serde_json::Value;
-use std::collections::HashMap;
-use std::cmp::Ordering;
-use std::cmp::Ord;
-use std::sync::Arc;
 use core::ops::Deref;
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::cmp::Ord;
+use std::cmp::Ordering;
+use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::sync::Arc;
 
 use crate::common::*;
 
@@ -31,21 +31,21 @@ use super::validation::*;
 
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum SelectionOp {
-    None,           // ""
-    DoesNotExist,   // "!"
-	Equals,         // "="
-	DoubleEquals,   // "=="
-	In,             // "in"
-	NotEquals,      // "!="
-	NotIn,          // "notin"
-	Exists,         // "exists"
-	GreaterThan,    // "gt"
-	LessThan,       // "lt"
+    None,         // ""
+    DoesNotExist, // "!"
+    Equals,       // "="
+    DoubleEquals, // "=="
+    In,           // "in"
+    NotEquals,    // "!="
+    NotIn,        // "notin"
+    Exists,       // "exists"
+    GreaterThan,  // "gt"
+    LessThan,     // "lt"
 }
 
 impl Default for SelectionOp {
     fn default() -> Self {
-        return Self::DoesNotExist
+        return Self::DoesNotExist;
     }
 }
 
@@ -66,13 +66,12 @@ impl SelectionOp {
     }
 }
 
-
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Selector(pub Vec<Requirement>);
 
 impl Selector {
     pub fn Parse(selector: &str) -> Result<Self> {
-        return Parse(selector)
+        return Parse(selector);
     }
 
     pub fn Equ(&self, other: &Self) -> bool {
@@ -89,7 +88,7 @@ impl Selector {
         return true;
     }
 
-    pub fn DeepCopy(&self) -> Self{
+    pub fn DeepCopy(&self) -> Self {
         let mut copy = Self::default();
         for r in &self.0 {
             copy.0.push(r.Copy());
@@ -137,12 +136,8 @@ impl Selector {
             let mut tmp = val;
             for s in split {
                 tmp = match tmp.get(s) {
-                    None => {
-                        return None
-                    },
-                    Some(v) => {
-                        &v
-                    }
+                    None => return None,
+                    Some(v) => &v,
                 };
             }
 
@@ -156,12 +151,12 @@ impl Selector {
     // String returns a comma-separated string of all
     // the internalSelector Requirements' human-readable strings.
     pub fn String(&self) -> String {
-        let mut reqs : Vec<String> = Vec::new();
+        let mut reqs: Vec<String> = Vec::new();
         for r in &self.0 {
             reqs.push(r.String());
         }
 
-        return reqs.join(",")
+        return reqs.join(",");
     }
 
     // RequiresExactMatch introspects whether a given selector requires a single specific field
@@ -206,7 +201,7 @@ fn GetRequirement(key: &str, op: SelectionOp, vals: Vec<String>) -> Requirement 
 pub struct Requirement {
     pub key: String,
     pub op: SelectionOp,
-    pub strVals: Vec<String>
+    pub strVals: Vec<String>,
 }
 
 impl Ord for Requirement {
@@ -227,9 +222,7 @@ impl PartialEq for Requirement {
     }
 }
 
-impl Eq for Requirement {
-
-}
+impl Eq for Requirement {}
 
 impl Requirement {
     pub fn Equ(&self, other: &Self) -> bool {
@@ -237,7 +230,7 @@ impl Requirement {
             return false;
         }
 
-        let mut set : BTreeSet<String> = BTreeSet::new();
+        let mut set: BTreeSet<String> = BTreeSet::new();
 
         for str in &self.strVals {
             set.insert(str.to_string());
@@ -279,43 +272,56 @@ impl Requirement {
             SelectionOp::None => panic!("selector::None"),
             SelectionOp::In | SelectionOp::NotIn => {
                 if vals.len() == 0 {
-                    return Err(Error::CommonError("for 'in', 'notin' operators, values set can't be empty".to_owned()))
+                    return Err(Error::CommonError(
+                        "for 'in', 'notin' operators, values set can't be empty".to_owned(),
+                    ));
                 }
             }
             SelectionOp::Equals | SelectionOp::DoubleEquals | SelectionOp::NotEquals => {
                 if vals.len() != 1 {
-                    return Err(Error::CommonError("exact-match compatibility requires one single value".to_owned()))
+                    return Err(Error::CommonError(
+                        "exact-match compatibility requires one single value".to_owned(),
+                    ));
                 }
             }
             SelectionOp::Exists | SelectionOp::DoesNotExist => {
                 if vals.len() != 0 {
-                    return Err(Error::CommonError("values set must be empty for exists and does not exist".to_owned()))
+                    return Err(Error::CommonError(
+                        "values set must be empty for exists and does not exist".to_owned(),
+                    ));
                 }
             }
             SelectionOp::GreaterThan | SelectionOp::LessThan => {
                 if vals.len() != 1 {
-                    return Err(Error::CommonError("for 'Gt', 'Lt' operators, exactly one value is required".to_owned()))
+                    return Err(Error::CommonError(
+                        "for 'Gt', 'Lt' operators, exactly one value is required".to_owned(),
+                    ));
                 }
 
                 for val in &vals {
                     match val.parse::<u64>() {
                         Err(_) => {
-                            return Err(Error::CommonError("for 'Gt', 'Lt' operators, the value must be an integer".to_owned()))
+                            return Err(Error::CommonError(
+                                "for 'Gt', 'Lt' operators, the value must be an integer".to_owned(),
+                            ))
                         }
                         _ => {}
                     }
                 }
-
             }
         }
 
-        return Ok(Requirement { key: key.to_owned(), op: op, strVals: vals })
+        return Ok(Requirement {
+            key: key.to_owned(),
+            op: op,
+            strVals: vals,
+        });
     }
 
     pub fn HasValue(&self, val: &str) -> bool {
         for str in &self.strVals {
             if str == val {
-                return true
+                return true;
             }
         }
 
@@ -369,7 +375,6 @@ impl Requirement {
                     Some(v) => v,
                 };
 
-
                 let lsValue: i64 = match val.parse() {
                     Err(_) => {
                         error!("ParseInt failed for value {} in label {:?}", val, ls);
@@ -384,12 +389,12 @@ impl Requirement {
                 }
 
                 for val in &self.strVals {
-                    let rValue : i64 = match val.parse() {
+                    let rValue: i64 = match val.parse() {
                         Err(_) => {
                             error!("ParseInt failed for value {} in requirement {:?}, for 'Gt', 'Lt' operators, the value must be an integer", val, self);
                             return false;
                         }
-                        Ok(v) => v
+                        Ok(v) => v,
                     };
 
                     if self.op == SelectionOp::GreaterThan {
@@ -397,7 +402,7 @@ impl Requirement {
                     }
 
                     //if self.op == SelectionOp::LessThan {
-                        return lsValue < rValue;
+                    return lsValue < rValue;
                     //}
                 }
 
@@ -429,7 +434,7 @@ impl Requirement {
 
     // Equal checks the equality of requirement.
     pub fn Equal(&self, x: &Self) -> bool {
-        if self.key !=  x.key {
+        if self.key != x.key {
             return false;
         }
 
@@ -443,10 +448,10 @@ impl Requirement {
 
         for i in 0..self.strVals.len() {
             if self.strVals[i] != self.strVals[i] {
-                return false
+                return false;
             }
         }
-        
+
         return true;
     }
 
@@ -463,7 +468,7 @@ impl Requirement {
         output = output + &self.key;
 
         match self.op {
-            SelectionOp::DoesNotExist | SelectionOp::Exists => { 
+            SelectionOp::DoesNotExist | SelectionOp::Exists => {
                 return output;
             }
             SelectionOp::Equals => output = output + "=",
@@ -567,9 +572,9 @@ impl Labels {
             return Ok(map.into());
         }
 
-        let labels : Vec<&str> = selector.split(",").collect();
+        let labels: Vec<&str> = selector.split(",").collect();
         for label in labels {
-            let l : Vec<&str> = label.split("=").collect();
+            let l: Vec<&str> = label.split("=").collect();
             if l.len() != 2 {
                 return Err(Error::CommonError(format!("invalid selector: {}", label)));
             }
@@ -583,7 +588,7 @@ impl Labels {
             map.insert(key.to_string(), value.to_string());
         }
 
-        return Ok(map.into())
+        return Ok(map.into());
     }
 
     // String returns all labels listed as a human readable string.
@@ -637,7 +642,7 @@ impl Labels {
                 None => return false,
                 Some(val) => {
                     if v != val {
-                        return true
+                        return true;
                     }
                 }
             }
@@ -673,7 +678,7 @@ impl Labels {
                 None => return false,
                 Some(val) => {
                     if v != val {
-                        return false
+                        return false;
                     }
                 }
             }
@@ -699,14 +704,18 @@ impl Labels {
     pub fn ToSelector(&self) -> Selector {
         let mut res = Selector::default();
         for (k, v) in self.as_ref() {
-            res.Add(Requirement { key: k.to_string(), op: SelectionOp::Equals, strVals: vec![v.to_string()] })
+            res.Add(Requirement {
+                key: k.to_string(),
+                op: SelectionOp::Equals,
+                strVals: vec![v.to_string()],
+            })
         }
 
         return res;
     }
 
     pub fn RequiresExactMatch(&self, lable: &str) -> Option<String> {
-        return self.Get(lable)
+        return self.Get(lable);
     }
 
     pub fn toFullSelector(&self) -> Selector {
@@ -714,38 +723,37 @@ impl Labels {
     }
 }
 
-
 // Token represents constant definition for lexer token
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Token {
-   	// ErrorToken represents scan error
-	ErrorToken = 0 as isize,
-	// EndOfStringToken represents end of string
-	EndOfStringToken,
-	// ClosedParToken represents close parenthesis
-	ClosedParToken,
-	// CommaToken represents the comma
-	CommaToken,
-	// DoesNotExistToken represents logic not
-	DoesNotExistToken,
-	// DoubleEqualsToken represents double equals
-	DoubleEqualsToken,
-	// EqualsToken represents equal
-	EqualsToken,
-	// GreaterThanToken represents greater than
-	GreaterThanToken,
-	// IdentifierToken represents identifier, e.g. keys and values
-	IdentifierToken,
-	// InToken represents in
-	InToken,
-	// LessThanToken represents less than
-	LessThanToken,
-	// NotEqualsToken represents not equal
-	NotEqualsToken,
-	// NotInToken represents not in
-	NotInToken,
-	// OpenParToken represents open parenthesis
-	OpenParToken,
+    // ErrorToken represents scan error
+    ErrorToken = 0 as isize,
+    // EndOfStringToken represents end of string
+    EndOfStringToken,
+    // ClosedParToken represents close parenthesis
+    ClosedParToken,
+    // CommaToken represents the comma
+    CommaToken,
+    // DoesNotExistToken represents logic not
+    DoesNotExistToken,
+    // DoubleEqualsToken represents double equals
+    DoubleEqualsToken,
+    // EqualsToken represents equal
+    EqualsToken,
+    // GreaterThanToken represents greater than
+    GreaterThanToken,
+    // IdentifierToken represents identifier, e.g. keys and values
+    IdentifierToken,
+    // InToken represents in
+    InToken,
+    // LessThanToken represents less than
+    LessThanToken,
+    // NotEqualsToken represents not equal
+    NotEqualsToken,
+    // NotInToken represents not in
+    NotInToken,
+    // OpenParToken represents open parenthesis
+    OpenParToken,
 }
 
 impl Default for Token {
@@ -824,7 +832,7 @@ impl Lexer {
 
     // scanIDOrKeyword scans string to recognize literal token (for example 'in') or an identifier.
     pub fn ScanIDOrKeyword(&mut self) -> (Token, String) {
-        let mut buf : Vec<char> = Vec::new();
+        let mut buf: Vec<char> = Vec::new();
         loop {
             let ch = self.Read();
             if ch == '\0' {
@@ -837,22 +845,20 @@ impl Lexer {
             }
         }
 
-        let s : String = buf.iter().collect();
+        let s: String = buf.iter().collect();
         match STRING2TOKEN.get(&s) {
             None => (),
-            Some(v) => {
-                return (v.clone(), s)
-            }
+            Some(v) => return (v.clone(), s),
         }
 
-        return (Token::IdentifierToken, s)
+        return (Token::IdentifierToken, s);
     }
 
     // scanSpecialSymbol scans string starting with special symbol.
     // special symbol identify non literal operators. "!=", "==", "="
     pub fn ScanSpecialSymbol(&mut self) -> (Token, String) {
         let mut lastScannedItem = ScannedItem::default();
-        let mut buf : Vec<char> = Vec::new();
+        let mut buf: Vec<char> = Vec::new();
 
         loop {
             let ch = self.Read();
@@ -860,7 +866,7 @@ impl Lexer {
                 break;
             } else if IsSpecialSymbol(ch) {
                 buf.push(ch);
-                let s : String = buf.iter().collect();
+                let s: String = buf.iter().collect();
                 match STRING2TOKEN.get(&s) {
                     Some(token) => {
                         lastScannedItem = ScannedItem {
@@ -881,12 +887,15 @@ impl Lexer {
             }
         }
 
-        let s : String = buf.iter().collect();
+        let s: String = buf.iter().collect();
         if lastScannedItem.tok == Token::ErrorToken {
-            return (Token::ErrorToken, format!("error expected: keyword found '{}'", s))
+            return (
+                Token::ErrorToken,
+                format!("error expected: keyword found '{}'", s),
+            );
         }
 
-        return (lastScannedItem.tok, lastScannedItem.literal)
+        return (lastScannedItem.tok, lastScannedItem.literal);
     }
 
     // skipWhiteSpaces consumes all blank characters
@@ -895,7 +904,7 @@ impl Lexer {
         let mut ch = ch;
         loop {
             if !IsWhitespace(ch) {
-                return ch
+                return ch;
             }
             ch = self.Read();
         }
@@ -933,33 +942,39 @@ pub struct Parser {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ParserContext {
     KeyAndOperator,
-	Values,
+    Values,
 }
 
 impl Parser {
     // lookahead func returns the current token and string. No increment of current position
     pub fn Lookahead(&self, context: ParserContext) -> (Token, String) {
-        let (mut tok, lit) = (self.scanItems[self.position].tok, self.scanItems[self.position].literal.clone());
+        let (mut tok, lit) = (
+            self.scanItems[self.position].tok,
+            self.scanItems[self.position].literal.clone(),
+        );
         if context == ParserContext::Values {
             if tok == Token::InToken || tok == Token::NotInToken {
                 tok = Token::IdentifierToken
             }
         }
 
-        return (tok, lit)
+        return (tok, lit);
     }
 
     // consume returns current token and string. Increments the position
     pub fn Consume(&mut self, context: ParserContext) -> (Token, String) {
         self.position += 1;
-        let (mut tok, lit) = (self.scanItems[self.position-1].tok, self.scanItems[self.position-1].literal.clone());
+        let (mut tok, lit) = (
+            self.scanItems[self.position - 1].tok,
+            self.scanItems[self.position - 1].literal.clone(),
+        );
         if context == ParserContext::Values {
             if tok == Token::InToken || tok == Token::NotInToken {
                 tok = Token::IdentifierToken
             }
         }
-        
-        return (tok, lit)
+
+        return (tok, lit);
     }
 
     // scan runs through the input string and stores the ScannedItem in an array
@@ -967,7 +982,10 @@ impl Parser {
     pub fn Scan(&mut self) {
         loop {
             let (token, literal) = self.l.Lex();
-            self.scanItems.push(ScannedItem { tok: token, literal: literal });
+            self.scanItems.push(ScannedItem {
+                tok: token,
+                literal: literal,
+            });
             if token == Token::EndOfStringToken {
                 break;
             }
@@ -985,25 +1003,30 @@ impl Parser {
                     requirements.Add(r);
                     let (t, l) = self.Consume(ParserContext::Values);
                     match t {
-                        Token::EndOfStringToken => {
-                            return Ok(requirements)
-                        }
+                        Token::EndOfStringToken => return Ok(requirements),
                         Token::CommaToken => {
                             let (t2, l2) = self.Lookahead(ParserContext::Values);
                             if t2 != Token::IdentifierToken && t2 != Token::DoesNotExistToken {
-                                return Err(Error::CommonError(format!("found '{}', expected: identifier after ','", l2)))
+                                return Err(Error::CommonError(format!(
+                                    "found '{}', expected: identifier after ','",
+                                    l2
+                                )));
                             }
                         }
                         _ => {
-                            return Err(Error::CommonError(format!("found '{}', expected: ',' or 'end of string'", l)))
+                            return Err(Error::CommonError(format!(
+                                "found '{}', expected: ',' or 'end of string'",
+                                l
+                            )))
                         }
                     }
                 }
-                Token::EndOfStringToken => {
-                    return Ok(requirements)
-                }
+                Token::EndOfStringToken => return Ok(requirements),
                 _ => {
-                    return Err(Error::CommonError(format!("found '{}', expected: !, identifier, or 'end of string'", lit)))
+                    return Err(Error::CommonError(format!(
+                        "found '{}', expected: !, identifier, or 'end of string'",
+                        lit
+                    )))
                 }
             }
         }
@@ -1021,17 +1044,21 @@ impl Parser {
             SelectionOp::In | SelectionOp::NotIn => {
                 values = self.ParseValues()?;
             }
-            SelectionOp::Equals | 
-            SelectionOp::DoubleEquals | 
-            SelectionOp::NotEquals | 
-            SelectionOp::GreaterThan | 
-            SelectionOp::LessThan => {
+            SelectionOp::Equals
+            | SelectionOp::DoubleEquals
+            | SelectionOp::NotEquals
+            | SelectionOp::GreaterThan
+            | SelectionOp::LessThan => {
                 values = self.ParseExactValue()?;
             }
-            _ => ()
+            _ => (),
         }
 
-        return Ok(Requirement::New(&key, operator, values.into_iter().collect())?);
+        return Ok(Requirement::New(
+            &key,
+            operator,
+            values.into_iter().collect(),
+        )?);
     }
 
     // parseKeyAndInferOperator parses literals.
@@ -1048,7 +1075,10 @@ impl Parser {
         }
 
         if tok != Token::IdentifierToken {
-            return Err(Error::CommonError(format!("found '{}', expected: identifier", literal)));
+            return Err(Error::CommonError(format!(
+                "found '{}', expected: identifier",
+                literal
+            )));
         }
 
         ValidateLabelKey(&literal)?;
@@ -1060,7 +1090,7 @@ impl Parser {
             }
         }
 
-        return Ok((literal, operator))
+        return Ok((literal, operator));
     }
 
     // parseOperator returns operator and eventually matchType
@@ -1077,11 +1107,14 @@ impl Parser {
             Token::NotInToken => op = SelectionOp::NotIn,
             Token::NotEqualsToken => op = SelectionOp::NotEquals,
             _ => {
-                return Err(Error::CommonError(format!("found '{}', expected: In, NotIn ...", lit)));
+                return Err(Error::CommonError(format!(
+                    "found '{}', expected: In, NotIn ...",
+                    lit
+                )));
             }
         }
 
-        return Ok(op)
+        return Ok(op);
     }
 
     // parseValues parses the values for set based matching (x,y,z)
@@ -1097,16 +1130,22 @@ impl Parser {
                 let s = self.ParseIdentifiersList()?;
                 let (tok, _) = self.Consume(ParserContext::Values);
                 if tok != Token::ClosedParToken {
-                    return Err(Error::CommonError(format!("found '{}', expected: ')'", lit)))
+                    return Err(Error::CommonError(format!(
+                        "found '{}', expected: ')'",
+                        lit
+                    )));
                 }
-                return Ok(s)
+                return Ok(s);
             }
             Token::ClosedParToken => {
                 self.Consume(ParserContext::Values);
                 return Ok(HashSet::new());
             }
             _ => {
-                return Err(Error::CommonError(format!("found '{}', expected: ',', ')' or identifier", lit)));
+                return Err(Error::CommonError(format!(
+                    "found '{}', expected: ',', ')' or identifier",
+                    lit
+                )));
             }
         }
     }
@@ -1122,10 +1161,16 @@ impl Parser {
                     match tok2 {
                         Token::CommaToken => continue,
                         Token::ClosedParToken => return Ok(s),
-                        _ => return Err(Error::CommonError(format!("found '{}', expected: ',' or ')'", lit2))),
+                        _ => {
+                            return Err(Error::CommonError(format!(
+                                "found '{}', expected: ',' or ')'",
+                                lit2
+                            )))
+                        }
                     }
                 }
-                Token::CommaToken => {  // handled here since we can have "(,"
+                Token::CommaToken => {
+                    // handled here since we can have "(,"
                     if s.len() == 0 {
                         s.insert("".to_owned()); // to handle (,
                     }
@@ -1133,7 +1178,7 @@ impl Parser {
                     let (tok2, _lit2) = self.Lookahead(ParserContext::Values);
                     if tok == Token::ClosedParToken {
                         s.insert("".to_owned()); // to handle ,)  Double "" removed by StringSet
-                        return Ok(s)
+                        return Ok(s);
                     }
                     if tok2 == Token::CommaToken {
                         self.Consume(ParserContext::Values);
@@ -1141,7 +1186,10 @@ impl Parser {
                     }
                 }
                 _ => {
-                    return Err(Error::CommonError(format!("found '{}', expected: ',', or identifier", lit)))
+                    return Err(Error::CommonError(format!(
+                        "found '{}', expected: ',', or identifier",
+                        lit
+                    )))
                 }
             }
         }
@@ -1162,7 +1210,10 @@ impl Parser {
             return Ok(s);
         }
 
-        return Err(Error::CommonError(format!("found '{}', expected: identifier", lit)))
+        return Err(Error::CommonError(format!(
+            "found '{}', expected: identifier",
+            lit
+        )));
     }
 }
 
@@ -1198,15 +1249,18 @@ impl Parser {
 //     the KEY exists and can be any VALUE.
 //  5. A requirement with just !KEY requires that the KEY not exist.
 pub fn Parse(selector: &str) -> Result<Selector> {
-    let mut p =  Parser {
-        l: Lexer { s: selector.chars().collect(), pos: 0 },
+    let mut p = Parser {
+        l: Lexer {
+            s: selector.chars().collect(),
+            pos: 0,
+        },
         scanItems: Vec::new(),
         position: 0,
     };
 
     let mut items = p.Parse()?;
     items.Sort();
-    return Ok(items)
+    return Ok(items);
 }
 
 pub fn ValidateLabelKey(k: &str) -> Result<()> {
@@ -1221,7 +1275,7 @@ pub fn ValidateLabelValue(_k: &str, v: &str) -> Result<()> {
 // nil and empty Sets are considered equivalent to Everything().
 // It does not perform any validation, which means the server will reject
 // the request if the Set contains invalid values.
-pub fn SelectorFromSet(ls : &Labels) -> Selector {
+pub fn SelectorFromSet(ls: &Labels) -> Selector {
     return SelectorFromValidatedSet(ls);
 }
 
@@ -1230,7 +1284,7 @@ pub fn SelectorFromSet(ls : &Labels) -> Selector {
 // The Set is validated client-side, which allows to catch errors early.
 pub fn ValidatedSelectorFromSet(ls: &Labels) -> Result<Selector> {
     let mut rs = Selector::default();
-    if ls.0.len() ==  0 {
+    if ls.0.len() == 0 {
         return Ok(rs);
     }
 
@@ -1250,12 +1304,16 @@ pub fn ValidatedSelectorFromSet(ls: &Labels) -> Result<Selector> {
 // instead, which does not copy.
 pub fn SelectorFromValidatedSet(ls: &Labels) -> Selector {
     let mut rs = Selector::default();
-    if ls.0.len() ==  0 {
+    if ls.0.len() == 0 {
         return rs;
     }
 
     for (label, value) in ls.as_ref() {
-        rs.0.push(Requirement { key: label.clone(), op: SelectionOp::Equals, strVals: vec![value.clone()] });
+        rs.0.push(Requirement {
+            key: label.clone(),
+            op: SelectionOp::Equals,
+            strVals: vec![value.clone()],
+        });
     }
 
     rs.Sort();

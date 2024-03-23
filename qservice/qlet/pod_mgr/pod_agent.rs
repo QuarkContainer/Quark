@@ -12,42 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::ops::Deref;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::os::unix::prelude::PermissionsExt;
-use std::path::Path;
 use std::fs;
 use std::fs::Permissions;
+use std::os::unix::prelude::PermissionsExt;
+use std::path::Path;
 use std::sync::Mutex;
 use std::time::Duration;
-use core::ops::Deref;
 use std::time::SystemTime;
 
 use qshare::crictl::DnsConfig;
 use qshare::node::*;
-use tokio::sync::{mpsc, Notify};
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use tokio::sync::{mpsc, Notify};
 use tokio::time;
 
 use qshare::k8s;
-            
+
 use qshare::common::*;
-use qshare::crictl;
 use qshare::config::*;
+use qshare::crictl;
 use qshare::types::*;
 
 use super::IMAGE_MGR;
 use super::RUNTIME_MGR;
 
+use super::container_agent::PodContainerAgent;
 use super::pm_msg::*;
-use super::qpod::*;
 use super::qcontainer::*;
+use super::qpod::*;
 use super::runtime::k8s_helper::*;
 use super::runtime::k8s_labels::*;
 use super::runtime::k8s_util::*;
-use super::container_agent::PodContainerAgent;
 
 // The container runtime default profile should be used.
 pub const SecurityProfile_RuntimeDefault: i32 = 0;
@@ -73,7 +73,7 @@ pub struct PodAgentInner {
     pub stop: AtomicBool,
 
     pub pod: QuarkPod,
-    pub supervisor: mpsc::Sender<NodeAgentMsg>, 
+    pub supervisor: mpsc::Sender<NodeAgentMsg>,
     pub agentChann: mpsc::Sender<NodeAgentMsg>,
     pub agentRx: Mutex<Option<mpsc::Receiver<NodeAgentMsg>>>,
     pub nodeConfig: NodeConfiguration,
@@ -82,7 +82,7 @@ pub struct PodAgentInner {
 
 pub enum PodType {
     Normal,
-    Python(String)
+    Python(String),
 }
 
 #[derive(Clone)]
@@ -97,9 +97,13 @@ impl Deref for PodAgent {
 }
 
 impl PodAgent {
-    pub fn New(supervisor: mpsc::Sender<NodeAgentMsg>, pod: &QuarkPod, nodeConfig: &NodeConfiguration) -> Self {
+    pub fn New(
+        supervisor: mpsc::Sender<NodeAgentMsg>,
+        pod: &QuarkPod,
+        nodeConfig: &NodeConfiguration,
+    ) -> Self {
         let (tx, rx) = mpsc::channel::<NodeAgentMsg>(30);
-        
+
         let inner = PodAgentInner {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
@@ -177,34 +181,38 @@ impl PodAgent {
         self.pod.lock().unwrap().runtimePod = Some(runtimePod.clone());
         info!("Start pod init containers pod {}", &podId);
         let containers = pod.read().unwrap().init_containers.to_vec();
-            for c in &containers {
-                let runtimeContainer = self.CreateContainer(
-                    runtimePod.sandboxConfig.as_ref().unwrap(), 
-                    c, 
-                    &namespace
-                ).await?;
-                let inner = QuarkContainerInner {
-                    state: RuntimeContainerState::Creating,
-                    initContainer: true,
-                    spec: c.clone(),
-                    runtimeContainer: runtimeContainer,
-                    containerStatus: None,
-                };
-                let container = QuarkContainer(Arc::new(Mutex::new(inner)));
-                self.pod.lock().unwrap().containers.insert(c.name.clone(), container.clone());
-                let containerAgent = PodContainerAgent::New(&self.agentChann, &self.pod, &container).await?;
-                self.containers.lock().unwrap().insert(c.name.clone(), containerAgent.clone());
-                containerAgent.Start().await?;
-            }
+        for c in &containers {
+            let runtimeContainer = self
+                .CreateContainer(runtimePod.sandboxConfig.as_ref().unwrap(), c, &namespace)
+                .await?;
+            let inner = QuarkContainerInner {
+                state: RuntimeContainerState::Creating,
+                initContainer: true,
+                spec: c.clone(),
+                runtimeContainer: runtimeContainer,
+                containerStatus: None,
+            };
+            let container = QuarkContainer(Arc::new(Mutex::new(inner)));
+            self.pod
+                .lock()
+                .unwrap()
+                .containers
+                .insert(c.name.clone(), container.clone());
+            let containerAgent =
+                PodContainerAgent::New(&self.agentChann, &self.pod, &container).await?;
+            self.containers
+                .lock()
+                .unwrap()
+                .insert(c.name.clone(), containerAgent.clone());
+            containerAgent.Start().await?;
+        }
 
         info!("Start pod containers pod {}", &podId);
         let containers = pod.read().unwrap().containers.to_vec();
         for c in &containers {
-            let runtimeContainer = self.CreateContainer(
-                runtimePod.sandboxConfig.as_ref().unwrap(), 
-                c, 
-                &namespace
-            ).await?;
+            let runtimeContainer = self
+                .CreateContainer(runtimePod.sandboxConfig.as_ref().unwrap(), c, &namespace)
+                .await?;
             let inner = QuarkContainerInner {
                 state: RuntimeContainerState::Creating,
                 initContainer: false,
@@ -213,16 +221,24 @@ impl PodAgent {
                 containerStatus: None,
             };
             let container = QuarkContainer(Arc::new(Mutex::new(inner)));
-            self.pod.lock().unwrap().containers.insert(c.name.clone(), container.clone());
-            let containerAgent = PodContainerAgent::New(&self.agentChann, &self.pod, &container).await?;
-            self.containers.lock().unwrap().insert(c.name.clone(), containerAgent.clone());
+            self.pod
+                .lock()
+                .unwrap()
+                .containers
+                .insert(c.name.clone(), container.clone());
+            let containerAgent =
+                PodContainerAgent::New(&self.agentChann, &self.pod, &container).await?;
+            self.containers
+                .lock()
+                .unwrap()
+                .insert(c.name.clone(), containerAgent.clone());
             containerAgent.Start().await?;
         }
 
-        return Ok(())
+        return Ok(());
     }
 
-    pub const HouseKeepingPeriod : Duration = Duration::from_secs(5);
+    pub const HouseKeepingPeriod: Duration = Duration::from_secs(5);
 
     pub async fn Stop(&self) -> Result<()> {
         self.stop.store(true, Ordering::SeqCst);
@@ -232,7 +248,7 @@ impl PodAgent {
         }
 
         self.closeNotify.notify_waiters();
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Start(&self) -> Result<()> {
@@ -271,41 +287,27 @@ impl PodAgent {
                 }
             }
         }
-        
-        return Ok(())
+
+        return Ok(());
     }
 
     pub async fn PodHandler(&self, msg: NodeAgentMsg) -> Result<()> {
         let oldPodState = self.pod.PodState();
 
         let mut ret = match msg {
-            NodeAgentMsg::PodCreate(_msg) => {
-                self.Create().await
-            }
-            NodeAgentMsg::PodTerminate => {
-                self.Terminate(false).await
-            }
-            NodeAgentMsg::PodContainerCreated(msg) => {
-                self.OnPodContainerCreated(msg).await
-            }
-            NodeAgentMsg::PodContainerStarted(msg) => {
-                self.OnPodContainerStarted(msg).await
-            }
-            NodeAgentMsg::PodContainerReady(msg) => {
-                self.OnPodContainerReady(msg).await
-            }
-            NodeAgentMsg::PodContainerStopped(msg) => {
-                self.OnPodContainerStopped(msg).await
-            }
-            NodeAgentMsg::PodContainerFailed(msg) => {
-                self.OnPodContainerFailed(msg).await
-            }
+            NodeAgentMsg::PodCreate(_msg) => self.Create().await,
+            NodeAgentMsg::PodTerminate => self.Terminate(false).await,
+            NodeAgentMsg::PodContainerCreated(msg) => self.OnPodContainerCreated(msg).await,
+            NodeAgentMsg::PodContainerStarted(msg) => self.OnPodContainerStarted(msg).await,
+            NodeAgentMsg::PodContainerReady(msg) => self.OnPodContainerReady(msg).await,
+            NodeAgentMsg::PodContainerStopped(msg) => self.OnPodContainerStopped(msg).await,
+            NodeAgentMsg::PodContainerFailed(msg) => self.OnPodContainerFailed(msg).await,
             NodeAgentMsg::HouseKeeping => {
                 //self.PodHouseKeeping().await
                 Ok(())
             }
 
-            _ => Ok(())
+            _ => Ok(()),
         };
 
         self.pod.SetPodStatus(None);
@@ -315,14 +317,13 @@ impl PodAgent {
                 self.pod.SetPodStatus(None);
             }
         }
-        
-        if self.pod.PodState() != PodState::Deleted  
-            && (oldPodState != self.pod.PodState() || self.pod.PodState() == PodState::Cleanup) {
-            self.Notify(NodeAgentMsg::PodStatusChange(
-                PodStatusChange {
-                    pod: self.pod.clone(),
-                }
-            ));
+
+        if self.pod.PodState() != PodState::Deleted
+            && (oldPodState != self.pod.PodState() || self.pod.PodState() == PodState::Cleanup)
+        {
+            self.Notify(NodeAgentMsg::PodStatusChange(PodStatusChange {
+                pod: self.pod.clone(),
+            }));
         }
 
         return ret;
@@ -330,10 +331,14 @@ impl PodAgent {
 
     pub async fn PodHouseKeeping(&self) -> Result<()> {
         let podState = self.pod.PodState();
-        info!("House keeping  pod {} podState {:?}", self.pod.PodId(), &podState);
+        info!(
+            "House keeping  pod {} podState {:?}",
+            self.pod.PodId(),
+            &podState
+        );
 
         if podState == PodState::Terminated || podState == PodState::Running {
-            return Ok(())
+            return Ok(());
         }
 
         let runtimePod = self.pod.RuntimePod();
@@ -343,62 +348,85 @@ impl PodAgent {
         } else if runtimePod.is_none() {
             self.pod.SetPodState(PodState::Terminated);
         } else if runtimePod.is_some() && runtimePod.as_ref().unwrap().sandbox.is_none() {
-            let sandbox = RUNTIME_MGR.get().unwrap().GetPodSandbox(&runtimePod.as_ref().unwrap().id).await?;
+            let sandbox = RUNTIME_MGR
+                .get()
+                .unwrap()
+                .GetPodSandbox(&runtimePod.as_ref().unwrap().id)
+                .await?;
             match sandbox {
                 None => self.pod.SetPodState(PodState::Terminated),
                 Some(_ps) => {
                     self.Terminate(true).await?;
                 }
             }
-        } 
+        }
 
-        return Ok(())
-        
+        return Ok(());
     }
 
     pub async fn OnPodContainerCreated(&self, msg: PodContainerCreated) -> Result<()> {
         let pod = &msg.pod;
         let container = &msg.container;
 
-        info!("pod Container created pod {} container {}", pod.PodId(), container.ContainerName());
+        info!(
+            "pod Container created pod {} container {}",
+            pod.PodId(),
+            container.ContainerName()
+        );
         let podState = pod.PodState();
         if podState == PodState::Terminating || podState == PodState::Terminated {
-            info!("Pod Container created after when pod is in terminating state pod {} container {}", pod.PodId(), container.ContainerName());
+            info!(
+                "Pod Container created after when pod is in terminating state pod {} container {}",
+                pod.PodId(),
+                container.ContainerName()
+            );
             self.TerminateContainer(container).await?;
         }
-        
+
         // TODO, update pod cpu, memory resource usage
-	    return Ok(())
+        return Ok(());
     }
 
     pub async fn OnPodContainerStarted(&self, msg: PodContainerStarted) -> Result<()> {
         let pod = &msg.pod;
         let container = &msg.container;
 
-        info!("pod Container started pod {} container {}", pod.PodId(), container.ContainerName());
-        
+        info!(
+            "pod Container started pod {} container {}",
+            pod.PodId(),
+            container.ContainerName()
+        );
+
         // TODO, update pod cpu, memory resource usage
-	    return Ok(())
+        return Ok(());
     }
 
     pub async fn OnPodContainerFailed(&self, msg: PodContainerFailed) -> Result<()> {
         let pod = &msg.pod;
         let container = &msg.container;
 
-        info!("OnPodContainerFailed1: pod Container Failed pod {} container {}", pod.PodId(), container.ContainerName());
-        
+        info!(
+            "OnPodContainerFailed1: pod Container Failed pod {} container {}",
+            pod.PodId(),
+            container.ContainerName()
+        );
+
         // TODO, update pod cpu, memory resource usage
-	    return self.HandlePodContainerExit(pod, container).await;
+        return self.HandlePodContainerExit(pod, container).await;
     }
 
     pub async fn OnPodContainerStopped(&self, msg: PodContainerStopped) -> Result<()> {
         let pod = &msg.pod;
         let container = &msg.container;
 
-        info!("pod Container stopped pod {} container {}", pod.PodId(), container.ContainerName());
-        
+        info!(
+            "pod Container stopped pod {} container {}",
+            pod.PodId(),
+            container.ContainerName()
+        );
+
         // TODO, release cpu, memory resource stat usage
-	    return self.HandlePodContainerExit(pod, container).await;
+        return self.HandlePodContainerExit(pod, container).await;
     }
 
     // when a container report it's ready, set pod to running state if all container are ready and init containers exit normally
@@ -406,9 +434,20 @@ impl PodAgent {
         let pod = &msg.pod;
         let container = &msg.container;
 
-        info!("pod Container is ready pod {} container {}", pod.PodId(), container.ContainerName());
+        info!(
+            "pod Container is ready pod {} container {}",
+            pod.PodId(),
+            container.ContainerName()
+        );
         let mut allContainerReady = true;
-        let containers : Vec<_> = self.pod.lock().unwrap().containers.values().cloned().collect();
+        let containers: Vec<_> = self
+            .pod
+            .lock()
+            .unwrap()
+            .containers
+            .values()
+            .cloned()
+            .collect();
         for c in containers {
             if c.InitContainer() {
                 allContainerReady = allContainerReady && c.ContainerExit();
@@ -420,11 +459,15 @@ impl PodAgent {
         if allContainerReady {
             pod.SetPodState(PodState::Running);
         }
-        
-        return Ok(())
+
+        return Ok(());
     }
 
-    pub async fn HandlePodContainerExit(&self, _pod: &QuarkPod, container: &QuarkContainer) -> Result<()> {
+    pub async fn HandlePodContainerExit(
+        &self,
+        _pod: &QuarkPod,
+        container: &QuarkContainer,
+    ) -> Result<()> {
         let containerName = container.ContainerName();
         let removed = self.containers.lock().unwrap().remove(&containerName);
         if let Some(container) = removed {
@@ -441,24 +484,30 @@ impl PodAgent {
             return self.Terminate(true).await;
         }
 
-        return Ok(())
+        return Ok(());
     }
-    
+
     pub async fn Cleanup(&self) -> Result<()> {
         info!("Cleanup pod {}", self.pod.PodId());
         self.CleanupPod().await?;
         self.pod.SetPodState(PodState::Cleanup);
-        return Ok(())
+        return Ok(());
     }
 
     pub async fn Create(&self) -> Result<()> {
         info!("Creating pod {}", self.pod.PodId());
         if self.pod.PodInTerminating() {
-            return Err(Error::CommonError(format!("Pod {} is being terminated or already terminated", self.pod.PodId())));
+            return Err(Error::CommonError(format!(
+                "Pod {} is being terminated or already terminated",
+                self.pod.PodId()
+            )));
         }
 
         if self.pod.PodCreated() {
-            return Err(Error::CommonError(format!("Pod {} is already created, NodeMgr is in sync", self.pod.PodId())));
+            return Err(Error::CommonError(format!(
+                "Pod {} is already created, NodeMgr is in sync",
+                self.pod.PodId()
+            )));
         }
 
         self.pod.SetPodState(PodState::Creating);
@@ -466,7 +515,7 @@ impl PodAgent {
 
         self.pod.SetPodState(PodState::Created);
 
-        return Ok(())
+        return Ok(());
     }
 
     // terminate evacute session if there are live sessions, and terminate pod containers,
@@ -474,8 +523,12 @@ impl PodAgent {
     // and recall this method to check if all container are finished, and finally set pod to terminted state
     // termiante method do no-op if pod state is already in terminating state unless forece retry is true
     pub async fn Terminate(&self, forceTerminatePod: bool) -> Result<()> {
-        info!("Stopping container and terminating pod {} state {:?} force {}", 
-            self.pod.PodId(), self.pod.PodState(), forceTerminatePod);
+        info!(
+            "Stopping container and terminating pod {} state {:?} force {}",
+            self.pod.PodId(),
+            self.pod.PodState(),
+            forceTerminatePod
+        );
 
         let pod = self.pod.Pod();
         let hasDeleted = pod.read().unwrap().deletion_timestamp.is_some();
@@ -485,7 +538,7 @@ impl PodAgent {
         }
 
         if self.pod.PodState() == PodState::Terminated || self.pod.PodState() == PodState::Cleanup {
-            return Ok(())
+            return Ok(());
         }
 
         self.pod.SetPodState(PodState::Terminating);
@@ -494,23 +547,32 @@ impl PodAgent {
             gracefulPeriodSeconds = period;
         }
 
-        self.TerminatePod(Duration::from_secs(gracefulPeriodSeconds as _), forceTerminatePod).await?;
+        self.TerminatePod(
+            Duration::from_secs(gracefulPeriodSeconds as _),
+            forceTerminatePod,
+        )
+        .await?;
         self.pod.SetPodState(PodState::Terminated);
-        
-        return Ok(())
+
+        return Ok(());
     }
 
-    pub const DefaultStopContainerGracePeriod : Duration = Duration::from_secs(30);
+    pub const DefaultStopContainerGracePeriod: Duration = Duration::from_secs(30);
 
     pub async fn TerminatePod(&self, gracefulPeriod: Duration, force: bool) -> Result<()> {
         let podState = self.pod.PodState();
         if podState != PodState::Terminating && podState != PodState::Failed {
-            return Err(Error::CommonError(format!("Pod {} is in not terminatable state {:?}", self.pod.PodId(), podState)));
+            return Err(Error::CommonError(format!(
+                "Pod {} is in not terminatable state {:?}",
+                self.pod.PodId(),
+                podState
+            )));
         }
 
         let mut gracefulPeriod = gracefulPeriod;
-        
-        let containers : Vec<PodContainerAgent> = self.containers.lock().unwrap().values().cloned().collect();
+
+        let containers: Vec<PodContainerAgent> =
+            self.containers.lock().unwrap().values().cloned().collect();
         for c in &containers {
             let status = c.container.lock().unwrap().containerStatus.clone();
             if let Some(status) = status {
@@ -519,13 +581,11 @@ impl PodAgent {
                         gracefulPeriod = Self::DefaultStopContainerGracePeriod;
                     }
 
-                    c.SendMsg(NodeAgentMsg::PodContainerStopping(
-                        PodContainerStopping {
-                            pod: self.pod.clone(),
-                            container: c.container.clone(),
-                            gracePeriod: gracefulPeriod.clone(),
-                        }
-                    ));
+                    c.SendMsg(NodeAgentMsg::PodContainerStopping(PodContainerStopping {
+                        pod: self.pod.clone(),
+                        container: c.container.clone(),
+                        gracePeriod: gracefulPeriod.clone(),
+                    }));
 
                     let mut pollingInterval = time::interval(time::Duration::from_secs(1));
                     let mut timeoutInternval = time::interval(gracefulPeriod);
@@ -550,7 +610,7 @@ impl PodAgent {
         }
 
         return Ok(());
-    } 
+    }
 
     pub async fn CleanupPod(&self) -> Result<()> {
         info!("Remove Pod sandbox pod {}", self.pod.PodId());
@@ -558,29 +618,33 @@ impl PodAgent {
 
         if let Some(runtimePod) = runtimePod {
             if runtimePod.sandbox.is_some() {
-                self.RemovePodSandbox(&runtimePod.sandbox.as_ref().unwrap().id, &runtimePod.sandboxConfig.as_ref().unwrap()).await?;
+                self.RemovePodSandbox(
+                    &runtimePod.sandbox.as_ref().unwrap().id,
+                    &runtimePod.sandboxConfig.as_ref().unwrap(),
+                )
+                .await?;
             }
         }
-        
+
         /*
-        	// TODO, Try to unmount volumes into pod, mounted vol will be detached by volumemanager if volume not required anymore
-            klog.InfoS("Unmount Pod volume", QUARK_POD, types.UniquePodName(a.pod))
-            if err := a.dependencies.VolumeManager.UnmountPodVolume(pod); err != nil {
-                klog.ErrorS(err, "Unable to unmount volumes for pod", QUARK_POD, types.UniquePodName(a.pod))
-                return err
-	        }
-         */
-        
+           // TODO, Try to unmount volumes into pod, mounted vol will be detached by volumemanager if volume not required anymore
+           klog.InfoS("Unmount Pod volume", QUARK_POD, types.UniquePodName(a.pod))
+           if err := a.dependencies.VolumeManager.UnmountPodVolume(pod); err != nil {
+               klog.ErrorS(err, "Unable to unmount volumes for pod", QUARK_POD, types.UniquePodName(a.pod))
+               return err
+           }
+        */
+
         // Remove data directories for the pod
-	    info!("Remove Pod Data dirs pod {}", self.pod.PodId());
+        info!("Remove Pod Data dirs pod {}", self.pod.PodId());
         let pod = self.pod.Pod();
         CleanupPodDataDirs(&self.nodeConfig.RootPath, &pod.read().unwrap())?;
 
         info!("Remove Pod log dirs pod {}", self.pod.PodId());
         CleanupPodLogDir(&self.nodeConfig.RootPath, &pod.read().unwrap())?;
-            
+
         /*
-        	// remove cgroups for the pod and apply resource parameters
+            // remove cgroups for the pod and apply resource parameters
             klog.InfoS("Remove Pod Cgroup", QUARK_POD, types.UniquePodName(a.pod))
             pcm := a.dependencies.QosManager
             if pcm.IsPodCgroupExist(pod) {
@@ -595,37 +659,51 @@ impl PodAgent {
                 pcm.UpdateQOSCgroups()
             }
         */
-        
-        return Ok(())
+
+        return Ok(());
     }
 
-    pub async fn RemovePodSandbox(&self, podSandboxId: &str, podSandboxConfig: &crictl::PodSandboxConfig) -> Result<()> {
-        RUNTIME_MGR.get().unwrap().TerminatePod(podSandboxId, Vec::new()).await?;
+    pub async fn RemovePodSandbox(
+        &self,
+        podSandboxId: &str,
+        podSandboxConfig: &crictl::PodSandboxConfig,
+    ) -> Result<()> {
+        RUNTIME_MGR
+            .get()
+            .unwrap()
+            .TerminatePod(podSandboxId, Vec::new())
+            .await?;
         fs::remove_dir_all(&podSandboxConfig.log_directory)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Notify(&self, msg: NodeAgentMsg) {
         self.supervisor.try_send(msg).unwrap();
-    } 
+    }
 
     pub fn NotifyContainer(&self, containerName: &str, msg: NodeAgentMsg) -> Result<()> {
         let container = match self.containers.lock().unwrap().get(containerName) {
             None => {
-                return Err(Error::CommonError(format!("Container with name {} not found", containerName)));
+                return Err(Error::CommonError(format!(
+                    "Container with name {} not found",
+                    containerName
+                )));
             }
-            Some(c) => c.clone()
+            Some(c) => c.clone(),
         };
 
         container.SendMsg(msg);
-        return Ok(())
+        return Ok(());
     }
 
     pub async fn CreatePodSandbox(&self) -> Result<RuntimePod> {
         let podsandboxConfig = self.GeneratePodSandboxConfig()?;
         let podIp = self.pod.PodId();
 
-        info!("Make pod log dir for pod {} path is {}", &podIp, &podsandboxConfig.log_directory);
+        info!(
+            "Make pod log dir for pod {} path is {}",
+            &podIp, &podsandboxConfig.log_directory
+        );
         fs::create_dir_all(&podsandboxConfig.log_directory)?;
         let perms = Permissions::from_mode(0o755);
         fs::set_permissions(&podsandboxConfig.log_directory, perms)?;
@@ -635,23 +713,30 @@ impl PodAgent {
             None => self.nodeConfig.RuntimeHandler.clone(),
             Some(runtime) => runtime.clone(),
         };
-        
-        info!("Call runtime to create sandbox runtimehandler is {} pod {} sandboxConfig is {:?}", &runtimehandler, &podIp, &podsandboxConfig);
 
-        let runtimePod = RUNTIME_MGR.get().unwrap().CreateSandbox(Some(podsandboxConfig), &runtimehandler).await?;
+        info!(
+            "Call runtime to create sandbox runtimehandler is {} pod {} sandboxConfig is {:?}",
+            &runtimehandler, &podIp, &podsandboxConfig
+        );
 
-        return Ok(runtimePod)
+        let runtimePod = RUNTIME_MGR
+            .get()
+            .unwrap()
+            .CreateSandbox(Some(podsandboxConfig), &runtimehandler)
+            .await?;
+
+        return Ok(runtimePod);
     }
 
     // generatePodSandboxConfig generates pod sandbox config .
     pub fn GeneratePodSandboxConfig(&self) -> Result<crictl::PodSandboxConfig> {
         // nodeagent will expect nodemgr populate most of pod spec before send it
-	    // it will not calulate hostname, all these staff
+        // it will not calulate hostname, all these staff
         let pod = self.pod.Pod();
         let pod = pod.read().unwrap();
 
         let namespaceSearch = format!("{}.{}.svc.cluster.local", &pod.namespace, &pod.tenant);
-        
+
         let podUID = pod.uid.clone();
         let mut podSandboxConfig = crictl::PodSandboxConfig {
             metadata: Some(crictl::PodSandboxMetadata {
@@ -665,7 +750,7 @@ impl PodAgent {
             dns_config: Some(DnsConfig {
                 servers: vec!["127.0.0.53".to_string()],
                 searches: vec![namespaceSearch],
-                options: vec!["ndots:2".to_string(), "edns0".to_string()]
+                options: vec!["ndots:2".to_string(), "edns0".to_string()],
             }),
             ..Default::default()
         };
@@ -674,12 +759,8 @@ impl PodAgent {
             podSandboxConfig.hostname = pod.host_name.clone();
         }
 
-        podSandboxConfig.log_directory = GetPodLogDir(
-            DefaultPodLogsRootPath,
-            &pod.namespace, 
-            &pod.name,  
-            &pod.uid,
-        );
+        podSandboxConfig.log_directory =
+            GetPodLogDir(DefaultPodLogsRootPath, &pod.namespace, &pod.name, &pod.uid);
 
         let mut podMapping = Vec::new();
         for c in &pod.containers {
@@ -697,7 +778,7 @@ impl PodAgent {
 
         ApplySandboxResources(&self.nodeConfig, &pod, &mut podSandboxConfig)?;
 
-        return Ok(podSandboxConfig)
+        return Ok(podSandboxConfig);
     }
 
     pub fn GeneratePodSandboxLinuxConfig(&self) -> Result<crictl::LinuxPodSandboxConfig> {
@@ -718,31 +799,66 @@ impl PodAgent {
         };
 
         //AddPodSecurityContext(&pod, &mut lpsc);
-        return Ok(lpsc)
+        return Ok(lpsc);
     }
 
     pub async fn CreateContainer(
-        &self, 
+        &self,
         podSandboxConfig: &crictl::PodSandboxConfig,
         containerSpec: &ContainerDef,
-        namespace: &str
+        namespace: &str,
     ) -> Result<RuntimeContainer> {
-        info!("Pull image for container pod {} container {}", self.pod.PodId(), &containerSpec.name);
+        info!(
+            "Pull image for container pod {} container {}",
+            self.pod.PodId(),
+            &containerSpec.name
+        );
         let pod = self.pod.Pod();
-        let imageRef = IMAGE_MGR.get().unwrap().PullImageForContainer(&containerSpec.image, podSandboxConfig).await?;
+        let imageRef = IMAGE_MGR
+            .get()
+            .unwrap()
+            .PullImageForContainer(&containerSpec.image, podSandboxConfig)
+            .await?;
 
-        info!("Create container log dir pod {} container {}", self.pod.PodId(), &containerSpec.name);
+        info!(
+            "Create container log dir pod {} container {}",
+            self.pod.PodId(),
+            &containerSpec.name
+        );
         let _logDir = BuildContainerLogsDirectory(&pod.read().unwrap(), &containerSpec.name)?;
 
-        info!("Generate container runtime config pod {} container {}", self.pod.PodId(), &containerSpec.name);
-        let containerConfig = self.generateContainerConfig(containerSpec, &imageRef, namespace).await?;
+        info!(
+            "Generate container runtime config pod {} container {}",
+            self.pod.PodId(),
+            &containerSpec.name
+        );
+        let containerConfig = self
+            .generateContainerConfig(containerSpec, &imageRef, namespace)
+            .await?;
 
-        info!("Call runtime to create container pod {} container {}", self.pod.PodId(), &containerSpec.name);
-        let runtimeContainer = RUNTIME_MGR.get().unwrap().CreateContainer(
-            &self.pod.RuntimePod().as_ref().unwrap().sandbox.as_ref().unwrap().id.clone(), 
-            Some(containerConfig), 
-            Some(podSandboxConfig.clone()),
-        ).await?;
+        info!(
+            "Call runtime to create container pod {} container {}",
+            self.pod.PodId(),
+            &containerSpec.name
+        );
+        let runtimeContainer = RUNTIME_MGR
+            .get()
+            .unwrap()
+            .CreateContainer(
+                &self
+                    .pod
+                    .RuntimePod()
+                    .as_ref()
+                    .unwrap()
+                    .sandbox
+                    .as_ref()
+                    .unwrap()
+                    .id
+                    .clone(),
+                Some(containerConfig),
+                Some(podSandboxConfig.clone()),
+            )
+            .await?;
 
         return Ok(runtimeContainer);
     }
@@ -751,12 +867,20 @@ impl PodAgent {
         match self.agentChann.try_send(msg) {
             Ok(()) => return Ok(()),
             Err(_) => {
-                return Err(Error::CommonError(format!("PodAgent {} send message fail", self.pod.PodId())))
+                return Err(Error::CommonError(format!(
+                    "PodAgent {} send message fail",
+                    self.pod.PodId()
+                )))
             }
         }
     }
 
-    pub async fn generateContainerConfig(&self, container: &ContainerDef, imageRef: &crictl::Image, namespace: &str) -> Result<crictl::ContainerConfig> {
+    pub async fn generateContainerConfig(
+        &self,
+        container: &ContainerDef,
+        imageRef: &crictl::Image,
+        namespace: &str,
+    ) -> Result<crictl::ContainerConfig> {
         let pod = self.pod.Pod();
         BuildContainerLogsDirectory(&pod.read().unwrap(), &container.name)?;
 
@@ -767,7 +891,7 @@ impl PodAgent {
         // }
 
         let envs = MakeEnvironmentVariables(container)?;
-        
+
         let mut commands = Vec::new();
         for v in &container.commands {
             let mut cmd = v.to_string();
@@ -787,7 +911,7 @@ impl PodAgent {
             }
             args.push(arg);
         }
-        
+
         let mut config = crictl::ContainerConfig {
             metadata: Some(crictl::ContainerMetadata {
                 name: container.name.clone(),
@@ -812,12 +936,12 @@ impl PodAgent {
 
         let uid = match &imageRef.uid {
             None => None,
-            Some(v) => Some(v.value)
+            Some(v) => Some(v.value),
         };
 
         let username = imageRef.username.clone();
         generateLinuxContainerConfig(&self.nodeConfig, container, &pod, uid, &username, true);
-        
+
         let mut criEnvs = Vec::with_capacity(envs.len());
         for env in &envs {
             criEnvs.push(crictl::KeyValue {
@@ -828,19 +952,23 @@ impl PodAgent {
 
         config.envs = criEnvs;
 
-        return Ok(config)
+        return Ok(config);
     }
 
     pub async fn TerminateContainer(&self, container: &QuarkContainer) -> Result<()> {
-        info!("Terminate container and remove it pod {} container {}", self.pod.PodId(), &container.lock().unwrap().spec.name.clone());
-        
+        info!(
+            "Terminate container and remove it pod {} container {}",
+            self.pod.PodId(),
+            &container.lock().unwrap().spec.name.clone()
+        );
+
         let id = container.lock().unwrap().runtimeContainer.id.clone();
         RUNTIME_MGR.get().unwrap().TerminateContainer(&id).await?;
-        return Ok(())
+        return Ok(());
     }
 }
 
-pub const DEFAULT_POD_LOGS_ROOT_PATH : &str = "/var/log/pods";
+pub const DEFAULT_POD_LOGS_ROOT_PATH: &str = "/var/log/pods";
 
 pub fn BuildContainerLogsDirectory(pod: &PodDef, containerName: &str) -> Result<String> {
     let namespace = &pod.namespace;
@@ -864,7 +992,7 @@ pub fn BuildContainerLogsDirectory(pod: &PodDef, containerName: &str) -> Result<
         fs::set_permissions(&containerpath, perms)?;
     }
 
-    return Ok(containerpath)
+    return Ok(containerpath);
 }
 
 pub fn BuildPodLogsDirectory(namespace: &str, podName: &str, uid: &str) -> Result<String> {
@@ -886,11 +1014,14 @@ pub fn BuildPodLogsDirectory(namespace: &str, podName: &str, uid: &str) -> Resul
 pub fn ContainerLogFileName(containerName: &str, restartCount: usize) -> String {
     let path = Path::new(containerName).join(&format!("{}.log", restartCount));
     return path.into_os_string().into_string().unwrap();
-} 
-
+}
 
 // determinePodSandboxIP determines the IP addresses of the given pod sandbox.
-pub fn DeterminePodSandboxIPs(podNamespace: &str, podName: &str, podSandbox: &crictl::PodSandboxStatus) -> Vec<String> {
+pub fn DeterminePodSandboxIPs(
+    podNamespace: &str,
+    podName: &str,
+    podSandbox: &crictl::PodSandboxStatus,
+) -> Vec<String> {
     let mut podIps = Vec::new();
     match &podSandbox.network {
         None => {
@@ -927,9 +1058,8 @@ pub fn AddPodSecurityContext(pod: &mut PodDef, lpsc: &mut crictl::LinuxPodSandbo
         lpsc.sysctls = sysctls;
 
         if let Some(run_as_user) = sc.run_as_user {
-            lpsc.security_context.as_mut().unwrap().run_as_user = Some(crictl::Int64Value {
-                value: run_as_user,
-            });
+            lpsc.security_context.as_mut().unwrap().run_as_user =
+                Some(crictl::Int64Value { value: run_as_user });
         }
 
         if let Some(run_as_group) = sc.run_as_group {
@@ -941,12 +1071,20 @@ pub fn AddPodSecurityContext(pod: &mut PodDef, lpsc: &mut crictl::LinuxPodSandbo
         lpsc.security_context.as_mut().unwrap().namespace_options = Some(NamespacesForPod(pod));
 
         if let Some(fsgroup) = sc.fs_group {
-            lpsc.security_context.as_mut().unwrap().supplemental_groups.push(fsgroup);
+            lpsc.security_context
+                .as_mut()
+                .unwrap()
+                .supplemental_groups
+                .push(fsgroup);
         }
 
         if let Some(fsgroups) = &sc.supplemental_groups {
             for sg in fsgroups {
-                lpsc.security_context.as_mut().unwrap().supplemental_groups.push(*sg);
+                lpsc.security_context
+                    .as_mut()
+                    .unwrap()
+                    .supplemental_groups
+                    .push(*sg);
             }
         }
 
@@ -956,9 +1094,7 @@ pub fn AddPodSecurityContext(pod: &mut PodDef, lpsc: &mut crictl::LinuxPodSandbo
                 role: opts.role.as_deref().unwrap_or("").to_string(),
                 r#type: opts.type_.as_deref().unwrap_or("").to_string(),
                 level: opts.level.as_deref().unwrap_or("").to_string(),
-
             })
         }
     }
-
 }

@@ -30,7 +30,10 @@ impl Continue {
         }
 
         if self.key.len() == 0 {
-            return Err(Error::CommonError("continue key is not valid: encoded start key empty (version meta.k8s.io/v1)".to_owned()));
+            return Err(Error::CommonError(
+                "continue key is not valid: encoded start key empty (version meta.k8s.io/v1)"
+                    .to_owned(),
+            ));
         }
 
         let mut key = self.key.clone();
@@ -45,7 +48,7 @@ impl Continue {
         return Self {
             key: self.key.clone(),
             revision: self.revision,
-        }
+        };
     }
 }
 
@@ -88,7 +91,7 @@ impl SelectionPredicate {
             let attrs = attrs.into();
             matched = self.field.Match(&attrs);
         }
-        
+
         return Ok(matched);
     }
 
@@ -97,11 +100,11 @@ impl SelectionPredicate {
             label: self.label.DeepCopy(),
             field: self.field.DeepCopy(),
             limit: self.limit,
-            continue_: match &self.continue_{
+            continue_: match &self.continue_ {
                 None => None,
                 Some(c) => Some(c.DeepCopy()),
-            }
-        }
+            },
+        };
     }
 
     pub fn Empty(&self) -> bool {
@@ -114,7 +117,11 @@ impl SelectionPredicate {
 
     pub fn Continue(&self, keyPrefix: &str) -> Result<(String, i64)> {
         match &self.continue_ {
-            None => return Err(Error::CommonError("SelectionPredicate has no continue".to_string())),
+            None => {
+                return Err(Error::CommonError(
+                    "SelectionPredicate has no continue".to_string(),
+                ))
+            }
             Some(c) => return c.Continue(keyPrefix),
         }
     }
@@ -123,14 +130,19 @@ impl SelectionPredicate {
 pub fn EncodeContinue(key: &str, keyPrefix: &str, revision: i64) -> Result<Continue> {
     let nextKey = match key.strip_prefix(keyPrefix) {
         Some(n) => n,
-        None => return Err(Error::CommonError(format!("unable to encode next field: the key '{}' and key prefix '{}' do not match", key, keyPrefix))),
+        None => {
+            return Err(Error::CommonError(format!(
+                "unable to encode next field: the key '{}' and key prefix '{}' do not match",
+                key, keyPrefix
+            )))
+        }
     };
 
     //let nextKey = key;
     return Ok(Continue {
         revision: revision,
         key: nextKey.to_owned(),
-    })
+    });
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -149,13 +161,13 @@ impl Default for RevisionMatch {
 #[derive(Debug, Default)]
 pub struct ListOption {
     // revision provides a resource version constraint to apply to the list operation
-	// as a "not older than" constraint: the result contains data at least as new as the provided
-	// ResourceVersion. The newest available data is preferred, but any data not older than this
-	// ResourceVersion may be served.
+    // as a "not older than" constraint: the result contains data at least as new as the provided
+    // ResourceVersion. The newest available data is preferred, but any data not older than this
+    // ResourceVersion may be served.
     pub revision: i64,
 
     // revisionMatch provides the rule for how the resource version constraint applies. If set
-	// to the default value "" the legacy resource version semantic apply.
+    // to the default value "" the legacy resource version semantic apply.
     pub revisionMatch: RevisionMatch,
 
     // Predicate provides the selection rules for the list operation.
@@ -168,6 +180,6 @@ impl ListOption {
             revision: self.revision,
             revisionMatch: self.revisionMatch,
             predicate: self.predicate.DeepCopy(),
-        }
+        };
     }
 }
