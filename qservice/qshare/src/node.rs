@@ -254,7 +254,6 @@ impl NodeInfo {
 }
 
 pub struct QNodeInner {}
-
 pub enum FuncDef {
     PythonFuncDef(PythonFuncDef),
 }

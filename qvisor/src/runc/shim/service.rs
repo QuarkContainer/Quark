@@ -63,7 +63,6 @@ impl Shim for Service {
         let mut grouping = opts.id.clone();
         let spec = read_spec_from_file("")?;
         debug!("start shim opts is {:?}", &opts);
-        debug!("spec is {:?}", &spec);
         match spec.annotations() {
             Some(annotations) => {
                 for label in GROUP_LABELS.iter() {

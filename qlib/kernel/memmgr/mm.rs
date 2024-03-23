@@ -231,21 +231,17 @@ impl MemoryManager {
             numaNodemask: 0,
         };
 
-        let gap = vmas.FindGap(MemoryDef::PHY_LOWER_ADDR);
-
-        // kernel memory
-        //vmas.Insert(&gap, &Range::New(MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_UPPER_ADDR - MemoryDef::PHY_LOWER_ADDR), vma.clone());
-        // KVM_IOEVENTFD RANGE
-        //vmas.Insert(&gap, &Range::New(MemoryDef::KVM_IOEVENTFD_BASEADDR, 0x1000), vma);
+        let gap: AreaGap<VMA> = vmas.FindGap(MemoryDef::PHY_LOWER_ADDR);
 
         vmas.Insert(
             &gap,
             &Range::New(
-                MemoryDef::KVM_IOEVENTFD_BASEADDR,
-                MemoryDef::PHY_UPPER_ADDR - MemoryDef::KVM_IOEVENTFD_BASEADDR,
+                MemoryDef::PHY_LOWER_ADDR,
+                MemoryDef::PHY_UPPER_ADDR - MemoryDef::PHY_LOWER_ADDR,
             ),
             vma.clone(),
         );
+
 
         let mapping = MMMapping {
             vmas: vmas,
