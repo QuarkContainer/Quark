@@ -38,7 +38,7 @@ impl QletStore {
         let channelRev = svcDir.ChannelRev();
         let nodeStore = CacheStore::New(None, "node", 0, &channelRev).await?;
         let podStore = CacheStore::New(None, "pod", 0, &channelRev).await?;
-        
+
         svcDir.AddCacher(nodeStore.clone());
         svcDir.AddCacher(podStore.clone());
 
@@ -46,7 +46,7 @@ impl QletStore {
             svcDir: svcDir,
             nodeStore: nodeStore,
             podStore: podStore,
-        })
+        });
     }
 
     pub fn ToNodeDataObject(&self, node: &QuarkNode) -> DataObject {
@@ -76,19 +76,19 @@ impl QletStore {
             data: node.ToString(),
         };
 
-        return inner.into()
+        return inner.into();
     }
 
     pub fn CreateNode(&self, node: &QuarkNode) -> Result<()> {
         let obj = self.ToNodeDataObject(node);
         self.nodeStore.Add(&obj)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn UpdateNode(&self, node: &QuarkNode) -> Result<()> {
         let obj = self.ToNodeDataObject(node);
         self.nodeStore.Update(&obj)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn ToPodDataObject(&self, pod: &QuarkPod) -> DataObject {
@@ -119,36 +119,38 @@ impl QletStore {
             data: pod.ToString(),
         };
 
-        return inner.into()
+        return inner.into();
     }
 
     pub fn CreatePod(&self, pod: &QuarkPod) -> Result<()> {
         let obj = self.ToPodDataObject(pod);
         self.podStore.Add(&obj)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn UpdatePod(&self, pod: &QuarkPod) -> Result<()> {
         let obj = self.ToPodDataObject(pod);
         self.podStore.Update(&obj)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn RemovePod(&self, pod: &QuarkPod) -> Result<()> {
         let obj = self.ToPodDataObject(pod);
         self.podStore.Remove(&obj)?;
-        return Ok(())
+        return Ok(());
     }
 }
 
 pub async fn QletStateService() -> Result<()> {
-    use tonic::transport::Server;
     use qshare::qmeta::q_meta_service_server::QMetaServiceServer;
+    use tonic::transport::Server;
 
     let localStateSvcAddr = format!("127.0.0.1:{}", QLET_CONFIG.stateSvcPort);
 
     let stateSvcFuture = Server::builder()
-        .add_service(QMetaServiceServer::new(QLET_STORE.get().unwrap().svcDir.clone()))
+        .add_service(QMetaServiceServer::new(
+            QLET_STORE.get().unwrap().svcDir.clone(),
+        ))
         .serve(localStateSvcAddr.parse().unwrap());
 
     info!("state service start ...");

@@ -17,11 +17,11 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
+use qshare::common::*;
+use qshare::etcd::etcd_store::EtcdStore;
 use qshare::metastore::data_obj::DataObject;
 use qshare::metastore::data_obj::DataObjectInner;
 use qshare::types::NodeInfo;
-use qshare::common::*;
-use qshare::etcd::etcd_store::EtcdStore;
 
 pub struct NodeRegister {
     pub closeNotify: Arc<Notify>,
@@ -33,7 +33,7 @@ pub struct NodeRegister {
     pub podMgrPort: u16,
     pub tsotSvcPort: u16,
     pub stateSvcPort: u16,
-    pub cidr: String
+    pub cidr: String,
 }
 
 impl NodeRegister {
@@ -44,7 +44,7 @@ impl NodeRegister {
         podMgrPort: u16,
         tsotSvcPort: u16,
         stateSvcPort: u16,
-        cidr: &str
+        cidr: &str,
     ) -> Self {
         let mut etcdAddresses = Vec::new();
         for addr in addresses {
@@ -61,7 +61,7 @@ impl NodeRegister {
             tsotSvcPort: tsotSvcPort,
             stateSvcPort: stateSvcPort,
             cidr: cidr.to_owned(),
-        }
+        };
     }
 
     pub fn Close(&self) {
@@ -77,7 +77,7 @@ impl NodeRegister {
             tsotSvcPort: self.tsotSvcPort,
             stateSvcPort: self.stateSvcPort,
             cidr: self.cidr.clone(),
-        }
+        };
     }
 
     pub fn DataObject(&self) -> DataObject {

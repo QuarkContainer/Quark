@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
-use std::fs;
-use std::path::Path;
-use std::os::unix::fs::PermissionsExt;
-use std::sync::Arc;
-use std::sync::RwLock;
 use qshare::consts::DefaultNodeFuncLogFolder;
 use qshare::node::*;
 use rand::prelude::*;
+use std::collections::BTreeMap;
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::RwLock;
 
-use qshare::k8s;
-use qshare::crictl;
 use qshare::common::*;
+use qshare::crictl;
+use qshare::k8s;
 
-use qshare::config::*;
 use crate::pod_mgr::runtime::k8s_quantity::*;
+use qshare::config::*;
 // use crate::pod_mgr::runtime::security_context::*;
 
 use super::k8s_types::RunContainerOptions;
@@ -37,7 +37,7 @@ pub fn CleanupPodDataDirs(rootPath: &str, pod: &PodDef) -> Result<()> {
     fs::remove_dir_all(&GetPodDir(rootPath, uid)).ok();
     fs::remove_dir_all(&GetPodVolumesDir(rootPath, uid)).ok();
     fs::remove_dir_all(&GetPodPluginsDir(rootPath, uid)).ok();
-    return Ok(())
+    return Ok(());
 }
 
 pub fn MakePodDataDir(rootPath: &str, pod: &PodDef) -> Result<()> {
@@ -45,7 +45,7 @@ pub fn MakePodDataDir(rootPath: &str, pod: &PodDef) -> Result<()> {
     fs::create_dir_all(&GetPodDir(rootPath, uid)).ok();
     fs::create_dir_all(&GetPodVolumesDir(rootPath, uid)).ok();
     fs::create_dir_all(&GetPodPluginsDir(rootPath, uid)).ok();
-    return Ok(())
+    return Ok(());
 }
 
 pub fn CleanupPodLogDir(rootPath: &str, pod: &PodDef) -> Result<()> {
@@ -53,7 +53,7 @@ pub fn CleanupPodLogDir(rootPath: &str, pod: &PodDef) -> Result<()> {
     let name = &pod.name;
     let uid = &pod.uid;
     fs::remove_dir_all(&GetPodLogDir(rootPath, namespace, name, uid)).ok();
-    return Ok(())
+    return Ok(());
 }
 
 pub fn MakePodLogDir(rootPath: &str, pod: &PodDef) -> Result<()> {
@@ -61,28 +61,28 @@ pub fn MakePodLogDir(rootPath: &str, pod: &PodDef) -> Result<()> {
     let name = &pod.name;
     let uid = &pod.uid;
     fs::create_dir_all(&GetPodLogDir(rootPath, namespace, name, uid)).ok();
-    return Ok(())
+    return Ok(());
 }
 
 pub fn GetPullSecretsForPod(_pod: &PodDef) -> Vec<k8s::Secret> {
-	let pullSecrets = Vec::new();
+    let pullSecrets = Vec::new();
 
-	// for _, secretRef := range pod.Spec.ImagePullSecrets {
-	//  if len(secretRef.Name) == 0 {
-	//    // API validation permitted entries with empty names (http://issue.k8s.io/99454#issuecomment-787838112).
-	//    // Ignore to avoid unnecessary warnings.
-	//    continue
-	//  }
-	//  secret, err := secretManager.GetSecret(pod.Namespace, secretRef.Name)
-	//  if err != nil {
-	//    klog.InfoS("Unable to retrieve pull secret, the image pull may not succeed.", QUARK_POD, klog.KObj(pod), "secret", klog.KObj(secret), "err", err)
-	//    continue
-	//  }
-	//
-	//  pullSecrets = append(pullSecrets, *secret)
-	// }
+    // for _, secretRef := range pod.Spec.ImagePullSecrets {
+    //  if len(secretRef.Name) == 0 {
+    //    // API validation permitted entries with empty names (http://issue.k8s.io/99454#issuecomment-787838112).
+    //    // Ignore to avoid unnecessary warnings.
+    //    continue
+    //  }
+    //  secret, err := secretManager.GetSecret(pod.Namespace, secretRef.Name)
+    //  if err != nil {
+    //    klog.InfoS("Unable to retrieve pull secret, the image pull may not succeed.", QUARK_POD, klog.KObj(pod), "secret", klog.KObj(secret), "err", err)
+    //    continue
+    //  }
+    //
+    //  pullSecrets = append(pullSecrets, *secret)
+    // }
 
-	return pullSecrets
+    return pullSecrets;
 }
 
 pub fn IsHostNetworkPod(pod: &PodDef) -> bool {
@@ -90,7 +90,7 @@ pub fn IsHostNetworkPod(pod: &PodDef) -> bool {
 }
 
 pub fn ContainerLogFileName(containerName: &str, restartCount: i32) -> String {
-	return format!("{}/{}", containerName, restartCount);
+    return format!("{}/{}", containerName, restartCount);
 }
 
 pub fn BuildContainerLogsDirectory(pod: &k8s::Pod, containerName: &str) -> Result<String> {
@@ -105,18 +105,18 @@ pub fn BuildContainerLogsDirectory(pod: &k8s::Pod, containerName: &str) -> Resul
         fs::set_permissions(&containerPath, fs::Permissions::from_mode(0o755))?;
     }
 
-    return Ok(containerPath)
+    return Ok(containerPath);
 }
 
 pub fn BuildPodLogsDirectory(podNamespace: &str, podName: &str, podUid: &str) -> Result<String> {
     let podPath = GetPodLogDir(DefaultPodLogsRootPath, podNamespace, podName, podUid);
-    
+
     if !Path::new(&podPath).exists() {
         fs::create_dir(&podPath)?;
         fs::set_permissions(&podPath, fs::Permissions::from_mode(0o755))?;
     }
 
-    return Ok(podPath)
+    return Ok(podPath);
 }
 
 pub type ContainerType = i32;
@@ -130,8 +130,8 @@ pub fn AllFeatureEnabledContainers() -> ContainerType {
 }
 
 pub fn HasPrivileged(_c: &ContainerDef, _containerType: ContainerType) -> bool {
-    // if c.security_context.is_some() 
-    //     && c.security_context.as_ref().unwrap().privileged.is_some() 
+    // if c.security_context.is_some()
+    //     && c.security_context.as_ref().unwrap().privileged.is_some()
     //     && c.security_context.as_ref().unwrap().privileged.unwrap() {
     //     return true;
     // }
@@ -140,18 +140,22 @@ pub fn HasPrivileged(_c: &ContainerDef, _containerType: ContainerType) -> bool {
 
 pub fn HasPrivilegedContainer(podSpec: &PodDef) -> bool {
     let mask = AllContainers;
-    for i in &podSpec.init_containers {{
-        if HasPrivileged(i, InitContainers) {
-            return true;
-        }
-    }}
-
-    if mask & Containers != 0 {
-        for i in &podSpec.containers {{
-            if HasPrivileged(i, Containers) {
+    for i in &podSpec.init_containers {
+        {
+            if HasPrivileged(i, InitContainers) {
                 return true;
             }
-        }}
+        }
+    }
+
+    if mask & Containers != 0 {
+        for i in &podSpec.containers {
+            {
+                if HasPrivileged(i, Containers) {
+                    return true;
+                }
+            }
+        }
     }
 
     // if mask & EphemeralContainers != 0 && podSpec.ephemeral_containers.is_some() {
@@ -178,7 +182,7 @@ pub fn MakePortMappings(container: &ContainerDef) -> Vec<crictl::PortMapping> {
     for p in &container.ports {
         let pm = crictl::PortMapping {
             host_ip: p.host_ip.as_deref().unwrap_or("").to_string(),
-            host_port: p.host_port.clone().unwrap_or(0), 
+            host_port: p.host_port.clone().unwrap_or(0),
             container_port: p.container_port,
             protocol: ToRuntimeProtocol(p.protocol.as_deref().unwrap_or("ProtocolTCP")),
         };
@@ -200,12 +204,12 @@ pub fn ToRuntimeProtocol(protocol: &str) -> i32 {
 // namespacesForPod returns the criv1.NamespaceOption for a given pod.
 // An empty or nil pod can be used to get the namespace defaults for v1.Pod.
 pub fn NamespacesForPod(pod: &PodDef) -> crictl::NamespaceOption {
-	return crictl::NamespaceOption {
-		ipc:     IpcNamespaceForPod(pod),
-		network: NetworkNamespaceForPod(pod),
-		pid:     PidNamespaceForPod(pod),
+    return crictl::NamespaceOption {
+        ipc: IpcNamespaceForPod(pod),
+        network: NetworkNamespaceForPod(pod),
+        pid: PidNamespaceForPod(pod),
         ..Default::default()
-	}
+    };
 }
 
 // A NamespaceMode describes the intended namespace configuration for each
@@ -234,39 +238,46 @@ pub const NamespaceMode_NODE: NamespaceMode = 2;
 pub const NamespaceMode_TARGET: NamespaceMode = 3;
 
 pub fn IpcNamespaceForPod(pod: &PodDef) -> NamespaceMode {
-	if pod.host_ipc {
-		return NamespaceMode_NODE
-	}
-	return NamespaceMode_POD
+    if pod.host_ipc {
+        return NamespaceMode_NODE;
+    }
+    return NamespaceMode_POD;
 }
 
 pub fn NetworkNamespaceForPod(pod: &PodDef) -> NamespaceMode {
-	if pod.host_network {
-		return NamespaceMode_NODE
-	}
-	return NamespaceMode_POD
+    if pod.host_network {
+        return NamespaceMode_NODE;
+    }
+    return NamespaceMode_POD;
 }
 
 pub fn PidNamespaceForPod(pod: &PodDef) -> NamespaceMode {
-	if pod.host_pid {
-		return NamespaceMode_NODE
-	}
+    if pod.host_pid {
+        return NamespaceMode_NODE;
+    }
 
     if pod.share_process_namespace {
-		return NamespaceMode_POD
-	}
+        return NamespaceMode_POD;
+    }
 
-	// Note that PID does not default to the zero value for v1.Pod
-	return NamespaceMode_CONTAINER
+    // Note that PID does not default to the zero value for v1.Pod
+    return NamespaceMode_CONTAINER;
 }
 
-pub fn ConvertOverheadToLinuxResources(nodeConfig: &NodeConfigurationInner, pod: &PodDef) -> crictl::LinuxContainerResources {
+pub fn ConvertOverheadToLinuxResources(
+    nodeConfig: &NodeConfigurationInner,
+    pod: &PodDef,
+) -> crictl::LinuxContainerResources {
     let resource = QuarkResource::New(&pod.overhead);
 
     return calculateLinuxResources(nodeConfig, resource.cpu, resource.cpu, resource.memory);
 }
 
-pub fn ApplySandboxResources(nodeConfig: &NodeConfigurationInner, pod: &PodDef, psc: &mut crictl::PodSandboxConfig) -> Result<()> {
+pub fn ApplySandboxResources(
+    nodeConfig: &NodeConfigurationInner,
+    pod: &PodDef,
+    psc: &mut crictl::PodSandboxConfig,
+) -> Result<()> {
     if psc.linux.is_none() {
         return Ok(());
     }
@@ -274,17 +285,20 @@ pub fn ApplySandboxResources(nodeConfig: &NodeConfigurationInner, pod: &PodDef, 
     let linux = psc.linux.as_mut().unwrap();
     linux.resources = Some(CalculateSandboxResources(nodeConfig, pod));
     linux.overhead = Some(ConvertOverheadToLinuxResources(nodeConfig, pod));
-    return Ok(())
+    return Ok(());
 }
 
-pub fn CalculateSandboxResources(nodeConfig: &NodeConfigurationInner, pod: &PodDef) -> crictl::LinuxContainerResources {
+pub fn CalculateSandboxResources(
+    nodeConfig: &NodeConfigurationInner,
+    pod: &PodDef,
+) -> crictl::LinuxContainerResources {
     let (req, lim) = PodRequestsAndLimitsWithoutOverhead(pod);
     return calculateLinuxResources(nodeConfig, req.cpu, lim.cpu, lim.memory);
 }
 
 pub fn ContainerResource(container: &ContainerDef) -> (QuarkResource, QuarkResource) {
-    let req = QuarkResource::New(&container.resources.requests);    
-    let lim =QuarkResource::New(&container.resources.limits);
+    let req = QuarkResource::New(&container.resources.requests);
+    let lim = QuarkResource::New(&container.resources.limits);
     return (req, lim);
 }
 
@@ -298,10 +312,15 @@ pub fn PodRequestsAndLimitsWithoutOverhead(pod: &PodDef) -> (QuarkResource, Quar
         limits.Add(&tmpLimits);
     }
 
-    return (reqs, limits)
+    return (reqs, limits);
 }
 
-pub fn calculateLinuxResources(nodeConfig: &NodeConfigurationInner, cpureq: i64, cpulimit: i64, memlimit: i64) -> crictl::LinuxContainerResources {
+pub fn calculateLinuxResources(
+    nodeConfig: &NodeConfigurationInner,
+    cpureq: i64,
+    cpulimit: i64,
+    memlimit: i64,
+) -> crictl::LinuxContainerResources {
     let mut resources = crictl::LinuxContainerResources::default();
 
     let cpushare;
@@ -321,12 +340,12 @@ pub fn calculateLinuxResources(nodeConfig: &NodeConfigurationInner, cpureq: i64,
         let cpuPeriod = quotaPeriod;
         /*
         if utilfeature.DefaultFeatureGate.Enabled(kubefeatures.CPUCFSQuotaPeriod) {
-			cpuPeriod = int64(nodeConfig.CPUCFSQuotaPeriod / time.Microsecond)
-		} 
+            cpuPeriod = int64(nodeConfig.CPUCFSQuotaPeriod / time.Microsecond)
+        }
         */
         let cpuQuota = MilliCPUToQuota(cpulimit, cpuPeriod);
-		resources.cpu_quota = cpuQuota;
-		resources.cpu_period = cpuPeriod;
+        resources.cpu_quota = cpuQuota;
+        resources.cpu_period = cpuPeriod;
     }
 
     return resources;
@@ -341,48 +360,48 @@ pub const MilliCPUToCPU: i64 = 1000;
 pub const milliCPUToCPU: i64 = 1000;
 
 // 100000 is equivalent to 100ms
-pub const quotaPeriod: i64    = 100000;
+pub const quotaPeriod: i64 = 100000;
 pub const minQuotaPeriod: i64 = 1000;
 
 pub fn MilliCPUToShares(milliCPU: i64) -> u64 {
     if milliCPU == 0 {
         // Docker converts zero milliCPU to unset, which maps to kernel default
-		// for unset: 1024. Return 2 here to really match kernel default for
-		// zero milliCPU.
+        // for unset: 1024. Return 2 here to really match kernel default for
+        // zero milliCPU.
         return 0;
     }
 
     // Conceptually (milliCPU / milliCPUToCPU) * sharesPerCPU, but factored to improve rounding.
-	let shares = (milliCPU * SharesPerCPU) / MilliCPUToCPU;
-	if shares < MinShares {
-		return MinShares as u64
-	}
-	if shares > MaxShares {
-		return MaxShares as u64
-	}
-	return shares as u64
+    let shares = (milliCPU * SharesPerCPU) / MilliCPUToCPU;
+    if shares < MinShares {
+        return MinShares as u64;
+    }
+    if shares > MaxShares {
+        return MaxShares as u64;
+    }
+    return shares as u64;
 }
 
 pub fn MilliCPUToQuota(milliCPU: i64, period: i64) -> i64 {
     // CFS quota is measured in two values:
-	//  - cfs_period_us=100ms (the amount of time to measure usage across)
-	//  - cfs_quota=20ms (the amount of cpu time allowed to be used across a period)
-	// so in the above example, you are limited to 20% of a single CPU
-	// for multi-cpu environments, you just scale equivalent amounts
-	// see https://www.kernel.org/doc/Documentation/scheduler/sched-bwc.txt for details
-	if milliCPU == 0 {
-		return 0
-	}
+    //  - cfs_period_us=100ms (the amount of time to measure usage across)
+    //  - cfs_quota=20ms (the amount of cpu time allowed to be used across a period)
+    // so in the above example, you are limited to 20% of a single CPU
+    // for multi-cpu environments, you just scale equivalent amounts
+    // see https://www.kernel.org/doc/Documentation/scheduler/sched-bwc.txt for details
+    if milliCPU == 0 {
+        return 0;
+    }
 
-	// we then convert your milliCPU to a value normalized over a period
-	let mut quota = (milliCPU * period) / milliCPUToCPU;
+    // we then convert your milliCPU to a value normalized over a period
+    let mut quota = (milliCPU * period) / milliCPUToCPU;
 
-	// quota needs to be a minimum of 1ms.
-	if quota < minQuotaPeriod {
-		quota = minQuotaPeriod;
-	}
+    // quota needs to be a minimum of 1ms.
+    if quota < minQuotaPeriod {
+        quota = minQuotaPeriod;
+    }
 
-	return quota;
+    return quota;
 }
 
 // systemdSuffix is the cgroup name suffix for systemd
@@ -393,12 +412,12 @@ pub const MemoryMin: &str = "memory.min";
 pub const MemoryHigh: &str = "memory.high";
 
 pub fn generateLinuxContainerConfig(
-    nodeConfig: &NodeConfigurationInner, 
-    container: &ContainerDef, 
-    pod: &Arc<RwLock<PodDef>>, 
-    _uid: Option<i64>, 
-    _username: &str, 
-    enforceMemoryQoS: bool
+    nodeConfig: &NodeConfigurationInner,
+    container: &ContainerDef,
+    pod: &Arc<RwLock<PodDef>>,
+    _uid: Option<i64>,
+    _username: &str,
+    enforceMemoryQoS: bool,
 ) -> crictl::LinuxContainerConfig {
     let _pod = &pod.read().unwrap();
     let mut lc = crictl::LinuxContainerConfig {
@@ -411,7 +430,9 @@ pub fn generateLinuxContainerConfig(
 
     let mem = lc.resources.as_ref().unwrap().memory_limit_in_bytes;
 
-    lc.resources = Some(calculateLinuxResources(nodeConfig, req.cpu, lim.cpu, lim.memory));
+    lc.resources = Some(calculateLinuxResources(
+        nodeConfig, req.cpu, lim.cpu, lim.memory,
+    ));
     lc.resources.as_mut().unwrap().oom_score_adj = nodeConfig.OOMScoreAdj as i64;
     //lc.resources.as_mut().unwrap().hugepage_limits = nodeConfig.OOMScoreAdj as i64;
     lc.resources.as_mut().unwrap().memory_swap_limit_in_bytes = mem;
@@ -426,18 +447,18 @@ pub fn generateLinuxContainerConfig(
         }
 
         // If container sets limits.memory, we set memory.high=pod.spec.containers[i].resources.limits[memory] * memory_throttling_factor
-		// for container level cgroup if memory.high>memory.min.
-		// If container doesn't set limits.memory, we set memory.high=node_allocatable_memory * memory_throttling_factor
-		// for container level cgroup.
-		let mut memoryHigh: i64 = 0;
+        // for container level cgroup if memory.high>memory.min.
+        // If container doesn't set limits.memory, we set memory.high=node_allocatable_memory * memory_throttling_factor
+        // for container level cgroup.
+        let mut memoryHigh: i64 = 0;
         if memoryLimit != 0 {
             memoryHigh = (memoryLimit as f64 * DefaultMemoryThrottlingFactor) as i64;
         } else {
             // allocatable := m.getNodeAllocatable()
-			// allocatableMemory, ok := allocatable[v1.ResourceMemory]
-			// if ok && allocatableMemory.Value() > 0 {
-			//  memoryHigh = int64(float64(allocatableMemory.Value()) * m.memoryThrottlingFactor)
-			// }
+            // allocatableMemory, ok := allocatable[v1.ResourceMemory]
+            // if ok && allocatableMemory.Value() > 0 {
+            //  memoryHigh = int64(float64(allocatableMemory.Value()) * m.memoryThrottlingFactor)
+            // }
         }
 
         if memoryHigh > memoryRequest {
@@ -446,13 +467,17 @@ pub fn generateLinuxContainerConfig(
 
         if unified.len() > 0 {
             for (k, v) in &unified {
-                lc.resources.as_mut().unwrap().unified.insert(k.to_string(), v.to_string());
+                lc.resources
+                    .as_mut()
+                    .unwrap()
+                    .unified
+                    .insert(k.to_string(), v.to_string());
             }
         }
     }
 
-    return lc
-} 
+    return lc;
+}
 
 pub fn MakeDevice(opts: &RunContainerOptions) -> Vec<crictl::Device> {
     let mut devices = Vec::with_capacity(opts.devices.len());
@@ -468,8 +493,11 @@ pub fn MakeDevice(opts: &RunContainerOptions) -> Vec<crictl::Device> {
     return devices;
 }
 
-
-pub async fn MakeMounts(pod: &Arc<RwLock<PodDef>>, container: &ContainerDef, namespace: &str) -> Result<Vec<crictl::Mount>> {
+pub async fn MakeMounts(
+    pod: &Arc<RwLock<PodDef>>,
+    container: &ContainerDef,
+    namespace: &str,
+) -> Result<Vec<crictl::Mount>> {
     let pod = pod.read().unwrap();
     let mut volumeMounts = Vec::new();
 
@@ -481,7 +509,7 @@ pub async fn MakeMounts(pod: &Arc<RwLock<PodDef>>, container: &ContainerDef, nam
                 volumes.insert(v.name.clone(), h.path.clone());
             }
             None => (),
-        } 
+        }
     }
 
     for mount in &container.volume_mounts {
@@ -492,10 +520,10 @@ pub async fn MakeMounts(pod: &Arc<RwLock<PodDef>>, container: &ContainerDef, nam
                     container_path: mount.mount_path.clone(),
                     ..Default::default()
                 };
-                
+
                 volumeMounts.push(mount);
             }
-            None => ()
+            None => (),
         }
     }
 
@@ -509,7 +537,7 @@ pub async fn MakeMounts(pod: &Arc<RwLock<PodDef>>, container: &ContainerDef, nam
 
     let logfolder = format!("{}/func/{}", DefaultNodeFuncLogFolder, namespace);
     std::fs::create_dir_all(&logfolder).unwrap();
-    
+
     let mount = crictl::Mount {
         host_path: logfolder,
         container_path: DefaultNodeFuncLogFolder.to_owned(),
@@ -519,13 +547,13 @@ pub async fn MakeMounts(pod: &Arc<RwLock<PodDef>>, container: &ContainerDef, nam
     volumeMounts.push(mount);
 
     // The reason we create and mount the log file in here is because
-	// the file's location depends on the ID of the container, and we need to create and
-	// mount the file before actually starting the container.
+    // the file's location depends on the ID of the container, and we need to create and
+    // mount the file before actually starting the container.
     // if opts.podContainerDir.len() != 0 && container.termination_message_path.as_ref().unwrap().len() != 0 {
     //     // Because the PodContainerDir contains pod uid and container name which is unique enough,
-	// 	// here we just add a random id to make the path unique for different instances
-	// 	// of the same container.
-	// 	let cid = MakeUID();
+    // 	// here we just add a random id to make the path unique for different instances
+    // 	// of the same container.
+    // 	let cid = MakeUID();
     //     let containerLogPath = format!("{}/{}", &opts.podContainerDir, cid);
     //     fs::create_dir_all(&containerLogPath).unwrap();
     //     let perms = Permissions::from_mode(0o666);
@@ -555,4 +583,3 @@ pub fn MakeUID() -> String {
     let n: u64 = rng.gen();
     return format!("{:0<8}", n);
 }
-

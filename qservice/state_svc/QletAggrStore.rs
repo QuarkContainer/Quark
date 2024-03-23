@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use core::ops::Deref;
 use qshare::metastore::data_obj::{DeltaEvent, EventType, STATESVC_ADDR};
 use qshare::metastore::informer::{EventHandler, Informer};
 use qshare::metastore::selection_predicate::ListOption;
 use qshare::metastore::store::ThreadSafeStore;
 use qshare::types::NodeInfo;
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
-use core::ops::Deref;
 
 use qshare::common::*;
-use qshare::metastore::cache_store::{CacheStore, ChannelRev};
 use qshare::metastore::aggregate_client::AggregateClient;
+use qshare::metastore::cache_store::{CacheStore, ChannelRev};
 
 #[derive(Debug)]
 pub struct QletAggrStoreInner {
@@ -68,38 +68,45 @@ impl QletAggrStore {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
         let addr = format!("http://{}", STATESVC_ADDR);
-        let informer = Informer::New(vec![addr], "node_info", "", "", &ListOption::default()).await?;
-        
+        let informer =
+            Informer::New(vec![addr], "node_info", "", "", &ListOption::default()).await?;
+
         informer.AddEventHandler(Arc::new(self.clone())).await?;
         let notify = Arc::new(Notify::new());
         informer.Process(notify).await?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn AddQletAgent(&self, nodeName: &str, svcAddr: &str) -> Result<()> {
         let podStore = self.PodStore();
         let nodeStore = self.NodeStore();
-        
+
         let agent = QletAgent::New(nodeName, svcAddr, &nodeStore, &podStore)?;
 
-        self.lock().unwrap().agents.insert(nodeName.to_owned(), agent.clone());
+        self.lock()
+            .unwrap()
+            .agents
+            .insert(nodeName.to_owned(), agent.clone());
         tokio::spawn(async move {
             agent.Process().await.unwrap();
         });
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn RemoveQletAgent(&self, nodeName: &str) -> Result<()> {
         let agent = match self.lock().unwrap().agents.remove(nodeName) {
             Some(a) => a,
             None => {
-                return Err(Error::NotExist(format!("QletAggrStore::RemoveQletAgent {}", nodeName)));
+                return Err(Error::NotExist(format!(
+                    "QletAggrStore::RemoveQletAgent {}",
+                    nodeName
+                )));
             }
         };
 
         agent.Close();
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -108,21 +115,26 @@ impl EventHandler for QletAggrStore {
         match &event.type_ {
             EventType::Added => {
                 let obj = &event.obj;
-                let nodeInfo : NodeInfo = serde_json::from_str(&obj.data)
-                    .expect(&format!("NodeMgr::handle deserialize fail for {}", &obj.data));
+                let nodeInfo: NodeInfo = serde_json::from_str(&obj.data).expect(&format!(
+                    "NodeMgr::handle deserialize fail for {}",
+                    &obj.data
+                ));
 
-                let stateSvcPort : u16 = nodeInfo.stateSvcPort;
+                let stateSvcPort: u16 = nodeInfo.stateSvcPort;
                 let stateSvcAddr = format!("http://{}:{}", &nodeInfo.nodeIp, stateSvcPort);
-                self.AddQletAgent(&nodeInfo.nodeName, &stateSvcAddr).unwrap();
+                self.AddQletAgent(&nodeInfo.nodeName, &stateSvcAddr)
+                    .unwrap();
             }
             EventType::Deleted => {
                 let obj = event.oldObj.as_ref().unwrap();
-                let nodeInfo : NodeInfo = serde_json::from_str(&obj.data)
-                    .expect(&format!("NodeMgr::handle deserialize fail for {}", &obj.data));
-                
+                let nodeInfo: NodeInfo = serde_json::from_str(&obj.data).expect(&format!(
+                    "NodeMgr::handle deserialize fail for {}",
+                    &obj.data
+                ));
+
                 self.RemoveQletAgent(&nodeInfo.nodeName).unwrap();
             }
-            _ => ()
+            _ => (),
         }
     }
 }
@@ -150,7 +162,12 @@ impl Deref for QletAgent {
 }
 
 impl QletAgent {
-    pub fn New(nodeName: &str, svcAddr: &str, nodeCache: &CacheStore, podCache: &CacheStore) -> Result<Self> {
+    pub fn New(
+        nodeName: &str,
+        svcAddr: &str,
+        nodeCache: &CacheStore,
+        podCache: &CacheStore,
+    ) -> Result<Self> {
         let inner = QletAgentInner {
             closeNotify: Arc::new(Notify::new()),
             closed: AtomicBool::new(false),
@@ -161,7 +178,7 @@ impl QletAgent {
             podClient: AggregateClient::New(podCache, "pod", "", "")?,
         };
 
-        return Ok(Self(Arc::new(inner)))
+        return Ok(Self(Arc::new(inner)));
     }
 
     pub fn Close(&self) {
@@ -172,7 +189,7 @@ impl QletAgent {
     pub async fn Process(&self) -> Result<()> {
         let listNotify = Arc::new(Notify::new());
 
-        tokio::select! { 
+        tokio::select! {
             _ = self.closeNotify.notified() => {
                 self.nodeClient.Close();
                 self.podClient.Close();
@@ -186,6 +203,6 @@ impl QletAgent {
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 }

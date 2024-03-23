@@ -21,35 +21,34 @@ use qshare::cadvisor_types::{MachineInfo, VersionInfo};
 
 #[derive(Debug)]
 pub struct NodeCAdvisorInfo {
-	//ContainerInfo []*cadvisorv2.ContainerInfo
-	pub machineInfo:   MachineInfo,
-	//RootFsInfo    *cadvisorv2.FsInfo
-	//ImageFsInfo   *cadvisorv2.FsInfo
-	pub versionInfo:   VersionInfo,
+    //ContainerInfo []*cadvisorv2.ContainerInfo
+    pub machineInfo: MachineInfo,
+    //RootFsInfo    *cadvisorv2.FsInfo
+    //ImageFsInfo   *cadvisorv2.FsInfo
+    pub versionInfo: VersionInfo,
 }
 
 pub struct Client {
     pub baseURL: String,
 }
 
-impl Client
-{
+impl Client {
     pub fn Init() -> Self {
         return Self {
             baseURL: "http://127.0.0.1:8080/api/v2.1".to_owned(),
-        }
+        };
     }
 
     pub async fn MachineInfo(&self) -> Result<MachineInfo> {
         let url = self.baseURL.clone() + "/" + "machine";
         let resp = reqwest::get(url).await?.text().await?;
-        let mi : MachineInfo = serde_json::from_str(&resp)?;
-        
+        let mi: MachineInfo = serde_json::from_str(&resp)?;
+
         return Ok(mi);
     }
 
     pub async fn VersionInfo(&self) -> Result<VersionInfo> {
-        return Ok(VersionInfo::default())
+        return Ok(VersionInfo::default());
     }
 
     pub async fn GetInfo(&self) -> Result<NodeCAdvisorInfo> {
@@ -58,6 +57,6 @@ impl Client
         return Ok(NodeCAdvisorInfo {
             machineInfo: mi,
             versionInfo: version,
-        })
+        });
     }
 }

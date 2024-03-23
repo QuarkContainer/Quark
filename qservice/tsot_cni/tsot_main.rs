@@ -16,15 +16,20 @@ use cni_plugin::error::CniError;
 use tonic::Request;
 
 use cni_plugin::*;
+use qshare::common::*;
 use qshare::config::TSOT_CNI_PORT;
 use qshare::tsot_cni;
-use qshare::common::*;
 
 #[macro_use]
 extern crate log;
 extern crate simple_logging;
 
-pub async fn get_pod_sandbox_addr(namespace: &str, pod_uid: &str, pod_name: &str, container_id: &str) -> Result<tsot_cni::GetPodSandboxAddrResp> {
+pub async fn get_pod_sandbox_addr(
+    namespace: &str,
+    pod_uid: &str,
+    pod_name: &str,
+    container_id: &str,
+) -> Result<tsot_cni::GetPodSandboxAddrResp> {
     let addr = format!("http://127.0.0.1:{}", TSOT_CNI_PORT);
     error!("get_pod_sandbox_addr 1 {}", &addr);
     let mut client = tsot_cni::tsot_cni_service_client::TsotCniServiceClient::connect(addr).await?;
@@ -42,12 +47,17 @@ pub async fn get_pod_sandbox_addr(namespace: &str, pod_uid: &str, pod_name: &str
     return Ok(resp);
 }
 
-pub async fn remove_pod_sandbox(namespace: &str, pod_uid: &str, pod_name: &str, container_id: &str) -> Result<tsot_cni::RemovePodSandboxResp> {
+pub async fn remove_pod_sandbox(
+    namespace: &str,
+    pod_uid: &str,
+    pod_name: &str,
+    container_id: &str,
+) -> Result<tsot_cni::RemovePodSandboxResp> {
     let addr = format!("http://127.0.0.1:{}", TSOT_CNI_PORT);
     let mut client = tsot_cni::tsot_cni_service_client::TsotCniServiceClient::connect(addr).await?;
-    let req = Request::new(tsot_cni::RemovePodSandboxReq{
+    let req = Request::new(tsot_cni::RemovePodSandboxReq {
         namespace: namespace.to_owned(),
-        pod_uid: pod_uid.to_owned(), 
+        pod_uid: pod_uid.to_owned(),
         pod_name: pod_name.to_owned(),
         container_id: container_id.to_owned(),
     });
@@ -82,11 +92,11 @@ async fn main() {
                     "K8S_POD_UID" => {
                         pod_uid = keyval[1].to_owned();
                     }
-                    _ => ()
+                    _ => (),
                 }
             }
         }
-        _ => ()
+        _ => (),
     }
 
     error!("namespace is {namespace}, podname is {podname}, pod_uid is {pod_uid}");
@@ -97,25 +107,29 @@ async fn main() {
     let container_id = input.container_id.clone();
 
     let cni_version = input.config.cni_version.clone(); // for error
-	
+
     match input.command {
         Command::Add => {
-            let addr = match get_pod_sandbox_addr(&namespace, &pod_uid, &podname, &container_id).await {
-                Err(e) => {
-                    error!("get_pod_sandbox_addr error  1 {:?}", e);
-                    let err = CniError::Generic(format!("get pod address fail with {:?}", e));
-                    reply::reply(err.into_reply(cni_version))
-                }
-                Ok(resp) => {
-                    if resp.error.len() == 0 {
-                        resp.ip_addr
-                    } else {
-                        let err = CniError::Generic(format!("get pod address fail with {:?}", resp.error));
-                        error!("get_pod_sandbox_addr error  2 {:?}", &err);
+            let addr =
+                match get_pod_sandbox_addr(&namespace, &pod_uid, &podname, &container_id).await {
+                    Err(e) => {
+                        error!("get_pod_sandbox_addr error  1 {:?}", e);
+                        let err = CniError::Generic(format!("get pod address fail with {:?}", e));
                         reply::reply(err.into_reply(cni_version))
                     }
-                }
-            };
+                    Ok(resp) => {
+                        if resp.error.len() == 0 {
+                            resp.ip_addr
+                        } else {
+                            let err = CniError::Generic(format!(
+                                "get pod address fail with {:?}",
+                                resp.error
+                            ));
+                            error!("get_pod_sandbox_addr error  2 {:?}", &err);
+                            reply::reply(err.into_reply(cni_version))
+                        }
+                    }
+                };
 
             let a = (addr >> 24) as u8;
             let b = (addr >> 16) as u8;
@@ -126,19 +140,17 @@ async fn main() {
             let res = reply::SuccessReply {
                 cni_version,
                 interfaces: Default::default(),
-                ips: vec![
-                    reply::Ip {
-                        address: str.parse().unwrap(), // "10.1.0.4".parse().unwrap(),
-                        gateway: None,
-                        interface: None
-                    }
-                ],
+                ips: vec![reply::Ip {
+                    address: str.parse().unwrap(), // "10.1.0.4".parse().unwrap(),
+                    gateway: None,
+                    interface: None,
+                }],
                 // ips: Default::default(),
                 routes: Default::default(),
                 dns: Default::default(),
                 specific: Default::default(),
             };
-        
+
             reply::reply(res);
         }
         Command::Del => {
@@ -150,7 +162,10 @@ async fn main() {
                 }
                 Ok(resp) => {
                     if resp.error.len() != 0 {
-                        let _err = CniError::Generic(format!("remove_pod_sandbox fail with {:?}", resp.error));
+                        let _err = CniError::Generic(format!(
+                            "remove_pod_sandbox fail with {:?}",
+                            resp.error
+                        ));
                         // ignore any fail to avoid block pods killing
                         // reply::reply(err.into_reply(cni_version))
                     }
@@ -165,7 +180,7 @@ async fn main() {
                 dns: Default::default(),
                 specific: Default::default(),
             };
-        
+
             reply::reply(res);
         }
         cmd => {

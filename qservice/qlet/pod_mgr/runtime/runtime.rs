@@ -18,15 +18,15 @@ use std::time::Duration;
 use tokio::sync::Semaphore;
 //use qobjs::v1alpha2::{self as cri};
 
-use qshare::crictl::*;
 use crate::pod_mgr::cri::client::*;
-use qshare::common::Result;
 use qshare::common::Error;
+use qshare::common::Result;
+use qshare::crictl::*;
 use qshare::types::*;
 
 #[derive(Debug)]
 pub struct RuntimeMgr {
-pub runtimeService: CriClient,
+    pub runtimeService: CriClient,
     pub concurrency: Semaphore,
 }
 
@@ -36,7 +36,7 @@ impl RuntimeMgr {
         return Ok(Self {
             runtimeService: runtimeService,
             concurrency: Semaphore::new(concurrency),
-        })
+        });
     }
 
     // GetPodSandbox implements RuntimeService
@@ -47,44 +47,44 @@ impl RuntimeMgr {
             id: podSandboxId.to_string(),
             ..Default::default()
         };
-        let sandboxes = self.runtimeService
-            .ListPodSandbox(Some(filter))
-            .await?;
+        let sandboxes = self.runtimeService.ListPodSandbox(Some(filter)).await?;
 
         if sandboxes.len() > 0 {
-            return Ok(Some(sandboxes[0].clone()))
-        } 
+            return Ok(Some(sandboxes[0].clone()));
+        }
 
         return Ok(None);
     }
 
     // Status implements cri.RuntimeService
     pub async fn GetRuntimeStatus(&self) -> Result<RuntimeStatus> {
-        let resp = self
-            .runtimeService
-            .Status(false)
-            .await?;
-        
+        let resp = self.runtimeService.Status(false).await?;
+
         if let Some(status) = resp.status {
             if status.conditions.len() >= 2 {
-                return Ok(status)
+                return Ok(status);
             }
         }
 
-        return Err(Error::CommonError("Failed to get runtime status: RuntimeReady or NetworkReady condition are not set".to_string()));
+        return Err(Error::CommonError(
+            "Failed to get runtime status: RuntimeReady or NetworkReady condition are not set"
+                .to_string(),
+        ));
     }
 
-    pub async fn CreateContainer(&self, 
-        podSandboxId: &str, 
-        containerConfig: Option<ContainerConfig>, 
-        podSandboxConfig: Option<PodSandboxConfig>) -> Result<RuntimeContainer> {
+    pub async fn CreateContainer(
+        &self,
+        podSandboxId: &str,
+        containerConfig: Option<ContainerConfig>,
+        podSandboxConfig: Option<PodSandboxConfig>,
+    ) -> Result<RuntimeContainer> {
         let _s = self.concurrency.acquire().await?;
 
-        let containerId = self.runtimeService.CreateContainer(
-            podSandboxId, 
-            containerConfig.clone(), 
-            podSandboxConfig).await?;
-        
+        let containerId = self
+            .runtimeService
+            .CreateContainer(podSandboxId, containerConfig.clone(), podSandboxConfig)
+            .await?;
+
         let filter = ContainerFilter {
             id: containerId.clone(),
             pod_sandbox_id: podSandboxId.to_string(),
@@ -99,18 +99,28 @@ impl RuntimeMgr {
                 container: containers[0].clone(),
             };
 
-            return Ok(container)
-        } 
+            return Ok(container);
+        }
 
-        return Err(Error::CommonError(format!("Do not get exact one container with id: {}", containerId)))
+        return Err(Error::CommonError(format!(
+            "Do not get exact one container with id: {}",
+            containerId
+        )));
     }
 
-   pub async fn CreateSandbox(&self, sandboxConfig: Option<PodSandboxConfig>, runtimeClassName: &str) -> Result<RuntimePod> {
+    pub async fn CreateSandbox(
+        &self,
+        sandboxConfig: Option<PodSandboxConfig>,
+        runtimeClassName: &str,
+    ) -> Result<RuntimePod> {
         let _s = self.concurrency.acquire().await?;
 
         info!("Run pod sandbox SandboxConfig {:?}", &sandboxConfig);
 
-        let podSandBoxId = self.runtimeService.RunPodSandbox(sandboxConfig.clone(), runtimeClassName).await?;
+        let podSandBoxId = self
+            .runtimeService
+            .RunPodSandbox(sandboxConfig.clone(), runtimeClassName)
+            .await?;
 
         let filter = PodSandboxFilter {
             id: podSandBoxId.clone(),
@@ -118,7 +128,10 @@ impl RuntimeMgr {
         };
         let sandboxes = self.runtimeService.ListPodSandbox(Some(filter)).await?;
         if sandboxes.len() != 1 {
-            return Err(Error::CommonError(format!("Do not get exact one pod sandbox with id: {}", &podSandBoxId)))
+            return Err(Error::CommonError(format!(
+                "Do not get exact one pod sandbox with id: {}",
+                &podSandBoxId
+            )));
         }
 
         let mut pod = RuntimePod {
@@ -138,8 +151,8 @@ impl RuntimeMgr {
             }
         }
 
-        return Ok(pod)
-    } 
+        return Ok(pod);
+    }
 
     // GetImageLabel implements cri.RuntimeService
     pub async fn GetImageLabel(&self) -> Result<String> {
@@ -148,13 +161,20 @@ impl RuntimeMgr {
 
     // GetContainerStatus implements cri.RuntimeService
     pub async fn GetContainerStatus(&self, containerId: &str) -> Result<ContainerStatus> {
-        let resp = self.runtimeService.ContainerStatus(containerId, false).await?;
+        let resp = self
+            .runtimeService
+            .ContainerStatus(containerId, false)
+            .await?;
 
-        return Ok(resp.status.unwrap())
+        return Ok(resp.status.unwrap());
     }
 
     // GetPodStatus implements cri.RuntimeService
-    pub async fn GetPodStatus(&self, podSandboxId: &str, containerIds: &[String]) -> Result<RuntimePodStatus> {
+    pub async fn GetPodStatus(
+        &self,
+        podSandboxId: &str,
+        containerIds: &[String],
+    ) -> Result<RuntimePodStatus> {
         info!("Get pod status include sandbox and container status PodSandboxID {}, ContainerIDs {:?}", podSandboxId, containerIds);
         let sandboxStatus = self.GetPodSandboxStatus(podSandboxId).await?;
 
@@ -164,10 +184,12 @@ impl RuntimeMgr {
         };
         for id in containerIds {
             let containerStatus = self.GetContainerStatus(id).await?;
-            podStatus.containerStatus.insert(id.to_string(), containerStatus);
+            podStatus
+                .containerStatus
+                .insert(id.to_string(), containerStatus);
         }
 
-        return Ok(podStatus)
+        return Ok(podStatus);
     }
 
     // GetPods implements cri.RuntimeService
@@ -193,7 +215,7 @@ impl RuntimeMgr {
             podMap.insert(pod.id.clone(), pod);
         }
 
-        let pods : Vec<_> = podMap.into_values().collect();
+        let pods: Vec<_> = podMap.into_values().collect();
         return Ok(pods);
     }
 
@@ -203,8 +225,10 @@ impl RuntimeMgr {
 
         info!("Stop container ContainerID {}", containerId);
 
-        self.runtimeService.StopContainer(containerId, timeout.as_secs() as i64).await?;
-        return Ok(())
+        self.runtimeService
+            .StopContainer(containerId, timeout.as_secs() as i64)
+            .await?;
+        return Ok(());
     }
 
     // StartContainer implements cri.RuntimeService
@@ -213,14 +237,17 @@ impl RuntimeMgr {
 
         info!("Start container ContainerID {}", containerId);
         self.runtimeService.StartContainer(containerId).await?;
-        return Ok(())
+        return Ok(());
     }
 
     // TerminateContainer implements cri.RuntimeService
     pub async fn TerminateContainer(&self, containerId: &str) -> Result<()> {
         let _s = self.concurrency.acquire().await;
 
-        info!("Terminate container, stop immediately without gracePeriodContainerID {}", containerId);
+        info!(
+            "Terminate container, stop immediately without gracePeriodContainerID {}",
+            containerId
+        );
 
         let status = self.GetContainerStatus(containerId).await?;
 
@@ -232,7 +259,11 @@ impl RuntimeMgr {
     }
 
     // TerminatePod implements cri.RuntimeService
-    pub async fn TerminatePod(&self, podSandboxId: &str, mut containerIds: Vec<String> ) -> Result<()> {
+    pub async fn TerminatePod(
+        &self,
+        podSandboxId: &str,
+        mut containerIds: Vec<String>,
+    ) -> Result<()> {
         let _s = self.concurrency.acquire().await;
 
         info!("Terminate pod PodSandboxID {}", podSandboxId);
@@ -241,7 +272,10 @@ impl RuntimeMgr {
             let containers = self.GetPodContainers(podSandboxId).await?;
             for c in &containers {
                 if c.state != ContainerState::ContainerExited as i32 {
-                    info!("Terminate container in pod PodSandboxID {}, Container {:?}", podSandboxId, c);
+                    info!(
+                        "Terminate container in pod PodSandboxID {}, Container {:?}",
+                        podSandboxId, c
+                    );
                     self.runtimeService.StopContainer(&c.id, 0).await?;
                     containerIds.push(c.id.clone());
                 }
@@ -252,26 +286,35 @@ impl RuntimeMgr {
 
         self.runtimeService.StopPodSandbox(podSandboxId).await?;
         self.runtimeService.RemovePodSandbox(podSandboxId).await?;
-        return Ok(())
+        return Ok(());
     }
 
     pub async fn GetPodSandboxStatus(&self, podSandboxID: &str) -> Result<PodSandboxStatus> {
-        let resp = self.runtimeService.PodSandboxStatus(podSandboxID, false).await?;
+        let resp = self
+            .runtimeService
+            .PodSandboxStatus(podSandboxID, false)
+            .await?;
         if resp.status.is_none() {
-            return Err(Error::CommonError(format!("GetPodSandboxStatus for {} get none status", podSandboxID)));
+            return Err(Error::CommonError(format!(
+                "GetPodSandboxStatus for {} get none status",
+                podSandboxID
+            )));
         }
 
-        return Ok(resp.status.unwrap())
+        return Ok(resp.status.unwrap());
     }
 
     pub async fn GetAllContainers(&self) -> Result<Vec<Container>> {
         info!("Get all containers in runtime");
-        
+
         return self.runtimeService.ListContainers(None).await;
     }
 
     pub async fn GetPodContainers(&self, podSandboxId: &str) -> Result<Vec<Container>> {
-        info!("Get all containers in sandbox PodSandboxID {}", podSandboxId);
+        info!(
+            "Get all containers in sandbox PodSandboxID {}",
+            podSandboxId
+        );
         let filter = ContainerFilter {
             pod_sandbox_id: podSandboxId.to_string(),
             ..Default::default()
@@ -280,14 +323,24 @@ impl RuntimeMgr {
         return self.runtimeService.ListContainers(Some(filter)).await;
     }
 
-    pub async fn ExecCommand(&self, containerID: &str, cmd: Vec<String>, timeout: i64) -> Result<(Vec<u8>, Vec<u8>)> {
-        let resp = self.runtimeService.ExecSync(containerID, cmd.to_vec(), timeout).await?;
+    pub async fn ExecCommand(
+        &self,
+        containerID: &str,
+        cmd: Vec<String>,
+        timeout: i64,
+    ) -> Result<(Vec<u8>, Vec<u8>)> {
+        let resp = self
+            .runtimeService
+            .ExecSync(containerID, cmd.to_vec(), timeout)
+            .await?;
         if resp.exit_code != 0 {
             let stderr = std::str::from_utf8(&resp.stderr)?;
-            return Err(Error::CommonError(format!("command '{:?}' exited with {}: {}", cmd, resp.exit_code, stderr)))
+            return Err(Error::CommonError(format!(
+                "command '{:?}' exited with {}: {}",
+                cmd, resp.exit_code, stderr
+            )));
         }
 
-        return Ok((resp.stdout.to_vec(), resp.stderr.to_vec()))
+        return Ok((resp.stdout.to_vec(), resp.stderr.to_vec()));
     }
 }
-

@@ -14,16 +14,16 @@
 
 // TsotSocket is a tcp client socket initialized from admin process such as mulitenant gateway
 
-use std::collections::BTreeMap;
-use std::io::IoSlice;
-use std::os::fd::{FromRawFd, IntoRawFd, AsRawFd, RawFd};
-use std::os::unix::net::UnixStream as StdStream;
-use std::os::unix::net::SocketAncillary;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
-use nix::sys::uio::IoVec;
 use nix::sys::socket::ControlMessageOwned;
 use nix::sys::socket::{recvmsg, MsgFlags};
+use nix::sys::uio::IoVec;
+use std::collections::BTreeMap;
+use std::io::IoSlice;
+use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
+use std::os::unix::net::SocketAncillary;
+use std::os::unix::net::UnixStream as StdStream;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 
 // use tokio::net::TcpStream;
 use tokio::net::{TcpSocket, TcpStream, UnixStream};
@@ -58,8 +58,8 @@ impl TsotClient {
     pub async fn New() -> Result<Self> {
         let stream = UnixStream::connect(TSOT_HOST_SOCKET_PATH).await?;
         let (tx, rx) = mpsc::channel::<TsotMessage>(30);
-        
-        let client = Self{
+
+        let client = Self {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
             inputTx: tx,
@@ -69,23 +69,27 @@ impl TsotClient {
             uid: uuid::Uuid::new_v4().into_bytes(),
 
             nextReqId: AtomicU32::new(1),
-            requests: Mutex::new(BTreeMap::new())
+            requests: Mutex::new(BTreeMap::new()),
         };
 
         let gatewayRegister = GatewayRegisterReq {
             gatewayUid: client.uid.clone(),
         };
 
-        client.SendMsg(TsotMessage::from(TsotMsg::GatewayRegisterReq(gatewayRegister))).unwrap();
+        client
+            .SendMsg(TsotMessage::from(TsotMsg::GatewayRegisterReq(
+                gatewayRegister,
+            )))
+            .unwrap();
 
         client.WaitforRegisterResp().await.unwrap();
 
-        return Ok(client)
+        return Ok(client);
     }
 
     pub async fn WaitforRegisterResp(&self) -> Result<()> {
-        let mut readBuf : [u8; BUFF_SIZE] = [0; BUFF_SIZE];
-        let readbufAddr = &readBuf[0] as * const _ as u64;
+        let mut readBuf: [u8; BUFF_SIZE] = [0; BUFF_SIZE];
+        let readbufAddr = &readBuf[0] as *const _ as u64;
         let mut offset = 0;
         while offset != BUFF_SIZE {
             self.stream.readable().await?;
@@ -93,22 +97,26 @@ impl TsotClient {
             offset += cnt;
         }
 
-        let msg = unsafe {
-            *(readbufAddr as * const TsotMsg)
-        };
+        let msg = unsafe { *(readbufAddr as *const TsotMsg) };
 
         match msg {
             TsotMsg::GatewayRegisterResp(resp) => {
                 if resp.errorCode != 0 {
-                    return Err(Error::CommonError(format!("TsotClient init fail with error {}", resp.errorCode)));
+                    return Err(Error::CommonError(format!(
+                        "TsotClient init fail with error {}",
+                        resp.errorCode
+                    )));
                 }
             }
             m => {
-                return Err(Error::CommonError(format!("TsotClient get unexpect message {:?}", m)))
+                return Err(Error::CommonError(format!(
+                    "TsotClient get unexpect message {:?}",
+                    m
+                )))
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Close(&self) {
@@ -121,7 +129,7 @@ impl TsotClient {
             Ok(()) => (),
             Err(Error::SocketClose) => {
                 self.stop.store(false, Ordering::SeqCst);
-            },
+            }
             Err(e) => {
                 error!("TsotClient process fail with error {:?}", e);
                 return;
@@ -132,8 +140,8 @@ impl TsotClient {
     pub async fn ProcessMsgs(&self) -> Result<()> {
         let mut rx = self.inputRx.lock().unwrap().take().unwrap();
 
-        let mut msg : Option<TsotMessage> = None;
-        
+        let mut msg: Option<TsotMessage> = None;
+
         loop {
             match msg.take() {
                 None => {
@@ -175,7 +183,7 @@ impl TsotClient {
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     const MAX_FILES: usize = 16 * 4;
@@ -189,25 +197,21 @@ impl TsotClient {
 
                 let mut iter = msg.cmsgs();
                 match iter.next() {
-                    Some(ControlMessageOwned::ScmRights(fds)) => {
-                        return Ok((cnt, fds.to_vec()))
-                    }
+                    Some(ControlMessageOwned::ScmRights(fds)) => return Ok((cnt, fds.to_vec())),
                     None => return Ok((cnt, Vec::new())),
                     _ => return Ok((cnt, Vec::new())),
                 }
             }
-            Err(errno) => {
-                return Err(Error::SysError(errno as i32))
-            }
+            Err(errno) => return Err(Error::SysError(errno as i32)),
         };
     }
 
     pub fn ProcessRead(&self) -> Result<()> {
-        let mut readBuf : [u8; BUFF_SIZE*2] = [0; BUFF_SIZE*2];
-        let readbufAddr = &readBuf[0] as * const _ as u64;
+        let mut readBuf: [u8; BUFF_SIZE * 2] = [0; BUFF_SIZE * 2];
+        let readbufAddr = &readBuf[0] as *const _ as u64;
         let raw_fd: RawFd = self.stream.as_raw_fd();
-        
-        defer!(          
+
+        defer!(
             // reset the tokio::unixstream state
             let mut buf =[0; 0];
             self.stream.try_read(&mut buf).ok();
@@ -227,17 +231,15 @@ impl TsotClient {
             return Err(Error::SocketClose);
         }
 
-        let msg = unsafe {
-            *(readbufAddr as * const TsotMsg)
-        };
+        let msg = unsafe { *(readbufAddr as *const TsotMsg) };
 
         if fds.len() == 0 {
             self.ProcessMsg(msg, None)?;
         } else {
             self.ProcessMsg(msg, Some(fds[0]))?;
         }
-        
-        return Ok(())
+
+        return Ok(());
     }
 
     pub fn ProcessMsg(&self, msg: TsotMsg, _socket: Option<RawFd>) -> Result<()> {
@@ -246,41 +248,40 @@ impl TsotClient {
                 let reqId = m.reqId;
                 let tx = self.requests.lock().unwrap().remove(&reqId);
                 match tx {
-                    None => return Err(Error::CommonError(format!("TsotClient ProcessMsg get unknown reqid {}", reqId))),
+                    None => {
+                        return Err(Error::CommonError(format!(
+                            "TsotClient ProcessMsg get unknown reqid {}",
+                            reqId
+                        )))
+                    }
                     Some(tx) => {
                         let err = if m.errorCode == 0 {
                             String::new()
                         } else {
                             format!("TsotClient connect fail with error {}", m.errorCode)
                         };
-                        tx.send(ConnectResp {
-                            error: err
-                        }).unwrap();
+                        tx.send(ConnectResp { error: err }).unwrap();
                     }
                 }
             }
             m => {
                 error!("ProcessMsg get unimplement msg {:?}", &m);
                 unimplemented!()
-            }            
+            }
         }
-        
-        return Ok(())
+
+        return Ok(());
     }
 
     pub fn SendMsg(&self, msg: TsotMessage) -> Result<()> {
         let socket = msg.socket;
-        let msgAddr = &msg.msg as * const _ as u64 as * const u8;
-        let writeBuf = unsafe {
-            std::slice::from_raw_parts(msgAddr, BUFF_SIZE)
-        };
+        let msgAddr = &msg.msg as *const _ as u64 as *const u8;
+        let writeBuf = unsafe { std::slice::from_raw_parts(msgAddr, BUFF_SIZE) };
 
-        let bufs = &[
-            IoSlice::new(writeBuf)
-        ][..];
+        let bufs = &[IoSlice::new(writeBuf)][..];
 
         let raw_fd: RawFd = self.stream.as_raw_fd();
-        let stdStream : StdStream = unsafe { StdStream::from_raw_fd(raw_fd) };
+        let stdStream: StdStream = unsafe { StdStream::from_raw_fd(raw_fd) };
 
         let mut ancillary_buffer = [0; 128];
         let mut ancillary = SocketAncillary::new(&mut ancillary_buffer[..]);
@@ -299,27 +300,35 @@ impl TsotClient {
             Err(e) => {
                 return Err(e.into());
             }
-            Ok(s) => s
+            Ok(s) => s,
         };
 
         assert!(size == BUFF_SIZE);
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn EnqMsg(&self, msg: TsotMessage) -> Result<()> {
         match self.inputTx.try_send(msg) {
             Ok(()) => return Ok(()),
             Err(_e) => {
-                return Err(Error::MpscSendFull(format!("TsotClient Enqueue message fulll")));
+                return Err(Error::MpscSendFull(format!(
+                    "TsotClient Enqueue message fulll"
+                )));
             }
         }
     }
 
-    pub async fn Connect(&self, tenant: &str, namespace: &str, ipAddr: [u8; 4], port: u16) -> Result<TcpStream> {
+    pub async fn Connect(
+        &self,
+        tenant: &str,
+        namespace: &str,
+        ipAddr: [u8; 4],
+        port: u16,
+    ) -> Result<TcpStream> {
         let tcpSocket = TcpSocket::new_v4()?;
         let sock = tcpSocket.as_raw_fd();
-        
+
         let podNamespace = format!("{}/{}", tenant, namespace);
 
         assert!(podNamespace.len() < 64);
@@ -353,9 +362,7 @@ impl TsotClient {
                 if v.error.len() == 0 {
                     // take ownership
                     let sock = tcpSocket.into_raw_fd();
-                    let stdstream = unsafe {
-                        std::net::TcpStream::from_raw_fd(sock)
-                    };
+                    let stdstream = unsafe { std::net::TcpStream::from_raw_fd(sock) };
                     let stream = tokio::net::TcpStream::from_std(stdstream)?;
                     return Ok(stream);
                 } else {

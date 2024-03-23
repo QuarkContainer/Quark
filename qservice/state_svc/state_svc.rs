@@ -17,16 +17,16 @@ use std::sync::Arc;
 
 use qshare::etcd::etcd_store::EtcdStore;
 use qshare::metastore::cache_store::CacheStore;
-use tokio_stream::wrappers::ReceiverStream;
-use tonic::{Response, Status, Request};
 use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
+use tonic::{Request, Response, Status};
 
 use qshare::common::*;
-use qshare::metastore::svc_dir::SvcDir;
-use qshare::qmeta;
 use qshare::metastore::data_obj::*;
 use qshare::metastore::selection_predicate::*;
 use qshare::metastore::selector::*;
+use qshare::metastore::svc_dir::SvcDir;
+use qshare::qmeta;
 
 use crate::QletAggrStore::QletAggrStore;
 
@@ -50,7 +50,7 @@ impl StateSvc {
             let c = CacheStore::New(Some(Arc::new(store.clone())), t, 0, &channelRev).await?;
             self.svcDir.write().unwrap().map.insert(t.to_string(), c);
         }
-        
+
         return Ok(());
     }
 }
@@ -170,7 +170,8 @@ impl qmeta::q_meta_service_server::QMetaService for StateSvc {
         }
     }
 
-    type WatchStream = std::pin::Pin<Box<dyn futures::Stream<Item = SResult<qmeta::WEvent, Status>> + Send>>;
+    type WatchStream =
+        std::pin::Pin<Box<dyn futures::Stream<Item = SResult<qmeta::WEvent, Status>> + Send>>;
 
     async fn watch(
         &self,
@@ -178,7 +179,7 @@ impl qmeta::q_meta_service_server::QMetaService for StateSvc {
     ) -> SResult<Response<Self::WatchStream>, Status> {
         let (tx, rx) = mpsc::channel(200);
         let stream = ReceiverStream::new(rx);
-        
+
         let svcDir = self.svcDir.clone();
         tokio::spawn(async move {
             let req = request.get_ref();
@@ -200,7 +201,7 @@ impl qmeta::q_meta_service_server::QMetaService for StateSvc {
                     tx.send(Err(Status::invalid_argument(&format!("Fail: {:?}", e))))
                         .await
                         .ok();
-                    
+
                     return;
                 }
                 Ok(s) => s,
@@ -249,7 +250,7 @@ impl qmeta::q_meta_service_server::QMetaService for StateSvc {
                                     return;
                                 }
                             };
-                            
+
                             let we = qmeta::WEvent {
                                 event_type: eventType,
                                 obj: Some(event.obj.Obj()),
@@ -274,11 +275,11 @@ impl qmeta::q_meta_service_server::QMetaService for StateSvc {
 
         return Ok(Response::new(Box::pin(stream) as Self::WatchStream));
     }
-    
+
     async fn read_obj(
         &self,
         _request: tonic::Request<qmeta::ReadObjReq>,
-    ) -> SResult<tonic::Response<qmeta::ReadObjResp>, tonic::Status>{
+    ) -> SResult<tonic::Response<qmeta::ReadObjResp>, tonic::Status> {
         unimplemented!()
         // let req = request.get_ref();
         // match self.objectMgr.ReadObject(&req.namespace, &req.name).await {
@@ -296,11 +297,11 @@ impl qmeta::q_meta_service_server::QMetaService for StateSvc {
         //     }
         // }
     }
-    
+
     async fn list_obj(
         &self,
         _request: tonic::Request<qmeta::ListObjReq>,
-    ) -> SResult<tonic::Response<qmeta::ListObjResp>, tonic::Status>{
+    ) -> SResult<tonic::Response<qmeta::ListObjResp>, tonic::Status> {
         unimplemented!()
         // let req = request.get_ref();
         // match self.objectMgr.ListObjects(&req.namespace, &req.prefix).await {
@@ -328,8 +329,8 @@ impl qmeta::q_meta_service_server::QMetaService for StateSvc {
 }
 
 pub async fn StateService() -> Result<()> {
-    use tonic::transport::Server;
     use qshare::qmeta::q_meta_service_server::QMetaServiceServer;
+    use tonic::transport::Server;
 
     let stateSvc = StateSvc::default();
     stateSvc.EtcdInit("localhost:2379").await?;

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
-use std::sync::Mutex;
 use core::ops::Deref;
 use std::collections::BTreeSet;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use qshare::common::*;
 
@@ -26,12 +26,11 @@ pub struct CidrInner {
     pub minAddr: u32,
     pub maxAddr: u32,
     pub nextAddr: u32,
-    pub allocated: BTreeSet<u32>
+    pub allocated: BTreeSet<u32>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Cidr(Arc<Mutex<CidrInner>>);
-
 
 impl Deref for Cidr {
     type Target = Arc<Mutex<CidrInner>>;
@@ -42,7 +41,7 @@ impl Deref for Cidr {
 }
 
 impl Cidr {
-    // for cidr (10.2.0.0/16), the addr is 10.2.0.0, the maskbits is 16 
+    // for cidr (10.2.0.0/16), the addr is 10.2.0.0, the maskbits is 16
     pub fn New(addr: u32, maskbits: usize) -> Self {
         let mask: u32 = !((1 << maskbits) - 1);
         assert!(addr & !mask == 0);
@@ -65,10 +64,12 @@ impl Cidr {
     pub fn Allocate(&self) -> Result<IpAddress> {
         let mut inner = self.lock().unwrap();
         if inner.allocated.len() == (inner.maxAddr - inner.minAddr + 1) as usize {
-            return Err(Error::CommonError("Cidr: the address are used up".to_owned()));
+            return Err(Error::CommonError(
+                "Cidr: the address are used up".to_owned(),
+            ));
         }
 
-        for current in inner.nextAddr..inner.maxAddr+1 {
+        for current in inner.nextAddr..inner.maxAddr + 1 {
             if !inner.allocated.contains(&current) {
                 inner.allocated.insert(current);
                 if current == inner.maxAddr {
@@ -90,7 +91,9 @@ impl Cidr {
             }
         }
 
-        return Err(Error::CommonError("Cidr: the address are used up".to_owned()));
+        return Err(Error::CommonError(
+            "Cidr: the address are used up".to_owned(),
+        ));
     }
 
     pub fn Free(&self, addr: IpAddress) -> Result<()> {
@@ -98,7 +101,10 @@ impl Cidr {
         let exist = inner.allocated.remove(&addr.0);
 
         if !exist {
-            return Err(Error::CommonError(format!("Cidr: free an un-allocated address {:x?}", addr)));
+            return Err(Error::CommonError(format!(
+                "Cidr: free an un-allocated address {:x?}",
+                addr
+            )));
         }
 
         return Ok(());
