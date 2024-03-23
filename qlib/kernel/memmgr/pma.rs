@@ -255,13 +255,6 @@ impl PageTables {
             }
         }
 
-        ret.MapPage(
-            Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
-            Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
-            PageOpts::Kernel().Val(),
-            pagePool,
-        )?;
-
         {
             let vsyscallPages = pagePool.VsyscallPages();
             ret.MapVsyscall(vsyscallPages);

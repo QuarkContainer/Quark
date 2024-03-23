@@ -69,7 +69,7 @@ rustup component add rust-src
 
 And also install "cargo-xbuild" as below.
 ```sh
-cargo install cargo-xbuild
+cargo +stable install cargo-xbuild
 ```
 
 And also some extra libraries for compiling GPU module:
