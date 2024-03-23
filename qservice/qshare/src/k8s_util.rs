@@ -14,8 +14,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::ObjectMeta;
 use crate::k8s;
+use crate::ObjectMeta;
 
 pub struct K8SUtil {}
 
@@ -29,9 +29,7 @@ impl K8SUtil {
     }
 
     pub fn Id(meta: &ObjectMeta) -> String {
-        return format!("{}/{}", 
-            K8SUtil::Namespace(&meta),
-            K8SUtil::Name(&meta));
+        return format!("{}/{}", K8SUtil::Namespace(&meta), K8SUtil::Name(&meta));
     }
 
     pub fn Namespace(meta: &ObjectMeta) -> String {
@@ -62,11 +60,11 @@ pub struct PullPolicy {}
 
 impl PullPolicy {
     // PullAlways means that kubelet always attempts to pull the latest image. Container will fail If the pull fails.
-	pub const PullAlways: &'static str = "Always";
+    pub const PullAlways: &'static str = "Always";
 
     // PullNever means that kubelet never pulls an image, but only uses a local image. Container will fail if the image isn't present
-	pub const PullNever: &'static str = "Never";
-	
+    pub const PullNever: &'static str = "Never";
+
     // PullIfNotPresent means that kubelet pulls if the image isn't present on disk. Container will fail if the image isn't present and the pull fails.
-	pub const PullIfNotPresent: &'static str = "IfNotPresent";
+    pub const PullIfNotPresent: &'static str = "IfNotPresent";
 }

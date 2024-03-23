@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod validation;
-pub mod selector;
-pub mod data_obj;
-pub mod selection_predicate;
-pub mod watch;
-pub mod store;
+pub mod aggregate_client;
+pub mod cache_store;
 pub mod cacher_client;
+pub mod data_obj;
 pub mod informer;
 pub mod informer_factory;
-pub mod cache_store;
+pub mod selection_predicate;
+pub mod selector;
+pub mod store;
 pub mod svc_dir;
-pub mod aggregate_client;
+pub mod validation;
+pub mod watch;

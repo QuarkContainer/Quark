@@ -14,20 +14,20 @@
 
 use std::collections::BTreeMap;
 use std::ops::Deref;
+use std::result::Result as SResult;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::result::Result as SResult;
 
-use tokio_stream::wrappers::ReceiverStream;
-use tonic::{Response, Status, Request};
 use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
+use tonic::{Request, Response, Status};
 
-use crate::qmeta;
+use crate::metastore::cache_store::CacheStore;
+use crate::metastore::cache_store::ChannelRev;
 use crate::metastore::data_obj::*;
 use crate::metastore::selection_predicate::*;
 use crate::metastore::selector::*;
-use crate::metastore::cache_store::CacheStore;
-use crate::metastore::cache_store::ChannelRev;
+use crate::qmeta;
 
 #[derive(Debug, Default, Clone)]
 pub struct SvcDir(Arc<RwLock<SvcDirInner>>);
@@ -179,7 +179,8 @@ impl qmeta::q_meta_service_server::QMetaService for SvcDir {
         }
     }
 
-    type WatchStream = std::pin::Pin<Box<dyn futures::Stream<Item = SResult<qmeta::WEvent, Status>> + Send>>;
+    type WatchStream =
+        std::pin::Pin<Box<dyn futures::Stream<Item = SResult<qmeta::WEvent, Status>> + Send>>;
 
     async fn watch(
         &self,
@@ -187,7 +188,7 @@ impl qmeta::q_meta_service_server::QMetaService for SvcDir {
     ) -> SResult<Response<Self::WatchStream>, Status> {
         let (tx, rx) = mpsc::channel(200);
         let stream = ReceiverStream::new(rx);
-        
+
         let svcDir = self.clone();
         tokio::spawn(async move {
             let req = request.get_ref();
@@ -209,7 +210,7 @@ impl qmeta::q_meta_service_server::QMetaService for SvcDir {
                     tx.send(Err(Status::invalid_argument(&format!("Fail: {:?}", e))))
                         .await
                         .ok();
-                    
+
                     return;
                 }
                 Ok(s) => s,
@@ -258,7 +259,7 @@ impl qmeta::q_meta_service_server::QMetaService for SvcDir {
                                     return;
                                 }
                             };
-                            
+
                             let we = qmeta::WEvent {
                                 event_type: eventType,
                                 obj: Some(event.obj.Obj()),
@@ -283,11 +284,11 @@ impl qmeta::q_meta_service_server::QMetaService for SvcDir {
 
         return Ok(Response::new(Box::pin(stream) as Self::WatchStream));
     }
-    
+
     async fn read_obj(
         &self,
         _request: tonic::Request<qmeta::ReadObjReq>,
-    ) -> SResult<tonic::Response<qmeta::ReadObjResp>, tonic::Status>{
+    ) -> SResult<tonic::Response<qmeta::ReadObjResp>, tonic::Status> {
         unimplemented!()
         // let req = request.get_ref();
         // match self.objectMgr.ReadObject(&req.namespace, &req.name).await {
@@ -305,11 +306,11 @@ impl qmeta::q_meta_service_server::QMetaService for SvcDir {
         //     }
         // }
     }
-    
+
     async fn list_obj(
         &self,
         _request: tonic::Request<qmeta::ListObjReq>,
-    ) -> SResult<tonic::Response<qmeta::ListObjResp>, tonic::Status>{
+    ) -> SResult<tonic::Response<qmeta::ListObjResp>, tonic::Status> {
         unimplemented!()
         // let req = request.get_ref();
         // match self.objectMgr.ListObjects(&req.namespace, &req.prefix).await {

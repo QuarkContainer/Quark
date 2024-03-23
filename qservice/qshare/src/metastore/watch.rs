@@ -17,10 +17,9 @@ use std::time::SystemTime;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc::channel, mpsc::Receiver, mpsc::Sender};
 
-
-use crate::common::*;
-use super::selection_predicate::*;
 use super::data_obj::*;
+use super::selection_predicate::*;
+use crate::common::*;
 
 pub struct CacheWatchStream {
     pub id: u64,
@@ -88,7 +87,11 @@ impl CacheWatcher {
                 obj: event.obj.DeepCopy(),
             }));
         } else if !curObjPasses && oldObjPasses {
-            let oldObj = event.prevObj.as_ref().unwrap().CopyWithRev(event.channelRev, event.revision);
+            let oldObj = event
+                .prevObj
+                .as_ref()
+                .unwrap()
+                .CopyWithRev(event.channelRev, event.revision);
             return Ok(Some(WatchEvent {
                 type_: EventType::Deleted,
                 obj: oldObj,

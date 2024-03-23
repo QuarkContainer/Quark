@@ -22,7 +22,7 @@ pub struct QletConfig {
     pub nodeName: String,
     pub etcdAddresses: Vec<String>,
     pub nodeIp: String,
-    
+
     pub podMgrPort: u16,
     pub tsotCniPort: u16,
     pub tsotSvcPort: u16,
@@ -36,7 +36,7 @@ pub struct QletConfig {
 impl QletConfig {
     pub fn Load(path: &str) -> Result<Self> {
         let data = fs::read_to_string(path)?;
-        let config : QletConfig = serde_json::from_str(&data)?;
-        return Ok(config)
+        let config: QletConfig = serde_json::from_str(&data)?;
+        return Ok(config);
     }
 }

@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
 use core::ops::Deref;
+use std::sync::Arc;
 
 use tokio::sync::Mutex as TMutex;
-use tonic::Streaming;
 use tonic::transport::Channel;
 use tonic::Request;
+use tonic::Streaming;
 
 // use crate::object_mgr::ObjectMeta;
+use super::data_obj::*;
 use super::selection_predicate::ListOption;
+use crate::common::*;
 use crate::qmeta::q_meta_service_client::QMetaServiceClient;
 use crate::qmeta::*;
-use crate::common::*;
-use super::data_obj::*;
 
 #[derive(Debug)]
 pub struct ObjectMeta {
@@ -50,17 +50,36 @@ impl CacherClient {
         return Ok(Self(Arc::new(TMutex::new(inner))));
     }
 
-    pub async fn Get(&self, objType: &str, tenant: &str, namespace: &str, name: &str, revision: i64) -> Result<Option<DataObject>> {
+    pub async fn Get(
+        &self,
+        objType: &str,
+        tenant: &str,
+        namespace: &str,
+        name: &str,
+        revision: i64,
+    ) -> Result<Option<DataObject>> {
         let mut inner = self.lock().await;
         return inner.Get(objType, tenant, namespace, name, revision).await;
     }
 
-    pub async fn List(&self, objType: &str, tenant: &str, namespace: &str, opts: &ListOption) -> Result<DataObjList> {
+    pub async fn List(
+        &self,
+        objType: &str,
+        tenant: &str,
+        namespace: &str,
+        opts: &ListOption,
+    ) -> Result<DataObjList> {
         let mut inner = self.lock().await;
         return inner.List(objType, tenant, namespace, opts).await;
     }
 
-    pub async fn Watch(&self, objType: &str, tenant: &str, namespace: &str, opts: &ListOption) -> Result<WatchStream> {
+    pub async fn Watch(
+        &self,
+        objType: &str,
+        tenant: &str,
+        namespace: &str,
+        opts: &ListOption,
+    ) -> Result<WatchStream> {
         let mut inner = self.lock().await;
         return inner.Watch(objType, tenant, namespace, opts).await;
     }
@@ -70,7 +89,12 @@ impl CacherClient {
         return inner.ReadObject(tenant, namespace, name).await;
     }
 
-    pub async fn ListObjects(&self, tenant: &str, namespace: &str, prefix: &str) -> Result<Vec<ObjectMeta>> {
+    pub async fn ListObjects(
+        &self,
+        tenant: &str,
+        namespace: &str,
+        prefix: &str,
+    ) -> Result<Vec<ObjectMeta>> {
         let mut inner = self.lock().await;
         return inner.ListObjects(tenant, namespace, prefix).await;
     }
@@ -84,12 +108,17 @@ pub struct CacherClientInner {
 impl CacherClientInner {
     pub async fn New(qmetaSvcAddr: String) -> Result<Self> {
         let client = QMetaServiceClient::connect(qmetaSvcAddr).await?;
-        return Ok(Self {
-            client: client,
-        })
+        return Ok(Self { client: client });
     }
 
-    pub async fn Get(&mut self, objType: &str, tenant: &str, namespace: &str, name: &str, revision: i64) -> Result<Option<DataObject>> {
+    pub async fn Get(
+        &mut self,
+        objType: &str,
+        tenant: &str,
+        namespace: &str,
+        name: &str,
+        revision: i64,
+    ) -> Result<Option<DataObject>> {
         let req = GetRequestMessage {
             obj_type: objType.to_owned(),
             tenant: tenant.to_owned(),
@@ -103,16 +132,20 @@ impl CacherClientInner {
         if resp.error.len() == 0 {
             match resp.obj.take() {
                 None => return Ok(None),
-                Some(o) => {
-                    return Ok(Some(DataObject::NewFromObj(&o)))
-                }
+                Some(o) => return Ok(Some(DataObject::NewFromObj(&o))),
             }
         }
-        
-        return Err(Error::CommonError(resp.error.clone()))
+
+        return Err(Error::CommonError(resp.error.clone()));
     }
 
-    pub async fn List(&mut self, objType: &str, tenant: &str, namespace: &str, opts: &ListOption) -> Result<DataObjList> {
+    pub async fn List(
+        &mut self,
+        objType: &str,
+        tenant: &str,
+        namespace: &str,
+        opts: &ListOption,
+    ) -> Result<DataObjList> {
         let req = ListRequestMessage {
             obj_type: objType.to_owned(),
             tenant: tenant.to_owned(),
@@ -127,7 +160,7 @@ impl CacherClientInner {
         if resp.error.len() == 0 {
             let mut objs = Vec::new();
             for dataO in &resp.objs {
-                let obj : DataObject = DataObject::NewFromObj(dataO);
+                let obj: DataObject = DataObject::NewFromObj(dataO);
                 objs.push(obj)
             }
 
@@ -137,13 +170,19 @@ impl CacherClientInner {
                 ..Default::default()
             };
 
-            return Ok(dol)
+            return Ok(dol);
         }
-        
-        return Err(Error::CommonError(resp.error.clone()))
+
+        return Err(Error::CommonError(resp.error.clone()));
     }
 
-    pub async fn Watch(&mut self, objType: &str, tenant: &str, namespace: &str, opts: &ListOption) -> Result<WatchStream> {
+    pub async fn Watch(
+        &mut self,
+        objType: &str,
+        tenant: &str,
+        namespace: &str,
+        opts: &ListOption,
+    ) -> Result<WatchStream> {
         let req = WatchRequestMessage {
             obj_type: objType.to_owned(),
             tenant: tenant.to_owned(),
@@ -155,7 +194,7 @@ impl CacherClientInner {
 
         let response = self.client.watch(Request::new(req)).await?;
         let resp = response.into_inner();
-        return Ok(WatchStream { stream: resp })
+        return Ok(WatchStream { stream: resp });
     }
 
     async fn ReadObject(&mut self, tenant: &str, namespace: &str, name: &str) -> Result<Vec<u8>> {
@@ -168,13 +207,18 @@ impl CacherClientInner {
         let response = self.client.read_obj(Request::new(req)).await?;
         let resp = response.into_inner();
         if resp.error.len() == 0 {
-            return Ok(resp.data)
+            return Ok(resp.data);
         }
 
-        return Err(Error::CommonError(resp.error.to_owned()))
+        return Err(Error::CommonError(resp.error.to_owned()));
     }
 
-    async fn ListObjects(&mut self, tenant: &str, namespace: &str, prefix: &str) -> Result<Vec<ObjectMeta>> {
+    async fn ListObjects(
+        &mut self,
+        tenant: &str,
+        namespace: &str,
+        prefix: &str,
+    ) -> Result<Vec<ObjectMeta>> {
         let req = ListObjReq {
             tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
@@ -191,15 +235,15 @@ impl CacherClientInner {
                     size: o.size,
                 })
             }
-            return Ok(objs)
+            return Ok(objs);
         }
 
-        return Err(Error::CommonError(resp.error.to_owned()))
+        return Err(Error::CommonError(resp.error.to_owned()));
     }
 }
 
 pub struct WatchStream {
-    stream: Streaming<WEvent>
+    stream: Streaming<WEvent>,
 }
 
 impl WatchStream {
@@ -213,11 +257,18 @@ impl WatchStream {
                     1 => EventType::Added,
                     2 => EventType::Modified,
                     3 => EventType::Deleted,
-                    _ => return Err(Error::CommonError(format!("invalid watch response type {}", e.event_type))),
+                    _ => {
+                        return Err(Error::CommonError(format!(
+                            "invalid watch response type {}",
+                            e.event_type
+                        )))
+                    }
                 };
 
                 if e.obj.is_none() {
-                    return Err(Error::CommonError(format!("invalid watch response ob is none")));
+                    return Err(Error::CommonError(format!(
+                        "invalid watch response ob is none"
+                    )));
                 }
 
                 let watchEvent = WatchEvent {
@@ -225,7 +276,7 @@ impl WatchStream {
                     obj: DataObject::NewFromObj(&e.obj.unwrap()),
                 };
 
-                return Ok(Some(watchEvent))
+                return Ok(Some(watchEvent));
             }
         }
     }

@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::ops::Deref;
+use spin::RwLock;
 use std::collections::BTreeMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
-use spin::RwLock;
-use core::ops::Deref;
 
 use super::data_obj::*;
 use crate::common::*;
@@ -37,7 +37,7 @@ use crate::common::*;
 pub trait Store {
     // Add adds the given object to the accumulator associated with the given object's key
     fn Add(&self, _obj: &DataObject) -> Result<()> {
-        return Ok(())
+        return Ok(());
     }
 
     // Update updates the given object in the accumulator associated with the given object's key
@@ -46,7 +46,7 @@ pub trait Store {
     }
 
     // Delete deletes the given object from the accumulator associated with the given object's key
-    fn Delete(&self, _obj: &DataObject) ->  Result<()> {
+    fn Delete(&self, _obj: &DataObject) -> Result<()> {
         todo!();
     }
 
@@ -56,7 +56,7 @@ pub trait Store {
     }
 
     // ListKeys returns a list of all the keys currently associated with non-empty accumulators
-    fn ListKeys(&self) -> Vec<String>{
+    fn ListKeys(&self) -> Vec<String> {
         todo!();
     }
 
@@ -85,7 +85,7 @@ pub static STORE_ID: AtomicU64 = AtomicU64::new(0);
 #[derive(Debug)]
 pub struct ThreadSafeStoreInner {
     pub id: u64,
-    pub map: BTreeMap<String, DataObject>
+    pub map: BTreeMap<String, DataObject>,
 }
 
 impl Default for ThreadSafeStoreInner {
@@ -116,7 +116,10 @@ impl ThreadSafeStore {
         match self.write().map.insert(key.clone(), obj.clone()) {
             None => return Ok(()),
             Some(_o) => {
-                return Err(Error::CommonError(format!("ThreadSafeStore Add get not none prev obj with obj {:#?}", key)));
+                return Err(Error::CommonError(format!(
+                    "ThreadSafeStore Add get not none prev obj with obj {:#?}",
+                    key
+                )));
             }
         }
     }
@@ -124,23 +127,31 @@ impl ThreadSafeStore {
     pub fn Update(&self, obj: &DataObject) -> Result<DataObject> {
         let key = obj.Key();
         match self.write().map.insert(key.clone(), obj.clone()) {
-            None => return Err(Error::CommonError(format!("ThreadSafeStore Update get none prev obj with key {}", key))),
-            Some(o) => {
-                return Ok(o)
+            None => {
+                return Err(Error::CommonError(format!(
+                    "ThreadSafeStore Update get none prev obj with key {}",
+                    key
+                )))
             }
+            Some(o) => return Ok(o),
         }
     }
 
     pub fn Delete(&self, obj: &DataObject) -> Result<DataObject> {
         let key = obj.Key();
         match self.write().map.remove(&key) {
-            None => return Err(Error::CommonError(format!("ThreadSafeStore Update get none prev obj with key {}", key))),
-            Some(obj) => return Ok(obj)
+            None => {
+                return Err(Error::CommonError(format!(
+                    "ThreadSafeStore Update get none prev obj with key {}",
+                    key
+                )))
+            }
+            Some(obj) => return Ok(obj),
         }
     }
 
     pub fn List(&self) -> Vec<DataObject> {
-        let list : Vec<DataObject> = self.read().map.values().cloned().collect();
+        let list: Vec<DataObject> = self.read().map.values().cloned().collect();
         return list;
     }
 
@@ -178,25 +189,23 @@ impl ThreadSafeStore {
 
         for (k, o) in &inner.map {
             match map.get(k) {
-                None => {
-                    events.push(DeltaEvent {
-                        type_: EventType::Deleted,
-                        inInitialList: false,
-                        obj: o.clone(),
-                        oldObj: None,
-                    })
-                }
-                Some(_) => ()
+                None => events.push(DeltaEvent {
+                    type_: EventType::Deleted,
+                    inInitialList: false,
+                    obj: o.clone(),
+                    oldObj: None,
+                }),
+                Some(_) => (),
             }
         }
         inner.map = map;
-        return Ok(events)
+        return Ok(events);
     }
 
     pub fn Get(&self, key: &str) -> Option<DataObject> {
         return match self.read().map.get(key) {
             None => None,
-            Some(v) => Some(v.clone())
-        }
+            Some(v) => Some(v.clone()),
+        };
     }
 }
