@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::mem::size_of;
-use alloc::vec::Vec;
-use alloc::string::String;
 use alloc::borrow::ToOwned;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::mem::size_of;
 
 pub static TSOT_SOCKET_PATH: &'static str = "/var/run/quark/tsot-socket";
 pub static TSOT_HOST_SOCKET_PATH: &'static str = "/var/run/quark_host/tsot-socket";
@@ -35,13 +35,12 @@ pub struct TsotMessage {
     pub msg: TsotMsg,
 }
 
-
 impl Default for TsotMessage {
     fn default() -> Self {
         return Self {
             socket: 0,
-            msg: TsotMsg::None
-        }
+            msg: TsotMsg::None,
+        };
     }
 }
 
@@ -49,11 +48,10 @@ impl From<TsotMsg> for TsotMessage {
     fn from(msg: TsotMsg) -> Self {
         return Self {
             socket: -1,
-            msg: msg
-        }
+            msg: msg,
+        };
     }
 }
-
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -65,7 +63,7 @@ pub enum TsotMsg {
     GatewayRegisterReq(GatewayRegisterReq),
 
     CreateSocketReq(CreateSocketReq),
-    
+
     ListenReq(ListenReq),
     AcceptReq(AcceptReq),
     StopListenReq(StopListenReq),
@@ -84,23 +82,18 @@ pub enum TsotMsg {
     DnsResp(DnsResp),
 }
 
-
 pub const BUFF_SIZE: usize = core::mem::size_of::<TsotMsg>();
 
 impl TsotMsg {
-    pub fn AsBytes(&self) -> &'static[u8] {
-        let addr = self as * const _ as u64 as * const u8;
-        return unsafe {
-            core::slice::from_raw_parts(addr, size_of::<Self>())
-        }
+    pub fn AsBytes(&self) -> &'static [u8] {
+        let addr = self as *const _ as u64 as *const u8;
+        return unsafe { core::slice::from_raw_parts(addr, size_of::<Self>()) };
     }
 
     pub fn FromBytes(bytes: &[u8]) -> Self {
         assert!(bytes.len() == size_of::<Self>());
-        let addr = &bytes[0] as * const _ as u64;
-        let ret = unsafe {
-            *(addr as * const Self)
-        };
+        let addr = &bytes[0] as *const _ as u64;
+        let ret = unsafe { *(addr as *const Self) };
         return ret;
     }
 }
@@ -121,8 +114,7 @@ pub struct GatewayRegisterReq {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
-pub struct CreateSocketReq {
-}
+pub struct CreateSocketReq {}
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -176,17 +168,15 @@ pub struct GatewayConnectReq {
 pub struct DnsReq {
     pub reqId: u16,
     pub nameslen: u16,
-    pub names: [u8; 256]
+    pub names: [u8; 256],
 }
-
 
 impl DnsReq {
     pub fn GetDomains(&self) -> Vec<String> {
-        let namesStr = unsafe {
-            String::from_utf8_unchecked(self.names[0..self.nameslen as usize].to_vec())
-        };
+        let namesStr =
+            unsafe { String::from_utf8_unchecked(self.names[0..self.nameslen as usize].to_vec()) };
 
-        let names : Vec<&str> = namesStr.split(":").collect();
+        let names: Vec<&str> = namesStr.split(":").collect();
         let mut domains = Vec::new();
         for name in names {
             domains.push(name.to_owned());
@@ -203,20 +193,19 @@ impl DnsReq {
 pub struct PodRegisterResp {
     // the pod's container IP addr
     pub containerIp: u32,
-    pub errorCode: u32
+    pub errorCode: u32,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct GatewayRegisterResp {
-    pub errorCode: u32
+    pub errorCode: u32,
 }
 
 // send with new socket fd
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
-pub struct CreateSocketResp {
-}
+pub struct CreateSocketResp {}
 
 // another pod connected to current pod
 // send with new socket fd
@@ -230,13 +219,11 @@ pub struct PeerConnectNotify {
 
 impl PeerConnectNotify {
     pub fn PeerAddrBytes(&self) -> [u8; 4] {
-        let addr = &self.peerIp as * const _ as u64 as * const u8;
-        let bytes = unsafe {
-            core::slice::from_raw_parts(addr, 4)
-        };
+        let addr = &self.peerIp as *const _ as u64 as *const u8;
+        let bytes = unsafe { core::slice::from_raw_parts(addr, 4) };
 
-        let mut ret : [u8; 4] = [0; 4];
-        
+        let mut ret: [u8; 4] = [0; 4];
+
         ret.copy_from_slice(bytes);
         return ret;
     }
@@ -246,14 +233,14 @@ impl PeerConnectNotify {
 #[derive(Debug, Clone, Copy)]
 pub struct PodConnectResp {
     pub reqId: u32,
-    pub errorCode: i32
+    pub errorCode: i32,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct GatewayConnectResp {
     pub reqId: u32,
-    pub errorCode: i32
+    pub errorCode: i32,
 }
 
 #[repr(C)]
@@ -264,5 +251,3 @@ pub struct DnsResp {
     pub ips: [u32; 4],
     pub count: usize,
 }
-
-
