@@ -752,86 +752,38 @@ pub extern "C" fn nvmlDeviceGetCount_v2(deviceCount: *mut c_uint) -> usize {
 // }
 
 
+
 pub static mut DLOPEN_ORIG: Option<unsafe extern "C" fn(*const libc::c_char, libc::c_int) -> *mut libc::c_void> = None;
 pub static mut DLCLOSE_ORIG: Option<unsafe extern "C" fn(*mut libc::c_void) -> libc::c_int> = None;
 pub static mut DL_HANDLE: *mut libc::c_void = ptr::null_mut();
 
-
-// #[no_mangle]
-// pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
-//     let c_str = unsafe {std::ffi::CStr::from_ptr(filename) };
-//     let filename_string = c_str.to_string_lossy().to_string();
-//     println!("Hijacked dlopen({} {})", filename_string, flag);
-
-//     let lib = CString::new("libcudart.so").unwrap();
-//     let handle = unsafe { libc::dlopen(lib.as_ptr(), libc::RTLD_LAZY) };    
-//     let func_name = CString::new("cudaSetDevice").unwrap();
-//     let orig_func: extern "C" fn(c_int) -> cudaError_t = unsafe {
-//         std::mem::transmute(libc::dlsym(handle, func_name.as_ptr()))
-//     };
-//     orig_func(device)
-// }
-
 #[no_mangle]
 pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
      let mut ret: *mut c_void  = std::ptr::null_mut();
-
-    let c_str = unsafe {std::ffi::CStr::from_ptr(filename) };
-    let filename_string = c_str.to_string_lossy().to_string();
-    println!("intercepted dlopen({} {})", filename_string, flag);
     
-    let ret = unsafe{::libc::dlopen(filename, flag) };
-    println!("ret {:x?}",ret);
-    return ret;
-    
-    if filename.is_null() {
-        return unsafe { DLOPEN_ORIG.unwrap()(filename, flag) };
-       
+    if filename.is_null(){
+        println!("intercepted dlopen(Null, {})", flag);
+    }else{
+        let c_str = unsafe {std::ffi::CStr::from_ptr(filename) };
+        let filename_string = c_str.to_string_lossy().to_string();
+        println!("intercepted dlopen again({} {})", filename_string, flag);
     }
-    // 0x0000557620af2700
+
+    if filename.is_null() {
+        return unsafe { DLOPEN_ORIG.unwrap()(filename, flag) };  
+    }
+    
     if unsafe { DLOPEN_ORIG.is_none() } {
         let symbol = CString::new("dlopen").unwrap();
-        // let orig = unsafe { dlsym(libc::RTLD_NEXT, symbol.as_ptr()) };
-
-        // let a:unsafe extern "C" fn() -> std::ffi::c_int = unsafe{  std::mem::transmute(
-        //     ::libc::dlsym(::libc::RTLD_NEXT, std::mem::transmute(b"dlopen\x00".as_ptr())))  };
-        // println!("{}", (unsafe { a() }) % 42);
-        // let a : fn(*const libc::c_char, libc::c_int) -> *mut libc::c_void = unsafe{  std::mem::transmute(
-        //       ::libc::dlopen(filename, flag)) };
-        
-
-        // println!("DLopen_Orig is {:x?}", ret);
-        // return ret;
-
-        let func_name = CString::new("dlopen").unwrap();
-        unsafe { DLOPEN_ORIG = Some(std::mem::transmute(libc::dlsym(libc::RTLD_NEXT, func_name.as_ptr())))};
-
+        unsafe { DLOPEN_ORIG = Some(std::mem::transmute(libc::dlsym(libc::RTLD_NEXT, symbol.as_ptr())))};
         //  unsafe {DLOPEN_ORIG =  Some(std::mem::transmute(
         //       ::libc::dlsym(::libc::RTLD_NEXT, std::mem::transmute(b"dlopen\x00".as_ptr())) )) };
-        
-       
-
-        
-        // if orig.is_null() {
-        //     println!("[dlopen] dlsym failed");
-        // } else {
-        //     // unsafe{ DLOPEN_ORIG =  Some(std::mem::transmute::<*mut c_void, unsafe extern "C" fn(*const c_char, c_int) -> *mut c_void>(orig)) };
-        //     println!("11111111 dlsym successfulely");
-        //     unsafe {
-        //         DLOPEN_ORIG = Some(transmute(orig));
-        //     }
-        // }
     }
     if unsafe { DLOPEN_ORIG.is_none() } {
         println!("DLopen_Orig is still none");
         
     }
-
-    // let real_rand = unsafe { DLOPEN_ORIG.unwrap_unchecked() };
-    // ret = unsafe { real_rand(filename, flag) };
     unsafe { println!("DLopen_Orig is {:x?}", DLOPEN_ORIG); }
-     // ret = unsafe { DLOPEN_ORIG.unwrap()(filename, flag) };
-    // return ret;
 
     let replace_libs = [
         "libcuda.so.1",
@@ -841,16 +793,19 @@ pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
     ];
 
     if !filename.is_null() {
+        let c_str = unsafe {std::ffi::CStr::from_ptr(filename) };
+        let filename_string = c_str.to_string_lossy().to_string();
+
         for libs in &replace_libs{
             if filename_string == *libs {
                 println!("replacing dlopen call to {} with libcudaproxy.so", libs);
                 let cudaProxy = CString::new("libcudaproxy.so").unwrap();
-                unsafe {
-                    DL_HANDLE = DLOPEN_ORIG.unwrap()(
+                 unsafe{  DL_HANDLE = DLOPEN_ORIG.unwrap()(
                         cudaProxy.as_ptr(),
                         flag,
-                    );
-                }
+                    )
+                };
+                unsafe {println!("DL_handle: {:x?}",DL_HANDLE ) };
                 if unsafe { DL_HANDLE.is_null() } {
                     println!("failed to replaced dlooen call to libcudaproxy.so");
                 }
@@ -859,22 +814,18 @@ pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
         }
     }
 
-    ret = unsafe { DLOPEN_ORIG.unwrap()(filename, flag) };
-    println!("22222222");
+    ret = unsafe { DLOPEN_ORIG.unwrap_or_else(||{ panic!("DLOPEN_ORIG IS None")})(filename,flag)};
 
     println!("value of ret {:#?}", ret);
 
-    // if ret.is_null() {
-    //     println!("2");
-    //     let err = unsafe { libc::dlerror() };
-    //     let errMesg = unsafe { CString::from_raw(err) };
-    //     println!(
-    //         "dlopen {} failed: {}",
-    //         filename_string,
-    //         errMesg.to_str().unwrap_or("unknown error")
-    //     );
-    // }
-    // println!("3");
+    if ret.is_null() {
+        let err = unsafe { libc::dlerror() };
+        let errMesg = unsafe { CString::from_raw(err) };
+        println!(
+            "dlopen failed: {}",
+            errMesg.to_str().unwrap_or("unknown error")
+        );
+    }
      return ret;
 }
 
