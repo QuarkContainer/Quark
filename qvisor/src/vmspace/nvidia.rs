@@ -876,8 +876,11 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             let mut flags:c_uint = Default::default();
             let mut active:c_int = Default::default();
 
+            
 
-            let ret = func(parameters.para1 as CUdevice, &mut flags, &mut active);
+
+            // let ret = func(parameters.para1 as CUdevice, &mut flags, &mut active);
+            let ret = unsafe {cuda_driver_sys::cuDevicePrimaryCtxGetState(parameters.para1 as CUdevice, &mut flags as *mut c_uint, &mut active as *mut c_int )};
 
             error!("CuDevicePrimaryCtxGetState ret {:?}", ret);
             
