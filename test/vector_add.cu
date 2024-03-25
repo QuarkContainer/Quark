@@ -8,6 +8,14 @@
 #define N 100//000
 #define MAX_ERR 1e-6
 
+/*
+To test, go to repo's root dir, then execute following script:
+
+(cd test/rust/cuda_hook; cargo build)
+nvcc -cudart shared -o target/vector_add test/vector_add.cu
+LD_PRELOAD=test/rust/cuda_hook/target/debug/libcuda_hook.so ./target/vector_add
+*/
+
 __global__ void vector_add(float *out, float *a, float *b, int n) {
     for(int i = 0; i < n; i ++){
         out[i] = a[i] + b[i];
