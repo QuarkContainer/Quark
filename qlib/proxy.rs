@@ -15,18 +15,53 @@
 #[repr(u64)]
 pub enum ProxyCommand {
     None = 0 as u64,
+    //devcie management
+    CudaChooseDevice,
+    CudaDeviceGetAttribute,
+    CudaDeviceGetByPCIBusId,
+    CudaDeviceGetCacheConfig,
+    CudaDeviceGetLimit,
+    CudaDeviceGetP2PAttribute,
+    CudaDeviceGetPCIBusId,
+    CudaDeviceGetSharedMemConfig,
+    CudaDeviceGetStreamPriorityRange,
+    CudaDeviceReset,
+    CudaDeviceSetCacheConfig,
+    
     CudaSetDevice,
+    CudaSetDeviceFlags,
     CudaDeviceSynchronize,
+
+    CudaGetDevice,
+    CudaGetDeviceCount,
+    CudaGetDeviceProperties,
+
     CudaMalloc,
     CudaMemcpy,
+    CudaMemcpyAsync,
     CudaFree,
     CudaRegisterFatBinary,
     CudaUnregisterFatBinary,
     CudaRegisterFunction,
+    CudaRegisterVar,
     CudaLaunchKernel,
 
+    // stream management 
+    CudaStreamSynchronize,
+    CudaStreamCreate,
+    CudaStreamDestroy,
+    CudaStreamIsCapturing,
+    CuModuleGetLoadingMode,
+    //Error handling
+    CudaGetLastError, 
+
     CuInit,
+    CuDevicePrimaryCtxGetState,
+
+    NvmlInitWithFlags,
+    NvmlDeviceGetCountV2,  
 }
+
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]
 #[repr(u64)]
@@ -34,7 +69,16 @@ pub enum XpuLibrary {
     None = 0 as u64,
     CudaRuntime,
     CudaDriver,
+    Nvml
 }
+
+#[repr(u32)]
+#[derive(Debug, Copy, Clone, Hash, PartialOrd, Ord, PartialEq, Eq)]
+pub enum CumoduleLoadingModeEnum {
+    CuModuleEagerLoading = 1,
+    CuModuleLazyLoading = 2,
+}
+pub use self::CumoduleLoadingModeEnum as CUmoduleLoadingMode;
 
 impl Default for ProxyCommand {
     fn default() -> Self {
@@ -100,6 +144,178 @@ pub const EIFMT_HVAL: u64 = 0x3;
 pub const EIFMT_SVAL: u64 = 0x4;
 
 #[repr(C)]
+#[derive(Debug, Default, Copy, Clone, Hash, PartialOrd, Ord, PartialEq, Eq)]
+pub struct CudaUUIDSt {
+    pub bytes: [i8; 16usize],
+}
+
+pub type CudaUUID = CudaUUIDSt;
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct CudaDeviceProperties {
+    pub name: [i8; 256usize],
+    pub uuid: CudaUUID,   
+    pub luid: [i8; 8usize],
+    pub luidDeviceNodeMask: i8,
+    pub totalGlobalMem: usize,
+    pub sharedMemPerBlock: usize,
+    pub regsPerBlock: i32,
+    pub warpSize: i32,
+    pub memPitch: usize,
+    pub maxThreadsPerBlock: i32,
+    pub maxThreadsDim: [i32; 3usize],
+    pub maxGridSize: [i32; 3usize],
+    pub clockRate: i32,
+    pub totalConstMem: usize,
+    pub major: i32,
+    pub minor: i32,
+    pub textureAlignment: usize,
+    pub texturePitchAlignment: usize,
+    pub deviceOverlap: i32,
+    pub multiProcessorCount: i32,
+    pub kernelExecTimeoutEnabled: i32,
+    pub integrated: i32,
+    pub canMapHostMemory: i32,
+    pub computeMode: i32,
+    pub maxTexture1D: i32,
+    pub maxTexture1DMipmap: i32,
+    pub maxTexture1DLinear: i32,
+    pub maxTexture2D: [i32; 2usize],
+    pub maxTexture2DMipmap: [i32; 2usize],
+    pub maxTexture2DLinear: [i32; 3usize],
+    pub maxTexture2DGather: [i32; 2usize],
+    pub maxTexture3D: [i32; 3usize],
+    pub maxTexture3DAlt: [i32; 3usize],
+    pub maxTextureCubemap: i32,
+    pub maxTexture1DLayered: [i32; 2usize],
+    pub maxTexture2DLayered: [i32; 3usize],
+    pub maxTextureCubemapLayered: [i32; 2usize],
+    pub maxSurface1D: i32,
+    pub maxSurface2D: [i32; 2usize],
+    pub maxSurface3D: [i32; 3usize],
+    pub maxSurface1DLayered: [i32; 2usize],
+    pub maxSurface2DLayered: [i32; 3usize],
+    pub maxSurfaceCubemap: i32,
+    pub maxSurfaceCubemapLayered: [i32; 2usize],
+    pub surfaceAlignment: usize,
+    pub concurrentKernels: i32,
+    pub ECCEnabled: i32,
+    pub pciBusID: i32,
+    pub pciDeviceID: i32,
+    pub pciDomainID: i32,
+    pub tccDriver: i32,
+    pub asyncEngineCount: i32,
+    pub unifiedAddressing: i32,
+    pub memoryClockRate: i32,
+    pub memoryBusWidth: i32,
+    pub l2CacheSize: i32,
+    pub maxThreadsPerMultiProcessor: i32,
+    pub streamPrioritiesSupported: i32,
+    pub globalL1CacheSupported: i32,
+    pub localL1CacheSupported: i32,
+    pub sharedMemPerMultiprocessor: usize,
+    pub regsPerMultiprocessor: i32,
+    pub managedMemory: i32,
+    pub isMultiGpuBoard: i32,
+    pub multiGpuBoardGroupID: i32,
+    pub hostNativeAtomicSupported: i32,
+    pub singleToDoublePrecisionPerfRatio: i32,
+    pub pageableMemoryAccess: i32,
+    pub concurrentManagedAccess: i32,
+    pub computePreemptionSupported: i32,
+    pub canUseHostPointerForRegisteredMem: i32,
+    pub cooperativeLaunch: i32,
+    pub cooperativeMultiDeviceLaunch: i32,
+    pub sharedMemPerBlockOptin: usize,
+    pub pageableMemoryAccessUsesHostPageTables: i32,
+    pub directManagedMemAccessFromHost: i32,
+}
+
+impl Default for CudaDeviceProperties {
+    fn default() -> Self {
+        Self {
+            name: [0; 256],
+            uuid: CudaUUID { bytes: [0; 16]},
+            luid: [0; 8usize],
+            luidDeviceNodeMask: 0,
+            totalGlobalMem: 0,
+            sharedMemPerBlock: 0,
+            regsPerBlock: 0,
+            warpSize: 0,
+            memPitch: 0,
+            maxThreadsPerBlock: 0,
+            maxThreadsDim: [0; 3],
+            maxGridSize: [0; 3],
+            clockRate: 0,
+            totalConstMem: 0,       
+            major: 0,
+            minor: 0,
+            textureAlignment: 0,
+            texturePitchAlignment: 0,
+            deviceOverlap: 0,
+            multiProcessorCount: 0,
+            kernelExecTimeoutEnabled: 0,
+            integrated: 0,
+            canMapHostMemory: 0,
+            computeMode: 0,
+            maxTexture1D: 0,
+            maxTexture1DMipmap: 0,
+            maxTexture1DLinear: 0,
+            maxTexture2D: [0; 2],
+            maxTexture2DMipmap: [0; 2],
+            maxTexture2DLinear: [0; 3],
+            maxTexture2DGather: [0; 2],
+            maxTexture3D: [0; 3],
+            maxTexture3DAlt: [0; 3],
+            maxTextureCubemap: 0,
+            maxTexture1DLayered: [0; 2],
+            maxTexture2DLayered: [0; 3],
+            maxTextureCubemapLayered: [0; 2],
+            maxSurface1D: 0,
+            maxSurface2D: [0; 2],
+            maxSurface3D: [0; 3],
+            maxSurface1DLayered: [0; 2],
+            maxSurface2DLayered: [0; 3],
+            maxSurfaceCubemap: 0,
+            maxSurfaceCubemapLayered: [0; 2],
+            surfaceAlignment: 0,
+            concurrentKernels: 0,
+            ECCEnabled: 0,
+            pciBusID: 0,
+            pciDeviceID: 0,
+            pciDomainID: 0,
+            tccDriver: 0,
+            asyncEngineCount: 0,
+            unifiedAddressing: 0,
+            memoryClockRate: 0,
+            memoryBusWidth: 0,
+            l2CacheSize: 0,
+            maxThreadsPerMultiProcessor: 0,
+            streamPrioritiesSupported: 0,
+            globalL1CacheSupported: 0,
+            localL1CacheSupported: 0,
+            sharedMemPerMultiprocessor: 0,
+            regsPerMultiprocessor: 0,
+            managedMemory: 0,
+            isMultiGpuBoard: 0,
+            multiGpuBoardGroupID: 0,
+            hostNativeAtomicSupported: 0,
+            singleToDoublePrecisionPerfRatio: 0,
+            pageableMemoryAccess: 0,
+            concurrentManagedAccess: 0,
+            computePreemptionSupported: 0,
+            canUseHostPointerForRegisteredMem: 0,
+            cooperativeLaunch: 0,
+            cooperativeMultiDeviceLaunch: 0,
+            sharedMemPerBlockOptin: 0,
+            pageableMemoryAccessUsesHostPageTables: 0,
+            directManagedMemAccessFromHost: 0,
+        }
+    }
+}
+
+#[repr(C)]
 #[derive(Debug)]
 pub struct FatHeader {
     magic: u32,
@@ -112,10 +328,10 @@ pub struct FatHeader {
 }
 
 #[repr(C)]
-#[derive(Default, Debug)]
+#[derive(Default, Debug,Copy, Clone)]
 pub struct FatElfHeader {
-    magic: u32,
-    version: u16,
+    pub magic: u32,
+    pub version: u16,
     pub header_size: u16,
     pub size: u64
 }
@@ -124,19 +340,19 @@ pub struct FatElfHeader {
 #[derive(Default, Debug)]
 pub struct FatTextHeader {
     pub kind: u16,
-    unknown1: u16,
+    pub unknown1: u16,
     pub header_size: u32,
     pub size: u64,
-    compressed_size: u32,
-    unknown2: u32,
-    minor: u16,
-    major: u16,
-    arch: u32,
-    obj_name_offset: u32,
-    obj_name_len: u32,
+    pub compressed_size: u32,
+    pub unknown2: u32,
+    pub minor: u16,
+    pub major: u16,
+    pub arch: u32,
+    pub obj_name_offset: u32,
+    pub obj_name_len: u32,
     pub flags:u64,
-    zero: u64,
-    decompressed_size: u64
+    pub zero: u64,
+    pub decompressed_size: u64
 }
 
 #[repr(C)]
@@ -173,7 +389,7 @@ pub struct RegisterFunctionInfo {
     pub hostFun:u64, 
     pub deviceFun:u64, 
     pub deviceName:u64, 
-    pub thread_limit:usize, 
+    pub thread_limit:i32, 
     pub tid:u64, 
     pub bid:u64, 
     pub bDim:u64, 
@@ -213,4 +429,17 @@ pub struct NvInfoEntry {
     pub values_size: u16,
     pub kernel_id: u32,
     pub value: u32
+}
+
+#[repr(C)]
+#[derive(Default, Debug, Copy, Clone)]
+pub struct RegisterVarInfo {
+    pub fatCubinHandle:u64, 
+    pub hostVar: u64,
+    pub deviceAddress:u64,
+    pub deviceName:u64,
+    pub ext:i32,
+    pub size: usize,
+    pub constant: i32,
+    pub global: i32,
 }
