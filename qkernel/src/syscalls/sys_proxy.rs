@@ -589,6 +589,14 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             );
             return Ok(ret);
         }
+        ProxyCommand::CuInit => {
+            error!("SysProxy CuInit");
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            return Ok(ret);
+        }
         ProxyCommand::CuDevicePrimaryCtxGetState => {
             let mut flags:u32 = 0;
             let mut active:i32 = 0;

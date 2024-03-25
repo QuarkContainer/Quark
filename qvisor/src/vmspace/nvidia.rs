@@ -66,6 +66,7 @@ lazy_static! {
         (ProxyCommand::CudaStreamIsCapturing,(XpuLibrary::CudaRuntime, "cudaStreamIsCapturing")),
         (ProxyCommand::CuModuleGetLoadingMode,(XpuLibrary::CudaDriver, "cuModuleGetLoadingMode")),
         (ProxyCommand::CudaGetLastError,(XpuLibrary::CudaRuntime, "cudaGetLastError")),
+        (ProxyCommand::CuInit,(XpuLibrary::CudaDriver, "cuInit")),
         (ProxyCommand::CuDevicePrimaryCtxGetState,(XpuLibrary::CudaDriver, "cuDevicePrimaryCtxGetState")),
         (ProxyCommand::NvmlInitWithFlags,(XpuLibrary::Nvml, "nvmlInitWithFlags")),
     ]);
@@ -869,6 +870,19 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
              );
             return Ok(ret as i64);
         }
+        ProxyCommand::CuInit => {
+             let func: extern "C" fn(c_uint) -> i32 = unsafe { std::mem::transmute(handler) };
+
+            // let ret = func(parameters.para1 as c_uint);
+
+            let ret = unsafe{ cuda_driver_sys::cuInit(parameters.para1 as c_uint)};
+
+            error!("func cuInit ret: {:?}", ret,);
+
+            return Ok(ret as i64);
+
+
+        }
         ProxyCommand::CuDevicePrimaryCtxGetState => {
             let func: extern "C" fn(CUdevice, *mut ::std::os::raw::c_uint, *mut ::std::os::raw::c_int) -> i32 = unsafe { std::mem::transmute(handler) };
             error!("CuDevicePrimaryCtxGetState, device({})", parameters.para1 as u32 );
@@ -878,8 +892,8 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
 
             
 
-
-            // let ret = func(parameters.para1 as CUdevice, &mut flags, &mut active);
+            // note: use the handler doesn't work 
+            // let ret = func(parameters.para1 as CUdevice, &mut flags as *mut c_uint, &mut active  as *mut c_int);
             let ret = unsafe {cuda_driver_sys::cuDevicePrimaryCtxGetState(parameters.para1 as CUdevice, &mut flags as *mut c_uint, &mut active as *mut c_int )};
 
             error!("CuDevicePrimaryCtxGetState ret {:?}", ret);
