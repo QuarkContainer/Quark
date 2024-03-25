@@ -84,18 +84,12 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
 
             let deviceProp = unsafe { *(parameters.para2 as *const u8 as *const cudaDeviceProp) };
 
-            // error!(
-            //     "deviceProp is(
-            //     deviceProp.luidDeviceNodeMask: {:x},
-            //     deviceProp.totalGlobalMem: {:x},
-            //     deviceProp.sharedMemPerBlock: {:x}
-            //     deviceProp.regsPerBlock: {:x}
-            // )...",
-            //     deviceProp.luidDeviceNodeMask,
-            //     deviceProp.totalGlobalMem,
-            //     deviceProp.sharedMemPerBlock,
-            //     deviceProp.regsPerBlock,
-            // );
+            error!("deviceProp is(deviceProp.luidDeviceNodeMask:{:x}, deviceProp.totalGlobalMem:{:x}, deviceProp.sharedMemPerBlock:{:x}, deviceProp.regsPerBlock: {:x})...",
+                deviceProp.luidDeviceNodeMask,
+                deviceProp.totalGlobalMem,
+                deviceProp.sharedMemPerBlock,
+                deviceProp.regsPerBlock,
+            );
 
             let func: extern "C" fn(*mut ::std::os::raw::c_int, *const cudaDeviceProp) -> i32 =
                 unsafe { std::mem::transmute(handler) };
@@ -578,7 +572,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                     *module
                 }
                 None => {
-                    // error!("no module found with this fatCubin");
+                    error!("no module found with this fatCubin");
                     0
                 }
             };

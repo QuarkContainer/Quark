@@ -474,7 +474,6 @@ fn GetKernelSectionFromKernelName(kernelName:String) -> String {
 
     format!(".nv.info.{}", kernelName)
 }
-                                                          // a mutable reference to a mutable raw pointer
 pub fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn) -> Result<i64> {
     let mut scn = 0 as u64 as *mut Elf_Scn;
     let mut size:usize = 0;
