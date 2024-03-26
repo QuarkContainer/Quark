@@ -122,6 +122,8 @@ change pub const DefaultRuntimeHandler             : &str = "quarkd" to "runc";
 Enable tsot in config.json
 
 set EnableTsot to true
+set ShimMode to true
+set PerSandboxLog to true
 
 2. Start etcd
 
@@ -135,13 +137,15 @@ sudo docker run \
   -p 2379:2379 \
   -p 2380:2380 \
   --rm \
-  --volume=${DATA_DIR}:/etcd-data \
   --name etcd ${REGISTRY}:latest \
   /usr/local/bin/etcd \
   --data-dir=/etcd-data --name node1 \
   --initial-advertise-peer-urls http://${NODE1}:2380 --listen-peer-urls http://0.0.0.0:2380 \
   --advertise-client-urls http://${NODE1}:2379 --listen-client-urls http://0.0.0.0:2379 \
   --initial-cluster node1=http://${NODE1}:2380
+
+#--volume=${DATA_DIR}:/etcd-data \
+  
 
 export ETCDCTL_API=3
 etcdctl get / --prefix
@@ -155,7 +159,7 @@ cd Quark/qservice/target/debug
 
 multiple qlet test
 
-# state service
+# start service
 rm -f /var/log/quark/ss.log; sudo ./ss
 # qlet
 rm -f /var/log/quark/na.log; sudo ./na /etc/quark/node1.json

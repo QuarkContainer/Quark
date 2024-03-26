@@ -16,12 +16,17 @@
 syntax = "proto3";
 package na;
 
+service ScheduleService {
+  rpc CreateFuncService(CreateFuncServiceReq) returns (CreateFuncServiceResp) {}
+}
+
 service NodeAgentService {
   rpc CreatePod(CreatePodReq) returns (CreatePodResp) {}
   rpc GetPod(GetPodReq) returns (GetPodResp) {}
   rpc TerminatePod(TerminatePodReq) returns (TerminatePodResp) {}
   rpc NodeConfig(NodeConfigReq) returns (NodeConfigResp) {}
   rpc CreateFuncPod(CreateFuncPodReq) returns (CreateFuncPodResp) {}
+  //rpc CreateFuncService(CreateFuncServiceReq) returns (CreateFuncServiceResp) {}
 }
 ///////////////////////////////////////////////////////////////////////
 
@@ -89,6 +94,48 @@ message CreateFuncPodReq {
 message CreateFuncPodResp {
   string error = 1;
   uint32 ipaddress = 2;
+}
+
+message FuncPodSpec {
+  string image = 4;
+  repeated string commands = 7;
+  repeated Env envs = 8;
+  repeated Mount mounts = 9;
+  repeated ContainerPort ports = 10;
+}
+
+message FuncPodDeploy {
+  string name = 1;
+  uint32 ipaddress = 2;
+}
+
+message FuncReplicas {
+  string name = 1;
+  int32 replica = 2;
+  int32 min_replica = 3;
+  oneof Set {
+    FuncPodSpec spec = 100;
+    FuncReplicas set = 200;
+  }
+}
+
+message FuncReplicasDeploy {
+  string name = 1;
+  repeated FuncPodDeploy pods = 2;
+}
+
+message CreateFuncServiceReq {
+  string tenant = 1;
+  string namespace = 2;
+  string name = 3;
+  repeated KV labels = 5;
+  repeated KV annotations = 6;
+  repeated FuncReplicas sets = 7;
+}
+
+message CreateFuncServiceResp {
+  string error = 1;
+  repeated FuncReplicasDeploy replicas = 2;
 }
 
 message ReadFuncLogReq {
