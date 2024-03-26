@@ -23,7 +23,6 @@
 #![recursion_limit = "256"]
 //#![allow(invalid_reference_casting)]
 #![feature(unix_socket_ancillary_data)]
-#![allow(invalid_reference_casting)]
 
 extern crate alloc;
 extern crate bit_field;
