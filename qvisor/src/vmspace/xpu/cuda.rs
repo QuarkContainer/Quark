@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 use spin::Mutex;
 use std::mem::MaybeUninit;
 use std::sync::Arc;
+use libc::*;
 
 use crate::qlib::common::*;
 use crate::qlib::proxy::*;

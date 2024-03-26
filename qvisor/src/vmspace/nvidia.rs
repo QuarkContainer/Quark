@@ -56,7 +56,7 @@ lazy_static! {
         (ProxyCommand::CudaMemcpyAsync,(XpuLibrary::CudaRuntime, "cudaMemcpyAsync")),
         (ProxyCommand::CudaRegisterFatBinary,(XpuLibrary::CudaDriver, "cuModuleLoadData")),
         (ProxyCommand::CudaRegisterFunction,(XpuLibrary::CudaDriver, "cuModuleGetFunction")),
-        (ProxyCommand::CudaRegisterVar,(XpuLibrary::CudaDriver, "cuModuleGetGlobal")),
+        (ProxyCommand::CudaRegisterVar,(XpuLibrary::CudaDriver, "cuModuleGetGlobal_v2")),
         (ProxyCommand::CudaLaunchKernel,(XpuLibrary::CudaDriver, "cuLaunchKernel")),
         (ProxyCommand::CudaFree,(XpuLibrary::CudaRuntime, "cudaFree")),
         (ProxyCommand::CudaUnregisterFatBinary,(XpuLibrary::CudaDriver, "cuModuleUnload")),
@@ -491,6 +491,9 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                     return Err(e);
                 }
             }
+            
+            // let func: extern "C" fn(*mut CUmodule, *const ::std::os::raw::c_void) -> i32 = unsafe{std::mem::transmute(handler)};
+            // let ret = func(&mut module as *mut _ as u64 as *mut CUmodule,parameters.para2 as *const c_void);
             let mut module: u64 = 0;
             let ret = unsafe {
                 cuda_driver_sys::cuModuleLoadData(
@@ -499,20 +502,9 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 )
             };
            
-          
-            if ret != CUresult::CUDA_SUCCESS {
-                match ret as u32 {
-                    1 => return Err(Error::NvidiaError(ret as u32)),
-                    2 => return Err(Error::NvidiaError(ret as u32)),
-                    3 => return Err(Error::NvidiaError(ret as u32)),
-                    4 => return Err(Error::NvidiaError(ret as u32)),
-                    5 => return Err(Error::NvidiaError(ret as u32)),
-                    _ => {
-                        return Err(Error::NvidiaError(ret as u32));
-                    }
-                }
-            }
 
+           
+          
             MODULES.lock().insert(moduleKey, module);
             error!(
                 "cudaRegisterFatBinary func ret {:?} module ptr {:x?} MODULES {:x?}",
@@ -578,6 +570,11 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 deviceName, parameters, module
             );
 
+         
+            // let func: extern "C" fn(*mut CUfunction, CUmodule, *const ::std::os::raw::c_char) -> i32 = unsafe{std::mem::transmute(handler)};
+            // let ret = unsafe {func( &mut hfunc as *mut _ as u64 as *mut CUfunction,*(&mut module as *mut _ as u64 as *mut CUmodule), CString::new(deviceName).unwrap().clone().as_ptr()) };
+           
+
             let mut hfunc: u64 = 0;
             let ret = unsafe {
                 cuda_driver_sys::cuModuleGetFunction(
@@ -586,19 +583,8 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                     CString::new(deviceName).unwrap().clone().as_ptr(),
                 )
             };
+            
 
-            if ret != CUresult::CUDA_SUCCESS {
-                match ret as u32 {
-                    1 => return Err(Error::NvidiaError(ret as u32)),
-                    2 => return Err(Error::NvidiaError(ret as u32)),
-                    3 => return Err(Error::NvidiaError(ret as u32)),
-                    4 => return Err(Error::NvidiaError(ret as u32)),
-                    5 => return Err(Error::NvidiaError(ret as u32)),
-                    _ => {
-                        return Err(Error::NvidiaError(ret as u32));
-                    }
-                }
-            }
             FUNCTIONS.lock().insert(info.hostFun, hfunc);
 
             error!(
@@ -608,7 +594,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 &hfunc,
                 FUNCTIONS.lock()
             );
- //  ?
+
             let kernelInfo = match KERNEL_INFOS.lock().get(&deviceName.to_string()) {
                 Some(kernelInformations) => {
                     error!("found kernel {:?}", kernelInformations);
@@ -622,7 +608,16 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                     Arc::new(KernelInfo::default())
                 }
             };
-            //  kenrelInfo.hostfun may updated
+        
+
+            // match KERNEL_INFOS.lock().get_mut(&deviceName.to_string()){
+            //     Some(kernelInformations) => {
+            //        let kernel_info = Arc::make_mut(kernelInformations);
+            //     }
+            //     None => {
+            //         error!("KernelInfo not found for the key: {}",&deviceName.to_string() );
+            //     }
+            // }
 
             let paramInfo = parameters.para3 as *const u8 as *mut ParamInfo;
             unsafe {
@@ -673,21 +668,12 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                     deviceName_cString.as_ptr(),
                 )
             };
+        
 
-            if ret != CUresult::CUDA_SUCCESS {
-                match ret as u32 {
-                    1 => return Err(Error::NvidiaError(ret as u32)),
-                    2 => return Err(Error::NvidiaError(ret as u32)),
-                    3 => return Err(Error::NvidiaError(ret as u32)),
-                    4 => return Err(Error::NvidiaError(ret as u32)),
-                    5 => return Err(Error::NvidiaError(ret as u32)),
-                    _ => {
-                        return Err(Error::NvidiaError(ret as u32));
-                    }
-                }
-            }
+            // let func: extern "C" fn( *mut CUdeviceptr, *mut usize, CUmodule,*const ::std::os::raw::c_char ) -> i32 = unsafe{std::mem::transmute(handler)};
+            // let ret  = func(&mut devicePtr, &mut d_size, (module as *const u64) as CUmodule, deviceName_cString.as_ptr());
 
-
+        
             GLOBALS.lock().insert(info.hostVar, devicePtr);
             error!(
                 "cuModuleGetGlobal_v2 ret {:x?}, devicePtr {:x}, GLOBALS {:x?}",
@@ -713,6 +699,36 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                 }
             };
             error!("CudaLaunchKernel in host info {:x?}, func {:x}", info, func);
+       
+            // let func: extern "C" fn(
+            //     CUfunction, 
+            //     ::std::os::raw::c_uint,
+            //     ::std::os::raw::c_uint,
+            //     ::std::os::raw::c_uint,
+            //     ::std::os::raw::c_uint,
+            //     ::std::os::raw::c_uint,
+            //     ::std::os::raw::c_uint,
+            //     ::std::os::raw::c_uint,
+            //     CUstream,
+            //     *mut *mut ::std::os::raw::c_void,
+            //     *mut *mut ::std::os::raw::c_void,
+            // ) -> i32 = unsafe{std::mem::transmute(handler)}; 
+
+            // let ret = func(
+            //     func as CUfunction,
+            //     info.gridDim.x,
+            //     info.gridDim.y,
+            //     info.gridDim.z,
+            //     info.blockDim.x,
+            //     info.blockDim.y,
+            //     info.blockDim.z,
+            //     info.sharedMem as u32,
+            //     info.stream as *mut CUstream_st,
+            //     info.args as *mut *mut ::std::os::raw::c_void,
+            //     0 as *mut *mut ::std::os::raw::c_void,
+            // );
+            
+            
 
             let ret: CUresult = unsafe {
                 cuda_driver_sys::cuLaunchKernel(
@@ -729,18 +745,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                     0 as *mut *mut ::std::os::raw::c_void,
                 )
             };
-            if ret != CUresult::CUDA_SUCCESS {
-                match ret as u32 {
-                    1 => return Err(Error::NvidiaError(ret as u32)),
-                    2 => return Err(Error::NvidiaError(ret as u32)),
-                    3 => return Err(Error::NvidiaError(ret as u32)),
-                    4 => return Err(Error::NvidiaError(ret as u32)),
-                    5 => return Err(Error::NvidiaError(ret as u32)),
-                    _ => {
-                        return Err(Error::NvidiaError(ret as u32));
-                    }
-                }
-            }
+          
 
             error!("cuLaunchKernel ret {:x?}", ret);
 
@@ -871,7 +876,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
             return Ok(ret as i64);
         }
         ProxyCommand::CuInit => {
-             let func: extern "C" fn(c_uint) -> i32 = unsafe { std::mem::transmute(handler) };
+            //  let func: extern "C" fn(c_uint) -> i32 = unsafe { std::mem::transmute(handler) };
 
             // let ret = func(parameters.para1 as c_uint);
 
@@ -884,7 +889,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
 
         }
         ProxyCommand::CuDevicePrimaryCtxGetState => {
-            let func: extern "C" fn(CUdevice, *mut ::std::os::raw::c_uint, *mut ::std::os::raw::c_int) -> i32 = unsafe { std::mem::transmute(handler) };
+            // let func: extern "C" fn(CUdevice, *mut ::std::os::raw::c_uint, *mut ::std::os::raw::c_int) -> i32 = unsafe { std::mem::transmute(handler) };
             error!("CuDevicePrimaryCtxGetState, device({})", parameters.para1 as u32 );
 
             let mut flags:c_uint = Default::default();
@@ -1191,6 +1196,22 @@ impl NvidiaHandlers {
         if initResult as u32 != 0 {
             error!("cuda runtime init error");
         }
+
+
+        // let cudaRuntimeHandle =  unsafe { libc::dlopen(cudartlib.as_ptr(), libc::RTLD_LAZY) } ; 
+        // let func_name1 = CString::new("cudaSetDevice").unwrap();
+        // let cudaSetDevice: extern "C" fn(c_int) -> u32 = unsafe {std::mem::transmute(libc::dlsym(cudaRuntimeHandle, func_name1.as_ptr()))};
+        // let initResult = cudaSetDevice(0);
+
+        // let func_name2 = CString::new("cudaDeviceSynchronize").unwrap();
+        // let cudaDeviceSynchronize: extern "C" fn() -> u32 = unsafe {std::mem::transmute(libc::dlsym(cudaRuntimeHandle, func_name2.as_ptr()))};
+        // cudaDeviceSynchronize();
+        // if initResult as u32 != 0 {
+        //     error!("cuda runtime init error");
+        // }
+
+
+
 
         return Self(Mutex::new(inner));
     }
