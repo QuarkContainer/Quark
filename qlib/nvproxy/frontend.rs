@@ -284,7 +284,7 @@ pub fn RMVidHeapControlAllocSize (
     };
 
     let mut ioctlParamsTmp = *ioctlParams;
-    let allocSizeParamsTmp = unsafe {
+    let mut allocSizeParamsTmp = unsafe {
         &mut *(&mut ioctlParamsTmp.data[0] as * mut _ as u64 as * mut NVOS32AllocSize)
     };
 
