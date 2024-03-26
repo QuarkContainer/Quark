@@ -131,9 +131,7 @@ impl PodBrokerMgrs {
         peerPort: u16,
         socket: i32,
     ) -> Result<()> {
-        error!("HandlePeerConnect 1");
         let broker = self.GetBroker(namespace, dstIp)?;
-        error!("HandlePeerConnect 2");
         broker.HandleNewPeerConnection(peerIp, peerPort, dstPort, socket)?;
 
         return Ok(());
