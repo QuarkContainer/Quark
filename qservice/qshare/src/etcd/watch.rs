@@ -1,4 +1,3 @@
-
 // Copyright (c) 2021 Quark Container Authors / 2014 The Kubernetes Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,11 +23,11 @@ use tokio::sync::mpsc;
 use tokio::sync::Mutex as TMutex;
 use tokio::sync::Notify;
 
-use crate::etcd::etcd_client::EtcdClient;
 use crate::common::*;
+use crate::etcd::etcd_client::EtcdClient;
+use crate::metastore::data_obj::*;
 use crate::metastore::selection_predicate::*;
 use crate::qmeta::*;
-use crate::metastore::data_obj::*;
 
 pub struct WatchReader {
     pub resultRecv: TMutex<mpsc::Receiver<WatchEvent>>,
@@ -44,8 +43,6 @@ impl WatchReader {
         self.closeNotify.notify_one();
     }
 }
-
-
 
 pub struct Watcher {
     pub client: EtcdClient,

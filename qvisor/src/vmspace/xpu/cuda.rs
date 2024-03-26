@@ -27,6 +27,7 @@ lazy_static! {
     pub static ref KERNEL_INFOS:Mutex<BTreeMap<String, Arc<KernelInfo>>> = Mutex::new(BTreeMap::new());
     pub static ref MODULES:Mutex<BTreeMap<CUmoduleKey, CUmoduleAddr>> = Mutex::new(BTreeMap::new());
     pub static ref FUNCTIONS:Mutex<BTreeMap<CUhostFunction, CUfunctionAddr>> = Mutex::new(BTreeMap::new());
+    pub static ref GLOBALS:Mutex<BTreeMap<u64, CUdeviceAddr>> = Mutex::new(BTreeMap::new());
 }
 
 pub type HandlerAddr = u64;
@@ -34,6 +35,7 @@ pub type CUmoduleKey = u64;
 pub type CUmoduleAddr = u64;
 pub type CUhostFunction = u64;
 pub type CUfunctionAddr = u64;
+pub type CUdeviceAddr = u64;
 
 #[repr(C)]
 #[derive(Default, Debug)]
@@ -47,11 +49,17 @@ pub struct KernelInfo {
 }
 
 pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
+    // error!("fatElfHeader magic is :{:x}, version is :{:x}, header size is :{:x}, size is :{:x}", fatElfHeader.magic, fatElfHeader.version, fatElfHeader.header_size, fatElfHeader.size);
     let mut inputPosition = addr + fatElfHeader.header_size as u64;
     let endPosition = inputPosition + fatElfHeader.size as u64;
+    let mut textDatAddr:u64;
+    let mut textDataSize:u64 = 0; 
     // error!("inputPosition:{:x} endPosition:{:x}", inputPosition, endPosition);
+    let mut decompressedByte: Vec<u8>;
+
     while inputPosition < endPosition {
-        let fatTextHeader = unsafe { &*(inputPosition as *const u8 as *const FatTextHeader) };
+        let fatTextHeader = unsafe { &*(inputPosition as *const u8 as *const FatTextHeader) };        
+
         // error!("fatTextHeader:{:x?}", *fatTextHeader);
         // error!("FATBIN_FLAG_COMPRESS:{:x}, fatTextHeader.flags:{:x}, result of &:{:x}", FATBIN_FLAG_COMPRESS, fatTextHeader.flags, fatTextHeader.flags & FATBIN_FLAG_COMPRESS);
         
@@ -63,24 +71,245 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
         if fatTextHeader.flags & FATBIN_FLAG_DEBUG > 0 {
             // error!("fatbin contains debug information.");
         }
-
         if (fatTextHeader.flags & FATBIN_FLAG_COMPRESS) > 0 {
             // error!("fatbin contains compressed device code. Decompressing...");
-            todo!()
+            let input_read:i64;
+      
+            decompressedByte = Vec::with_capacity((fatTextHeader.decompressed_size + 7) as usize);
+            unsafe{
+            decompressedByte.set_len((fatTextHeader.decompressed_size + 7) as usize); 
+            }
+ 
+            textDatAddr = &decompressedByte[0] as *const _ as u64;   
+            // error!("textDatAddr is {:x}", textDatAddr );
+            // error!("textDatasize before function call is {}", textDataSize);
+                                                                            
+            match DecompressSingleSection(inputPosition, &mut decompressedByte, &mut textDataSize, fatTextHeader) {
+                Ok(inputRead) => { input_read = inputRead; },
+                Err(error) => {
+                    return Err(error)
+                },
+            }
+            // error!("textDatasize after function call is {}", textDataSize);
+
+            // error!("decompressedByte is: {:?}", decompressedByte);
+          
+            // error!("input_read is: {:x}", input_read);
+
+            if input_read < 0 {
+                error!("Something went wrong while decompressing text section.");
+                return Err(Error::DecompressFatbinError(String::from("Something went wrong while decompressing text section.")));
+            } 
+            inputPosition += input_read as u64;                           
+        }else {
+            textDatAddr = inputPosition;
+            textDataSize = fatTextHeader.size;
+
+            inputPosition += fatTextHeader.size;   
         }
 
-        match GetParameterInfo(fatTextHeader, inputPosition) {
+        match GetParameterInfo( textDatAddr, textDataSize) {
             Ok(v) => v,
             Err(e) => return Err(e),
         };
 
-        inputPosition += fatTextHeader.size;
+       
     }
     // error!("Complete handling FatTextHeader");
     Ok(0)
 }
+                                                                                                                    
+fn DecompressSingleSection(inputPosition:u64, outputPosition:&mut Vec<u8>, outputSize:&mut u64,fatTextHeader:&FatTextHeader) -> Result<i64> {
+    let mut padding:u64;
+    let mut inputRead:u64 = 0;
+    let mut outputWritten:u64 = 0;
+    let decompressResult;
+    let zeros: [u8; 8] = [0; 8];
 
-fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i64> {
+    // error!("fatTextHeader: fatbin_kind:{:x}, header_size:{:x}, size:{:x}, compressed_size:{:x}, minor:{:x}, major:{:x}, arch:{:x}, decompressed_size:{:x}, flags:{:#x?}",
+    // fatTextHeader.kind,
+    // fatTextHeader.header_size, 
+    // fatTextHeader.size, 
+    // fatTextHeader.compressed_size, 
+    // fatTextHeader.minor, 
+    // fatTextHeader.major, 
+    // fatTextHeader.arch, 
+    // fatTextHeader.decompressed_size, 
+    // fatTextHeader.flags
+    // );
+    // error!("fatTextHeader unknown fields: unknown1: {:x}, unknown2: {:x}, zeros: {:x}", fatTextHeader.unknown1, fatTextHeader.unknown2, fatTextHeader.zero);
+                                                                                                                        
+    decompressResult = decompress(inputPosition, fatTextHeader.compressed_size as u64, outputPosition, fatTextHeader.decompressed_size);
+
+    if decompressResult != fatTextHeader.decompressed_size {
+        error!("Decompression failed: decompressed size is {:x}, but header says {:x}.", decompressResult, fatTextHeader.decompressed_size);
+        hexdump(inputPosition, 0x160);
+        if decompressResult >= 0x60 {
+                hexdump(outputPosition.as_ptr() as u64 + decompressResult - 0x60, 0x60); 
+        }
+        return Err(Error::DecompressFatbinError(String::from("decompression failed")));
+    }
+
+    // error!("decompressResult should equal to fatTextHeader.decompressed_size, decompressResult: {:x}, fatTextHeader.decompressed_size: {:x}", decompressResult, fatTextHeader.decompressed_size);
+    inputRead += fatTextHeader.compressed_size as u64;
+    outputWritten += fatTextHeader.decompressed_size;
+
+    // error!("inputPosition is: {:x}, inputRead is: {:x}", inputPosition, inputRead);
+    // error!("inputPosition + inputRead = {:x}", inputPosition + inputRead);
+    padding = 8u64.wrapping_sub(inputPosition +inputRead);
+    // error!("padding after subtraction is: {:x}", padding);
+    padding = padding % 8;
+    
+    let slice1 = unsafe{std::slice::from_raw_parts((inputPosition + inputRead) as *const u8, padding as usize) };
+    let slice2 = unsafe {std::slice::from_raw_parts(&zeros[0] as *const u8, padding as usize)};
+
+    if slice1 != slice2 {
+        // error!("expected {:x} zero bytes", padding);
+        hexdump(inputPosition + inputRead, 0x60);
+        return Err(Error::DecompressFatbinError(String::from("padding length is wrong")));
+    }
+    // error!("slice1 is: {:?}", slice1);
+
+    // error!("slice2 is: {:?}", slice2);
+
+    inputRead += padding;
+    
+    padding = (8u64.wrapping_sub(fatTextHeader.decompressed_size)) % 8;
+  
+    for i in 0..padding {
+        outputPosition[i as usize] = 0;
+    }
+
+    outputWritten += padding;
+    *outputSize = outputWritten;
+
+    return Ok(inputRead as i64);
+}
+                                          
+// Decompressed a fatbin file 
+///
+/// # Arguments
+///
+/// * `inputPosition` - inputPosition for compressed input data.
+/// * `inputSize` - Size of compressed data.
+/// * `output` - Preallocated memory where decompressed output should be stored.
+/// * `outputSize` - Size of output buffer. Should be equal to the size of the decompressed data.
+
+fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, outputSize: u64) -> u64 {
+    let mut ipos:u64 = 0;
+    let mut opos:u64 = 0;
+    let mut nextNonCompressed_length:u64;
+    let mut nextCompressed_length:u64;
+    let mut backOffset:u64;
+  
+    // error!("size of compressed data is {}",inputSize);
+
+    while ipos < inputSize {      
+        nextNonCompressed_length = unsafe { ((*((inputPosition + ipos) as *const u8) & 0xf0) >> 4) as u64};
+        nextCompressed_length = unsafe{ 4 + (*((inputPosition + ipos) as *const u8) & 0xf) as u64  };
+         
+        if nextNonCompressed_length == 0xf{
+            loop {
+                ipos += 1;
+                unsafe{
+                nextNonCompressed_length += *((inputPosition + ipos) as *const u8) as u64
+                };
+                if unsafe{ *((inputPosition + ipos) as *const u8)} != 0xff  {
+                    break; 
+                }
+            }
+        }
+
+        ipos += 1;
+        for i in 0..nextNonCompressed_length {
+            outputPosition[(opos + i) as usize] =  unsafe {*((inputPosition + ipos + i) as *const u8)};
+        }
+
+        ipos += nextNonCompressed_length;
+        opos += nextNonCompressed_length;
+
+        if ipos >= inputSize || opos >= outputSize {
+            break;
+        }
+       
+
+       backOffset = unsafe{ (*((inputPosition + ipos) as *const u8)) as u64 };
+
+       let inputvalue:u64 =unsafe{ *((inputPosition + ipos +1) as *const u8) as u64 };  
+       let shiftvalue = inputvalue << 8;
+        // error!("backOffset before shift is: {}", backOffset);
+        // error!("input[ipos+1] is {}",inputvalue );
+        // error!("input[ipos+1] << 8 is {}",shiftvalue);
+       backOffset =  backOffset + shiftvalue;
+       // error!("backOffset after shift is {}",backOffset);
+       ipos += 2;
+
+       if nextCompressed_length == (0xf + 4){
+            loop {
+                nextCompressed_length += unsafe{ *((inputPosition + ipos) as *const u8) as u64 };
+                ipos += 1;
+                if unsafe {*((inputPosition + ipos - 1) as *const u8)} != 0xff {
+                    break;
+                }
+            }        
+        }
+
+        if nextCompressed_length <= backOffset {
+            for i in 0..nextCompressed_length {
+                outputPosition[(opos + i) as usize] =  outputPosition[(opos - backOffset + i) as usize];
+            }
+
+        }else{
+            for i in 0..backOffset {
+                outputPosition[(opos + i) as usize] =  outputPosition[(opos - backOffset + i) as usize];
+            }
+            for i in backOffset..nextCompressed_length {
+               outputPosition[(opos + i) as usize] = outputPosition[(opos + i - backOffset) as usize];  
+            }
+        }
+
+        opos += nextCompressed_length;
+      
+    }
+    // error!("ipos: {:x}, opos: {:x}, input size: {:x}, output size: {:x}", ipos, opos, inputSize, outputSize);
+    return opos ; 
+}
+
+fn hexdump(dataAddress: u64, size: u64){
+    let mut pos: u64 = 0;
+    while pos < size {
+        error!("hexdump debug {:#05x}", pos);
+        for i in 0..16 {
+            if pos + i < size {
+                unsafe {
+                error!("hexdump debug {:02x}", *((dataAddress + i) as *const u8))
+                };
+            } else {
+                error!(" ");
+            }
+            if i % 4 == 3 {
+                error!(" ");
+            }
+        }
+        for i in 0..16 {
+            unsafe{
+                if pos + i < size {
+                
+                if  *((dataAddress + i) as *const u8) >= 0x20 &&  *((dataAddress + i) as *const u8) <= 0x7e {
+                    error!("{}", *((dataAddress + i) as *const char));    
+                } else {
+                    error!(".");
+                }
+            } else {
+                error!("");
+            }
+        };
+        }
+        pos += 16;
+    }
+}
+
+fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
     let mut section:MaybeUninit<Elf_Scn>  = MaybeUninit::uninit();
     let mut ptr_section = section.as_mut_ptr();
     let mut shdr:MaybeUninit<GElf_Shdr> = MaybeUninit::uninit();
@@ -88,8 +317,7 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
     let mut sym:MaybeUninit<GElf_Sym> = MaybeUninit::uninit();
     let mut ptr_sym = sym.as_mut_ptr();
 
-    let memsize = fatTextHeader.size as usize;
-    let elf = unsafe { elf_memory(inputPosition as *mut i8, memsize) };
+    let elf = unsafe { elf_memory(inputPosition as *mut i8, memSize as usize) };
     match CheckElf(elf) {
         Ok(v) => v,
         Err(e) => return Err(e),
@@ -172,7 +400,6 @@ fn GetParameterInfo(fatTextHeader:&FatTextHeader, inputPosition:u64) -> Result<i
         // error!("ki: {:x?}", ki);
 
         KERNEL_INFOS.lock().insert(kernel_str.clone(), Arc::new(ki));
-
         secpos += infoSize;
     }
 
@@ -247,7 +474,6 @@ fn GetKernelSectionFromKernelName(kernelName:String) -> String {
 
     format!(".nv.info.{}", kernelName)
 }
-
 pub fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn) -> Result<i64> {
     let mut scn = 0 as u64 as *mut Elf_Scn;
     let mut size:usize = 0;

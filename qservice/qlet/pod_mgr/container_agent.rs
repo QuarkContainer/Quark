@@ -12,25 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use qshare::node::ContainerDef;
-use qshare::node::*;
-use tokio::sync::mpsc;
-use tokio::time;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
-use tokio::sync::Notify;
 use core::ops::Deref;
 use core::time::Duration;
+use qshare::node::ContainerDef;
+use qshare::node::*;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use tokio::sync::mpsc;
+use tokio::sync::Notify;
+use tokio::time;
 
-use qshare::crictl;
 use qshare::common::*;
+use qshare::crictl;
 use qshare::types::*;
 
-use super::RUNTIME_MGR;
+use super::pm_msg::*;
 use super::qcontainer::*;
 use super::qpod::QuarkPod;
-use super::pm_msg::*;
+use super::RUNTIME_MGR;
 
 pub struct PodContainerAgentInner {
     pub closeNotify: Arc<Notify>,
@@ -54,12 +54,16 @@ impl Deref for PodContainerAgent {
     }
 }
 
-unsafe impl Send for PodContainerAgent{}
+unsafe impl Send for PodContainerAgent {}
 
 impl PodContainerAgent {
-    pub async fn New(supervisor: &mpsc::Sender<NodeAgentMsg>, pod: &QuarkPod, container: &QuarkContainer) -> Result<Self> {
+    pub async fn New(
+        supervisor: &mpsc::Sender<NodeAgentMsg>,
+        pod: &QuarkPod,
+        container: &QuarkContainer,
+    ) -> Result<Self> {
         let (tx, rx) = mpsc::channel::<NodeAgentMsg>(30);
-        
+
         let inner = PodContainerAgentInner {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
@@ -76,13 +80,12 @@ impl PodContainerAgent {
             agent1.Process(rx).await.unwrap();
         });
 
-
         return Ok(agent);
     }
 
     pub fn Close(&self) -> Result<()> {
         self.closeNotify.notify_one();
-        return Ok(())
+        return Ok(());
     }
 
     pub async fn Start(&self) -> Result<()> {
@@ -90,29 +93,27 @@ impl PodContainerAgent {
 
         if !hasStatus {
             self.container.SetState(RuntimeContainerState::Created);
-            self.Notify(NodeAgentMsg::PodContainerCreated (
-                PodContainerCreated {
-                    pod: self.pod.clone(),
-                    container: self.container.clone(),
-                }
-            )).await;
+            self.Notify(NodeAgentMsg::PodContainerCreated(PodContainerCreated {
+                pod: self.pod.clone(),
+                container: self.container.clone(),
+            }))
+            .await;
 
             self.StartContainer().await?;
         } else {
             self.started.store(true, Ordering::SeqCst);
-            
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub async fn CreateContainer() -> Result<()> {
-        return Ok(())
+        return Ok(());
     }
 
     pub fn SendMsg(&self, msg: NodeAgentMsg) {
         self.agentChann.try_send(msg).unwrap();
-    } 
+    }
 
     pub async fn Process(&self, mut rx: mpsc::Receiver<NodeAgentMsg>) -> Result<()> {
         let mut interval = time::interval(time::Duration::from_secs(5));
@@ -126,12 +127,12 @@ impl PodContainerAgent {
                     if !self.started.load(Ordering::Relaxed) {
                         continue;
                     }
-                    
+
                     let containerId = self.container.lock().unwrap().runtimeContainer.id.clone();
                     let status = match RUNTIME_MGR.get().unwrap().GetContainerStatus(&containerId).await {
                         Ok(s) => s,
                         Err(e) => {
-                            info!("Container missing pod {} containerName {} error {:?}", 
+                            info!("Container missing pod {} containerName {} error {:?}",
                                 self.pod.PodId(), self.container.ContainerName(), e);
                             self.Notify(NodeAgentMsg::PodContainerFailed(
                                 PodContainerFailed {
@@ -153,8 +154,8 @@ impl PodContainerAgent {
                 }
             }
         }
-        
-        return Ok(())
+
+        return Ok(());
     }
 
     pub async fn ContainerHandler(&self, msg: NodeAgentMsg) -> Result<()> {
@@ -170,7 +171,7 @@ impl PodContainerAgent {
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn ContainerName(&self) -> String {
@@ -182,12 +183,23 @@ impl PodContainerAgent {
         let result = Some(result.clone());
         let initContainer = self.container.lock().unwrap().initContainer;
         if ContainerExit(&result) && !initContainer {
-            info!("Container exit pod {} container {} exit code {} finished at {:?}", 
-                self.pod.PodId(), self.container.ContainerName(), result.as_ref().unwrap().exit_code, result.as_ref().unwrap().finished_at);
+            info!(
+                "Container exit pod {} container {} exit code {} finished at {:?}",
+                self.pod.PodId(),
+                self.container.ContainerName(),
+                result.as_ref().unwrap().exit_code,
+                result.as_ref().unwrap().finished_at
+            );
             self.OnContainerFailed().await;
         }
 
-        let hasReadinessProbe = self.container.lock().unwrap().spec.readiness_probe.is_some();
+        let hasReadinessProbe = self
+            .container
+            .lock()
+            .unwrap()
+            .spec
+            .readiness_probe
+            .is_some();
         if !hasReadinessProbe && ContainerRunning(&result) {
             if self.container.State() == RuntimeContainerState::Started {
                 self.OnContainerReady().await;
@@ -196,79 +208,96 @@ impl PodContainerAgent {
     }
 
     pub async fn OnContainerFailed(&self) {
-        info!("Container failed pod {} containerName {}", self.pod.PodId(), self.container.ContainerName());
-        self.Notify(NodeAgentMsg::PodContainerFailed(
-            PodContainerFailed {
-                pod: self.pod.clone(),
-                container: self.container.clone(),
-            }
-        )).await;
+        info!(
+            "Container failed pod {} containerName {}",
+            self.pod.PodId(),
+            self.container.ContainerName()
+        );
+        self.Notify(NodeAgentMsg::PodContainerFailed(PodContainerFailed {
+            pod: self.pod.clone(),
+            container: self.container.clone(),
+        }))
+        .await;
     }
 
     pub async fn OnContainerStarted(&self) -> Result<()> {
         if self.container.State() == RuntimeContainerState::Created {
             self.container.SetState(RuntimeContainerState::Started);
-            self.Notify(NodeAgentMsg::PodContainerStarted(
-                PodContainerStarted {
-                    pod: self.pod.clone(),
-                    container: self.container.clone(),
-                }
-            )).await;
+            self.Notify(NodeAgentMsg::PodContainerStarted(PodContainerStarted {
+                pod: self.pod.clone(),
+                container: self.container.clone(),
+            }))
+            .await;
         }
 
         if self.InStoppingProcess() {
-            return Ok(())
+            return Ok(());
         }
 
         let initContainer = self.container.lock().unwrap().initContainer;
         if !initContainer {
             // todo: start liveness and readyness probe
 
-            info!("Run post start lifecycle handler pod {} containerName {}", self.pod.PodId(), self.container.ContainerName());
+            info!(
+                "Run post start lifecycle handler pod {} containerName {}",
+                self.pod.PodId(),
+                self.container.ContainerName()
+            );
 
             let lifecycle = self.container.lock().unwrap().spec.lifecycle.clone();
             if let Some(lifecycle) = lifecycle {
-                if let Some(postStart) = lifecycle.post_start {   
-                    self.RunLifecycleHandler(&self.pod, &self.container, &postStart).await?;
+                if let Some(postStart) = lifecycle.post_start {
+                    self.RunLifecycleHandler(&self.pod, &self.container, &postStart)
+                        .await?;
                 }
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub async fn OnContainerReady(&self) {
         if !self.InStoppingProcess() {
             self.container.SetState(RuntimeContainerState::Running);
-            info!("Container ready pod {} containerName {}", self.pod.PodId(), self.container.ContainerName());
-            self.Notify(NodeAgentMsg::PodContainerReady(
-                PodContainerReady {
-                    pod: self.pod.clone(),
-                    container: self.container.clone(),
-                }
-            )).await;
+            info!(
+                "Container ready pod {} containerName {}",
+                self.pod.PodId(),
+                self.container.ContainerName()
+            );
+            self.Notify(NodeAgentMsg::PodContainerReady(PodContainerReady {
+                pod: self.pod.clone(),
+                container: self.container.clone(),
+            }))
+            .await;
         }
     }
 
     pub fn InStoppingProcess(&self) -> bool {
         let state = self.container.State();
-        return state == RuntimeContainerState::Stopping 
+        return state == RuntimeContainerState::Stopping
             || state == RuntimeContainerState::Stopped
             || state == RuntimeContainerState::Terminated
-            || state == RuntimeContainerState::Terminating
-     
+            || state == RuntimeContainerState::Terminating;
     }
 
     pub async fn StartContainer(&self) -> Result<()> {
-        info!("Start container pod {} container {}", self.pod.PodId(), self.container.lock().unwrap().spec.name);
+        info!(
+            "Start container pod {} container {}",
+            self.pod.PodId(),
+            self.container.lock().unwrap().spec.name
+        );
         let containerId = self.container.lock().unwrap().runtimeContainer.id.clone();
-        RUNTIME_MGR.get().unwrap().StartContainer(&containerId).await?;
+        RUNTIME_MGR
+            .get()
+            .unwrap()
+            .StartContainer(&containerId)
+            .await?;
 
         // todo: starup probe
         // no startup probe, assume it started, run container post started hook
         self.OnContainerStarted().await?;
         self.started.store(true, Ordering::SeqCst);
-        return Ok(())
+        return Ok(());
     }
 
     pub async fn StopContainer(&self, dur: Duration) -> Result<()> {
@@ -276,16 +305,20 @@ impl PodContainerAgent {
             let lifecycle = self.container.lock().unwrap().spec.lifecycle.clone();
             if let Some(lifecycle) = lifecycle {
                 if let Some(handler) = &lifecycle.pre_stop {
-                    info!("Running pre stop lifecycle handler pod {} container {}", self.pod.PodId(), self.container.lock().unwrap().spec.name);
+                    info!(
+                        "Running pre stop lifecycle handler pod {} container {}",
+                        self.pod.PodId(),
+                        self.container.lock().unwrap().spec.name
+                    );
                     let future = self.RunHttpHandler(&self.pod, &self.container, &handler);
                     tokio::select! {
                         ret = future => {
                             match ret {
                                 Ok(_) => (),
                                 Err(e) => {
-                                    info!("Pre stop lifecycle handler failed pod {} container {} error {:?}", 
+                                    info!("Pre stop lifecycle handler failed pod {} container {} error {:?}",
                                         self.pod.PodId(), self.container.lock().unwrap().spec.name, e);
-                    
+
                                 }
                             }
                         }
@@ -304,36 +337,50 @@ impl PodContainerAgent {
         self.StopRuntimeContainer(dur).await?;
         self.container.SetState(RuntimeContainerState::Stopped);
 
-        self.Notify(NodeAgentMsg::PodContainerStopped(
-            PodContainerStopped {
-                pod: self.pod.clone(),
-                container: self.container.clone(),
-            }
-        )).await;
+        self.Notify(NodeAgentMsg::PodContainerStopped(PodContainerStopped {
+            pod: self.pod.clone(),
+            container: self.container.clone(),
+        }))
+        .await;
 
-        return Ok(())
+        return Ok(());
     }
 
     pub async fn StopRuntimeContainer(&self, dur: Duration) -> Result<()> {
         let containerId = self.container.lock().unwrap().runtimeContainer.id.clone();
-        let status = RUNTIME_MGR.get().unwrap().GetContainerStatus(&containerId).await?;
+        let status = RUNTIME_MGR
+            .get()
+            .unwrap()
+            .GetContainerStatus(&containerId)
+            .await?;
 
         self.container.lock().unwrap().containerStatus = Some(status.clone());
         if ContainerExit(&Some(status.clone())) {
-            return Ok(())
+            return Ok(());
         }
 
-        RUNTIME_MGR.get().unwrap().StopContainer(&containerId, dur).await?;
-        let status = RUNTIME_MGR.get().unwrap().GetContainerStatus(&containerId).await?;
+        RUNTIME_MGR
+            .get()
+            .unwrap()
+            .StopContainer(&containerId, dur)
+            .await?;
+        let status = RUNTIME_MGR
+            .get()
+            .unwrap()
+            .GetContainerStatus(&containerId)
+            .await?;
         self.container.lock().unwrap().containerStatus = Some(status);
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Send(&self, msg: NodeAgentMsg) -> Result<()> {
         match self.agentChann.try_send(msg) {
             Ok(()) => return Ok(()),
             Err(_) => {
-                return Err(Error::CommonError(format!("PodContainerAgent {} send message fail", self.container.lock().unwrap().spec.name)))
+                return Err(Error::CommonError(format!(
+                    "PodContainerAgent {} send message fail",
+                    self.container.lock().unwrap().spec.name
+                )))
             }
         }
     }
@@ -342,15 +389,24 @@ impl PodContainerAgent {
         self.supervisor.try_send(msg).unwrap();
     }
 
-
     pub async fn Stop(&self) {
         self.closeNotify.notify_one();
     }
 
-    pub async fn RunLifecycleHandler(&self, pod: &QuarkPod, container: &QuarkContainer, handle: &LifecycleHandler) -> Result<String> {
+    pub async fn RunLifecycleHandler(
+        &self,
+        pod: &QuarkPod,
+        container: &QuarkContainer,
+        handle: &LifecycleHandler,
+    ) -> Result<String> {
         if let Some(exec) = &handle.exec {
             let containerid = container.lock().unwrap().runtimeContainer.id.clone();
-            match super::RUNTIME_MGR.get().unwrap().ExecCommand(&containerid, exec.command.to_vec(), 0).await {
+            match super::RUNTIME_MGR
+                .get()
+                .unwrap()
+                .ExecCommand(&containerid, exec.command.to_vec(), 0)
+                .await
+            {
                 Err(e) => return Err(e),
                 Ok((stdout, _stderr)) => {
                     let stdout = std::str::from_utf8(&stdout)?;
@@ -364,10 +420,17 @@ impl PodContainerAgent {
             return Ok(msg);
         }
 
-        return Err(Error::CommonError("Cannot run lifecycle handler as handler is unknown".to_string()));
+        return Err(Error::CommonError(
+            "Cannot run lifecycle handler as handler is unknown".to_string(),
+        ));
     }
 
-    pub async fn RunHttpHandler(&self, pod: &QuarkPod, container: &QuarkContainer, handle: &LifecycleHandler) -> Result<String> {
+    pub async fn RunHttpHandler(
+        &self,
+        pod: &QuarkPod,
+        container: &QuarkContainer,
+        handle: &LifecycleHandler,
+    ) -> Result<String> {
         let httpGet = handle.http_get.as_ref().unwrap();
         let host = match &httpGet.host {
             None => {
@@ -390,7 +453,12 @@ impl PodContainerAgent {
             }
         };
 
-        let url = format!("http://{}:{}/{:?}", host, port, &httpGet.path.as_ref().unwrap());
+        let url = format!(
+            "http://{}:{}/{:?}",
+            host,
+            port,
+            &httpGet.path.as_ref().unwrap()
+        );
         let resp = reqwest::get(url).await?.text().await?;
         return Ok(resp);
     }
@@ -404,9 +472,12 @@ pub fn ResolvePort(portStr: &str, container: &ContainerDef) -> Result<i32> {
 
     for port in &container.ports {
         if Some(portStr.to_string()) == port.name {
-            return Ok(port.container_port)
+            return Ok(port.container_port);
         }
     }
 
-    return Err(Error::CommonError(format!("couldn't find port: {:?} in {:?}", portStr, container)));
+    return Err(Error::CommonError(format!(
+        "couldn't find port: {:?} in {:?}",
+        portStr, container
+    )));
 }

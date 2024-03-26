@@ -1,0 +1,14 @@
+pip install patchelf
+maturin develop
+
+python -m venv .env
+source .env/bin/activate
+
+####################test########################
+/rust/Quark/qservice/qactor/python$ python3 ./test1.py 
+
+curl --header "Content-Type: application/json" \
+  --request POST \
+  --data '{"prompt":"xyz"}' \
+  http://localhost:9876/prompt
+

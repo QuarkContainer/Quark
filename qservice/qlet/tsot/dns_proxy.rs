@@ -12,22 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::atomic::Ordering;
-use std::sync::{atomic::AtomicBool, Mutex};
-use std::sync::Arc;
-use std::time::Duration;
 use rand::Rng;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::sync::{atomic::AtomicBool, Mutex};
+use std::time::Duration;
 use tokio::sync::{mpsc, Notify};
 
-use qshare::metastore::cacher_client::CacherClient;
-use crate::tsot::tsot_msg::*;
 use crate::QLET_CONFIG;
+use qshare::metastore::cacher_client::CacherClient;
+use qshare::tsot_msg::*;
 
 use super::pod_broker::PodBroker;
 use qshare::node::PodDef;
 
-pub const DNS_POSTFIX : &'static str = "svc.cluster.local";
-
+pub const DNS_POSTFIX: &'static str = "svc.cluster.local";
 
 lazy_static::lazy_static! {
     pub static ref DNS_PROXY: DnsProxy = DnsProxy::New();
@@ -37,7 +36,7 @@ lazy_static::lazy_static! {
 pub struct DnsProxyReq {
     pub reqId: u16,
     pub podBroker: PodBroker,
-    pub domains: Vec<String>
+    pub domains: Vec<String>,
 }
 
 pub struct DnsProxy {
@@ -47,13 +46,13 @@ pub struct DnsProxy {
     pub inputTx: mpsc::Sender<DnsProxyReq>,
     pub inputRx: Mutex<Option<mpsc::Receiver<DnsProxyReq>>>,
 
-    pub stateSvcAddresses: Vec<String>
+    pub stateSvcAddresses: Vec<String>,
 }
 
 impl DnsProxy {
     pub fn New() -> Self {
         let (tx, rx) = mpsc::channel::<DnsProxyReq>(30);
-        
+
         let mut stateSvcAddresses = Vec::new();
         if QLET_CONFIG.singleNodeModel {
             stateSvcAddresses.push(format!("http://127.0.0.1:{}", QLET_CONFIG.stateSvcPort));
@@ -70,8 +69,8 @@ impl DnsProxy {
             inputTx: tx,
             inputRx: Mutex::new(Some(rx)),
 
-            stateSvcAddresses: stateSvcAddresses
-        }
+            stateSvcAddresses: stateSvcAddresses,
+        };
     }
 
     pub fn Close(&self) {
@@ -90,7 +89,7 @@ impl DnsProxy {
                 let idx = (offset + i) % size;
                 let addr = &self.stateSvcAddresses[idx];
 
-                tokio::select! { 
+                tokio::select! {
                     out = CacherClient::New(addr.to_owned()) => {
                         match out {
                             Ok(client) => return Some(client),
@@ -107,7 +106,7 @@ impl DnsProxy {
             }
 
             // retry after one second
-            tokio::select! { 
+            tokio::select! {
                 _ = tokio::time::sleep(Duration::from_millis(1000)) => {}
                 _ = self.closeNotify.notified() => {
                     self.closed.store(true, Ordering::SeqCst);
@@ -121,7 +120,7 @@ impl DnsProxy {
         let mut rx = self.inputRx.lock().unwrap().take().unwrap();
         let mut client = match self.GetClient().await {
             None => return,
-            Some(c) => c
+            Some(c) => c,
         };
 
         loop {
@@ -140,14 +139,15 @@ impl DnsProxy {
                                 if domain.ends_with(DNS_POSTFIX) {
                                     let left = domain.strip_suffix(DNS_POSTFIX).unwrap();
                                     let split : Vec<&str> = left.split(".").collect();
-                                    if split.len() != 3 {
+                                    if split.len() != 4 {
                                         error!("get invalid domain {}/ {:?}/ {}", domain, &split, left);
                                         ips.push(0);
                                         continue;
-                                    } 
+                                    }
+                                    let tenant = split[2];
                                     let namespace = split[1];
                                     let name = split[0];
-                                    match client.Get("pod", namespace, name, 0).await {
+                                    match client.Get("pod", tenant, namespace, name, 0).await {
                                         Err(e) => {
                                             error!("DnsProxy::Process fail {:?}", e);
                                             client = match self.GetClient().await {
@@ -200,7 +200,7 @@ impl DnsProxy {
                                         }
                                     };
                                 }
-                            } 
+                            }
 
                             let mut dnsResp = DnsResp {
                                 reqId: m.reqId,
@@ -223,7 +223,4 @@ impl DnsProxy {
             }
         }
     }
-
 }
-
-

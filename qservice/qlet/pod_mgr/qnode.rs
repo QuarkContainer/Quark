@@ -12,24 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
-use std::sync::Arc;
-use std::ops::Deref;
-use std::sync::Mutex;
-use std::sync::atomic::AtomicI64;
-use std::time::SystemTime;
 use qshare::node::Node;
 use qshare::node::NodeCondition;
 use qshare::node::NodeStatus;
 use qshare::node::PodDef;
 use qshare::qlet_config::QletConfig;
+use std::collections::BTreeMap;
+use std::ops::Deref;
+use std::sync::atomic::AtomicI64;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::SystemTime;
 use uuid::Uuid;
 
+use super::qpod::*;
+use super::runtime::network::*;
+use qshare::common::*;
 use qshare::config::*;
 use qshare::consts::*;
-use qshare::common::*;
-use super::runtime::network::*;
-use super::qpod::*;
 
 lazy_static::lazy_static! {
     pub static ref NETWORK_PROVIDER: LocalNetworkAddressProvider = {
@@ -41,7 +41,8 @@ pub fn InitNode(qletConfig: &QletConfig) -> Result<Node> {
     let mut node = Node {
         name: qletConfig.nodeName.clone(),
         annotations: BTreeMap::new(),
-        namespace: DefaultNodeMgrNodeNameSpace.to_string(),
+        tenant: DefaultNodeMgrNodeTenant.to_owned(),
+        namespace: DefaultNodeMgrNodeNameSpace.to_owned(),
         uid: Uuid::new_v4().to_string(),
         resource_version: "0".to_owned(),
         labels: BTreeMap::new(),
@@ -59,11 +60,11 @@ pub fn InitNode(qletConfig: &QletConfig) -> Result<Node> {
             // volumes_in_use: Some(Vec::new()),
             // volumes_attached: Some(Vec::new()),
             ..Default::default()
-        }
+        },
     };
 
-    node.status.conditions.push(NodeCondition{
-        type_   : NodeReady.to_string(),
+    node.status.conditions.push(NodeCondition {
+        type_: NodeReady.to_string(),
         status: ConditionFalse.to_string(),
         reason: Some("Node Initialiazing".to_string()),
         message: Some("Node Initialiazing".to_string()),
@@ -71,8 +72,8 @@ pub fn InitNode(qletConfig: &QletConfig) -> Result<Node> {
         ..Default::default()
     });
 
-    node.status.conditions.push(NodeCondition{
-        type_   : NodeNetworkUnavailable.to_string(),
+    node.status.conditions.push(NodeCondition {
+        type_: NodeNetworkUnavailable.to_string(),
         status: ConditionTrue.to_string(),
         reason: Some("Node Initialiazing".to_string()),
         message: Some("Node Initialiazing".to_string()),
@@ -82,16 +83,15 @@ pub fn InitNode(qletConfig: &QletConfig) -> Result<Node> {
 
     node.status.addresses = NETWORK_PROVIDER.GetNetAddress();
 
-    return Ok(node)
+    return Ok(node);
 }
-
 
 #[derive(Debug)]
 pub struct QuarkNodeInner {
     pub nodeConfig: NodeConfiguration,
     pub node: Mutex<Node>,
     pub revision: AtomicI64,
-    pub pods: Mutex<BTreeMap<String, QuarkPod>>, 
+    pub pods: Mutex<BTreeMap<String, QuarkPod>>,
 }
 
 #[derive(Clone, Debug)]
@@ -106,16 +106,19 @@ impl Deref for QuarkNode {
 }
 
 impl QuarkNode {
-    pub fn NewQuarkNode(qletConfig: &QletConfig, nodeConfig: &NodeConfiguration) -> Result<QuarkNode> {
+    pub fn NewQuarkNode(
+        qletConfig: &QletConfig,
+        nodeConfig: &NodeConfiguration,
+    ) -> Result<QuarkNode> {
         let k8sNode = InitNode(qletConfig)?;
-        
+
         let inner = QuarkNodeInner {
             nodeConfig: nodeConfig.clone(),
             node: Mutex::new(k8sNode),
             revision: AtomicI64::new(0),
             pods: Mutex::new(BTreeMap::new()),
         };
-    
+
         return Ok(QuarkNode(Arc::new(inner)));
     }
 
@@ -133,9 +136,7 @@ impl QuarkNode {
     pub fn NodeName(&self) -> String {
         return self.node.lock().unwrap().NodeId();
     }
-
 }
-
 
 pub struct ContainerWorldSummary {
     pub runningPods: Vec<QuarkPod>,
@@ -148,11 +149,10 @@ pub fn NodeSpecPodCidrChanged(old: &Node, new: &Node) -> bool {
             error!("api node spec is not valid, errors {:?}", e);
             return false;
         }
-        Ok(()) => ()
+        Ok(()) => (),
     }
 
-    if old.pod_cidr.len() == 0 
-        || old.pod_cidr != new.pod_cidr { 
+    if old.pod_cidr.len() == 0 || old.pod_cidr != new.pod_cidr {
         return true;
     }
 
@@ -168,5 +168,5 @@ pub fn ValidateNodeSpec(node: &Node) -> Result<()> {
         let _network = node.pod_cidr.parse::<IpNetwork>()?;
     }
 
-    return Ok(())
+    return Ok(());
 }

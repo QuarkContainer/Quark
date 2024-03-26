@@ -14,9 +14,9 @@
 
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
-use std::sync::atomic::*;
 use std::result::Result as SResult;
+use std::sync::atomic::*;
+use std::sync::Arc;
 
 use tokio::net::UnixListener;
 use tokio::sync::Notify;
@@ -26,53 +26,55 @@ use qshare::common::*;
 use qshare::tsot_cni;
 
 use super::pod_broker::*;
-use super::tsot_msg::TsotMessage;
+use qshare::tsot_msg::*;
 
 use crate::pod_mgr::NAMESPACE_MGR;
 use crate::tsot::conn_svc::ConnectionSvc;
 use crate::tsot::dns_proxy::DNS_PROXY;
-use crate::tsot::tsot_msg::TSOT_SOCKET_PATH;
 use crate::QLET_CONFIG;
-
-
-impl Drop for TsotMessage {
-    fn drop(&mut self) {
-        unsafe {
-            if self.socket >= 0 {
-                libc::close(self.socket);
-            }
-        }
-    }
-}
 
 pub struct TsotSvc {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
 
+    // listen for pod connection
     pub listener: UnixListener,
+
+    // listen for gateway connection
+    pub hostListener: UnixListener,
 }
 
 impl TsotSvc {
     pub fn New() -> Result<Self> {
         let socket = Path::new(TSOT_SOCKET_PATH);
+        let hostSocket = Path::new(TSOT_HOST_SOCKET_PATH);
 
         // create the parent folder if it doesn't exist
         let path = socket.parent().unwrap();
         fs::create_dir_all(path).ok();
+        let hostpath = hostSocket.parent().unwrap();
+        fs::create_dir_all(hostpath).ok();
 
         // Delete old socket if necessary
         if socket.exists() {
             std::fs::remove_file(&socket).unwrap();
         }
 
-        let listener = UnixListener::bind(socket)?;
+        // Delete old socket if necessary
+        if hostSocket.exists() {
+            std::fs::remove_file(&hostSocket).unwrap();
+        }
 
-        return Ok(Self{
+        let listener = UnixListener::bind(socket)?;
+        let hostListener = UnixListener::bind(hostSocket)?;
+
+        return Ok(Self {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
 
             listener: listener,
-        })
+            hostListener: hostListener,
+        });
     }
 
     pub fn Close(&self) {
@@ -96,21 +98,33 @@ impl TsotSvc {
                         Ok((stream, _addr)) => {
                             tokio::spawn(async move {
                                 let podBroker = PodBroker::New(stream);
-                                podBroker.Process().await;
+                                podBroker.Process(false).await;
                             });
                         }
                     }
-                    
+                }
+                res = self.hostListener.accept() => {
+                    match res {
+                        Err(e) => {
+                            error!("TsotSvc accept get error {:?}", e);
+                            continue;
+                        }
+                        Ok((stream, _addr)) => {
+                            tokio::spawn(async move {
+                                let podBroker = PodBroker::New(stream);
+                                podBroker.Process(true).await;
+                            });
+                        }
+                    }
                 }
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 }
 
 pub struct TostCniSvc {}
-
 
 impl TostCniSvc {
     pub fn GetPodSandboxAddr(&self, _namespace: &str, uid: &str) -> Result<IpAddress> {
@@ -133,7 +147,7 @@ impl tsot_cni::tsot_cni_service_server::TsotCniService for TostCniSvc {
             Ok(addr) => {
                 return Ok(tonic::Response::new(tsot_cni::GetPodSandboxAddrResp {
                     error: "".to_owned(),
-                    ip_addr: addr.0
+                    ip_addr: addr.0,
                 }))
             }
             Err(e) => {
@@ -152,26 +166,26 @@ impl tsot_cni::tsot_cni_service_server::TsotCniService for TostCniSvc {
         match self.RemovePodSandbox(&req.namespace, &req.pod_uid) {
             Ok(()) => {
                 return Ok(tonic::Response::new(tsot_cni::RemovePodSandboxResp {
-                    error: "".to_owned()
+                    error: "".to_owned(),
                 }))
             }
             Err(e) => {
                 return Ok(tonic::Response::new(tsot_cni::RemovePodSandboxResp {
-                    error: format!("fail: {:?}", e)
+                    error: format!("fail: {:?}", e),
                 }))
             }
         }
     }
 }
 
-pub async fn TsotSvc() -> Result<()>{
+pub async fn TsotSvc() -> Result<()> {
     info!("Tsot service start ...");
     let tsotSvc = TsotSvc::New()?;
     let tsotSvcFuture = tsotSvc.Process();
 
-    let tsotCniSvc = TostCniSvc{};
+    let tsotCniSvc = TostCniSvc {};
     let cniAddr = format!("127.0.0.1:{}", QLET_CONFIG.tsotCniPort);
-   
+
     let tostCniSvcFuture = Server::builder()
         .add_service(tsot_cni::tsot_cni_service_server::TsotCniServiceServer::new(tsotCniSvc))
         .serve(cniAddr.parse().unwrap());
@@ -190,5 +204,5 @@ pub async fn TsotSvc() -> Result<()>{
         _ = dnsProxyFuture => {}
     }
     info!("Tsot service finish ...");
-    return Ok(())
+    return Ok(());
 }

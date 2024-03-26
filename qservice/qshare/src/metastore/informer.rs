@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::ops::Deref;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::time::Duration;
-use std::{collections::BTreeMap, sync::Arc, fmt::Debug};
-use core::ops::Deref;
+use std::{collections::BTreeMap, fmt::Debug, sync::Arc};
 
-use tokio::sync::{RwLock as TRwLock, Notify};
+use tokio::sync::{Notify, RwLock as TRwLock};
 
 use rand::Rng;
 
-use super::data_obj::*;
 use super::cacher_client::*;
+use super::data_obj::*;
 use super::selection_predicate::*;
 use super::store::ThreadSafeStore;
 use crate::common::*;
 
-pub trait EventHandler : Debug + Send + Sync {
+pub trait EventHandler: Debug + Send + Sync {
     fn handle(&self, store: &ThreadSafeStore, event: &DeltaEvent);
 }
 
@@ -45,10 +45,17 @@ impl Deref for Informer {
 unsafe impl Send for Informer {}
 
 impl Informer {
-    pub async fn New(addresses: Vec<String>, objType: &str, namespace: &str, opts: &ListOption) -> Result<Self> {
+    pub async fn New(
+        addresses: Vec<String>,
+        objType: &str,
+        tenant: &str,
+        namespace: &str,
+        opts: &ListOption,
+    ) -> Result<Self> {
         let inner = InformerInner {
-            objType: objType.to_string(),
-            namespace: namespace.to_string(),
+            objType: objType.to_owned(),
+            tenant: tenant.to_owned(),
+            namespace: namespace.to_owned(),
             opts: opts.DeepCopy(),
             revision: AtomicI64::new(0),
             store: ThreadSafeStore::default(),
@@ -56,7 +63,7 @@ impl Informer {
             serverAddresses: addresses,
             handlers: TRwLock::new(BTreeMap::new()),
             closeNotify: Arc::new(Notify::new()),
-            closed: AtomicBool::new(false)
+            closed: AtomicBool::new(false),
         };
 
         let informer = Self(Arc::new(inner));
@@ -68,9 +75,8 @@ impl Informer {
         let notify = self.closeNotify.clone();
 
         notify.notify_waiters();
-        return Ok(())
+        return Ok(());
     }
-
 
     pub async fn AddEventHandler(&self, h: Arc<dyn EventHandler>) -> Result<u64> {
         if self.closed.load(Ordering::SeqCst) {
@@ -78,14 +84,14 @@ impl Informer {
         }
 
         let id = self.lastEventHandlerId.fetch_add(1, Ordering::SeqCst);
-        
+
         let objs = self.store.List();
         for obj in objs {
-            let event = DeltaEvent { 
-                type_: EventType::Added, 
+            let event = DeltaEvent {
+                type_: EventType::Added,
                 inInitialList: true,
-                obj: obj, 
-                oldObj: None 
+                obj: obj,
+                oldObj: None,
             };
 
             h.handle(&self.store, &event);
@@ -108,7 +114,7 @@ impl Informer {
                 let idx = (offset + i) % size;
                 let addr = &self.serverAddresses[idx];
 
-                tokio::select! { 
+                tokio::select! {
                     out = CacherClient::New(addr.clone()) => {
                         match out {
                             Ok(client) => return Some(client),
@@ -125,7 +131,7 @@ impl Informer {
             }
 
             // retry after one second
-            tokio::select! { 
+            tokio::select! {
                 _ = tokio::time::sleep(Duration::from_millis(1000)) => {}
                 _ = self.closeNotify.notified() => {
                     self.closed.store(true, Ordering::SeqCst);
@@ -137,12 +143,13 @@ impl Informer {
 
     async fn InitList(&self, client: &CacherClient) -> Result<()> {
         let store = self.store.clone();
-        
+
         let objType = self.objType.clone();
+        let tenant = self.tenant.clone();
         let namespace = self.namespace.clone();
         let opts = self.opts.DeepCopy();
-        
-        let objs = client.List(&objType, &namespace, &opts).await?;
+
+        let objs = client.List(&objType, &tenant, &namespace, &opts).await?;
         self.revision.store(objs.revision, Ordering::SeqCst);
         for o in objs.objs {
             store.Add(&o)?;
@@ -151,24 +158,26 @@ impl Informer {
                 inInitialList: true,
                 obj: o,
                 oldObj: None,
-            }).await;
+            })
+            .await;
         }
-        
-        return Ok(())
+
+        return Ok(());
     }
 
     async fn WatchUpdate(&self, client: &CacherClient) -> Result<()> {
         let objType = self.objType.clone();
+        let tenant = self.tenant.clone();
         let namespace = self.namespace.clone();
         let mut opts = self.opts.DeepCopy();
         opts.revision = self.revision.load(Ordering::Acquire) + 1;
         let store = self.store.clone();
         let closeNotify = self.closeNotify.clone();
-        
+
         loop {
-            let mut ws = client.Watch(&objType, &namespace, &opts).await?;
+            let mut ws = client.Watch(&objType, &tenant, &namespace, &opts).await?;
             loop {
-                let event = tokio::select! { 
+                let event = tokio::select! {
                     e = ws.Next() => {
                         e
                     }
@@ -180,56 +189,58 @@ impl Informer {
 
                 let event = match event {
                     Err(e) => {
-                        error!("WatchUpdate type is {}/{} watch get error {:?}", 
-                            self.objType, self.revision.load(Ordering::Acquire), e);
+                        error!(
+                            "WatchUpdate type is {}/{} watch get error {:?}",
+                            self.objType,
+                            self.revision.load(Ordering::Acquire),
+                            e
+                        );
                         break;
                     }
-                    Ok(e) => {
-                        match e {
-                            None => break,
-                            Some(e) => {
-                                opts.revision = e.obj.Revision();
-                                self.revision.store(opts.revision, Ordering::SeqCst);
-                                let de = match e.type_ {
-                                    EventType::Added => {
-                                        store.Add(&e.obj)?;
-                                        DeltaEvent {
-                                            type_: e.type_,
-                                            inInitialList: false,
-                                            obj: e.obj.clone(),
-                                            oldObj: None
-                                        }
+                    Ok(e) => match e {
+                        None => break,
+                        Some(e) => {
+                            opts.revision = e.obj.Revision();
+                            self.revision.store(opts.revision, Ordering::SeqCst);
+                            let de = match e.type_ {
+                                EventType::Added => {
+                                    store.Add(&e.obj)?;
+                                    DeltaEvent {
+                                        type_: e.type_,
+                                        inInitialList: false,
+                                        obj: e.obj.clone(),
+                                        oldObj: None,
                                     }
-                                    EventType::Modified => {
-                                        let oldObj = store.Update(&e.obj)?;
-                                        DeltaEvent {
-                                            type_: e.type_,
-                                            inInitialList: false,
-                                            obj: e.obj.clone(),
-                                            oldObj: Some(oldObj)
-                                        }
+                                }
+                                EventType::Modified => {
+                                    let oldObj = store.Update(&e.obj)?;
+                                    DeltaEvent {
+                                        type_: e.type_,
+                                        inInitialList: false,
+                                        obj: e.obj.clone(),
+                                        oldObj: Some(oldObj),
                                     }
-                                    EventType::Deleted => {
-                                        let old = store.Delete(&e.obj)?;
-                                        DeltaEvent {
-                                            type_: e.type_,
-                                            inInitialList: false,
-                                            obj: e.obj.clone(),
-                                            oldObj: Some(old),
-                                        }
+                                }
+                                EventType::Deleted => {
+                                    let old = store.Delete(&e.obj)?;
+                                    DeltaEvent {
+                                        type_: e.type_,
+                                        inInitialList: false,
+                                        obj: e.obj.clone(),
+                                        oldObj: Some(old),
                                     }
-                                    _ => panic!("Informer::Process get unexpect type {:?}", e.type_),
-                                };
-                                de
-                            }
+                                }
+                                _ => panic!("Informer::Process get unexpect type {:?}", e.type_),
+                            };
+                            de
                         }
-                    }
+                    },
                 };
 
                 self.Distribute(&event).await;
             }
 
-            let objs = client.List(&objType, &namespace, &opts).await?;
+            let objs = client.List(&objType, &tenant, &namespace, &opts).await?;
             opts.revision = objs.revision + 1;
             for o in objs.objs {
                 self.Distribute(&DeltaEvent {
@@ -237,10 +248,10 @@ impl Informer {
                     inInitialList: false,
                     obj: o,
                     oldObj: None,
-                }).await;
+                })
+                .await;
             }
         }
-        
     }
 
     pub async fn Process(&self, notify: Arc<Notify>) -> Result<()> {
@@ -262,8 +273,7 @@ impl Informer {
                 Some(c) => c,
             };
         }
-        
-        
+
         notify.notify_waiters();
 
         loop {
@@ -280,7 +290,7 @@ impl Informer {
             };
         }
 
-        return Ok(())   
+        return Ok(());
     }
 
     pub async fn Distribute(&self, event: &DeltaEvent) {
@@ -289,19 +299,19 @@ impl Informer {
             h.handle(&self.store, event)
         }
     }
-
 }
 
 #[derive(Debug)]
 pub struct InformerInner {
     pub objType: String,
+    pub tenant: String,
     pub namespace: String,
     pub opts: ListOption,
 
     pub revision: AtomicI64,
 
     pub serverAddresses: Vec<String>,
-    
+
     pub lastEventHandlerId: AtomicU64,
     pub store: ThreadSafeStore,
     pub handlers: TRwLock<BTreeMap<u64, Arc<dyn EventHandler>>>,

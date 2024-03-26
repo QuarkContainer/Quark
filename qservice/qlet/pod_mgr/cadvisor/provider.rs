@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::time::Duration;
-use std::sync::Arc;
+use core::ops::Deref;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::sync::Mutex;
-use core::ops::Deref;
+use std::time::Duration;
 
 use tokio::sync::Notify;
 use tokio::time;
@@ -33,9 +33,8 @@ pub struct CadvisorInfoProviderInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
 
-	pub nodeCAdvisorInfo: Mutex<Arc<NodeCAdvisorInfo>>,
-	pub nodeInfoInterval: Duration,
-	
+    pub nodeCAdvisorInfo: Mutex<Arc<NodeCAdvisorInfo>>,
+    pub nodeInfoInterval: Duration,
 }
 
 #[derive(Clone, Debug)]
@@ -52,60 +51,60 @@ impl Deref for CadvisorInfoProvider {
 }
 
 impl CadvisorInfoProvider {
-	pub async fn New() -> Result<Self> {
-		let info = Self::CollectCAdvisorInfo().await?;
-		let inner = CadvisorInfoProviderInner {
-			closeNotify: Arc::new(Notify::new()),
-			stop: AtomicBool::new(false),
-			nodeCAdvisorInfo: Mutex::new(Arc::new(info)),
-			nodeInfoInterval: Duration::from_secs(10),
-		};
+    pub async fn New() -> Result<Self> {
+        let info = Self::CollectCAdvisorInfo().await?;
+        let inner = CadvisorInfoProviderInner {
+            closeNotify: Arc::new(Notify::new()),
+            stop: AtomicBool::new(false),
+            nodeCAdvisorInfo: Mutex::new(Arc::new(info)),
+            nodeInfoInterval: Duration::from_secs(10),
+        };
 
-		let provider = Self(Arc::new(inner));
-		let clone = provider.clone();
+        let provider = Self(Arc::new(inner));
+        let clone = provider.clone();
 
-		tokio::spawn(async move {
+        tokio::spawn(async move {
             clone.Process().await.unwrap();
         });
 
-		return Ok(provider);
-	}
+        return Ok(provider);
+    }
 
-	pub fn CAdvisorInfo(&self) -> Arc<NodeCAdvisorInfo> {
-		return self.nodeCAdvisorInfo.lock().unwrap().clone();
-	}
+    pub fn CAdvisorInfo(&self) -> Arc<NodeCAdvisorInfo> {
+        return self.nodeCAdvisorInfo.lock().unwrap().clone();
+    }
 
-	pub fn Stop(&self) {
-		self.closeNotify.notify_one();
-	}
+    pub fn Stop(&self) {
+        self.closeNotify.notify_one();
+    }
 
-	pub async fn CollectCAdvisorInfo() -> Result<NodeCAdvisorInfo> {
-		let machineInfo = CADVISOR_CLI.MachineInfo().await?;
-		let versionInfo = CADVISOR_CLI.VersionInfo().await?;
-		
-		let info = NodeCAdvisorInfo {
-			machineInfo: machineInfo,
-			versionInfo: versionInfo,
-		};
+    pub async fn CollectCAdvisorInfo() -> Result<NodeCAdvisorInfo> {
+        let machineInfo = CADVISOR_CLI.MachineInfo().await?;
+        let versionInfo = CADVISOR_CLI.VersionInfo().await?;
 
-		return Ok(info)
-	}
+        let info = NodeCAdvisorInfo {
+            machineInfo: machineInfo,
+            versionInfo: versionInfo,
+        };
 
-	pub async fn Process(&self) -> Result<()> {
-		let mut interval = time::interval(self.nodeInfoInterval);
-		loop {
+        return Ok(info);
+    }
+
+    pub async fn Process(&self) -> Result<()> {
+        let mut interval = time::interval(self.nodeInfoInterval);
+        loop {
             tokio::select! {
                 _ = self.closeNotify.notified() => {
                     self.stop.store(false, Ordering::SeqCst);
                     break;
                 }
                 _ = interval.tick() => {
-					let info = Arc::new(Self::CollectCAdvisorInfo().await?);
+                    let info = Arc::new(Self::CollectCAdvisorInfo().await?);
                     *self.nodeCAdvisorInfo.lock().unwrap() = info;
                 }
             }
         }
-        
-        return Ok(())
-	}
+
+        return Ok(());
+    }
 }

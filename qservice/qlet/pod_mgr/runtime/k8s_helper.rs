@@ -16,15 +16,13 @@ use qshare::{common::*, node::ContainerDef};
 
 use super::k8s_types::EnvVar;
 
-pub fn MakeEnvironmentVariables(
-    container: &ContainerDef, 
-) -> Result<Vec<EnvVar>> {
+pub fn MakeEnvironmentVariables(container: &ContainerDef) -> Result<Vec<EnvVar>> {
     // todo: ?
     /*if pod.spec.as_ref().unwrap().enable_service_links.is_none() {
         return Err(Error::CommonError(format!("nil pod.spec.enableServiceLinks encountered, cannot construct envvars")));
     }*/
 
-    let mut result : Vec<EnvVar> = Vec::new();
+    let mut result: Vec<EnvVar> = Vec::new();
     //let mut configMaps :BTreeMap<String, k8s::ConfigMap> = BTreeMap::new();
     //let mut secrets: BTreeMap<String, k8s::Secret> = BTreeMap::new();
     //let mut tmpEnv: BTreeMap<String, String> = BTreeMap::new();
@@ -38,5 +36,5 @@ pub fn MakeEnvironmentVariables(
         result.push(env);
     }
 
-    return Ok(result)
+    return Ok(result);
 }

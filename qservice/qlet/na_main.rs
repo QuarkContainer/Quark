@@ -22,14 +22,13 @@
 
 #[macro_use]
 extern crate log;
+extern crate simple_logging;
 
 #[macro_use]
 extern crate scopeguard;
 
-extern crate simple_logging;
-
-mod tsot;
 mod pod_mgr;
+mod tsot;
 
 use std::sync::Arc;
 
@@ -92,8 +91,11 @@ async fn main() -> Result<()> {
             addresses.push(format!("http://{}", addr));
         }
 
-        let factory = InformerFactory::New(addresses, "").await.unwrap();
-        factory.AddInformer("node_info", &ListOption::default()).await.unwrap();
+        let factory = InformerFactory::New(addresses, "", "").await.unwrap();
+        factory
+            .AddInformer("node_info", &ListOption::default())
+            .await
+            .unwrap();
         let informer = factory.GetInformer("node_info").await.unwrap();
         let _id1 = informer.AddEventHandler(NODE_MGR.clone()).await.unwrap();
         let notify = Arc::new(Notify::new());
@@ -113,6 +115,6 @@ async fn main() -> Result<()> {
             error!("tostSvcFuturer res is {:?}", res);
         }
     }
-    
-    return Ok(())
+
+    return Ok(());
 }

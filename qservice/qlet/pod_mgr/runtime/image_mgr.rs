@@ -15,10 +15,10 @@
 use std::collections::BTreeMap;
 use tokio::sync::Mutex as TMutex;
 
-use qshare::crictl;
 use qshare::common::*;
-use qshare::k8s_util::*;
+use qshare::crictl;
 use qshare::k8s;
+use qshare::k8s_util::*;
 
 use crate::pod_mgr::cri::client::CriClient;
 
@@ -36,20 +36,30 @@ impl ImageMgr {
             imageRefs: TMutex::new(BTreeMap::new()),
             imageSvc: imageService,
             authConfig: authConfig,
-        })
+        });
     }
 
-    pub async fn PullImageForContainer(&self, imageLink: &str, podSandboxConfig: &crictl::PodSandboxConfig) -> Result<crictl::Image> {
+    pub async fn PullImageForContainer(
+        &self,
+        imageLink: &str,
+        podSandboxConfig: &crictl::PodSandboxConfig,
+    ) -> Result<crictl::Image> {
         let imageWithTag = match ApplyDefaultImageTag(imageLink) {
             None => {
-                return Err(Error::CommonError(format!("Failed to apply default image tag {}", imageLink)));
+                return Err(Error::CommonError(format!(
+                    "Failed to apply default image tag {}",
+                    imageLink
+                )));
             }
             Some(l) => l,
         };
 
         match self.imageRefs.lock().await.get(&imageWithTag) {
             Some(image) => {
-                info!("Container image with tag {} already present on machine", &imageWithTag);
+                info!(
+                    "Container image with tag {} already present on machine",
+                    &imageWithTag
+                );
                 return Ok(image.clone());
             }
             None => (),
@@ -77,12 +87,24 @@ impl ImageMgr {
         }
 
         if let Some(img) = image {
-            self.imageRefs.lock().await.insert(imageWithTag.clone(), img.clone());
-            info!("Container image already present on machine image {:?} tag {}", &img, imageWithTag);
-            return Ok(img)
+            self.imageRefs
+                .lock()
+                .await
+                .insert(imageWithTag.clone(), img.clone());
+            info!(
+                "Container image already present on machine image {:?} tag {}",
+                &img, imageWithTag
+            );
+            return Ok(img);
         }
 
-        self.imageSvc.PullImage(Some(imageSpec), Some(self.authConfig.clone()), Some(podSandboxConfig.clone())).await?;
+        self.imageSvc
+            .PullImage(
+                Some(imageSpec),
+                Some(self.authConfig.clone()),
+                Some(podSandboxConfig.clone()),
+            )
+            .await?;
 
         let mut image = None;
         let images = self.imageSvc.ListImages(Some(filter)).await?;
@@ -97,8 +119,11 @@ impl ImageMgr {
         }
 
         if let Some(img) = image {
-            self.imageRefs.lock().await.insert(imageWithTag.clone(), img.clone());
-            return Ok(img)
+            self.imageRefs
+                .lock()
+                .await
+                .insert(imageWithTag.clone(), img.clone());
+            return Ok(img);
         }
 
         panic!("impossible")
@@ -110,9 +135,10 @@ pub fn ShouldPullImage(container: &k8s::Container, imagePresent: bool) -> bool {
         return false;
     }
 
-    if container.image_pull_policy == Some(PullPolicy::PullAlways.to_string()) 
+    if container.image_pull_policy == Some(PullPolicy::PullAlways.to_string())
         || (container.image_pull_policy == Some(PullPolicy::PullIfNotPresent.to_string())
-            && !imagePresent) {
+            && !imagePresent)
+    {
         return true;
     }
 
@@ -153,8 +179,7 @@ pub fn ApplyDefaultImageTag(link: &str) -> Option<String> {
     }
 }
 
-
-/* 
+/*
 
 pub const LEGACY_DEFAULT_DOMAIN : &str = "index.docker.io";
 pub const DEFAULT_DOMAIN        : &str = "docker.io";
@@ -179,7 +204,7 @@ pub fn splitDockerDomain(name: &str) -> (String, String) {
     } else {
         domain = DEFAULT_DOMAIN;
         reminder = name;
-    } 
+    }
 
     return (domain.to_string(), reminder.to_string())
 }

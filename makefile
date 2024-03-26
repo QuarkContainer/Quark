@@ -26,9 +26,11 @@ QUARK_BIN_RELEASE = $(QTARGET_RELASE)/$(QUARK)
 #
 MAKEFLAGS += -j4
 
-.PHONY: all release debug clean install qvisor_release qvisor_debug cuda
+.PHONY: all release debug clean install qvisor_release qvisor_debug cuda_make cuda_all
 
 all:: release debug
+
+cuda_all:: cuda_release cuda_debug
 
 release:: qvisor_release qkernel_release 
 
@@ -51,6 +53,16 @@ clean:
 
 docker:
 	sudo systemctl restart docker
+
+cuda_release:: qvisor_cuda_release qkernel_release cuda_make
+
+cuda_debug:: qvisor_cuda_debug qkernel_debug cuda_make
+
+qvisor_cuda_release:
+	make -C ./qvisor cuda_release
+
+qvisor_cuda_debug:
+	make -C ./qvisor cuda_debug
 
 install:
 #
@@ -89,7 +101,7 @@ endif
 # Always Install config for debug purpose
 	sudo cp -f $(QROOT_DIR)/config.json $(QCONFIG_GLOBAL_DIR)
 
-cuda:
+cuda_make:
 	make -C $(QROOT_DIR)/cudaproxy release
 	sudo cp -f $(QTARGET_RELASE)/libcudaproxy.so $(QBIN_DIR)/libcudaproxy.so
 	sudo cp -f $(QTARGET_RELASE)/libcudaproxy.so $(QROOT_DIR)/test

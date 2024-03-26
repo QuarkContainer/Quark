@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under
 
-use std::{collections::HashMap, sync::{Arc, RwLock}};
 use core::ops::Deref;
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 use qshare::common::*;
 
@@ -46,16 +49,24 @@ impl PodBrokerMgr {
     pub fn AddPodBroker(&self, addr: u32, podBroker: PodBroker) -> Result<()> {
         let mut inner = self.write().unwrap();
         if inner.brokers.contains_key(&addr) {
-            return Err(Error::Exist(format!("PodBrokerMgr::AddPodBroker addr {:x?} existing", addr)));
+            return Err(Error::Exist(format!(
+                "PodBrokerMgr::AddPodBroker addr {:x?} existing",
+                addr
+            )));
         }
 
         inner.brokers.insert(addr, podBroker);
-        return Ok(())
+        return Ok(());
     }
 
     fn GetBroker(&self, addr: u32) -> Result<PodBroker> {
         match self.read().unwrap().brokers.get(&addr) {
-            None => return Err(Error::NotExist(format!("PodBrokerMgr::GetBroker fail with addr {:x?}", addr))),
+            None => {
+                return Err(Error::NotExist(format!(
+                    "PodBrokerMgr::GetBroker fail with addr {:x?}",
+                    addr
+                )))
+            }
             Some(b) => return Ok(b.clone()),
         }
     }
@@ -63,9 +74,12 @@ impl PodBrokerMgr {
     pub fn RemoveBroker(&self, addr: u32) -> Result<()> {
         match self.write().unwrap().brokers.remove(&addr) {
             None => {
-                return Err(Error::NotExist(format!("PodBrokerMgr::RemoveBroker broker with addr {:x} doesn't exist", addr)));
+                return Err(Error::NotExist(format!(
+                    "PodBrokerMgr::RemoveBroker broker with addr {:x} doesn't exist",
+                    addr
+                )));
             }
-            Some(_) => return Ok(())
+            Some(_) => return Ok(()),
         }
     }
 }
@@ -105,27 +119,34 @@ impl PodBrokerMgrs {
             Some(mgr) => mgr.clone(),
         };
 
-        return Ok(mgr)
-    } 
+        return Ok(mgr);
+    }
 
     pub fn HandlePeerConnect(
-        &self, 
-        namespace: &str, 
-        dstIp: u32, 
-        dstPort: u16, 
-        peerIp: u32, 
+        &self,
+        namespace: &str,
+        dstIp: u32,
+        dstPort: u16,
+        peerIp: u32,
         peerPort: u16,
-        socket: i32
+        socket: i32,
     ) -> Result<()> {
+        error!("HandlePeerConnect 1");
         let broker = self.GetBroker(namespace, dstIp)?;
+        error!("HandlePeerConnect 2");
         broker.HandleNewPeerConnection(peerIp, peerPort, dstPort, socket)?;
-        
-        return Ok(())
+
+        return Ok(());
     }
 
     pub fn GetBrokerMgr(&self, namespace: &str) -> Result<PodBrokerMgr> {
         match self.read().unwrap().mgrs.get(namespace) {
-            None => return Err(Error::NotExist(format!("PodBrokerMgrs::GetMgr fail with namespace {:x?}", namespace))),
+            None => {
+                return Err(Error::NotExist(format!(
+                    "PodBrokerMgrs::GetMgr fail with namespace {:x?}",
+                    namespace
+                )))
+            }
             Some(b) => return Ok(b.clone()),
         }
     }

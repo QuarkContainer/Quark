@@ -37,6 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     BuildProto("./proto/na.proto")?;
     BuildProto("./proto/tsot_cni.proto")?;
     BuildProto("./proto/qobjs.proto")?;
+    BuildProto("./proto/actor.proto")?;
 
     return Ok(());
 }

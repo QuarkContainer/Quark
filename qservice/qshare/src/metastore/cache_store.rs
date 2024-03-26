@@ -13,33 +13,40 @@
 // limitations under the License.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Debug;
+use std::ops::Deref;
 use std::sync::atomic::AtomicI64;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
 use std::sync::RwLock;
-use std::ops::Deref;
-use std::fmt::Debug;
+use std::time::{Duration, Instant, SystemTime};
 use uuid::Uuid;
 
 use tokio::sync::Notify;
 
-use crate::common::*;
 use super::data_obj::*;
 use super::selection_predicate::*;
 use super::watch::*;
+use crate::common::*;
 
 use async_trait::async_trait;
 
 pub const DEFAULT_CACHE_COUNT: usize = 2000;
 
 #[async_trait]
-pub trait BackendStore : Sync + Send + Debug {
+pub trait BackendStore: Sync + Send + Debug {
     async fn Get(&self, key: &str, minRevision: i64) -> Result<Option<DataObject>>;
     async fn List(&self, prefix: &str, opts: &ListOption) -> Result<DataObjList>;
 
     // register cacher for the prefix, the ready will be notified when the first list finish
     // the notify is used by Cacher to notice BackendStore stop update the Cacher
-    fn Register(&self, cacher: CacheStore, rev: i64, prefix: String, ready: Arc<Notify>, notify: Arc<Notify>) -> Result<()>;
+    fn Register(
+        &self,
+        cacher: CacheStore,
+        rev: i64,
+        prefix: String,
+        ready: Arc<Notify>,
+        notify: Arc<Notify>,
+    ) -> Result<()>;
 }
 
 #[derive(Debug, Clone, Default)]
@@ -69,7 +76,12 @@ impl Deref for CacheStore {
 }
 
 impl CacheStore {
-    pub async fn New(store: Option<Arc<dyn BackendStore>>, objType: &str, rev: i64, channelRev: &ChannelRev) -> Result<Self> {
+    pub async fn New(
+        store: Option<Arc<dyn BackendStore>>,
+        objType: &str,
+        rev: i64,
+        channelRev: &ChannelRev,
+    ) -> Result<Self> {
         let storeClone = store.clone();
         let inner = CacheStoreInner::New(store, objType, channelRev);
         let notify = inner.closeNotify.clone();
@@ -88,10 +100,10 @@ impl CacheStore {
                 ready.notified().await;
             }
         }
-        
+
         return Ok(ret);
     }
-    
+
     pub fn ObjType(&self) -> String {
         return self.read().unwrap().objectType.clone();
     }
@@ -102,7 +114,7 @@ impl CacheStore {
         let objType = self.read().unwrap().objectType.clone();
         defer!(info!("cacher[{}] stop ... ", &objType));
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Watch(
@@ -129,15 +141,15 @@ impl CacheStore {
     }
 
     pub fn Add(&self, obj: &DataObject) -> Result<()> {
-        return self.write().unwrap().Add(obj)
+        return self.write().unwrap().Add(obj);
     }
 
     pub fn Update(&self, obj: &DataObject) -> Result<()> {
-        return self.write().unwrap().Update(obj)
+        return self.write().unwrap().Update(obj);
     }
 
     pub fn Remove(&self, obj: &DataObject) -> Result<()> {
-        return self.write().unwrap().Remove(obj)
+        return self.write().unwrap().Remove(obj);
     }
 
     pub async fn Get(
@@ -151,7 +163,7 @@ impl CacheStore {
             // -1 means get from etcd
             let store: Arc<dyn BackendStore> = match self.Store() {
                 None => return Ok(None),
-                Some(s) => s
+                Some(s) => s,
             };
             let key = &self.StoreKey(&objKey);
             return store.Get(key, revision).await;
@@ -172,7 +184,7 @@ impl CacheStore {
         if opts.revision == -1 {
             let store = match self.Store() {
                 None => return Ok(DataObjList::default()),
-                Some(s) => s
+                Some(s) => s,
             };
             let mut opts = opts.DeepCopy();
             opts.revision = 0;
@@ -277,7 +289,11 @@ pub struct CacheStoreInner {
 }
 
 impl CacheStoreInner {
-    pub fn New(store: Option<Arc<dyn BackendStore>>, objectType: &str, channelRev: &ChannelRev) -> Self {
+    pub fn New(
+        store: Option<Arc<dyn BackendStore>>,
+        objectType: &str,
+        channelRev: &ChannelRev,
+    ) -> Self {
         return Self {
             backendStore: store,
             objectType: objectType.to_string(),
@@ -325,10 +341,10 @@ impl CacheStoreInner {
                     };
                     events.push(event);
                 }
-            } 
+            }
         }
 
-        for (key, obj)  in &self.cacheStore {
+        for (key, obj) in &self.cacheStore {
             if !set.contains(key) {
                 let event = WatchEvent {
                     type_: EventType::Deleted,
@@ -340,9 +356,9 @@ impl CacheStoreInner {
 
         for event in &events {
             self.ProcessEvent(event)?;
-        }        
+        }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Add(&mut self, obj: &DataObject) -> Result<()> {
@@ -398,7 +414,7 @@ impl CacheStoreInner {
 
                 // get older update, ignore this
                 if newRev <= preRev {
-                    return Ok(())
+                    return Ok(());
                 }
                 wcEvent.prevObj = Some(o.clone());
             }
@@ -437,10 +453,7 @@ impl CacheStoreInner {
         }
     }
 
-    pub fn GetAllEventsFromStore(
-        &self,
-        pred: &SelectionPredicate,
-    ) -> Result<Vec<WatchCacheEvent>> {
+    pub fn GetAllEventsFromStore(&self, pred: &SelectionPredicate) -> Result<Vec<WatchCacheEvent>> {
         let mut buf = Vec::new();
 
         for (_, obj) in &self.cacheStore {
@@ -468,9 +481,11 @@ impl CacheStoreInner {
     ) -> Result<Vec<WatchCacheEvent>> {
         let size = self.cache.Size();
 
+        error!("GetAllEvents 1 {}/{}", revision, self.listRevision);
         let oldest = if self.listRevision >= 0 && self.cache.tail == 0 {
             // If no event was removed from the buffer since last relist, the oldest watch
             // event we can deliver is one greater than the resource version of the list.
+            error!("GetAllEvents 2");
             self.listRevision + 1
         } else if size > 0 {
             self.cache.buf[self.cache.OldestIdx()]
@@ -501,6 +516,7 @@ impl CacheStoreInner {
             )));
         }
 
+        error!("GetAllEvents 3");
         return self.cache.GetAllEvents(revision, pred);
     }
 

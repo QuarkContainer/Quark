@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::string::String;
 use spin::Mutex;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
@@ -45,6 +46,203 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ProxyCommand::None => {
             return Err(Error::SysError(SysErr::EINVAL));
         }
+        ProxyCommand::CudaChooseDevice => {
+            let mut device: i32 = 0;
+
+            parameters.para1 = &mut device as *mut _ as u64;
+
+            let deviceProperties = task.CopyInObj::<CudaDeviceProperties>(parameters.para2)?;  
+
+            parameters.para2 = &deviceProperties as * const _ as u64;  
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            // error!("device value after function call, is {}", device);
+
+            if ret == 0 {
+                task.CopyOutObj(&device, args.arg1 as u64)?; 
+            }
+
+            return Ok(ret);
+        }
+        ProxyCommand::CudaDeviceGetAttribute => {
+            let mut value: i32 = 0;   
+            parameters.para1 = &mut value as * mut _ as u64;
+
+            // let attribute: u32 = parameters.para2 as u32;
+            // error!("SysProxy CudaDeviceGetAttribute, query about attribute: {}, device: {}", attribute, parameters.para3);
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            if ret == 0 {
+                task.CopyOutObj(&value, args.arg1 as u64)?; 
+            }
+
+            return Ok(ret);
+        }
+        ProxyCommand::CudaDeviceGetByPCIBusId => {
+            let mut device: i32 = 0;
+            parameters.para1 = &mut device as *mut _ as u64;
+            
+            let PCIBusId = CString::ToString(task, parameters.para2)?;
+       
+            parameters.para2 = &(PCIBusId.as_bytes()[0]) as * const _ as u64;
+          
+            parameters.para3 = PCIBusId.as_bytes().len() as u64;
+
+            // error!("PCIBusId {}",PCIBusId);
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            if ret == 0 {
+                task.CopyOutObj(&device, args.arg1 as u64)?; 
+            }
+
+            return Ok(ret);
+        }
+        ProxyCommand::CudaDeviceGetCacheConfig => {
+            let mut CacheConfig:u32;
+
+            unsafe{ 
+                CacheConfig = *(parameters.para1 as *mut _) ;  
+                // error!("value of parameter.para2 is: {}",*(parameters.para1 as *mut u32));         
+            }
+
+            parameters.para1 = &mut CacheConfig as *mut _ as u64;
+               
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            if ret == 0 {
+                task.CopyOutObj(&CacheConfig, args.arg1 as u64)?; 
+            }
+
+            return Ok(ret);
+        }
+        ProxyCommand::CudaDeviceGetLimit => {
+
+            let mut limit:usize = 0; 
+            
+            parameters.para1 = &mut limit as * mut _ as u64;
+
+            // let attribute: u32 = parameters.para2 as u32;
+            // error!("SysProxy CudaDeviceGetLimit, query about attribute: {}", attribute);
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            
+            if ret == 0 {
+                task.CopyOutObj(&limit, args.arg1 as u64)?; 
+            }
+
+            return Ok(ret);
+
+        }
+        ProxyCommand::CudaDeviceGetP2PAttribute => {
+            let mut value:i32 = 0;
+            parameters.para1 = &mut value as * mut _ as u64;
+
+            // let attribute: u32 = parameters.para2 as u32;
+            // error!("SysProxy CudaDeviceGetP2PAttribute, query about attribute: {}", attribute);
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            if ret == 0 {
+                task.CopyOutObj(&value, args.arg1 as u64)?;
+            }
+            return Ok(ret);
+
+        }
+        ProxyCommand::CudaDeviceGetPCIBusId => {
+            let mut pciBusIdAddress = CString::ToString(task, parameters.para1)?;
+
+            // error!("pciBusIdAddress: {}", pciBusIdAddress);
+
+            parameters.para1 = &mut pciBusIdAddress as * mut String as u64;
+
+            // error!("SysProxy CudaDeviceGetPCIBusId, query about device:{}", parameters.para3);
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+           if ret == 0 {
+            task.CopyOutString(args.arg1, parameters.para2 as usize, &pciBusIdAddress)?;
+           }
+
+            return Ok(ret);
+        }
+        ProxyCommand::CudaDeviceGetSharedMemConfig => {
+            let mut sharedMemConfig:u32 = unsafe { *(parameters.para1 as *mut _ )};
+            // error!("value of sharedMemConfig is: {}", sharedMemConfig);
+
+            parameters.para1 = &mut sharedMemConfig as *mut _ as u64;
+
+            let ret = HostSpace::Proxy(
+                cmd, 
+                parameters,
+            );
+
+            if ret == 0 {
+                task.CopyOutObj(&sharedMemConfig, args.arg1 as u64)?;
+            }
+
+            return Ok(ret);
+
+        }
+        ProxyCommand::CudaDeviceGetStreamPriorityRange => {
+            let mut lowPriority:i32 = 0;
+            let mut highPriority:i32 = 0;
+
+            parameters.para1 = &mut lowPriority as *mut _ as u64;
+            parameters.para2 = &mut highPriority as *mut _ as u64;
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            if ret == 0{
+                task.CopyOutObj(&lowPriority, args.arg1)?;
+                task.CopyOutObj(&highPriority, args.arg2)?;
+            }
+
+            return Ok(ret);
+        }
+        ProxyCommand::CudaDeviceReset => {
+            // error!("SysProxy CudaDeviceReset");
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            return Ok(ret);
+        } 
+        ProxyCommand::CudaDeviceSetCacheConfig => {
+            // error!("SysProxy CudaDeviceSetCacheConfig cache configuration: {}", parameters.para1 as u32);
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            return Ok(ret);
+        }
         ProxyCommand::CudaSetDevice |
         ProxyCommand::CudaDeviceSynchronize => {
             // error!("SysProxy CudaSetDevice");
@@ -53,6 +251,64 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 parameters,
             );
             return Ok(ret);
+        }
+        ProxyCommand::CudaSetDeviceFlags => {
+            // error!("SysProxy CudaSetDeviceFlags");
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            return Ok(ret);
+        }
+        ProxyCommand::CudaGetDevice => {
+            let mut device:i32 = 0;
+            parameters.para1 = &mut device as *mut _ as u64;
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            if ret ==0 {
+                task.CopyOutObj(&device, args.arg1 as u64)?;
+            }
+            return Ok(ret);
+        }
+        ProxyCommand::CudaGetDeviceCount => {
+            let mut deviceCount:i32 = 0 ; 
+            
+            parameters.para1 = &mut deviceCount as *mut _ as u64;
+
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+        
+            if ret == 0 {
+                task.CopyOutObj(&deviceCount, args.arg1 as u64)?; 
+            }
+
+            return Ok(ret);
+        }
+        ProxyCommand::CudaGetDeviceProperties => {
+
+            let mut deviceProp:CudaDeviceProperties = CudaDeviceProperties::default();
+
+            parameters.para1 = &mut deviceProp as * mut _ as u64;
+
+            // error!("cudaGetDeviceProperties Device: {}",parameters.para2);
+
+            let ret = HostSpace::Proxy(
+                cmd, 
+                parameters
+            );
+
+            if ret == 0 {
+                task.CopyOutObj(&deviceProp, args.arg1)?;
+            }
+
+            return Ok(ret);
+
         }
         ProxyCommand::CudaMalloc => {
             let mut addr:u64 = 0;
@@ -94,9 +350,20 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
             
         }
+        ProxyCommand::CudaMemcpyAsync => {
+            let ret = CudaMemcpyAsync(
+                task,
+                parameters.para1,
+                parameters.para2,
+                parameters.para3,
+                parameters.para4,
+                parameters.para5      
+            )?;
+            return Ok(ret);
+        }
         ProxyCommand::CudaRegisterFatBinary => {
             let data: Vec<u8> = task.CopyInVec(parameters.para2, parameters.para1 as usize)?;
-            parameters.para2 = &data[0] as *const _ as u64;
+            parameters.para2 = &data[0] as *const _ as u64; 
             let ret = HostSpace::Proxy(
                 ProxyCommand::CudaRegisterFatBinary,
                 parameters,
@@ -105,20 +372,19 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             
         }
         ProxyCommand::CudaUnregisterFatBinary => {
-            //error!("fatCubinHandle from the cudaproxy is {:x}", parameters.para1 as u64);
+            // error!("fatCubinHandle from the cudaproxy is {:x}", parameters.para1 as u64);
             let ret = HostSpace::Proxy(
                  ProxyCommand::CudaUnregisterFatBinary,
                  parameters,
             );
-            //error!("fatCubinHandle from the cudaproxy is {:x}", parameters.para1 as u64);
             return Ok(ret);
-
         }
         ProxyCommand::CudaRegisterFunction => {
             let mut functionInfo = task.CopyInObj::<RegisterFunctionInfo>(parameters.para1)?;
             // error!("CudaRegisterFunction data {:x?}, parameters {:x?}", functionInfo, parameters);
 
             let deviceName = CString::ToString(task, functionInfo.deviceName)?;
+          
             functionInfo.deviceName = &(deviceName.as_bytes()[0]) as * const _ as u64;
             parameters.para1 = &functionInfo as * const _ as u64;
             parameters.para2 = deviceName.as_bytes().len() as u64;
@@ -145,6 +411,26 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             return Ok(ret);
         }
+        ProxyCommand::CudaRegisterVar => {
+            let mut data = task.CopyInObj::<RegisterVarInfo>(parameters.para1)?;   // still take the addresss 
+            // error!("CudaRegisterVar data {:x?}, parameters {:x?}", data, parameters);
+
+            let deviceName = CString::ToString(task, data.deviceName)?;
+ 
+            data.deviceName = &(deviceName.as_bytes()[0]) as * const _ as u64;
+            parameters.para1 = &data as * const _ as u64;
+
+            parameters.para2 = deviceName.as_bytes().len() as u64; 
+            // error!("deviceName {}, data.deviceName {:x}, parameters {:x?}", deviceName, data.deviceName, parameters);
+
+            let ret = HostSpace::Proxy(
+                ProxyCommand::CudaRegisterVar,
+                parameters,
+            );
+
+            return Ok(ret); 
+            
+        }
         ProxyCommand::CudaLaunchKernel => {
             let mut kernelInfo = task.CopyInObj::<LaunchKernelInfo>(parameters.para1)?;
             let paramInfo = PARAM_INFOS.lock().get(&kernelInfo.func).unwrap().clone();
@@ -164,11 +450,118 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
             // error!("paramAddrs after set {:x?}", paramAddrs);
             kernelInfo.args = &paramAddrs[0] as * const _ as u64;
-            // error!("data.args {:x?}", kernelInfo.args);
+            // error!("kernelInfo.args {:x?}", kernelInfo.args);
 
             parameters.para1 = &kernelInfo as * const _ as u64;
             let ret = HostSpace::Proxy(
                 ProxyCommand::CudaLaunchKernel,
+                parameters,
+            );
+            return Ok(ret);
+        }
+        ProxyCommand::CudaStreamSynchronize => {
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            return Ok(ret);
+        }
+        ProxyCommand::CudaStreamCreate => {
+            
+            let mut stream:u64 = unsafe { *(parameters.para1 as *mut _) };
+            
+            parameters.para1 = &mut stream as *mut _ as u64;
+         
+            // error!("stream content is :{:x}", stream);
+            // error!("parameters.para1(address of stream) is:{:x}",parameters.para1);
+            let ret = HostSpace::Proxy(
+                    cmd,
+                    parameters,
+                );
+
+            if ret == 0 {
+                task.CopyOutObj(&stream, args.arg1 as u64)?; 
+                }
+            
+            return Ok(ret);
+            
+        }
+        ProxyCommand::CudaStreamDestroy => {
+            // error!("stream parameter from cudaproxy is : {:x}", parameters.para1);
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            return Ok(ret);
+        }
+        ProxyCommand::CudaStreamIsCapturing => {
+            let mut pCaptureStatus:u32;
+            
+            unsafe{ 
+                pCaptureStatus = *(parameters.para2 as *mut _) ; 
+            }
+            parameters.para2 = &mut pCaptureStatus as *mut _ as u64;
+            // error!("content of the pCaptureStatus is: {}", pCaptureStatus );
+               
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            
+            if ret == 0 {
+                task.CopyOutObj(&pCaptureStatus, args.arg2 as u64)?;
+            }
+                
+            return Ok(ret);
+            
+        }
+        ProxyCommand::CuModuleGetLoadingMode => {
+            let mut mode:u32 = 0; 
+            parameters.para1 = &mut mode as *mut _ as u64; 
+
+            let ret = HostSpace::Proxy(
+                 cmd,
+                 parameters,
+             );
+             
+            if ret == 0 {
+                task.CopyOutObj(&mode, args.arg1 as u64)?;
+            }
+            return Ok(ret);
+
+        }
+        ProxyCommand::CudaGetLastError => {
+            // error!("SysProxy CudaGetLastError");
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+            return Ok(ret);
+        }
+        ProxyCommand::CuDevicePrimaryCtxGetState => {
+            let mut flags:u32 = 0;
+            let mut active:i32 = 0;
+
+            parameters.para2 = &mut flags as *mut _ as u64;
+            parameters.para3 = &mut active as *mut _ as u64;
+            let ret = HostSpace::Proxy(
+                cmd,
+                parameters,
+            );
+
+            // error!("flags {}, active {}", flags, active);
+
+            if ret == 0 {
+                task.CopyOutObj(&flags, args.arg2 as u64)?;
+                task.CopyOutObj(&active, args.arg3 as u64)?;
+            }
+            return Ok(ret);
+        }
+        ProxyCommand::NvmlInitWithFlags => {
+            // error!("SysProxy NvmlInitWithFlags");
+            let ret = HostSpace::Proxy(
+                cmd,
                 parameters,
             );
             return Ok(ret);
@@ -180,11 +573,10 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn CudaMemcpy(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyKind) -> Result<i64> {
     match kind {
         CUDA_MEMCPY_HOST_TO_HOST => {
-            // error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
+            error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
             return Ok(1);
         }
-        CUDA_MEMCPY_HOST_TO_DEVICE => {
-            // src is the virtual addr
+        CUDA_MEMCPY_HOST_TO_DEVICE => {  
             let mut prs = Vec::new();
             task.V2P(src, count, &mut prs, true, false)?;
 
@@ -205,7 +597,6 @@ pub fn CudaMemcpy(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyK
             return Ok(ret);
         }
         CUDA_MEMCPY_DEVICE_TO_HOST => {
-            // dst is the virtual addr
             let mut prs = Vec::new();
             task.V2P(dst, count, &mut prs, true, false)?;
 
@@ -246,4 +637,75 @@ pub fn CudaMemcpy(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyK
         _ => todo!()
     }
     
+}
+
+fn CudaMemcpyAsync(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyKind, stream: u64) -> Result<i64> {
+    match kind {
+        CUDA_MEMCPY_HOST_TO_HOST => {
+            error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
+            return Ok(1);
+        }
+        CUDA_MEMCPY_HOST_TO_DEVICE => {  
+            let mut prs = Vec::new();
+            task.V2P(src, count, &mut prs, true, false)?;
+
+            let parameters = ProxyParameters {
+                para1: dst,
+                para2: &prs[0] as * const _ as u64,
+                para3: prs.len() as u64,
+                para4: count as u64,
+                para5: kind,
+                para6: stream,
+                ..Default::default()
+            };
+
+            let ret = HostSpace::Proxy(
+                ProxyCommand::CudaMemcpyAsync,
+                parameters,
+            );
+
+            return Ok(ret);
+        }
+        CUDA_MEMCPY_DEVICE_TO_HOST => {
+            let mut prs = Vec::new();
+            task.V2P(dst, count, &mut prs, true, false)?;
+
+            let parameters = ProxyParameters {
+                para1: &prs[0] as * const _ as u64,
+                para2: prs.len() as u64,
+                para3: src,
+                para4: count as u64,
+                para5: kind,
+                para6: stream,
+                ..Default::default()
+            };
+
+            let ret = HostSpace::Proxy(
+                ProxyCommand::CudaMemcpyAsync,
+                parameters,
+            );
+
+            return Ok(ret);
+            
+        }
+        CUDA_MEMCPY_DEVICE_TO_DEVICE => {
+            let parameters = ProxyParameters {
+                para1: dst,
+                para2: 0,
+                para3: src,
+                para4: count as u64,
+                para5: kind,
+                para6: stream,
+                ..Default::default()
+            };
+
+            let ret = HostSpace::Proxy(
+                ProxyCommand::CudaMemcpyAsync,
+                parameters,
+            );
+
+            return Ok(ret);
+        }
+        _ => todo!()
+    }
 }
