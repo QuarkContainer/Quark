@@ -1,5 +1,5 @@
 {
-  "DebugLevel"    : "Debug",
+  "DebugLevel"    : "Error",
   "KernelMemSize" : 24,
   "LogType"       : "Sync",
   "LogLevel"      : "Simple",

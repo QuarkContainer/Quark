@@ -687,7 +687,7 @@ pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
     let replace_libs = [
         "libcuda.so.1",
         "libcuda.so",
-        "libnvidia-ml.so.1",
+        // "libnvidia-ml.so.1",
         "libcudnn_cnn_infer.so.8",
     ];
 
