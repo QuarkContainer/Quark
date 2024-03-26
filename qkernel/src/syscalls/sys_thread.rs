@@ -16,13 +16,6 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-
-pub use xmas_elf::header::HeaderPt2;
-pub use xmas_elf::program::{Flags, ProgramHeader, ProgramHeader64};
-pub use xmas_elf::sections::Rela;
-pub use xmas_elf::symbol_table::{Entry, Entry64};
-pub use xmas_elf::{P32, P64};
-
 use super::super::asm::*;
 use super::super::kernel::cpuset::*;
 use super::super::loader::loader::*;

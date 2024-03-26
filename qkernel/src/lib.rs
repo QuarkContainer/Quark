@@ -25,11 +25,11 @@
 //#![feature(const_fn)]
 #![feature(allocator_api)]
 #![feature(associated_type_bounds)]
-#![feature(core_intrinsics)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(panic_info_message)]
 #![allow(deprecated)]
 #![recursion_limit = "256"]
+#![allow(invalid_reference_casting)]
 
 #[macro_use]
 extern crate alloc;
