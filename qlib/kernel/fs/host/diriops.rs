@@ -21,7 +21,7 @@ use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
 
-use crate::GLOBAL_ALLOCATOR;
+
 use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
@@ -96,20 +96,14 @@ impl HostDirOpIntern {
 
     pub fn ReadDirAll(&self, _task: &Task) -> Result<DentMap> {
         let fd = self.HostFd();
-        let buff_size = 4096 * 4 as usize; // 16KB in shared buffer
-        let buff_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(buff_size,0x80)};
-        unsafe{
-            core::ptr::write_bytes(buff_ptr, 0, buff_size);
-        }
-        //let mut buf: [u8; 4096 * 4] = [0; 4096 * 4]; // 16KB in stack
-        let buff_slice_ptr = unsafe {
-            core::slice::from_raw_parts_mut(buff_ptr, buff_size)
-        };
+
+        let mut buf: [u8; 4096 * 4] = [0; 4096 * 4]; // 16KB in stack
+
         //let deviceId = self.sattr.DeviceId;
         let mut entries = BTreeMap::new();
         let mut reset = true;
         loop {
-            let res = HostSpace::ReadDir(fd, buff_slice_ptr, reset);
+            let res = HostSpace::ReadDir(fd, &mut buf, reset);
             if res < 0 {
                 return Err(Error::SysError(-res as i32));
             }
@@ -120,7 +114,7 @@ impl HostDirOpIntern {
                 break;
             }
 
-            let addr = buff_ptr as u64;
+            let addr = &buf[0] as *const _ as u64;
             let cnt: u64 = res as u64;
             let mut pos: u64 = 0;
             while pos < cnt {
@@ -148,7 +142,6 @@ impl HostDirOpIntern {
                 entries.insert(pathname.Str().unwrap().to_string(), dentry);
             }
         }
-        unsafe{ GLOBAL_ALLOCATOR.DeallocShareBuf(buff_ptr ,buff_size,0x80);}
         return Ok(DentMap::New(entries));
     }
 

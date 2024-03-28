@@ -952,7 +952,7 @@ unsafe impl GlobalAlloc for GuestHostSharedAllocator {
 unsafe impl Allocator for GuestHostSharedAllocator {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
 
-        info!("GuestHostSharedAllocator allocate");
+        //info!("GuestHostSharedAllocator allocate");
 
         unsafe {
             let ptr = GLOBAL_ALLOCATOR.AllocSharedBuf(layout.size(), layout.align());
@@ -963,7 +963,7 @@ unsafe impl Allocator for GuestHostSharedAllocator {
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        info!("GuestHostSharedAllocator deallocate");
+        //info!("GuestHostSharedAllocator deallocate");
         let ptr = ptr.as_ptr();
         GLOBAL_ALLOCATOR.dealloc(ptr, layout);
     }
