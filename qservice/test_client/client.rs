@@ -16,7 +16,9 @@
 
 use std::env;
 
-use qshare::{common::IpAddress, na::{self, CreateFuncPodReq, CreateFuncPodResp, GetPodReq, TerminatePodReq}};
+use qshare::common::IpAddress;
+use qshare::na;
+use qshare::na::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -190,7 +192,7 @@ async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
         }
     ];
 
-    let request = tonic::Request::new(CreateFuncPodReq {
+    let request: tonic::Request<CreateFuncPodReq> = tonic::Request::new(CreateFuncPodReq {
         namespace: "ns1".into(),
         name: cmd.into(), //"name1".into(),
         image: "ubuntu".into(),

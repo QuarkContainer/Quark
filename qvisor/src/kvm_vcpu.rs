@@ -25,6 +25,7 @@ use spin::Mutex;
 use std::sync::atomic::{fence, Ordering};
 use std::sync::mpsc::Sender;
 use std::os::unix::io::AsRawFd;
+use crate::qlib::task_mgr::TaskId;
 
 pub struct HostPageAllocator {
     pub allocator: AlignedAllocator,
@@ -202,7 +203,7 @@ impl KVMVcpu {
                         qmsg.ret = Self::qCall(qmsg.msg);
                     }
 
-                    if currTaskId.Addr() != 0 {
+                    if currTaskId.PrivateTaskAddr() != 0 {
                         sharespace
                             .scheduler
                             .ScheduleQ(currTaskId, currTaskId.Queue(), true)
@@ -355,7 +356,7 @@ impl Scheduler {
         return (prev & mask) != 0;
     }
 
-    pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, block: bool) -> Result<u64> {
+    pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, block: bool) -> Result<TaskId> {
         return self.VcpuArr[vcpuId].VcpuWait(sharespace, block);
     }
 }
@@ -446,37 +447,16 @@ impl CPULocal {
         return count;
     }
 
-    pub fn Process(&self, sharespace: &ShareSpace) -> Option<u64> {
+    pub fn Process(&self, sharespace: &ShareSpace) -> Option<TaskId> {
         match sharespace.scheduler.GetNext() {
             None => (),
-            Some(newTask) => return Some(newTask.data),
+            Some(newTask) => return Some(newTask),
         }
-
-        // process in vcpu worker thread will decease the throughput of redis/etcd benchmark
-        // todo: study and fix
-        /*let mut start = TSC.Rdtsc();
-        while IsRunning() {
-            match sharespace.scheduler.GetNext() {
-                None => (),
-                Some(newTask) => {
-                    return Some(newTask.data)
-                }
-            }
-
-            let count = Self::ProcessOnce(sharespace);
-            if count > 0 {
-                start = TSC.Rdtsc()
-            }
-
-            if TSC.Rdtsc() - start >= IO_WAIT_CYCLES {
-                break;
-            }
-        }*/
 
         return None;
     }
 
-    pub fn VcpuWait(&self, sharespace: &ShareSpace, block: bool) -> Result<u64> {
+    pub fn VcpuWait(&self, sharespace: &ShareSpace, block: bool) -> Result<TaskId> {
         let mut events = [libc::epoll_event { events: 0, u64: 0 }; 2];
 
         let time = if block { -1 } else { 0 };
@@ -504,7 +484,7 @@ impl CPULocal {
             if sharespace.scheduler.VcpWaitMaskSet(self.vcpuId) {
                 match sharespace.scheduler.GetNext() {
                     None => (),
-                    Some(newTask) => return Ok(newTask.data),
+                    Some(newTask) => return Ok(newTask),
                 }
 
                 //Self::ProcessOnce(sharespace);

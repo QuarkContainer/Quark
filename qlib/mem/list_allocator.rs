@@ -351,6 +351,12 @@ impl HostAllocator {
         return self.GuestHostSharedAllocator().alloc(layout);
     }
 
+        // should be called by guest if it want to get buf that can be accessed by host
+    pub unsafe fn DeallocSharedBuf(&self,  ptr: *mut u8, layout: Layout) {    
+            return self.GuestHostSharedAllocator().dealloc(ptr, layout);
+    }
+    
+
 
     // should be called by host
     pub unsafe fn AllocGuestPrivatMem(&self, size: usize, align: usize) -> *mut u8 {

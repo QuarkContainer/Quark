@@ -137,9 +137,10 @@ pub fn switch(from: TaskId, to: TaskId) {
     //Task::Current().PerfGoto(PerfType::Blocked);
     Task::Current().AccountTaskEnter(SchedState::Blocked);
 
-    CPULocal::SetCurrentTask(to.Addr());
-    let fromCtx = from.GetTask();
-    let toCtx = to.GetTask();
+    debug!("switch from {:x?}, to {:x?}", from, to);
+    CPULocal::SetCurrentTask(to.PrivateTaskAddr(), to.SharedTaskAddr());
+    let fromCtx = from.GetPrivateTask();
+    let toCtx = to.GetPrivateTask();
 
     if !SHARESPACE.config.read().KernelPagetable {
         toCtx.SwitchPageTable();
@@ -149,12 +150,12 @@ pub fn switch(from: TaskId, to: TaskId) {
     fromCtx.mm.VcpuLeave();
     toCtx.mm.VcpuEnter();
 
-    //fromCtx.Check();
-    //toCtx.Check();
-    //debug!("switch {:x}->{:x}", from.data, to.data);
+    assert!(from.task_wrapper_addr > 0, "switch from.task_wrapper_addr > 0");
+    assert!(to.task_wrapper_addr > 0, "switch to.task_wrapper_addr > 0");
 
     unsafe {
-        context_swap(fromCtx.GetContext(), toCtx.GetContext(), 1, 0);
+        // rdi, rsi, rdx, rcx, r8, r9
+        context_swap(fromCtx.GetContext(), toCtx.GetContext(), from.task_wrapper_addr, to.task_wrapper_addr);
     }
 
     //Task::Current().PerfGofrom(PerfType::Blocked);
@@ -264,7 +265,7 @@ impl HostSpace {
     }
 
     pub fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
-        let current = Task::Current().GetTaskId();
+        let current = Task::Current().GetPrivateTaskId();
 
         let qMsg = QMsg {
             taskId: current,
@@ -282,7 +283,7 @@ impl HostSpace {
     }
 
     pub fn HCall(msg: &mut Msg, lock: bool) -> u64 {
-        let taskId = Task::Current().GetTaskId();
+        let taskId = Task::Current().GetPrivateTaskId();
 
         let mut event = QMsg {
             taskId: taskId,

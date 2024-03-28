@@ -235,7 +235,7 @@ pub fn ControlMsgHandler(fd: *const u8) {
     }
 
     // free curent task in the waitfn context
-    CPULocal::SetPendingFreeStack(Task::Current().taskId);
+    CPULocal::SetPendingFreeStack(Task::Current().taskId, Task::Current().taskWrapperId);
     super::super::taskMgr::SwitchToNewTask();
 }
 

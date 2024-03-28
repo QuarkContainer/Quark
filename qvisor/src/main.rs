@@ -115,6 +115,7 @@ pub fn AllocatorPrint(_class: usize) -> String {
     return "".to_string();
 }
 
+pub static IS_GUEST: bool = false;
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 
 thread_local!(static THREAD_ID: RefCell<i32> = RefCell::new(0));
