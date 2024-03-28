@@ -80,6 +80,7 @@ pub mod ucall;
 pub mod unix_socket_def;
 pub mod util;
 mod vmspace;
+pub mod arch;
 
 use alloc::sync::Arc;
 use lazy_static::lazy_static;

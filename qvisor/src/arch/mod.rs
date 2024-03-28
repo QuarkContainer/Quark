@@ -12,4 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod x86_64;
+use std::sync::mpsc::Sender;
+use spin::MutexGuard;
+use crate::qlib::common::Error;
+
+#[cfg(target_arch = "x86_64")]
+#[path = "./x86_64/mod.rs"]
+pub mod __cpu_arch;
+
+pub trait vCPU {
+    fn new (kvm_vm_fd: &kvm_ioctls::VmFd, vCPU_id: usize) -> Self;
+    fn init(&mut self, id: usize) -> Result<(), Error>;
+    fn run(&self, entry_addr: u64, stack_start_addr: u64, heap_start_addr: u64,
+           share_space_addr: u64, id: u64, vdso_addr: u64, cpus_total: u64,
+           auto_start: bool) -> Result<(), Error>;
+    fn interrupt_guest(&self);
+    fn get_interrupt_lock(&self) -> MutexGuard<'_, (bool, Vec<Sender<()>>)>;
+    fn vcpu_fd(&self) -> Option<&kvm_ioctls::VcpuFd>;
+}

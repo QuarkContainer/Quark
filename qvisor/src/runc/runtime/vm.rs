@@ -24,6 +24,7 @@ use kvm_ioctls::{Cap, Kvm, VmFd};
 use lazy_static::lazy_static;
 use nix::sys::signal;
 
+use crate::arch::vCPU;
 use crate::qlib::MAX_VCPU_COUNT;
 use crate::tsot_agent::TSOT_AGENT;
 //use crate::vmspace::hibernate::HiberMgr;
@@ -422,7 +423,9 @@ impl VirtualMachine {
 
             // enable cpuid in host
             #[cfg(target_arch = "x86_64")]
-            vcpu.vcpu.set_cpuid2(&kvm_cpuid).unwrap();
+            vcpu.arch_vcpu.vcpu_fd()
+                          .unwrap()
+                          .set_cpuid2(&kvm_cpuid).unwrap();
             VMS.lock().vcpus.push(vcpu.clone());
             vcpus.push(vcpu);
         }

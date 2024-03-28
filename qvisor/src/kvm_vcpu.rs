@@ -1,5 +1,6 @@
 use crate::host_uring::HostSubmit;
 
+use crate::arch::{vCPU, __cpu_arch::ArchvCPU};
 use super::qcall::AQHostCall;
 use super::qlib::buddyallocator::ZeroPage;
 use super::qlib::common::Allocator;
@@ -18,11 +19,11 @@ use super::VMS;
 use super::vmspace::VMSpace;
 use alloc::alloc::alloc;
 use libc::ioctl;
+use libc::gettid;
 use core::alloc::Layout;
 use core::slice;
 use core::sync::atomic::AtomicU64;
 use nix::sys::signal;
-use spin::Mutex;
 use std::sync::atomic::{fence, Ordering};
 use std::sync::mpsc::Sender;
 use std::os::unix::io::AsRawFd;
@@ -84,22 +85,12 @@ pub struct KVMVcpu {
     pub tgid: AtomicU64,
     pub state: AtomicU64,
     pub vcpuCnt: usize,
-    //index in the cpu arrary
-    pub vcpu: kvm_ioctls::VcpuFd,
-
     pub topStackAddr: u64,
     pub entry: u64,
-
-    pub gdtAddr: u64,
-    pub idtAddr: u64,
-    pub tssIntStackStart: u64,
-    pub tssAddr: u64,
-
+    pub arch_vcpu: ArchvCPU,
     pub heapStartAddr: u64,
     pub shareSpaceAddr: u64,
-
-    pub autoStart: bool,
-    pub interrupting: Mutex<(bool, Vec<Sender<()>>)>,
+    pub autoStart: bool
 }
 
 //for pub shareSpace: * mut Mutex<ShareSpace>
@@ -116,44 +107,12 @@ impl KVMVcpu {
         autoStart: bool,
     ) -> Result<Self> {
         const DEFAULT_STACK_PAGES: u64 = MemoryDef::DEFAULT_STACK_PAGES; //64KB
-        //let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
         let stackSize = DEFAULT_STACK_PAGES << 12;
         let stackAddr = AlignedAllocate(stackSize as usize, stackSize as usize, false).unwrap();
         let topStackAddr = stackAddr + (DEFAULT_STACK_PAGES << 12);
 
-        let gdtAddr = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-        let idtAddr = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-
-        let tssIntStackStart = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-        let tssAddr = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-
-        // info!("the tssIntStackStart is {:x}, tssAddr address is {:x}, idt addr is {:x}, gdt addr is {:x}",
-        //     tssIntStackStart, tssAddr, idtAddr, gdtAddr);
-
-        let vcpu = vm_fd
-            .create_vcpu(id as u64)
-            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))
-            .expect("create vcpu fail");
+        let mut _arch_vcpu: ArchvCPU = ArchvCPU::new(&vm_fd, id);
+        _arch_vcpu.init(id)?;
         let cpuAffinit = VMS.lock().cpuAffinit;
         let vcpuCoreId = if !cpuAffinit {
             -1
@@ -168,18 +127,44 @@ impl KVMVcpu {
             tgid: AtomicU64::new(0),
             state: AtomicU64::new(KVMVcpuState::HOST as u64),
             vcpuCnt,
-            vcpu,
             topStackAddr: topStackAddr,
             entry: entry,
-            gdtAddr: gdtAddr,
-            idtAddr: idtAddr,
-            tssIntStackStart: tssIntStackStart,
-            tssAddr: tssAddr,
+            arch_vcpu: _arch_vcpu,
             heapStartAddr: pageAllocatorBaseAddr,
             shareSpaceAddr: shareSpaceAddr,
             autoStart: autoStart,
-            interrupting: Mutex::new((false, vec![])),
         });
+    }
+
+    pub fn run(&self, tgid: i32) -> Result<()> {
+        SetExitSignal();
+        self.SignalMask();
+        let tid = unsafe { gettid() };
+        self.threadid.store(tid as u64, Ordering::SeqCst);
+        self.tgid.store(tgid as u64, Ordering::SeqCst);
+
+        if self.cordId > 0 {
+            let coreid = core_affinity::CoreId {
+                id: self.cordId as usize,
+            };
+            // print cpu id
+            core_affinity::set_for_current(coreid);
+        }
+
+        if !super::runc::runtime::vm::IsRunning() {
+            info!("The VM is not running.");
+            return Ok(());
+        }
+
+        info!(
+            "Start enter guest[{}]: entry is {:x}, stack is {:x}",
+            self.id, self.entry, self.topStackAddr
+        );
+        self.arch_vcpu.run(self.entry, self.topStackAddr, self.heapStartAddr,
+                           self.shareSpaceAddr, self.id as u64, VMS.lock().vdsoAddr,
+                           self.vcpuCnt as u64, self.autoStart)?;
+
+        Ok(())
     }
 
     pub fn GuestMsgProcess(sharespace: &ShareSpace) -> usize {
@@ -213,7 +198,6 @@ impl KVMVcpu {
                 }
                 Some(msg) => {
                     count += 1;
-                    //error!("qcall msg is {:x?}", &msg);
                     AQHostCall(msg, sharespace);
                 }
             }
@@ -223,7 +207,8 @@ impl KVMVcpu {
     }
 
     pub fn interrupt(&self, waitCh: Option<Sender<()>>) {
-        let mut interrupting = self.interrupting.lock();
+        let mut interrupting = self.arch_vcpu
+                                   .get_interrupt_lock();
         if let Some(w) = waitCh {
             interrupting.1.push(w);
         }
@@ -270,7 +255,10 @@ impl KVMVcpu {
 
         let ret = unsafe {
             ioctl(
-                self.vcpu.as_raw_fd(),
+                self.arch_vcpu
+                    .vcpu_fd()
+                    .unwrap()
+                    .as_raw_fd(),
                 Self::KVM_SET_SIGNAL_MASK,
                 &data as *const _ as u64,
             )
@@ -281,7 +269,10 @@ impl KVMVcpu {
             "SignalMask ret is {}/{}/{}",
             ret,
             errno::errno().0,
-            self.vcpu.as_raw_fd()
+            self.arch_vcpu
+                .vcpu_fd()
+                .unwrap()
+                .as_raw_fd()
         );
     }
 }
@@ -334,7 +325,10 @@ extern "C" fn handleSigChild(signal: i32) {
     if signal == Signal::SIGCHLD {
         // used for tlb shootdown
         if let Some(vcpu) = super::LocalVcpu() {
-            vcpu.vcpu.set_kvm_immediate_exit(1);
+            vcpu.arch_vcpu
+                .vcpu_fd()
+                .unwrap()
+                .set_kvm_immediate_exit(1);
             fence(Ordering::SeqCst);
         }
     }
@@ -457,28 +451,6 @@ impl CPULocal {
             None => (),
             Some(newTask) => return Some(newTask.data),
         }
-
-        // process in vcpu worker thread will decease the throughput of redis/etcd benchmark
-        // todo: study and fix
-        /*let mut start = TSC.Rdtsc();
-        while IsRunning() {
-            match sharespace.scheduler.GetNext() {
-                None => (),
-                Some(newTask) => {
-                    return Some(newTask.data)
-                }
-            }
-
-            let count = Self::ProcessOnce(sharespace);
-            if count > 0 {
-                start = TSC.Rdtsc()
-            }
-
-            if TSC.Rdtsc() - start >= IO_WAIT_CYCLES {
-                break;
-            }
-        }*/
-
         return None;
     }
 
@@ -512,14 +484,11 @@ impl CPULocal {
                     None => (),
                     Some(newTask) => return Ok(newTask.data),
                 }
-
-                //Self::ProcessOnce(sharespace);
             }
 
             super::GLOBAL_ALLOCATOR.Clear();
 
             let _nfds = unsafe { libc::epoll_wait(self.epollfd, &mut events[0], 2, time) };
-           
             {
                 let mut data: u64 = 0;
                 let ret = unsafe {
@@ -535,7 +504,6 @@ impl CPULocal {
                 }
             }
         }
-
         return Err(Error::Exit);
     }
 }
