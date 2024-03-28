@@ -17,7 +17,7 @@ use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
 
-use crate::qlib::cstring::CString;
+use crate::qlib::kernel::util::sharedstring::SharedString;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::fs::file::*;
 use crate::qlib::kernel::guestfdnotifier::NonBlockingPoll;
@@ -193,7 +193,7 @@ impl InodeOperations for UvmDevice {
         let hostpath = "/dev/nvidia-uvm";
 
         let name = path::Clean(&hostpath);
-        let cstr = CString::New(&name);
+        let cstr = SharedString::New(&name);
 
         let fd = HostSpace::OpenDevFile(-1, cstr.Ptr(), flags.ToLinux()) as i32;
         if fd < 0 {
@@ -530,11 +530,15 @@ pub fn UvmIoctlInvoke<Params: Sized>(
         None => 0,
         Some(p) => p as * const _ as u64
     };
-
+    let paramslen = match params {
+        None => 0,
+        Some(_) => core::mem::size_of::<Params>()
+    };
     let n = HostSpace::IoCtl(
         ui.fd.fd, 
         ui.cmd as u64, 
-        paramsAddr
+        paramsAddr,
+        paramslen
     ); 
     if n < 0 {
         return Err(Error::SysError(n as i32));

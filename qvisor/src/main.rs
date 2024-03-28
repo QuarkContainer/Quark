@@ -23,7 +23,7 @@
 #![recursion_limit = "256"]
 //#![allow(invalid_reference_casting)]
 #![feature(unix_socket_ancillary_data)]
-
+#![feature(allocator_api)]
 extern crate alloc;
 extern crate bit_field;
 extern crate core_affinity;
@@ -179,6 +179,7 @@ pub fn InitSingleton() {
 //pub static ALLOCATOR: HostAllocator = HostAllocator::New();
 #[global_allocator]
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
+pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
 
 fn main() {
     InitSingleton();

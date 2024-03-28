@@ -15,7 +15,7 @@
 use alloc::collections::vec_deque::VecDeque;
 use alloc::string::String;
 use cache_padded::CachePadded;
-use core::alloc::{GlobalAlloc, Layout};
+use core::alloc::{GlobalAlloc, Layout, Allocator, AllocError};
 use core::cmp::max;
 use core::mem::size_of;
 use core::ptr::NonNull;
@@ -351,6 +351,13 @@ impl HostAllocator {
         return self.GuestHostSharedAllocator().alloc(layout);
     }
 
+    pub unsafe fn DeallocShareBuf(&self, ptr: *mut u8, size: usize, align: usize) {
+
+        let layout = Layout::from_size_align(size, align)
+            .expect("DeallocShareBuf can't dealloc memory");
+
+        return self.GuestHostSharedAllocator().dealloc(ptr,layout);
+    }
 
     // should be called by host
     pub unsafe fn AllocGuestPrivatMem(&self, size: usize, align: usize) -> *mut u8 {
@@ -915,5 +922,49 @@ impl MemList {
         }
         //assert!(next % self.size == 0, "Pop next is {:x}/size is {:x}", next, self.size);
         return next;
+    }
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+pub struct GuestHostSharedAllocator {
+}
+
+
+impl GuestHostSharedAllocator {
+    pub const fn New() -> Self {
+        return Self {};
+    }
+
+}
+
+unsafe impl GlobalAlloc for GuestHostSharedAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+
+        let addr = GLOBAL_ALLOCATOR.AllocSharedBuf(layout.size(), layout.align());
+        return addr;
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        GLOBAL_ALLOCATOR.dealloc(ptr, layout);
+    }
+}
+
+unsafe impl Allocator for GuestHostSharedAllocator {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+
+        //info!("GuestHostSharedAllocator allocate");
+
+        unsafe {
+            let ptr = GLOBAL_ALLOCATOR.AllocSharedBuf(layout.size(), layout.align());
+            let slice = core::slice::from_raw_parts_mut(ptr, layout.size());
+            
+            Ok(NonNull::new_unchecked(slice))
+        }
+    }
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        //info!("GuestHostSharedAllocator deallocate");
+        let ptr = ptr.as_ptr();
+        GLOBAL_ALLOCATOR.dealloc(ptr, layout);
     }
 }

@@ -87,6 +87,7 @@ use self::qlib::kernel::memmgr;
 use self::qlib::kernel::perflog;
 use self::qlib::kernel::quring;
 use self::qlib::kernel::Kernel;
+use self::qlib::kernel::Kernel::ENABLE_CC;
 use self::qlib::kernel::*;
 use self::qlib::{ShareSpaceRef, SysCallID};
 //use self::vcpu::*;
@@ -114,7 +115,6 @@ use self::task::*;
 use self::threadmgr::task_sched::*;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use guest_host_allocator::GuestHostSharedAllocator;
 use memmgr::pma::PageMgr;
 
 #[macro_use]
@@ -127,7 +127,6 @@ mod interrupt;
 pub mod kernel_def;
 pub mod rdma_def;
 
-mod guest_host_allocator;
 mod syscalls;
 
 
@@ -480,27 +479,29 @@ pub extern "C" fn rust_main(
     self::qlib::kernel::asm::fninit();
     if id == 0 {
         GLOBAL_ALLOCATOR.InitPrivateAllocator(privateHeapStart);
-
-
-        // ghcb convert shared memory
-
+        // If is in sev-snp,ghcb convert shared memory and set ENABLE_CC
+        ENABLE_CC.store(true,Ordering::Release);
         
         GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
+        
+        assert!(self::qlib::qmsg::sharepara::SHAREPARA_COUNT >= vcpuCnt);
+
         let size = core::mem::size_of::<ShareSpace>();
         // info!("ShareSpace size {:x}", size);
         let shared_space = unsafe {
-            GLOBAL_ALLOCATOR.AllocSharedBuf(size, 2)
+            GLOBAL_ALLOCATOR.AllocSharedBuf(size, 0x80)
         };
-        HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, PAGE_MGR_HOLDER.Addr(), 0, 0);
+        HyperCall64_init(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, PAGE_MGR_HOLDER.Addr(), 0, 0);
 
 
         SHARESPACE.SetValue(shared_space as u64);
         SingletonInit();
-
+        //HyperCall64 can be called after here, since gs set in SingletonInit
         SetVCPCount(vcpuCnt as usize);
         VCPU_ALLOCATOR.Print();
         VCPU_ALLOCATOR.Initializated();
 
+        info!("123");
 
         let mut vec1: Vec<i32, _> = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
         for i in 0..10 {
@@ -532,7 +533,7 @@ pub extern "C" fn rust_main(
         VDSO.Initialization(vdsoParamAddr);
 
         // release other vcpus
-        HyperCall64(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
+        HyperCall64_init(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
     } else {
         InitGs(id);
         //PerfGoto(PerfType::Kernel);
@@ -604,7 +605,6 @@ fn StartRootContainer(_para: *const u8) -> ! {
     let task = Task::Current();
     let mut process = Process::default();
     Kernel::HostSpace::LoadProcessKernel(&mut process as *mut _ as u64) as usize;
-
     let (_tid, entry, userStackAddr, kernelStackAddr) = {
         let mut processArgs = LOADER.Lock(task).unwrap().Init(process);
         match LOADER.LoadRootProcess(&mut processArgs) {
@@ -668,4 +668,3 @@ fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
     self::Kernel::HostSpace::Panic(&format!("alloc_error_handler layout: {:?}", layout));
     loop {}
 }
-

@@ -251,7 +251,7 @@ impl Loader {
             &procArgs.Filename,
             &paths,
         )?;
-
+        info!("##Load 1");
         let mut ttyFileOps = None;
         if procArgs.Terminal {
             let file = task
@@ -274,7 +274,7 @@ impl Loader {
             task.NewStdFds(&procArgs.Stdiofds[..], false)
                 .expect("Task: create std fds");
         }
-
+        info!("##Load 2");
         GetKernel().Start()?;
 
         //task.NewStdFds(&procArgs.Stdiofds[..], procArgs.Terminal).expect("Task: create std fds");

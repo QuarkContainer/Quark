@@ -15,6 +15,8 @@
 use alloc::string::String;
 use alloc::string::ToString;
 
+use crate::qlib::kernel::util::sharedstring::*;
+
 use super::super::fs::dirent::*;
 use super::super::fs::file::*;
 use super::super::fs::flags::*;
@@ -276,7 +278,7 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
                             
                             let dirfd = parentIops.HostDirOp().expect(&format!("inodeop type is {:?}", parentIops.InodeType())).HostFd();
                             let name = d.Name();
-                            let cstr = CString::New(&name);
+                            let cstr = SharedString::New(&name);
                             lkiops.TryOpenWrite(dirfd, cstr.Ptr())?;
                         }
                     }
@@ -555,7 +557,7 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
                             let mut lkiops = iops.lock();
                             let dirfd = parent.Inode().lock().InodeOp.HostDirOp().unwrap().HostFd();
                             if lkiops.SkipRw() {
-                                let cstr = CString::New(&name);
+                                let cstr = SharedString::New(&name);
                                 lkiops.TryOpenWrite(dirfd, cstr.Ptr())?;
                             }
                         }

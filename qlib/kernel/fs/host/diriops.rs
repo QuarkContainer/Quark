@@ -21,6 +21,7 @@ use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
 
+
 use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
@@ -141,7 +142,6 @@ impl HostDirOpIntern {
                 entries.insert(pathname.Str().unwrap().to_string(), dentry);
             }
         }
-
         return Ok(DentMap::New(entries));
     }
 
