@@ -47,6 +47,7 @@ pub unsafe fn InitSingleton() {
 // Event describes the event mask that was observed and the user data to be
 // returned when one of the events occurs. It has this format to match the linux
 // format to avoid extra copying/allocation when writing events to userspace.
+#[repr(C)]
 #[derive(Default, Clone, Copy, Debug)]
 pub struct Event {
     // Events is the event mask containing the set of events that have been
