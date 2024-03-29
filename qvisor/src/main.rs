@@ -21,8 +21,8 @@
 #![allow(dead_code)]
 //#![feature(asm)]
 #![recursion_limit = "256"]
-//#![allow(invalid_reference_casting)]
 #![feature(unix_socket_ancillary_data)]
+#![allow(invalid_reference_casting)]
 
 extern crate alloc;
 extern crate bit_field;
@@ -58,7 +58,7 @@ pub mod asm;
 
 #[macro_use]
 pub mod print;
-#[cfg(target_arch="x86_64")]
+#[cfg(target_arch = "x86_64")]
 pub mod amd64_def;
 pub mod console;
 pub mod elf_loader;
@@ -161,8 +161,9 @@ lazy_static! {
     pub static ref GLOCK: Mutex<()> = Mutex::new(());
     pub static ref NIVIDIA_CONTAINER_NAME: Mutex<String> = Mutex::new(String::new());
     pub static ref SANDBOX: Mutex<Sandbox> = Mutex::new(Sandbox::default());
-
-    pub static ref URING: Mutex::<io_uring::IoUring> = Mutex::new(io_uring::IoUring::new(MemoryDef::QURING_SIZE as u32).expect("setup io_Uring fail"));
+    pub static ref URING: Mutex::<io_uring::IoUring> = Mutex::new(
+        io_uring::IoUring::new(MemoryDef::QURING_SIZE as u32).expect("setup io_Uring fail")
+    );
 }
 
 pub const LOG_FILE: &'static str = "/var/log/quark/quark.log";
