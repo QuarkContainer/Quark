@@ -45,11 +45,11 @@ Quark Container supports to transfer the container application's TCP traffic wit
 ### Requirement 
 Quark builds on X86-64 only. Other architecture will be available in the future.
 
-Quark is developed with Rust language. The build needs to install Rust nightly. Please use current known good version "nightly-2022-2023-12-x86_64-unknown-linux-gnu"
+Quark is developed with Rust language. The build needs to install Rust nightly. Please use current known good version "nightly-2023-12-11-x86_64-unknown-linux-gnu"
 
 ```sh
-rustup toolchain install nightly-2022-2023-12-x86_64-unknown-linux-gnu
-rustup default nightly-2022-2023-12-x86_64-unknown-linux-gnu
+rustup toolchain install nightly-2023-12-11-x86_64-unknown-linux-gnu
+rustup default nightly-2023-12-11-x86_64-unknown-linux-gnu
 
 ```
 
