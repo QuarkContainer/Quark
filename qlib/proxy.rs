@@ -27,7 +27,7 @@ pub enum ProxyCommand {
     CudaDeviceGetStreamPriorityRange,
     CudaDeviceReset,
     CudaDeviceSetCacheConfig,
-    
+
     CudaSetDevice,
     CudaSetDeviceFlags,
     CudaDeviceSynchronize,
@@ -46,22 +46,21 @@ pub enum ProxyCommand {
     CudaRegisterVar,
     CudaLaunchKernel,
 
-    // stream management 
+    // stream management
     CudaStreamSynchronize,
     CudaStreamCreate,
     CudaStreamDestroy,
     CudaStreamIsCapturing,
     CuModuleGetLoadingMode,
     //Error handling
-    CudaGetLastError, 
+    CudaGetLastError,
 
     CuInit,
     CuDevicePrimaryCtxGetState,
 
     NvmlInitWithFlags,
-    NvmlDeviceGetCountV2,  
+    NvmlDeviceGetCountV2,
 }
-
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]
 #[repr(u64)]
@@ -69,7 +68,7 @@ pub enum XpuLibrary {
     None = 0 as u64,
     CudaRuntime,
     CudaDriver,
-    Nvml
+    Nvml,
 }
 
 #[repr(u32)]
@@ -78,7 +77,6 @@ pub enum CumoduleLoadingModeEnum {
     CuModuleEagerLoading = 1,
     CuModuleLazyLoading = 2,
 }
-pub use self::CumoduleLoadingModeEnum as CUmoduleLoadingMode;
 
 impl Default for ProxyCommand {
     fn default() -> Self {
@@ -155,7 +153,7 @@ pub type CudaUUID = CudaUUIDSt;
 #[derive(Copy, Clone, Debug)]
 pub struct CudaDeviceProperties {
     pub name: [i8; 256usize],
-    pub uuid: CudaUUID,   
+    pub uuid: CudaUUID,
     pub luid: [i8; 8usize],
     pub luidDeviceNodeMask: i8,
     pub totalGlobalMem: usize,
@@ -236,7 +234,7 @@ impl Default for CudaDeviceProperties {
     fn default() -> Self {
         Self {
             name: [0; 256],
-            uuid: CudaUUID { bytes: [0; 16]},
+            uuid: CudaUUID { bytes: [0; 16] },
             luid: [0; 8usize],
             luidDeviceNodeMask: 0,
             totalGlobalMem: 0,
@@ -248,7 +246,7 @@ impl Default for CudaDeviceProperties {
             maxThreadsDim: [0; 3],
             maxGridSize: [0; 3],
             clockRate: 0,
-            totalConstMem: 0,       
+            totalConstMem: 0,
             major: 0,
             minor: 0,
             textureAlignment: 0,
@@ -320,20 +318,20 @@ impl Default for CudaDeviceProperties {
 pub struct FatHeader {
     magic: u32,
     version: u32,
-    pub text: &'static FatElfHeader, 
+    pub text: &'static FatElfHeader,
     data: u64,
     unknown: u64,
     text2: u64,
-    zero: u64
+    zero: u64,
 }
 
 #[repr(C)]
-#[derive(Default, Debug,Copy, Clone)]
+#[derive(Default, Debug, Copy, Clone)]
 pub struct FatElfHeader {
     pub magic: u32,
     pub version: u16,
     pub header_size: u16,
-    pub size: u64
+    pub size: u64,
 }
 
 #[repr(C)]
@@ -350,9 +348,9 @@ pub struct FatTextHeader {
     pub arch: u32,
     pub obj_name_offset: u32,
     pub obj_name_len: u32,
-    pub flags:u64,
+    pub flags: u64,
     pub zero: u64,
-    pub decompressed_size: u64
+    pub decompressed_size: u64,
 }
 
 #[repr(C)]
@@ -360,18 +358,18 @@ pub struct FatTextHeader {
 pub struct ParamInfo {
     pub addr: u64,
     pub paramNum: usize,
-    pub paramSizes: [u16;30]
+    pub paramSizes: [u16; 30],
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Copy, Clone)]
 pub struct LaunchKernelInfo {
     pub func: u64,
-    pub gridDim: Qdim3, 
-    pub blockDim: Qdim3, 
-    pub args: u64, 
-    pub sharedMem: usize, 
-    pub stream: u64
+    pub gridDim: Qdim3,
+    pub blockDim: Qdim3,
+    pub args: u64,
+    pub sharedMem: usize,
+    pub stream: u64,
 }
 
 #[repr(C)]
@@ -379,22 +377,22 @@ pub struct LaunchKernelInfo {
 pub struct Qdim3 {
     pub x: u32,
     pub y: u32,
-    pub z: u32
+    pub z: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Copy, Clone)]
 pub struct RegisterFunctionInfo {
-    pub fatCubinHandle:u64, 
-    pub hostFun:u64, 
-    pub deviceFun:u64, 
-    pub deviceName:u64, 
-    pub thread_limit:i32, 
-    pub tid:u64, 
-    pub bid:u64, 
-    pub bDim:u64, 
-    pub gDim:u64, 
-    pub wSize:usize
+    pub fatCubinHandle: u64,
+    pub hostFun: u64,
+    pub deviceFun: u64,
+    pub deviceName: u64,
+    pub thread_limit: i32,
+    pub tid: u64,
+    pub bid: u64,
+    pub bDim: u64,
+    pub gDim: u64,
+    pub wSize: usize,
 }
 
 #[repr(C)]
@@ -403,7 +401,7 @@ pub struct NvInfoKernelEntry {
     pub format: u8,
     pub attribute: u8,
     pub values_size: u16,
-    pub values: u32
+    pub values: u32,
 }
 
 #[repr(C)]
@@ -412,12 +410,12 @@ pub struct NvInfoKParamInfo {
     pub index: u32,
     pub ordinal: u16,
     pub offset: u16,
-    pub comp: u32
+    pub comp: u32,
 }
 
 impl NvInfoKParamInfo {
     pub fn GetSize(&self) -> u16 {
-        (self.comp>>18 & 0x3fff) as u16
+        (self.comp >> 18 & 0x3fff) as u16
     }
 }
 
@@ -428,17 +426,17 @@ pub struct NvInfoEntry {
     pub attribute: u8,
     pub values_size: u16,
     pub kernel_id: u32,
-    pub value: u32
+    pub value: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Copy, Clone)]
 pub struct RegisterVarInfo {
-    pub fatCubinHandle:u64, 
+    pub fatCubinHandle: u64,
     pub hostVar: u64,
-    pub deviceAddress:u64,
-    pub deviceName:u64,
-    pub ext:i32,
+    pub deviceAddress: u64,
+    pub deviceName: u64,
+    pub ext: i32,
     pub size: usize,
     pub constant: i32,
     pub global: i32,
