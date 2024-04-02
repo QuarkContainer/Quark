@@ -1040,10 +1040,21 @@ impl MemoryManager {
                 let vmaOffset = pageAddr - range.Start();
                 let fileOffset = vmaOffset + vma.offset; // offset in the file
                 let phyAddr = iops.MapFilePage(task, fileOffset)?;
+                let writeable = vma.effectivePerms.Write();
                 
                 let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
                 CopyPage(page, phyAddr);
-                self.MapPageWriteLocked(pageAddr, page, exec);
+
+                if writeable{
+                    self.MapPageWriteLocked(pageAddr, page, exec);
+                } else {
+                    self.MapPageReadLocked(pageAddr, page, exec);
+                }
+
+                if !vma.private{
+                    iops.MapSharedPage(phyAddr, page);
+                }
+
                 super::super::PAGE_MGR.DerefPage(page);
                 return Ok(());
             }
