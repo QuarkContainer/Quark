@@ -377,7 +377,47 @@ pub fn HandleFault(
                         FAR: {:#x},
                         GPR: {:#x}",
                         error_code, fault_address, task.GetPtRegs());
-            panic!("the k_map is {:?}", &map);
+            let ctx = task.GetPtRegs();
+            unsafe {
+                if let Some(opcode) = crate::kernel_def::read_user_opcode(ctx.pc) {
+                    let bind = task
+                        .mm
+                        .pagetable
+                        .write();
+                    let  phy = bind.pt
+                        .VirtualToPhy(ctx.pc).unwrap();
+                    debug!("VM: current-PC: {:#x}, retrieved PC[opcode]:{:#x} - PhysicalAddr:{:#x}.", ctx.pc, opcode, phy.0);
+                    } else {
+                        debug!("VM: current-PC: {:#x}, can not retrieve PC[opcode].", ctx.pc);
+                    }
+                }
+                panic!("the k_map is {:?}", &map);
+            }
+         else {
+            let ctx = task.GetPtRegs();
+            unsafe {
+                if let Some(opcode) = crate::kernel_def::read_user_opcode(ctx.pc) {
+                    let bind = task
+                        .mm
+                        .pagetable
+                        .write();
+                    let  phy = bind.pt
+                        .VirtualToPhy(ctx.pc).unwrap();
+                    let far_pte = bind.pt.VirtualToEntry(fault_address);
+                    debug!("VM: Fault addres - PTE:{:?}", far_pte);
+                    debug!("VM: current-PC: {:#x}, retrieved PC[opcode]:{:#x} - PhysicalAddr:{:#x}.", ctx.pc, opcode, phy.0);
+                } else {
+                    debug!("VM: current-PC: {:#x}, can not retrieve PC[opcode].", ctx.pc);
+                }
+            }
+        }
+        print!("VM: Unhandled EXCEPTION: PageFault in Kernel -
+                    error code: {:#x},
+                    FAR: {:#x},
+                    GPR: {:#x}",
+                    error_code, fault_address, task.GetPtRegs());
+        loop {
+            
         }
 
         let mut info = SignalInfo {

@@ -216,9 +216,8 @@ pub fn Execvat(
             envs += &env;
             envs += " ";
         }
-        info!("in the execve: the cmd is {} \n envs is {:?}", &cmd, &envs);
-
         let fileName = ExecvFilleName(task, dirfd, &fileName, flags)?;
+        info!("VM: in the execve: filename:{:?}, cmd {}, \n envs: {:?}", fileName, &cmd, &envs);
 
         {
             let t = task.Thread().clone();
@@ -424,6 +423,8 @@ pub fn SysClone(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         cTid = args.arg4;
     }
     // aarch64: should be different!
+    debug!("VM: Clone argv - flags:{:#x}, cStack:{:#x}, pTid:{}, cTid:{}, tls:{}",
+            flags, cStack, pTid, cTid, tls);
     let pid = task.Clone(flags, cStack, pTid, cTid, tls)?;
     return Ok(pid as i64);
 }

@@ -395,8 +395,8 @@ pub fn syscall_dispatch_aarch64(
             tid = currTask.Thread().lock().id;
             pid = currTask.Thread().ThreadGroup().ID();
             info!(
-                "({}/{})------get call id {:?} arg0:{:x}",
-                tid, pid, callId, _arg0
+                "({}/{})------get call id {:?} arg0:{:x},\n CpuState:{:#x}",
+                tid, pid, callId, _arg0, currTask.GetPtRegs()
             );
         }
     }
@@ -421,12 +421,13 @@ pub fn syscall_dispatch_aarch64(
             0
         };
         info!(
-            "({}/{})------Return[{}] res is {:x}: call id {:?} ",
+            "({}/{})------Return[{}] res is {:x}: call id {:?},\n CpuState:{:#x}",
             tid,
             pid,
             Scale(gap),
             res,
-            callId
+            callId,
+            currTask.GetPtRegs()
         );
     }
 

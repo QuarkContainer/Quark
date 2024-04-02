@@ -221,6 +221,7 @@ pub fn SwitchToNewTask() -> ! {
 
     let current = Task::TaskId();
     let waitTask = TaskId::New(CPULocal::WaitTask());
+    debug!{"VM: switch to new task."};
     switch(current, waitTask);
     panic!("SwitchToNewTask end impossible");
 }

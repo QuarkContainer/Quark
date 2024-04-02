@@ -280,6 +280,8 @@ pub fn Load(
 ) -> Result<(u64, u64, u64)> {
     let vdsoAddr = LoadVDSO(task)?;
 
+    debug!("VM: Load filename:{:?} - argv:{:?}, envv:{:?}.",
+        filename, argv, envv);
     let (loaded, executable, tmpArgv) = LoadExecutable(task, filename, argv)?;
     let argv = tmpArgv;
 
