@@ -38,7 +38,7 @@ pub fn IsValidSegmentBase(addr: u64) -> bool {
 
 const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
 const DEFAULT_STACK_PAGES: u64 = DEFAULT_STACK_SIZE as u64 / (4 * 1024);
-const DEFAULT_STACK_MAST: u64 = !(DEFAULT_STACK_SIZE as u64 - 1);
+const DEFAULT_STACK_MASK: u64 = !(DEFAULT_STACK_SIZE as u64 - 1);
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SharingOptions {

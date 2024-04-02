@@ -139,7 +139,7 @@ pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
 
-pub static IS_GUEST: bool = true;
+pub static  IS_GUEST: bool = true;
 
 
 lazy_static! {
@@ -152,6 +152,7 @@ lazy_static! {
 }
 
 pub fn SingletonInit() {
+
     unsafe {
         vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
         vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);

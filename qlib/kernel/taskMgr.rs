@@ -90,7 +90,6 @@ pub fn IOWait() {
 }
 
 pub fn WaitFn() -> ! {
-    debug!("WaitFn 222");
     let mut task = TaskId::default();
     loop {
         let next = if task.PrivateTaskAddr() == 0 {

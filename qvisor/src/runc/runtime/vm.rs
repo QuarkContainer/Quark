@@ -267,7 +267,7 @@ impl VirtualMachine {
             }
         }
 
-        let cpuCount = cpuCount.max(2); // minimal 2 cpus
+        let cpuCount = cpuCount.max(4); // minimal 2 cpus
 
         VMS.write().vcpuCount = cpuCount; //VMSpace::VCPUCount();
         VMS.write().RandomVcpuMapping();

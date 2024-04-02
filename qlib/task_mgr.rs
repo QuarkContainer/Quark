@@ -280,13 +280,6 @@ impl<T: Clone> Deref for VcpuLocalQueue<T> {
     }
 }
 
-// impl<T: Clone> DerefMut for VcpuLocalQueue<T> {
-
-//     fn deref_mut(&mut self) -> &mut VcpuLocalQueue<T> {
-//         self
-//     }
-// }
-
 impl<T: Clone> VcpuLocalQueue<T> {
     pub fn New(size: usize) -> Self {
         return Self(VecDeque::with_capacity(size));

@@ -134,10 +134,8 @@ impl CounterSet {
 
 #[inline]
 pub fn switch(from: TaskId, to: TaskId) {
-    //Task::Current().PerfGoto(PerfType::Blocked);
     Task::Current().AccountTaskEnter(SchedState::Blocked);
 
-    debug!("switch from {:x?}, to {:x?}", from, to);
     CPULocal::SetCurrentTask(to.PrivateTaskAddr(), to.SharedTaskAddr());
     let fromCtx = from.GetPrivateTask();
     let toCtx = to.GetPrivateTask();

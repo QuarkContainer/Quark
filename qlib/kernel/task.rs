@@ -60,7 +60,7 @@ use super::asm::*;
 
 const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
 pub const DEFAULT_STACK_PAGES: u64 = DEFAULT_STACK_SIZE as u64 / (4 * 1024);
-pub const DEFAULT_STACK_MAST: u64 = !(DEFAULT_STACK_SIZE as u64 - 1);
+pub const DEFAULT_STACK_MASK: u64 = !(DEFAULT_STACK_SIZE as u64 - 1);
 
 pub static DUMMY_TASK: Singleton<DummyTask> = Singleton::<DummyTask>::New();
 
@@ -299,14 +299,14 @@ impl Task {
     #[inline(always)]
     pub fn TaskAddress() -> u64 {
         let rsp = GetRsp();
-        let task = rsp & DEFAULT_STACK_MAST;
+        let task = rsp & DEFAULT_STACK_MASK;
         if rsp - task < 0x2000 {
             raw!(0x238, rsp, task, 0);
             super::Kernel::HostSpace::VcpuDebug();
             loop {}
             //panic!("TaskAddress panic");
         }
-        return rsp; //& DEFAULT_STACK_MAST;
+        return rsp;
     }
 
     pub fn DummyTask() -> Self {
@@ -418,7 +418,7 @@ impl Task {
 
     pub fn StackOverflowCheck() {
         let rsp = GetRsp();
-        let task = rsp & DEFAULT_STACK_MAST;
+        let task = rsp & DEFAULT_STACK_MASK;
         if rsp - task < 0x2000 {
             raw!(0x237, rsp, task, 0);
             super::Kernel::HostSpace::VcpuDebug();
@@ -568,7 +568,7 @@ impl Task {
     #[inline(always)]
     pub fn PrivateTaskID() -> u64 {
         let rsp = GetRsp();
-        return rsp & DEFAULT_STACK_MAST;
+        return rsp & DEFAULT_STACK_MASK;
     }
 
     #[inline(always)]
@@ -639,7 +639,7 @@ impl Task {
 
     #[inline(always)]
     pub fn GetTask(addr: u64) -> &'static mut Task {
-        let addr = addr & DEFAULT_STACK_MAST;
+        let addr = addr & DEFAULT_STACK_MASK;
         unsafe {
             return &mut *(addr as *mut Task);
         }
