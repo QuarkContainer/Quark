@@ -427,7 +427,7 @@ impl Task {
         }
 
         let mut userSp = cStack;
-        if opts.sharingOption.NewAddressSpace || cStack == 0 {
+        if opts.sharingOption.NewAddressSpace || cStack == 0 || opts.Vfork {
             userSp = Self::Current().GetPtRegs().get_stack_pointer();
         }
 
