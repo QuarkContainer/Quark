@@ -263,7 +263,7 @@ impl VirtualMachine {
             VMS.lock().cpuAffinit = true;
         }
 
-        let cpuCount = cpuCount.max(2); // minimal 2 cpus
+        let cpuCount = 3;//cpuCount.max(2); // minimal 2 cpus
 
         VMS.lock().vcpuCount = cpuCount;
         VMS.lock().RandomVcpuMapping();
