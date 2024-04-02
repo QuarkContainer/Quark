@@ -544,6 +544,8 @@ impl MemoryManager {
             let dstPtr = dst as *mut u8;
             let srcPtr = src as *const u8;
             debug!("VM: Memcpy - from:{:#x}; to:{:#x}.", src, dst);
+            #[cfg(feature = "duck-vm")]
+            crate::kernel_def::enable_access_user();
             core::ptr::copy_nonoverlapping(srcPtr, dstPtr, count);
         }
     }

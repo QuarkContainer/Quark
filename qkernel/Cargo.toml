@@ -50,3 +50,7 @@ overflow-checks = false
 lto = true
 codegen-units = 1
 debug-assertions = false
+
+[features]
+default = ["duck-vm"]
+duck-vm = []
