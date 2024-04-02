@@ -86,6 +86,13 @@ pub fn CurrentKernelTable() -> u64 {
 }
 
 #[inline]
+pub fn flush_tlb() {
+   unsafe{
+       asm!("tlbi vmalle1");
+    }
+}
+
+#[inline]
 pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) -> ! {
     let currTask = task::Task::Current();
     let pt = currTask.GetPtRegs();
@@ -97,6 +104,7 @@ pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) -> ! {
     pt.sp = userStackAddr;
     pt.pstate &= !PsrFlagsClear;
     pt.pstate |= UserFlagsSet;
+    debug!("VM: Enter User - \nCpuState:{:#x}", currTask.GetPtRegs());
     IRet(pt as *const _ as u64);
 }
 
@@ -133,7 +141,7 @@ pub fn IRet(kernelRsp: u64) -> ! {
               eret
             ",
             in("x0") kernelRsp);
-        panic!("won't reach");
+        panic!("won't reach - IRet");
     }
 }
 

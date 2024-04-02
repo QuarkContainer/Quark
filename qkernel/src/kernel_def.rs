@@ -223,9 +223,9 @@ pub fn switch(from: TaskId, to: TaskId) {
     fromCtx.mm.VcpuLeave();
     toCtx.mm.VcpuEnter();
 
-    //fromCtx.Check();
-    //toCtx.Check();
-    //debug!("switch {:x}->{:x}", from.data, to.data);
+    fromCtx.Check();
+    toCtx.Check();
+    debug!("switch {:x}->{:x}", from.data, to.data);
 
     unsafe {
         context_swap(fromCtx.GetContext(), toCtx.GetContext(), 1, 0);
@@ -396,6 +396,11 @@ impl HostSpace {
 
 #[inline]
 pub fn child_clone(userSp: u64) {
+    #[cfg(target_arch = "aarch64")] {
+        use crate::qlib::kernel::asm::aarch64;
+        aarch64::flush_tlb();
+    }
+    
     let currTask = Task::Current();
     CPULocal::SetUserStack(userSp);
     CPULocal::SetKernelStack(currTask.GetKernelSp());
