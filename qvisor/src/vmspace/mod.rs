@@ -2031,7 +2031,6 @@ impl VMSpace {
 
         let freq = self.vcpus[0].arch_vcpu
                                 .vcpu_fd()
-                                .unwrap()
                                 .get_tsc_khz().unwrap() * 1000;
         return freq as i64;
     }

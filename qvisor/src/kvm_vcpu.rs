@@ -18,6 +18,7 @@ use super::FD_NOTIFIER;
 use super::VMS;
 use super::vmspace::VMSpace;
 use alloc::alloc::alloc;
+use kvm_bindings::CpuId;
 use libc::ioctl;
 use libc::gettid;
 use core::alloc::Layout;
@@ -105,6 +106,7 @@ impl KVMVcpu {
         pageAllocatorBaseAddr: u64,
         shareSpaceAddr: u64,
         autoStart: bool,
+        kvm_vcpu_id: CpuId,
     ) -> Result<Self> {
         const DEFAULT_STACK_PAGES: u64 = MemoryDef::DEFAULT_STACK_PAGES; //64KB
         let stackSize = DEFAULT_STACK_PAGES << 12;
@@ -112,7 +114,7 @@ impl KVMVcpu {
         let topStackAddr = stackAddr + (DEFAULT_STACK_PAGES << 12);
 
         let mut _arch_vcpu: ArchvCPU = ArchvCPU::new(&vm_fd, id);
-        _arch_vcpu.init(id)?;
+        _arch_vcpu.init(id, kvm_vcpu_id)?;
         let cpuAffinit = VMS.lock().cpuAffinit;
         let vcpuCoreId = if !cpuAffinit {
             -1
@@ -257,7 +259,6 @@ impl KVMVcpu {
             ioctl(
                 self.arch_vcpu
                     .vcpu_fd()
-                    .unwrap()
                     .as_raw_fd(),
                 Self::KVM_SET_SIGNAL_MASK,
                 &data as *const _ as u64,
@@ -271,7 +272,6 @@ impl KVMVcpu {
             errno::errno().0,
             self.arch_vcpu
                 .vcpu_fd()
-                .unwrap()
                 .as_raw_fd()
         );
     }
@@ -327,7 +327,6 @@ extern "C" fn handleSigChild(signal: i32) {
         if let Some(vcpu) = super::LocalVcpu() {
             vcpu.arch_vcpu
                 .vcpu_fd()
-                .unwrap()
                 .set_kvm_immediate_exit(1);
             fence(Ordering::SeqCst);
         }

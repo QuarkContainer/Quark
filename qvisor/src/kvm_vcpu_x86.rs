@@ -93,40 +93,4 @@ impl KVMVcpu {
             }
         }
     }
-
-    pub fn dump(&self) -> Result<()> {
-        if !Dump(self.id) {
-            return Ok(());
-        }
-        defer!(ClearDump(self.id));
-        let regs = self
-            .vcpu
-            .get_regs()
-            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-        let sregs = self
-            .vcpu
-            .get_sregs()
-            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-        error!("vcpu regs: {:#x?}", regs);
-        let ss = sregs.ss.selector as u64;
-        let isUser = (ss & 0x3) != 0;
-        if isUser {
-            error!("vcpu {} is in user mode, skip", self.id);
-            return Ok(());
-        }
-        let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
-        let mut frames = String::new();
-        crate::qlib::backtracer::trace(regs.rip, regs.rsp, regs.rbp, &mut |frame| {
-            frames.push_str(&format!("{:#x?}\n", frame));
-            if frame.rbp < MemoryDef::PHY_LOWER_ADDR
-                || frame.rbp >= MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB
-            {
-                false
-            } else {
-                true
-            }
-        });
-        error!("vcpu {} stack: {}", self.id, frames);
-        Ok(())
-    }
 }

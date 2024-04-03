@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::sync::mpsc::Sender;
+use kvm_bindings::CpuId;
 use spin::MutexGuard;
 use crate::qlib::common::Error;
 
@@ -22,11 +23,12 @@ pub mod __cpu_arch;
 
 pub trait vCPU {
     fn new (kvm_vm_fd: &kvm_ioctls::VmFd, vCPU_id: usize) -> Self;
-    fn init(&mut self, id: usize) -> Result<(), Error>;
+    fn init(&mut self, vcpu_id: usize, kvm_vcpu_id: CpuId) -> Result<(), Error>;
     fn run(&self, entry_addr: u64, stack_start_addr: u64, heap_start_addr: u64,
-           share_space_addr: u64, id: u64, vdso_addr: u64, cpus_total: u64,
+           share_space_addr: u64, vcpu_id: u64, vdso_addr: u64, cpus_total: u64,
            auto_start: bool) -> Result<(), Error>;
     fn interrupt_guest(&self);
     fn get_interrupt_lock(&self) -> MutexGuard<'_, (bool, Vec<Sender<()>>)>;
-    fn vcpu_fd(&self) -> Option<&kvm_ioctls::VcpuFd>;
+    fn vcpu_fd(&self) -> &kvm_ioctls::VcpuFd;
+    fn dump(&self, vcpu_id: u64) -> Result<(), Error>;
 }

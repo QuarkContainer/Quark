@@ -419,13 +419,9 @@ impl VirtualMachine {
                 heapStartAddr,
                 SHARE_SPACE.Value(),
                 autoStart,
+                kvm_cpuid.clone()
             )?);
 
-            // enable cpuid in host
-            #[cfg(target_arch = "x86_64")]
-            vcpu.arch_vcpu.vcpu_fd()
-                          .unwrap()
-                          .set_cpuid2(&kvm_cpuid).unwrap();
             VMS.lock().vcpus.push(vcpu.clone());
             vcpus.push(vcpu);
         }
@@ -541,11 +537,12 @@ fn SetSigusr1Handler() {
 }
 
 extern "C" fn handleSigusr1(_signal: i32) {
+    use::std::convert::TryInto;
     SetDumpAll();
     let vms = VMS.lock();
     for vcpu in &vms.vcpus {
         if vcpu.state.load(Ordering::Acquire) == KVMVcpuState::HOST as u64 {
-            vcpu.dump().unwrap_or_default();
+            vcpu.arch_vcpu.dump(vcpu.id.try_into().unwrap()).unwrap_or_default();
         }
         vcpu.Signal(Signal::SIGCHLD);
     }
