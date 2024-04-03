@@ -31,6 +31,7 @@ use self::memmgr::pma::*;
 use self::quring::*;
 
 pub mod Kernel;
+#[cfg (feature = "cc")]
 pub mod Kernel_cc;
 pub mod SignalDef;
 pub mod arch;

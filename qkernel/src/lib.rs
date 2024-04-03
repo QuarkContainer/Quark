@@ -87,6 +87,7 @@ use self::qlib::kernel::memmgr;
 use self::qlib::kernel::perflog;
 use self::qlib::kernel::quring;
 use self::qlib::kernel::Kernel;
+#[cfg (feature = "cc")]
 use self::qlib::kernel::Kernel::ENABLE_CC;
 use self::qlib::kernel::*;
 use self::qlib::{ShareSpaceRef, SysCallID};
@@ -480,10 +481,12 @@ pub extern "C" fn rust_main(
     if id == 0 {
         GLOBAL_ALLOCATOR.InitPrivateAllocator(privateHeapStart);
         // If is in sev-snp,ghcb convert shared memory and set ENABLE_CC
+        #[cfg (feature = "cc")]
         ENABLE_CC.store(true,Ordering::Release);
         
         GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
         
+        #[cfg (feature = "cc")]
         assert!(self::qlib::qmsg::sharepara::SHAREPARA_COUNT >= vcpuCnt);
 
         let size = core::mem::size_of::<ShareSpace>();
@@ -491,6 +494,7 @@ pub extern "C" fn rust_main(
         let shared_space = unsafe {
             GLOBAL_ALLOCATOR.AllocSharedBuf(size, 0x80)
         };
+        #[cfg (feature = "cc")]
         HyperCall64_init(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, PAGE_MGR_HOLDER.Addr(), 0, 0);
 
 
@@ -533,7 +537,7 @@ pub extern "C" fn rust_main(
         VDSO.Initialization(vdsoParamAddr);
 
         // release other vcpus
-        HyperCall64_init(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
+        HyperCall64(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
     } else {
         InitGs(id);
         //PerfGoto(PerfType::Kernel);

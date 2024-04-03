@@ -3,6 +3,10 @@ name = "qkernel"
 version = "0.6.0"
 authors = ["Yulin Sun <yulin.sun@quarksoft.io>"]
 
+[features]
+cc = []
+
+
 [lib]
 crate-type = ["staticlib"]
 
@@ -20,6 +24,7 @@ scopeguard = { version = "^1.1.0", default-features = false }
 hashbrown = "0.12.3"
 enum_dispatch = { git = "https://github.com/QuarkContainer/enum_dispatch_clone.git" }
 log = { version = "0.4", features = ["max_level_trace", "release_max_level_trace"] }
+cfg-if = "1.0.0"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 x86_64 = "0.14.7"

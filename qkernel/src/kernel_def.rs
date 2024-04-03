@@ -45,6 +45,7 @@ use super::qlib::task_mgr::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::ShareSpace;
 use super::qlib::*;
+#[cfg (feature = "cc")]
 use super::qlib::qmsg::sharepara::*;
 use super::syscalls::sys_file::*;
 use super::Kernel::HostSpace;
@@ -211,9 +212,27 @@ pub fn Invlpg(addr: u64) {
 }
 
 
-
+#[cfg(target_arch = "x86_64")]
+#[cfg (not(feature = "cc"))]
+#[inline(always)]
+pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
+    unsafe {
+        let data: u8 = 0;
+        asm!("
+            out dx, al
+            ",
+            in("dx") type_,
+            in("al") data,
+            in("rsi") para1,
+            in("rcx") para2,
+            in("rdi") para3,
+            in("r10") para4
+        )
+    }
+}
 
 #[cfg(target_arch = "x86_64")]
+#[cfg (feature = "cc")]
 #[inline(always)]
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     let vcpuid = GetVcpuId();
@@ -237,6 +256,7 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
 
 //VCPU 0 did not set gs as corresponding Vcpulocal address, thus use another function to use default position
 #[cfg(target_arch = "x86_64")]
+#[cfg (feature = "cc")]
 #[inline(always)]
 pub fn HyperCall64_init(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     let share_para_page  = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;

@@ -23,6 +23,7 @@ use crate::kernel_def::HyperCall64;
 use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
 use crate::qlib::proxy::*;
 
+#[cfg (feature = "cc")]
 pub static ENABLE_CC: AtomicBool = AtomicBool::new(false);
 extern "C" {
     pub fn rdtsc() -> i64;
@@ -30,6 +31,7 @@ extern "C" {
 
 pub struct HostSpace {}
 
+#[cfg (feature = "cc")]
 pub fn is_cc_enabled() -> bool {
     return ENABLE_CC.load(Ordering::Acquire);
 }
@@ -48,6 +50,7 @@ impl HostSpace {
     }
 
     pub fn LoadProcessKernel(processAddr: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::LoadProcessKernel_cc(processAddr);
         }
@@ -59,6 +62,7 @@ impl HostSpace {
     }
 
     pub fn CreateMemfd(len: i64, flags: u32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::CreateMemfd_cc(len, flags);
         }
@@ -71,6 +75,7 @@ impl HostSpace {
     }
 
     pub fn Fallocate(fd: i32, mode: i32, offset: i64, len: i64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Fallocate_cc(fd, mode, offset, len);
         }
@@ -85,6 +90,7 @@ impl HostSpace {
     }
 
     pub fn Sysinfo(addr: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Sysinfo_cc(addr);
         }
@@ -94,6 +100,7 @@ impl HostSpace {
     }
 
     pub fn EventfdWrite(fd: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::EventfdWrite_cc(fd);
         }
@@ -103,6 +110,7 @@ impl HostSpace {
     }
 
     pub fn RenameAt(olddirfd: i32, oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::RenameAt_cc(olddirfd, oldpath, newdirfd, newpath);
         }
@@ -117,6 +125,7 @@ impl HostSpace {
     }
 
     pub fn HostMemoryBarrier() -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::HostMemoryBarrier_cc();
         }
@@ -126,6 +135,7 @@ impl HostSpace {
     }
 
     pub fn Ftruncate(fd: i32, len: i64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Ftruncate_cc(fd,len);
         }
@@ -135,6 +145,7 @@ impl HostSpace {
     }
 
     pub fn Rdtsc() -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Rdtsc_cc();
         }
@@ -144,6 +155,7 @@ impl HostSpace {
     }
 
     pub fn SetTscOffset(offset: i64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::SetTscOffset_cc(offset);
         }
@@ -153,6 +165,7 @@ impl HostSpace {
     }
 
     pub fn TlbShootdown(vcpuMask: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::TlbShootdown_cc(vcpuMask);
         }
@@ -162,6 +175,7 @@ impl HostSpace {
     }
 
     pub fn IORead(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::IORead_cc(fd, iovs, iovcnt);
         }
@@ -171,6 +185,7 @@ impl HostSpace {
     }
 
     pub fn IOTTYRead(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::IOTTYRead_cc(fd, iovs, iovcnt);
         }
@@ -180,6 +195,7 @@ impl HostSpace {
     }
 
     pub fn IOWrite(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::IOWrite_cc(fd, iovs, iovcnt);
         }
@@ -189,6 +205,7 @@ impl HostSpace {
     }
 
     pub fn IOReadAt(fd: i32, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::IOReadAt_cc(fd, iovs, iovcnt, offset);
         }
@@ -203,6 +220,7 @@ impl HostSpace {
     }
 
     pub fn IOWriteAt(fd: i32, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::IOWriteAt_cc(fd, iovs, iovcnt, offset);
         }
@@ -217,6 +235,7 @@ impl HostSpace {
     }
 
     pub fn IOAppend(fd: i32, iovs: u64, iovcnt: i32) -> (i64, i64) {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::IOAppend_cc(fd, iovs, iovcnt);
         }
@@ -237,6 +256,7 @@ impl HostSpace {
     }
 
     pub fn IOAccept(fd: i32, addr: u64, addrlen: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::IOAccept_cc(fd, addr, addrlen);
         }
@@ -246,6 +266,7 @@ impl HostSpace {
     }
 
     pub fn IOConnect(fd: i32, addr: u64, addrlen: u32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::IOConnect_cc(fd, addr, addrlen);
         }
@@ -255,6 +276,7 @@ impl HostSpace {
     }
 
     pub fn IORecvMsg(fd: i32, msghdr: u64, flags: i32, blocking: bool) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::IORecvMsg_cc(fd, msghdr, flags, blocking);
         }
@@ -269,6 +291,7 @@ impl HostSpace {
     }
 
     pub fn IORecvfrom(fd: i32, buf: u64, size: usize, flags: i32, addr: u64, len: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::IORecvfrom_cc(fd, buf, size, flags, addr, len);
         }
@@ -285,6 +308,7 @@ impl HostSpace {
     }
 
     pub fn IOSendMsg(fd: i32, msghdr: u64, flags: i32, blocking: bool) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::IOSendMsg_cc(fd, msghdr, flags, blocking);
         }
@@ -299,6 +323,7 @@ impl HostSpace {
     }
 
     pub fn IOSendto(fd: i32, buf: u64, size: usize, flags: i32, addr: u64, len: u32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::IOSendto_cc(fd, buf, size, flags, addr, len);
         }
@@ -315,6 +340,7 @@ impl HostSpace {
     }
 
     pub fn GetTimeOfDay(tv: u64, tz: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::GetTimeOfDay_cc(tv, tz);
         }
@@ -324,6 +350,7 @@ impl HostSpace {
     }
 
     pub fn ReadLinkAt(dirfd: i32, path: u64, buf: u64, bufsize: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::ReadLinkAt_cc(dirfd, path, buf, bufsize);
         }
@@ -338,6 +365,7 @@ impl HostSpace {
     }
 
     pub fn Fcntl(fd: i32, cmd: i32, arg: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Fcntl_cc(fd, cmd ,arg);
         }
@@ -346,7 +374,9 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    #[allow(unused_variables)]
     pub fn IoCtl(fd: i32, cmd: u64, argp: u64, argplen: usize) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::IoCtl_cc(fd, cmd ,argp, argplen);
         }
@@ -356,6 +386,7 @@ impl HostSpace {
     }
 
     pub fn Fstatfs(fd: i32, buf: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Fstatfs_cc(fd, buf);
         }
@@ -365,6 +396,7 @@ impl HostSpace {
     }
 
     pub fn NewSocket(fd: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::NewSocket_cc(fd);
         }
@@ -374,6 +406,7 @@ impl HostSpace {
     }
 
     pub fn FAccessAt(dirfd: i32, pathname: u64, mode: i32, flags: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::FAccessAt_cc(dirfd, pathname, mode, flags);
         }
@@ -388,6 +421,7 @@ impl HostSpace {
     }
 
     pub fn Fstat(fd: i32, buff: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Fstat_cc(fd, buff);
         }
@@ -398,6 +432,7 @@ impl HostSpace {
     }
 
     pub fn Fstatat(dirfd: i32, pathname: u64, buff: u64, flags: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Fstatat_cc(dirfd, pathname, buff, flags);
         }
@@ -412,6 +447,7 @@ impl HostSpace {
     }
 
     pub fn Unlinkat(dirfd: i32, pathname: u64, flags: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Unlinkat_cc(dirfd, pathname, flags);
         }
@@ -425,6 +461,7 @@ impl HostSpace {
     }
 
     pub fn Mkdirat(dirfd: i32, pathname: u64, mode_: u32, uid: u32, gid: u32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Mkdirat_cc(dirfd, pathname, mode_, uid, gid);
         }
@@ -440,6 +477,7 @@ impl HostSpace {
     }
 
     pub fn Mkfifoat(dirfd: i32, name: u64, mode: u32, uid: u32, gid: u32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Mkfifoat_cc(dirfd, name, mode, uid, gid);
         }
@@ -455,6 +493,7 @@ impl HostSpace {
     }
 
     pub fn Proxy(cmd: ProxyCommand, parameters: ProxyParameters) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Proxy_cc(cmd, parameters);
         }
@@ -467,6 +506,7 @@ impl HostSpace {
     }
 
     pub fn SwapInPage(addr: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::SwapInPage_cc(addr);
         }
@@ -476,6 +516,7 @@ impl HostSpace {
     }
 
     pub fn SwapOut() -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::SwapOut_cc();
         }
@@ -485,6 +526,7 @@ impl HostSpace {
     }
 
     pub fn SwapIn() -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::SwapIn_cc();
         }
@@ -494,6 +536,7 @@ impl HostSpace {
     }
 
     pub fn SysSync() -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::SysSync_cc();
         }
@@ -503,6 +546,7 @@ impl HostSpace {
     }
 
     pub fn SyncFs(fd: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::SyncFs_cc(fd);
         }
@@ -512,6 +556,7 @@ impl HostSpace {
     }
 
     pub fn SyncFileRange(fd: i32, offset: i64, nbytes: i64, flags: u32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::SyncFileRange_cc(fd, offset, nbytes, flags);
         }
@@ -526,6 +571,7 @@ impl HostSpace {
     }
 
     pub fn FSync(fd: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::FSync_cc(fd);
         }
@@ -535,6 +581,7 @@ impl HostSpace {
     }
 
     pub fn MSync(addr: u64, len: usize, flags: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::MSync_cc(addr, len, flags);
         }
@@ -544,6 +591,7 @@ impl HostSpace {
     }
 
     pub fn Madvise(addr: u64, len: usize, advise: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Madvise_cc(addr, len, advise);
         }
@@ -553,6 +601,7 @@ impl HostSpace {
     }
 
     pub fn FDataSync(fd: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::FDataSync_cc(fd);
         }
@@ -562,6 +611,7 @@ impl HostSpace {
     }
 
     pub fn Seek(fd: i32, offset: i64, whence: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Seek_cc(fd, offset, whence);
         }
@@ -571,6 +621,7 @@ impl HostSpace {
     }
 
     pub fn ReadDir(dirfd: i32, data: &mut [u8], reset: bool) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::ReadDir_cc(dirfd, data, reset);
         }
@@ -585,6 +636,7 @@ impl HostSpace {
     }
 
     pub fn FSetXattr(fd: i32, name: u64, value: u64, size: usize, flags: u32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::FSetXattr_cc(fd, name, value, size, flags);
         }
@@ -600,6 +652,7 @@ impl HostSpace {
     }
 
     pub fn FGetXattr(fd: i32, name: u64, value: u64, size: usize) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::FGetXattr_cc(fd, name, value, size);
         }
@@ -616,6 +669,7 @@ impl HostSpace {
     }
 
     pub fn FRemoveXattr(fd: i32, name: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::FRemoveXattr_cc(fd, name);
         }
@@ -625,6 +679,7 @@ impl HostSpace {
     }
 
     pub fn FListXattr(fd: i32, list: u64, size: usize) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::FListXattr_cc(fd, list, size);
         }
@@ -634,6 +689,7 @@ impl HostSpace {
     }
 
     pub fn GetRandom(buf: u64, len: u64, flags: u32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::GetRandom_cc(buf, len, flags);
         }
@@ -643,6 +699,7 @@ impl HostSpace {
     }
 
     pub fn Statm(statm: &mut StatmInfo) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Statm_cc(statm);
         }
@@ -654,6 +711,7 @@ impl HostSpace {
     }
 
     pub fn Socket(domain: i32, type_: i32, protocol: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Socket_cc(domain, type_, protocol);
         }
@@ -667,6 +725,7 @@ impl HostSpace {
     }
 
     pub fn UnblockedSocket(domain: i32, type_: i32, protocol: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::UnblockedSocket_cc(domain, type_, protocol);
         }
@@ -680,6 +739,7 @@ impl HostSpace {
     }
 
     pub fn GetSockName(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::GetSockName_cc(sockfd, addr, addrlen);
         }
@@ -693,6 +753,7 @@ impl HostSpace {
     }
 
     pub fn GetPeerName(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::GetPeerName_cc(sockfd, addr, addrlen);
         }
@@ -706,6 +767,7 @@ impl HostSpace {
     }
 
     pub fn GetSockOpt(sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::GetSockOpt_cc(sockfd, level, optname, optval, optlen);
         }
@@ -721,6 +783,7 @@ impl HostSpace {
     }
 
     pub fn SetSockOpt(sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::SetSockOpt_cc(sockfd, level, optname, optval, optlen);
         }
@@ -737,6 +800,7 @@ impl HostSpace {
     }
 
     pub fn Bind(sockfd: i32, addr: u64, addrlen: u32, umask: u32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Bind_cc(sockfd, addr, addrlen, umask);
         }
@@ -751,6 +815,7 @@ impl HostSpace {
     }
 
     pub fn Listen(sockfd: i32, backlog: i32, block: bool) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Listen_cc(sockfd, backlog, block);
         }
@@ -764,6 +829,7 @@ impl HostSpace {
     }
 
     pub fn RDMAListen(sockfd: i32, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::RDMAListen_cc(sockfd, backlog, block, acceptQueue);
         }
@@ -778,6 +844,7 @@ impl HostSpace {
     }
 
     pub fn RDMANotify(sockfd: i32, typ: RDMANotifyType) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::RDMANotify_cc(sockfd, typ);
         }
@@ -787,6 +854,7 @@ impl HostSpace {
     }
 
     pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Shutdown_cc(sockfd, how);
         }
@@ -801,6 +869,7 @@ impl HostSpace {
     }
 
     pub fn Panic(str: &str) {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Panic_cc(str);
         }
@@ -813,6 +882,7 @@ impl HostSpace {
     }
 
     pub fn TryOpenWrite(dirfd: i32, oldfd: i32, name: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::TryOpenWrite_cc(dirfd, oldfd, name);
         }
@@ -827,6 +897,7 @@ impl HostSpace {
     }
 
     pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64, skiprw: bool) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::TryOpenAt_cc(dirfd, name, addr, skiprw);
         }
@@ -843,6 +914,7 @@ impl HostSpace {
     }
 
     pub fn OpenAt(dirfd: i32, name: u64, flags: i32, addr: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::OpenAt_cc(dirfd, name, flags, addr);
         }
@@ -859,6 +931,7 @@ impl HostSpace {
     }
 
     pub fn OpenDevFile(dirfd: i32, name: u64, flags: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::OpenDevFile_cc(dirfd, name, flags);
         }
@@ -874,6 +947,7 @@ impl HostSpace {
     }
 
     pub fn RemapGuestMemRanges(len: u64, addr: u64, count: usize) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::RemapGuestMemRanges_cc(len, addr, count);
         }
@@ -888,6 +962,7 @@ impl HostSpace {
     }
 
     pub fn UnmapGuestMemRange(start: u64, len: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::UnmapGuestMemRange_cc(start, len);
         }
@@ -901,6 +976,7 @@ impl HostSpace {
     }
 
     pub fn NividiaDriverVersion(version: &RMAPIVersion) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::NividiaDriverVersion_cc(version);
         }
@@ -913,6 +989,7 @@ impl HostSpace {
     }
 
     pub fn NvidiaMMap(addr: u64, len: u64, prot: i32, flags: i32, fd: i32, offset: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::NvidiaMMap_cc(addr, len, prot, flags, fd, offset);
         }
@@ -930,6 +1007,7 @@ impl HostSpace {
     }
 
     pub fn HostUnixConnect(type_: i32, addr: u64, len: usize) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::HostUnixConnect_cc(type_, addr, len);
         }
@@ -944,6 +1022,7 @@ impl HostSpace {
     }
 
     pub fn HostUnixRecvMsg(fd: i32, msghdr: u64, flags: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::HostUnixRecvMsg_cc(fd, msghdr, flags);
         }
@@ -958,6 +1037,7 @@ impl HostSpace {
     }
 
     pub fn TsotRecvMsg(msgAddr: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::TsotRecvMsg_cc(msgAddr);
         }
@@ -971,6 +1051,7 @@ impl HostSpace {
     }
 
     pub fn TsotSendMsg(msgAddr: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::TsotSendMsg_cc(msgAddr);
         }
@@ -992,6 +1073,7 @@ impl HostSpace {
         gid: u32,
         fstatAddr: u64,
     ) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::CreateAt_cc(dirfd, pathName, flags, mode, uid, gid, fstatAddr);
         }
@@ -1009,6 +1091,7 @@ impl HostSpace {
     }
 
     pub fn SchedGetAffinity(pid: i32, cpuSetSize: u64, mask: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::SchedGetAffinity_cc(pid, cpuSetSize, mask);
         }
@@ -1022,6 +1105,7 @@ impl HostSpace {
     }
 
     pub fn Fchdir(fd: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Fchdir_cc(fd);
         }
@@ -1031,6 +1115,7 @@ impl HostSpace {
     }
 
     pub fn Fadvise(fd: i32, offset: u64, len: u64, advice: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Fadvise_cc(fd, offset, len, advice);
         }
@@ -1045,6 +1130,7 @@ impl HostSpace {
     }
 
     pub fn Mlock2(addr: u64, len: u64, flags: u32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Mlock2_cc(addr, len, flags);
         }
@@ -1054,6 +1140,7 @@ impl HostSpace {
     }
 
     pub fn MUnlock(addr: u64, len: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::MUnlock_cc(addr, len);
         }
@@ -1063,6 +1150,7 @@ impl HostSpace {
     }
 
     pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::NonBlockingPoll_cc(fd, mask);
         }
@@ -1076,6 +1164,7 @@ impl HostSpace {
     }
 
     pub fn HostEpollWaitProcess() -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::HostEpollWaitProcess_cc();
         }
@@ -1086,6 +1175,7 @@ impl HostSpace {
     }
 
     pub fn VcpuWait() -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::VcpuWait_cc();
         }
@@ -1095,6 +1185,7 @@ impl HostSpace {
     }
 
     pub fn NewTmpfsFile(typ: TmpfsFileType, addr: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::NewTmpfsFile_cc(typ, addr);
         }
@@ -1104,6 +1195,7 @@ impl HostSpace {
     }
 
     pub fn Chown(pathname: u64, owner: u32, group: u32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Chown_cc(pathname, owner, group);
         }
@@ -1117,6 +1209,7 @@ impl HostSpace {
     }
 
     pub fn FChown(fd: i32, owner: u32, group: u32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::FChown_cc(fd, owner, group);
         }
@@ -1126,6 +1219,7 @@ impl HostSpace {
     }
 
     pub fn Chmod(pathname: u64, mode: u32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Chmod_cc(pathname, mode);
         }
@@ -1135,6 +1229,7 @@ impl HostSpace {
     }
 
     pub fn Fchmod(fd: i32, mode: u32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Fchmod_cc(fd, mode);
         }
@@ -1144,6 +1239,7 @@ impl HostSpace {
     }
 
     pub fn LinkAt(olddirfd: i32, oldpath: u64, newdirfd: i32, newpath: u64, flags: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::LinkAt_cc(olddirfd, oldpath, newdirfd, newpath, flags);
         }
@@ -1159,6 +1255,7 @@ impl HostSpace {
     }
 
     pub fn SymLinkAt(oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::SymLinkAt_cc(oldpath, newdirfd, newpath);
         }
@@ -1172,6 +1269,7 @@ impl HostSpace {
     }
 
     pub fn ReadControlMsg(fd: i32, addr: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::ReadControlMsg_cc(fd, addr);
         }
@@ -1181,6 +1279,7 @@ impl HostSpace {
     }
 
     pub fn WriteControlMsgResp(fd: i32, addr: u64, len: usize, close: bool) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::WriteControlMsgResp_cc(fd, addr, len, close);
         }
@@ -1195,6 +1294,7 @@ impl HostSpace {
     }
 
     pub fn UpdateWaitInfo(fd: i32, waitinfo: FdWaitInfo) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::UpdateWaitInfo_cc(fd, waitinfo);
         }
@@ -1207,6 +1307,7 @@ impl HostSpace {
     }
 
     pub fn Futimens(fd: i32, times: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Futimens_cc(fd, times);
         }
@@ -1216,6 +1317,7 @@ impl HostSpace {
     }
 
     pub fn GetStdfds(addr: u64) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::GetStdfds_cc(addr);
         }
@@ -1225,6 +1327,7 @@ impl HostSpace {
     }
 
     pub fn MMapFile(len: u64, fd: i32, offset: u64, prot: i32) -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::MMapFile_cc(len, fd, offset, prot);
         }
@@ -1253,6 +1356,7 @@ impl HostSpace {
     }
 
     pub fn MUnmap(addr: u64, len: u64) {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::MUnmap_cc(addr, len);
         }
@@ -1280,6 +1384,7 @@ impl HostSpace {
     }
 
     pub fn SyncPrint(level: DebugLevel, str: &str) {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::SyncPrint_cc(level, str);
         }
@@ -1288,6 +1393,7 @@ impl HostSpace {
     }
 
     pub fn Kprint(str: &str) {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::Kprint_cc(str);
         }
@@ -1308,6 +1414,7 @@ impl HostSpace {
     }
 
     pub fn KernelGetTime(clockId: i32) -> Result<i64> {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::KernelGetTime_cc(clockId);
         }
@@ -1329,6 +1436,7 @@ impl HostSpace {
     }
 
     pub fn KernelVcpuFreq() -> i64 {
+        #[cfg (feature = "cc")]
         if is_cc_enabled(){
             return Self::KernelVcpuFreq_cc();
         }

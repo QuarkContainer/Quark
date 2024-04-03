@@ -59,10 +59,15 @@ cuda-driver-sys = "0.3.0"
 cuda-runtime-sys = "0.3.0-alpha.1"
 libelf = "0.1.0"
 io-uring = "0.6.3"
+cfg-if = "1.0.0"
 
 [dependencies.lazy_static]
 version = "1.4"
 features = ["spin_no_std"]
+
+
+[features]
+cc = []
 
 [dependencies.crossbeam-queue]
 version = "0.3.8"
