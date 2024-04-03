@@ -14,10 +14,8 @@
 
 use libc::{clock_gettime, clockid_t, timespec};
 use kvm_ioctls::VcpuExit;
-use spin::Mutex;
 use core::sync::atomic::{Ordering, fence};
 use std::convert::TryInto;
-use std::sync::mpsc::Sender;
 
 use crate::arch::vCPU;
 use crate::{SHARE_SPACE, KERNEL_IO_THREAD, Print, qlib, QMsg, GLOCK};
@@ -35,7 +33,7 @@ use crate::arch::__cpu_arch::x86_64vCPU;
 use crate::qlib::perf_tunning::PerfPrint;
 
 impl x86_64vCPU {
-    pub(in super::super::super::__cpu_arch) fn vcpu_run(&mut self, id: u64)
+    pub(in super::super::super::__cpu_arch) fn vcpu_run(&self, id: u64)
     -> Result<(), Error> {
         let mut lastVal: u32 = 0;
         let mut first = true;
@@ -49,26 +47,26 @@ impl x86_64vCPU {
            // self.state
            //     .store(KVMVcpuState::GUEST as u64, Ordering::Release);
            // fence(Ordering::Acquire);
-            let kvmRet = match self.vcpu_fd
-                                   .unwrap()
+            let kvmRet = match self.vcpu_fd()
                                    .run() {
-                Ok(ret) => ret,
+                Ok(ret) => {
+                    debug!("VMM: returned - no error.");
+                    ret
+                },
                 Err(e) => {
+                    debug!("VMM: returned - error.");
                     if e.errno() == SysErr::EINTR {
-                        self.vcpu_fd
-                            .unwrap()
+                        self.vcpu_fd()
                             .set_kvm_immediate_exit(0);
-                        self.dump()?;
-                        if self.vcpu_fd
-                               .unwrap()
+                        self.dump(id)?;
+                        if self.vcpu_fd()
                                .get_ready_for_interrupt_injection() > 0 {
                                VcpuExit::IrqWindowOpen
                         } else {
                             VcpuExit::Intr
                         }
                     } else {
-                        let regs = self.vcpu_fd
-                                .unwrap()
+                        let regs = self.vcpu_fd()
                                 .get_regs()
                                 .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
 
@@ -77,8 +75,7 @@ impl x86_64vCPU {
                         //
                         error!("vcpu error regs is {:#x?}, ioerror: {:#?}", regs, e);
 
-                        let sregs = self.vcpu_fd
-                                .unwrap()
+                        let sregs = self.vcpu_fd()
                                 .get_sregs()
                                 .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
 
@@ -104,8 +101,7 @@ impl x86_64vCPU {
                         id, addr, data[0],
                     );
 
-                    let vcpu_sregs = self.vcpu_fd
-                        .unwrap()
+                    let vcpu_sregs = self.vcpu_fd()
                         .get_sregs()
                         .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                     if vcpu_sregs.cs.dpl != 0x0 {
@@ -123,7 +119,7 @@ impl x86_64vCPU {
                         interrupting.1.clear();
                     }
             let vcpu_sregs = self
-                        .vcpu_fd.unwrap()
+                        .vcpu_fd()
                         .get_sregs()
                         .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                     if vcpu_sregs.cs.dpl != 0x0 {
@@ -132,7 +128,7 @@ impl x86_64vCPU {
                     }
 
                     let regs = self
-                        .vcpu_fd.unwrap()
+                        .vcpu_fd()
                         .get_regs()
                         .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                     let para1 = regs.rsi;
@@ -261,7 +257,9 @@ impl x86_64vCPU {
                         qlib::HYPERCALL_VCPU_FREQ => {
                             let data = para1;
 
-                            let freq = self.vcpu_fd.unwrap().get_tsc_khz().unwrap() * 1000;
+                            let freq = self.vcpu_fd()
+                                           .get_tsc_khz()
+                                           .unwrap() * 1000;
                             unsafe {
                                 let call = &mut *(data as *mut VcpuFeq);
                                 call.res = freq as i64;
@@ -274,11 +272,11 @@ impl x86_64vCPU {
 
                         qlib::HYPERCALL_VCPU_DEBUG => {
                             let regs = self
-                                .vcpu_fd.unwrap()
+                                .vcpu_fd()
                                 .get_regs()
                                 .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let vcpu_sregs = self
-                                .vcpu_fd.unwrap()
+                                .vcpu_fd()
                                 .get_sregs()
                                 .map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
                             error!("sregs {:x} is {:x?}", regs.rsp, vcpu_sregs);
@@ -286,7 +284,7 @@ impl x86_64vCPU {
 
                         qlib::HYPERCALL_VCPU_PRINT => {
                             let regs = self
-                                .vcpu_fd.unwrap()
+                                .vcpu_fd()
                                 .get_regs()
                                 .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             error!("[{}] HYPERCALL_VCPU_PRINT regs is {:#x?}", id, regs);
@@ -368,7 +366,8 @@ impl x86_64vCPU {
                 }
                 VcpuExit::IrqWindowOpen => {
                     self.interrupt_guest();
-                    self.vcpu_fd.unwrap().set_kvm_request_interrupt_window(0);
+                    self.vcpu_fd()
+                        .set_kvm_request_interrupt_window(0);
                     fence(Ordering::SeqCst);
                     {
                         let mut interrupting = self.interrupting.lock();
@@ -377,7 +376,8 @@ impl x86_64vCPU {
                     }
                 }
                 VcpuExit::Intr => {
-                    self.vcpu_fd.unwrap().set_kvm_request_interrupt_window(1);
+                    self.vcpu_fd()
+                        .set_kvm_request_interrupt_window(1);
                     fence(Ordering::SeqCst);
                     {
                         let mut interrupting = self.interrupting.lock();
@@ -388,11 +388,11 @@ impl x86_64vCPU {
                 }
                 r => {
                     let vcpu_sregs = self
-                        .vcpu_fd.unwrap()
+                        .vcpu_fd()
                         .get_sregs()
                         .map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
                     let regs = self
-                        .vcpu_fd.unwrap()
+                        .vcpu_fd()
                         .get_regs()
                         .map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
 

@@ -15,6 +15,7 @@
 use kvm_bindings::{kvm_sregs, kvm_xcrs};
 use core::mem::size_of;
 
+use crate::arch::vCPU;
 use crate::VMS;
 use crate::amd64_def::{SegmentDescriptor,
                        SEGMENT_DESCRIPTOR_PRESENT,
@@ -63,7 +64,7 @@ impl x86_64vCPU {
 
         info!("The tssIntStackStart is {:x}, tssAddr address is {:x}, idt addr is {:x}, gdt addr is {:x}",
              self.tssIntStackStart, self.tssAddr, self.idtAddr, self.gdtAddr);
-       self.setup_long_mode();
+       self.setup_long_mode()?;
        self.SetXCR0()?;
 
         Ok(())
@@ -72,20 +73,15 @@ impl x86_64vCPU {
     fn setup_long_mode(&self) -> Result<(), Error> {
         let mut vcpu_sregs = self
             .vcpu_fd
-            .unwrap()
             .get_sregs()
-            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+            .map_err(|e| Error::IOError(format!("Setup_long_mode get_regs - io::error is {:?}", e)))?;
 
-        //vcpu_sregs.cr0 = CR0_PE | CR0_MP | CR0_AM | CR0_ET | CR0_NE | CR0_WP | CR0_PG;
-        vcpu_sregs.cr0 = CR0_PE | CR0_AM | CR0_ET | CR0_PG | CR0_NE; // | CR0_WP; // | CR0_MP | CR0_NE;
+        vcpu_sregs.cr0 = CR0_PE | CR0_AM | CR0_ET | CR0_PG | CR0_NE;
         vcpu_sregs.cr3 = VMS.lock().pageTables.GetRoot();
-        //vcpu_sregs.cr4 = CR4_PAE | CR4_OSFXSR | CR4_OSXMMEXCPT;
-        vcpu_sregs.cr4 =
-            CR4_PSE | CR4_PAE | CR4_PGE | CR4_OSFXSR | CR4_OSXMMEXCPT
-            | CR4_FSGSBASE | CR4_OSXSAVE; // | CR4_UMIP ;// CR4_PSE | | CR4_SMEP | CR4_SMAP;
+        vcpu_sregs.cr4 = CR4_PSE | CR4_PAE | CR4_PGE | CR4_OSFXSR
+                        | CR4_OSXMMEXCPT | CR4_FSGSBASE | CR4_OSXSAVE;
 
         vcpu_sregs.efer = EFER_LME | EFER_LMA | EFER_SCE | EFER_NX;
-
         vcpu_sregs.idt = kvm_bindings::kvm_dtable {
             base: 0,
             limit: 4095,
@@ -99,10 +95,11 @@ impl x86_64vCPU {
         };
 
         self.SetupGDT(&mut vcpu_sregs);
+
         self.vcpu_fd
-            .unwrap()
             .set_sregs(&vcpu_sregs)
-            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+            .map_err(|e| Error::IOError(format!("Setup_long_mode set_regs - io::error is {:?}", e)))?;
+
         Ok(())
     }
 
@@ -181,10 +178,9 @@ impl x86_64vCPU {
         let mut xcrs_args = kvm_xcrs::default();
         xcrs_args.nr_xcrs = 1;
         xcrs_args.xcrs[0].value = maskedXCR0;
-        self.vcpu_fd
-            .unwrap()
+        self.vcpu_fd()
             .set_xcrs(&xcrs_args)
-            .map_err(|e| Error::IOError(format!("failed to set kvm xcr0, {}", e)))?;
+            .map_err(|e| Error::IOError(format!("kvm set_regs xcr0 - {}", e)))?;
         Ok(())
     }
 }
