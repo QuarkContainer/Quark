@@ -2032,7 +2032,11 @@ impl VMSpace {
 
     #[cfg(target_arch = "x86_64")]
     pub fn GetVcpuFreq(&self) -> i64 {
-        let freq = self.vcpus[0].vcpu.get_tsc_khz().unwrap() * 1000;
+        use crate::arch::vCPU;
+
+        let freq = self.vcpus[0].arch_vcpu
+                                .vcpu_fd()
+                                .get_tsc_khz().unwrap() * 1000;
         return freq as i64;
     }
 
