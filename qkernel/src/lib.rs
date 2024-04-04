@@ -85,6 +85,8 @@ use self::qlib::kernel::memmgr;
 use self::qlib::kernel::perflog;
 use self::qlib::kernel::quring;
 use self::qlib::kernel::Kernel;
+#[cfg (feature = "cc")]
+use self::qlib::kernel::Kernel::ENABLE_CC;
 use self::qlib::kernel::*;
 use self::qlib::{ShareSpaceRef, SysCallID};
 use self::qlib::kernel::socket;
@@ -124,7 +126,6 @@ mod interrupt;
 pub mod kernel_def;
 pub mod rdma_def;
 
-mod guest_host_allocator;
 mod syscalls;
 
 
@@ -463,7 +464,6 @@ fn InitLoader() {
     LOADER.InitKernel(process).unwrap();
 }
 
-
 cfg_if::cfg_if! {
     if #[cfg(feature = "cc")] {
         #[no_mangle]
@@ -680,7 +680,6 @@ fn StartRootContainer(_para: *const u8) -> ! {
     let task = Task::Current();
     let mut process = Process::default();
     Kernel::HostSpace::LoadProcessKernel(&mut process as *mut _ as u64) as usize;
-
     let (_tid, entry, userStackAddr, kernelStackAddr) = {
         let mut processArgs = LOADER.Lock(task).unwrap().Init(process);
         match LOADER.LoadRootProcess(&mut processArgs) {
@@ -744,4 +743,3 @@ fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
     self::Kernel::HostSpace::Panic(&format!("alloc_error_handler layout: {:?}", layout));
     loop {}
 }
-

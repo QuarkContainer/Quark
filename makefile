@@ -84,7 +84,7 @@ ifneq ("$(wildcard $(QUARK_BIN_RELEASE))","")
 	sudo cp -f $(QUARK_BIN_RELEASE) $(QBIN_DIR)/containerd-shim-quark-v1
 endif
 else
-	@echo "Qurk release is not build, will not be installed."
+	@echo "Quark release is not build, will not be installed."
 endif
 #
 # Debug if present
@@ -96,7 +96,7 @@ ifneq ("$(wildcard $(QUARK_BIN_DEBUG))","")
 	sudo cp -f $(QUARK_BIN_DEBUG) $(QBIN_DIR)/containerd-shim-quarkd-v1
 endif
 else
-	@echo "Qurk debug is not build, will not be installed."
+	@echo "Quark debug is not build, will not be installed."
 endif
 	sudo cp -f $(QROOT_DIR)/vdso/vdso.so $(QBIN_DIR)/vdso.so
 #

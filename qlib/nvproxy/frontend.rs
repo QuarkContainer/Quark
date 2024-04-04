@@ -40,7 +40,8 @@ pub fn FrontendIoctlInvokePtr(fi: &FrontendIoctlState, paramsAddr: u64) -> Resul
     let n = HostSpace::IoCtl(
         fi.fd.fd, 
         FrontendIoctlCmd(fi.nr, fi.ioctlParamsSize), 
-        paramsAddr
+        paramsAddr,
+        fi.ioctlParamsSize as usize
     ); 
     if n < 0 {
         return Err(Error::SysError(n as i32));
@@ -61,7 +62,8 @@ pub fn FrontendIoctlInvoke<Params: Sized>(
     let n = HostSpace::IoCtl(
         fi.fd.fd, 
         FrontendIoctlCmd(fi.nr, fi.ioctlParamsSize), 
-        paramsAddr
+        paramsAddr,
+        fi.ioctlParamsSize as usize
     ); 
     if n < 0 {
         return Err(Error::SysError(n as i32));

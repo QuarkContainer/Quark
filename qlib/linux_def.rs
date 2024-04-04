@@ -15,6 +15,8 @@
 use alloc::slice;
 use alloc::vec::Vec;
 use core::sync::atomic::Ordering;
+use super::mem::list_allocator::GuestHostSharedAllocator;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 use super::super::kernel_def::*;
 
@@ -2459,7 +2461,7 @@ pub struct IoVec {
 
 #[derive(Debug)]
 pub struct DataBuff {
-    pub buf: Vec<u8>,
+    pub buf: Vec<u8,GuestHostSharedAllocator>,
 }
 
 use super::kernel::tcpip::tcpip::SockAddrInet;
@@ -2469,7 +2471,7 @@ impl DataBuff {
     pub fn New(size: usize) -> Self {
         // allocate memory even size is zero. So that Ptr() can get valid address
         let count = if size > 0 { size } else { 1 };
-        let mut buf = Vec::with_capacity(count);
+        let mut buf = Vec::with_capacity_in(count,GUEST_HOST_SHARED_ALLOCATOR);
         buf.resize(size, 0);
 
         return Self { buf: buf };
@@ -3019,6 +3021,9 @@ impl MemoryDef {
                                                             - MemoryDef::GUEST_PRIVATE_HEAP_SIZE;
     pub const GUEST_HOST_SHARED_HEAP_OFFEST: u64 =  MemoryDef::GUEST_PRIVATE_HEAP_END;
     pub const GUEST_HOST_SHARED_HEAP_END: u64 =  MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE;
+
+    pub const GHCB_OFFSET: u64 = MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::PAGE_SIZE*2;
+    pub const HYPERCALL_PARA_PAGE_OFFSET :u64 = MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::PAGE_SIZE*3;
 
     // Create 24GB Init memory region for KVM VM
     pub const KERNEL_MEM_INIT_REGION_SIZE: u64 = 24; // 24 GB

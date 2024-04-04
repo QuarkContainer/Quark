@@ -18,7 +18,7 @@ use core::arch::asm;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-
+use alloc::boxed::Box;
 use crate::qlib::fileinfo::*;
 
 use self::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
@@ -45,11 +45,14 @@ use super::qlib::task_mgr::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::ShareSpace;
 use super::qlib::*;
+#[cfg (feature = "cc")]
+use super::qlib::qmsg::sharepara::*;
 use super::syscalls::sys_file::*;
 use super::Kernel::HostSpace;
 
 use super::PRIVATE_VCPU_LOCAL_HOLDER;
 use crate::GLOBAL_ALLOCATOR;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 impl OOMHandler for ListAllocator {
     fn handleError(&self, size: u64, alignment: u64) {
@@ -207,7 +210,9 @@ pub fn Invlpg(addr: u64) {
     }
 }
 
+
 #[cfg(target_arch = "x86_64")]
+#[cfg (not(feature = "cc"))]
 #[inline(always)]
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     unsafe {
@@ -224,6 +229,53 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
         )
     }
 }
+
+#[cfg(target_arch = "x86_64")]
+#[cfg (feature = "cc")]
+#[inline(always)]
+pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
+    let vcpuid = GetVcpuId();
+    let share_para_page  = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
+    let mut share_para =unsafe{&mut (*share_para_page).SharePara[vcpuid]};
+    share_para.para1 = para1;
+    share_para.para2 = para2;
+    share_para.para3 = para3;
+    share_para.para4 = para4;
+
+    unsafe {
+        let data: u8 = 0;
+        asm!("
+            out dx, al
+            ",
+            in("dx") type_,
+            in("al") data,
+        )
+    }
+}
+
+//VCPU 0 did not set gs as corresponding Vcpulocal address, thus use another function to use default position
+#[cfg(target_arch = "x86_64")]
+#[cfg (feature = "cc")]
+#[inline(always)]
+pub fn HyperCall64_init(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
+    let share_para_page  = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
+    let mut share_para =unsafe{&mut (*share_para_page).SharePara[0]};
+    share_para.para1 = para1;
+    share_para.para2 = para2;
+    share_para.para3 = para3;
+    share_para.para4 = para4;
+
+    unsafe {
+        let data: u8 = 0;
+        asm!("
+            out dx, al
+            ",
+            in("dx") type_,
+            in("al") data,
+        )
+    }
+}
+
 
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
@@ -265,17 +317,19 @@ impl HostSpace {
     pub fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
         let current = Task::Current().GetPrivateTaskId();
 
-        let qMsg = QMsg {
+        let qMsg = Box::new_in(QMsg {
             taskId: current,
             globalLock: true,
             ret: 0,
             msg: msg,
-        };
+        }
+        ,GUEST_HOST_SHARED_ALLOCATOR);
 
-        let addr = &qMsg as *const _ as u64;
-        let om = HostOutputMsg::QCall(addr);
-
-        super::SHARESPACE.AQCall(&om);
+        let addr = &*qMsg as *const _ as u64;
+        let om = Box::new_in(HostOutputMsg::QCall(addr),
+        GUEST_HOST_SHARED_ALLOCATOR
+        );
+        super::SHARESPACE.AQCall(&*om);
         taskMgr::Wait();
         return qMsg.ret;
     }
@@ -283,14 +337,15 @@ impl HostSpace {
     pub fn HCall(msg: &mut Msg, lock: bool) -> u64 {
         let taskId = Task::Current().GetPrivateTaskId();
 
-        let mut event = QMsg {
+        let mut event = Box::new_in(QMsg {
             taskId: taskId,
             globalLock: lock,
             ret: 0,
             msg: msg,
-        };
+        },
+        GUEST_HOST_SHARED_ALLOCATOR);
 
-        HyperCall64(HYPERCALL_HCALL, &mut event as *const _ as u64, 0, 0, 0);
+        HyperCall64(HYPERCALL_HCALL, &mut *event as *const _ as u64, 0, 0, 0);
 
         return event.ret;
     }
@@ -352,8 +407,8 @@ impl HostAllocator {
         *self.GuestHostSharedAllocator() = ListAllocator::New(sharedHeapStart as _, shaedHeapEnd);
         
         
-        // reserve first 4KB gor the listAllocator
-        let size = core::mem::size_of::<ListAllocator>();
+        // reserve 4 pages for the listAllocator, ghcb blok and share para page
+        let size = 4 * MemoryDef::PAGE_SIZE as usize;
         self.GuestHostSharedAllocator().Add(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST as usize + size, 
             MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as usize - size);
     }

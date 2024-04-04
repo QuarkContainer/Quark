@@ -3,6 +3,10 @@ name = "qkernel"
 version = "0.6.0"
 authors = ["Yulin Sun <yulin.sun@quarksoft.io>"]
 
+[features]
+cc = []
+
+
 [lib]
 crate-type = ["staticlib"]
 

@@ -1,7 +1,7 @@
 arch = $(shell uname -m)
 kernel := ../build/qkernel.bin
-kernel_debug := ../build/qkernel_d.bin
 cc_kernel = ../build/qkernel_cc.bin
+kernel_debug := ../build/qkernel_d.bin
 cc_kernel_debug := ../build/qkernel_d_cc.bin
 target ?= $(arch)-qkernel
 qkernel := ../target/$(target)/release/libqkernel.a

@@ -62,10 +62,36 @@ pub struct MappableInternal {
 
     // file offset to ref count mapping
     pub chunkrefs: BTreeMap<u64, i32>,
+
+    //addr mapping for shared pages from shared memory to private memory
+    //need to write back to shared pages when munmap in cc
+    pub p2pmap: BTreeMap<u64, u64>,
 }
 
 impl MappableInternal {
+    pub fn WritebackPage(&self, phyAddr: u64){
+        match self.p2pmap.get(&phyAddr) {
+            None => (),
+            Some(newAddr) => unsafe {
+                core::ptr::copy_nonoverlapping(
+                    *newAddr as *const u8,
+                    phyAddr as *mut u8,
+                    PAGE_SIZE as usize,
+                );
+            },
+        }
+    }
+
     pub fn Clear(&mut self) {
+        for (phyAddr, newAddr) in &self.p2pmap{
+            unsafe{
+                core::ptr::copy_nonoverlapping(
+                    *newAddr as *const u8,
+                    *phyAddr as *mut u8,
+                    PAGE_SIZE as usize,
+                );
+            }
+        }
         for (_offset, phyAddr) in &self.f2pmap {
             //error!("MappableInternal clean phyAddr {:x?}/{:x?}", phyAddr, offset);
             HostSpace::MUnmap(*phyAddr, CHUNK_SIZE);
@@ -107,7 +133,11 @@ impl MappableInternal {
                     }
                     Some(offset) => *offset,
                 };
-
+                
+                for i in 0..CHUNK_SIZE/PAGE_SIZE{
+                    self.WritebackPage(phyAddr+i*PAGE_SIZE);
+                    self.p2pmap.remove(&(phyAddr+i*PAGE_SIZE));
+                }
                 HostSpace::MUnmap(phyAddr, CHUNK_SIZE);
 
                 /*error!("DecrRefOn 1 {:x}/{:x}", phyAddr,  phyAddr + CHUNK_SIZE);
@@ -152,6 +182,7 @@ impl Default for MappableInternal {
             f2pmap: BTreeMap::new(),
             mapping: AreaSet::New(0, core::u64::MAX),
             chunkrefs: BTreeMap::new(),
+            p2pmap: BTreeMap::new(),
         };
     }
 }
@@ -372,6 +403,11 @@ impl HostInodeOpIntern {
         return Ok(phyAddr + (fileOffset - chunkStart));
     }
 
+    pub fn MapSharedPage(&mut self, phyAddr: u64, newAddr: u64) {
+        let mappable = self.Mappable();
+        let mut mappableLock = mappable.lock();
+        mappableLock.p2pmap.insert(phyAddr, newAddr);
+    }
     //fill the holes for the file range by mmap
     //start must be Hugepage aligned
     fn Fill(&mut self, _task: &Task, start: u64, end: u64) -> Result<()> {
@@ -991,8 +1027,14 @@ impl HostInodeOp {
         return self.lock().MapFilePage(task, fileOffset);
     }
 
+    
+    pub fn MapSharedPage(&self, phyAddr: u64, newAddr: u64) {
+        self.lock().MapSharedPage(phyAddr,newAddr);
+    }
+
     pub fn MSync(&self, fr: &Range, msyncType: MSyncType) -> Result<()> {
         let ranges = self.GetPhyRanges(fr);
+        self.WritebackRanges(&ranges)?;
         for r in &ranges {
             let ret = HostSpace::MSync(r.Start(), r.Len() as usize, msyncType.MSyncFlags());
             if ret < 0 {
@@ -1078,6 +1120,20 @@ impl HostInodeOp {
         return rs;
     }
 
+    pub fn WritebackRanges(&self, ranges: &Vec<Range>) -> Result<()> {
+        let mappable = self.lock().Mappable();
+        let mappableLock = mappable.lock();
+
+        for range in ranges {
+            assert!(range.start & PAGE_MASK == 0);
+            let mut PageStart = range.start;
+            while PageStart < range.End() {
+                mappableLock.WritebackPage(PageStart);
+                PageStart += PAGE_SIZE;
+            }
+        }
+        return Ok(());
+    }
     /*********************************end of mappable****************************************************************/
 }
 

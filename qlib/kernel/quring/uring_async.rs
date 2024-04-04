@@ -23,6 +23,7 @@ use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
 use enum_dispatch::enum_dispatch;
 
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use crate::qlib::kernel::socket::hostinet::tsotsocket::TsotSocketOperations;
 use super::super::super::super::kernel_def::*;
 use super::super::super::common::*;
@@ -1060,7 +1061,11 @@ impl AIOWrite {
         eventfops: Option<EventOperations>,
     ) -> Result<Self> {
         let vec = task.CopyInVec(cb.buf, cb.bytes as usize)?;
-        let buf = DataBuff { buf: vec };
+        let mut shared_vec = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
+        for item in vec {
+            shared_vec.push(item);
+        };
+        let buf = DataBuff { buf: shared_vec };
 
         let inner = AIOWriteInner {
             fd: cb.fd as i32,

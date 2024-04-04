@@ -40,6 +40,8 @@ use super::kvm_vcpu::SetExitSignal;
 use super::qlib::linux::time::Timespec;
 use super::qlib::linux_def::*;
 use super::qlib::perf_tunning::*;
+#[cfg (feature = "cc")]
+use super::qlib::qmsg::sharepara::*;
 use super::runc::runtime::vm::*;
 use super::syncmgr::*;
 #[cfg(feature = "cc")] 
@@ -341,16 +343,26 @@ impl KVMVcpu {
                         // call from user space
                         panic!("Get VcpuExit::IoOut from guest user space, Abort, vcpu_sregs is {:#x?}", vcpu_sregs)
                     }
-
-                    let regs = self
-                        .vcpu
-                        .get_regs()
-                        .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                    let para1 = regs.rsi;
-                    let para2 = regs.rcx;
-                    let para3 = regs.rdi;
-                    let para4 = regs.r10;
-
+                    cfg_if::cfg_if! {
+                        if #[cfg(feature = "cc")] {
+                            let share_para_page  = unsafe{* (MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *const ShareParaPage)};
+                            let share_para = share_para_page.SharePara[self.id];
+                            let para1 = share_para.para1;
+                            let para2 = share_para.para2;
+                            let para3 = share_para.para3;
+                            let para4 = share_para.para4;
+                        } else {
+                            let regs = self
+                                .vcpu
+                                .get_regs()
+                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            let para1 = regs.rsi;
+                            let para2 = regs.rcx;
+                            let para3 = regs.rdi;
+                            let para4 = regs.r10;
+                        }
+                    }                    
+                    //info!("HyperCall64 type:0x{:x}  para1:0x{:x} para2:0x{:x} para3:0x{:x} para4:0x{:x}\n",addr,para1,para2,para3,para4);
                     match addr {
                         qlib::HYPERCALL_IOWAIT => {
                             if !super::runc::runtime::vm::IsRunning() {
@@ -584,7 +596,7 @@ impl KVMVcpu {
 
                             let eventAddr = addr as *mut QMsg; // as &mut qlib::Event;
                             let qmsg = unsafe { &mut (*eventAddr) };
-
+                            //info!("{:#?}",qmsg);
                             {
                                 let _l = if qmsg.globalLock {
                                     Some(super::GLOCK.lock())

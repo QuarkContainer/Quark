@@ -19,10 +19,9 @@
 #![allow(non_camel_case_types)]
 #![allow(deprecated)]
 #![allow(dead_code)]
-//#![feature(asm)]
 #![recursion_limit = "256"]
-//#![allow(invalid_reference_casting)]
 #![feature(unix_socket_ancillary_data)]
+#![feature(allocator_api)]
 #![feature(stmt_expr_attributes)]
 
 extern crate alloc;
@@ -188,6 +187,7 @@ pub fn InitSingleton() {
 //pub static ALLOCATOR: HostAllocator = HostAllocator::New();
 #[global_allocator]
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
+pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
 
 fn main() {
     InitSingleton();
