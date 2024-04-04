@@ -505,8 +505,6 @@ pub extern "C" fn rust_main(
         VCPU_ALLOCATOR.Print();
         VCPU_ALLOCATOR.Initializated();
 
-        info!("123");
-
         let mut vec1: Vec<i32, _> = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
         for i in 0..10 {
             vec1.push(i);

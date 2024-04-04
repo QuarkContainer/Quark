@@ -39,7 +39,6 @@ extern "C" {
 }
 
 impl HostSpace {
-    //Here exists memory leak, vec in shared struct cannot be dealloc
     pub fn LoadProcessKernel_cc(processAddr: u64) -> i64 {
         let mut new_process = Box::new_in(Process::default(), GUEST_HOST_SHARED_ALLOCATOR);
         let process_ptr = &mut *new_process as *mut _;
@@ -53,7 +52,6 @@ impl HostSpace {
         let private_process = unsafe { &mut *(processAddr as *mut Process) };
         private_process.clone_from_shared(process_ptr);
         //info!("###Cloned Process:{:#?}\n",private_process);
-        //Here could have memory leak since
         return ret;
     }
 
