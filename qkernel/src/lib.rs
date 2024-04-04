@@ -21,16 +21,12 @@
 #![allow(deref_nullptr)]
 #![allow(non_snake_case)]
 #![allow(bare_trait_objects)]
-//#![feature(const_raw_ptr_to_usize_cast)]
-//#![feature(const_fn)]
 #![feature(allocator_api)]
 #![feature(associated_type_bounds)]
-#![feature(core_intrinsics)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(panic_info_message)]
 #![allow(deprecated)]
 #![recursion_limit = "256"]
-// #![feature(thread_local)]
 
 #[macro_use]
 extern crate alloc;
@@ -91,7 +87,6 @@ use self::qlib::kernel::quring;
 use self::qlib::kernel::Kernel;
 use self::qlib::kernel::*;
 use self::qlib::{ShareSpaceRef, SysCallID};
-//use self::vcpu::*;
 use self::qlib::kernel::socket;
 use self::qlib::kernel::task;
 use self::qlib::kernel::taskMgr;

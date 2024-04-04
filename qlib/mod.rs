@@ -1292,7 +1292,6 @@ impl ShareSpace {
     }
 
     pub fn Submit(&self) -> Result<usize> {
-        info!("iouring Submit");
         if self.HostProcessor() == 0 {
             self.scheduler.VcpuArr[0].Wakeup();
         }
