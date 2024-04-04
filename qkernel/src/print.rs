@@ -67,7 +67,7 @@ pub fn PrintPrefix() -> String {
     return format!(
         "[{}/{:x}|{}]",
         CPULocal::CpuId(),
-        Task::TaskId().Addr(),
+        Task::PrivateTaskID(),
         now
     );
 }

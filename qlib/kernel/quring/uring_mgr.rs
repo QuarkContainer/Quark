@@ -415,8 +415,14 @@ impl QUring {
     }
 
     pub fn UCall(&self, task: &Task, msg: UringOp) -> i64 {
+
+        let taskID = task.GetPrivateTaskId();
+
+        assert!(taskID.task_addr != 0);
+        assert!(taskID.task_wrapper_addr != 0);
+
         let call = UringCall {
-            taskId: task.GetTaskId(),
+            taskId: taskID,
             ret: 0,
             msg: msg,
         };
@@ -462,44 +468,6 @@ impl QUring {
         return index as usize;
     }
 
-    pub fn AUCallLinked(&self, ops1: AsyncOps, ops2: AsyncOps) {
-        let index1;
-
-        loop {
-            match self.asyncMgr.AllocSlot() {
-                None => {
-                    self.asyncMgr.Print();
-                    //error!("AUCall async slots usage up...");
-                    print!("AUCall async slots usage up...");
-                }
-                Some(idx) => {
-                    index1 = idx;
-                    break;
-                }
-            }
-        }
-
-        let index2;
-        loop {
-            match self.asyncMgr.AllocSlot() {
-                None => {
-                    self.asyncMgr.Print();
-                    //error!("AUCall async slots usage up...");
-                    print!("AUCall async slots usage up...");
-                }
-                Some(idx) => {
-                    index2 = idx;
-                    break;
-                }
-            }
-        }
-
-        let mut entry1 = self.asyncMgr.SetOps(index1, ops1);
-        entry1.linked = true;
-        let entry2 = self.asyncMgr.SetOps(index2, ops2);
-
-        self.AUringCallLinked(entry1, entry2);
-    }
 
     pub fn NextCompleteEntry(&self) -> Option<CompleteEntry> {
         return SHARESPACE.uringQueue.completeq.pop();
@@ -520,6 +488,38 @@ impl QUring {
             }
         }
     }
+
+
+    pub fn DrainCompletionQueueOnHost(&self) -> usize {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                0
+            } else {
+                let mut count = 0;
+                loop {
+                    if super::super::Shutdown() {
+                        return 0;
+                    }
+        
+                    let cqe = self.NextCompleteEntry();
+        
+                    match cqe {
+                        None => break,
+                        Some(cqe) => {
+                            count += 1;
+                            self.Process(&cqe);
+                        }
+                    }
+                }
+        
+                return count;
+            }
+        }
+
+
+
+    }
+
 
     pub fn DrainCompletionQueue(&self) -> usize {
         let mut count = 0;
@@ -559,27 +559,23 @@ impl QUring {
     }
 
     pub fn UringPush(&self, entry: UringEntry) {
-        {
-            let mut s = SHARESPACE.uringQueue.submitq.lock();
-            s.push_back(entry);
-        }
+        
 
+        let mut entry = entry;
+        loop {
+            let r = SHARESPACE.uringQueue.submitq.push(entry);
+            if r.is_ok() {
+                break;
+            } else {
+                entry = r.err().unwrap();
+            }
+        }
+           
         SHARESPACE.Submit().expect("QUringIntern::submit fail");
         return;
     }
 
     pub fn AUringCall(&self, entry: UringEntry) {
         self.UringPush(entry);
-    }
-
-    pub fn AUringCallLinked(&self, entry1: UringEntry, entry2: UringEntry) {
-        {
-            let mut s = SHARESPACE.uringQueue.submitq.lock();
-            s.push_back(entry1);
-            s.push_back(entry2);
-        }
-
-        SHARESPACE.Submit().expect("QUringIntern::submit fail");
-        return;
     }
 }

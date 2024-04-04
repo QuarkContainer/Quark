@@ -126,24 +126,6 @@ impl GlobalVcpuAllocator {
     }
 }
 
-/*
-unsafe impl GlobalAlloc for GlobalVcpuAllocator {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        if !self.init.load(Ordering::Relaxed) {
-            return GLOBAL_ALLOCATOR
-                .alloc(layout);
-        }
-        return CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout)
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        if !self.init.load(Ordering::Relaxed) {
-            return GLOBAL_ALLOCATOR
-                .dealloc(ptr, layout);
-        }
-        return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout)
-    }
-}*/
 
 #[derive(Debug, Default)]
 pub struct PageAllocator {
@@ -346,27 +328,42 @@ impl HostAllocator {
     pub unsafe fn AllocSharedBuf(&self,  size: usize, align: usize) -> *mut u8 {
 
         let layout = Layout::from_size_align(size, align)
-            .expect("AllocSharedBuf can't allocate memory");
-
-        return self.GuestHostSharedAllocator().alloc(layout);
+        .expect("AllocSharedBuf can't allocate memory");
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                return self.GuestHostSharedAllocator().alloc(layout);
+            } else {
+                return alloc::alloc::alloc(layout);
+            }
+        }
     }
 
-    pub unsafe fn DeallocShareBuf(&self, ptr: *mut u8, size: usize, align: usize) {
+        // should be called by guest if it want to get buf that can be accessed by host
+    pub unsafe fn DeallocSharedBuf(&self,  ptr: *mut u8, layout: Layout) {  
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                return self.GuestHostSharedAllocator().dealloc(ptr, layout);
+            } else {
+                return alloc::alloc::dealloc(ptr, layout);
+            }
+        }  
 
-        let layout = Layout::from_size_align(size, align)
-            .expect("DeallocShareBuf can't dealloc memory");
 
-        return self.GuestHostSharedAllocator().dealloc(ptr,layout);
     }
-
+    
     // should be called by host
     pub unsafe fn AllocGuestPrivatMem(&self, size: usize, align: usize) -> *mut u8 {
         let layout = Layout::from_size_align(size, align)
             .expect("AllocGuestPrivatMem can't allocate memory");
 
-        return self.GuestPrivateAllocator().alloc(layout);
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "cc")] {
+                    return self.GuestPrivateAllocator().alloc(layout);
+                } else {
+                    return alloc::alloc::alloc(layout);
+                }
+            }
     }
-
 }
 
 #[derive(Debug)]
@@ -924,6 +921,7 @@ impl MemList {
         return next;
     }
 }
+
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct GuestHostSharedAllocator {

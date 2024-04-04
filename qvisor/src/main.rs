@@ -19,11 +19,11 @@
 #![allow(non_camel_case_types)]
 #![allow(deprecated)]
 #![allow(dead_code)]
-//#![feature(asm)]
 #![recursion_limit = "256"]
-//#![allow(invalid_reference_casting)]
 #![feature(unix_socket_ancillary_data)]
 #![feature(allocator_api)]
+#![feature(stmt_expr_attributes)]
+
 extern crate alloc;
 extern crate bit_field;
 extern crate core_affinity;
@@ -115,6 +115,7 @@ pub fn AllocatorPrint(_class: usize) -> String {
     return "".to_string();
 }
 
+pub static IS_GUEST: bool = false;
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 
 thread_local!(static THREAD_ID: RefCell<i32> = RefCell::new(0));
@@ -136,6 +137,13 @@ pub fn LocalVcpu() -> Option<Arc<KVMVcpu>> {
         vcpu = f.borrow().clone();
     });
     return vcpu;
+}
+
+#[cfg(not(feature = "cc"))]
+lazy_static! {
+    pub static ref SHARE_SPACE_STRUCT: Arc<Mutex<crate::qlib::ShareSpace>> =
+    Arc::new(Mutex::new(crate::qlib::ShareSpace::New()));
+
 }
 
 lazy_static! {

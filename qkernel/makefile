@@ -32,6 +32,7 @@ $(kernel_debug): kernel_debug $(assembly_object_files)
 	@ld -n --gc-sections -T $(linker_script) -o $(kernel_debug) \
 		$(assembly_object_files) $(qkernel_debug)
 
+
 $(cc_kernel): cc_kernel $(assembly_object_files)
 	@ld -n --gc-sections -T $(linker_script) -o $(kernel) \
 		$(assembly_object_files) $(qkernel)
@@ -56,4 +57,3 @@ cc_kernel_debug:
 ../build/arch/$(arch)/%.o: src/qlib/kernel/arch/$(arch)/%.s
 	@mkdir -p $(shell dirname $@)
 	$(AS) $^ -o $@
-

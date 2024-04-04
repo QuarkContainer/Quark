@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::borrow::Borrow;
 use std::time::Duration;
 use std::ptr;
 use enum_dispatch::enum_dispatch;
@@ -67,7 +68,7 @@ pub fn HostSubmit() -> Result<usize> {
     {
         let mut uring = URING.lock();
         let mut sq = uring.submission();
-        let mut submitq = SHARESPACE.uringQueue.submitq.lock();
+        let submitq = SHARESPACE.uringQueue.submitq.borrow();
 
         if sq.dropped() != 0 {
             error!("uring fail dropped {}", sq.dropped());
@@ -80,7 +81,7 @@ pub fn HostSubmit() -> Result<usize> {
         assert!(!sq.cq_overflow());
 
         while !sq.is_full() {
-            let uringEntry = match submitq.pop_front() {
+            let uringEntry = match submitq.pop() {
                 None => break,
                 Some(e) => e,
             };
@@ -442,9 +443,10 @@ impl UringAsyncOpsTrait for AsyncAccept {
     fn Entry(&self) -> squeue::Entry {
         let op = opcode::Accept::new(
             types::Fd(self.fd),
-            &self.addr as *const _ as u64 as *mut _,
-            &self.len as *const _ as u64 as *mut _,
+            &self.addr.addr.data[0] as *const _ as u64 as *mut _,
+            &self.addr.len as *const _ as u64 as *mut _,
         );
+        
         if SHARESPACE.config.read().UringFixedFile {
             return op.build().flags(squeue::Flags::FIXED_FILE);
         } else {
@@ -584,7 +586,7 @@ impl UringAsyncOpsTrait for AsyncConnect {
     fn Entry(&self) -> squeue::Entry {
         let op = opcode::Connect::new(
             types::Fd(self.fd), 
-            &self.addr as * const _ as u64 as *const _, 
+            &self.addr.data[0] as * const _ as u64 as *const _, 
             self.len
         );
 

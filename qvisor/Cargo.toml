@@ -77,6 +77,10 @@ features = ["alloc"]
 [profile.dev]
 opt-level = 0
 
+[features]
+cc = []
+
+
 [profile.release]
 opt-level = 3
 debug = 0

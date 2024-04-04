@@ -250,7 +250,13 @@ impl UringSocketOperations {
                 if v.len() == 0 {
                     None
                 } else {
-                    Some(GetAddr(v[0] as i16, &v[0..v.len()]).unwrap())
+                    match GetAddr(v[0] as i16, &v[0..v.len()]) {
+                        Ok(addr) => Some(addr),
+                        Err(_) => {
+                            error!("can't get address through accept...");
+                            None
+                        }
+                    }
                 }
             }
         };

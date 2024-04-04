@@ -102,11 +102,15 @@ impl TaskSetInternal {
 
     pub fn IncrTaskCount(&mut self) -> i32 {
         self.taskCount += 1;
+        info!("IncrTaskCount {}", self.taskCount);
         return self.taskCount;
     }
 
     pub fn DecrTaskCount1(&mut self) -> i32 {
+
         self.taskCount -= 1;
+        
+        info!("DecrTaskCount1 {}", self.taskCount);
         /*if self.taskCount == 0 {
             info!("start to exit vm...");
             super::super::super::Kernel::HostSpace::ExitVM().unwrap();
@@ -174,6 +178,7 @@ impl TaskSet {
             id: 0,
             name: "".to_string(),
             taskId: cfg.TaskId,
+            taskIdWrapperId: cfg.TaskWrapperId,
             blocker: cfg.Blocker.clone(),
             k: kernel.clone(),
             memoryMgr: cfg.MemoryMgr.clone(),
@@ -253,6 +258,8 @@ impl TaskSet {
             }
 
             tslock.AssignTids(&t)?;
+
+            info!("tslock.IncrTaskCount()");
             tslock.IncrTaskCount();
         }
 

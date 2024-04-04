@@ -38,7 +38,7 @@ pub fn IsValidSegmentBase(addr: u64) -> bool {
 
 const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
 const DEFAULT_STACK_PAGES: u64 = DEFAULT_STACK_SIZE as u64 / (4 * 1024);
-const DEFAULT_STACK_MAST: u64 = !(DEFAULT_STACK_SIZE as u64 - 1);
+const DEFAULT_STACK_MASK: u64 = !(DEFAULT_STACK_SIZE as u64 - 1);
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SharingOptions {
@@ -228,7 +228,7 @@ impl CloneOptions {
 }
 
 impl Thread {
-    pub fn Clone(&self, opts: &CloneOptions, stackAddr: u64) -> Result<Self> {
+    pub fn Clone(&self, opts: &CloneOptions, stackAddr: u64, taskWrapperAddr: u64) -> Result<Self> {
         let pidns = self.PIDNamespace();
         let ts = pidns.Owner();
         let _wl = ts.WriteLock();
@@ -314,8 +314,11 @@ impl Thread {
             );
         }
 
+        let blocker = Blocker::New(TaskId::New(stackAddr, taskWrapperAddr));
+
         let mut cfg = TaskConfig {
             TaskId: stackAddr,
+            TaskWrapperId: taskWrapperAddr,
             Kernel: t.k.clone(),
             Parent: None,
             InheritParent: None,
@@ -330,7 +333,7 @@ impl Thread {
             AllowedCPUMask: t.allowedCPUMask.Copy(),
             UTSNamespace: utsns,
             IPCNamespace: ipcns,
-            Blocker: Blocker::New(stackAddr),
+            Blocker: blocker,
             ContainerID: t.containerID.to_string(),
         };
 
@@ -453,7 +456,7 @@ impl Task {
             cTask.context.fs = tls;
         }
 
-        taskMgr::NewTask(TaskId::New(cTask.taskId));
+        taskMgr::NewTask(TaskId::New(cTask.taskId, cTask.taskWrapperId));
 
         return Ok(pid);
     }
@@ -468,7 +471,22 @@ impl Task {
         let task = Task::Current();
         let thread = task.Thread();
 
-        let nt = thread.Clone(&opts, s_ptr as u64)?;
+        let tw_size  = core::mem::size_of::<TaskWrapper>();
+        let tw_ptr = unsafe {
+            crate::GLOBAL_ALLOCATOR.AllocSharedBuf(tw_size, 2)
+        };
+        
+        let t_wp = TaskWrapper::New(s_ptr as u64);
+        let t_wp_ptr = tw_ptr as *mut TaskWrapper;
+        unsafe {
+            ptr::write(
+                t_wp_ptr,
+                t_wp
+            );
+        }
+
+
+        let nt = thread.Clone(&opts, s_ptr as u64, t_wp_ptr as u64)?;
 
         unsafe {
             let mm = nt.lock().memoryMgr.clone();
@@ -506,6 +524,7 @@ impl Task {
                 Self {
                     context: Context::New(),
                     taskId: s_ptr as u64,
+                    taskWrapperId: t_wp_ptr as u64,
                     mm: mm,
                     tidInfo: Default::default(),
                     isWaitThread: false,
@@ -652,6 +671,8 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
     let mut to = toTask.GetKernelSp();
     let toPtRegs = toTask.GetPtRegs();
 
+
+    toTask.GetSharedTask().SetReady(1);
     unsafe {
         while from >= fromSp {
             *(to as *mut u64) = *(from as *const u64);
@@ -659,7 +680,7 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
             to -= 8;
         }
 
-        toTask.context.SetReady(1);
+        
         toTask.context.fs = fromTask.context.fs;
         toTask.context.rsp = toTask.GetPtRegs() as *const _ as u64 - 8;
         toTask.context.rdi = userSp;

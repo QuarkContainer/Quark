@@ -64,12 +64,16 @@ pub static TSC: Tsc = Tsc::New();
 pub static SHARESPACE: ShareSpaceRef = ShareSpaceRef::New();
 pub static IOURING: IOUringRef = IOUringRef::New();
 pub static KERNEL_PAGETABLE: Singleton<PageTables> = Singleton::<PageTables>::New();
-// used for allocate new page table see pub fn Fork(&self, pagePool: &PageMgr) -> Result<Self> {
-pub static PAGE_MGR: PageMgrRef = PageMgrRef::New();    
+
+ 
 pub static LOADER: Singleton<Loader> = Singleton::<Loader>::New();
 pub static WAIT_CONTAINER_FD: AtomicI32 = AtomicI32::new(-1);
+
+// place holder, will never be used by qvisor
 pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> =
     Singleton::<AlignedAllocator>::New();
+// place holder, will never be used by qvisor
+pub static PAGE_MGR: PageMgrRef = PageMgrRef::New();   
 
 pub static EXIT_CODE: Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
 pub static VCPU_FREQ: AtomicI64 = AtomicI64::new(2_000_000_000); // default 2GHZ

@@ -44,7 +44,10 @@ use super::qlib::perf_tunning::*;
 use super::qlib::qmsg::sharepara::*;
 use super::runc::runtime::vm::*;
 use super::syncmgr::*;
+#[cfg(feature = "cc")] 
 use crate::qlib::kernel::PAGE_MGR;
+
+use crate::qlib::task_mgr::TaskId;
 
 #[repr(C)]
 pub struct SignalMaskStruct {
@@ -193,27 +196,55 @@ impl KVMVcpu {
         self.threadid.store(tid as u64, Ordering::SeqCst);
         self.tgid.store(tgid as u64, Ordering::SeqCst);
 
-        let regs: kvm_regs = kvm_regs {
-            rflags: KERNEL_FLAGS_SET,
-            rip: self.entry,
-            rsp: self.topStackAddr,
-            rax: 0x11,
-            rbx: 0xdd,
-            //arg0
-            rdi: self.privateHeapStartAddr, // self.pageAllocatorBaseAddr + self.,
-            //arg1
-            rsi: self.id as u64,
-            //arg2
-            rdx: VMS.read().vdsoAddr,
-            //arg3
-            rcx: self.vcpuCnt as u64,
-            //arg4
-            r8: self.autoStart as u64,
-            //arg5
-            // r9: 
-            //rcx:
-            ..Default::default()
-        };
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                let regs: kvm_regs = kvm_regs {
+                    rflags: KERNEL_FLAGS_SET,
+                    rip: self.entry,
+                    rsp: self.topStackAddr,
+                    rax: 0x11,
+                    rbx: 0xdd,
+                    //arg0
+                    rdi: self.privateHeapStartAddr, // self.pageAllocatorBaseAddr + self.,
+                    //arg1
+                    rsi: self.id as u64,
+                    //arg2
+                    rdx: VMS.read().vdsoAddr,
+                    //arg3
+                    rcx: self.vcpuCnt as u64,
+                    //arg4
+                    r8: self.autoStart as u64,
+                    //arg5
+                    // r9: 
+                    //rcx:
+                    ..Default::default()
+                };
+            } else {
+                let regs: kvm_regs = kvm_regs {
+                    rflags: KERNEL_FLAGS_SET,
+                    rip: self.entry,
+                    rsp: self.topStackAddr,
+                    rax: 0x11,
+                    rbx: 0xdd,
+                    //arg0
+                    rdi: self.heapStartAddr, // self.pageAllocatorBaseAddr + self.,
+                    //arg1
+                    rsi: self.shareSpaceAddr,
+                    //arg2
+                    rdx: self.id as u64,
+                    //arg3
+                    rcx: VMS.read().vdsoAddr,
+                    //arg4
+                    r8: self.vcpuCnt as u64,
+                    //arg5
+                    r9: self.autoStart as u64,
+                    //rdx:
+                    //rcx:
+                    ..Default::default()
+                };
+            }
+        }
+
 
         self.vcpu
             .set_regs(&regs)
@@ -371,6 +402,7 @@ impl KVMVcpu {
                         qlib::HYPERCALL_RELEASE_VCPU => {
                             SyncMgr::WakeShareSpaceReady();
                         }
+                        #[cfg(feature = "cc")]
                         qlib::HYPERCALL_SHARESPACE_INIT => {
                             info!("VM EXIT HYPERCALL_SHARESPACE_INIT");
                             GLOBAL_ALLOCATOR.is_vm_lauched.store(true, Ordering::SeqCst);
@@ -590,7 +622,7 @@ impl KVMVcpu {
                             let ret = SHARE_SPACE.scheduler.WaitVcpu(&SHARE_SPACE, self.id, true);
                             match ret {
                                 Ok(taskId) => unsafe {
-                                    *(retAddr as *mut u64) = taskId as u64;
+                                    *(retAddr as *mut TaskId) = taskId;
                                 },
                                 Err(Error::Exit) => return Ok(()),
                                 Err(e) => {
@@ -729,34 +761,6 @@ impl KVMVcpu {
 
         //let mut vcpu_regs = self.vcpu_fd.get_regs()?;
         Ok(())
-    }
-
-    pub fn VcpuWait(&self) -> i64 {
-        let sharespace = &SHARE_SPACE;
-        loop {
-            if !super::runc::runtime::vm::IsRunning() {
-                return -1;
-            }
-
-            {
-                sharespace.IncrHostProcessor();
-                Self::GuestMsgProcess(sharespace);
-
-                defer!({
-                    // last processor in host
-                    if sharespace.DecrHostProcessor() == 0 {
-                        Self::GuestMsgProcess(sharespace);
-                    }
-                });
-            }
-
-            let ret = sharespace.scheduler.WaitVcpu(sharespace, self.id, true);
-            match ret {
-                Ok(taskId) => return taskId as i64,
-                Err(Error::Exit) => return -1,
-                Err(e) => panic!("HYPERCALL_HLT wait fail with error {:?}", e),
-            }
-        }
     }
 
     pub fn SetXCR0(&self) -> Result<()> {
