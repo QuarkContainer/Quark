@@ -95,8 +95,15 @@ pub struct KVMVcpu {
     pub tssIntStackStart: u64,
     pub tssAddr: u64,
 
+    #[cfg(feature = "cc")]
     pub privateHeapStartAddr: u64,
+    #[cfg(feature = "cc")]
     pub sharedHeapStartAddr: u64,
+
+    #[cfg(not(feature = "cc"))]
+    pub heapStartAddr: u64,
+    #[cfg(not(feature = "cc"))]
+    pub shareSpaceAddr: u64,
 
     pub autoStart: bool,
     pub interrupting: Mutex<(bool, Vec<Sender<()>>)>,
@@ -106,6 +113,84 @@ pub struct KVMVcpu {
 unsafe impl Send for KVMVcpu {}
 
 impl KVMVcpu {
+    #[cfg(not(feature = "cc"))]
+    pub fn Init(
+        id: usize,
+        vcpuCnt: usize,
+        vm_fd: &kvm_ioctls::VmFd,
+        entry: u64,
+        pageAllocatorBaseAddr: u64,
+        shareSpaceAddr: u64,
+        autoStart: bool,
+    ) -> Result<Self> {
+        const DEFAULT_STACK_PAGES: u64 = MemoryDef::DEFAULT_STACK_PAGES; //64KB
+        //let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
+        let stackSize = DEFAULT_STACK_PAGES << 12;
+        let stackAddr = AlignedAllocate(stackSize as usize, stackSize as usize, false).unwrap();
+        let topStackAddr = stackAddr + (DEFAULT_STACK_PAGES << 12);
+
+        let gdtAddr = AlignedAllocate(
+            MemoryDef::PAGE_SIZE as usize,
+            MemoryDef::PAGE_SIZE as usize,
+            true,
+        )
+        .unwrap();
+        let idtAddr = AlignedAllocate(
+            MemoryDef::PAGE_SIZE as usize,
+            MemoryDef::PAGE_SIZE as usize,
+            true,
+        )
+        .unwrap();
+
+        let tssIntStackStart = AlignedAllocate(
+            MemoryDef::PAGE_SIZE as usize,
+            MemoryDef::PAGE_SIZE as usize,
+            true,
+        )
+        .unwrap();
+        let tssAddr = AlignedAllocate(
+            MemoryDef::PAGE_SIZE as usize,
+            MemoryDef::PAGE_SIZE as usize,
+            true,
+        )
+        .unwrap();
+
+        // info!("the tssIntStackStart is {:x}, tssAddr address is {:x}, idt addr is {:x}, gdt addr is {:x}",
+        //     tssIntStackStart, tssAddr, idtAddr, gdtAddr);
+
+        let vcpu = vm_fd
+            .create_vcpu(id as u64)
+            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))
+            .expect("create vcpu fail");
+        let cpuAffinit = VMS.read().cpuAffinit;
+        let vcpuCoreId = if !cpuAffinit {
+            -1
+        } else {
+            VMS.read().ComputeVcpuCoreId(id) as isize
+        };
+
+        return Ok(Self {
+            id: id,
+            cordId: vcpuCoreId,
+            threadid: AtomicU64::new(0),
+            tgid: AtomicU64::new(0),
+            state: AtomicU64::new(KVMVcpuState::HOST as u64),
+            vcpuCnt,
+            vcpu,
+            topStackAddr: topStackAddr,
+            entry: entry,
+            gdtAddr: gdtAddr,
+            idtAddr: idtAddr,
+            tssIntStackStart: tssIntStackStart,
+            tssAddr: tssAddr,
+            heapStartAddr: pageAllocatorBaseAddr,
+            shareSpaceAddr: shareSpaceAddr,
+            autoStart: autoStart,
+            interrupting: Mutex::new((false, vec![])),
+        });
+    }
+
+    #[cfg(feature = "cc")]
     pub fn Init(
         id: usize,
         vcpuCnt: usize,

@@ -56,7 +56,7 @@ impl KIOThread {
         count += HostSubmit().unwrap();
         TIMER_STORE.Trigger();
         count += HostSubmit().unwrap();
-        // count += IOURING.DrainCompletionQueue();
+        count += crate::vmspace::kernel::IOURING.DrainCompletionQueueOnHost();
         count += HostSubmit().unwrap();
         count += KVMVcpu::GuestMsgProcess(sharespace);
         count += HostSubmit().unwrap();

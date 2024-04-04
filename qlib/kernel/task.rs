@@ -310,6 +310,7 @@ impl Task {
     }
 
     pub fn DummyTask() -> Self {
+        #[cfg(feature = "cc")]
         assert!(IS_GUEST == true, "DummyTask should only be called from guest");
         let creds = Credentials::default();
         let userns = creds.lock().UserNamespace.clone();
