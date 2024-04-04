@@ -21,7 +21,10 @@ use core::ops::Deref;
 use core::ptr;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicUsize, AtomicU64};
-use crate::{GLOBAL_ALLOCATOR, IS_GUEST};
+
+#[cfg(feature = "cc")] 
+use crate::IS_GUEST;
+use crate::GLOBAL_ALLOCATOR;
 
 //use super::arch::x86_64::arch_x86::*;
 use super::super::super::kernel_def::*;

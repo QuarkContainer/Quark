@@ -64,6 +64,8 @@ use taskMgr::{CreateTask, IOWait, WaitFn};
 use vcpu::CPU_LOCAL;
 
 use crate::qlib::kernel::GlobalIOMgr;
+
+#[cfg(feature = "cc")] 
 use crate::qlib::ShareSpace;
 
 use self::asm::*;
@@ -113,7 +115,6 @@ use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 use guest_host_allocator::GuestHostSharedAllocator;
 use memmgr::pma::PageMgr;
 
@@ -501,23 +502,6 @@ cfg_if::cfg_if! {
                 SetVCPCount(vcpuCnt as usize);
                 VCPU_ALLOCATOR.Print();
                 VCPU_ALLOCATOR.Initializated();
-        
-        
-                let mut vec1: Vec<i32, _> = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
-                for i in 0..10 {
-                    vec1.push(i);
-                }
-        
-                debug!("vec1 {:?}", vec1);
-                drop(vec1);
-        
-                let mut vec2: Vec<i32, _> = Vec:: with_capacity_in(10, GUEST_HOST_SHARED_ALLOCATOR);
-                for i in 0..10 {
-                    vec2.push(i);
-                }
-        
-                debug!("vec2 {:?}", vec2);
-                drop(vec2);
         
                 InitTsc();
                 InitTimeKeeper(vdsoParamAddr);

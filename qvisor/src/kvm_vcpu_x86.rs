@@ -42,6 +42,7 @@ use super::qlib::linux_def::*;
 use super::qlib::perf_tunning::*;
 use super::runc::runtime::vm::*;
 use super::syncmgr::*;
+#[cfg(feature = "cc")] 
 use crate::qlib::kernel::PAGE_MGR;
 
 use crate::qlib::task_mgr::TaskId;
