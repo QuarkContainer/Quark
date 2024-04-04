@@ -19,6 +19,7 @@ use alloc::vec::Vec;
 use spin::Mutex;
 use core::marker::Send;
 use core::ops::Deref;
+use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
 use enum_dispatch::enum_dispatch;
 
@@ -67,12 +68,23 @@ pub trait AsyncOpsTrait {
 #[repr(align(128))]
 #[derive(Clone)]
 pub enum AsyncOps {
+    AsyncTimeout(AsyncTimeout),
+    AsyncTimerRemove(AsyncTimerRemove),
+    AsyncTTYWrite(AsyncTTYWrite),
+    AsyncWrite(AsyncWritev),
+    AsyncEventfdWrite(AsyncEventfdWrite),
+    AsycnSendMsg(AsycnSendMsg),
+    AsycnRecvMsg(AsycnRecvMsg),
     AsyncFiletWrite(AsyncFiletWrite),
     AsyncFileRead(AsyncFileRead),
     AIOWrite(AIOWrite),
     AIORead(AIORead),
     AIOFsync(AIOFsync),
+    AsyncRawTimeout(AsyncRawTimeout),
     AsyncLogFlush(AsyncLogFlush),
+    AsyncStatx(AsyncStatx),
+    AsyncLinkTimeout(AsyncLinkTimeout),
+    UnblockBlockPollAdd(UnblockBlockPollAdd),
     AsyncBufWrite(AsyncBufWrite),
     AsyncAccept(AsyncAccept),
     AsyncEpollCtl(AsyncEpollCtl),
@@ -99,12 +111,23 @@ impl AsyncOps {
 
     pub fn Type(&self) -> usize {
         match self {
+            AsyncOps::AsyncTimeout(_) => return 1,
+            AsyncOps::AsyncTimerRemove(_) => return 2,
+            AsyncOps::AsyncTTYWrite(_) => return 3,
+            AsyncOps::AsyncWrite(_) => return 4,
+            AsyncOps::AsyncEventfdWrite(_) => return 5,
+            AsyncOps::AsycnSendMsg(_) => return 6,
+            AsyncOps::AsycnRecvMsg(_) => return 7,
             AsyncOps::AsyncFiletWrite(_) => return 8,
             AsyncOps::AsyncFileRead(_) => return 9,
             AsyncOps::AIOWrite(_) => return 10,
             AsyncOps::AIORead(_) => return 11,
             AsyncOps::AIOFsync(_) => return 12,
+            AsyncOps::AsyncRawTimeout(_) => return 13,
             AsyncOps::AsyncLogFlush(_) => return 14,
+            AsyncOps::AsyncStatx(_) => return 15,
+            AsyncOps::AsyncLinkTimeout(_) => return 16,
+            AsyncOps::UnblockBlockPollAdd(_) => return 17,
             AsyncOps::AsyncBufWrite(_) => return 18,
             AsyncOps::AsyncAccept(_) => return 19,
             AsyncOps::AsyncEpollCtl(_) => return 20,
@@ -687,13 +710,27 @@ impl AsyncFiletWrite {
     }
 }
 
+#[derive(Debug)]
+pub struct AcceptAddr {
+    pub addr: TcpSockAddr,
+    pub len: AtomicU32,
+}
+
+impl AcceptAddr {
+    pub fn New() -> Self {
+        return Self {
+            addr: TcpSockAddr::default(),
+            len: AtomicU32::new(16),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct AsyncAccept {
     pub fd: i32,
     pub queue: Queue,
     pub acceptQueue: AcceptQueue,
-    pub addr: TcpSockAddr,
-    pub len: u32,
+    pub addr: Arc<AcceptAddr>,
 }
 
 impl AsyncOpsTrait for AsyncAccept {
@@ -708,16 +745,13 @@ impl AsyncOpsTrait for AsyncAccept {
         /**************************hibernate wakeu **************************/
         // so far the quark hibernate is wakeup by accept.
         // todo: find better to handle this
-        let cc_enabled = SHARESPACE.config.read().EnableCC;
-        if !cc_enabled {
-            if SHARESPACE.reapFileAvaiable.load(Ordering::Relaxed) {
-                ReapSwapIn();
-            }
+        if SHARESPACE.reapFileAvaiable.load(Ordering::Relaxed) {
+            ReapSwapIn();
+        }
 
-            if SHARESPACE.hibernatePause.load(Ordering::Relaxed) {
-                GetKernel().Unpause();
-                SHARESPACE.hibernatePause.store(false, Ordering::SeqCst);
-            }
+        if SHARESPACE.hibernatePause.load(Ordering::Relaxed) {
+            GetKernel().Unpause();
+            SHARESPACE.hibernatePause.store(false, Ordering::SeqCst);
         }
 
         /**************************hibernate wakeu end **************************/
@@ -726,13 +760,13 @@ impl AsyncOpsTrait for AsyncAccept {
         let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::default()));
         let hasSpace = self.acceptQueue.EnqSocket(
             result,
-            self.addr,
-            self.len,
+            self.addr.addr.Dup(),
+            self.addr.len.load(Ordering::SeqCst),
             sockBuf.into(),
             Queue::default(),
         );
 
-        self.len = 16;
+        self.addr.len.store(16, Ordering::SeqCst);
 
         return hasSpace;
     }
@@ -744,8 +778,7 @@ impl AsyncAccept {
             fd,
             queue,
             acceptQueue,
-            addr: TcpSockAddr::default(),
-            len: 16, //size of TcpSockAddr
+            addr: Arc::new(AcceptAddr::New()), //size of TcpSockAddr
         };
     }
 }
@@ -1308,7 +1341,7 @@ impl UnblockBlockPollAdd {
 #[derive(Clone)]
 pub struct AsyncConnect {
     pub fd: i32,
-    pub addr: TcpSockAddr,
+    pub addr: Arc<TcpSockAddr>,
     pub len: u32,
     pub socket: UringSocketOperationsWeak,
 }
@@ -1360,7 +1393,7 @@ impl AsyncConnect {
         socket.SetConnErrno(-SysErr::EINPROGRESS);
         return Self {
             fd,
-            addr: addr,
+            addr: Arc::new(addr),
             len: len as _,
             socket: socket.Downgrade(),
         };
@@ -1487,6 +1520,18 @@ impl AsyncOpsTrait for PollHostEpollWait {
         if result < 0 {
             error!("PollHostEpollWait::Process result {}", result);
         }
+
+        // we don't handle the host epollwait in kernel.
+        // todo: fix this when merge kernel IO CPU and host IO thread
+        // check whether there is vcpu waiting in the host can process this
+        /*match SHARESPACE.TryLockEpollProcess() {
+            None => (),
+            Some(_) => {
+                GUEST_NOTIFIER.ProcessHostEpollWait();
+            }
+        }
+
+        return false;*/
 
         return false;
     }

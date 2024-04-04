@@ -822,10 +822,14 @@ impl HostSpace {
         return ret;
     }
 
-    pub fn VcpuWait() -> i64 {
-        let mut ret: i64 = 0;
-        HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, &mut ret as *mut _ as u64, 0);
-        return ret as i64;
+    pub fn VcpuWait() -> TaskId {
+        let mut next: TaskId = TaskId::New(0, 0);
+        HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, &mut next as *mut _ as u64, 0);
+        
+        assert!(next.PrivateTaskAddr() != 0);
+        assert!(next.SharedTaskAddr() != 0);
+
+        return next;
     }
 
     pub fn NewTmpfsFile(typ: TmpfsFileType, addr: u64) -> i64 {

@@ -182,6 +182,12 @@ impl TcpSockAddr {
         *ptr = addr;
         return ret;
     }
+
+    pub fn Dup(&self) -> Self {
+        return Self {
+            data: self.data.clone(),
+        }
+    }
 }
 
 pub struct QOrdering {}
@@ -2958,6 +2964,7 @@ impl MemoryDef {
     //interrupt stack pages
     pub const INTERRUPT_STACK_PAGES: u64 = 1;
 
+    pub const TASK_QLEN: usize = 512;
     pub const MSG_QLEN: usize = 1024;
     pub const QURING_SIZE: usize = 4096;
     pub const DEFAULT_STACK_PAGES: u64 = 32;

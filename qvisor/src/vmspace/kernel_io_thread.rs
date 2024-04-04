@@ -23,7 +23,6 @@ use super::super::qlib::common::*;
 use super::super::qlib::kernel::kernel::timer::TIMER_STORE;
 use super::super::qlib::kernel::GlobalRDMASvcCli;
 use super::super::qlib::kernel::ASYNC_PROCESS;
-use super::super::qlib::kernel::IOURING;
 use super::super::qlib::kernel::TSC;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::ShareSpace;
@@ -57,7 +56,7 @@ impl KIOThread {
         count += HostSubmit().unwrap();
         TIMER_STORE.Trigger();
         count += HostSubmit().unwrap();
-        count += IOURING.DrainCompletionQueue();
+        // count += IOURING.DrainCompletionQueue();
         count += HostSubmit().unwrap();
         count += KVMVcpu::GuestMsgProcess(sharespace);
         count += HostSubmit().unwrap();

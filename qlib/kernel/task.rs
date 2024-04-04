@@ -20,6 +20,8 @@ use core::mem;
 use core::ops::Deref;
 use core::ptr;
 use core::sync::atomic::Ordering;
+use core::sync::atomic::{AtomicUsize, AtomicU64};
+use crate::{GLOBAL_ALLOCATOR, IS_GUEST};
 
 //use super::arch::x86_64::arch_x86::*;
 use super::super::super::kernel_def::*;
@@ -58,7 +60,7 @@ use super::asm::*;
 
 const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
 pub const DEFAULT_STACK_PAGES: u64 = DEFAULT_STACK_SIZE as u64 / (4 * 1024);
-pub const DEFAULT_STACK_MAST: u64 = !(DEFAULT_STACK_SIZE as u64 - 1);
+pub const DEFAULT_STACK_MASK: u64 = !(DEFAULT_STACK_SIZE as u64 - 1);
 
 pub static DUMMY_TASK: Singleton<DummyTask> = Singleton::<DummyTask>::New();
 
@@ -97,20 +99,13 @@ impl TaskStore {
 
     pub fn CreateTask(runFnAddr: u64, para: *const u8, kernel: bool) -> TaskId {
         let t = Task::Create(runFnAddr as u64, para, kernel);
-        return TaskId::New(t.taskId);
+        return TaskId::New(t.taskId, t.taskWrapperId);
     }
 
     pub fn CreateFromThread() -> TaskId {
         let t = Task::CreateFromThread();
 
-        return TaskId::New(t.taskId);
-    }
-}
-
-impl TaskId {
-    #[inline]
-    pub fn GetTask(&self) -> &'static mut Task {
-        return unsafe { &mut *(self.Addr() as *mut Task) };
+        return TaskId::New(t.taskId, t.taskWrapperId);
     }
 }
 
@@ -165,10 +160,51 @@ impl Drop for Task {
     }
 }
 
+
+// task wrapper on shared memory
+#[repr(C)]
+pub struct TaskWrapper {
+    pub ready: AtomicU64,  // 0x0
+    // job queue id
+    pub queueId: AtomicUsize,
+    pub taskAddr: u64,
+}
+
+
+impl TaskWrapper {
+    pub fn New(task_addr: u64) -> Self {
+        return Self {
+            ready: AtomicU64::new(1),
+            queueId: AtomicUsize::new(0),
+            taskAddr: task_addr,
+        };
+    }
+
+    pub fn Ready(&self) -> u64 {
+        return self.ready.load(Ordering::Acquire);
+    }
+
+    pub fn SetReady(&self, val: u64) {
+        return self.ready.store(val, Ordering::SeqCst);
+    }
+
+    pub fn QueueId(&self) -> usize {
+        return self.queueId.load(Ordering::Acquire);
+    }
+
+    pub fn SetQueueId(&self, queueId: usize) {
+        return self.queueId.store(queueId, Ordering::Release);
+    }
+}
+
+
 #[repr(C)]
 pub struct Task {
     pub context: Context,
+    // address of Task struct
     pub taskId: u64,
+    // address of TaskWrapper struct
+    pub taskWrapperId: u64,
     pub mm: MemoryManager,
     pub tidInfo: TidInfo,
     pub isWaitThread: bool,
@@ -220,6 +256,11 @@ impl Task {
         return self.ipcns.clone();
     }
 
+    pub fn GetSharedTask(&self) -> &'static mut TaskWrapper {
+        info!("task GetSharedTask");
+        return unsafe { &mut *(self.taskWrapperId as *mut TaskWrapper) };
+    }
+
     //clean object on stack
     pub fn SetDummy(&mut self) {
         let dummyTask = DUMMY_TASK.read();
@@ -254,28 +295,22 @@ impl Task {
         }
     }
 
-    pub fn QueueId(&self) -> usize {
-        return self.context.queueId.load(Ordering::Acquire);
-    }
-
-    pub fn SetQueueId(&self, queueId: usize) {
-        return self.context.queueId.store(queueId, Ordering::Release);
-    }
 
     #[inline(always)]
     pub fn TaskAddress() -> u64 {
         let rsp = GetRsp();
-        let task = rsp & DEFAULT_STACK_MAST;
+        let task = rsp & DEFAULT_STACK_MASK;
         if rsp - task < 0x2000 {
             raw!(0x238, rsp, task, 0);
             super::Kernel::HostSpace::VcpuDebug();
             loop {}
             //panic!("TaskAddress panic");
         }
-        return rsp; //& DEFAULT_STACK_MAST;
+        return rsp;
     }
 
     pub fn DummyTask() -> Self {
+        assert!(IS_GUEST == true, "DummyTask should only be called from guest");
         let creds = Credentials::default();
         let userns = creds.lock().UserNamespace.clone();
 
@@ -291,6 +326,7 @@ impl Task {
         let ret = Task {
             context: Context::New(),
             taskId: 0,
+            taskWrapperId: 0,
             //mm: MemoryMgr::default(),
             mm: mm,
             tidInfo: Default::default(),
@@ -320,7 +356,9 @@ impl Task {
     }
 
     pub fn AccountTaskEnter(&self, state: SchedState) {
-        if self.taskId == CPULocal::WaitTask() || self.exiting == true {
+
+        let (w_task_id, _) = CPULocal::WaitTask();
+        if self.taskId == w_task_id || self.exiting == true {
             return;
         }
 
@@ -346,7 +384,9 @@ impl Task {
 
     pub fn AccountTaskLeave(&self, state: SchedState) {
         //print!("AccountTaskLeave current task is {:x}, state is {:?}", self.taskId, state);
-        if self.taskId == CPULocal::WaitTask() || self.exiting == true {
+
+        let (w_task_id, _) = CPULocal::WaitTask();
+        if self.taskId == w_task_id || self.exiting == true {
             return;
         }
 
@@ -378,7 +418,7 @@ impl Task {
 
     pub fn StackOverflowCheck() {
         let rsp = GetRsp();
-        let task = rsp & DEFAULT_STACK_MAST;
+        let task = rsp & DEFAULT_STACK_MASK;
         if rsp - task < 0x2000 {
             raw!(0x237, rsp, task, 0);
             super::Kernel::HostSpace::VcpuDebug();
@@ -526,14 +566,9 @@ impl Task {
     }
 
     #[inline(always)]
-    pub fn TaskId() -> TaskId {
+    pub fn PrivateTaskID() -> u64 {
         let rsp = GetRsp();
-        return TaskId::New(rsp & DEFAULT_STACK_MAST);
-    }
-
-    #[inline(always)]
-    pub fn GetPtr(&self) -> &'static mut Task {
-        return unsafe { &mut *(self.taskId as *mut Task) };
+        return rsp & DEFAULT_STACK_MASK;
     }
 
     #[inline(always)]
@@ -604,14 +639,14 @@ impl Task {
 
     #[inline(always)]
     pub fn GetTask(addr: u64) -> &'static mut Task {
-        let addr = addr & DEFAULT_STACK_MAST;
+        let addr = addr & DEFAULT_STACK_MASK;
         unsafe {
             return &mut *(addr as *mut Task);
         }
     }
 
-    pub fn GetTaskId(&self) -> TaskId {
-        return TaskId::New(self.taskId);
+    pub fn GetPrivateTaskId(&self) -> TaskId {
+        return TaskId::New(self.taskId, self.taskWrapperId);
     }
 
     pub fn Create(runFnAddr: u64, para: *const u8, kernel: bool) -> &'static mut Self {
@@ -629,16 +664,32 @@ impl Task {
             ctx.rdi = para as u64;
         }
 
-        //let ioUsage = DUMMY_TASK.read().ioUsage.clone();
         let ioUsage = DUMMY_TASK.read().ioUsage.clone();
         let perfcounters = Some(THREAD_COUNTS.lock().NewCounters());
         let futexMgr = FUTEX_MGR.Fork();
-        let blocker = Blocker::New(s_ptr as u64);
+
         let mm = MemoryManager::Init(kernel);
         let creds = Credentials::default();
         let userns = creds.lock().UserNamespace.clone();
         let utsns = UTSNamespace::New("".to_string(), "".to_string(), userns.clone());
         let ipcns = IPCNamespace::New(&userns);
+
+
+        let tw_size  = core::mem::size_of::<TaskWrapper>();
+        let tw_ptr = unsafe {
+            GLOBAL_ALLOCATOR.AllocSharedBuf(tw_size, 2)
+        };
+
+        let t_wp = TaskWrapper::New(s_ptr as u64);
+        let t_wp_ptr = tw_ptr as *mut TaskWrapper;
+        unsafe {
+            ptr::write(
+                t_wp_ptr,
+                t_wp
+            );
+        }
+
+        let blocker = Blocker::New(TaskId::New(s_ptr as u64, tw_ptr as u64));
 
         //put Task on the task as Linux
         let taskPtr = s_ptr as *mut Task;
@@ -648,6 +699,7 @@ impl Task {
                 Task {
                     context: ctx,
                     taskId: s_ptr as u64,
+                    taskWrapperId: tw_ptr as u64,
                     mm: mm,
                     tidInfo: Default::default(),
                     isWaitThread: false,
@@ -739,8 +791,25 @@ impl Task {
     }
 
     pub fn CreateFromThread() -> &'static mut Self {
-        let baseStackAddr = Self::TaskId().Addr();
+        let baseStackAddr = Self::PrivateTaskID();
         let taskPtr = baseStackAddr as *mut Task;
+
+        let tw_size  = core::mem::size_of::<TaskWrapper>();
+        let tw_ptr = unsafe {
+            GLOBAL_ALLOCATOR.AllocSharedBuf(tw_size, 2)
+        };
+
+        let t_wp = TaskWrapper::New(taskPtr as u64);
+        let t_wp_ptr = tw_ptr as *mut TaskWrapper;
+        unsafe {
+            ptr::write(
+                t_wp_ptr,
+                t_wp
+            );
+        }
+
+
+        let blocker = Blocker::New(TaskId::New(baseStackAddr, tw_ptr as u64));
 
         unsafe {
             let creds = Credentials::default();
@@ -751,6 +820,7 @@ impl Task {
                 Task {
                     context: Context::New(),
                     taskId: baseStackAddr,
+                    taskWrapperId: tw_ptr as u64,
                     mm: dummyTask.mm.clone(),
                     tidInfo: Default::default(),
                     isWaitThread: true,
@@ -763,7 +833,7 @@ impl Task {
                     fsContext: FSContext::default(),
 
                     fdTbl: FDTable::default(),
-                    blocker: Blocker::New(baseStackAddr),
+                    blocker: blocker,
                     thread: None,
                     haveSyscallReturn: false,
                     syscallRestartBlock: None,

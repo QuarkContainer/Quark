@@ -23,6 +23,7 @@ use super::super::kernel::timer::timer::*;
 use super::super::kernel::timer::*;
 use super::super::kernel::waiter::*;
 use super::super::threadmgr::thread::*;
+use crate::qlib::TaskId;
 
 impl Thread {
     pub fn Interrupted(&self, clear: bool) -> bool {
@@ -130,7 +131,7 @@ impl Blocker {
         self.realBlockTimer.Destroy();
     }
 
-    pub fn New(taskId: u64) -> Self {
+    pub fn New(taskId: TaskId) -> Self {
         let waiter = Waiter::New(taskId);
 
         let timerEntry = waiter.NewWaitEntry(Waiter::TIMER_WAITID, 1);

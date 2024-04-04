@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::IS_GUEST;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
@@ -88,7 +89,9 @@ impl DirDataNodeTrait for ProcNode {
             Some(t) => t,
         };
 
-        let otherTask = TaskId::New(otherThread.lock().taskId).GetTask();
+        assert!(IS_GUEST == true, "Lookup is called by the host");
+        let other_tid = otherThread.lock().taskId; 
+        let otherTask = TaskId::New(other_tid, 0).GetPrivateTask();
 
         let ms = dir.lock().MountSource.clone();
         let td = self.NewTaskDir(&otherTask, &otherThread, &ms, true);

@@ -37,14 +37,10 @@ use super::super::super::qlib::addr;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::kernel::kernel::futex;
 use super::super::super::qlib::kernel::kernel::timer;
-use super::super::super::qlib::kernel::task;
 use super::super::super::qlib::kernel::vcpu;
 use super::super::super::qlib::kernel::IOURING;
-use super::super::super::qlib::kernel::KERNEL_PAGETABLE;
-use super::super::super::qlib::kernel::KERNEL_STACK_ALLOCATOR;
 use super::super::super::qlib::kernel::SHARESPACE;
 use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::pagetable::AlignedAllocator;
 use super::super::super::qlib::pagetable::PageTables;
 use super::super::super::qlib::perf_tunning::*;
 use super::super::super::qlib::task_mgr::*;
@@ -215,18 +211,10 @@ impl VirtualMachine {
         IOURING.SetValue(sharespace.GetIOUringAddr());
 
         unsafe {
-            KERNEL_PAGETABLE.SetRoot(VMS.read().pageTables.GetRoot());
-            // used for created new task from host
-            // see Create(runFnAddr: u64, para: *const u8, kernel: bool) -> &'static mut Self {
-            KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
-                MemoryDef::DEFAULT_STACK_SIZE as usize,
-                MemoryDef::DEFAULT_STACK_SIZE as usize,
-            ));
-
-            task::InitSingleton();
             futex::InitSingleton();
             timer::InitSingleton();
         }
+
         if SHARESPACE.config.read().EnableTsot {
             // initialize the tost_agent
             TSOT_AGENT.NextReqId();
@@ -279,7 +267,7 @@ impl VirtualMachine {
             }
         }
 
-        let cpuCount = cpuCount.max(2); // minimal 2 cpus
+        let cpuCount = cpuCount.max(4); // minimal 2 cpus
 
         VMS.write().vcpuCount = cpuCount; //VMSpace::VCPUCount();
         VMS.write().RandomVcpuMapping();
@@ -376,17 +364,9 @@ impl VirtualMachine {
         }
 
         let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
-        //let vdsoMap = VDSOMemMap::Init(&"/home/brad/rust/quark/vdso/vdso.so".to_string()).unwrap();
         elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
         VMS.write().vdsoAddr = elf.vdsoStart;
 
-        // let p = entry as *const u8;
-        // info!(
-        //     "entry is 0x{:x}, data at entry is {:x}, heapStartAddr is {:x}",
-        //     entry,
-        //     unsafe { *p },
-        //     heapStartAddr
-        // );
 
         {
             super::super::super::URING_MGR.lock();

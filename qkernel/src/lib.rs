@@ -117,6 +117,7 @@ use alloc::vec::Vec;
 use guest_host_allocator::GuestHostSharedAllocator;
 use memmgr::pma::PageMgr;
 
+
 #[macro_use]
 mod print;
 
@@ -138,7 +139,7 @@ pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
 
-
+pub static  IS_GUEST: bool = true;
 
 
 lazy_static! {
@@ -151,6 +152,7 @@ lazy_static! {
 }
 
 pub fn SingletonInit() {
+
     unsafe {
         vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
         vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
@@ -158,11 +160,7 @@ pub fn SingletonInit() {
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentKernelTable()));
         //init fp state with current fp state as it is brand new vcpu
         FP_STATE.Reset();
-        //SHARESPACE.SetvirtualizationHandlerAddr(virtualization_handler as u64);
         IOURING.SetValue(SHARESPACE.GetIOUringAddr());
-
-        // the error! can run after this point
-        //error!("error message");
 
         PAGE_MGR.SetValue(PAGE_MGR_HOLDER.Addr());
         LOADER.Init(Loader::default());
@@ -419,7 +417,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
 
                     let mm = thread.lock().memoryMgr.clone();
                     thread.lock().memoryMgr = currTask.mm.clone();
-                    CPULocal::SetPendingFreeStack(currTask.taskId);
+                    CPULocal::SetPendingFreeStack(currTask.taskId, currTask.taskWrapperId);
 
                     /*if !SHARESPACE.config.read().KernelPagetable {
                         KERNEL_PAGETABLE.SwitchTo();
@@ -565,8 +563,28 @@ pub extern "C" fn rust_main(
         CreateTask(ControllerProcess as u64, ptr::null(), true);
     }
 
+    if id == 2 {
+        // CreateTask(IoHanlder as u64, ptr::null(), true);
+        IoHanlder();
+
+    }
+
     WaitFn();
 }
+
+
+fn IoHanlder() {
+    loop {
+        if Shutdown() {
+            break;
+        }
+
+        QUringTrigger();
+    }
+}
+
+
+
 
 fn StartExecProcess(fd: i32, process: Process) -> ! {
     let (tid, entry, userStackAddr, kernelStackAddr) = { LOADER.ExecProcess(process).unwrap() };
