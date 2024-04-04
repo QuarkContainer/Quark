@@ -112,7 +112,6 @@ use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
 use alloc::boxed::Box;
-use guest_host_allocator::GuestHostSharedAllocator;
 use memmgr::pma::PageMgr;
 
 
@@ -477,18 +476,21 @@ cfg_if::cfg_if! {
             self::qlib::kernel::asm::fninit();
             if id == 0 {
                 GLOBAL_ALLOCATOR.InitPrivateAllocator(privateHeapStart);
-        
-        
+                
+                //check msr to see if sev-snp enabled
+                ENABLE_CC.store(true,Ordering::Release);
                 // ghcb convert shared memory
-        
                 
                 GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
+
+                assert!(self::qlib::qmsg::sharepara::SHAREPARA_COUNT >= vcpuCnt);
+                
                 let size = core::mem::size_of::<ShareSpace>();
                 // info!("ShareSpace size {:x}", size);
                 let shared_space = unsafe {
                     GLOBAL_ALLOCATOR.AllocSharedBuf(size, 2)
                 };
-                HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, PAGE_MGR_HOLDER.Addr(), 0, 0);
+                HyperCall64_init(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, PAGE_MGR_HOLDER.Addr(), 0, 0);
         
         
                 SHARESPACE.SetValue(shared_space as u64);

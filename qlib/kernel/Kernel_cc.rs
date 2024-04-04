@@ -1763,14 +1763,13 @@ impl HostSpace {
         return ret;
     }
 
-    pub fn VcpuWait_cc() -> i64 {
-        let ret_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size_of::<i64>(), 0x8) as *mut i64 };
-        HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, ret_ptr as u64, 0);
-        let ret = unsafe { *ret_ptr };
-        unsafe {
-            GLOBAL_ALLOCATOR.DeallocShareBuf(ret_ptr as *mut u8, size_of::<i64>(), 0x8);
-        }
-        return ret as i64;
+    pub fn VcpuWait_cc() -> TaskId {
+        let mut next = Box::new_in(TaskId::New(0, 0),GUEST_HOST_SHARED_ALLOCATOR);
+        let next_ptr = &mut *next as *mut _;
+        HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, next_ptr as u64, 0);
+        assert!(next.PrivateTaskAddr() != 0);
+        assert!(next.SharedTaskAddr() != 0);
+        return *next;
     }
 
     pub fn NewTmpfsFile_cc(typ: TmpfsFileType, addr: u64) -> i64 {

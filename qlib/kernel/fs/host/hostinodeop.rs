@@ -65,10 +65,12 @@ pub struct MappableInternal {
 
     //addr mapping for shared pages from shared memory to private memory
     //need to write back to shared pages when munmap in cc
+    #[cfg (feature = "cc")]
     pub p2pmap: BTreeMap<u64, u64>,
 }
 
 impl MappableInternal {
+    #[cfg (feature = "cc")]
     pub fn WritebackPage(&self, phyAddr: u64){
         match self.p2pmap.get(&phyAddr) {
             None => (),
@@ -83,6 +85,7 @@ impl MappableInternal {
     }
 
     pub fn Clear(&mut self) {
+        #[cfg (feature = "cc")]
         for (phyAddr, newAddr) in &self.p2pmap{
             unsafe{
                 core::ptr::copy_nonoverlapping(
@@ -134,6 +137,7 @@ impl MappableInternal {
                     Some(offset) => *offset,
                 };
                 
+                #[cfg (feature = "cc")]
                 for i in 0..CHUNK_SIZE/PAGE_SIZE{
                     self.WritebackPage(phyAddr+i*PAGE_SIZE);
                     self.p2pmap.remove(&(phyAddr+i*PAGE_SIZE));
@@ -182,6 +186,7 @@ impl Default for MappableInternal {
             f2pmap: BTreeMap::new(),
             mapping: AreaSet::New(0, core::u64::MAX),
             chunkrefs: BTreeMap::new(),
+            #[cfg (feature = "cc")]
             p2pmap: BTreeMap::new(),
         };
     }
@@ -403,6 +408,7 @@ impl HostInodeOpIntern {
         return Ok(phyAddr + (fileOffset - chunkStart));
     }
 
+    #[cfg (feature = "cc")]
     pub fn MapSharedPage(&mut self, phyAddr: u64, newAddr: u64) {
         let mappable = self.Mappable();
         let mut mappableLock = mappable.lock();
@@ -1027,13 +1033,14 @@ impl HostInodeOp {
         return self.lock().MapFilePage(task, fileOffset);
     }
 
-    
+    #[cfg (feature = "cc")]
     pub fn MapSharedPage(&self, phyAddr: u64, newAddr: u64) {
         self.lock().MapSharedPage(phyAddr,newAddr);
     }
 
     pub fn MSync(&self, fr: &Range, msyncType: MSyncType) -> Result<()> {
         let ranges = self.GetPhyRanges(fr);
+        #[cfg (feature = "cc")]
         self.WritebackRanges(&ranges)?;
         for r in &ranges {
             let ret = HostSpace::MSync(r.Start(), r.Len() as usize, msyncType.MSyncFlags());
@@ -1120,6 +1127,7 @@ impl HostInodeOp {
         return rs;
     }
 
+    #[cfg (feature = "cc")]
     pub fn WritebackRanges(&self, ranges: &Vec<Range>) -> Result<()> {
         let mappable = self.lock().Mappable();
         let mappableLock = mappable.lock();
