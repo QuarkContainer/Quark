@@ -148,6 +148,7 @@ dependencies = [
  "bit_field",
  "bitflags",
  "cache-padded",
+ "cfg-if",
  "crossbeam-queue",
  "enum_dispatch",
  "hashbrown",
