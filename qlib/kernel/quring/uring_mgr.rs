@@ -489,6 +489,38 @@ impl QUring {
         }
     }
 
+
+    pub fn DrainCompletionQueueOnHost(&self) -> usize {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                0
+            } else {
+                let mut count = 0;
+                loop {
+                    if super::super::Shutdown() {
+                        return 0;
+                    }
+        
+                    let cqe = self.NextCompleteEntry();
+        
+                    match cqe {
+                        None => break,
+                        Some(cqe) => {
+                            count += 1;
+                            self.Process(&cqe);
+                        }
+                    }
+                }
+        
+                return count;
+            }
+        }
+
+
+
+    }
+
+
     pub fn DrainCompletionQueue(&self) -> usize {
         let mut count = 0;
         loop {

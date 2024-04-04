@@ -96,7 +96,9 @@ impl HostAllocator {
         self.HostInitAllocator().Add(MemoryDef::HOST_INIT_HEAP_OFFSET as usize + size, 
                                             MemoryDef::HOST_INIT_HEAP_SIZE as usize - size);
         self.initialized.store(true, Ordering::SeqCst);
+
         self.is_vm_lauched.store(false, Ordering::SeqCst);
+
     }
 
     pub fn Clear(&self) -> bool {
@@ -105,6 +107,8 @@ impl HostAllocator {
     }
 }
 
+
+#[cfg(feature = "cc")]
 unsafe impl GlobalAlloc for HostAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let initialized = self.initialized.load(Ordering::SeqCst);
@@ -137,6 +141,25 @@ unsafe impl GlobalAlloc for HostAllocator {
     }
 }
 
+#[cfg(not(feature = "cc"))]
+unsafe impl GlobalAlloc for HostAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let initialized = self.initialized.load(Ordering::Relaxed);
+        if !initialized {
+            self.Init();
+        }
+
+        return self.GuestPrivateAllocator().alloc(layout);
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        self.GuestPrivateAllocator().dealloc(ptr, layout);
+        
+    }
+}
+
+
+
 impl OOMHandler for ListAllocator {
     fn handleError(&self, _a: u64, _b: u64) {
         panic!("qvisor OOM: Heap allocator fails to allocate memory block");
@@ -145,17 +168,6 @@ impl OOMHandler for ListAllocator {
 
 impl ListAllocator {
     pub fn initialize(&self) {
-        /*let listHeapAddr = MemoryDef::PHY_LOWER_ADDR + HEAP_OFFSET;
-        let heapSize = 1 << KERNEL_HEAP_ORD as usize;
-        let address: usize;
-        unsafe {
-            address = libc::mmap(listHeapAddr as _, heapSize, libc::PROT_READ | libc::PROT_WRITE,
-                                 libc::MAP_PRIVATE | libc::MAP_ANON, -1, 0) as usize;
-            if address == libc::MAP_FAILED as usize {
-                panic!("mmap: failed to get mapped memory area for heap");
-            }
-            self.heap.lock().init(address + 0x1000 as usize, heapSize - 0x1000);
-        }*/
         self.initialized.store(true, Ordering::Relaxed);
     }
 

@@ -117,6 +117,9 @@ use self::ringbuf::*;
 use self::task_mgr::*;
 use self::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
 use self::kernel::quring::uring_async::UringEntry;
+#[cfg(not(feature = "cc"))]
+use crate::qlib::kernel::memmgr::pma::PageMgr;
+
 
 pub fn InitSingleton() {
     unsafe {
@@ -1159,62 +1162,120 @@ impl Default for UringQueue {
     }
 }
 
-#[repr(C)]
-#[repr(align(128))]
-#[derive(Default)]
-pub struct ShareSpace {
+     #[cfg(not(feature = "cc"))]
+        #[repr(C)]
+        #[repr(align(128))]
+        #[derive(Default)]
+        pub struct ShareSpace {
+            pub QOutput: QRingQueue<HostOutputMsg>, //QMutex<VecDeque<HostInputMsg>>,
+        
+            // add this pad can decrease the mariadb start time 25 sec to 12 sec
+            //todo: root cause this. False share?
+            //pub pad: [u64; 8],
+            pub hostEpollProcessing: CachePadded<QMutex<()>>,
+        
+            pub scheduler: task_mgr::Scheduler,
+            pub guestMsgCount: CachePadded<AtomicU64>,
+            pub hostProcessor: CachePadded<AtomicU64>,
+            pub VcpuSearchingCnt: CachePadded<AtomicU64>,
+        
+            pub shutdown: CachePadded<AtomicBool>,
+            pub pendingWrite: CachePadded<AtomicU64>,
+            pub ioUring: CachePadded<QUring>,
+            pub timerkeeper: CachePadded<TimeKeeper>,
+            pub timerStore: CachePadded<TimerStore>,
+            pub futexMgr: CachePadded<FutexMgr>,
+            pub pageMgr: CachePadded<PageMgr>,
+            pub ioMgr: CachePadded<IOMgr>,
+            pub config: CachePadded<QRwLock<Config>>,
+            pub rdmaSvcCli: CachePadded<RDMASvcClient>,
+        
+            pub logBuf: CachePadded<QMutex<Option<ByteStream>>>,
+            pub logLock: CachePadded<QMutex<()>>,
+            pub logfd: CachePadded<AtomicI32>,
+            pub signalHandlerAddr: CachePadded<AtomicU64>,
+            pub virtualizationHandlerAddr: CachePadded<AtomicU64>,
+            pub tlbShootdownLock: CachePadded<QMutex<()>>,
+            pub tlbShootdownMask: CachePadded<AtomicU64>,
+            pub uid: CachePadded<AtomicU64>,
+            pub inotifyCookie: CachePadded<AtomicU32>,
+            pub waitMask: CachePadded<AtomicU64>,
+            pub reapFileAvaiable: CachePadded<AtomicBool>,
+            pub hibernatePause: CachePadded<AtomicBool>,
+            pub hiberMgr: CachePadded<HiberMgr>,
+        
+            pub supportMemoryBarrier: bool,
+            pub controlSock: i32,
+            pub hostEpollfd: AtomicI32,
+        
+            pub tsotSocketMgr: TsotSocketMgr,
+            pub dnsSvc: DnsSvc,
+            pub uringQueue: UringQueue,
+        
+            pub bootId: QMutex<alloc::string::String>,
+            pub values: Vec<[AtomicU64; 2]>,
+        }
 
-    // Qcall specific
-    pub QOutput: QRingQueue<HostOutputMsg>, //QMutex<VecDeque<HostInputMsg>>,
-    
-    // scheduler specific 
-    pub scheduler: task_mgr::Scheduler,               
-    pub hostProcessor: CachePadded<AtomicU64>,
-    pub VcpuSearchingCnt: CachePadded<AtomicU64>,
 
-    //system wide
-    pub shutdown: CachePadded<AtomicBool>,
+        #[cfg(feature = "cc")]
+        #[repr(C)]
+        #[repr(align(128))]
+        #[derive(Default)]
+        pub struct ShareSpace {
+        
+            // Qcall specific
+            pub QOutput: QRingQueue<HostOutputMsg>, //QMutex<VecDeque<HostInputMsg>>,
+            
+            // scheduler specific 
+            pub scheduler: task_mgr::Scheduler,               
+            pub hostProcessor: CachePadded<AtomicU64>,
+            pub VcpuSearchingCnt: CachePadded<AtomicU64>,
+        
+            //system wide
+            pub shutdown: CachePadded<AtomicBool>,
+        
+            // Uring specific 
+            pub pendingWrite: CachePadded<AtomicU64>,
+            pub ioUring: CachePadded<QUring>,
+        
+            // Timer specific
+            pub timerkeeper: CachePadded<TimeKeeper>,   
+            pub timerStore: CachePadded<TimerStore>,
+            
+            pub futexMgr: CachePadded<FutexMgr>,
+            pub ioMgr: CachePadded<IOMgr>,
+            pub config: CachePadded<QRwLock<Config>>,
+            
+            // rdma specific
+            pub rdmaSvcCli: CachePadded<RDMASvcClient>,
+        
+            // log specific
+            pub logBuf: CachePadded<QMutex<Option<ByteStream>>>,
+            pub logLock: CachePadded<QMutex<()>>,   // only used on host
+            pub logfd: CachePadded<AtomicI32>,   
+        
+            // serverless specific
+            pub reapFileAvaiable: CachePadded<AtomicBool>,
+            pub hibernatePause: CachePadded<AtomicBool>,
+            pub hiberMgr: CachePadded<HiberMgr>,
+        
+            pub supportMemoryBarrier: bool,
+            pub controlSock: i32,
+            pub hostEpollfd: AtomicI32,
+        
+            pub tsotSocketMgr: TsotSocketMgr,
+            pub dnsSvc: DnsSvc,
+            pub uringQueue: UringQueue,
+        
+            pub values: Vec<[AtomicU64; 2]>,
+            pub uid: CachePadded<AtomicU64>,
+        
+            // only used in qkernel
+            pub inotifyCookie: CachePadded<AtomicU32>,   
+        }
 
-    // Uring specific 
-    pub pendingWrite: CachePadded<AtomicU64>,
-    pub ioUring: CachePadded<QUring>,
 
-    // Timer specific
-    pub timerkeeper: CachePadded<TimeKeeper>,   
-    pub timerStore: CachePadded<TimerStore>,
-    
-    pub futexMgr: CachePadded<FutexMgr>,
 
-    pub ioMgr: CachePadded<IOMgr>,
-    pub config: CachePadded<QRwLock<Config>>,
-    
-    // rdma specific
-    pub rdmaSvcCli: CachePadded<RDMASvcClient>,
-
-    // log specific
-    pub logBuf: CachePadded<QMutex<Option<ByteStream>>>,
-    pub logLock: CachePadded<QMutex<()>>,   // only used on host
-    pub logfd: CachePadded<AtomicI32>,   
-
-    // serverless specific
-    pub reapFileAvaiable: CachePadded<AtomicBool>,
-    pub hibernatePause: CachePadded<AtomicBool>,
-    pub hiberMgr: CachePadded<HiberMgr>,
-
-    pub supportMemoryBarrier: bool,
-    pub controlSock: i32,
-    pub hostEpollfd: AtomicI32,
-
-    pub tsotSocketMgr: TsotSocketMgr,
-    pub dnsSvc: DnsSvc,
-    pub uringQueue: UringQueue,
-
-    pub values: Vec<[AtomicU64; 2]>,
-    pub uid: CachePadded<AtomicU64>,
-
-    // only used in qkernel
-    pub inotifyCookie: CachePadded<AtomicU32>,   
-}
 
 impl ShareSpace {
     pub fn New() -> Self {
@@ -1231,7 +1292,6 @@ impl ShareSpace {
     }
 
     pub fn Submit(&self) -> Result<usize> {
-        info!("iouring Submit");
         if self.HostProcessor() == 0 {
             self.scheduler.VcpuArr[0].Wakeup();
         }
@@ -1269,6 +1329,11 @@ impl ShareSpace {
 
     pub fn DecrPendingWrite(&self) {
         self.pendingWrite.fetch_sub(1, Ordering::SeqCst);
+    }
+
+    #[cfg(not(feature = "cc"))]
+    pub fn GetPageMgrAddr(&self) -> u64 {
+        return self.pageMgr.Addr();
     }
 
     pub fn GetFutexMgrAddr(&self) -> u64 {

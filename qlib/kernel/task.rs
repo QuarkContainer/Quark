@@ -21,7 +21,10 @@ use core::ops::Deref;
 use core::ptr;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicUsize, AtomicU64};
-use crate::{GLOBAL_ALLOCATOR, IS_GUEST};
+
+#[cfg(feature = "cc")] 
+use crate::IS_GUEST;
+use crate::GLOBAL_ALLOCATOR;
 
 //use super::arch::x86_64::arch_x86::*;
 use super::super::super::kernel_def::*;
@@ -310,6 +313,7 @@ impl Task {
     }
 
     pub fn DummyTask() -> Self {
+        #[cfg(feature = "cc")]
         assert!(IS_GUEST == true, "DummyTask should only be called from guest");
         let creds = Credentials::default();
         let userns = creds.lock().UserNamespace.clone();

@@ -68,13 +68,11 @@ impl TaskId {
 
     #[inline]
     pub fn GetSharedTask(&self) -> &'static mut TaskWrapper {
-        info!("task GetSharedTask");
         return unsafe { &mut *(self.SharedTaskAddr() as *mut TaskWrapper) };
     }
 
     #[inline]
     pub fn Queue(&self) -> u64 {
-        info!("task Queue");
         return self.GetSharedTask().queueId.load(Ordering::Relaxed) as u64;
     }
 }
@@ -98,10 +96,10 @@ pub struct Context {
     pub rbp: u64,  // 0x30
     pub rdi: u64,  // 0x38
 
-    pub fs: u64,   // 0x40
-    pub savefpsate: bool,  // 
+    pub fs: u64,
+    pub savefpsate: bool,
     pub X86fpstate: Option<Box<X86fpstate>>,
-
+    // job queue id
     pub links: Links,
 }
 

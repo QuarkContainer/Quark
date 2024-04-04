@@ -23,6 +23,7 @@
 #![recursion_limit = "256"]
 //#![allow(invalid_reference_casting)]
 #![feature(unix_socket_ancillary_data)]
+#![feature(stmt_expr_attributes)]
 
 extern crate alloc;
 extern crate bit_field;
@@ -137,6 +138,13 @@ pub fn LocalVcpu() -> Option<Arc<KVMVcpu>> {
         vcpu = f.borrow().clone();
     });
     return vcpu;
+}
+
+#[cfg(not(feature = "cc"))]
+lazy_static! {
+    pub static ref SHARE_SPACE_STRUCT: Arc<Mutex<crate::qlib::ShareSpace>> =
+    Arc::new(Mutex::new(crate::qlib::ShareSpace::New()));
+
 }
 
 lazy_static! {

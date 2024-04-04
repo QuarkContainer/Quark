@@ -26,9 +26,11 @@ QUARK_BIN_RELEASE = $(QTARGET_RELASE)/$(QUARK)
 #
 MAKEFLAGS += -j4
 
-.PHONY: all release debug clean install qvisor_release qvisor_debug cuda
+.PHONY: all release debug clean install qvisor_release qvisor_debug cuda cc_make cc_all
 
 all:: release debug
+
+cc_all:: cc_release cc_debug
 
 release:: qvisor_release qkernel_release 
 
@@ -51,6 +53,25 @@ clean:
 
 docker:
 	sudo systemctl restart docker
+
+
+cc_release:: qvisor_cc_release qkernel_cc_release
+
+cc_debug:: qvisor_cc_debug qkernel_cc_debug
+
+qkernel_cc_release:
+	make -C ./qkernel cc_release
+
+qkernel_cc_debug:
+	make -C ./qkernel cc_debug
+
+
+qvisor_cc_release:
+	make -C ./qvisor cc_release
+
+qvisor_cc_debug:
+	make -C ./qvisor cc_debug
+
 
 install:
 #

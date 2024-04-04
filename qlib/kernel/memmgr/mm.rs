@@ -1040,11 +1040,36 @@ impl MemoryManager {
                 let vmaOffset = pageAddr - range.Start();
                 let fileOffset = vmaOffset + vma.offset; // offset in the file
                 let phyAddr = iops.MapFilePage(task, fileOffset)?;
-                
-                let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
-                CopyPage(page, phyAddr);
-                self.MapPageWriteLocked(pageAddr, page, exec);
-                super::super::PAGE_MGR.DerefPage(page);
+
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "cc")] {
+                        let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
+                        CopyPage(page, phyAddr);
+                        self.MapPageWriteLocked(pageAddr, page, exec);
+                        super::super::PAGE_MGR.DerefPage(page);
+
+                    } else {
+                            if vma.private {            
+                                let writeable = vma.effectivePerms.Write();
+                                if writeable {
+                                    let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
+                                    CopyPage(page, phyAddr);
+                                    self.MapPageWriteLocked(pageAddr, page, exec);
+                                    super::super::PAGE_MGR.DerefPage(page);
+                                } else {
+                                    self.MapPageReadLocked(pageAddr, phyAddr, exec);
+                                }
+                            } else {
+                                let writeable = vma.effectivePerms.Write();
+                                if writeable {
+                                    self.MapPageWriteLocked(pageAddr, phyAddr, exec);
+                                } else {
+                                    self.MapPageReadLocked(pageAddr, phyAddr, exec);
+                                }
+                            }
+                    }
+                }
+
                 return Ok(());
             }
             None => {

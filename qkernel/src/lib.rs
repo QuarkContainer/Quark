@@ -21,16 +21,12 @@
 #![allow(deref_nullptr)]
 #![allow(non_snake_case)]
 #![allow(bare_trait_objects)]
-//#![feature(const_raw_ptr_to_usize_cast)]
-//#![feature(const_fn)]
 #![feature(allocator_api)]
 #![feature(associated_type_bounds)]
-#![feature(core_intrinsics)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(panic_info_message)]
 #![allow(deprecated)]
 #![recursion_limit = "256"]
-// #![feature(thread_local)]
 
 #[macro_use]
 extern crate alloc;
@@ -64,6 +60,8 @@ use taskMgr::{CreateTask, IOWait, WaitFn};
 use vcpu::CPU_LOCAL;
 
 use crate::qlib::kernel::GlobalIOMgr;
+
+#[cfg(feature = "cc")] 
 use crate::qlib::ShareSpace;
 
 use self::asm::*;
@@ -89,7 +87,6 @@ use self::qlib::kernel::quring;
 use self::qlib::kernel::Kernel;
 use self::qlib::kernel::*;
 use self::qlib::{ShareSpaceRef, SysCallID};
-//use self::vcpu::*;
 use self::qlib::kernel::socket;
 use self::qlib::kernel::task;
 use self::qlib::kernel::taskMgr;
@@ -113,7 +110,6 @@ use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 use guest_host_allocator::GuestHostSharedAllocator;
 use memmgr::pma::PageMgr;
 
@@ -467,121 +463,183 @@ fn InitLoader() {
     LOADER.InitKernel(process).unwrap();
 }
 
-#[no_mangle]
-pub extern "C" fn rust_main(
-    privateHeapStart: u64,
-    id: u64,
-    vdsoParamAddr: u64,
-    vcpuCnt: u64,
-    autoStart: bool,
-) {
-    self::qlib::kernel::asm::fninit();
-    if id == 0 {
-        GLOBAL_ALLOCATOR.InitPrivateAllocator(privateHeapStart);
 
-
-        // ghcb convert shared memory
-
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cc")] {
+        #[no_mangle]
+        pub extern "C" fn rust_main(
+            privateHeapStart: u64,
+            id: u64,
+            vdsoParamAddr: u64,
+            vcpuCnt: u64,
+            autoStart: bool,
+        ) {
+            self::qlib::kernel::asm::fninit();
+            if id == 0 {
+                GLOBAL_ALLOCATOR.InitPrivateAllocator(privateHeapStart);
         
-        GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
-        let size = core::mem::size_of::<ShareSpace>();
-        // info!("ShareSpace size {:x}", size);
-        let shared_space = unsafe {
-            GLOBAL_ALLOCATOR.AllocSharedBuf(size, 2)
-        };
-        HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, PAGE_MGR_HOLDER.Addr(), 0, 0);
-
-
-        SHARESPACE.SetValue(shared_space as u64);
-        SingletonInit();
-
-        SetVCPCount(vcpuCnt as usize);
-        VCPU_ALLOCATOR.Print();
-        VCPU_ALLOCATOR.Initializated();
-
-
-        let mut vec1: Vec<i32, _> = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
-        for i in 0..10 {
-            vec1.push(i);
+        
+                // ghcb convert shared memory
+        
+                
+                GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
+                let size = core::mem::size_of::<ShareSpace>();
+                // info!("ShareSpace size {:x}", size);
+                let shared_space = unsafe {
+                    GLOBAL_ALLOCATOR.AllocSharedBuf(size, 2)
+                };
+                HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, PAGE_MGR_HOLDER.Addr(), 0, 0);
+        
+        
+                SHARESPACE.SetValue(shared_space as u64);
+                SingletonInit();
+        
+                SetVCPCount(vcpuCnt as usize);
+                VCPU_ALLOCATOR.Print();
+                VCPU_ALLOCATOR.Initializated();
+        
+                InitTsc();
+                InitTimeKeeper(vdsoParamAddr);
+                {
+                    let kpt = &KERNEL_PAGETABLE;
+        
+                    let vsyscallPages = PAGE_MGR.VsyscallPages();
+                    kpt.InitVsyscall(vsyscallPages);
+                }
+        
+                GlobalIOMgr().InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
+        
+                VDSO.Initialization(vdsoParamAddr);
+        
+                // release other vcpus
+                HyperCall64(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
+            } else {
+                InitGs(id);
+                //PerfGoto(PerfType::Kernel);
+            }
+        
+            SHARESPACE.IncrVcpuSearching();
+            taskMgr::AddNewCpu();
+            RegisterSysCall(syscall_entry as u64);
+        
+            //interrupts::init_idt();
+            interrupt::init();
+        
+            /***************** can't run any qcall before this point ************************************/
+        
+            if id == 0 {
+                //error!("start main: {}", ::AllocatorPrint(10));
+        
+                //ALLOCATOR.Print();
+                IOWait();
+            };
+        
+            if id == 1 {
+                info!("heap start is {:x}", privateHeapStart);
+                self::Init();
+        
+                if autoStart {
+                    CreateTask(StartRootContainer as u64, ptr::null(), false);
+                }
+        
+                CreateTask(ControllerProcess as u64, ptr::null(), true);
+            }
+        
+            if id == 2 {
+                // CreateTask(IoHanlder as u64, ptr::null(), true);
+                IoHanlder();
+        
+            }
+        
+            WaitFn();
         }
-
-        debug!("vec1 {:?}", vec1);
-        drop(vec1);
-
-        let mut vec2: Vec<i32, _> = Vec:: with_capacity_in(10, GUEST_HOST_SHARED_ALLOCATOR);
-        for i in 0..10 {
-            vec2.push(i);
-        }
-
-        debug!("vec2 {:?}", vec2);
-        drop(vec2);
-
-        InitTsc();
-        InitTimeKeeper(vdsoParamAddr);
-        {
-            let kpt = &KERNEL_PAGETABLE;
-
-            let vsyscallPages = PAGE_MGR.VsyscallPages();
-            kpt.InitVsyscall(vsyscallPages);
-        }
-
-        GlobalIOMgr().InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
-
-        VDSO.Initialization(vdsoParamAddr);
-
-        // release other vcpus
-        HyperCall64(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
+        
+        
+        fn IoHanlder() {
+            loop {
+                if Shutdown() {
+                    break;
+                }
+        
+                QUringTrigger();
+            }
+        } 
     } else {
-        InitGs(id);
-        //PerfGoto(PerfType::Kernel);
-    }
+        #[no_mangle]
+        pub extern "C" fn rust_main(
+            heapStart: u64,
+            shareSpaceAddr: u64,
+            id: u64,
+            vdsoParamAddr: u64,
+            vcpuCnt: u64,
+            autoStart: bool,
+        ) {
+            self::qlib::kernel::asm::fninit();
+            if id == 0 {
+                GLOBAL_ALLOCATOR.InitPrivateAllocator(heapStart);
+                GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
 
-    SHARESPACE.IncrVcpuSearching();
-    taskMgr::AddNewCpu();
-    RegisterSysCall(syscall_entry as u64);
+                SHARESPACE.SetValue(shareSpaceAddr);
+                SingletonInit();
 
-    //interrupts::init_idt();
-    interrupt::init();
-
-    /***************** can't run any qcall before this point ************************************/
-
-    if id == 0 {
-        //error!("start main: {}", ::AllocatorPrint(10));
-
-        //ALLOCATOR.Print();
-        IOWait();
-    };
-
-    if id == 1 {
-        info!("heap start is {:x}", privateHeapStart);
-        self::Init();
-
-        if autoStart {
-            CreateTask(StartRootContainer as u64, ptr::null(), false);
+                SetVCPCount(vcpuCnt as usize);
+                VCPU_ALLOCATOR.Print();
+                VCPU_ALLOCATOR.Initializated();
+        
+                InitTsc();
+                InitTimeKeeper(vdsoParamAddr);
+        
+                {
+                    let kpt = &KERNEL_PAGETABLE;
+        
+                    let vsyscallPages = PAGE_MGR.VsyscallPages();
+                    kpt.InitVsyscall(vsyscallPages);
+                }
+        
+                GlobalIOMgr().InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
+                VDSO.Initialization(vdsoParamAddr);
+        
+                // release other vcpus
+                HyperCall64(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
+            } else {
+                InitGs(id);
+                //PerfGoto(PerfType::Kernel);
+            }
+        
+            SHARESPACE.IncrVcpuSearching();
+            taskMgr::AddNewCpu();
+            RegisterSysCall(syscall_entry as u64);
+        
+            //interrupts::init_idt();
+            interrupt::init();
+        
+            /***************** can't run any qcall before this point ************************************/
+        
+            if id == 0 {
+                //error!("start main: {}", ::AllocatorPrint(10));
+        
+                //ALLOCATOR.Print();
+                IOWait();
+            };
+        
+            if id == 1 {
+                info!("heap start is {:x}", heapStart);
+                self::Init();
+        
+                if autoStart {
+                    CreateTask(StartRootContainer as u64, ptr::null(), false);
+                }
+        
+                CreateTask(ControllerProcess as u64, ptr::null(), true);
+            }
+        
+            WaitFn();
         }
-
-        CreateTask(ControllerProcess as u64, ptr::null(), true);
     }
-
-    if id == 2 {
-        // CreateTask(IoHanlder as u64, ptr::null(), true);
-        IoHanlder();
-
-    }
-
-    WaitFn();
 }
 
 
-fn IoHanlder() {
-    loop {
-        if Shutdown() {
-            break;
-        }
 
-        QUringTrigger();
-    }
-}
 
 
 
