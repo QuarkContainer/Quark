@@ -72,13 +72,6 @@ impl QUring {
         return self as *const _ as u64;
     }
 
-    pub fn TimerRemove(&self, task: &Task, userData: u64) -> i64 {
-        let msg = UringOp::TimerRemove(TimerRemoveOp { userData: userData });
-
-        return self.UCall(task, msg);
-    }
-
-
     pub fn EpollCtl(&self, epollfd: i32, fd: i32, op: i32, mask: u32) -> usize {
         let ops = AsyncEpollCtl::New(epollfd, fd, op, mask);
         let idx = self.AUCall(AsyncOps::AsyncEpollCtl(ops));
@@ -201,20 +194,22 @@ impl QUring {
 
         return ai;
     }
-
-    pub fn PollHostEpollWaitInit(&self, hostEpollWaitfd: i32) {
-        let op = PollHostEpollWait::New(hostEpollWaitfd);
-        IOURING.AUCall(AsyncOps::PollHostEpollWait(op));
-    }
-
+    
+    #[cfg(not(feature = "cc"))]
     pub fn TsotPollInit(&self, tsotSocket: i32) {
         let op = TsotPoll::New(tsotSocket);
         IOURING.AUCall(AsyncOps::TsotPoll(op));
     }
 
+    #[cfg (not(feature = "cc"))]
     pub fn DNSRecvInit(&self, fd: i32, msgAddr: u64) {
         let op = DNSRecv::New(fd, msgAddr);
         IOURING.AUCall(AsyncOps::DNSRecv(op));
+    }
+
+    pub fn PollHostEpollWaitInit(&self, hostEpollWaitfd: i32) {
+        let op = PollHostEpollWait::New(hostEpollWaitfd);
+        IOURING.AUCall(AsyncOps::PollHostEpollWait(op));
     }
 
     pub fn SendDns(&self, op: DNSSend) {

@@ -48,7 +48,6 @@ impl UringCall {
 #[derive(Clone, Debug, Copy)]
 pub enum UringOp {
     None,
-    TimerRemove(TimerRemoveOp),
     Read(ReadOp),
     Write(WriteOp),
     Statx(StatxOp),
