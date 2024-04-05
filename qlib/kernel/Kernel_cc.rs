@@ -50,8 +50,7 @@ impl HostSpace {
         );
         let ret = HostSpace::Call(&mut msg, false) as i64;
         let private_process = unsafe { &mut *(processAddr as *mut Process) };
-        private_process.clone_from_shared(process_ptr);
-        //info!("###Cloned Process:{:#?}\n",private_process);
+        *private_process = (*new_process).clone();
         return ret;
     }
 
