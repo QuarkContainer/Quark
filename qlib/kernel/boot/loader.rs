@@ -251,7 +251,6 @@ impl Loader {
             &procArgs.Filename,
             &paths,
         )?;
-        info!("##Load 1");
         let mut ttyFileOps = None;
         if procArgs.Terminal {
             let file = task
