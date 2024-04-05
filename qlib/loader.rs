@@ -48,38 +48,3 @@ pub struct Process {
     pub Stdiofds: [i32; 3],
     pub ExecId: Option<String>,
 }
-
-impl Process {
-    //Cannot use default trait clone here, clone uses clone method for the allocator in vec,
-    //which is the global allocator of the qvisor, not the kernel
-    pub fn clone_from_shared(&mut self, process_ptr:*mut Process){
-        let shared_process = unsafe{&*process_ptr };
-        //info!("###Process: {:#?}\n",shared_process);
-        self.UID = shared_process.UID;
-        self.GID = shared_process.GID;
-        self.AdditionalGids.extend(shared_process.AdditionalGids.iter());
-        self.Terminal = shared_process.Terminal;
-        //FIXME: if there is a more elegant way to initiate a String with global allocator from another String
-        for str in shared_process.Args.iter(){
-            unsafe{self.Args.push(String::from_utf8_unchecked(str.as_bytes().to_vec()));}
-        }
-        for str in shared_process.Envs.iter(){
-            unsafe{self.Envs.push(String::from_utf8_unchecked(str.as_bytes().to_vec()));}
-        }
-        self.Cwd = unsafe{String::from_utf8_unchecked((&shared_process.Cwd).as_bytes().to_vec())};
-        self.Caps = shared_process.Caps;
-        self.NoNewPrivileges = shared_process.NoNewPrivileges;
-        self.NumCpu = shared_process.NumCpu;
-        self.HostName = unsafe{String::from_utf8_unchecked((&shared_process.HostName).as_bytes().to_vec())};
-        for (k, v) in &shared_process.limitSet.data {
-            self.limitSet.data.insert(*k, *v);
-        }
-        self.ID = unsafe{String::from_utf8_unchecked((&shared_process.ID).as_bytes().to_vec())};
-        self.Root = unsafe{String::from_utf8_unchecked((&shared_process.Root).as_bytes().to_vec())};
-        self.Stdiofds = shared_process.Stdiofds;
-        self.ExecId = match &shared_process.ExecId{
-            Some(str) => unsafe{Some(String::from_utf8_unchecked(str.as_bytes().to_vec()))},
-            _ => None,
-        };
-    }
-}
