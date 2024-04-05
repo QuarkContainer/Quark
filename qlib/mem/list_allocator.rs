@@ -347,8 +347,15 @@ impl HostAllocator {
                 return alloc::alloc::dealloc(ptr, layout);
             }
         }  
+    }
 
+    #[cfg(feature = "cc")]
+    pub unsafe fn DeallocShareBuf(&self, ptr: *mut u8, size: usize, align: usize) {
 
+        let layout = Layout::from_size_align(size, align)
+            .expect("DeallocShareBuf can't dealloc memory");
+
+        return self.GuestHostSharedAllocator().dealloc(ptr,layout);
     }
     
     // should be called by host

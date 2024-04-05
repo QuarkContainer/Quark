@@ -65,10 +65,6 @@ cfg-if = "1.0.0"
 version = "1.4"
 features = ["spin_no_std"]
 
-
-[features]
-cc = []
-
 [dependencies.crossbeam-queue]
 version = "0.3.8"
 default-features = false
@@ -79,7 +75,6 @@ opt-level = 0
 
 [features]
 cc = []
-
 
 [profile.release]
 opt-level = 3
