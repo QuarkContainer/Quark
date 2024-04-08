@@ -214,24 +214,6 @@ impl FsyncOp {
     }
 }
 
-impl SpliceOp {
-    pub fn Entry(&self) -> squeue::Entry {
-        let op = opcode::Splice::new(
-            types::Fd(self.fdIn),
-            self.offsetIn,
-            types::Fd(self.fdOut),
-            self.offsetOut,
-            self.len,
-        );
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-}
-
 impl EpollCtlOp {
     pub fn Entry(&self) -> squeue::Entry {
         let op = opcode::EpollCtl::new(
@@ -273,7 +255,6 @@ impl UringCall {
             UringOp::Write(ref msg) => return msg.Entry(),
             UringOp::Statx(ref msg) => return msg.Entry(),
             UringOp::Fsync(ref msg) => return msg.Entry(),
-            UringOp::Splice(ref msg) => return msg.Entry(),
             UringOp::Accept(ref msg) => return msg.Entry(),
         };
 
