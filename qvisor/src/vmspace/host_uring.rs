@@ -324,18 +324,6 @@ impl UringAsyncOpsTrait for AsyncSend {
     }
 }
 
-#[cfg (not(feature = "cc"))]
-impl UringAsyncOpsTrait for TsotAsyncSend {
-    fn Entry(&self) -> squeue::Entry {
-        //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
-        let op = opcode::Send::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32);
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-}
 
 impl UringAsyncOpsTrait for AsyncFiletWrite {
     fn Entry(&self) -> squeue::Entry {
@@ -514,7 +502,6 @@ impl UringAsyncOpsTrait for AsyncEpollCtl {
     }
 }
 
-#[cfg (not(feature = "cc"))]
 impl UringAsyncOpsTrait for TsotPoll {
     fn Entry(&self) -> squeue::Entry {
         let op = opcode::PollAdd::new(types::Fd(self.fd), EVENT_READ as u32);
@@ -526,6 +513,19 @@ impl UringAsyncOpsTrait for TsotPoll {
         }
     }
 }
+
+impl UringAsyncOpsTrait for TsotAsyncSend {
+    fn Entry(&self) -> squeue::Entry {
+        //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
+        let op = opcode::Send::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
+    }
+}
+
 
 impl UringAsyncOpsTrait for AsyncNone {}
 

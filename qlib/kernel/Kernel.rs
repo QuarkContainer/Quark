@@ -1379,13 +1379,7 @@ impl HostSpace {
 
         HostSpace::HCall(&mut msg, true);
     }
-
-    pub fn EventfdWriteAsync(fd: i32) {
-        let msg = HostOutputMsg::EventfdWriteAsync(EventfdWriteAsync { fd });
-
-        super::SHARESPACE.AQCall(&msg);
-    }
-
+    
     pub fn SyncPrint(level: DebugLevel, str: &str) {
         #[cfg (feature = "cc")]
         if is_cc_enabled(){

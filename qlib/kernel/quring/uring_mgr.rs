@@ -173,13 +173,11 @@ impl QUring {
         return ai;
     }
     
-    #[cfg(not(feature = "cc"))]
     pub fn TsotPollInit(&self, tsotSocket: i32) {
         let op = TsotPoll::New(tsotSocket);
         IOURING.AUCall(AsyncOps::TsotPoll(op));
     }
 
-    #[cfg (not(feature = "cc"))]
     pub fn DNSRecvInit(&self, fd: i32, msgAddr: u64) {
         let op = DNSRecv::New(fd, msgAddr);
         IOURING.AUCall(AsyncOps::DNSRecv(op));

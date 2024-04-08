@@ -26,7 +26,7 @@ use super::super::super::super::linux_def::*;
 use super::super::super::super::qmsg::qcall::TryOpenStruct;
 use super::super::super::kernel::time::*;
 use super::super::super::task::*;
-use super::super::super::util::cstring::*;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use super::super::super::util::sharedstring::*;
 
 use super::super::super::super::path;
@@ -36,6 +36,7 @@ use super::super::super::SHARESPACE;
 use super::super::attr::*;
 use super::diriops::*;
 use super::*;
+use Box;
 
 impl Statx {
     pub fn InodeType(&self) -> InodeType {
@@ -553,13 +554,15 @@ pub fn UnstableAttr(
 
         return Ok(s.UnstableAttr(mo));
     } else {
-        let mut s: Statx = Default::default();
-        let str = CString::New("");
+        let s = Box::new_in(Statx::default(), GUEST_HOST_SHARED_ALLOCATOR);
+        let addr = &*s as *const  _ as u64;
+
+        let str =  SharedString::New("");
         let ret = IOURING.Statx(
             task,
             hostfd,
             str.Ptr(),
-            &mut s as *mut _ as u64,
+            addr,
             ATType::AT_EMPTY_PATH,
             StatxMask::STATX_BASIC_STATS,
         );
