@@ -406,13 +406,24 @@ pub fn SysExitThreadGroup(task: &mut Task, args: &SyscallArguments) -> Result<i6
 // sys_clone has so many flavors. We implement the default one in linux 3.11
 // x86_64:
 //    sys_clone(clone_flags, newsp, parent_tidptr, child_tidptr, tls_val)
+// aarch64:
+//    sys_clone(clone_flags, newsp, parent_tidptr, tls_val, child_tidptr)
 pub fn SysClone(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let flags = args.arg0;
     let cStack = args.arg1;
     let pTid = args.arg2;
-    let cTid = args.arg3;
-    let tls = args.arg4;
-
+    let cTid;
+    let tls;
+    #[cfg(target_arch = "x86_64")]{
+        cTid = args.arg3;
+        tls = args.arg4;
+    }
+    // the linux kernel people decides to flip the position of tls and cTid....
+    #[cfg(target_arch = "aarch64")]{
+        tls = args.arg3;
+        cTid = args.arg4;
+    }
+    // aarch64: should be different!
     let pid = task.Clone(flags, cStack, pTid, cTid, tls)?;
     return Ok(pid as i64);
 }
