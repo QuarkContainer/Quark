@@ -38,7 +38,6 @@ use super::super::super::qlib::common::*;
 use super::super::super::qlib::kernel::kernel::futex;
 use super::super::super::qlib::kernel::kernel::timer;
 use super::super::super::qlib::kernel::vcpu;
-use super::super::super::qlib::kernel::IOURING;
 use super::super::super::qlib::kernel::SHARESPACE;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::pagetable::PageTables;
@@ -272,7 +271,6 @@ impl VirtualMachine {
             .unwrap();
 
         URING_MGR.lock().Addfd(controlSock).unwrap();
-        IOURING.SetValue(sharespace.GetIOUringAddr());
 
         unsafe {
             futex::InitSingleton();

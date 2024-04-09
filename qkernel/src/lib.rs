@@ -145,7 +145,12 @@ lazy_static! {
 
     pub static ref PRIVATE_VCPU_LOCAL_HOLDER: Box<PrivateCPULocal> = Box::new(PrivateCPULocal::New());
 
-    pub static ref PAGE_MGR_HOLDER: Box<PageMgr> = Box::new(PageMgr::default());      
+    pub static ref PAGE_MGR_HOLDER: Box<PageMgr> = Box::new(PageMgr::default());        
+}
+
+#[cfg(feature = "cc")]
+lazy_static! {
+    pub static ref IO_URING_HOLDER: Box<QUring> = Box::new(QUring::New(MemoryDef::QURING_SIZE));   
 }
 
 pub fn SingletonInit() {
@@ -157,7 +162,15 @@ pub fn SingletonInit() {
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentKernelTable()));
         //init fp state with current fp state as it is brand new vcpu
         FP_STATE.Reset();
-        IOURING.SetValue(SHARESPACE.GetIOUringAddr());
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                IOURING.SetValue(IO_URING_HOLDER.Addr());
+            } else {
+                IOURING.SetValue(SHARESPACE.GetIOUringAddr());
+            }
+        }
+
 
         PAGE_MGR.SetValue(PAGE_MGR_HOLDER.Addr());
         LOADER.Init(Loader::default());
@@ -538,7 +551,7 @@ cfg_if::cfg_if! {
             };
         
             if id == 1 {
-                info!("heap start is {:x}", privateHeapStart);
+                info!("heap start is {:x} cc is enabled 1", privateHeapStart);
                 self::Init();
         
                 if autoStart {

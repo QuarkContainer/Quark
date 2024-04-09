@@ -1,4 +1,3 @@
-use crate::host_uring::HostSubmit;
 use crate::GLOBAL_ALLOCATOR;
 
 use super::qcall::AQHostCall;
@@ -6,7 +5,6 @@ use super::qlib::buddyallocator::ZeroPage;
 use super::qlib::common::Allocator;
 use super::qlib::common::RefMgr;
 use super::qlib::common::{Error, Result};
-use super::qlib::kernel::IOURING;
 use super::qlib::linux_def::{MemoryDef, SysErr};
 use super::qlib::linux_def::{Signal, EVENT_READ};
 use super::qlib::pagetable::AlignedAllocator;
@@ -514,23 +512,6 @@ impl CPULocal {
         self.data = 1;
     }
 
-    pub fn ProcessOnce(sharespace: &ShareSpace) -> usize {
-        let mut count = 0;
-
-        loop {
-            let cnt = HostSubmit().unwrap();
-            if cnt == 0 {
-                break;
-            }
-            count += cnt;
-        }
-
-        count += IOURING.DrainCompletionQueue();
-        count += KVMVcpu::GuestMsgProcess(sharespace);
-        count += FD_NOTIFIER.HostEpollWait() as usize;
-
-        return count;
-    }
 
     pub fn Process(&self, sharespace: &ShareSpace) -> Option<TaskId> {
         match sharespace.scheduler.GetNext() {
