@@ -236,7 +236,7 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     let vcpuid = GetVcpuId();
     let share_para_page  = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
-    let mut share_para =unsafe{&mut (*share_para_page).SharePara[vcpuid]};
+    let share_para =unsafe{&mut (*share_para_page).SharePara[vcpuid]};
     share_para.para1 = para1;
     share_para.para2 = para2;
     share_para.para3 = para3;
@@ -259,7 +259,7 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
 #[inline(always)]
 pub fn HyperCall64_init(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     let share_para_page  = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
-    let mut share_para =unsafe{&mut (*share_para_page).SharePara[0]};
+    let share_para =unsafe{&mut (*share_para_page).SharePara[0]};
     share_para.para1 = para1;
     share_para.para2 = para2;
     share_para.para3 = para3;

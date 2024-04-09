@@ -333,7 +333,7 @@ impl HostSpace {
         );
 
         let ret = HostSpace::HCall(&mut msg, false) as i64;
-        let mut socket = unsafe { &mut *(addr as *mut TcpSockAddr) };
+        let socket = unsafe { &mut *(addr as *mut TcpSockAddr) };
         socket.data = new_socket.data;
         let len = unsafe { &mut *(addrlen as *mut u32) };
         *len = *new_len;
@@ -2030,7 +2030,7 @@ impl HostSpace {
     pub fn KernelGetTime_cc(clockId: i32) -> Result<i64> {
         let size = size_of::<GetTimeCall>();
         let call_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size, 0x8) as *mut GetTimeCall };
-        let mut call = unsafe { &mut *call_ptr };
+        let call = unsafe { &mut *call_ptr };
         call.clockId = clockId;
         call.res = 0;
 
@@ -2051,7 +2051,7 @@ impl HostSpace {
     pub fn KernelVcpuFreq_cc() -> i64 {
         let size = size_of::<VcpuFeq>();
         let call_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size, 0x8) as *mut VcpuFeq };
-        let mut call = unsafe { &mut *call_ptr };
+        let call = unsafe { &mut *call_ptr };
         call.res = 0;
 
         let addr = call_ptr as *const _ as u64;
