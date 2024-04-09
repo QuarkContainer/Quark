@@ -455,11 +455,6 @@ fn InitGs(id: u64) {
     SwapGs();
 }
 
-pub fn LogInit(pages: u64) {
-    let bs = self::qlib::bytestream::ByteStream::Init(pages); // 4MB
-    *SHARESPACE.logBuf.lock() = Some(bs);
-}
-
 pub fn InitTsc() {
     let _hosttsc1 = Kernel::HostSpace::Rdtsc();
     let tsc1 = TSC.Rdtsc();

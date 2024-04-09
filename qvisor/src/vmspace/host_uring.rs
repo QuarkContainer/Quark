@@ -287,8 +287,8 @@ impl UringAsyncOpsTrait for AsyncBufWrite {
         //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
         let op = opcode::Write::new(
             types::Fd(self.fd),
-            self.buf.Ptr() as *const u8,
-            self.buf.Len() as u32,
+            self.bufAddr as *const u8,
+            self.bufLen as u32,
         )
         .offset(self.offset as _);
 

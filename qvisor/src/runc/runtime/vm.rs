@@ -52,6 +52,8 @@ use super::super::super::{
     ThreadId, KERNEL_IO_THREAD, PMA_KEEPER, QUARK_CONFIG, ROOT_CONTAINER_ID, THREAD_ID, URING_MGR,
     VCPU, VMS,
 };
+#[cfg(not(feature = "cc"))]
+use crate::qlib::kernel::IOURING;
 
 pub const SANDBOX_UID_NAME : &str = "io.kubernetes.cri.sandbox-uid";
 

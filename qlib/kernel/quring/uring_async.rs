@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::GuestHostSharedAllocator;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -41,6 +42,9 @@ use super::super::SHARESPACE;
 use super::uring_op::UringCall;
 use crate::qlib::kernel::kernel::kernel::GetKernel;
 use crate::qlib::kernel::tcpip::tcpip::SockAddrInet;
+
+#[cfg (feature = "cc")]
+use crate::qlib::kernel::Kernel::is_cc_enabled;
 
 pub enum UringOps {
     UringCall(UringCall),
@@ -218,6 +222,8 @@ impl AsyncWritev {
 pub struct AsyncBufWriteInner {
     pub fd: i32,
     pub buf: DataBuff,
+    pub bufAddr: u64,
+    pub bufLen: usize,
     pub offset: i64,
     pub lockGuard: QMutex<Option<QAsyncLockGuard>>,
 }
@@ -251,6 +257,8 @@ impl AsyncBufWrite {
     pub fn New(fd: i32, buf: DataBuff, offset: i64, lockGuard: QAsyncLockGuard) -> Self {
         let inner = AsyncBufWriteInner {
             fd,
+            bufAddr: buf.Ptr(),
+            bufLen: buf.Len(),
             buf,
             offset,
             lockGuard: QMutex::new(Some(lockGuard)),
@@ -545,7 +553,7 @@ pub struct AsyncAccept {
     pub fd: i32,
     pub queue: Queue,
     pub acceptQueue: AcceptQueue,
-    pub addr: Arc<AcceptAddr>,
+    pub addr: Arc<AcceptAddr, GuestHostSharedAllocator>,
 }
 
 impl AsyncOpsTrait for AsyncAccept {
@@ -560,14 +568,31 @@ impl AsyncOpsTrait for AsyncAccept {
         /**************************hibernate wakeu **************************/
         // so far the quark hibernate is wakeup by accept.
         // todo: find better to handle this
-        if SHARESPACE.reapFileAvaiable.load(Ordering::Relaxed) {
-            ReapSwapIn();
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                if !is_cc_enabled() {
+                    if SHARESPACE.reapFileAvaiable.load(Ordering::Relaxed) {
+                        ReapSwapIn();
+                    }
+            
+                    if SHARESPACE.hibernatePause.load(Ordering::Relaxed) {
+                        GetKernel().Unpause();
+                        SHARESPACE.hibernatePause.store(false, Ordering::SeqCst);
+                    }
+            
+                }
+            } else {
+                if SHARESPACE.reapFileAvaiable.load(Ordering::Relaxed) {
+                    ReapSwapIn();
+                }
+        
+                if SHARESPACE.hibernatePause.load(Ordering::Relaxed) {
+                    GetKernel().Unpause();
+                    SHARESPACE.hibernatePause.store(false, Ordering::SeqCst);
+                }
+            }
         }
 
-        if SHARESPACE.hibernatePause.load(Ordering::Relaxed) {
-            GetKernel().Unpause();
-            SHARESPACE.hibernatePause.store(false, Ordering::SeqCst);
-        }
 
         /**************************hibernate wakeu end **************************/
 
@@ -593,7 +618,7 @@ impl AsyncAccept {
             fd,
             queue,
             acceptQueue,
-            addr: Arc::new(AcceptAddr::New()), //size of TcpSockAddr
+            addr: Arc::new_in(AcceptAddr::New(), GUEST_HOST_SHARED_ALLOCATOR), //size of TcpSockAddr
         };
     }
 }
@@ -952,7 +977,7 @@ impl AIOFsync {
 #[derive(Clone)]
 pub struct AsyncConnect {
     pub fd: i32,
-    pub addr: Arc<TcpSockAddr>,
+    pub addr: Arc<TcpSockAddr, GuestHostSharedAllocator>,
     pub len: u32,
     pub socket: UringSocketOperationsWeak,
 }
@@ -1004,7 +1029,7 @@ impl AsyncConnect {
         socket.SetConnErrno(-SysErr::EINPROGRESS);
         return Self {
             fd,
-            addr: Arc::new(addr),
+            addr: Arc::new_in(addr, GUEST_HOST_SHARED_ALLOCATOR),
             len: len as _,
             socket: socket.Downgrade(),
         };
