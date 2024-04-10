@@ -347,6 +347,8 @@ pub fn syscall_dispatch_aarch64(
     _arg4: u64,
     _arg5: u64,
 ) -> u64 {
+    use crate::qlib::addr::Addr;
+
     CPULocal::Myself().SetMode(VcpuMode::Kernel);
 
     let currTask = task::Task::Current();
@@ -403,9 +405,29 @@ pub fn syscall_dispatch_aarch64(
 
     let currTask = task::Task::Current();
 
+    if callId == SysCallID::sys_wait4 || callId == SysCallID::sys_clone {
+        let sp_el0 = currTask.GetPtRegs().get_stack_pointer();
+        const frames: usize = 40;
+        let sp_bottom = sp_el0 + ((frames-1) * core::mem::size_of::<u64>()) as u64;
+        let mut stack_log: [u64; frames] = [0; frames];
+        let sp_bottom_ptr = sp_bottom as *const u64;
+        let stack_log_prt = stack_log.as_mut_ptr();
+        unsafe {
+            use crate::kernel_def;
+            kernel_def::enable_access_user();
+            core::ptr::copy_nonoverlapping(sp_bottom_ptr, stack_log_prt, frames);
+        }
+        for i in 0..frames {
+            debug!("VM: sp:{:#x} -> {:#x}",
+                   sp_bottom - (i * core::mem::size_of::<u64>()) as u64,
+                  stack_log[i]);
+        }
+    }
+
     let state = SysCall(currTask, nr, &args);
     MainRun(currTask, state);
     res = currTask.Return();
+
     currTask.DoStop();
     // not needed because user stack not used here
     // CPULocal::SetUserStack(pt.rsp);
@@ -429,6 +451,55 @@ pub fn syscall_dispatch_aarch64(
             callId,
             currTask.GetPtRegs()
         );
+    }
+
+    if callId == SysCallID::sys_wait4 || callId == SysCallID::sys_clone {
+       // debug!("VM: Return from wait4 - cause PF on USpace.");
+       // let uaddr = 0x400000;
+       // let bind = currTask
+       //           .mm
+       //           .pagetable
+       //           .write();
+       // //
+       // // PF on user code.
+       // //
+       // for i in 0..5 {
+       //     let pf_addr = uaddr + 0x1000 * i;
+       //     let pte = bind
+       //               .pt
+       //               .VirtualToEntry(pf_addr).unwrap();
+       //     let mut flags = pte.flags();
+       //     flags.remove(PageTableFlags::ACCESSED);
+       //     bind.pt.SetPageFlags(qlib::addr::Addr(pf_addr), flags);
+       // }
+       // //
+       // // PF on return address - wait
+       // //
+       // let wait_ret_addr = 0x41e000;
+       // let pte = bind
+       //           .pt
+       //           .VirtualToEntry(wait_ret_addr).unwrap();
+       // let mut flags = pte.flags();
+       // flags.remove(PageTableFlags::ACCESSED);
+       // bind.pt.SetPageFlags(Addr(wait_ret_addr), flags);
+
+        let sp_el0 = currTask.GetPtRegs().get_stack_pointer();
+        const frames: usize = 40;
+        let sp_bottom = sp_el0 + ((frames-1) * core::mem::size_of::<u64>()) as u64;
+        let mut stack_log: [u64; frames] = [0; frames];
+        let sp_bottom_ptr = sp_bottom as *const u64;
+        let stack_log_prt = stack_log.as_mut_ptr();
+        unsafe {
+            use crate::kernel_def;
+            kernel_def::enable_access_user();
+            core::ptr::copy_nonoverlapping(sp_bottom_ptr, stack_log_prt, frames);
+        }
+        for i in 0..frames {
+            debug!("VM: sp:{:#x} -> {:#x}",
+                   sp_bottom - (i * core::mem::size_of::<u64>()) as u64,
+                  stack_log[i]);
+        }
+
     }
 
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());

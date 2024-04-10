@@ -263,7 +263,9 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
                     let page_bit_set = flags.contains(PageTableFlags::PAGE);
                     let valid_bit_set = flags.contains(PageTableFlags::VALID);
                     if valid_bit_set && page_bit_set {
-                         panic!("VM: Error - Translation-PF with mapped page, PAGE-/VALID-Flag are set in PTE.");
+                         debug!("VM: Error - Translation-PF with mapped page, PAGE-/VALID-Flag are set in PTE.");
+                         signal = Signal::SIGSEGV;
+                         break;
                     } else {
                         if !page_bit_set {
                             flags.insert(PageTableFlags::PAGE);
@@ -416,9 +418,6 @@ pub fn HandleFault(
                     FAR: {:#x},
                     GPR: {:#x}",
                     error_code, fault_address, task.GetPtRegs());
-        loop {
-            
-        }
 
         let mut info = SignalInfo {
             Signo: signal, //Signal::SIGBUS,

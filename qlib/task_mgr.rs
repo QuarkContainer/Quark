@@ -146,7 +146,7 @@ impl Scheduler {
             self.IncReadyTaskCount();
         }
 
-        //error!("ScheduleQ task {:x?}, vcpuId {}", task, vcpuId);
+        debug!("ScheduleQ task {:x?}, vcpuId {}", task, vcpuId);
         if vcpuId == 0 {
             self.WakeOne();
             return;
@@ -154,7 +154,7 @@ impl Scheduler {
 
         let state = self.VcpuArr[vcpuId as usize].State();
         if state == VcpuState::Waiting {
-            //error!("ScheduleQ: vcpu {} is waiting ..., wake it up", vcpuId);
+            debug!("ScheduleQ: vcpu {} is waiting ..., wake it up", vcpuId);
             self.VcpuArr[vcpuId as usize].Wakeup();
         } else if state == VcpuState::Running {
             self.WakeOne();
