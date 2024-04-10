@@ -112,13 +112,50 @@ pub struct PtRegs {
 #[cfg(target_arch = "aarch64")]
 impl fmt::LowerHex for PtRegs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "SP:[{:#x}]
+        write!(f, "\nSP:[{:#x}]
                    PC:[{:#x}]
                    State:[{:#x}]
                    X0:[{:#x}]
-                   GenRegs:[{:#?}]",
-                   self.sp, self.pc, self.pstate,
-                   self.orig_x0, self.regs)
+                   GenRegs:[
+                       x0:{:#x}
+                       x1:{:#x}
+                       x2:{:#x}
+                       x3:{:#x}
+                       x4:{:#x}
+                       x5:{:#x}
+                       x6:{:#x}
+                       x7:{:#x}
+                       x8:{:#x}
+                       x9:{:#x}
+                       x10:{:#x}
+                       x11:{:#x}
+                       x12:{:#x}
+                       x13:{:#x}
+                       x14:{:#x}
+                       x15:{:#x}
+                       x16:{:#x}
+                       x17:{:#x}
+                       x18:{:#x}
+                       x19:{:#x}
+                       x20:{:#x}
+                       x21:{:#x}
+                       x22:{:#x}
+                       x23:{:#x}
+                       x24:{:#x}
+                       x25:{:#x}
+                       x26:{:#x}
+                       x27:{:#x}
+                       x28:{:#x}
+                       x29:{:#x}
+                       x30:{:#x}
+                   ]\n",
+                   self.sp, self.pc, self.pstate, self.orig_x0, self.regs[0],
+                   self.regs[1], self.regs[2], self.regs[3], self.regs[4], self.regs[5],
+                   self.regs[6], self.regs[7], self.regs[8], self.regs[9], self.regs[10],
+                   self.regs[11], self.regs[12], self.regs[13], self.regs[14], self.regs[15],
+                   self.regs[16], self.regs[17], self.regs[18], self.regs[19], self.regs[20],
+                   self.regs[21], self.regs[22], self.regs[23], self.regs[24], self.regs[25],
+                   self.regs[26], self.regs[27], self.regs[28], self.regs[29], self.regs[30])
     }
 }
 #[cfg(target_arch = "aarch64")]
