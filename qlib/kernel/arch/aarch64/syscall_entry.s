@@ -78,10 +78,9 @@ context_swap:
     ldp     x25, x26, [x8], #16
     ldp     x27, x28, [x8], #16
     ldp     x29, x9, [x8], #16
-    ldr     lr, [x8], #8
-    ldr     x0, [x8], #8
+    ldp     lr, x0, [x8], #16
     dsb ish
     isb
     mov     sp, x9
-    str     x4, [x8]
+    str     x2, [x8]
     ret
