@@ -48,12 +48,10 @@ impl UringCall {
 #[derive(Clone, Debug, Copy)]
 pub enum UringOp {
     None,
-    TimerRemove(TimerRemoveOp),
     Read(ReadOp),
     Write(WriteOp),
     Statx(StatxOp),
     Fsync(FsyncOp),
-    Splice(SpliceOp),
     Accept(AcceptOp),
 }
 
@@ -97,16 +95,6 @@ pub struct StatxOp {
 pub struct FsyncOp {
     pub fd: i32,
     pub dataSyncOnly: bool,
-}
-
-#[derive(Clone, Debug, Copy)]
-pub struct SpliceOp {
-    pub fdIn: i32,
-    pub offsetIn: i64,
-    pub fdOut: i32,
-    pub offsetOut: i64,
-    pub len: u32,
-    pub flags: u32,
 }
 
 #[derive(Clone, Debug, Copy)]

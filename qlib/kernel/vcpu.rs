@@ -16,7 +16,6 @@ use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
 use super::asm::*;
-//use super::IOURING;
 use super::super::singleton::*;
 use super::super::vcpu_mgr::*;
 use super::SHARESPACE;

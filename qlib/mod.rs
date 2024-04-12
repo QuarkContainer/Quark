@@ -108,6 +108,7 @@ use self::hiber_mgr::*;
 use self::kernel::kernel::futex::*;
 use self::kernel::kernel::timer::timekeeper::*;
 use self::kernel::kernel::timer::timer_store::*;
+#[cfg(not(feature = "cc"))]
 use self::kernel::quring::uring_mgr::QUring;
 use self::linux_def::*;
 use self::object_ref::ObjectRef;
@@ -1236,7 +1237,6 @@ impl Default for UringQueue {
         
             // Uring specific 
             pub pendingWrite: CachePadded<AtomicU64>,
-            pub ioUring: CachePadded<QUring>,
         
             // Timer specific
             pub timerkeeper: CachePadded<TimeKeeper>,   
@@ -1280,7 +1280,9 @@ impl Default for UringQueue {
 impl ShareSpace {
     pub fn New() -> Self {
         let ret = ShareSpace {
+            #[cfg(not(feature = "cc"))]
             ioUring: CachePadded::new(QUring::New(MemoryDef::QURING_SIZE)),
+
             dnsSvc: DnsSvc::New().unwrap(),
             ioMgr: CachePadded::new(IOMgr::Init().unwrap()),
             tsotSocketMgr: TsotSocketMgr::default(),
@@ -1340,6 +1342,7 @@ impl ShareSpace {
         return self.futexMgr.Addr();
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn GetIOUringAddr(&self) -> u64 {
         return self.ioUring.Addr();
     }

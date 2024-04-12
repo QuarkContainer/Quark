@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use std::borrow::Borrow;
-use std::time::Duration;
 use std::ptr;
 use enum_dispatch::enum_dispatch;
 
@@ -215,24 +214,6 @@ impl FsyncOp {
     }
 }
 
-impl SpliceOp {
-    pub fn Entry(&self) -> squeue::Entry {
-        let op = opcode::Splice::new(
-            types::Fd(self.fdIn),
-            self.offsetIn,
-            types::Fd(self.fdOut),
-            self.offsetOut,
-            self.len,
-        );
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-}
-
 impl EpollCtlOp {
     pub fn Entry(&self) -> squeue::Entry {
         let op = opcode::EpollCtl::new(
@@ -270,86 +251,14 @@ impl UringCall {
     pub fn Entry(&self) -> squeue::Entry {
         match self.msg {
             UringOp::None => (),
-            UringOp::TimerRemove(ref msg) => return msg.Entry(),
             UringOp::Read(ref msg) => return msg.Entry(),
             UringOp::Write(ref msg) => return msg.Entry(),
             UringOp::Statx(ref msg) => return msg.Entry(),
             UringOp::Fsync(ref msg) => return msg.Entry(),
-            UringOp::Splice(ref msg) => return msg.Entry(),
             UringOp::Accept(ref msg) => return msg.Entry(),
         };
 
         panic!("UringCall SEntry UringOp::None")
-    }
-}
-
-impl UringAsyncOpsTrait for AsyncEventfdWrite {
-    fn Entry(&self) -> squeue::Entry {
-        let op = opcode::Write::new(
-            types::Fd(self.fd),
-            &self.addr as *const _ as u64 as *const u8,
-            8,
-        );
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-}
-
-impl UringAsyncOpsTrait for AsyncTimeout {
-    fn Entry(&self) -> squeue::Entry {
-        let ts = types::Timespec::from(
-            Duration::new(self.timeout / 1000_000_000, (self.timeout % 1000_000_000) as u32)
-        );
-        let op = opcode::Timeout::new(&ts);
-        return op.build();
-    }
-}
-
-impl UringAsyncOpsTrait for AsyncRawTimeout {
-    fn Entry(&self) -> squeue::Entry {
-        let ts = types::Timespec::from(
-            Duration::new(self.timeout / 1000_000_000, (self.timeout % 1000_000_000) as u32)
-        );
-        let op = opcode::Timeout::new(&ts);
-        return op.build();
-    }
-}
-
-impl UringAsyncOpsTrait for AsyncTimerRemove {
-    fn Entry(&self) -> squeue::Entry {
-        let op = opcode::TimeoutRemove::new(self.userData);
-
-        return op.build();
-    }
-}
-
-impl UringAsyncOpsTrait for AsyncStatx {
-    fn Entry(&self) -> squeue::Entry {
-        let op = opcode::Statx::new(
-            types::Fd(self.dirfd),
-            self.pathname as *const _,
-            &self.statx as *const _ as u64 as *mut types::statx,
-        )
-        .flags(self.flags)
-        .mask(self.mask);
-
-        return op.build();
-    }
-}
-
-impl UringAsyncOpsTrait for AsyncTTYWrite {
-    fn Entry(&self) -> squeue::Entry {
-        let op = opcode::Write::new(types::Fd(self.fd), self.addr as *const _, self.len as u32);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
     }
 }
 
@@ -378,8 +287,8 @@ impl UringAsyncOpsTrait for AsyncBufWrite {
         //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
         let op = opcode::Write::new(
             types::Fd(self.fd),
-            self.buf.Ptr() as *const u8,
-            self.buf.Len() as u32,
+            self.bufAddr as *const u8,
+            self.bufLen as u32,
         )
         .offset(self.offset as _);
 
@@ -415,17 +324,6 @@ impl UringAsyncOpsTrait for AsyncSend {
     }
 }
 
-impl UringAsyncOpsTrait for TsotAsyncSend {
-    fn Entry(&self) -> squeue::Entry {
-        //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
-        let op = opcode::Send::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32);
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-}
 
 impl UringAsyncOpsTrait for AsyncFiletWrite {
     fn Entry(&self) -> squeue::Entry {
@@ -475,37 +373,7 @@ impl UringAsyncOpsTrait for AsyncFileRead {
     }
 }
 
-impl UringAsyncOpsTrait for AsycnSendMsg {
-    fn Entry(&self) -> squeue::Entry {
-        let intern = self.lock();
-        let op = opcode::SendMsg::new(
-            types::Fd(intern.fd), 
-            &intern.msg as *const _ as *const _
-        );
 
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-}
-
-impl UringAsyncOpsTrait for AsycnRecvMsg {
-    fn Entry(&self) -> squeue::Entry {
-        let intern = self.lock();
-        let op = opcode::RecvMsg::new(
-            types::Fd(intern.fd), 
-            &intern.msg as *const _ as u64 as *mut _
-        );
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-}
 
 impl UringAsyncOpsTrait for AIOWrite {
     fn Entry(&self) -> squeue::Entry {
@@ -557,31 +425,6 @@ impl UringAsyncOpsTrait for AIOFsync {
     }
 }
 
-impl UringAsyncOpsTrait for AsyncLinkTimeout {
-    fn Entry(&self) -> squeue::Entry {
-        let tv_sec = self.timeout / 1000_000_000;
-        let tv_nsec = self.timeout % 1000_000_000;
-        let ts = types::Timespec::from(
-            Duration::new(tv_sec as u64, tv_nsec as _)
-        );
-        let op = opcode::LinkTimeout::new(&ts);
-
-        return op.build();
-    }
-}
-
-impl UringAsyncOpsTrait for UnblockBlockPollAdd {
-    fn Entry(&self) -> squeue::Entry {
-        let op = opcode::PollAdd::new(types::Fd(self.fd), self.flags);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-}
-
 impl UringAsyncOpsTrait for AsyncConnect {
     fn Entry(&self) -> squeue::Entry {
         let op = opcode::Connect::new(
@@ -598,17 +441,6 @@ impl UringAsyncOpsTrait for AsyncConnect {
     }
 }
 
-impl UringAsyncOpsTrait for TsotPoll {
-    fn Entry(&self) -> squeue::Entry {
-        let op = opcode::PollAdd::new(types::Fd(self.fd), EVENT_READ as u32);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
-    }
-}
 
 impl UringAsyncOpsTrait for DNSRecv {
     fn Entry(&self) -> squeue::Entry {
@@ -669,6 +501,31 @@ impl UringAsyncOpsTrait for AsyncEpollCtl {
         }
     }
 }
+
+impl UringAsyncOpsTrait for TsotPoll {
+    fn Entry(&self) -> squeue::Entry {
+        let op = opcode::PollAdd::new(types::Fd(self.fd), EVENT_READ as u32);
+
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
+    }
+}
+
+impl UringAsyncOpsTrait for TsotAsyncSend {
+    fn Entry(&self) -> squeue::Entry {
+        //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
+        let op = opcode::Send::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
+    }
+}
+
 
 impl UringAsyncOpsTrait for AsyncNone {}
 

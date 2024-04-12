@@ -23,6 +23,7 @@
 #![feature(unix_socket_ancillary_data)]
 #![feature(allocator_api)]
 #![feature(stmt_expr_attributes)]
+#![allow(invalid_reference_casting)]
 
 extern crate alloc;
 extern crate bit_field;

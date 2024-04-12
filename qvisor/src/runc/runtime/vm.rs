@@ -38,7 +38,6 @@ use super::super::super::qlib::common::*;
 use super::super::super::qlib::kernel::kernel::futex;
 use super::super::super::qlib::kernel::kernel::timer;
 use super::super::super::qlib::kernel::vcpu;
-use super::super::super::qlib::kernel::IOURING;
 use super::super::super::qlib::kernel::SHARESPACE;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::pagetable::PageTables;
@@ -53,6 +52,8 @@ use super::super::super::{
     ThreadId, KERNEL_IO_THREAD, PMA_KEEPER, QUARK_CONFIG, ROOT_CONTAINER_ID, THREAD_ID, URING_MGR,
     VCPU, VMS,
 };
+#[cfg(not(feature = "cc"))]
+use crate::qlib::kernel::IOURING;
 
 pub const SANDBOX_UID_NAME : &str = "io.kubernetes.cri.sandbox-uid";
 
@@ -272,7 +273,6 @@ impl VirtualMachine {
             .unwrap();
 
         URING_MGR.lock().Addfd(controlSock).unwrap();
-        IOURING.SetValue(sharespace.GetIOUringAddr());
 
         unsafe {
             futex::InitSingleton();
