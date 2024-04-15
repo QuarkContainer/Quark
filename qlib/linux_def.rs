@@ -3000,19 +3000,13 @@ impl MemoryDef {
         Self::RDMA_LOCAL_SHARE_OFFSET + Self::RDMA_LOCAL_SHARE_SIZE;
     pub const RDMA_GLOBAL_SHARE_SIZE: u64 = 2 * Self::ONE_MB;
 
-    // file map area
-    pub const FILE_MAP_OFFSET: u64 = Self::RDMA_GLOBAL_SHARE_OFFSET + Self::RDMA_GLOBAL_SHARE_SIZE;
-    pub const FILE_MAP_SIZE: u64 = Self::GUEST_PRIVATE_HEAP_OFFSET - Self::FILE_MAP_OFFSET;
-
     // heap
     pub const HOST_INIT_HEAP_OFFSET: u64 = MemoryDef::NVIDIA_START_ADDR + Self::NVIDIA_ADDR_SIZE;
     pub const HOST_INIT_HEAP_SIZE: u64 = 5 * Self::ONE_GB;
     pub const HOST_INIT_HEAP_END: u64 = Self::HOST_INIT_HEAP_OFFSET + Self::HOST_INIT_HEAP_SIZE;
 
 
-    pub const GUEST_PRIVATE_HEAP_OFFSET: u64 = MemoryDef::PHY_LOWER_ADDR
-        + Self::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB
-        - Self::GUEST_PRIVATE_HEAP_PLUS_SHARED_HEAP_SIZE;
+    pub const GUEST_PRIVATE_HEAP_OFFSET: u64 = Self::RDMA_GLOBAL_SHARE_OFFSET + Self::RDMA_GLOBAL_SHARE_SIZE;
     pub const GUEST_PRIVATE_HEAP_PLUS_SHARED_HEAP_SIZE: u64 = 10 * Self::ONE_GB;
     pub const GUEST_PRIVATE_HEAP_SIZE: u64 = 5 * Self::ONE_GB;
 
@@ -3024,6 +3018,10 @@ impl MemoryDef {
 
     pub const GHCB_OFFSET: u64 = MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::PAGE_SIZE*2;
     pub const HYPERCALL_PARA_PAGE_OFFSET :u64 = MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::PAGE_SIZE*3;
+
+    // file map area
+    pub const FILE_MAP_OFFSET: u64 = Self::GUEST_HOST_SHARED_HEAP_OFFEST + Self::GUEST_HOST_SHARED_HEAP_SIZE;
+    pub const FILE_MAP_SIZE: u64 = Self::KERNEL_MEM_INIT_REGION_SIZE * Self::ONE_GB + Self::PHY_LOWER_ADDR - Self::FILE_MAP_OFFSET;
 
     // Create 24GB Init memory region for KVM VM
     pub const KERNEL_MEM_INIT_REGION_SIZE: u64 = 24; // 24 GB
