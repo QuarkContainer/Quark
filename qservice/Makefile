@@ -1,4 +1,4 @@
-All: na ss cni test httpgateway 
+all: na ss cni test gw sched
 
 na: 
 	cargo +nightly-x86_64-unknown-linux-gnu build --bin na
@@ -9,7 +9,7 @@ cni:
 	cp -f cni_logging_config.yaml /etc/quark/
 	sudo cp -f target/debug/cni /opt/cni/bin/tsot
 
-httpgateway:	
+gw:	
 	cargo +nightly-x86_64-unknown-linux-gnu build --bin gateway
 	cp -f gateway_logging_config.yaml /etc/quark/
 
@@ -18,7 +18,11 @@ ss:
 	cp -f ss_logging_config.yaml /etc/quark/
 	cp -f qlet/node1.json /etc/quark/
 	cp -f qlet/node2.json /etc/quark/
-	
+
+sched:
+	cargo build --bin scheduler
+	cp -f scheduler_logging_config.yaml /etc/quark/
+
 test:
 	cargo build --bin test
 
