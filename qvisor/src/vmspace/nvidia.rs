@@ -12,10 +12,11 @@
 // limitations under the License.
 
 use core::ops::Deref;
+use libc::c_void;
 use spin::Mutex;
 use std::collections::BTreeMap;
 use std::ffi::CString;
-use std::mem::MaybeUninit;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::os::raw::*;
 use std::sync::Arc;
 
@@ -25,13 +26,129 @@ use crate::qlib::proxy::*;
 use crate::qlib::range::Range;
 use crate::xpu::cuda::*;
 
-use cuda_driver_sys::*;
-use cuda_runtime_sys::{
-    cudaDeviceAttr, cudaDeviceProp, cudaFuncCache, cudaLimit, cudaSharedMemConfig,
-};
-use cuda_runtime_sys::{cudaDeviceP2PAttr, cudaStreamCaptureStatus, cudaStream_t};
+use cuda_driver_sys::{CUcontext, CUdevice, CUdeviceptr, CUfunction, CUmodule, CUresult, CUstream, CUstream_st, CUfunction_attribute};
+use cuda_runtime_sys::{cudaDeviceAttr, cudaDeviceProp, cudaError_t, cudaEvent_t, cudaFuncCache, cudaLimit, cudaSharedMemConfig, cudaFuncAttributes,
+    cudaFuncAttribute, cudaDeviceP2PAttr, cudaStreamCaptureStatus, cudaStream_t, cudaStreamCaptureMode};
+use rcublas_sys::{cublasHandle_t, cublasMath_t};
+use cuda11_cublasLt_sys::{cublasLtHandle_t, cublasLtMatmulDesc_t, cublasLtMatrixLayout_t, cublasLtMatmulAlgo_t, cublasLtMatmulPreference_t, cublasLtMatmulHeuristicResult_t};
+
+#[link(name = "cuda")]
+extern "C" {
+    pub fn cuModuleLoadData( module: *mut CUmodule, image: *const c_void) -> CUresult;
+    pub fn cuModuleGetFunction(hfunc: *mut CUfunction, hmod: CUmodule, name: *const c_char) -> CUresult;
+    pub fn cuLaunchKernel(f: CUfunction, gridDimX: c_uint, gridDimY: c_uint, gridDimZ: c_uint, blockDimX: c_uint, blockDimY: c_uint, blockDimZ: c_uint, sharedMemBytes: c_uint, hStream: CUstream, kernelParams: *mut *mut c_void, extra: *mut *mut c_void) -> CUresult;  
+    pub fn cuModuleGetGlobal_v2(dptr: *mut CUdeviceptr, bytes: *mut usize, hmod: CUmodule, name: *const c_char) -> CUresult;
+    pub fn cuDevicePrimaryCtxGetState(dev: CUdevice, flags: *mut c_uint, active: *mut c_int) -> CUresult;
+    pub fn cuInit(Flags: c_uint) -> CUresult;
+    
+    pub fn cuModuleGetLoadingMode(mode: *mut CUmoduleLoadingMode) -> u32;
+    pub fn cuCtxCreate(pctx: *mut CUcontext, flags: c_uint, dev: CUdevice) -> CUresult;
+    pub fn cuCtxPushCurrent(pctx: CUcontext) -> CUresult;
+    pub fn cuDevicePrimaryCtxRetain(pctx: *mut CUcontext, dev: CUdevice) -> CUresult;
+    pub fn cuFuncGetAttribute (pi: *mut c_int, attrib: CUfunction_attribute, hfunc: CUfunction) -> CUresult;
+    pub fn cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(numBlocks: *mut c_int, func: CUfunction, blockSize: c_int, dynamicSMemSize: usize, flags: c_uint) -> CUresult;
+    pub fn cuCtxGetCurrent(pctx: *mut CUcontext) -> CUresult;
+    pub fn cuModuleUnload(hmod: CUmodule) -> CUresult;
+}
+
+#[link(name = "cudart")]
+extern "C" {
+    pub fn cudaMalloc(devPtr: *mut *mut c_void, size: usize) -> cudaError_t;
+    pub fn cudaFree(devPtr: *mut c_void) -> cudaError_t;
+    pub fn cudaMemcpy(dst: u64, src: u64, count: u64, kind: u64) -> u32;
+    pub fn cudaGetDeviceCount(count: *mut c_int) -> cudaError_t;
+    pub fn cudaGetDevice(device: *mut c_int) -> cudaError_t;
+    pub fn cudaDeviceGetStreamPriorityRange(leastPriority: *mut c_int, greatestPriority: *mut c_int) -> cudaError_t;
+    pub fn cudaStreamIsCapturing(stream: cudaStream_t, pCaptureStatus: *mut cudaStreamCaptureStatus) -> cudaError_t;
+    pub fn cudaSetDevice(device: c_int) -> cudaError_t;
+    pub fn cudaDeviceSynchronize() -> cudaError_t;
+    pub fn cudaGetLastError() -> cudaError_t;
+    pub fn cudaGetDeviceProperties(prop: *mut cudaDeviceProp, device: c_int) -> cudaError_t;
+    pub fn cudaMemcpyAsync(dst: u64, src: u64, count: u64, kind: u64, stream: cudaStream_t) -> u32;
+
+    pub fn cudaChooseDevice(device: *mut c_int, prop: *const cudaDeviceProp) -> cudaError_t;
+    pub fn cudaDeviceGetAttribute(value: *mut c_int, attr: cudaDeviceAttr, device: c_int) -> cudaError_t;
+    pub fn cudaDeviceGetByPCIBusId(device: *mut c_int, pciBusId: *const c_char) -> cudaError_t;
+    pub fn cudaDeviceGetCacheConfig(pCacheConfig: *mut cudaFuncCache) -> cudaError_t;
+    pub fn cudaDeviceGetLimit(pValue: *mut usize, limit: cudaLimit) -> cudaError_t;
+    pub fn cudaDeviceGetP2PAttribute(value: *mut c_int, attr: cudaDeviceP2PAttr, srcDevice: c_int, dstDevice: c_int) -> cudaError_t;
+    pub fn cudaDeviceGetPCIBusId(pciBusId: *mut c_char, len: c_int, device: c_int) -> cudaError_t;
+    pub fn cudaDeviceGetSharedMemConfig(pConfig: *mut cudaSharedMemConfig) -> cudaError_t;
+    pub fn cudaDeviceSetCacheConfig(cacheConfig: u32) -> cudaError_t;
+    pub fn cudaSetDeviceFlags(flags: c_uint) -> cudaError_t;
+    pub fn cudaDeviceReset() -> cudaError_t;
+
+    pub fn cudaStreamSynchronize(stream: cudaStream_t) -> cudaError_t;
+    pub fn cudaStreamCreate(pStream: *mut cudaStream_t) -> cudaError_t;
+    pub fn cudaStreamCreateWithFlags(pStream: *mut cudaStream_t, flags: c_uint) -> cudaError_t;
+    pub fn cudaStreamCreateWithPriority(pStream: *mut cudaStream_t, flags: c_uint, priority: c_int) -> cudaError_t;
+    pub fn cudaStreamDestroy(stream: cudaStream_t) -> cudaError_t;
+    pub fn cudaStreamGetFlags(hStream: cudaStream_t, flags: *mut c_uint) -> cudaError_t;
+    pub fn cudaStreamGetPriority(hStream: cudaStream_t, priority: *mut c_int) -> cudaError_t;
+    pub fn cudaStreamQuery(stream: cudaStream_t) -> cudaError_t;
+    pub fn cudaStreamWaitEvent(stream: cudaStream_t, event: cudaEvent_t, flags: c_uint) -> cudaError_t;
+    pub fn cudaThreadExchangeStreamCaptureMode(mode: *mut cudaStreamCaptureMode) -> cudaError_t;
+    pub fn cudaEventCreate(event: *mut cudaEvent_t) -> cudaError_t;
+    pub fn cudaEventCreateWithFlags(event: *mut cudaEvent_t,flags: c_uint) -> cudaError_t;
+    pub fn cudaEventDestroy(event: cudaEvent_t) -> cudaError_t;
+    pub fn cudaEventElapsedTime(ms: *mut f32, start: cudaEvent_t, end: cudaEvent_t) -> cudaError_t;
+    pub fn cudaEventQuery(event: cudaEvent_t) -> cudaError_t;
+    pub fn cudaEventRecord(event: cudaEvent_t, stream: cudaStream_t) -> cudaError_t;
+    pub fn cudaEventSynchronize(event: cudaEvent_t) -> cudaError_t;
+    pub fn cudaFuncGetAttributes(attr: *mut cudaFuncAttributes, func: *const c_void) -> cudaError_t;
+    pub fn cudaFuncSetAttribute(func: *const c_void, attr: cudaFuncAttribute, value: c_int) -> cudaError_t;
+    pub fn cudaFuncSetCacheConfig(func: *const c_void, cacheConfig: cudaFuncCache) -> cudaError_t;
+    pub fn cudaFuncSetSharedMemConfig(func: *const c_void, config: cudaSharedMemConfig) -> cudaError_t;
+
+    pub fn cudaGetErrorString(error: cudaError_t) -> *const c_char;
+    pub fn cudaGetErrorName(error: cudaError_t) -> *const c_char;
+    pub fn cudaPeekAtLastError() -> cudaError_t;
+    pub fn cudaDeviceSetLimit(limit: cudaLimit, value: usize) -> cudaError_t;
+    pub fn cudaDeviceSetSharedMemConfig(config: cudaSharedMemConfig) -> cudaError_t;
+    pub fn cudaGetDeviceFlags(flags: *mut c_uint) -> cudaError_t;
+    pub fn cudaSetValidDevices(device_arr: *mut c_int,len: c_int) -> cudaError_t;
+
+    pub fn cudaMemset(devPtr: *const c_void, value: c_int, count: usize) -> cudaError_t;
+    pub fn cudaMemsetAsync(devPtr: *const c_void, value: c_int, count: usize, stream: cudaStream_t) -> cudaError_t;
+    pub fn cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(numBlocks: *mut c_int, func: *const c_void, blockSize: c_int, dynamicSMemSize: usize, flags: c_uint) -> cudaError_t;
+}
+
+#[link(name = "nvidia-ml")]
+extern "C" {
+    pub fn nvmlInitWithFlags(flags: c_uint) -> u32;
+    pub fn nvmlDeviceGetCount_v2(deviceCount: *mut c_uint) -> u32;
+    pub fn nvmlInit() -> u32;
+    pub fn nvmlInit_v2() -> u32;
+    pub fn nvmlShutdown() -> u32;
+}
+#[link(name = "cublas")]
+extern "C" {
+    pub fn cublasCreate_v2(handle: *mut cublasHandle_t) -> u32;
+    pub fn cublasDestroy_v2(handle: cublasHandle_t) -> u32;
+    pub fn cublasSetStream_v2(handle: cublasHandle_t, streamId: cudaStream_t) -> u32;
+    pub fn cublasSetWorkspace_v2(handle: cublasHandle_t, workspace: *mut c_void, workspaceSizeInBytes: usize) -> u32;
+    pub fn cublasSetMathMode(handle: cublasHandle_t, mode: cublasMath_t) -> u32;
+    pub fn cublasSgemmStridedBatched(handle: cublasHandle_t, transa: u32, transb: u32, m: c_int, n: c_int, k: c_int, alpha: *const f32,
+         A: *const f32, lda: c_int, strideA: c_longlong, B: *const f32, ldb: c_int, strideB: c_longlong, beta: *const f32, C: *mut f32, 
+         ldc: c_int, strideC: c_longlong, batchCount: c_int) -> u32;
+    pub fn cublasGetMathMode(handle: cublasHandle_t, mode: *mut u32) -> u32;
+    pub fn cublasSgemm_v2(handle: cublasHandle_t, transa: u32, transb: u32, m: c_int, n: c_int, k: c_int, alpha: *const f32, A: *const f32,
+        lda: c_int, B: *const f32, ldb: c_int, beta: *const f32, C: *mut f32, ldc: c_int) -> u32;
+}  
+
+#[link(name ="cublasLt")]
+extern "C" {
+    pub fn cublasLtMatmul(lightHandle: cublasLtHandle_t, computeDesc: cublasLtMatmulDesc_t, alpha: *const f64, A: *const c_void, 
+        Adesc: cublasLtMatrixLayout_t, B: *const c_void, Bdesc: cublasLtMatrixLayout_t, beta: *const f64, C: *const c_void,
+        Cdesc: cublasLtMatrixLayout_t, D: *mut c_void, Ddesc: cublasLtMatrixLayout_t, algo: *const cublasLtMatmulAlgo_t,
+        workspace: *mut c_void, workspaceSizeInBytes: usize, stream: cudaStream_t) -> u32;
+    pub fn cublasLtMatmulAlgoGetHeuristic(lightHandle: cublasLtHandle_t, operationDesc: cublasLtMatmulDesc_t, Adesc: cublasLtMatrixLayout_t,
+        Bdesc: cublasLtMatrixLayout_t, Cdesc: cublasLtMatrixLayout_t, Ddesc: cublasLtMatrixLayout_t, preference: cublasLtMatmulPreference_t,
+        requestedAlgoCount: c_int, heuristicResultsArray: *mut cublasLtMatmulHeuristicResult_t, returnAlgoCount: *mut c_int) -> u32;
+}
 
 lazy_static! {
+    static ref CUDA_HAS_INIT: AtomicUsize = AtomicUsize::new(0);
     pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
     pub static ref FUNC_MAP: BTreeMap<ProxyCommand, (XpuLibrary, &'static str)> = BTreeMap::from([
         (ProxyCommand::CudaChooseDevice,(XpuLibrary::CudaRuntime, "cudaChooseDevice")),
@@ -56,7 +173,7 @@ lazy_static! {
         (ProxyCommand::CudaMemcpyAsync,(XpuLibrary::CudaRuntime, "cudaMemcpyAsync")),
         (ProxyCommand::CudaRegisterFatBinary,(XpuLibrary::CudaDriver, "cuModuleLoadData")),
         (ProxyCommand::CudaRegisterFunction,(XpuLibrary::CudaDriver, "cuModuleGetFunction")),
-        (ProxyCommand::CudaRegisterVar,(XpuLibrary::CudaDriver, "cuModuleGetGlobal")),
+        (ProxyCommand::CudaRegisterVar,(XpuLibrary::CudaDriver, "cuModuleGetGlobal_v2")),
         (ProxyCommand::CudaLaunchKernel,(XpuLibrary::CudaDriver, "cuLaunchKernel")),
         (ProxyCommand::CudaFree,(XpuLibrary::CudaRuntime, "cudaFree")),
         (ProxyCommand::CudaUnregisterFatBinary,(XpuLibrary::CudaDriver, "cuModuleUnload")),
@@ -66,560 +183,481 @@ lazy_static! {
         (ProxyCommand::CudaStreamIsCapturing,(XpuLibrary::CudaRuntime, "cudaStreamIsCapturing")),
         (ProxyCommand::CuModuleGetLoadingMode,(XpuLibrary::CudaDriver, "cuModuleGetLoadingMode")),
         (ProxyCommand::CudaGetLastError,(XpuLibrary::CudaRuntime, "cudaGetLastError")),
+        (ProxyCommand::CuInit,(XpuLibrary::CudaDriver, "cuInit")),
         (ProxyCommand::CuDevicePrimaryCtxGetState,(XpuLibrary::CudaDriver, "cuDevicePrimaryCtxGetState")),
+        (ProxyCommand::NvmlInit,(XpuLibrary::Nvml, "nvmlInit")),
+        (ProxyCommand::NvmlInitV2,(XpuLibrary::Nvml, "nvmlInit_v2")),
+        (ProxyCommand::NvmlShutdown,(XpuLibrary::Nvml, "nvmlShutdown")),
         (ProxyCommand::NvmlInitWithFlags,(XpuLibrary::Nvml, "nvmlInitWithFlags")),
+        (ProxyCommand::NvmlDeviceGetCountV2,(XpuLibrary::Nvml, "nvmlDeviceGetCount_v2")),
     ]);
 }
 
-pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i64> {
-    // error!("NvidiaProxy 0 cmd {:?}", cmd);
-    let handler = NVIDIA_HANDLERS.GetFuncHandler(cmd)?;
-    // error!("NvidiaProxy 0 cmd {:?} After getting handler", cmd);
+pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId: &str) -> Result<i64> {
     match cmd {
         ProxyCommand::None => {
             panic!("get impossible proxy command");
         }
         ProxyCommand::CudaChooseDevice => {
-            let mut device: ::std::os::raw::c_int = Default::default();
-
+            // error!("nvidia.rs: cudaChooseDevice");
+            let mut device: c_int = Default::default();
             let deviceProp = unsafe { *(parameters.para2 as *const u8 as *const cudaDeviceProp) };
-
-            error!("deviceProp is(deviceProp.luidDeviceNodeMask:{:x}, deviceProp.totalGlobalMem:{:x}, deviceProp.sharedMemPerBlock:{:x}, deviceProp.regsPerBlock: {:x})...",
-                deviceProp.luidDeviceNodeMask,
-                deviceProp.totalGlobalMem,
-                deviceProp.sharedMemPerBlock,
-                deviceProp.regsPerBlock,
-            );
-
-            let func: extern "C" fn(*mut ::std::os::raw::c_int, *const cudaDeviceProp) -> i32 =
-                unsafe { std::mem::transmute(handler) };
-
-            let ret = func(&mut device, &deviceProp);
-
-            // error!("device after function call is :{}", device);
-
-            // error!("cudaChooseDevice ret is: {:?}, {}", ret, ret);
-
+            
+            let ret = unsafe { cudaChooseDevice(&mut device, &deviceProp) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by CudaChooseDevice: {}", ret as u32);
+            }
+            
             unsafe { *(parameters.para1 as *mut i32) = device };
-
             return Ok(ret as i64);
         }
         ProxyCommand::CudaDeviceGetAttribute => {
-            let attribute: cudaDeviceAttr;
-
-            unsafe {
-                attribute = *(&parameters.para2 as *const _ as u64 as *mut cudaDeviceAttr);
-            }
-
+            // error!("nvidia.rs: cudaDeviceGetAttribute");
+            let attribute: cudaDeviceAttr = unsafe{ *(&parameters.para2 as *const _ as u64 as *mut cudaDeviceAttr) };
             let mut value: c_int = 0;
-
             let device: c_int = parameters.para3 as c_int;
 
-            let func: extern "C" fn(
-                *mut ::std::os::raw::c_int,
-                cudaDeviceAttr,
-                ::std::os::raw::c_int,
-            ) -> i32 = unsafe { std::mem::transmute(handler) };
-
-            let ret = func(&mut value, attribute, device);
-
-            // error!("value after function call is :{:x}", value);
-            // error!(
-            //     "cudaDeviceGetAttribute ret is: {:?}, {}",
-            //     ret, ret
-            // );
+            let ret = unsafe { cudaDeviceGetAttribute(&mut value, attribute, device) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by CudaDeviceGetAttribute: {}", ret as u32);
+            }
 
             unsafe { *(parameters.para1 as *mut i32) = value as i32 };
-
             return Ok(ret as i64);
         }
         ProxyCommand::CudaDeviceGetByPCIBusId => {
-            let func: extern "C" fn(
-                *mut ::std::os::raw::c_int,
-                *const ::std::os::raw::c_char,
-            ) -> i32 = unsafe { std::mem::transmute(handler) };
-
+            // error!("nvidia.rs: cudaDeviceGetByPCIBusId");
             let mut device: c_int = 0;
-
-            let bytes = unsafe {
-                std::slice::from_raw_parts(parameters.para2 as *const u8, parameters.para3 as usize)
-            };
-
+            let bytes = unsafe { std::slice::from_raw_parts(parameters.para2 as *const u8, parameters.para3 as usize) };
             let PCIBusId = std::str::from_utf8(bytes).unwrap();
-
             let cstring = CString::new(PCIBusId).unwrap();
 
-            let ret = func(&mut device, cstring.as_ptr());
-            // error!("the cstring: {:?}", cstring);
-
-            // error!("device after function call is :{:x}", device);
-            // error!(
-            //     "cudaDeviceGetByPCIBusId ret is: {:?}, {}",
-            //     ret, ret
-            // );
+            let ret = unsafe{ cudaDeviceGetByPCIBusId(&mut device, cstring.as_ptr()) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaDeviceGetByPCIBusId: {}", ret as u32);
+            }
 
             unsafe { *(parameters.para1 as *mut i32) = device as i32 };
-
             return Ok(ret as i64);
         }
         ProxyCommand::CudaDeviceGetCacheConfig => {
-            let func: extern "C" fn(*mut cudaFuncCache) -> i32 =
-                unsafe { std::mem::transmute(handler) };
+            // error!("nvidia.rs: cudaDeviceGetCacheConfig");
+            let mut cacheConfig: cudaFuncCache = unsafe {*(parameters.para1 as *mut _)};
 
-            let mut cacheConfig: cudaFuncCache;
-            unsafe {
-                cacheConfig = *(parameters.para1 as *mut _);
+            let ret = unsafe { cudaDeviceGetCacheConfig(&mut cacheConfig) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaDeviceGetCacheConfig: {}", ret as u32);
             }
 
-            let ret = func(&mut cacheConfig);
-
-            // error!("cudaDeviceGetCacheConfig ret is :{}, {:?}", ret, ret);
-            // error!(
-            //     "now cacheConfig should change: {}, {:?}",
-            //     cacheConfig as u32, cacheConfig
-            // );
-
-            unsafe {
-                *(parameters.para1 as *mut _) = cacheConfig as u32;
-            }
-
+            unsafe {*(parameters.para1 as *mut _) = cacheConfig as u32;}
             return Ok(ret as i64);
         }
         ProxyCommand::CudaDeviceGetLimit => {
-            let limitType: cudaLimit;
-            unsafe {
-                limitType = *(&parameters.para2 as *const _ as u64 as *mut cudaLimit);
-            }
-
+            //error!("nvidia.rs: cudaDeviceGetLimit");
+            let limitType: cudaLimit = unsafe { *(&parameters.para2 as *const _ as *mut cudaLimit) };
             let mut limit: usize = 0;
 
-            let func: extern "C" fn(*mut usize, cudaLimit) -> i32 =
-                unsafe { std::mem::transmute(handler) };
-
-            let ret = func(&mut limit, limitType);
-
-            // error!("limit after function call is :{:x}", limit);
-            // error!(
-            //     "cudaDeviceGetAttribute ret is: {:?}, {}",
-            //     ret, ret
-            // );
+            let ret = unsafe { cudaDeviceGetLimit(&mut limit, limitType)};
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaDeviceGetLimit: {}", ret as u32);
+            }
 
             unsafe { *(parameters.para1 as *mut _) = limit };
-
             return Ok(ret as i64);
         }
         ProxyCommand::CudaDeviceGetP2PAttribute => {
+            //error!("nvidia.rs: cudaDeviceGetP2PAttribute");
             let mut value: libc::c_int = 0; 
-            let attribute =
-                unsafe { *(&parameters.para2 as *const _ as u64 as *mut cudaDeviceP2PAttr) };
+            let attribute = unsafe { *(&parameters.para2 as *const _ as u64 as *mut cudaDeviceP2PAttr) };
 
-            let func: extern "C" fn(
-                *mut ::std::os::raw::c_int,
-                cudaDeviceP2PAttr,
-                ::std::os::raw::c_int,
-                ::std::os::raw::c_int,
-            ) -> i32 = unsafe { std::mem::transmute(handler) };
-            let ret = func(
-                &mut value,
-                attribute,
-                parameters.para3 as c_int,
-                parameters.para4 as c_int,
-            );
-
-            // error!("value after function call is :{:x}", value);
-            // error!(
-            //     "cudaDeviceGetP2PAttribute ret is: {:?}, {}",
-            //     ret, ret
-            // );
+            let ret = unsafe { cudaDeviceGetP2PAttribute(&mut value, attribute, 
+                parameters.para3 as c_int, parameters.para4 as c_int)};
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaDeviceGetP2PAttribute: {}", ret as u32);
+            }
 
             unsafe { *(parameters.para1 as *mut _) = value as i32 };
-
             return Ok(ret as i64);
         }
         ProxyCommand::CudaDeviceGetPCIBusId => {
-            let func: extern "C" fn(
-                *mut libc::c_char,
-                ::std::os::raw::c_int,
-                ::std::os::raw::c_int,
-            ) -> i32 = unsafe { std::mem::transmute(handler) };
-
+            //error!("nvidia.rs: cudaDeviceGetPCIBusId");
             let mut pciBusId: Vec<c_char> = vec![0; parameters.para2 as usize];
 
-            let ret = func(
-                pciBusId.as_mut_ptr(),
-                parameters.para2 as ::std::os::raw::c_int,
-                parameters.para3 as ::std::os::raw::c_int,
-            );
-
-            // error!("PciBusId after C function call: {:#?}", pciBusId);
-            // error!("cudaDeviceGetPCIBusId ret is: {:?}, {}", ret, ret);
-
-            let pciBusString =
-                String::from_utf8(pciBusId.iter().map(|&c| c as u8).collect()).unwrap();
-
-            unsafe {
-                *(parameters.para1 as *mut String) = pciBusString.to_owned();
+            let ret = unsafe { cudaDeviceGetPCIBusId( pciBusId.as_mut_ptr(), parameters.para2 as c_int, parameters.para3 as c_int,) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaDeviceGetPCIBusId: {}", ret as u32);
             }
 
+            let pciBusString = String::from_utf8(pciBusId.iter().map(|&c| c as u8).collect()).unwrap();
+            unsafe {*(parameters.para1 as *mut String) = pciBusString.to_owned()};
             return Ok(ret as i64);
         }
         ProxyCommand::CudaDeviceGetSharedMemConfig => {
-            let func: extern "C" fn(*mut cudaSharedMemConfig) -> i32 =
-                unsafe { std::mem::transmute(handler) };
+            //error!("nvidia.rs: cudaDeviceGetSharedMemConfig");
             let mut sharedMemConfig: cudaSharedMemConfig = unsafe { *(parameters.para1 as *mut _) };
 
-            let ret = func(&mut sharedMemConfig);
-
-            // error!("cudaDeviceGetSharedMemConfig ret is :{}, {:#?}", ret, ret);
-            // error!(
-            //     "sharedMemConfig after function call is: {}, {:?}",
-            //     sharedMemConfig as u32, sharedMemConfig
-            // );
+            let ret = unsafe { cudaDeviceGetSharedMemConfig(&mut sharedMemConfig) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaDeviceGetSharedMemConfig: {}", ret as u32);
+            }
 
             unsafe { *(parameters.para1 as *mut _) = sharedMemConfig as u32 };
-
             return Ok(ret as i64);
         }
         ProxyCommand::CudaDeviceGetStreamPriorityRange => {
-            let mut leastPriority: ::std::os::raw::c_int;
-            let mut greatestPriority: ::std::os::raw::c_int;
+            //error!("nvidia.rs: cudaDeviceGetStreamPriorityRange");
+            let mut leastPriority: c_int = unsafe { *(parameters.para1 as *mut _) };
+            let mut greatestPriority: c_int = unsafe { *(parameters.para2 as *mut _) };
 
-            unsafe {
-                leastPriority = *(parameters.para1 as *mut _);
-                greatestPriority = *(parameters.para2 as *mut _);
+            let ret = unsafe { cudaDeviceGetStreamPriorityRange(&mut leastPriority, &mut greatestPriority) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaDeviceGetStreamPriorityRange: {}", ret as u32);
             }
-
-            // error!("leastPriority before function call is: {}",leastPriority);
-            // error!("greatestPriority before function call is: {}",greatestPriority);
-
-            let func: extern "C" fn(*mut ::std::os::raw::c_int, *mut ::std::os::raw::c_int) -> i32 =
-                unsafe { std::mem::transmute(handler) };
-
-            let ret = func(&mut leastPriority, &mut greatestPriority);
-
-            // error!("leastPriority after function call is :{}",leastPriority);
-            // error!("greatestPriority after function call is:{}",greatestPriority);
-
-            // error!("cudaDeviceGetStreamPriorityRange ret is: {:?}, {}", ret, ret);
 
             unsafe {
                 *(parameters.para1 as *mut _) = leastPriority;
                 *(parameters.para2 as *mut _) = greatestPriority;
             }
-
             return Ok(ret as i64);
         }
         ProxyCommand::CudaDeviceSetCacheConfig => {
-            let func: extern "C" fn(cudaFuncCache) -> i32 = unsafe { std::mem::transmute(handler) };
-
-            let cacheConfig = unsafe { std::mem::transmute(parameters.para1 as u32) };
-            let ret = func(cacheConfig);
-
-            // error!("cudaDeviceSetCacheConfig ret is {}, {:?}", ret, ret);
+            //error!("nvidia.rs: cudaDeviceSetCacheConfig");
+            let ret = unsafe { cudaDeviceSetCacheConfig(parameters.para1 as u32)};
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by CudaDeviceSetCacheConfig: {}", ret as u32);
+            }
 
             return Ok(ret as i64);
         }
-        ProxyCommand::CudaSetDevice => {
-            // error!("CudaSetDevice {}",parameters.para1 as i32);
-            let func: extern "C" fn(libc::c_int) -> i32 = unsafe { std::mem::transmute(handler) };
+        ProxyCommand::CudaDeviceSetLimit => {
+            //error!("nvidia.rs: cudaDeviceSetLimit");
+            let ret = unsafe { cudaDeviceSetLimit(*(&parameters.para1 as *const _ as u64 as *mut cudaLimit), parameters.para2 as usize)};
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaDeviceSetLimit: {}", ret as u32);
+            }
 
-            let ret = func(parameters.para1 as i32);
-            // error!(
-            //     "called func CudaSetDevice ret {:?}",
-            //     ret,
-            //  );
-        
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaDeviceSetSharedMemConfig => {
+            //error!("nvidia.rs: CudaDeviceSetSharedMemConfig");
+            let ret = unsafe { cudaDeviceSetSharedMemConfig(*(&parameters.para1 as *const _ as u64 as *mut cudaSharedMemConfig))};
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaDeviceSetSharedMemConfig: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+
+        }
+        ProxyCommand::CudaSetDevice => {
+            //error!("nvidia.rs: cudaSetDevice {}",parameters.para1 as i32);
+            let ret = unsafe { cudaSetDevice(parameters.para1 as i32) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaSetDevice: {}", ret as u32);
+            }
+
             return Ok(ret as i64);
         }
         ProxyCommand::CudaSetDeviceFlags => {
-            // error!("CudaSetDeviceFlags");
-            let func: extern "C" fn(libc::c_uint) -> i32 = unsafe { std::mem::transmute(handler) };
-
-            let ret = func(parameters.para1 as u32);
-            // error!("cudaSetDeviceFlags ret is {}, {:?}", ret, ret);
+            //error!("nvidia.rs: cudaSetDeviceFlags");     
+            let ret = unsafe { cudaSetDeviceFlags(parameters.para1 as u32) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaSetDeviceFlags: {}", ret as u32);
+            }
 
             return Ok(ret as i64);
         }
-        ProxyCommand::CudaDeviceReset | ProxyCommand::CudaDeviceSynchronize => {
-            let func: extern "C" fn() -> i32 = unsafe { std::mem::transmute(handler) };
+        ProxyCommand::CudaSetValidDevices => {
+            //error!("nvidia.rs: cudaSetValidDevices");
+            let ret = unsafe { cudaSetValidDevices(parameters.para1 as *mut c_int, parameters.para2 as i32)};
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaSetValidDevices: {}", ret as u32);
+            }
 
-            let ret = func();
+            return Ok(ret as i64);  
+        }
+
+        ProxyCommand::CudaDeviceReset => {
+            //error!("nvidia.rs: cudaDeviceReset");
+            let ret = unsafe { cudaDeviceReset() };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaDeviceReset: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaDeviceSynchronize => {
+            // error!("nvidia.rs: cudaDeviceSynchronize");
+            let ret  = unsafe { cudaDeviceSynchronize() };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaDeviceSynchronize: {}", ret as u32);
+            }
+
             return Ok(ret as i64);
         }
         ProxyCommand::CudaGetDevice => {
-            let mut device: ::std::os::raw::c_int = Default::default();
-            let func: extern "C" fn(*mut ::std::os::raw::c_int) -> i32 = unsafe{ std::mem::transmute(handler) };
-            let ret = func(&mut device);
-            // error!("cudaGetDevice ret {:?}, device {}",ret,device);
+            //error!("nvidia.rs: cudaGetDevice");
+            let mut device: c_int = Default::default();
 
-            unsafe{ *(parameters.para1 as *mut i32) = device };
+            let ret = unsafe { cudaGetDevice(&mut device) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaGetDevice: {}", ret as u32);
+            }
 
+            unsafe { *(parameters.para1 as *mut i32) = device };
             return Ok(ret as i64);
-
         }
         ProxyCommand::CudaGetDeviceCount => {
-            let mut deviceCount: libc::c_int = 0;
+            //error!("nvidia.rs: cudaGetDeviceCount");
+            let mut deviceCount: c_int = 0;
 
-            let func: extern "C" fn(*mut ::std::os::raw::c_int) -> i32 =
-                unsafe { std::mem::transmute(handler) };
-
-            let ret = func(&mut deviceCount);
-
-            // error!("device count after function call is :{:x}",deviceCount);
-            // error!("cudaGetDeviceCount ret is: {:?}, {}", ret, ret);
+            let ret = unsafe { cudaGetDeviceCount(&mut deviceCount) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaGetDeviceCount: {}", ret as u32);
+            }
 
             unsafe { *(parameters.para1 as *mut i32) = deviceCount as i32 };
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaGetDeviceFlags => {
+            //error!("nvidia.rs: cudaGetDeviceFlags");
+            let mut deviceFlags = 0;
+
+            let ret = unsafe { cudaGetDeviceFlags(&mut deviceFlags) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaGetDeviceFlags: {}", ret as u32);
+            }
 
             return Ok(ret as i64);
         }
         ProxyCommand::CudaGetDeviceProperties => {
+            //error!("nvidia.rs: cudaGetDeviceProperties");
             let device = parameters.para2;
-
             let mut deviceProp: cudaDeviceProp = Default::default();
 
-            let func: extern "C" fn(*mut cudaDeviceProp, ::std::os::raw::c_int) -> i32 =
-                unsafe { std::mem::transmute(handler) };
-
-            let ret = func(&mut deviceProp, device as ::std::os::raw::c_int);
-
-            // error!("deviceProp after function call, deviceProp.name:{:?}, deviceProp.uuid:{:?}, deviceProp.luid:{:?}", deviceProp.name, deviceProp.uuid, deviceProp.luid);
-            // error!("cudaGetDeviceProperties ret is {}, {:?}", ret, ret);
+            let ret = unsafe { cudaGetDeviceProperties(&mut deviceProp, device as c_int) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaGetDeviceProperties: {}", ret as u32);
+            }
 
             unsafe { *(parameters.para1 as *mut _) = deviceProp };
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaGetErrorString => {
+            //error!("nvidia.rs: cudaGetErrorString");
+            let ret = unsafe { cudaGetErrorString(*(&parameters.para1 as *const _ as u64 as *mut cudaError_t))};
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaGetErrorString: {}", ret as u32);
+            }
+
+            let cStr = unsafe { std::ffi::CStr::from_ptr(ret) };
+            let errorStr = cStr.to_str().expect("Invalid UTF-8 data");
+            let errorString = errorStr.to_string();
+            unsafe {*(parameters.para2 as *mut String) = errorString};
+            return Ok(0 as i64);
+        }
+        ProxyCommand::CudaGetErrorName => {
+            //error!("nvidia.rs: cudaGetErrorName");
+            let ret = unsafe { cudaGetErrorName(*(&parameters.para1 as *const _ as u64 as *mut cudaError_t)) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaGetErrorName: {}", ret as u32);
+            }
+
+            let cStr = unsafe { std::ffi::CStr::from_ptr(ret) };
+            let errorStr = cStr.to_str().expect("Invalid UTF-8 data");
+            let errorString = errorStr.to_string();
+            unsafe {*(parameters.para2 as *mut String) = errorString};
+            return Ok(0 as i64);
+
+        }
+        ProxyCommand::CudaPeekAtLastError => {
+            //error!("nvidia.rs: cudaPeekAtLastError");
+            let ret = unsafe { cudaPeekAtLastError()};
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaPeekAtLastError: {}", ret as u32);
+            }
 
             return Ok(ret as i64);
         }
         ProxyCommand::CudaMalloc => {
-            let func: extern "C" fn(*mut *mut ::std::os::raw::c_void, usize) -> i32 =
-                unsafe { std::mem::transmute(handler) };
-
-            // error!("CudaMalloc before parameters:{:x?}", parameters);
-            let mut para1 = parameters.para1 as *mut ::std::os::raw::c_void;
+           // error!("nvidia.rs: cudaMalloc");
+            let mut para1 = parameters.para1 as *mut c_void;
             let addr = &mut para1;
 
-            // error!(
-            //     "before cuda_runtime_sys::cudaMalloc addr {:x}",
-            //     *addr as u64
-            // );
-            let ret = func(addr, parameters.para2 as usize);
-            // error!(
-            //     "cuda_runtime_sys::cudaMalloc ret {:x?} addr {:x}",
-            //     ret, *addr as u64
-            // );
-
-            unsafe {
-                *(parameters.para1 as *mut u64) = *addr as u64;
+            let ret = unsafe { cudaMalloc(addr, parameters.para2 as usize) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaMalloc: {}", ret as u32);
             }
 
-            // error!(
-            //     "CudaMalloc after parameters:{:x?} ret {:x?}",
-            //     parameters, ret
-            // );
+            unsafe { *(parameters.para1 as *mut u64) = *addr as u64 };
             return Ok(ret as i64);
         }
-
         ProxyCommand::CudaFree => {
-            let func: extern "C" fn(*mut ::std::os::raw::c_void) -> i32 =
-                unsafe { std::mem::transmute(handler) };
-                
-            let ret = func(parameters.para1 as *mut ::std::os::raw::c_void);
-            // error!("cuda free memory ret: {:?} at location: {:x}",ret, parameters.para1);
+            //error!("nvidia.rs: cudaFree");
+            let  ret = unsafe{ cudaFree(parameters.para1 as *mut c_void) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaFree: {}", ret as u32);
+            }
 
             return Ok(ret as i64);
         }
         ProxyCommand::CudaMemcpy => {
-            return CudaMemcpy(handler, parameters);
+            return CudaMemcpy(parameters);
         }
         ProxyCommand::CudaMemcpyAsync => {
-            return CudaMemcpyAsync(handler, parameters);
+            return CudaMemcpyAsync(parameters);
         }
         ProxyCommand::CudaRegisterFatBinary => {
+            //error!("nvidia.rs: cudaRegisterFatBinary");
+            let bytes = unsafe {std::slice::from_raw_parts( parameters.para4 as *const _, parameters.para5 as usize)};
+            let ptxlibPath = std::str::from_utf8(bytes).unwrap();
+            // todo: use mutex instead of atomic?
+            if CUDA_HAS_INIT.fetch_add(1, Ordering::SeqCst)==0 {
+                NVIDIA_HANDLERS.Trigger(containerId, ptxlibPath);
+            }
+          
             let fatElfHeader = unsafe { &*(parameters.para2 as *const u8 as *const FatElfHeader) };
+            // error!("fatElfHeader magic is :{:x}, version is :{:x}, header size is :{:x}, size is :{:x}", fatElfHeader.magic, fatElfHeader.version, fatElfHeader.header_size, fatElfHeader.size);
             let moduleKey = parameters.para3;
-            // error!("moduleKey:{:x}", moduleKey);
-
             match GetFatbinInfo(parameters.para2, fatElfHeader) {
                 Ok(_) => {}
                 Err(e) => {
                     return Err(e);
                 }
             }
+            
             let mut module: u64 = 0;
-            let ret = unsafe {
-                cuda_driver_sys::cuModuleLoadData(
-                    &mut module as *mut _ as u64 as *mut CUmodule,
-                    parameters.para2 as *const c_void,
-                )
-            };
-           
-            MODULES.lock().insert(moduleKey, module);
-            // error!(
-            //     "cudaRegisterFatBinary func ret {:?} module ptr {:x?} MODULES {:x?}",
-            //     ret,
-            //     module,
-            //     MODULES.lock()
-            // );
+            let ret = unsafe { cuModuleLoadData(&mut module as *mut _ as u64 as *mut CUmodule, parameters.para2 as *const c_void) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by CudaRegisterFatBinary(cuModuleLoadData): {}", ret as u32);
+            }
 
+            unsafe{ cudaDeviceSynchronize();}
+            MODULES.lock().insert(moduleKey, module);
             return Ok(ret as i64);
         }
         ProxyCommand::CudaUnregisterFatBinary => {
+            //error!("nvidia.rs: CudaUnregisterFatBinary");
             let moduleKey = parameters.para1;
-            // error!("unregister module key:{:x}", moduleKey);
 
             let module = match MODULES.lock().get(&moduleKey) {
                 Some(module) => {
-                    // error!(
-                    //     "module: {:x} for this module key: {:x} has been found",
-                    //     module, moduleKey
-                    // );
                     *module
                 }
                 None => {
-                    // error!("no module be found with this fatcubinHandle:{:x}",moduleKey);
+                    //error!("no module be found with this fatcubinHandle: {:x}", moduleKey);
                     0
                 }
             };
-            let ret =
-                unsafe { cuda_driver_sys::cuModuleUnload((module as *const u64) as CUmodule) };
-            // error!("cudaUnregisterFatBinary ret: {:?}", ret);
-            MODULES.lock().remove(&moduleKey);
 
-            //TODO: may need to remove the FUNCTIONS key value pair
+            let ret = unsafe { cuModuleUnload(module as *const u64 as CUmodule) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by CudaUnregisterFatBinary(cuModuleUnload): {}", ret as u32);
+            }
+
+            // delete the module
+            MODULES.lock().remove(&moduleKey);
             return Ok(ret as i64);
         }
         ProxyCommand::CudaRegisterFunction => {
+            //error!("nvidia.rs: cudaRegisterFunction");
             let info = unsafe { &*(parameters.para1 as *const u8 as *const RegisterFunctionInfo) };
-
-            let bytes = unsafe {
-                std::slice::from_raw_parts(info.deviceName as *const u8, parameters.para2 as usize)
-            };
+            let bytes = unsafe { std::slice::from_raw_parts(info.deviceName as *const u8, parameters.para2 as usize) };
             let deviceName = std::str::from_utf8(bytes).unwrap();
 
             let mut module = match MODULES.lock().get(&info.fatCubinHandle) {
                 Some(module) => {
-                    // error!("module: {:x} for this fatCubinHandle:{} has been found",module, info.fatCubinHandle);
                     *module
                 }
                 None => {
-                    error!("no module found with this fatCubin");
+                    //error!("no module be found with this fatcubinHandle: {:x}", info.fatCubinHandle);
                     0
                 }
             };
-            // error!(
-            //     "deviceName {}, parameters {:x?} module {:x}",
-            //     deviceName, parameters, module
-            // );
 
             let mut hfunc: u64 = 0;
             let ret = unsafe {
-                cuda_driver_sys::cuModuleGetFunction(
+                // cuda_driver_sys::
+                cuModuleGetFunction(
                     &mut hfunc as *mut _ as u64 as *mut CUfunction,
                     *(&mut module as *mut _ as u64 as *mut CUmodule),
                     CString::new(deviceName).unwrap().clone().as_ptr(),
                 )
             };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by CudaRegisterFunction(cuModuleGetFunction): {}", ret as u32);
+            }
 
+            unsafe{ cudaDeviceSynchronize();}
             FUNCTIONS.lock().insert(info.hostFun, hfunc);
-            // error!(
-            //     "cuModuleGetFunction ret {:x?}, hfunc {:x}, &hfunc {:x}, FUNCTIONS  {:x?}",
-            //     ret,
-            //     hfunc,
-            //     &hfunc,
-            //     FUNCTIONS.lock()
-            // );
 
             let kernelInfo = match KERNEL_INFOS.lock().get(&deviceName.to_string()) {
                 Some(kernelInformations) => {
-                    // error!("found kernel {:?}", kernelInformations);
                     kernelInformations.clone()
                 }
                 None => {
-                    error!(
-                        "No kernel infos found with this deviceName : {}",
-                        deviceName
-                    );
+                    //error!("No kernel infos found with this deviceName : {}", deviceName);
                     Arc::new(KernelInfo::default())
                 }
             };
-
             let paramInfo = parameters.para3 as *const u8 as *mut ParamInfo;
             unsafe {
                 (*paramInfo).paramNum = kernelInfo.paramNum;
                 for i in 0..(*paramInfo).paramNum {
                     (*paramInfo).paramSizes[i] = kernelInfo.paramSizes[i];
                 }
-                // error!("paramInfo in nvidia {:x?}", (*paramInfo));
             }
             return Ok(ret as i64);
         }
         ProxyCommand::CudaRegisterVar => {
+            //error!("nvidia.rs: cudaRegisterFunction");
             let info = unsafe { *(parameters.para1 as *const u8 as *const RegisterVarInfo) };
-
-            let bytes = unsafe {
-                std::slice::from_raw_parts(info.deviceName as *const u8, parameters.para2 as usize)
-            };
-
+            let bytes = unsafe { std::slice::from_raw_parts(info.deviceName as *const u8, parameters.para2 as usize) };
             let deviceName = std::str::from_utf8(bytes).unwrap();
-
-            let deviceName_cString = CString::new(deviceName).unwrap();
 
             let module = match MODULES.lock().get(&info.fatCubinHandle) {
                 Some(module) => {
-                    // error!(
-                    //     "module: {:x} for this fatCubinHandle:{:x} has been found",
-                    //     module, info.fatCubinHandle
-                    // );
                     *module
                 }
                 None => {
-                    error!("no module found with this fatCubin");
+                    //error!("no module found with this fatCubin {:x}", info.fatCubinHandle);
                     0
                 }
             };
-            // error!(
-            //     "deviceName {}, parameters {:x?} module {:x}",
-            //     deviceName, parameters, module
-            // );
 
             let mut devicePtr: CUdeviceptr = 0;
-            let mut d_size: usize = 0;
+            let mut dSize: usize = 0;
             let ret = unsafe {
-                cuda_driver_sys::cuModuleGetGlobal_v2(
+                // cuda_driver_sys::
+                cuModuleGetGlobal_v2(
                     &mut devicePtr,
-                    &mut d_size,
+                    &mut dSize,
                     (module as *const u64) as CUmodule,
-                    deviceName_cString.as_ptr(),
+                    CString::new(deviceName).unwrap().as_ptr(),
                 )
             };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by CudaRegisterVar(cuModuleGetGlobal_v2): {}", ret as u32);
+            }
 
             GLOBALS.lock().insert(info.hostVar, devicePtr);
-            // error!(
-            //     "cuModuleGetGlobal_v2 ret {:x?}, devicePtr {:x}, GLOBALS {:x?}",
-            //     ret,
-            //     devicePtr,
-            //     GLOBALS.lock()
-            // );
-
             return Ok(ret as i64);
         }
         ProxyCommand::CudaLaunchKernel => {
-            // error!("CudaLaunchKernel in host parameters {:x?}", parameters);
+            //error!("nvidia.rs: cudaLaunchKernel");
             let info = unsafe { &*(parameters.para1 as *const u8 as *const LaunchKernelInfo) };
-
             let func = match FUNCTIONS.lock().get(&info.func) {
                 Some(func) => {
-                    // error!("func has been found: {:x}", func);
                     func.clone()
                 }
                 None => {
-                    // error!("no CUfunction has been found");
+                    //error!("no CUfunction has been found {:x}", info.func);
                     0
                 }
             };
-            // error!("CudaLaunchKernel in host info {:x?}, func {:x}", info, func);
-
+       
             let ret: CUresult = unsafe {
-                cuda_driver_sys::cuLaunchKernel(
+                // cuda_driver_sys::
+                cuLaunchKernel(
                     func as CUfunction,
                     info.gridDim.x,
                     info.gridDim.y,
@@ -629,167 +667,791 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters) -> Result<i6
                     info.blockDim.z,
                     info.sharedMem as u32,
                     info.stream as *mut CUstream_st,
-                    info.args as *mut *mut ::std::os::raw::c_void,
-                    0 as *mut *mut ::std::os::raw::c_void,
+                    info.args as *mut *mut c_void,
+                    0 as *mut *mut c_void,
                 )
             };
-          
-            // error!("cuLaunchKernel ret {:x?}", ret);
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by CudaLaunchKernel(cuLaunchKernel): {}", ret as u32);
+            }
 
             return Ok(ret as i64);
         }
         ProxyCommand::CudaStreamSynchronize => {
-            // error!(
-            //     "CudaStreamSynchronize stream parameter is:{:?}",
-            //     parameters.para1
-            // );
-            let func: extern "C" fn(cudaStream_t) -> i32 = unsafe { std::mem::transmute(handler) };
-
-            let ret = func(parameters.para1 as cudaStream_t);
-
-            // error!("cudaStreamSynchronize result {:x?}", ret);
+            //error!("nvidia.rs: cudaStreamSynchronize");
+            let ret = unsafe { cudaStreamSynchronize(parameters.para1 as cudaStream_t) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaStreamSynchronize: {}", ret as u32);
+            }
 
             return Ok(ret as i64);
         }
         ProxyCommand::CudaStreamCreate => {
-            // error!(
-            //     "parameters para1 value(address of stream):{:x}",
-            //     parameters.para1
-            // );
+            //error!("nvidia.rs: cudaStreamCreate");
+            let mut s: cudaStream_t = unsafe { *(parameters.para1 as *mut u64) as cudaStream_t };
 
-            let func: extern "C" fn(*mut cudaStream_t) -> i32 =
-                unsafe { std::mem::transmute(handler) };
+            let ret = unsafe { cudaStreamCreate(&mut s)};
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaStreamCreate: {}", ret as u32);
+            }
 
-            let mut a: cudaStream_t = unsafe {*(parameters.para1 as *mut u64) as cudaStream_t};
-                
-            // error!("a value(content of stream:{:x}", a as u64);
-
-            let ret = func(&mut a);
-                
-            // error!("content of stream after function call:{:x}", a as u64);
-             
-            // error!("cudaStreamCreate ret: {:x?}", ret);
-            unsafe{
-                 *(parameters.para1 as *mut u64) = a as u64;
-            };
-
+            unsafe{*(parameters.para1 as *mut u64) = s as u64 };
             return Ok(ret as i64);
-            
+        }
+
+        ProxyCommand::CudaStreamCreateWithFlags => {
+            //error!("nvidia.rs: cudaStreamCreateWithFlags");
+            let mut stream: cudaStream_t = unsafe { *(parameters.para1 as *mut u64) as cudaStream_t };
+
+            let ret = unsafe { cudaStreamCreateWithFlags(&mut stream, parameters.para2 as u32) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaStreamCreateWithFlags: {}", ret as u32);
+            }
+
+            unsafe{*(parameters.para1 as *mut u64) = stream as u64 };
+            return Ok(ret as i64);  
+        }
+        ProxyCommand::CudaStreamCreateWithPriority => {
+            //error!("nvidia.rs: CudaStreamCreateWithPriority");
+            let mut stream: cudaStream_t = unsafe { *(parameters.para1 as *mut u64) as cudaStream_t };
+
+            let ret = unsafe { 
+                cudaStreamCreateWithPriority(&mut stream, parameters.para2 as u32, parameters.para3 as i32) 
+            };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaStreamCreateWithPriority: {}", ret as u32);
+            }
+
+            unsafe{*(parameters.para1 as *mut u64) = stream as u64 };
+            return Ok(ret as i64);  
         }
         ProxyCommand::CudaStreamDestroy => {
-            // error!(
-            //     "cudaStreamDestroy stream value to be destroy: {:x}",
-            //     parameters.para1
-            // );
-            let func: extern "C" fn(cudaStream_t) -> i32 = unsafe { std::mem::transmute(handler) };
+            //error!("nvidia.rs: cudaStreamDestroy");
+            let ret = unsafe { cudaStreamDestroy(parameters.para1 as cudaStream_t) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaStreamDestroy: {}", ret as u32);
+            }
 
-            let ret = func(parameters.para1 as cudaStream_t);
-            // error!("cudaStreamDestory ret: {:x?}", ret);
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaStreamGetFlags => {
+            //error!("nvidia.rs: CudaStreamGetFlags");
+            let mut flags: u32 = 0;
 
+            let ret = unsafe { cudaStreamGetFlags(parameters.para1 as cudaStream_t, &mut flags) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaStreamGetFlags: {}", ret as u32);
+            }
+
+            unsafe{ *(parameters.para2 as *mut u32) = flags };
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaStreamGetPriority => {
+            // error!("nvidia.rs: CudaStreamGetPriority");
+            let mut priority: i32 = 0; 
+
+            let ret = unsafe { cudaStreamGetPriority(parameters.para1 as cudaStream_t, &mut priority) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaStreamGetPriority: {}", ret as u32);
+            }
+
+            unsafe{ *(parameters.para2 as *mut i32) = priority };
             return Ok(ret as i64);
         }
         ProxyCommand::CudaStreamIsCapturing => {
-            // error!(
-            //     "cudaStreamIsCapturing stream value is :{:x}",
-            //     parameters.para1
-            // );
-            let func: extern "C" fn(cudaStream_t, *mut cudaStreamCaptureStatus) -> i32 =
-                unsafe { std::mem::transmute(handler) };
+            //error!("nvidia.rs: cudaStreamIsCapturing");
+            let mut captureStatus: cudaStreamCaptureStatus = unsafe { *(parameters.para2 as *mut _) };
 
-            let mut captureStatus: cudaStreamCaptureStatus;
-            unsafe {
-                captureStatus = *(parameters.para2 as *mut _);
+            let ret =  unsafe { cudaStreamIsCapturing(parameters.para1 as cudaStream_t, &mut captureStatus) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaStreamIsCapturing: {}", ret as u32);
             }
-            // error!(
-            //     "captureStatus is: {}, {:?}",
-            //     captureStatus as u32, captureStatus
-            // );
 
-            let ret = func(parameters.para1 as cudaStream_t, &mut captureStatus);
+            unsafe { *(parameters.para2 as *mut _) = captureStatus as u32};
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaStreamQuery => {
+            //error!("nvidia.rs: cudaStreamQuery");
+            let ret =  unsafe { cudaStreamQuery(parameters.para1 as cudaStream_t) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaStreamQuery: {}", ret as u32);
+            }
 
-            // error!("cudaStreamIsCapturing ret is :{:x?}", ret);
-            // error!(
-            //     "now captureStatus should change: {}, {:?}",
-            //     captureStatus as u32, captureStatus
-            // );
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaStreamWaitEvent => {
+            //error!("nvidia.rs: cudaStreamWaitEvent");
+            let ret =  unsafe { 
+                cudaStreamWaitEvent(
+                    parameters.para1 as cudaStream_t,
+                    parameters.para2 as cudaEvent_t,
+                    parameters.para3 as c_uint
+                ) 
+            };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaStreamWaitEvent: {}", ret as u32);
+            }
 
-            unsafe {
-                *(parameters.para2 as *mut _) = captureStatus as u32;
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaThreadExchangeStreamCaptureMode => {
+            //error!("nvidia.rs: cudaThreadExchangeStreamCaptureMode");
+            let mut mode: cudaStreamCaptureMode = unsafe { *(parameters.para1 as *mut cudaStreamCaptureMode) };
+            
+            let ret = unsafe { cudaThreadExchangeStreamCaptureMode(&mut mode)};
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaThreadExchangeStreamCaptureMode: {}", ret as u32);
+            }
+
+            unsafe { *(parameters.para1 as *mut _) = mode as u32 };
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaEventCreate => {
+            //error!("nvidia.rs: CudaEventCreate");
+            let mut event: cudaEvent_t = unsafe { *(parameters.para1 as *mut u64) as cudaEvent_t };
+
+            let ret = unsafe { cudaEventCreate(&mut event)};
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaEventCreate: {}", ret as u32);
+            }
+
+            unsafe { *(parameters.para1 as *mut u64) = event as u64 };
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaEventCreateWithFlags => {
+            //error!("nvidia.rs: CudaEventCreateWithFlags");
+            let mut event: cudaEvent_t = unsafe { *(parameters.para1 as *mut u64) as cudaEvent_t };
+
+            let ret = unsafe { cudaEventCreateWithFlags(&mut event, parameters.para2 as c_uint) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by CudaEventCreateWithFlags: {}", ret as u32);
+            }
+
+            unsafe { *(parameters.para1 as *mut u64) = event as u64 };
+            return Ok(ret as i64);
+
+        }
+        ProxyCommand::CudaEventDestroy => {
+            //error!("nvidia.rs: CudaEventDestroy");
+            let ret = unsafe { cudaEventDestroy(parameters.para1 as cudaEvent_t) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaEventDestroy: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaEventElapsedTime => {
+            //error!("nvidia.rs: CudaEventElapsedTime");
+            let mut time:f32 = 0.0;
+
+            let ret = unsafe { 
+                cudaEventElapsedTime(&mut time, parameters.para2 as cudaEvent_t, parameters.para3 as cudaEvent_t) 
+            };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaEventElapsedTime: {}", ret as u32);
+            }
+
+            unsafe { *(parameters.para1  as *mut _) = time };
+            return Ok(ret as i64); 
+        }
+        ProxyCommand::CudaEventQuery => {
+            //error!("nvidia.rs: CudaEventQuery");
+            let ret = unsafe { cudaEventQuery(parameters.para1 as cudaEvent_t) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaEventQuery: {}", ret as u32);
+            }
+
+            return Ok(ret as i64); 
+        }
+        ProxyCommand::CudaEventRecord => {
+            //error!("nvidia.rs: CudaEventRecord");
+            let ret = unsafe { cudaEventRecord(parameters.para1 as cudaEvent_t, parameters.para2 as cudaStream_t )};
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaEventRecord: {}", ret as u32);
+            }
+
+            return Ok(ret as i64); 
+        }
+        ProxyCommand::CudaEventSynchronize => {
+            //error!("nvidia.rs: CudaEventSynchronize");
+            let ret = unsafe { cudaEventSynchronize(parameters.para1 as cudaEvent_t) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaEventSynchronize: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaFuncGetAttributes => {
+            //error!("nvidia.rs: CudaFuncGetAttributes");
+            //error!("map is {:?}", FUNCTIONS.lock());
+            let dev_func = match FUNCTIONS.lock().get(&parameters.para2) {
+                Some(func) => {
+                    func.clone()
+                }
+                None => {
+                    //error!("CudaFuncGetAttributes not find for func: {:x}", parameters.para2);
+                    0
+                }
+            };
+            let mut attr: cudaFuncAttributes = Default::default();
+            let mut tmpAttr: i32 = 0;
+            let mut ret = unsafe { cuFuncGetAttribute( &mut tmpAttr, CUfunction_attribute::CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES, dev_func as CUfunction) };
+            if ret as i32 != 0 {
+                error!("nvidia.rs: error caused by cuFuncGetAttribute: {}", ret as u32);
+                return Ok(ret as i64);
+            } else {
+                attr.sharedSizeBytes = tmpAttr as usize;
+            }
+            ret = unsafe { cuFuncGetAttribute( &mut tmpAttr, CUfunction_attribute::CU_FUNC_ATTRIBUTE_CONST_SIZE_BYTES, dev_func as CUfunction) };
+            if ret as i32 != 0 {
+                error!("nvidia.rs: error caused by cuFuncGetAttribute: {}", ret as u32);
+                return Ok(ret as i64);
+            } else {
+                attr.constSizeBytes = tmpAttr as usize;
+            }
+            ret = unsafe { cuFuncGetAttribute( &mut tmpAttr, CUfunction_attribute::CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES, dev_func as CUfunction) };
+            if ret as i32 != 0 {
+                error!("nvidia.rs: error caused by cuFuncGetAttribute: {}", ret as u32);
+                return Ok(ret as i64);
+            } else {
+                attr.localSizeBytes = tmpAttr as usize;
+            }
+            ret = unsafe { cuFuncGetAttribute( &mut tmpAttr, CUfunction_attribute::CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, dev_func as CUfunction) };
+            if ret as i32 != 0 {
+                error!("nvidia.rs: error caused by cuFuncGetAttribute: {}", ret as u32);
+                return Ok(ret as i64);
+            } else {
+                attr.maxThreadsPerBlock = tmpAttr as i32;
+            }
+            ret = unsafe { cuFuncGetAttribute( &mut tmpAttr, CUfunction_attribute::CU_FUNC_ATTRIBUTE_NUM_REGS, dev_func as CUfunction) };
+            if ret as i32 != 0 {
+                error!("nvidia.rs: error caused by cuFuncGetAttribute: {}", ret as u32);
+                return Ok(ret as i64);
+            } else {
+                attr.numRegs = tmpAttr as i32;
+            }
+            ret = unsafe { cuFuncGetAttribute( &mut tmpAttr, CUfunction_attribute::CU_FUNC_ATTRIBUTE_PTX_VERSION, dev_func as CUfunction) };
+            if ret as i32 != 0 {
+                error!("nvidia.rs: error caused by cuFuncGetAttribute: {}", ret as u32);
+                return Ok(ret as i64);
+            } else {
+                attr.ptxVersion = tmpAttr as i32;
+            }
+            ret = unsafe { cuFuncGetAttribute( &mut tmpAttr, CUfunction_attribute::CU_FUNC_ATTRIBUTE_BINARY_VERSION, dev_func as CUfunction) };
+            if ret as i32 != 0 {
+                error!("nvidia.rs: error caused by cuFuncGetAttribute: {}", ret as u32);
+                return Ok(ret as i64);
+            } else {
+                attr.binaryVersion = tmpAttr as i32;
+            }
+            ret = unsafe { cuFuncGetAttribute( &mut tmpAttr, CUfunction_attribute::CU_FUNC_ATTRIBUTE_CACHE_MODE_CA, dev_func as CUfunction) };
+            if ret as i32 != 0 {
+                error!("nvidia.rs: error caused by cuFuncGetAttribute: {}", ret as u32);
+                return Ok(ret as i64);
+            } else {
+                attr.cacheModeCA = tmpAttr as i32;
+            }
+            ret = unsafe { cuFuncGetAttribute( &mut tmpAttr, CUfunction_attribute::CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES, dev_func as CUfunction) };
+            if ret as i32 != 0 {
+                error!("nvidia.rs: error caused by cuFuncGetAttribute: {}", ret as u32);
+                return Ok(ret as i64);
+            } else {
+                attr.maxDynamicSharedSizeBytes = tmpAttr as i32;
+            }
+            ret = unsafe { cuFuncGetAttribute( &mut tmpAttr, CUfunction_attribute::CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT, dev_func as CUfunction) };
+            if ret as i32 != 0 {
+                error!("nvidia.rs: error caused by cuFuncGetAttribute: {}", ret as u32);
+                return Ok(ret as i64);
+            } else {
+                attr.preferredShmemCarveout = tmpAttr as i32;
+            }
+
+            unsafe { *(parameters.para1 as *mut cudaFuncAttributes) = attr };
+            return Ok(0 as i64);
+        }
+        ProxyCommand::CudaFuncSetAttribute => {
+            //error!("nvidia.rs: CudaFuncSetAttribute");
+            let ret = unsafe { 
+                cudaFuncSetAttribute(
+                    parameters.para1 as *const c_void, 
+                    *(&parameters.para2 as *const _ as *const cudaFuncAttribute),
+                     parameters.para3 as c_int
+                    )
+                };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaFuncSetAttribute: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaFuncSetCacheConfig => {
+            //error!("nvidia.rs: CudaFuncSetCacheConfig");
+            let ret = unsafe { cudaFuncSetCacheConfig(parameters.para1 as *const c_void, *(&parameters.para2 as *const _ as *const cudaFuncCache))};
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaFuncSetCacheConfig: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaFuncSetSharedMemConfig => {
+            //error!("nvidia.rs: CudaFuncSetSharedMemConfig");
+            let ret = unsafe { cudaFuncSetSharedMemConfig(parameters.para1 as *const c_void,*(&parameters.para2 as *const _ as *const cudaSharedMemConfig)) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaFuncSetSharedMemConfig: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaGetLastError => {
+            //error!("nvidia.rs: cuModuleGetLoadingMode");
+            let ret = unsafe { cudaGetLastError() };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaGetLastError: {}", ret as u32);
             }
 
             return Ok(ret as i64);
         }
         ProxyCommand::CuModuleGetLoadingMode => {
-            let mut loadingMode: CUmoduleLoadingMode;
-            unsafe { loadingMode = *(parameters.para1 as *mut _) };
+            //error!("nvidia.rs: cuModuleGetLoadingMode");
+            let mut loadingMode: CUmoduleLoadingMode = unsafe { *(parameters.para1 as *mut _) };
 
-            // error!(
-            //     "before function call, loading mode is: {}, {:?}",
-            //     loadingMode as i32, loadingMode
-            // );
+            let ret = unsafe { cuModuleGetLoadingMode(&mut loadingMode) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cuModuleGetLoadingMode: {}", ret as u32);
+            }
 
-            let func: extern "C" fn(*mut CUmoduleLoadingMode) -> i32 =
-                unsafe { std::mem::transmute(handler) };
-
-            let ret = func(&mut loadingMode);
-
-            // error!("cuModuleGetLoadingMode ret is : {}, {:x?}", ret, ret);
-            // error!(
-            //     "loading mode should change: {}, {:?}",
-            //     loadingMode as i32, loadingMode
-            // );
-            unsafe{
-            *(parameters.para1  as *mut _) = loadingMode as u32
-            };
-
+            unsafe { *(parameters.para1  as *mut _) = loadingMode as u32 };
             return Ok(ret as i64);
-
         }
-        ProxyCommand::CudaGetLastError => {
-            let func: extern "C" fn() -> i32 = unsafe { std::mem::transmute(handler) };
+        ProxyCommand::CuInit => {
+            //error!("nvidia.rs: CuInit");           
+            let ret = unsafe { cuInit(parameters.para1 as c_uint) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cuInit: {}", ret as u32);
+            }
 
-            let ret = func();
-            // error!(
-            //     "called func cudaGetLastError ret {:?}",
-            //     ret,
-            //  );
             return Ok(ret as i64);
         }
         ProxyCommand::CuDevicePrimaryCtxGetState => {
-            let func: extern "C" fn(CUdevice, *mut ::std::os::raw::c_uint, *mut ::std::os::raw::c_int) -> i32 = unsafe { std::mem::transmute(handler) };
-            // error!("CuDevicePrimaryCtxGetState, device({})", parameters.para1 as u32 );
-
+            //error!("nvidia.rs: cuDevicePrimaryCtxGetState");
             let mut flags:c_uint = Default::default();
             let mut active:c_int = Default::default();
-
-
-            let ret = func(parameters.para1 as CUdevice, &mut flags, &mut active);
-
-            // error!("CuDevicePrimaryCtxGetState ret {:?}", ret);
+           
+            let ret = unsafe {
+                cuDevicePrimaryCtxGetState(
+                    parameters.para1 as CUdevice,
+                    &mut flags as *mut c_uint,
+                    &mut active as *mut c_int
+                )
+            };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cuDevicePrimaryCtxGetState: {}", ret as u32);
+            }
             
             unsafe {
                 *(parameters.para2 as *mut _) = flags;
                 *(parameters.para3 as *mut _) = active;
-
             };
             return Ok(ret as i64);
+        }
+        ProxyCommand::NvmlDeviceGetCountV2 => {
+            //error!("nvidia.rs: nvmlDeviceGetCountV2");
+            let mut deviceCount: c_int = Default::default();
 
+            let ret = unsafe { cudaGetDeviceCount(&mut deviceCount) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaGetDeviceCount: {}", ret as u32);
+            }
+
+            unsafe { *(parameters.para1 as *mut _) = deviceCount as u32 };
+            return Ok(ret as i64);
         }
         ProxyCommand::NvmlInitWithFlags => {
-            let func: extern "C" fn(::std::os::raw::c_uint) -> i32 = unsafe {std::mem::transmute(handler) };
-
-            let ret = func(parameters.para1 as ::std::os::raw::c_uint);
-
-            // error!("nvmlInitWithFlags ret {:?}", ret);
+            //error!("nvidia.rs: nvmlInitWithFlags");
+            let ret = unsafe{ nvmlInitWithFlags(parameters.para1 as c_uint) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by nvmlInitWithFlags: {}", ret as u32);
+            }
 
             return Ok(ret as i64);
         }
-        _ => todo!(),
+        ProxyCommand::NvmlInit => {
+            //error!("nvidia.rs: NvmlInit");
+            let ret = unsafe{ nvmlInitWithFlags(0 as c_uint) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by NvmlInit(nvmlInitWithFlags): {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::NvmlInitV2 => {
+            //error!("nvidia.rs: NvmlInitV2");
+            let ret = unsafe{ nvmlInit_v2() };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by nvmlInit_v2: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::NvmlShutdown => {
+            //error!("nvidia.rs: NvmlShutdown");
+            let ret = unsafe{ nvmlShutdown() };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by nvmlShutdown: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CublasCreateV2 => {
+            //error!("nvidia.rs: CublasCreateV2");    
+            let mut handle:cublasHandle_t  = unsafe { *(parameters.para1 as *mut u64) as cublasHandle_t };
+
+            let ret = unsafe { cublasCreate_v2(&mut handle) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cublasCreate_v2: {}", ret as u32);
+            }
+
+            unsafe { *(parameters.para1 as *mut u64) = handle as u64 };
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CublasDestroyV2 => {
+            //error!("nvidia.rs: CublasDestroyV2");    
+            let ret = unsafe { cublasDestroy_v2(parameters.para1 as cublasHandle_t) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cublasDestroy_v2: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CublasSetStreamV2 => {
+            //error!("nvidia.rs: CublasSetStreamV2");    
+            let ret = unsafe { cublasSetStream_v2(parameters.para1 as cublasHandle_t, parameters.para2 as cudaStream_t) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cublasSetStream_v2: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CublasSetWorkspaceV2 => {
+            //error!("nvidia.rs: CublasSetWorkspaceV2");  
+            let ret = unsafe { 
+                cublasSetWorkspace_v2(
+                    parameters.para1 as cublasHandle_t,
+                    parameters.para2 as *mut c_void,
+                    parameters.para3 as usize
+                )
+            };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cublasSetWorkspace_v2: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CublasSetMathMode => {
+            //error!("nvidia.rs: CublasSetMathMode");
+            let ret = unsafe { cublasSetMathMode(parameters.para1 as cublasHandle_t, *(&parameters.para2 as *const _  as *const cublasMath_t)) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cublasSetMathMode: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CublasSgemmStridedBatched => {
+            //error!("nvidia.rs: CublasSgemmStridedBatched");
+            let info = unsafe { *(parameters.para1 as *const u8 as *const SgemmStridedBatchedInfo) };
+            let alpha = unsafe { *(parameters.para2 as *const f32) };
+            let beta = unsafe { *(parameters.para3 as *const f32) };
+           
+            let ret = unsafe {
+                cublasSgemmStridedBatched(
+                    info.handle as cublasHandle_t, 
+                    info.transa, 
+                    info.transb, 
+                    info.m,
+                    info.n,
+                    info.k,
+                    &alpha,
+                    info.A,
+                    info.lda,
+                    info.strideA,
+                    info.B,
+                    info.ldb,
+                    info.strideB,
+                    &beta,
+                    info.C,
+                    info.ldc,
+                    info.strideC,
+                    info.batchCount
+                )
+            };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cublasSgemmStridedBatched: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CublasLtMatmul => {
+            //error!("nvidia.rs: CublasLtMatmul");
+            let info = unsafe { *(parameters.para1 as *const u8 as *const CublasLtMatmulInfo) };
+
+            let alpha = unsafe { *(parameters.para2 as *const f64) };
+            let beta = unsafe { *(parameters.para3 as *const f64) };
+            let ret = unsafe { 
+                cublasLtMatmul(
+                    info.lightHandle as cublasLtHandle_t, 
+                    info.computeDesc as cublasLtMatmulDesc_t, 
+                    &alpha, 
+                    info.A, 
+                    info.Adesc as cublasLtMatrixLayout_t, 
+                    info.B, 
+                    info.Bdesc as cublasLtMatrixLayout_t, 
+                    &beta, 
+                    info.C, 
+                    info.Cdesc as cublasLtMatrixLayout_t, 
+                    info.D, 
+                    info.Ddesc as cublasLtMatrixLayout_t, 
+                    info.algo as *const cublasLtMatmulAlgo_t, 
+                    info.workspace, 
+                    info.workspaceSizeInBytes, 
+                    info.stream as cudaStream_t
+                )
+            };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cublasLtMatmul: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CublasLtMatmulAlgoGetHeuristic => {
+            //error!("nvidia.rs: CublasLtMatmulAlgoGetHeuristic");
+            let info = unsafe { *(parameters.para1 as *const u8 as *const CublasLtMatmulAlgoGetHeuristicInfo) };
+            let mut heuristicResultsArray: Vec<cublasLtMatmulHeuristicResult_t> = Vec::with_capacity(info.requestedAlgoCount as usize);
+            unsafe { heuristicResultsArray.set_len(info.requestedAlgoCount as usize); };
+            let mut returnAlgoCount: c_int = 0;
+ 
+            let ret = unsafe { 
+                cublasLtMatmulAlgoGetHeuristic(
+                    info.lightHandle as cublasLtHandle_t, 
+                    info.operationDesc as cublasLtMatmulDesc_t, 
+                    info.Adesc as cublasLtMatrixLayout_t, 
+                    info.Bdesc as cublasLtMatrixLayout_t, 
+                    info.Cdesc as cublasLtMatrixLayout_t, 
+                    info.Ddesc as cublasLtMatrixLayout_t, 
+                    info.preference as cublasLtMatmulPreference_t, 
+                    info.requestedAlgoCount, 
+                    &mut heuristicResultsArray[0] as *mut cublasLtMatmulHeuristicResult_t, 
+                    &mut returnAlgoCount
+                )
+            };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cublasLtMatmulAlgoGetHeuristic: {}", ret as u32);
+            }
+
+            unsafe { *(parameters.para3 as *mut _) = returnAlgoCount };
+            for i in 0..returnAlgoCount as u64 {
+                unsafe { (*((parameters.para2 + i) as *mut u8 as *mut cublasLtMatmulHeuristicResult_t)) = heuristicResultsArray[i as usize] };
+            }
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CublasGetMathMode => {
+            //error!("nvidia.rs: CublasGetMathMode");
+            let mut mode: u32 = 0;
+
+            let ret = unsafe { cublasGetMathMode(parameters.para1 as cublasHandle_t, &mut mode) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cublasGetMathMode: {}", ret as u32);
+            }
+
+            unsafe { *(parameters.para2 as *mut u32) = mode as u32 };
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaMemset => {
+            //error!("nvidia.rs: CudaMemset");
+            let ret = unsafe { cudaMemset(parameters.para1 as *const c_void, parameters.para2 as c_int, parameters.para3 as usize) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaMemset: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaMemsetAsync => {
+            //error!("nvidia.rs: cudaMemsetAsync");
+            let ret = unsafe { cudaMemsetAsync(parameters.para1 as *const c_void, parameters.para2 as c_int, parameters.para3 as usize, parameters.para4 as cudaStream_t) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaMemsetAsync: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags => {
+            //error!("nvidia.rs: CudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags");
+            let dev_func = match FUNCTIONS.lock().get(&parameters.para2) {
+                Some(func) => {
+                    func.clone()
+                }
+                None => {
+                    0
+                }
+            };
+            let mut numBlocks = 0;
+
+            let ret = unsafe { 
+                cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
+                    &mut numBlocks, 
+                    dev_func as CUfunction,
+                    parameters.para3 as c_int, 
+                    parameters.para4 as usize, 
+                    parameters.para5 as c_uint
+                )
+            };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags: {}", ret as u32);
+            }
+
+            unsafe { *(parameters.para1 as *mut i32) = numBlocks as i32 };
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CuCtxGetCurrent => {
+            //error!("nvidia.rs: CuCtxGetCurrent");
+            let mut ctx: u64 = 0;
+           
+            let ret = unsafe { cuCtxGetCurrent(&mut ctx as *mut _ as *mut CUcontext) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cuCtxGetCurrent: {}", ret as u32);
+            }
+
+            unsafe { *(parameters.para1 as *mut u64) = ctx };
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CuModuleLoadData => {
+            //error!("nvidia.rs: CuModuleLoadData");
+            match GetParameterInfo(parameters.para2, parameters.para3) {
+                Ok(v) => v,
+                Err(e) => return Err(e),
+            };
+            let mut module: u64 = 0;
+           
+            let ret = unsafe { cuModuleLoadData(&mut module as *mut _ as *mut CUmodule, parameters.para2 as *const c_void) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cuModuleLoadData: {}", ret as u32);
+            }
+
+            unsafe { *(parameters.para1 as *mut u64) = module};
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CuModuleGetFunction => {
+            // error!("nvidia.rs: CuModuleGetFunction");
+            let bytes = unsafe { std::slice::from_raw_parts(parameters.para3 as *const u8, parameters.para4 as usize) };
+            let funcName = std::str::from_utf8(bytes).unwrap();
+            let mut hfunc: u64 = 0;
+
+            let ret = unsafe {
+                // cuda_driver_sys::
+                cuModuleGetFunction(
+                    &mut hfunc as *mut _ as u64 as *mut CUfunction,
+                    parameters.para2 as CUmodule,
+                    CString::new(funcName).unwrap().clone().as_ptr(),
+                )
+            };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cuModuleGetFunction: {}", ret as u32);
+            }
+
+            unsafe { *(parameters.para1 as *mut u64) = hfunc };
+
+            let kernelInfo = match KERNEL_INFOS.lock().get(&funcName.to_string()) {
+                Some(kernelInformations) => {
+                    kernelInformations.clone()
+                }
+                None => {
+                    //error!("No kernel infos found with this funcName : {}",funcName);
+                    Arc::new(KernelInfo::default())
+                }
+            };
+        
+            let paramInfo = parameters.para5 as *const u8 as *mut ParamInfo;
+            unsafe {
+                (*paramInfo).paramNum = kernelInfo.paramNum;
+                for i in 0..(*paramInfo).paramNum {
+                    (*paramInfo).paramSizes[i] = kernelInfo.paramSizes[i];
+                }
+            }
+
+            // FUNCTIONS.lock().insert(info.hostFun, hfunc);
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CuModuleUnload => {
+            // error!("nvidia.rs: CuModuleUnload");
+            let ret = unsafe { cuModuleUnload(parameters.para1 as CUmodule) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cuModuleUnload: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CuLaunchKernel => {
+            //error!("nvidia.rs: CuLaunchKernel");
+            let info = unsafe { &*(parameters.para1 as *const u8 as *const CuLaunchKernelInfo) };
+       
+            let ret: CUresult = unsafe {
+                // cuda_driver_sys::
+                cuLaunchKernel(
+                    info.f as CUfunction,
+                    info.gridDimX,
+                    info.gridDimY,
+                    info.gridDimZ,
+                    info.blockDimX,
+                    info.blockDimY,
+                    info.blockDimZ,
+                    info.sharedMemBytes as u32,
+                    info.hStream as *mut CUstream_st,
+                    info.kernelParams as *mut *mut ::std::os::raw::c_void,
+                    0 as *mut *mut ::std::os::raw::c_void,
+                )
+            };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cuLaunchKernel: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CublasSgemmV2 => {
+            //error!("nvidia.rs: CublasSgemm_v2");
+            let info = unsafe { *(parameters.para1 as *const u8 as *const CublasSgemmV2Info) };
+            let alpha = unsafe { *(parameters.para2 as *const f32) };
+            let beta = unsafe { *(parameters.para3 as *const f32) };
+
+            let ret = unsafe { 
+                cublasSgemm_v2(info.handle as cublasHandle_t, 
+                    info.transa, 
+                    info.transb, 
+                    info.m,
+                    info.n,
+                    info.k,
+                    &alpha,
+                    info.A,
+                    info.lda,
+                    info.B,
+                    info.ldb,
+                    &beta,
+                    info.C,
+                    info.ldc
+                )
+            };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cublasSgemm_v2: {}", ret as u32);
+            }
+
+
+            return Ok(ret as i64);
+        }
+        _ => todo!()
     }
 }
 
-pub fn CudaMemcpy(handle: u64, parameters: &ProxyParameters) -> Result<i64> {
-    let func: extern "C" fn(u64, u64, u64, u64) -> u32 = unsafe { std::mem::transmute(handle) };
+pub fn CudaMemcpy(parameters: &ProxyParameters) -> Result<i64> {
+    //error!("nvidia.rs: cudaMemcpy");
+    // let func: extern "C" fn(u64, u64, u64, u64) -> u32 = unsafe { std::mem::transmute(handle) };
 
     let kind = parameters.para5;
 
@@ -804,16 +1466,10 @@ pub fn CudaMemcpy(handle: u64, parameters: &ProxyParameters) -> Result<i64> {
             let ranges = unsafe { std::slice::from_raw_parts(ptr, len) };
             let mut offset = 0;
             for r in ranges {
-                let ret = func(dst + offset, r.start, r.len, kind);
+                // let ret = func(dst + offset, r.start, r.len, kind);
+                let ret = unsafe { cudaMemcpy(dst + offset, r.start, r.len, kind) };
                 if ret != 0 {
-                    // error!(
-                    //     "CUDA_MEMCPY_HOST_TO_DEVICE ret is {:x}/{:x}/{:x}/{} {}",
-                    //     dst + offset,
-                    //     r.start,
-                    //     r.len,
-                    //     kind,
-                    //     ret
-                    // );
+                    error!("nvidia.rs: error caused by cudaMemcpy: {}", ret as u32);
                     return Ok(ret as i64);
                 }
                 offset += r.len;
@@ -832,8 +1488,10 @@ pub fn CudaMemcpy(handle: u64, parameters: &ProxyParameters) -> Result<i64> {
             let ranges = unsafe { std::slice::from_raw_parts(ptr, len) };
             let mut offset = 0;
             for r in ranges {
-                let ret = func(r.start, src + offset, r.len, kind);
+                // let ret = func(r.start, src + offset, r.len, kind);
+                let ret = unsafe{ cudaMemcpy(r.start, src + offset, r.len, kind) };
                 if ret != 0 {
+                    error!("nvidia.rs: error caused by cudaMemcpy: {}", ret as u32);
                     return Ok(ret as i64);
                 }
                 offset += r.len;
@@ -847,45 +1505,39 @@ pub fn CudaMemcpy(handle: u64, parameters: &ProxyParameters) -> Result<i64> {
             let dst = parameters.para1;
             let src = parameters.para3;
             let count = parameters.para4;
-            let ret = func(dst, src, count, kind);
+            // let ret = func(dst, src, count, kind);
+
+            let ret = unsafe { cudaMemcpy(dst, src, count, kind)};
+            if ret != 0 {
+                error!("nvidia.rs: error caused by cudaMemcpy: {}", ret as u32);
+            }
+
             return Ok(ret as i64);
         }
         _ => todo!(),
     }
 }
 
-pub fn CudaMemcpyAsync(handle: u64, parameters: &ProxyParameters) -> Result<i64> {
-    let func: extern "C" fn(u64, u64, u64, u64, cudaStream_t) -> i32 =
-        unsafe { std::mem::transmute(handle) };
+pub fn CudaMemcpyAsync(parameters: &ProxyParameters) -> Result<i64> {
+    //error!("nvidia.rs: cudaMemcpyAsync");
+
     let kind = parameters.para5;
     let stream = parameters.para6 as cudaStream_t;
     match kind {
         CUDA_MEMCPY_HOST_TO_HOST => todo!(),
         CUDA_MEMCPY_HOST_TO_DEVICE => {
-            let dst = parameters.para1; 
+            let dst = parameters.para1; // device
             let ptr = parameters.para2 as *const Range;
-           
+            // length of the vector
             let len = parameters.para3 as usize;
             let count = parameters.para4;
 
             let ranges = unsafe { std::slice::from_raw_parts(ptr, len) };
             let mut offset = 0;
             for r in ranges {
-                let ret = func(dst + offset, r.start, r.len, kind, stream);
-                // error!(
-                //     "called func CudaMemcpyAsync Host to Device ret {:?}",
-                //     ret,
-                //  );
-                if ret != 0 {
-                    // error!(
-                    //     "CUDA_MEMCPY_ASYNC_HOST_TO_DEVICE ret is {:x}/{:x}/{:x}/{}/{}/{:?}",
-                    //     dst + offset,
-                    //     r.start,
-                    //     r.len,
-                    //     kind,
-                    //     ret,
-                    //     stream
-                    // );
+                let ret = unsafe { cudaMemcpyAsync(dst + offset, r.start, r.len, kind, stream)};
+                if ret as u32 != 0 {
+                    error!("nvidia.rs: error caused by CudaMemcpyAsync: {}", ret as u32);
                     return Ok(ret as i64);
                 }
                 offset += r.len;
@@ -896,24 +1548,23 @@ pub fn CudaMemcpyAsync(handle: u64, parameters: &ProxyParameters) -> Result<i64>
             return Ok(0);
         }
         CUDA_MEMCPY_DEVICE_TO_HOST => {
+            // dst is host(virtual address)
             let ptr = parameters.para1 as *const Range;
             let len = parameters.para2 as usize;
 
-            let src = parameters.para3; 
+            let src = parameters.para3; //device
             let count = parameters.para4;
 
             let ranges = unsafe { std::slice::from_raw_parts(ptr, len) };
             let mut offset = 0;
-            for r in ranges {
-                let ret = func(r.start, src + offset, r.len, kind, stream);
+            for r in ranges {          
+                let ret = unsafe{ cudaMemcpyAsync(r.start, src + offset, r.len, kind, stream) };
+
                 if ret != 0 {
+                    error!("nvidia.rs: error caused by CudaMemcpyAsync: {}", ret as u32);
                     return Ok(ret as i64);
                 }
                 offset += r.len;
-                // error!(
-                //     "called func CudaMemcpyAsync Device to Host ret {:?}",
-                //     ret,
-                //  );
             }
 
             assert!(offset == count);
@@ -924,7 +1575,11 @@ pub fn CudaMemcpyAsync(handle: u64, parameters: &ProxyParameters) -> Result<i64>
             let dst = parameters.para1;
             let src = parameters.para3;
             let count = parameters.para4;
-            let ret = func(dst, src, count, kind, stream);
+            
+            let ret = unsafe{ cudaMemcpyAsync(dst, src, count, kind, stream)};
+            if ret != 0 {
+                error!("nvidia.rs: error caused by CudaMemcpyAsync: {}", ret as u32);
+            }
             return Ok(ret as i64);
         }
         _ => todo!(),
@@ -959,11 +1614,11 @@ impl NvidiaHandlersInner {
 
                 let handler = match XPU_LIBRARY_HANDLERS.lock().get(&pair.0) {
                     Some(functionHandler) => {
-                        // error!("function handler got {:?}", functionHandler);
+                        error!("function handler got {:?}", functionHandler);
                         functionHandler.clone()
                     }
                     None => {
-                        // error!("no function handler found");
+                        error!("no function handler found");
                         0
                     }
                 };
@@ -976,7 +1631,7 @@ impl NvidiaHandlersInner {
                 };
 
                 if handler != 0 {
-                    // error!("got handler {:x}", handler);
+                    error!("got handler {:x}", handler);
                     return Ok(handler as u64);
                 }
             }
@@ -999,70 +1654,32 @@ impl Deref for NvidiaHandlers {
 
 impl NvidiaHandlers {
     pub fn New() -> Self {
-        // This code piece is necessary. Otherwise cuModuleLoadData will return CUDA_ERROR_JIT_COMPILER_NOT_FOUND
-        let lib = CString::new("libnvidia-ptxjitcompiler.so").unwrap();
-        let handle = unsafe { libc::dlopen(lib.as_ptr(), libc::RTLD_LAZY) };
-        info!("libnvidia-ptxjitcompiler.so handle {:?}", handle);
-
-        let initResult = unsafe { cuda_driver_sys::cuInit(0) };
-        info!("initResult {:?}", initResult);
-
-        let mut ctx: MaybeUninit<CUcontext> = MaybeUninit::uninit();
-        let ptr_ctx = ctx.as_mut_ptr();
-        let ret = unsafe { cuda_driver_sys::cuCtxCreate_v2(ptr_ctx, 0, 0) };
-        info!("cuCtxCreate ret {:?}", ret);
-
-        let ret = unsafe { cuCtxPushCurrent_v2(*ptr_ctx) };
-        info!("cuCtxPushCurrent ret {:?}", ret);
-
-        let cuda = format!("/usr/lib/x86_64-linux-gnu/libcuda.so");
-        let cudalib = CString::new(&*cuda).unwrap();
-        let cudaHandler = unsafe { libc::dlopen(cudalib.as_ptr(), libc::RTLD_LAZY) } as u64;
-        assert!(cudaHandler != 0, "can't open libcuda.so");
-        XPU_LIBRARY_HANDLERS
-            .lock()
-            .insert(XpuLibrary::CudaDriver, cudaHandler);
-        info!("successfully load the libcuda.so");
-
-        let nvidiaML = format!("/usr/lib/x86_64-linux-gnu/libnvidia-ml.so");
-        let nvidiaMLlib = CString::new(&*nvidiaML).unwrap();
-        let nvmlHandler = unsafe { libc::dlopen(nvidiaMLlib.as_ptr(), libc::RTLD_LAZY) } as u64;
-        assert!(nvmlHandler != 0, "can't open libnvidia-ml.so");
-        XPU_LIBRARY_HANDLERS
-            .lock()
-            .insert(XpuLibrary::Nvml, nvmlHandler);
-        info!("successfully load the libnvidia-ml.so");
-
         let handlers = BTreeMap::new();
-
-        let cudart = format!("/usr/local/cuda/lib64/libcudart.so");
-        let cudartlib = CString::new(&*cudart).unwrap();
-        let cudaRuntimeHandler =
-            unsafe { libc::dlopen(cudartlib.as_ptr(), libc::RTLD_LAZY) } as u64;
-        assert!(cudaRuntimeHandler != 0, "/usr/local/cuda/lib64/libcudart.so");
-        XPU_LIBRARY_HANDLERS
-            .lock()
-            .insert(XpuLibrary::CudaRuntime, cudaRuntimeHandler);
-        info!("successfully load the libcudart.so");
-
         let inner = NvidiaHandlersInner {
-            cudaHandler: cudaHandler,
-            cudaRuntimeHandler: cudaRuntimeHandler,
-            nvmlHandler:nvmlHandler,
+            cudaHandler: 0,
+            cudaRuntimeHandler: 0,
+            nvmlHandler:0,
             handlers: handlers,
         };
-
-        // let initResult = unsafe {cuda_runtime_sys::cudaSetDevice(0) };
-        // unsafe {cuda_runtime_sys::cudaDeviceSynchronize()};
-        // if initResult as u32 != 0 {
-        //     error!("cuda runtime init error");
-        // }
-
         return Self(Mutex::new(inner));
     }
 
     // trigger the NvidiaHandlers initialization
-    pub fn Trigger(&self) {}
+   pub fn Trigger(&self, containerId: &str, ptxlibPath: &str) {
+        // cuModuleLoadData requires libnvidia-ptxjitcompiler.so, and nvidia image will mount some host libraries into container,
+        // the lib we want to use is locate in /usr/local/cuda/compat/, host version libraries will cause error.
+        let ptxlibPathStr = format!("/{}{}", containerId, ptxlibPath);
+        let ptxlibPath = CString::new(ptxlibPathStr).unwrap();
+        let handle = unsafe { libc::dlopen(ptxlibPath.as_ptr() as *const i8, libc::RTLD_LAZY) };
+
+
+        let initResult1 = unsafe {cudaSetDevice(0) as u32};
+        let initResult2 = unsafe {cudaDeviceSynchronize() as u32};
+
+        if initResult1 | initResult2 != 0 {
+            error!("cuda runtime init error");
+        }
+    }
 
     pub fn GetFuncHandler(&self, cmd: ProxyCommand) -> Result<u64> {
         let mut inner = self.lock();

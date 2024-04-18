@@ -1930,9 +1930,9 @@ impl VMSpace {
         }
     }
 
-    pub fn Proxy(_cmd: ProxyCommand, _parameters: &ProxyParameters) -> i64 {
-        #[cfg(feature = "cuda")]        
-        match NvidiaProxy(_cmd, _parameters) {
+    pub fn Proxy(&self, cmd: ProxyCommand, parameters: &ProxyParameters) -> i64 {
+        #[cfg(feature = "cuda")]  
+        match NvidiaProxy(cmd, parameters, &self.args.as_ref().unwrap().ID) {
             Ok(v) => return v,
             Err(e) => {
                 error!("nvidia proxy get error {:?}", e);

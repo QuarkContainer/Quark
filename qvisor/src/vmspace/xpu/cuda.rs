@@ -309,7 +309,7 @@ fn hexdump(dataAddress: u64, size: u64){
     }
 }
 
-fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
+pub fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
     let mut section:MaybeUninit<Elf_Scn>  = MaybeUninit::uninit();
     let mut ptr_section = section.as_mut_ptr();
     let mut shdr:MaybeUninit<GElf_Shdr> = MaybeUninit::uninit();
@@ -318,10 +318,10 @@ fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
     let mut ptr_sym = sym.as_mut_ptr();
 
     let elf = unsafe { elf_memory(inputPosition as *mut i8, memSize as usize) };
-    match CheckElf(elf) {
-        Ok(v) => v,
-        Err(e) => return Err(e),
-    };
+    // match CheckElf(elf) {
+    //     Ok(v) => v,
+    //     Err(e) => return Err(e),
+    // };
 
     match GetSectionByName(elf, String::from(".symtab"), &mut ptr_section) {
         Ok(v) => v,
