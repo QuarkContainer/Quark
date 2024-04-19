@@ -129,7 +129,6 @@ pub enum CumoduleLoadingModeEnum {
     CuModuleEagerLoading = 1,
     CuModuleLazyLoading = 2,
 }
-pub use self::CumoduleLoadingModeEnum as CUmoduleLoadingMode;
 
 impl Default for ProxyCommand {
     fn default() -> Self {

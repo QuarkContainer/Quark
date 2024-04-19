@@ -11,17 +11,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::ops::Deref;
+//use core::ops::Deref;
 use libc::c_void;
-use spin::Mutex;
-use std::collections::BTreeMap;
+//use spin::Mutex;
+//use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::os::raw::*;
 use std::sync::Arc;
 
 use crate::qlib::common::*;
-use crate::qlib::linux_def::SysErr;
+//use crate::qlib::linux_def::SysErr;
 use crate::qlib::proxy::*;
 use crate::qlib::range::Range;
 use crate::xpu::cuda::*;
@@ -41,7 +41,7 @@ extern "C" {
     pub fn cuDevicePrimaryCtxGetState(dev: CUdevice, flags: *mut c_uint, active: *mut c_int) -> CUresult;
     pub fn cuInit(Flags: c_uint) -> CUresult;
     
-    pub fn cuModuleGetLoadingMode(mode: *mut CUmoduleLoadingMode) -> u32;
+    pub fn cuModuleGetLoadingMode(mode: *mut CumoduleLoadingModeEnum) -> u32;
     pub fn cuCtxCreate(pctx: *mut CUcontext, flags: c_uint, dev: CUdevice) -> CUresult;
     pub fn cuCtxPushCurrent(pctx: CUcontext) -> CUresult;
     pub fn cuDevicePrimaryCtxRetain(pctx: *mut CUcontext, dev: CUdevice) -> CUresult;
@@ -149,48 +149,48 @@ extern "C" {
 
 lazy_static! {
     static ref CUDA_HAS_INIT: AtomicUsize = AtomicUsize::new(0);
-    pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
-    pub static ref FUNC_MAP: BTreeMap<ProxyCommand, (XpuLibrary, &'static str)> = BTreeMap::from([
-        (ProxyCommand::CudaChooseDevice,(XpuLibrary::CudaRuntime, "cudaChooseDevice")),
-        (ProxyCommand::CudaDeviceGetAttribute,(XpuLibrary::CudaRuntime, "cudaDeviceGetAttribute")),
-        (ProxyCommand::CudaDeviceGetByPCIBusId,(XpuLibrary::CudaRuntime, "cudaDeviceGetByPCIBusId")),
-        (ProxyCommand::CudaDeviceGetCacheConfig,(XpuLibrary::CudaRuntime, "cudaDeviceGetCacheConfig")),
-        (ProxyCommand::CudaDeviceGetLimit,(XpuLibrary::CudaRuntime, "cudaDeviceGetLimit")),
-        (ProxyCommand::CudaDeviceGetP2PAttribute,(XpuLibrary::CudaRuntime, "cudaDeviceGetP2PAttribute")),
-        (ProxyCommand::CudaDeviceGetPCIBusId,(XpuLibrary::CudaRuntime, "cudaDeviceGetPCIBusId")),
-        (ProxyCommand::CudaDeviceGetSharedMemConfig,(XpuLibrary::CudaRuntime, "cudaDeviceGetSharedMemConfig")),
-        (ProxyCommand::CudaDeviceGetStreamPriorityRange,(XpuLibrary::CudaRuntime, "cudaDeviceGetStreamPriorityRange")),
-        (ProxyCommand::CudaDeviceReset,(XpuLibrary::CudaRuntime, "cudaDeviceReset")),
-        (ProxyCommand::CudaDeviceSetCacheConfig,(XpuLibrary::CudaRuntime, "cudaDeviceSetCacheConfig")),
-        (ProxyCommand::CudaSetDevice,(XpuLibrary::CudaRuntime, "cudaSetDevice")),
-        (ProxyCommand::CudaSetDeviceFlags,(XpuLibrary::CudaRuntime, "cudaSetDeviceFlags")),
-        (ProxyCommand::CudaDeviceSynchronize,(XpuLibrary::CudaRuntime, "cudaDeviceSynchronize")),
-        (ProxyCommand::CudaGetDevice,(XpuLibrary::CudaRuntime, "cudaGetDevice")),
-        (ProxyCommand::CudaGetDeviceCount,(XpuLibrary::CudaRuntime, "cudaGetDeviceCount")),
-        (ProxyCommand::CudaGetDeviceProperties,(XpuLibrary::CudaRuntime, "cudaGetDeviceProperties")),
-        (ProxyCommand::CudaMalloc,(XpuLibrary::CudaRuntime, "cudaMalloc")),
-        (ProxyCommand::CudaMemcpy,(XpuLibrary::CudaRuntime, "cudaMemcpy")),
-        (ProxyCommand::CudaMemcpyAsync,(XpuLibrary::CudaRuntime, "cudaMemcpyAsync")),
-        (ProxyCommand::CudaRegisterFatBinary,(XpuLibrary::CudaDriver, "cuModuleLoadData")),
-        (ProxyCommand::CudaRegisterFunction,(XpuLibrary::CudaDriver, "cuModuleGetFunction")),
-        (ProxyCommand::CudaRegisterVar,(XpuLibrary::CudaDriver, "cuModuleGetGlobal_v2")),
-        (ProxyCommand::CudaLaunchKernel,(XpuLibrary::CudaDriver, "cuLaunchKernel")),
-        (ProxyCommand::CudaFree,(XpuLibrary::CudaRuntime, "cudaFree")),
-        (ProxyCommand::CudaUnregisterFatBinary,(XpuLibrary::CudaDriver, "cuModuleUnload")),
-        (ProxyCommand::CudaStreamSynchronize,(XpuLibrary::CudaRuntime, "cudaStreamSynchronize")),
-        (ProxyCommand::CudaStreamCreate,(XpuLibrary::CudaRuntime, "cudaStreamCreate")),
-        (ProxyCommand::CudaStreamDestroy,(XpuLibrary::CudaRuntime, "cudaStreamDestroy")),
-        (ProxyCommand::CudaStreamIsCapturing,(XpuLibrary::CudaRuntime, "cudaStreamIsCapturing")),
-        (ProxyCommand::CuModuleGetLoadingMode,(XpuLibrary::CudaDriver, "cuModuleGetLoadingMode")),
-        (ProxyCommand::CudaGetLastError,(XpuLibrary::CudaRuntime, "cudaGetLastError")),
-        (ProxyCommand::CuInit,(XpuLibrary::CudaDriver, "cuInit")),
-        (ProxyCommand::CuDevicePrimaryCtxGetState,(XpuLibrary::CudaDriver, "cuDevicePrimaryCtxGetState")),
-        (ProxyCommand::NvmlInit,(XpuLibrary::Nvml, "nvmlInit")),
-        (ProxyCommand::NvmlInitV2,(XpuLibrary::Nvml, "nvmlInit_v2")),
-        (ProxyCommand::NvmlShutdown,(XpuLibrary::Nvml, "nvmlShutdown")),
-        (ProxyCommand::NvmlInitWithFlags,(XpuLibrary::Nvml, "nvmlInitWithFlags")),
-        (ProxyCommand::NvmlDeviceGetCountV2,(XpuLibrary::Nvml, "nvmlDeviceGetCount_v2")),
-    ]);
+    // pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
+    // pub static ref FUNC_MAP: BTreeMap<ProxyCommand, (XpuLibrary, &'static str)> = BTreeMap::from([
+    //     (ProxyCommand::CudaChooseDevice,(XpuLibrary::CudaRuntime, "cudaChooseDevice")),
+    //     (ProxyCommand::CudaDeviceGetAttribute,(XpuLibrary::CudaRuntime, "cudaDeviceGetAttribute")),
+    //     (ProxyCommand::CudaDeviceGetByPCIBusId,(XpuLibrary::CudaRuntime, "cudaDeviceGetByPCIBusId")),
+    //     (ProxyCommand::CudaDeviceGetCacheConfig,(XpuLibrary::CudaRuntime, "cudaDeviceGetCacheConfig")),
+    //     (ProxyCommand::CudaDeviceGetLimit,(XpuLibrary::CudaRuntime, "cudaDeviceGetLimit")),
+    //     (ProxyCommand::CudaDeviceGetP2PAttribute,(XpuLibrary::CudaRuntime, "cudaDeviceGetP2PAttribute")),
+    //     (ProxyCommand::CudaDeviceGetPCIBusId,(XpuLibrary::CudaRuntime, "cudaDeviceGetPCIBusId")),
+    //     (ProxyCommand::CudaDeviceGetSharedMemConfig,(XpuLibrary::CudaRuntime, "cudaDeviceGetSharedMemConfig")),
+    //     (ProxyCommand::CudaDeviceGetStreamPriorityRange,(XpuLibrary::CudaRuntime, "cudaDeviceGetStreamPriorityRange")),
+    //     (ProxyCommand::CudaDeviceReset,(XpuLibrary::CudaRuntime, "cudaDeviceReset")),
+    //     (ProxyCommand::CudaDeviceSetCacheConfig,(XpuLibrary::CudaRuntime, "cudaDeviceSetCacheConfig")),
+    //     (ProxyCommand::CudaSetDevice,(XpuLibrary::CudaRuntime, "cudaSetDevice")),
+    //     (ProxyCommand::CudaSetDeviceFlags,(XpuLibrary::CudaRuntime, "cudaSetDeviceFlags")),
+    //     (ProxyCommand::CudaDeviceSynchronize,(XpuLibrary::CudaRuntime, "cudaDeviceSynchronize")),
+    //     (ProxyCommand::CudaGetDevice,(XpuLibrary::CudaRuntime, "cudaGetDevice")),
+    //     (ProxyCommand::CudaGetDeviceCount,(XpuLibrary::CudaRuntime, "cudaGetDeviceCount")),
+    //     (ProxyCommand::CudaGetDeviceProperties,(XpuLibrary::CudaRuntime, "cudaGetDeviceProperties")),
+    //     (ProxyCommand::CudaMalloc,(XpuLibrary::CudaRuntime, "cudaMalloc")),
+    //     (ProxyCommand::CudaMemcpy,(XpuLibrary::CudaRuntime, "cudaMemcpy")),
+    //     (ProxyCommand::CudaMemcpyAsync,(XpuLibrary::CudaRuntime, "cudaMemcpyAsync")),
+    //     (ProxyCommand::CudaRegisterFatBinary,(XpuLibrary::CudaDriver, "cuModuleLoadData")),
+    //     (ProxyCommand::CudaRegisterFunction,(XpuLibrary::CudaDriver, "cuModuleGetFunction")),
+    //     (ProxyCommand::CudaRegisterVar,(XpuLibrary::CudaDriver, "cuModuleGetGlobal_v2")),
+    //     (ProxyCommand::CudaLaunchKernel,(XpuLibrary::CudaDriver, "cuLaunchKernel")),
+    //     (ProxyCommand::CudaFree,(XpuLibrary::CudaRuntime, "cudaFree")),
+    //     (ProxyCommand::CudaUnregisterFatBinary,(XpuLibrary::CudaDriver, "cuModuleUnload")),
+    //     (ProxyCommand::CudaStreamSynchronize,(XpuLibrary::CudaRuntime, "cudaStreamSynchronize")),
+    //     (ProxyCommand::CudaStreamCreate,(XpuLibrary::CudaRuntime, "cudaStreamCreate")),
+    //     (ProxyCommand::CudaStreamDestroy,(XpuLibrary::CudaRuntime, "cudaStreamDestroy")),
+    //     (ProxyCommand::CudaStreamIsCapturing,(XpuLibrary::CudaRuntime, "cudaStreamIsCapturing")),
+    //     (ProxyCommand::CuModuleGetLoadingMode,(XpuLibrary::CudaDriver, "cuModuleGetLoadingMode")),
+    //     (ProxyCommand::CudaGetLastError,(XpuLibrary::CudaRuntime, "cudaGetLastError")),
+    //     (ProxyCommand::CuInit,(XpuLibrary::CudaDriver, "cuInit")),
+    //     (ProxyCommand::CuDevicePrimaryCtxGetState,(XpuLibrary::CudaDriver, "cuDevicePrimaryCtxGetState")),
+    //     (ProxyCommand::NvmlInit,(XpuLibrary::Nvml, "nvmlInit")),
+    //     (ProxyCommand::NvmlInitV2,(XpuLibrary::Nvml, "nvmlInit_v2")),
+    //     (ProxyCommand::NvmlShutdown,(XpuLibrary::Nvml, "nvmlShutdown")),
+    //     (ProxyCommand::NvmlInitWithFlags,(XpuLibrary::Nvml, "nvmlInitWithFlags")),
+    //     (ProxyCommand::NvmlDeviceGetCountV2,(XpuLibrary::Nvml, "nvmlDeviceGetCount_v2")),
+//     ]);
 }
 
 pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId: &str) -> Result<i64> {
@@ -294,14 +294,14 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
         }
         ProxyCommand::CudaDeviceGetSharedMemConfig => {
             //error!("nvidia.rs: cudaDeviceGetSharedMemConfig");
-            let mut sharedMemConfig: cudaSharedMemConfig = unsafe { *(parameters.para1 as *mut _) };
+            let mut sharedMemConfig: cudaSharedMemConfig = unsafe { *(parameters.para1 as *mut cudaSharedMemConfig) };
 
             let ret = unsafe { cudaDeviceGetSharedMemConfig(&mut sharedMemConfig) };
             if ret as u32 != 0 {
                 error!("nvidia.rs: error caused by cudaDeviceGetSharedMemConfig: {}", ret as u32);
             }
 
-            unsafe { *(parameters.para1 as *mut _) = sharedMemConfig as u32 };
+            unsafe { *(parameters.para1 as *mut u32) = sharedMemConfig as u32 };
             return Ok(ret as i64);
         }
         ProxyCommand::CudaDeviceGetStreamPriorityRange => {
@@ -511,8 +511,8 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
             let bytes = unsafe {std::slice::from_raw_parts( parameters.para4 as *const _, parameters.para5 as usize)};
             let ptxlibPath = std::str::from_utf8(bytes).unwrap();
             // todo: use mutex instead of atomic?
-            if CUDA_HAS_INIT.fetch_add(1, Ordering::SeqCst)==0 {
-                NVIDIA_HANDLERS.Trigger(containerId, ptxlibPath);
+            if CUDA_HAS_INIT.fetch_add(1, Ordering::SeqCst)==0 { //compare_and_swap
+                InitNvidia(containerId, ptxlibPath);
             }
           
             let fatElfHeader = unsafe { &*(parameters.para2 as *const u8 as *const FatElfHeader) };
@@ -626,13 +626,15 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
 
             let mut devicePtr: CUdeviceptr = 0;
             let mut dSize: usize = 0;
+            let ownded_name = CString::new(deviceName).unwrap();
+            let name = ownded_name.as_ptr();
             let ret = unsafe {
                 // cuda_driver_sys::
                 cuModuleGetGlobal_v2(
                     &mut devicePtr,
                     &mut dSize,
                     (module as *const u64) as CUmodule,
-                    CString::new(deviceName).unwrap().as_ptr(),
+                    name,
                 )
             };
             if ret as u32 != 0 {
@@ -1013,7 +1015,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
         }
         ProxyCommand::CuModuleGetLoadingMode => {
             //error!("nvidia.rs: cuModuleGetLoadingMode");
-            let mut loadingMode: CUmoduleLoadingMode = unsafe { *(parameters.para1 as *mut _) };
+            let mut loadingMode: CumoduleLoadingModeEnum = unsafe { *(parameters.para1 as *mut _) };
 
             let ret = unsafe { cuModuleGetLoadingMode(&mut loadingMode) };
             if ret as u32 != 0 {
@@ -1445,7 +1447,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
 
             return Ok(ret as i64);
         }
-        _ => todo!()
+        //_ => todo!()
     }
 }
 
@@ -1586,103 +1588,118 @@ pub fn CudaMemcpyAsync(parameters: &ProxyParameters) -> Result<i64> {
     }
 }
 
-pub struct NvidiaHandlersInner {
-    pub cudaHandler: u64,
-    pub cudaRuntimeHandler: u64,
-    pub nvmlHandler: u64,
-    pub handlers: BTreeMap<ProxyCommand, u64>,
-}
+fn InitNvidia(containerId: &str, ptxlibPath: &str) {
+    // cuModuleLoadData requires libnvidia-ptxjitcompiler.so, and nvidia image will mount some host libraries into container,
+    // the lib we want to use is locate in /usr/local/cuda/compat/, host version libraries will cause error.
+    error!("Init nvidia");
+    let ptxlibPathStr = format!("/{}{}", containerId, ptxlibPath);
+    let ptxlibPath = CString::new(ptxlibPathStr).unwrap();
+    let _handle = unsafe { libc::dlopen(ptxlibPath.as_ptr() as *const i8, libc::RTLD_LAZY) };
 
-impl NvidiaHandlersInner {
-    pub fn GetFuncHandler(&mut self, cmd: ProxyCommand) -> Result<u64> {
-        match self.handlers.get(&cmd) {
-            None => {
-                let func = self.DLSym(cmd)?;
-                self.handlers.insert(cmd, func);
-                return Ok(func);
-            }
-            Some(func) => {
-                return Ok(*func);
-            }
-        }
-    }
+    let initResult1 = unsafe {cudaSetDevice(0) as u32};
+    let initResult2 = unsafe {cudaDeviceSynchronize() as u32};
 
-    pub fn DLSym(&self, cmd: ProxyCommand) -> Result<u64> {
-        match FUNC_MAP.get(&cmd) {
-            Some(&pair) => {
-                let func_name = CString::new(pair.1).unwrap();
-
-                let handler = match XPU_LIBRARY_HANDLERS.lock().get(&pair.0) {
-                    Some(functionHandler) => {
-                        error!("function handler got {:?}", functionHandler);
-                        functionHandler.clone()
-                    }
-                    None => {
-                        error!("no function handler found");
-                        0
-                    }
-                };
-
-                let handler: u64 = unsafe {
-                    std::mem::transmute(libc::dlsym(
-                        handler as *mut libc::c_void,
-                        func_name.as_ptr(),
-                    ))
-                };
-
-                if handler != 0 {
-                    error!("got handler {:x}", handler);
-                    return Ok(handler as u64);
-                }
-            }
-            None => (),
-        }
-
-        return Err(Error::SysError(SysErr::ENOTSUP));
+    if initResult1 | initResult2 != 0 {
+        error!("cuda runtime init error");
     }
 }
+// pub struct NvidiaHandlersInner {
+//     pub cudaHandler: u64,
+//     pub cudaRuntimeHandler: u64,
+//     pub nvmlHandler: u64,
+//     pub handlers: BTreeMap<ProxyCommand, u64>,
+// }
 
-pub struct NvidiaHandlers(Mutex<NvidiaHandlersInner>);
+// impl NvidiaHandlersInner {
+//     pub fn GetFuncHandler(&mut self, cmd: ProxyCommand) -> Result<u64> {
+//         match self.handlers.get(&cmd) {
+//             None => {
+//                 let func = self.DLSym(cmd)?;
+//                 self.handlers.insert(cmd, func);
+//                 return Ok(func);
+//             }
+//             Some(func) => {
+//                 return Ok(*func);
+//             }
+//         }
+//     }
 
-impl Deref for NvidiaHandlers {
-    type Target = Mutex<NvidiaHandlersInner>;
+//     pub fn DLSym(&self, cmd: ProxyCommand) -> Result<u64> {
+//         match FUNC_MAP.get(&cmd) {
+//             Some(&pair) => {
+//                 let func_name = CString::new(pair.1).unwrap();
 
-    fn deref(&self) -> &Mutex<NvidiaHandlersInner> {
-        &self.0
-    }
-}
+//                 let handler = match XPU_LIBRARY_HANDLERS.lock().get(&pair.0) {
+//                     Some(functionHandler) => {
+//                         error!("function handler got {:?}", functionHandler);
+//                         functionHandler.clone()
+//                     }
+//                     None => {
+//                         error!("no function handler found");
+//                         0
+//                     }
+//                 };
 
-impl NvidiaHandlers {
-    pub fn New() -> Self {
-        let handlers = BTreeMap::new();
-        let inner = NvidiaHandlersInner {
-            cudaHandler: 0,
-            cudaRuntimeHandler: 0,
-            nvmlHandler:0,
-            handlers: handlers,
-        };
-        return Self(Mutex::new(inner));
-    }
+//                 let handler: u64 = unsafe {
+//                     std::mem::transmute(libc::dlsym(
+//                         handler as *mut libc::c_void,
+//                         func_name.as_ptr(),
+//                     ))
+//                 };
 
-    // trigger the NvidiaHandlers initialization
-   pub fn Trigger(&self, containerId: &str, ptxlibPath: &str) {
-        // cuModuleLoadData requires libnvidia-ptxjitcompiler.so, and nvidia image will mount some host libraries into container,
-        // the lib we want to use is locate in /usr/local/cuda/compat/, host version libraries will cause error.
-        let ptxlibPathStr = format!("/{}{}", containerId, ptxlibPath);
-        let ptxlibPath = CString::new(ptxlibPathStr).unwrap();
-        let handle = unsafe { libc::dlopen(ptxlibPath.as_ptr() as *const i8, libc::RTLD_LAZY) };
+//                 if handler != 0 {
+//                     error!("got handler {:x}", handler);
+//                     return Ok(handler as u64);
+//                 }
+//             }
+//             None => (),
+//         }
+
+//         return Err(Error::SysError(SysErr::ENOTSUP));
+//     }
+// }
+
+// pub struct NvidiaHandlers(Mutex<NvidiaHandlersInner>);
+
+// impl Deref for NvidiaHandlers {
+//     type Target = Mutex<NvidiaHandlersInner>;
+
+//     fn deref(&self) -> &Mutex<NvidiaHandlersInner> {
+//         &self.0
+//     }
+// }
+
+// impl NvidiaHandlers {
+//     pub fn New() -> Self {
+//         let handlers = BTreeMap::new();
+//         let inner = NvidiaHandlersInner {
+//             cudaHandler: 0,
+//             cudaRuntimeHandler: 0,
+//             nvmlHandler:0,
+//             handlers: handlers,
+//         };
+//         return Self(Mutex::new(inner));
+//     }
+
+//     // trigger the NvidiaHandlers initialization
+//    pub fn Trigger(&self, containerId: &str, ptxlibPath: &str) {
+//         // cuModuleLoadData requires libnvidia-ptxjitcompiler.so, and nvidia image will mount some host libraries into container,
+//         // the lib we want to use is locate in /usr/local/cuda/compat/, host version libraries will cause error.
+//         let ptxlibPathStr = format!("/{}{}", containerId, ptxlibPath);
+//         let ptxlibPath = CString::new(ptxlibPathStr).unwrap();
+//         let handle = unsafe { libc::dlopen(ptxlibPath.as_ptr() as *const i8, libc::RTLD_LAZY) };
 
 
-        let initResult1 = unsafe {cudaSetDevice(0) as u32};
-        let initResult2 = unsafe {cudaDeviceSynchronize() as u32};
+//         let initResult1 = unsafe {cudaSetDevice(0) as u32};
+//         let initResult2 = unsafe {cudaDeviceSynchronize() as u32};
 
-        if initResult1 | initResult2 != 0 {
-            error!("cuda runtime init error");
-        }
-    }
+//         if initResult1 | initResult2 != 0 {
+//             error!("cuda runtime init error");
+//         }
+//     }
 
-    pub fn GetFuncHandler(&self, cmd: ProxyCommand) -> Result<u64> {
-        let mut inner = self.lock();
-        return inner.GetFuncHandler(cmd);
-    }
-}
+//     pub fn GetFuncHandler(&self, cmd: ProxyCommand) -> Result<u64> {
+//         let mut inner = self.lock();
+//         return inner.GetFuncHandler(cmd);
+//     }
+// }

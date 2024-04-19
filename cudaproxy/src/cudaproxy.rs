@@ -22,7 +22,7 @@ use libelf::raw::*;
 use cuda_driver_sys::*;
 use cuda_runtime_sys::{
     cudaStreamCaptureMode, cudaMemcpyKind, cudaEvent_t, cudaStreamCaptureStatus, 
-    cudaStream_t,cudaFuncAttributes,cudaFuncAttribute,cudaLaunchParams,
+    cudaStream_t,cudaFuncAttributes,cudaFuncAttribute,
     cudaDeviceAttr, cudaDeviceP2PAttr, cudaDeviceProp, cudaFuncCache, cudaLimit,
     cudaSharedMemConfig,cudaError_t
 };
@@ -42,14 +42,14 @@ pub static mut DL_HANDLE: *mut libc::c_void = ptr::null_mut();
 
 #[no_mangle]
 pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
-     let mut ret: *mut c_void  = std::ptr::null_mut();
-    if filename.is_null() {
-        //println!("intercepted dlopen(Null, {})", flag);
-    } else {
-        let c_str = unsafe { std::ffi::CStr::from_ptr(filename) };
-        let filename_string = c_str.to_string_lossy().to_string();
-        //println!("intercepted dlopen again({} {})", filename_string, flag);
-    }
+    //let mut ret: *mut c_void  = std::ptr::null_mut();
+    // if filename.is_null() {
+    //     println!("intercepted dlopen(Null, {})", flag);
+    // } else {
+    //     let c_str = unsafe { std::ffi::CStr::from_ptr(filename) };
+    //     let filename_string = c_str.to_string_lossy().to_string();
+    //     println!("intercepted dlopen again({} {})", filename_string, flag);
+    // }
 
     if filename.is_null() {
         return unsafe { DLOPEN_ORIG.unwrap()(filename, flag) };  
@@ -90,11 +90,11 @@ pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
         }
     }
 
-    ret = unsafe { DLOPEN_ORIG.unwrap_or_else(||{ panic!("DLOPEN_ORIG IS None")})(filename,flag)};
+    let ret = unsafe { DLOPEN_ORIG.unwrap_or_else(||{ panic!("DLOPEN_ORIG IS None")})(filename,flag)};
 
     if ret.is_null() {
-        let err = unsafe { libc::dlerror() };
-        let errMesg = unsafe { CString::from_raw(err) };
+        //let err = unsafe { libc::dlerror() };
+        //let errMesg = unsafe { CString::from_raw(err) };
         // println!(
         //     "dlopen failed: {}",
         //     errMesg.to_str().unwrap_or("unknown error")
@@ -146,7 +146,6 @@ pub extern "C" fn cudaDeviceGetAttribute(value: *mut c_int, attr: cudaDeviceAttr
 #[no_mangle]
 pub extern "C" fn cudaDeviceGetByPCIBusId(device: *mut c_int, pciBusId: *const c_char) -> usize {
     //println!("Hijacked cudaDeviceGetByPCIBusId");
-    let c_str = unsafe { CString::from_raw(pciBusId as *mut c_char) };
     return unsafe {
         syscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetByPCIBusId as usize, device as *mut _ as usize, pciBusId as usize)
     };
@@ -364,11 +363,11 @@ pub fn findPtxJitCompilerLibrary(path: &mut String) -> std::io::Result<()> {
 pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) -> *mut *mut c_void {
     //println!("Hijacked __cudaRegisterFatBinary");
     let mut ptxlibPath: String = "".to_string();
-    let res = findPtxJitCompilerLibrary(&mut ptxlibPath).unwrap();
+    findPtxJitCompilerLibrary(&mut ptxlibPath).unwrap();
 
     let len = fatCubin.text.header_size as usize + fatCubin.text.size as usize;
-    let mut result: *mut *mut c_void = ptr::null_mut();
-    result = unsafe { libc::calloc(1, 0x58) as *mut *mut c_void };
+    //let mut result: *mut *mut c_void = ptr::null_mut();
+    let result = unsafe { libc::calloc(1, 0x58) as *mut *mut c_void };
     if result.is_null() {
         panic!("CUDA register an atexit handler for fatbin cleanup, but is failed!");
     }
@@ -389,7 +388,7 @@ pub extern "C" fn __cudaUnregisterFatBinary(fatCubinHandle: u64) {
 }
 
 #[no_mangle]
-pub extern "C" fn __cudaRegisterFatBinaryEnd(fatCubinHandle:u64) {
+pub extern "C" fn __cudaRegisterFatBinaryEnd(_fatCubinHandle: u64) {
     //println!("Hijacked __cudaRegisterFatBinaryEnd");
     //panic!("TODO: __cudaRegisterFatBinaryEnd not yet implemented");
 }
@@ -475,51 +474,51 @@ pub extern "C" fn cudaLaunchKernel(
     }
 }
 
-#[no_mangle]
-pub extern "C" fn cudaLaunchCooperativeKernel(
-    func: u64,
-    gridDim: Qdim3,
-    blockDim: Qdim3,
-    args: u64,
-    sharedMem: u64,
-    stream: u64,
-) -> usize {
-    //println!("Hijacked cudaLaunchCooperativeKernel");
-    let info = LaunchCooperativeKernelInfo {
-        func: func,
-        gridDim: gridDim,
-        blockDim: blockDim,
-        args: args,
-        sharedMem: sharedMem,
-        stream: stream,
-    };
-    panic!("todo cudaLaunchCooperativeKernel")
-}
+// #[no_mangle]
+// pub extern "C" fn cudaLaunchCooperativeKernel(
+//     func: u64,
+//     gridDim: Qdim3,
+//     blockDim: Qdim3,
+//     args: u64,
+//     sharedMem: u64,
+//     stream: u64,
+// ) -> usize {
+//     //println!("Hijacked cudaLaunchCooperativeKernel");
+//     // let info = LaunchCooperativeKernelInfo {
+//     //     func: func,
+//     //     gridDim: gridDim,
+//     //     blockDim: blockDim,
+//     //     args: args,
+//     //     sharedMem: sharedMem,
+//     //     stream: stream,
+//     // };
+//     panic!("todo cudaLaunchCooperativeKernel")
+// }
 
-#[no_mangle]
-pub extern "C" fn cudaLaunchCooperativeKernelMultiDevice(
-    launchParamsList: *mut cudaLaunchParams,
-    numDevices: c_uint,
-    flags: c_uint
-) -> usize {
-    //println!("Hijacked cudaLaunchCooperativeKernelMultiDevice");
-    panic!("todo cudaLaunchCooperativeKernelMultiDevice")
-}
+// #[no_mangle]
+// pub extern "C" fn cudaLaunchCooperativeKernelMultiDevice(
+//     launchParamsList: *mut cudaLaunchParams,
+//     numDevices: c_uint,
+//     flags: c_uint
+// ) -> usize {
+//     //println!("Hijacked cudaLaunchCooperativeKernelMultiDevice");
+//     panic!("todo cudaLaunchCooperativeKernelMultiDevice")
+// }
 
-#[no_mangle]
-pub extern "C" fn cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-    numBlocks: *mut c_int, 
-    func: u64, 
-    blockSize: c_int, 
-    dynamicSMemSize:u64
-) -> usize {
-    //println!("Hijacked cudaOccupancyMaxActiveBlocksPerMultiprocessor");
-    panic!("TODO: cudaOccupancyMaxActiveBlocksPerMultiprocessor");
-    // return unsafe {
-    //   syscall5(SYS_PROXY, ProxyCommand::cudaOccupancyMaxActiveBlocksPerMultiprocessor as usize, 
-    //     numBlocks as *mut _ as usize, func as usize, blockSize as usize, dynamicSMemSize as usize)
-    // };
-}
+// #[no_mangle]
+// pub extern "C" fn cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+//     numBlocks: *mut c_int, 
+//     func: u64, 
+//     blockSize: c_int, 
+//     dynamicSMemSize:u64
+// ) -> usize {
+//     //println!("Hijacked cudaOccupancyMaxActiveBlocksPerMultiprocessor");
+//     panic!("TODO: cudaOccupancyMaxActiveBlocksPerMultiprocessor");
+//     // return unsafe {
+//     //   syscall5(SYS_PROXY, ProxyCommand::cudaOccupancyMaxActiveBlocksPerMultiprocessor as usize, 
+//     //     numBlocks as *mut _ as usize, func as usize, blockSize as usize, dynamicSMemSize as usize)
+//     // };
+// }
 
 #[no_mangle]
 pub extern "C" fn cudaMalloc(dev_ptr: *mut *mut c_void, size: usize) -> usize {
@@ -763,7 +762,7 @@ pub extern "C" fn cudaFuncSetSharedMemConfig(func: u64, config: cudaSharedMemCon
 
 #[no_mangle]
 pub extern "C" fn cuModuleGetLoadingMode(
-    mode: *mut CUmoduleLoadingMode
+    mode: *mut CumoduleLoadingModeEnum
 ) -> usize {
     println!("Hijacked cuModuleGetLoadingMode");
     return unsafe {
@@ -779,55 +778,55 @@ pub extern "C" fn cuInit(flags: c_uint) -> usize {
     } ;
 }
 
-#[no_mangle]
-pub extern "C" fn cuDeviceGet(device: *mut CUdevice, ordinal: c_int) -> usize {
-    //println!("Hijacked cuDeviceGet");
-    panic!("TODO: cuDeviceGet not yet implemented");
-}
+// #[no_mangle]
+// pub extern "C" fn cuDeviceGet(device: *mut CUdevice, ordinal: c_int) -> usize {
+//     //println!("Hijacked cuDeviceGet");
+//     panic!("TODO: cuDeviceGet not yet implemented");
+// }
 
-#[no_mangle]
-pub extern "C" fn cuDeviceGetCount(count: *mut c_int) -> usize {
-    //println!("Hijacked cuDeviceGetCount");
-    panic!("TODO: cuDeviceGetCount not yet implemented");
-}
+// #[no_mangle]
+// pub extern "C" fn cuDeviceGetCount(count: *mut c_int) -> usize {
+//     //println!("Hijacked cuDeviceGetCount");
+//     panic!("TODO: cuDeviceGetCount not yet implemented");
+// }
 
-#[no_mangle]
-pub extern "C" fn cuDeviceGetName(name: *mut c_char, len: c_int, dev: CUdevice) -> usize {
-    //println!("Hijacked cuDeviceGetName");
-    panic!("TODO: cuDeviceGetName not yet implemented");
-}
+// #[no_mangle]
+// pub extern "C" fn cuDeviceGetName(name: *mut c_char, len: c_int, dev: CUdevice) -> usize {
+//     //println!("Hijacked cuDeviceGetName");
+//     panic!("TODO: cuDeviceGetName not yet implemented");
+// }
 
-#[no_mangle]
-pub extern "C" fn cuDeviceGetUuid(uuid: *mut CUuuid, dev: CUdevice) -> usize {
-    //println!("Hijacked cuDeviceGetUuid");
-    panic!("TODO: cuDeviceGetUuid not yet implemented");
-}
+// #[no_mangle]
+// pub extern "C" fn cuDeviceGetUuid(uuid: *mut CUuuid, dev: CUdevice) -> usize {
+//     //println!("Hijacked cuDeviceGetUuid");
+//     panic!("TODO: cuDeviceGetUuid not yet implemented");
+// }
 
-#[no_mangle]
-pub extern "C" fn cuDeviceGetAttribute(
-    pi: *mut c_int,
-    attrub: CUdevice_attribute,
-    dev: CUdevice,
-) -> usize {
-    //println!("Hijacked cuDeviceGetAttribute");
-    panic!("TODO: cuDeviceGetAttribute not yet implemented");
-}
+// #[no_mangle]
+// pub extern "C" fn cuDeviceGetAttribute(
+//     pi: *mut c_int,
+//     attrub: CUdevice_attribute,
+//     dev: CUdevice,
+// ) -> usize {
+//     //println!("Hijacked cuDeviceGetAttribute");
+//     panic!("TODO: cuDeviceGetAttribute not yet implemented");
+// }
 
-#[no_mangle]
-pub extern "C" fn cuDeviceGetProperties(prop: *mut CUdevprop, dev: CUdevice) -> usize {
-    //println!("Hijacked cuDeviceGetAttribute");
-    panic!("TODO: cuDeviceGetProperties not yet implemented");
-}
+// #[no_mangle]
+// pub extern "C" fn cuDeviceGetProperties(prop: *mut CUdevprop, dev: CUdevice) -> usize {
+//     //println!("Hijacked cuDeviceGetAttribute");
+//     panic!("TODO: cuDeviceGetProperties not yet implemented");
+// }
 
-#[no_mangle]
-pub extern "C" fn cuDeviceComputeCapability(
-    major: *mut c_int,
-    minor: *mut c_int,
-    dev: CUdevice,
-) -> usize {
-    //println!("Hijacked cuDeviceComputeCapability");
-    panic!("TODO: cuDeviceComputeCapability not yet implemented");
-}
+// #[no_mangle]
+// pub extern "C" fn cuDeviceComputeCapability(
+//     major: *mut c_int,
+//     minor: *mut c_int,
+//     dev: CUdevice,
+// ) -> usize {
+//     //println!("Hijacked cuDeviceComputeCapability");
+//     panic!("TODO: cuDeviceComputeCapability not yet implemented");
+// }
 
 #[no_mangle]
 pub extern "C" fn cuDevicePrimaryCtxGetState(
@@ -974,11 +973,11 @@ pub extern "C" fn cublasSgemm_v2(
         };
 }
 
-#[no_mangle]
-pub extern "C" fn cublasLtCreate(lighthandle: *mut cublasLtHandle_t) -> usize {
-    //println!("cublasLtCreate , but not yet implemented. ");
-    panic!("TODO: cublasLtCreate");
-}
+// #[no_mangle]
+// pub extern "C" fn cublasLtCreate(lighthandle: *mut cublasLtHandle_t) -> usize {
+//     //println!("cublasLtCreate , but not yet implemented. ");
+//     panic!("TODO: cublasLtCreate");
+// }
 
 #[no_mangle]
 pub extern "C" fn cudaMemset(devPtr: *const c_void, value: c_int, count: usize) -> usize {
@@ -1032,10 +1031,10 @@ pub extern "C" fn cuModuleLoadData(module: *mut CUmodule, image: *const c_void )
     }
     let ehdr = image as *const _ as *const Elf64_Ehdr;
     unsafe {
-        if ((*ehdr).e_ident[EI_MAG0 as usize] != ELFMAG0 as u8||
-            (*ehdr).e_ident[EI_MAG1 as usize] != ELFMAG1 as u8||
-            (*ehdr).e_ident[EI_MAG2 as usize] != ELFMAG2 as u8||
-            (*ehdr).e_ident[EI_MAG3 as usize] != ELFMAG3 as u8) {
+        if  (*ehdr).e_ident[EI_MAG0 as usize] != ELFMAG0 as u8 ||
+            (*ehdr).e_ident[EI_MAG1 as usize] != ELFMAG1 as u8 ||
+            (*ehdr).e_ident[EI_MAG2 as usize] != ELFMAG2 as u8 ||
+            (*ehdr).e_ident[EI_MAG3 as usize] != ELFMAG3 as u8 {
             //println!("invalid image!");
             return cuda_driver_sys::cudaError_enum::CUDA_ERROR_INVALID_IMAGE as usize;
         }

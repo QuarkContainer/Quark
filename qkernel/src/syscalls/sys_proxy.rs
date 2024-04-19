@@ -19,7 +19,7 @@ use alloc::vec::Vec;
 
 use crate::qlib::common::*;
 use crate::syscalls::syscalls::*;
-use crate::{parameters, task::*};
+use crate::{task::*};
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::linux_def::SysErr;
 use crate::qlib::proxy::*;
@@ -102,7 +102,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ProxyCommand::CudaDeviceGetAttribute => {
             let mut value: i32 = 0; 
             parameters.para1 = &mut value as *mut _ as u64;
-            let attribute: u32 = parameters.para2 as u32;
             
             let ret = HostSpace::Proxy(cmd, parameters);
 
@@ -140,7 +139,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ProxyCommand::CudaDeviceGetLimit => {
             let mut limit:usize = 0; 
             parameters.para1 = &mut limit as *mut _ as u64;
-            let attribute: u32 = parameters.para2 as u32;
 
             let ret = HostSpace::Proxy(cmd, parameters);
 
@@ -152,7 +150,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ProxyCommand::CudaDeviceGetP2PAttribute => {
             let mut value:i32 = 0;
             parameters.para1 = &mut value as *mut _ as u64;
-            let attribute: u32 = parameters.para2 as u32;
 
             let ret = HostSpace::Proxy(cmd, parameters);
 
@@ -173,7 +170,8 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
         }
         ProxyCommand::CudaDeviceGetSharedMemConfig => {
-            let mut sharedMemConfig: u32 = unsafe { *(parameters.para1 as *mut _ ) };
+            error!("CudaDeviceGetSharedMemConfig");
+            let mut sharedMemConfig: u32 = unsafe { *(parameters.para1 as *mut u32) };
             parameters.para1 = &mut sharedMemConfig as *mut _ as u64;
 
             let ret = HostSpace::Proxy(cmd, parameters);
@@ -709,7 +707,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
             return Ok(ret); 
         }
-        _ => todo!()
+        //_ => todo!()
     }
 }
 
