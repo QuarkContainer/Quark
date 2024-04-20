@@ -27,13 +27,22 @@ pub enum ProxyCommand {
     CudaDeviceGetStreamPriorityRange,
     CudaDeviceReset,
     CudaDeviceSetCacheConfig,
+    CudaDeviceSetLimit,
+    CudaDeviceSetSharedMemConfig,
 
+    CudaGetErrorString,
+    CudaGetErrorName,
+    CudaPeekAtLastError,
+    
     CudaSetDevice,
     CudaSetDeviceFlags,
+    CudaSetValidDevices,
     CudaDeviceSynchronize,
+
 
     CudaGetDevice,
     CudaGetDeviceCount,
+    CudaGetDeviceFlags,
     CudaGetDeviceProperties,
 
     CudaMalloc,
@@ -46,20 +55,63 @@ pub enum ProxyCommand {
     CudaRegisterVar,
     CudaLaunchKernel,
 
-    // stream management
+    CudaMemset,
+    CudaMemsetAsync,
+    CudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags,
+
+    // stream management 
     CudaStreamSynchronize,
     CudaStreamCreate,
+    CudaStreamCreateWithFlags,
+    CudaStreamCreateWithPriority,
     CudaStreamDestroy,
+    CudaStreamGetFlags,
+    CudaStreamGetPriority,
     CudaStreamIsCapturing,
+    CudaStreamQuery,
+    CudaStreamWaitEvent,
+    CudaThreadExchangeStreamCaptureMode,
+
+    CudaEventCreate,
+    CudaEventCreateWithFlags,
+    CudaEventDestroy,
+    CudaEventElapsedTime,
+    CudaEventQuery,
+    CudaEventRecord,
+    CudaEventSynchronize,
+    CudaFuncGetAttributes,
+    CudaFuncSetAttribute,
+    CudaFuncSetCacheConfig,
+    CudaFuncSetSharedMemConfig,
+
     CuModuleGetLoadingMode,
     //Error handling
-    CudaGetLastError,
+    CudaGetLastError, 
 
     CuInit,
     CuDevicePrimaryCtxGetState,
+    CuCtxGetCurrent,
+    CuModuleLoadData,
+    CuModuleGetFunction,
+    CuLaunchKernel,
+    CuModuleUnload,
 
+    NvmlInit,
+    NvmlInitV2,
+    NvmlShutdown,
     NvmlInitWithFlags,
-    NvmlDeviceGetCountV2,
+    NvmlDeviceGetCountV2, 
+
+    CublasCreateV2,
+    CublasDestroyV2,
+    CublasSetStreamV2,
+    CublasSetWorkspaceV2,
+    CublasSetMathMode,
+    CublasSgemmStridedBatched,
+    CublasLtMatmul,
+    CublasLtMatmulAlgoGetHeuristic,
+    CublasGetMathMode,
+    CublasSgemmV2,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]
@@ -68,7 +120,7 @@ pub enum XpuLibrary {
     None = 0 as u64,
     CudaRuntime,
     CudaDriver,
-    Nvml,
+    Nvml
 }
 
 #[repr(u32)]
@@ -146,14 +198,13 @@ pub const EIFMT_SVAL: u64 = 0x4;
 pub struct CudaUUIDSt {
     pub bytes: [i8; 16usize],
 }
-
 pub type CudaUUID = CudaUUIDSt;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct CudaDeviceProperties {
     pub name: [i8; 256usize],
-    pub uuid: CudaUUID,
+    pub uuid: CudaUUID,   
     pub luid: [i8; 8usize],
     pub luidDeviceNodeMask: i8,
     pub totalGlobalMem: usize,
@@ -234,7 +285,7 @@ impl Default for CudaDeviceProperties {
     fn default() -> Self {
         Self {
             name: [0; 256],
-            uuid: CudaUUID { bytes: [0; 16] },
+            uuid: CudaUUID { bytes: [0; 16]},
             luid: [0; 8usize],
             luidDeviceNodeMask: 0,
             totalGlobalMem: 0,
@@ -246,7 +297,7 @@ impl Default for CudaDeviceProperties {
             maxThreadsDim: [0; 3],
             maxGridSize: [0; 3],
             clockRate: 0,
-            totalConstMem: 0,
+            totalConstMem: 0,       
             major: 0,
             minor: 0,
             textureAlignment: 0,
@@ -318,20 +369,20 @@ impl Default for CudaDeviceProperties {
 pub struct FatHeader {
     magic: u32,
     version: u32,
-    pub text: &'static FatElfHeader,
+    pub text: &'static FatElfHeader, 
     data: u64,
     unknown: u64,
     text2: u64,
-    zero: u64,
+    zero: u64
 }
 
 #[repr(C)]
-#[derive(Default, Debug, Copy, Clone)]
+#[derive(Default, Debug,Copy, Clone)]
 pub struct FatElfHeader {
     pub magic: u32,
     pub version: u16,
     pub header_size: u16,
-    pub size: u64,
+    pub size: u64
 }
 
 #[repr(C)]
@@ -348,9 +399,9 @@ pub struct FatTextHeader {
     pub arch: u32,
     pub obj_name_offset: u32,
     pub obj_name_len: u32,
-    pub flags: u64,
+    pub flags:u64,
     pub zero: u64,
-    pub decompressed_size: u64,
+    pub decompressed_size: u64
 }
 
 #[repr(C)]
@@ -358,18 +409,45 @@ pub struct FatTextHeader {
 pub struct ParamInfo {
     pub addr: u64,
     pub paramNum: usize,
-    pub paramSizes: [u16; 30],
+    pub paramSizes: [u16;30]
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Copy, Clone)]
 pub struct LaunchKernelInfo {
     pub func: u64,
-    pub gridDim: Qdim3,
-    pub blockDim: Qdim3,
-    pub args: u64,
-    pub sharedMem: usize,
-    pub stream: u64,
+    pub gridDim: Qdim3, 
+    pub blockDim: Qdim3, 
+    pub args: u64, 
+    pub sharedMem: usize, 
+    pub stream: u64
+}
+
+#[repr(C)]
+#[derive(Default, Debug, Copy, Clone)]
+pub struct LaunchCooperativeKernelInfo {
+    pub func: u64,
+    pub gridDim: Qdim3, 
+    pub blockDim: Qdim3, 
+    pub args: u64, 
+    pub sharedMem: u64, 
+    pub stream: u64
+}
+
+#[repr(C)]
+#[derive(Default, Debug, Copy, Clone)]
+pub struct CuLaunchKernelInfo {
+    pub f: u64,
+    pub gridDimX: u32, 
+    pub gridDimY: u32, 
+    pub gridDimZ: u32, 
+    pub blockDimX: u32, 
+    pub blockDimY: u32, 
+    pub blockDimZ: u32, 
+    pub sharedMemBytes: u32, 
+    pub hStream: u64, 
+    pub kernelParams: u64, 
+    pub extra: u64
 }
 
 #[repr(C)]
@@ -377,22 +455,22 @@ pub struct LaunchKernelInfo {
 pub struct Qdim3 {
     pub x: u32,
     pub y: u32,
-    pub z: u32,
+    pub z: u32
 }
 
 #[repr(C)]
 #[derive(Default, Debug, Copy, Clone)]
 pub struct RegisterFunctionInfo {
-    pub fatCubinHandle: u64,
-    pub hostFun: u64,
-    pub deviceFun: u64,
-    pub deviceName: u64,
-    pub thread_limit: i32,
-    pub tid: u64,
-    pub bid: u64,
-    pub bDim: u64,
-    pub gDim: u64,
-    pub wSize: usize,
+    pub fatCubinHandle:u64, 
+    pub hostFun:u64, 
+    pub deviceFun:u64, 
+    pub deviceName:u64, 
+    pub thread_limit:i32, 
+    pub tid:u64, 
+    pub bid:u64, 
+    pub bDim:u64, 
+    pub gDim:u64, 
+    pub wSize:usize
 }
 
 #[repr(C)]
@@ -401,7 +479,7 @@ pub struct NvInfoKernelEntry {
     pub format: u8,
     pub attribute: u8,
     pub values_size: u16,
-    pub values: u32,
+    pub values: u32
 }
 
 #[repr(C)]
@@ -410,12 +488,12 @@ pub struct NvInfoKParamInfo {
     pub index: u32,
     pub ordinal: u16,
     pub offset: u16,
-    pub comp: u32,
+    pub comp: u32
 }
 
 impl NvInfoKParamInfo {
     pub fn GetSize(&self) -> u16 {
-        (self.comp >> 18 & 0x3fff) as u16
+        (self.comp>>18 & 0x3fff) as u16
     }
 }
 
@@ -426,18 +504,195 @@ pub struct NvInfoEntry {
     pub attribute: u8,
     pub values_size: u16,
     pub kernel_id: u32,
-    pub value: u32,
+    pub value: u32
 }
+
 
 #[repr(C)]
 #[derive(Default, Debug, Copy, Clone)]
 pub struct RegisterVarInfo {
-    pub fatCubinHandle: u64,
+    pub fatCubinHandle:u64, 
     pub hostVar: u64,
-    pub deviceAddress: u64,
-    pub deviceName: u64,
-    pub ext: i32,
+    pub deviceAddress:u64,
+    pub deviceName:u64,
+    pub ext:i32,
     pub size: usize,
     pub constant: i32,
     pub global: i32,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct SgemmStridedBatchedInfo {
+    pub handle: u64,
+    pub transa: u32,
+    pub transb: u32,
+    pub m: i32,
+    pub n: i32,
+    pub k: i32,
+    pub alpha: *const f32,
+    pub A: *const f32,
+    pub lda: i32,
+    pub strideA: i64,
+    pub B: *const f32,
+    pub ldb: i32,
+    pub strideB: i64,
+    pub beta: *const f32,
+    pub C: *mut f32,
+    pub ldc: i32,
+    pub strideC: i64,
+    pub batchCount: i32,
+}
+
+impl Default for SgemmStridedBatchedInfo {
+    fn default() -> Self {
+        SgemmStridedBatchedInfo {
+            handle: Default::default(),
+            transa: Default::default(),
+            transb: Default::default(),
+            m: Default::default(),
+            n: Default::default(),
+            k: Default::default(),
+            alpha: 0 as *const f32,
+            A: 0 as *const f32,
+            lda: Default::default(),
+            strideA: Default::default(),
+            B: 0 as *const f32,
+            ldb: Default::default(),
+            strideB: Default::default(),
+            beta: 0 as *const f32,
+            C: 0 as *mut f32,
+            ldc: Default::default(),
+            strideC: Default::default(),
+            batchCount: Default::default(),    
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct CublasSgemmV2Info {
+    pub handle: u64,
+    pub transa: u32,
+    pub transb: u32,
+    pub m: i32,
+    pub n: i32,
+    pub k: i32,
+    pub alpha: *const f32,
+    pub A: *const f32,
+    pub lda: i32,
+    pub B: *const f32,
+    pub ldb: i32,
+    pub beta: *const f32,
+    pub C: *mut f32,
+    pub ldc: i32,
+}
+
+impl Default for CublasSgemmV2Info {
+    fn default() -> Self {
+        CublasSgemmV2Info {
+            handle: Default::default(),
+            transa: Default::default(),
+            transb: Default::default(),
+            m: Default::default(),
+            n: Default::default(),
+            k: Default::default(),
+            alpha: 0 as *const f32,
+            A: 0 as *const f32,
+            lda: Default::default(),
+            B: 0 as *const f32,
+            ldb: Default::default(),
+            beta: 0 as *const f32,
+            C: 0 as *mut f32,
+            ldc: Default::default(),
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Default,Debug, Copy, Clone)]
+pub struct CublasLtMatmulAlgoT {
+    pub data: [u64; 8usize],
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct CublasLtMatmulInfo {
+    pub lightHandle: u64,
+    pub computeDesc: u64,
+    pub alpha: *const core::ffi::c_void,
+    pub A: *const core::ffi::c_void,
+    pub Adesc: u64,
+    pub B: *const core::ffi::c_void,
+    pub Bdesc: u64,
+    pub beta: *const core::ffi::c_void,
+    pub C: *const core::ffi::c_void,
+    pub Cdesc: u64,
+    pub D: *mut core::ffi::c_void,
+    pub Ddesc: u64,
+    pub algo: *const CublasLtMatmulAlgoT,
+    pub workspace: *mut core::ffi::c_void,
+    pub workspaceSizeInBytes: usize,
+    pub stream: u64,
+}
+
+impl Default for CublasLtMatmulInfo {
+    fn default() -> Self {
+        CublasLtMatmulInfo {
+            lightHandle: Default::default(),
+            computeDesc: Default::default(),
+            alpha: 0 as *const core::ffi::c_void,
+            A: 0 as *const core::ffi::c_void,
+            Adesc: Default::default(),
+            B: 0 as *const core::ffi::c_void,
+            Bdesc: Default::default(),
+            beta: 0 as *const core::ffi::c_void,
+            C: 0 as *const core::ffi::c_void,
+            Cdesc: Default::default(),
+            D: 0 as *mut core::ffi::c_void,
+            Ddesc: Default::default(),
+            algo: 0 as *const CublasLtMatmulAlgoT,
+            workspace: 0 as *mut core::ffi::c_void,
+            workspaceSizeInBytes: Default::default(),
+            stream: Default::default(),      
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Default,Debug, Copy, Clone)]
+pub struct CublasLtMatmulAlgoGetHeuristicInfo {
+    pub lightHandle: u64,
+    pub operationDesc: u64,
+    pub Adesc: u64,
+    pub Bdesc: u64,
+    pub Cdesc: u64,
+    pub Ddesc: u64,
+    pub preference: u64,
+    pub requestedAlgoCount: core::ffi::c_int,
+}
+
+#[repr(C)]
+#[derive(Default,Debug, Copy, Clone)]
+pub struct CublasLtMatmulHeuristicResult {
+    pub algo: CublasLtMatmulAlgoT,
+    pub workspaceSize: usize,
+    pub state: u32,
+    pub wavesCount: f32,
+    pub reserved: [core::ffi::c_int; 4usize],
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone, Hash, PartialOrd, Ord, PartialEq, Eq)]
+pub struct CudaFuncAttributes {
+    pub sharedSizeBytes: usize,
+    pub constSizeBytes: usize,
+    pub localSizeBytes: usize,
+    pub maxThreadsPerBlock: core::ffi::c_int,
+    pub numRegs: core::ffi::c_int,
+    pub ptxVersion: core::ffi::c_int,
+    pub binaryVersion: core::ffi::c_int,
+    pub cacheModeCA: core::ffi::c_int,
+    pub maxDynamicSharedSizeBytes: core::ffi::c_int,
+    pub preferredShmemCarveout: core::ffi::c_int,
 }

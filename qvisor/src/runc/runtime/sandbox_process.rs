@@ -779,18 +779,18 @@ impl SandboxProcess {
 
     pub fn MountNvidiaFiles(&self) -> Result<()> {
         let files = [
-            "/usr/lib/x86_64-linux-gnu/libcuda.so",
-            "/usr/lib/x86_64-linux-gnu/libnvidia-ml.so",
-            "/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so",
+            // "/usr/lib/x86_64-linux-gnu/libcuda.so",
+            // "/usr/lib/x86_64-linux-gnu/libnvidia-ml.so",
+            // "/usr/lib/x86_64-linux-gnu/libnvidia-allocator.so",
             //"/usr/lib/x86_64-linux-gnu/libnvidia-compiler.so",
-            "/usr/lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so",
+            // "/usr/lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so",
             
             // the libcudart.so location changed sometime,
             // todo: figure out good solution
             // "/usr/lib/x86_64-linux-gnu/libcudart.so",
-            "/usr/local/cuda/lib64/libcudart.so",
+            // "/usr/local/cuda/lib64/libcudart.so",
             
-            "/usr/lib/x86_64-linux-gnu/libelf.so.1"
+            // "/usr/lib/x86_64-linux-gnu/libelf.so.1"
             //"/lib/firmware/nvidia/535.129.03/gsp_ga10x.bin",
             //"/lib/firmware/nvidia/535.129.03/gsp_tu10x.bin"
         ];
