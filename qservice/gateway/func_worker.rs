@@ -699,6 +699,8 @@ impl FuncWorker {
         let mut client = QHttpClient::New(stream).await?;
         self.WaitforLiveness(&mut client).await?;
 
+        let stream = self.ConnectPod().await?;
+        let mut client = QHttpClient::New(stream).await?;
         self.WaitforReadiness(&mut client).await?;
         return Ok(client);
     }
@@ -706,22 +708,29 @@ impl FuncWorker {
     pub async fn ProbeLiveness(&self, client: &mut QHttpClient) -> Result<()> {
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
+
             match self.HttpPing(client, LIVENESS_URL).await {
-                Err(e) => return Err(e),
+                Err(e) => {
+                    return Err(e);
+                }
                 Ok(_s) => (),
             }
         }
     }
 
-    pub async fn HttpPing(&self, client: &mut QHttpClient, url: &str) -> Result<()> {
+    pub async fn HttpPing(&self, _client: &mut QHttpClient, url: &str) -> Result<()> {
         let url = url.parse::<hyper::Uri>()?;
 
         let authority = url.authority().unwrap().clone();
 
+        let stream = self.ConnectPod().await?;
+        let mut client = QHttpClient::New(stream).await?;
+
         // Create an HTTP request with an empty body and a HOST header
         let req = Request::builder()
-            .uri(url)
+            .uri(url.path())
             .header(hyper::header::HOST, authority.as_str())
+            //.header(hyper::header::CONNECTION, "keep-alive, Keep-Alive")
             .body(Empty::<Bytes>::new())?;
 
         // Await the response...
@@ -739,7 +748,9 @@ impl FuncWorker {
         for _ in 0..100 {
             match self.HttpPing(client, LIVENESS_URL).await {
                 Err(_) => (),
-                Ok(s) => return Ok(s),
+                Ok(s) => {
+                    return Ok(s);
+                }
             }
 
             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -754,7 +765,9 @@ impl FuncWorker {
         for _ in 0..100 {
             match self.HttpPing(client, READINESS_URL).await {
                 Err(_) => (),
-                Ok(s) => return Ok(s),
+                Ok(s) => {
+                    return Ok(s);
+                }
             }
 
             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -962,8 +975,6 @@ impl FuncWorkerClient {
     pub async fn Process(&self, reqQueueRx: mpsc::Receiver<FuncReq>) -> Result<()> {
         let mut reqQueueRx = reqQueueRx;
 
-        let mut client = self.TryConnectPod().await?;
-
         loop {
             tokio::select! {
                 _ = self.closeNotify.notified() => {
@@ -977,6 +988,7 @@ impl FuncWorkerClient {
                             return Ok(())
                         }
                         Some(req) => {
+                            let mut client = self.TryConnectPod().await?;
                             self.HttpCall(&mut client, req).await?;
                             self.funcWorker.RequestDone(self);
                         }
@@ -996,7 +1008,9 @@ impl FuncWorkerClient {
 
         let body = serde_json::to_string(&promptReq)?;
 
-        let httpReq = Request::post(FUNCCALL_URL)
+        let uri = "/funccall";
+        let httpReq = Request::post(uri.parse::<hyper::Uri>()?)
+            .header("host", "127.0.0.1")
             .header("Content-Type", "application/json")
             .body(body)?;
 
