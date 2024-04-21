@@ -493,7 +493,7 @@ impl FuncWorker {
         reqQueueRx: mpsc::Receiver<FuncReq>,
         idleClientRx: mpsc::Receiver<FuncWorkerClient>,
     ) -> Result<()> {
-        let mut client = self.WaitForPod().await?;
+        self.WaitForPod().await?;
         self.funcAgent
             .SendWorkerStatusUpdate(WorkerUpdate::Ready(self.clone()));
 
@@ -512,7 +512,7 @@ impl FuncWorker {
                             self.StopWorker().await?;
                             return Ok(())
                         }
-                        e = self.ProbeLiveness(&mut client) => {
+                        e = self.ProbeLiveness() => {
                             self.funcAgent.SendWorkerStatusUpdate(WorkerUpdate::WorkerFail(self.clone()));
                             error!("FuncWorker::Process ProbeLiveness fail with error {:?}", e);
                             break;
@@ -551,7 +551,7 @@ impl FuncWorker {
                             self.StopWorker().await?;
                             return Ok(())
                         }
-                        e = self.ProbeLiveness(&mut client) => {
+                        e = self.ProbeLiveness() => {
                             self.funcAgent.SendWorkerStatusUpdate(WorkerUpdate::WorkerFail(self.clone()));
                             error!("FuncWorker::Process ProbeLiveness fail with error {:?}", e);
                             break;
@@ -693,23 +693,17 @@ impl FuncWorker {
         }
     }
 
-    pub async fn WaitForPod(&self) -> Result<QHttpClient> {
-        let stream = self.ConnectPod().await?;
-
-        let mut client = QHttpClient::New(stream).await?;
-        self.WaitforLiveness(&mut client).await?;
-
-        let stream = self.ConnectPod().await?;
-        let mut client = QHttpClient::New(stream).await?;
-        self.WaitforReadiness(&mut client).await?;
-        return Ok(client);
+    pub async fn WaitForPod(&self) -> Result<()> {
+        self.WaitforLiveness().await?;
+        self.WaitforReadiness().await?;
+        return Ok(());
     }
 
-    pub async fn ProbeLiveness(&self, client: &mut QHttpClient) -> Result<()> {
+    pub async fn ProbeLiveness(&self) -> Result<()> {
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
 
-            match self.HttpPing(client, LIVENESS_URL).await {
+            match self.HttpPing(LIVENESS_URL).await {
                 Err(e) => {
                     return Err(e);
                 }
@@ -718,7 +712,7 @@ impl FuncWorker {
         }
     }
 
-    pub async fn HttpPing(&self, _client: &mut QHttpClient, url: &str) -> Result<()> {
+    pub async fn HttpPing(&self, url: &str) -> Result<()> {
         let url = url.parse::<hyper::Uri>()?;
 
         let authority = url.authority().unwrap().clone();
@@ -744,9 +738,9 @@ impl FuncWorker {
         }
     }
 
-    pub async fn WaitforLiveness(&self, client: &mut QHttpClient) -> Result<()> {
+    pub async fn WaitforLiveness(&self) -> Result<()> {
         for _ in 0..100 {
-            match self.HttpPing(client, LIVENESS_URL).await {
+            match self.HttpPing(LIVENESS_URL).await {
                 Err(_) => (),
                 Ok(s) => {
                     return Ok(s);
@@ -761,9 +755,9 @@ impl FuncWorker {
         )));
     }
 
-    pub async fn WaitforReadiness(&self, client: &mut QHttpClient) -> Result<()> {
+    pub async fn WaitforReadiness(&self) -> Result<()> {
         for _ in 0..100 {
-            match self.HttpPing(client, READINESS_URL).await {
+            match self.HttpPing(READINESS_URL).await {
                 Err(_) => (),
                 Ok(s) => {
                     return Ok(s);
