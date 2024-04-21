@@ -638,61 +638,6 @@ impl FuncWorker {
         }
     }
 
-    pub async fn HttpCall(&self, req: FuncReq) -> Result<()> {
-        let mut client = self.GetHttpCallClient().await?;
-
-        let promptReq = PromptReq {
-            tenant: req.tenant.clone(),
-            namespace: req.namespace.clone(),
-            func: req.funcName.clone(),
-            prompt: req.request.clone(),
-        };
-
-        let body = serde_json::to_string(&promptReq)?;
-
-        let httpReq = Request::post(FUNCCALL_URL)
-            .header("Content-Type", "application/json")
-            .body(body)?;
-
-        match client.Send(httpReq).await {
-            Err(e) => {
-                let resp = HttpResponse {
-                    status: StatusCode::BAD_REQUEST,
-                    response: format!("service fail with error {:?}", e),
-                };
-                req.tx.send(resp).unwrap();
-                return Ok(());
-            }
-            Ok(mut res) => {
-                let mut output = String::new();
-                while let Some(next) = res.frame().await {
-                    match next {
-                        Err(e) => {
-                            let resp = HttpResponse {
-                                status: StatusCode::BAD_REQUEST,
-                                response: format!("service fail with error {:?}", e),
-                            };
-                            req.tx.send(resp).unwrap();
-                            return Ok(());
-                        }
-                        Ok(frame) => {
-                            let chunk = frame.data_ref().unwrap().to_vec();
-                            let str = String::from_utf8(chunk).unwrap();
-                            output = output + &str;
-                        }
-                    }
-                }
-
-                let resp = HttpResponse {
-                    status: res.status(),
-                    response: output,
-                };
-                req.tx.send(resp).unwrap();
-                return Ok(());
-            }
-        }
-    }
-
     pub async fn WaitForPod(&self) -> Result<()> {
         self.WaitforLiveness().await?;
         self.WaitforReadiness().await?;
@@ -1002,10 +947,13 @@ impl FuncWorkerClient {
 
         let body = serde_json::to_string(&promptReq)?;
 
-        let uri = "/funccall";
-        let httpReq = Request::post(uri.parse::<hyper::Uri>()?)
-            .header("host", "127.0.0.1")
-            .header("Content-Type", "application/json")
+        let url = FUNCCALL_URL.parse::<hyper::Uri>()?;
+
+        let authority = url.authority().unwrap().clone();
+
+        let httpReq = Request::post(url.path())
+            .header(hyper::header::HOST, authority.as_str())
+            .header(hyper::header::CONTENT_TYPE, "application/json")
             .body(body)?;
 
         match client.Send(httpReq).await {
