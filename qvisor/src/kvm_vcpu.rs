@@ -94,9 +94,7 @@ pub struct KVMVcpu {
     pub tssAddr: u64,
 
     #[cfg(feature = "cc")]
-    pub privateHeapStartAddr: u64,
-    #[cfg(feature = "cc")]
-    pub sharedHeapStartAddr: u64,
+    pub privateHeapStartGpa: u64,
 
     #[cfg(not(feature = "cc"))]
     pub heapStartAddr: u64,
@@ -256,8 +254,7 @@ impl KVMVcpu {
             idtAddr: idtAddr,
             tssIntStackStart: tssIntStackStart,
             tssAddr: tssAddr,
-            privateHeapStartAddr: MemoryDef::GUEST_PRIVATE_HEAP_OFFSET,
-            sharedHeapStartAddr: MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST,
+            privateHeapStartGpa: MemoryDef::guest_private_heap_offset_gpa(),
             autoStart: autoStart,
             interrupting: Mutex::new((false, vec![])),
         });

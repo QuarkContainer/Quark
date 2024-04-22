@@ -490,7 +490,7 @@ cfg_if::cfg_if! {
                 ENABLE_CC.store(true,Ordering::Release);
                 // ghcb convert shared memory
                 
-                GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
+                GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::guest_host_shared_heap_offest_gpa());
 
                 assert!(self::qlib::qmsg::sharepara::SHAREPARA_COUNT >= vcpuCnt);
                 

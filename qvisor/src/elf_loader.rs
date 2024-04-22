@@ -159,6 +159,7 @@ impl KernelELF {
             }
         }
 
+        info!("kernel start addr {:x}, endaddr {:x}", startAddr.0, endAddr.0);
         self.startAddr = startAddr;
         self.endAddr = endAddr;
 

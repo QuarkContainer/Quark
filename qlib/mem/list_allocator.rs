@@ -22,7 +22,7 @@ use core::ptr::NonNull;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
 use crate::qlib::Vec;
-use crate::PRIVATE_VCPU_LOCAL_HOLDER;
+use crate::{IS_GUEST, PRIVATE_VCPU_LOCAL_HOLDER};
 
 use super::super::super::kernel_def::VcpuId;
 use crate::qlib::kernel::vcpu::VCPU_COUNT;
@@ -297,11 +297,20 @@ impl HostAllocator {
     }
 
     pub fn IsHostGuestSharedHeapAddr(addr: u64) -> bool {
-        return addr < MemoryDef::GUEST_HOST_SHARED_HEAP_END && addr >= MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST;
+        if IS_GUEST {
+            return addr < MemoryDef::guest_host_shared_heap_end_gpa() && addr >= MemoryDef::guest_host_shared_heap_offest_gpa();
+        } else {                                                                            
+            return addr < MemoryDef::guest_host_shared_heap_end_hva() && addr >= MemoryDef::guest_host_shared_heap_offset_hva();
+        }
+
     }
 
     pub fn IsGuestPrivateHeapAddr(addr: u64) -> bool {
-        return addr < MemoryDef::GUEST_PRIVATE_HEAP_END && addr >= MemoryDef::GUEST_PRIVATE_HEAP_OFFSET;
+        if !IS_GUEST { 
+            return addr < MemoryDef::guest_private_heap_end_hva() && addr >= MemoryDef::guest_private_heap_offset_hva();
+        } else {
+            return addr < MemoryDef::guest_private_heap_end_gpa() && addr >= MemoryDef::guest_private_heap_offset_gpa();
+        }
     }
 
     #[inline]

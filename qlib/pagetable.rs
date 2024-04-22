@@ -22,7 +22,7 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use crate::qlib::kernel::SHARESPACE;
-use crate::GLOBAL_ALLOCATOR;
+use crate::{GLOBAL_ALLOCATOR, IS_GUEST};
 
 cfg_x86_64! {
    pub use x86_64::structures::paging::page_table::PageTableEntry;
@@ -722,6 +722,8 @@ impl PageTables {
     }
 
     pub fn Unmap(&self, start: u64, end: u64, pagePool: &Allocator) -> Result<()> {
+
+
         Addr(start).PageAligned()?;
         Addr(end).PageAligned()?;
         let mut start = start;
@@ -856,14 +858,16 @@ impl PageTables {
     }
 
     pub fn GetAllPagetablePages(&self, pages: &mut BTreeSet<u64>) -> Result<()> {
+
+        assert!(IS_GUEST == false, "GetAllPagetablePages");
         self.GetAllPagetablePagesWithRange(
             Addr(MemoryDef::PAGE_SIZE),
-            Addr(MemoryDef::PHY_LOWER_ADDR),
+            Addr(MemoryDef::phy_lower_hva()),
             pages,
         )?;
 
         self.GetAllPagetablePagesWithRange(
-            Addr(MemoryDef::PHY_UPPER_ADDR),
+            Addr(MemoryDef::phy_upper_hva()),
             Addr(MemoryDef::LOWER_TOP),
             pages,
         )?;
@@ -1129,11 +1133,11 @@ impl PageTables {
         pages: &mut BTreeSet<u64>,
         updatePageEntry: bool,
     ) -> Result<()> {
+        assert!(IS_GUEST == false);
         let end = start + len;
-
         self.Traverse(
             Addr(MemoryDef::PAGE_SIZE),
-            Addr(MemoryDef::PHY_LOWER_ADDR),
+            Addr(MemoryDef::phy_lower_hva()),
             |entry: &mut PageTableEntry, _virtualAddr| {
                 let phyAddr = entry.addr().as_u64();
                 if start <= phyAddr && phyAddr < end {
@@ -1156,7 +1160,7 @@ impl PageTables {
         )?;
 
         return self.Traverse(
-            Addr(MemoryDef::PHY_UPPER_ADDR),
+            Addr(MemoryDef::phy_upper_hva()),
             Addr(MemoryDef::LOWER_TOP),
             |entry, _virtualAddr| {
                 let phyAddr = entry.addr().as_u64();

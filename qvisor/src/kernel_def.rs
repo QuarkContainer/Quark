@@ -133,8 +133,8 @@ impl ShareSpace {
         if self.config.read().EnableRDMA {
             self.rdmaSvcCli = CachePadded::new(RDMASvcClient::initialize(
                 rdmaSvcCliSock,
-                MemoryDef::RDMA_LOCAL_SHARE_OFFSET,
-                MemoryDef::RDMA_GLOBAL_SHARE_OFFSET,
+                MemoryDef::rdma_local_shared_hva(),
+                MemoryDef::rdma_global_shared_hva(),
                 podId,
             ));
         }

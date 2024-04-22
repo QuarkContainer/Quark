@@ -205,7 +205,7 @@ impl KVMVcpu {
                     rax: 0x11,
                     rbx: 0xdd,
                     //arg0
-                    rdi: self.privateHeapStartAddr, // self.pageAllocatorBaseAddr + self.,
+                    rdi: self.privateHeapStartGpa, // self.pageAllocatorBaseAddr + self.,
                     //arg1
                     rsi: self.id as u64,
                     //arg2
@@ -345,7 +345,7 @@ impl KVMVcpu {
                     }
                     cfg_if::cfg_if! {
                         if #[cfg(feature = "cc")] {
-                            let share_para_page  = unsafe{* (MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *const ShareParaPage)};
+                            let share_para_page  = unsafe{* (MemoryDef::hcall_page_hva() as *const ShareParaPage)};
                             let share_para = share_para_page.SharePara[self.id];
                             let para1 = share_para.para1;
                             let para2 = share_para.para2;
@@ -800,8 +800,8 @@ impl KVMVcpu {
         let mut frames = String::new();
         crate::qlib::backtracer::trace(regs.rip, regs.rsp, regs.rbp, &mut |frame| {
             frames.push_str(&format!("{:#x?}\n", frame));
-            if frame.rbp < MemoryDef::PHY_LOWER_ADDR
-                || frame.rbp >= MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB
+            if frame.rbp < MemoryDef::phy_lower_gpa()
+                || frame.rbp >= MemoryDef::phy_lower_gpa() + kernelMemRegionSize * MemoryDef::ONE_GB
             {
                 false
             } else {

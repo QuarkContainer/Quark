@@ -411,8 +411,6 @@ impl VirtualMachine {
             vms.controlSock = controlSock;
             PMA_KEEPER.InitHugePages();
 
-            vms.hostAddrTop =
-                MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
             vms.pageTables = PageTables::New(&vms.allocator)?;
 
             vms.KernelMapHugeTable(
@@ -569,8 +567,8 @@ impl VirtualMachine {
         Self::SetMemRegion(
             1,
             &vm_fd,
-            MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::PHY_LOWER_ADDR,
+            MemoryDef::phy_lower_gpa(),
+            MemoryDef::phy_lower_hva(),
             MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB,
         )?;
         
@@ -585,7 +583,7 @@ impl VirtualMachine {
         }
 
 
-        PMA_KEEPER.Init(MemoryDef::FILE_MAP_OFFSET, MemoryDef::FILE_MAP_SIZE);
+        PMA_KEEPER.Init(MemoryDef::file_map_offset_hva(), MemoryDef::FILE_MAP_SIZE);
 
 
         let autoStart;
@@ -594,14 +592,12 @@ impl VirtualMachine {
             vms.controlSock = controlSock;
             PMA_KEEPER.InitHugePages(); 
 
-            vms.hostAddrTop =
-                MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
             vms.pageTables = PageTables::New(&vms.allocator)?;
 
             vms.KernelMapHugeTable(
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR),
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR),
+                addr::Addr(MemoryDef::phy_lower_gpa()),
+                addr::Addr(MemoryDef::phy_lower_gpa() + kernelMemRegionSize * MemoryDef::ONE_GB),
+                addr::Addr(MemoryDef::phy_lower_gpa()),
                 addr::PageOpts::Zero()
                     .SetPresent()
                     .SetWrite()

@@ -235,7 +235,7 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
 #[inline(always)]
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     let vcpuid = GetVcpuId();
-    let share_para_page  = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
+    let share_para_page  = MemoryDef::hcall_page_gpa() as *mut ShareParaPage;
     let share_para =unsafe{&mut (*share_para_page).SharePara[vcpuid]};
     share_para.para1 = para1;
     share_para.para2 = para2;
@@ -258,7 +258,7 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
 #[cfg (feature = "cc")]
 #[inline(always)]
 pub fn HyperCall64_init(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
-    let share_para_page  = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
+    let share_para_page  = MemoryDef::hcall_page_gpa() as *mut ShareParaPage;
     let share_para =unsafe{&mut (*share_para_page).SharePara[0]};
     share_para.para1 = para1;
     share_para.para2 = para2;
@@ -376,12 +376,6 @@ pub fn InitX86FPState(data: u64, useXsave: bool) {
     unsafe { initX86FPState(data, useXsave) }
 }
 
-
-
-
-
-
-
 impl HostAllocator {
     pub const fn New() -> Self {
         return Self {
@@ -409,7 +403,7 @@ impl HostAllocator {
         
         // reserve 4 pages for the listAllocator, ghcb blok and share para page
         let size = 4 * MemoryDef::PAGE_SIZE as usize;
-        self.GuestHostSharedAllocator().Add(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST as usize + size, 
+        self.GuestHostSharedAllocator().Add(MemoryDef::guest_host_shared_heap_offest_gpa() as usize + size, 
             MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as usize - size);
     }
 

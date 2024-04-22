@@ -13,8 +13,8 @@ impl HostAllocator {
     pub const fn New() -> Self {
         return Self {
             host_initialization_heap: AtomicU64::new(MemoryDef::HOST_INIT_HEAP_OFFSET),
-            host_guest_shared_heap: AtomicU64::new(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST),
-            guest_private_heap: AtomicU64::new(MemoryDef::GUEST_PRIVATE_HEAP_OFFSET),
+            host_guest_shared_heap: AtomicU64::new(MemoryDef::guest_host_shared_heap_offset_hva()),
+            guest_private_heap: AtomicU64::new(MemoryDef::guest_private_heap_offset_hva()),
             initialized: AtomicBool::new(false),
             is_host_allocator: AtomicBool::new(true),
             is_vm_lauched: AtomicBool::new(false),
@@ -30,7 +30,7 @@ impl HostAllocator {
             }
             libc::mmap(
                 self.guest_private_heap.load(Ordering::Relaxed) as _,
-                MemoryDef::GUEST_PRIVATE_HEAP_PLUS_SHARED_HEAP_SIZE as usize,
+                MemoryDef::get_guest_heap_total_size() as usize,
                 libc::PROT_READ | libc::PROT_WRITE,
                 flags,
                 -1,
@@ -81,7 +81,7 @@ impl HostAllocator {
 
         // init private guest heap
         let guestPrivateHeapStart = self.guest_private_heap.load(Ordering::Relaxed);
-        let guestPrivateHeapEnd = guestPrivateHeapStart + MemoryDef::GUEST_PRIVATE_HEAP_SIZE as u64;
+        let guestPrivateHeapEnd = guestPrivateHeapStart + MemoryDef::get_guest_private_heap_size() as u64;
         *self.GuestPrivateAllocator() = ListAllocator::New(guestPrivateHeapStart as _, guestPrivateHeapEnd);
 
         let hostInitHeapStart = self.host_initialization_heap.load(Ordering::Relaxed);
@@ -91,8 +91,8 @@ impl HostAllocator {
         // reserve first 4KB gor the listAllocator
         let size = core::mem::size_of::<ListAllocator>();
 
-        self.GuestPrivateAllocator().Add(MemoryDef::GUEST_PRIVATE_HEAP_OFFSET as usize + size, 
-                        MemoryDef::GUEST_PRIVATE_HEAP_SIZE as usize - size);
+        self.GuestPrivateAllocator().Add(MemoryDef::guest_private_heap_offset_hva() as usize + size, 
+                        MemoryDef::get_guest_private_heap_size() as usize - size);
         self.HostInitAllocator().Add(MemoryDef::HOST_INIT_HEAP_OFFSET as usize + size, 
                                             MemoryDef::HOST_INIT_HEAP_SIZE as usize - size);
         self.initialized.store(true, Ordering::SeqCst);
