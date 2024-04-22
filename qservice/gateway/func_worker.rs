@@ -33,7 +33,7 @@ use hyper_util::rt::TokioIo;
 use qshare::common::*;
 use qshare::na::{self, Env, Kv};
 
-use crate::func_mgr::FuncPackage;
+use qshare::obj_mgr::func_mgr::FuncPackage;
 use crate::{PromptReq, FUNCPOD_FUNCNAME, FUNCPOD_PROMPT, FUNCPOD_TYPE, TSOT_CLIENT};
 
 lazy_static::lazy_static! {

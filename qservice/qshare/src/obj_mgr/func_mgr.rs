@@ -18,8 +18,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use qshare::common::*;
-use qshare::metastore::data_obj::*;
+use crate::common::*;
+use crate::metastore::data_obj::*;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct FuncPackageId {

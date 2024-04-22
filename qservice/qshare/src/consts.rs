@@ -46,26 +46,23 @@ pub const KUBERNETES_POD_NAMESPACE_LABEL: &str = "io.kubernetes.pod.namespace";
 pub const KUBERNETES_POD_UIDLABEL: &str = "io.kubernetes.pod.uid";
 pub const KUBERNETES_CONTAINER_NAME_LABEL: &str = "io.kubernetes.container.name";
 
-pub const LabelNodeMgrNodeDaemon: &str = "daemon.qserverless.quarksoft.io";
-pub const LabelNodeMgrApplication: &str = "application.core.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrNode: &str = "node.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrPod: &str = "pod.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrCreationUnixMicro: &str =
-    "create.unixmicro.core.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrSessionService: &str = "sessionservice.core.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrApplicationSession: &str =
-    "applicationsession.core.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrNodeRevision: &str = "noderevision.core.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrHibernatePod: &str = "hibernatepod.core.qserverless.quarksoft.io";
-pub const AnnotationNodeMgrSessionServicePod: &str =
-    "sessionservicepod.core.qserverless.quarksoft.io";
-pub const AnnotationFuncPodPackageName: &str = "packagename.qserverless.quarksoft.io";
-pub const AnnotationFuncPodPackageType: &str = "packagetype.qserverless.quarksoft.io";
-pub const AnnotationFuncPodPyPackageId: &str = "pypackageid.qserverless.quarksoft.io";
-pub const EnvVarNodeMgrPodId: &str = "qserverless_podid";
-pub const EnvVarNodeMgrNamespace: &str = "qserverless_namespace";
-pub const EnvVarNodeMgrPackageId: &str = "qserverless_packageid";
-pub const EnvVarNodeAgentAddr: &str = "qserverless_nodeagentaddr";
+pub const LabelNodeMgrNodeDaemon: &str = "daemon.qservice.io";
+pub const LabelNodeMgrApplication: &str = "application.core.qservice.io";
+pub const AnnotationNodeMgrNode: &str = "node.qservice.io";
+pub const AnnotationNodeMgrPod: &str = "pod.qservice.io";
+pub const AnnotationNodeMgrCreationUnixMicro: &str = "create.unixmicro.core.qservice.io";
+pub const AnnotationNodeMgrSessionService: &str = "sessionservice.core.qservice.io";
+pub const AnnotationNodeMgrApplicationSession: &str = "applicationsession.core.qservice.io";
+pub const AnnotationNodeMgrNodeRevision: &str = "noderevision.core.qservice.io";
+pub const AnnotationNodeMgrHibernatePod: &str = "hibernatepod.core.qservice.io";
+pub const AnnotationNodeMgrSessionServicePod: &str = "sessionservicepod.core.qservice.io";
+pub const AnnotationFuncPodPackageName: &str = "packagename.qservice.io";
+pub const AnnotationFuncPodPackageType: &str = "packagetype.qservice.io";
+pub const AnnotationFuncPodPyPackageId: &str = "pypackageid.qservice.io";
+pub const EnvVarNodeMgrPodId: &str = "qservice_podid";
+pub const EnvVarNodeMgrNamespace: &str = "qservice_namespace";
+pub const EnvVarNodeMgrPackageId: &str = "qservice_packageid";
+pub const EnvVarNodeAgentAddr: &str = "qservice_nodeagentaddr";
 pub const DefaultNodeAgentAddr: &str = "unix:///var/lib/quark/nodeagent/sock";
 pub const DefaultNodeFuncLogFolder: &str = "/var/log/quark";
 
@@ -76,7 +73,7 @@ pub const ERROR_SOURCE_USER: i32 = 2;
 
 pub const DefaultNodeMgrNodeNameSpace: &str = "qservice";
 pub const DefaultNodeMgrNodeTenant: &str = "system";
-pub const DefaultDomainName: &str = "qservice.io";
+pub const DefaultDomainName: &str = "qservice";
 
 // NodePending means the node has been created/added by the system, but not configured.
 pub const NodePending: &str = "Pending";

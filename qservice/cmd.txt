@@ -130,8 +130,8 @@ set PerSandboxLog to true
 export NODE1=127.0.0.1
 REGISTRY=quay.io/coreos/etcd
 
-docker volume create --name etcd-data
-export DATA_DIR="etcd-data"
+#docker volume create --name etcd-data
+#export DATA_DIR="etcd-data"
 
 sudo docker run \
   -p 2379:2379 \
