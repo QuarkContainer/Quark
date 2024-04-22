@@ -406,6 +406,7 @@ pub extern "C" fn __cudaRegisterFunction(
     gDim: u64,
     wSize: usize
 )  {
+    println!("Hijacked __cudaRegisterFunction");
         let info = RegisterFunctionInfo {
         fatCubinHandle: fatCubinHandle,
         hostFun: hostFun,

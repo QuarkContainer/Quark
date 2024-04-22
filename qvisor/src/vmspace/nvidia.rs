@@ -511,7 +511,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
             let bytes = unsafe {std::slice::from_raw_parts( parameters.para4 as *const _, parameters.para5 as usize)};
             let ptxlibPath = std::str::from_utf8(bytes).unwrap();
             // todo: use mutex instead of atomic?
-            if CUDA_HAS_INIT.fetch_add(1, Ordering::SeqCst)==0 { //compare_and_swap
+            if CUDA_HAS_INIT.fetch_add(1, Ordering::SeqCst) == 0 { //compare_and_swap
                 InitNvidia(containerId, ptxlibPath);
             }
           
@@ -531,8 +531,9 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
                 error!("nvidia.rs: error caused by CudaRegisterFatBinary(cuModuleLoadData): {}", ret as u32);
             }
 
-            unsafe{ cudaDeviceSynchronize();}
+            // unsafe{ cudaDeviceSynchronize();}
             MODULES.lock().insert(moduleKey, module);
+            // error!("insert module: {:x} -> {:x}", moduleKey, module);
             return Ok(ret as i64);
         }
         ProxyCommand::CudaUnregisterFatBinary => {
@@ -541,11 +542,11 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
 
             let module = match MODULES.lock().get(&moduleKey) {
                 Some(module) => {
-                    *module
+                    module.clone()
                 }
                 None => {
-                    //error!("no module be found with this fatcubinHandle: {:x}", moduleKey);
-                    0
+                    error!("CudaUnregisterFatBinary: no module be found with this fatcubinHandle: {:x}", moduleKey);
+                    moduleKey.clone()
                 }
             };
 
@@ -566,11 +567,11 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
 
             let mut module = match MODULES.lock().get(&info.fatCubinHandle) {
                 Some(module) => {
-                    *module
+                    module.clone()
                 }
                 None => {
-                    //error!("no module be found with this fatcubinHandle: {:x}", info.fatCubinHandle);
-                    0
+                    error!("CudaRegisterFunction: no module be found with this fatcubinHandle: {:x}", info.fatCubinHandle);
+                    info.fatCubinHandle.clone()
                 }
             };
 
@@ -587,7 +588,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
                 error!("nvidia.rs: error caused by CudaRegisterFunction(cuModuleGetFunction): {}", ret as u32);
             }
 
-            unsafe{ cudaDeviceSynchronize();}
+            //unsafe{ cudaDeviceSynchronize(); }
             FUNCTIONS.lock().insert(info.hostFun, hfunc);
 
             let kernelInfo = match KERNEL_INFOS.lock().get(&deviceName.to_string()) {
@@ -616,11 +617,11 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
 
             let module = match MODULES.lock().get(&info.fatCubinHandle) {
                 Some(module) => {
-                    *module
+                    module.clone()
                 }
                 None => {
-                    //error!("no module found with this fatCubin {:x}", info.fatCubinHandle);
-                    0
+                    error!("CudaRegisterVar: no module be found with this fatcubinHandle: {}", info.fatCubinHandle);
+                    info.fatCubinHandle.clone()
                 }
             };
 
@@ -629,7 +630,6 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
             let ownded_name = CString::new(deviceName).unwrap();
             let name = ownded_name.as_ptr();
             let ret = unsafe {
-                // cuda_driver_sys::
                 cuModuleGetGlobal_v2(
                     &mut devicePtr,
                     &mut dSize,
@@ -658,7 +658,6 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
             };
        
             let ret: CUresult = unsafe {
-                // cuda_driver_sys::
                 cuLaunchKernel(
                     func as CUfunction,
                     info.gridDim.x,

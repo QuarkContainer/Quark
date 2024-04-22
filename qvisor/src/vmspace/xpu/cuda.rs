@@ -343,7 +343,8 @@ pub fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
     match GetSectionByName(elf, String::from(".nv.info"), &mut ptr_section) {
         Ok(v) => v,
         Err(_e) => {
-            return Err(Error::ELFLoadError("could not find .nv.info section. This means this binary does not contain any kernels."));
+            //return Err(Error::ELFLoadError("could not find .nv.info section. This means this binary does not contain any kernels."));
+            return Ok(0);   // It's okay if we can't find nv.info section because some ELF file might without it but still valid.
         },
     };
 
