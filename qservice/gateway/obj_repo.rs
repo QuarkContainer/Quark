@@ -13,9 +13,8 @@
 // limitations under the License.
 
 use core::ops::Deref;
-use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::sync::Mutex;
+use tokio::sync::Notify;
 
 use qshare::metastore::data_obj::*;
 use qshare::metastore::informer::EventHandler;
@@ -24,62 +23,17 @@ use qshare::metastore::informer_factory::InformerFactory;
 use qshare::metastore::selection_predicate::ListOption;
 use qshare::metastore::store::ThreadSafeStore;
 use qshare::node::PodDef;
-use serde::{Deserialize, Serialize};
 
 use qshare::common::*;
 use qshare::etcd::etcd_store::EtcdStore;
-use tokio::sync::Notify;
-
-use crate::func_mgr::*;
-use crate::pod_mgr::PodMgr;
-
-#[derive(Serialize, Deserialize, Debug, Default)]
-pub struct NamespaceSpec {
-    #[serde(default)]
-    pub tenant: String,
-    pub namespace: String,
-    pub revision: i64,
-    pub disable: bool,
-}
-
-impl NamespaceSpec {
-    pub const KEY: &'static str = "namespace_info";
-
-    pub fn FromDataObject(obj: DataObject) -> Result<Self> {
-        let spec = match serde_json::from_str::<Self>(&obj.data) {
-            Err(e) => {
-                return Err(Error::CommonError(format!(
-                    "NamespaceSpec::FromDataObject {:?}",
-                    e
-                )))
-            }
-            Ok(s) => s,
-        };
-        return Ok(spec);
-    }
-
-    pub fn DataObject(&self) -> DataObject {
-        let inner = DataObjectInner {
-            kind: Self::KEY.to_owned(),
-            tenant: self.tenant.clone(),
-            namespace: "system".to_owned(),
-            name: self.namespace.to_owned(),
-            data: serde_json::to_string_pretty(&self).unwrap(),
-            ..Default::default()
-        };
-
-        return inner.into();
-    }
-
-    pub fn Key(&self) -> String {
-        return format!("{}/{}", &self.tenant, &self.namespace);
-    }
-}
+use qshare::obj_mgr::func_mgr::*;
+use qshare::obj_mgr::namespace_mgr::*;
+use qshare::obj_mgr::pod_mgr::PodMgr;
 
 #[derive(Debug)]
-pub struct NamespaceMgrInner {
+pub struct ObjRepoInner {
     pub funcPackageMgr: FuncPackageMgr,
-    pub namespaces: Mutex<BTreeMap<String, NamespaceSpec>>,
+    pub namespaceMgr: NamespaceMgr,
     pub podMgr: PodMgr,
 
     pub factory: InformerFactory,
@@ -88,17 +42,17 @@ pub struct NamespaceMgrInner {
 }
 
 #[derive(Debug, Clone)]
-pub struct NamespaceMgr(Arc<NamespaceMgrInner>);
+pub struct ObjRepo(Arc<ObjRepoInner>);
 
-impl Deref for NamespaceMgr {
-    type Target = Arc<NamespaceMgrInner>;
+impl Deref for ObjRepo {
+    type Target = Arc<ObjRepoInner>;
 
-    fn deref(&self) -> &Arc<NamespaceMgrInner> {
+    fn deref(&self) -> &Arc<ObjRepoInner> {
         &self.0
     }
 }
 
-impl NamespaceMgr {
+impl ObjRepo {
     pub async fn New(addresses: Vec<String>) -> Result<Self> {
         let factory = InformerFactory::New(addresses, "", "").await?;
 
@@ -118,9 +72,9 @@ impl NamespaceMgr {
         factory.AddInformer("pod", &ListOption::default()).await?;
         let podInformer = factory.GetInformer("pod").await?;
 
-        let inner = NamespaceMgrInner {
+        let inner = ObjRepoInner {
             funcPackageMgr: FuncPackageMgr::default(),
-            namespaces: Mutex::new(BTreeMap::new()),
+            namespaceMgr: NamespaceMgr::default(),
             podMgr: PodMgr::default(),
             factory: factory,
             namespaceInformer: namespaceInformer.clone(),
@@ -154,40 +108,39 @@ impl NamespaceMgr {
     }
 
     pub fn ContainsNamespace(&self, tenant: &str, namespace: &str) -> bool {
-        let podNamespace = format!("{}/{}", tenant, namespace);
-        return self.namespaces.lock().unwrap().contains_key(&podNamespace);
+        return self.namespaceMgr.Contains(tenant, namespace);
     }
 
-    pub fn AddNamespace(&self, spec: NamespaceSpec) -> Result<()> {
-        let mut inner = self.namespaces.lock().unwrap();
+    // pub fn AddNamespace(&self, spec: NamespaceSpec) -> Result<()> {
+    //     let mut inner = self.namespaces.lock().unwrap();
 
-        let key = spec.Key();
+    //     let key = spec.Key();
 
-        if inner.contains_key(&key) {
-            return Err(Error::Exist(format!("NamespaceMgr::AddNamespace {}", &key)));
-        };
+    //     if inner.contains_key(&key) {
+    //         return Err(Error::Exist(format!("NamespaceMgr::AddNamespace {}", &key)));
+    //     };
 
-        inner.insert(key, spec);
+    //     inner.insert(key, spec);
 
-        return Ok(());
-    }
+    //     return Ok(());
+    // }
 
-    pub fn UpdateNamespace(&self, spec: NamespaceSpec) -> Result<()> {
-        let mut inner = self.namespaces.lock().unwrap();
+    // pub fn UpdateNamespace(&self, spec: NamespaceSpec) -> Result<()> {
+    //     let mut inner = self.namespaces.lock().unwrap();
 
-        let key = spec.Key();
+    //     let key = spec.Key();
 
-        if !inner.contains_key(&key) {
-            return Err(Error::NotExist(format!(
-                "NamespaceMgr::UpdateNamespace {}",
-                &key
-            )));
-        };
+    //     if !inner.contains_key(&key) {
+    //         return Err(Error::NotExist(format!(
+    //             "NamespaceMgr::UpdateNamespace {}",
+    //             &key
+    //         )));
+    //     };
 
-        inner.insert(key, spec);
+    //     inner.insert(key, spec);
 
-        return Ok(());
-    }
+    //     return Ok(());
+    // }
 
     pub fn ContainsFuncPackage(&self, tenant: &str, namespace: &str, name: &str) -> Result<bool> {
         if !self.ContainsNamespace(tenant, namespace) {
@@ -246,7 +199,7 @@ impl NamespaceMgr {
                 }
                 NamespaceSpec::KEY => {
                     let spec: NamespaceSpec = NamespaceSpec::FromDataObject(obj)?;
-                    self.AddNamespace(spec)?;
+                    self.namespaceMgr.Add(spec)?;
                 }
                 PodDef::KEY => {
                     let podDef = PodDef::FromDataObject(obj)?;
@@ -266,7 +219,7 @@ impl NamespaceMgr {
                 }
                 NamespaceSpec::KEY => {
                     let spec: NamespaceSpec = NamespaceSpec::FromDataObject(obj)?;
-                    self.UpdateNamespace(spec)?;
+                    self.namespaceMgr.Update(spec)?;
                 }
                 PodDef::KEY => {
                     let podDef = PodDef::FromDataObject(obj)?;
@@ -307,7 +260,7 @@ impl NamespaceMgr {
     }
 }
 
-impl EventHandler for NamespaceMgr {
+impl EventHandler for ObjRepo {
     fn handle(&self, _store: &ThreadSafeStore, event: &DeltaEvent) {
         self.ProcessDeltaEvent(event).unwrap();
     }

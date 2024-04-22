@@ -26,21 +26,19 @@ extern crate simple_logging;
 #[macro_use]
 extern crate scopeguard;
 
-pub mod func_mgr;
 pub mod func_worker;
 pub mod http_gateway;
-pub mod namespace_mgr;
-pub mod pod_mgr;
+pub mod obj_repo;
 pub mod tsot_client;
 
-use namespace_mgr::{NamespaceMgr, NamespaceStore};
+use obj_repo::{NamespaceStore, ObjRepo};
 use once_cell::sync::OnceCell;
 
 use http_gateway::*;
 use qshare::common::*;
 use tsot_client::TsotClient;
 
-pub static NAMESPACE_MGR: OnceCell<NamespaceMgr> = OnceCell::new();
+pub static OBJ_REPO: OnceCell<ObjRepo> = OnceCell::new();
 pub static NAMESPACE_STORE: OnceCell<NamespaceStore> = OnceCell::new();
 pub static TSOT_CLIENT: OnceCell<TsotClient> = OnceCell::new();
 
@@ -48,8 +46,8 @@ pub static TSOT_CLIENT: OnceCell<TsotClient> = OnceCell::new();
 async fn main() -> Result<()> {
     log4rs::init_file("/etc/quark/gateway_logging_config.yaml", Default::default()).unwrap();
 
-    NAMESPACE_MGR
-        .set(NamespaceMgr::New(vec!["http://127.0.0.1:8890".to_owned()]).await?)
+    OBJ_REPO
+        .set(ObjRepo::New(vec!["http://127.0.0.1:8890".to_owned()]).await?)
         .unwrap();
     NAMESPACE_STORE
         .set(NamespaceStore::New(&vec!["http://127.0.0.1:2379".to_owned()]).await?)

@@ -17,9 +17,9 @@ use std::ops::Deref;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use qshare::common::*;
-use qshare::node::PodDef;
-use qshare::node::PodDefBox;
+use crate::common::*;
+use crate::node::PodDef;
+use crate::node::PodDefBox;
 
 #[derive(Debug, Default)]
 pub struct PodMgrInner {

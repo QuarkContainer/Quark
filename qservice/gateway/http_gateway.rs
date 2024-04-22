@@ -26,11 +26,12 @@ use serde::{Deserialize, Serialize};
 type Client = hyper_util::client::legacy::Client<HttpConnector, Body>;
 
 use qshare::common::*;
+use qshare::obj_mgr::func_mgr::*;
+use qshare::obj_mgr::namespace_mgr::NamespaceSpec;
 
-use crate::namespace_mgr::NamespaceSpec;
-use crate::NAMESPACE_MGR;
+use crate::func_worker::FUNCAGENT_MGR;
 use crate::NAMESPACE_STORE;
-use crate::{func_mgr::FuncPackageSpec, func_worker::FUNCAGENT_MGR};
+use crate::OBJ_REPO;
 
 pub const FUNCPOD_TYPE: &str = "funcpod_type.qservice.io";
 pub const FUNCPOD_FUNCNAME: &str = "fun_name.qservice.io";
@@ -71,7 +72,7 @@ impl HttpGateway {
 }
 
 async fn PostNamespace(Json(spec): Json<NamespaceSpec>) -> impl IntoResponse {
-    if NAMESPACE_MGR
+    if OBJ_REPO
         .get()
         .unwrap()
         .ContainsNamespace(&spec.tenant, &spec.namespace)
@@ -91,7 +92,7 @@ async fn PostNamespace(Json(spec): Json<NamespaceSpec>) -> impl IntoResponse {
 async fn GetFuncPods(
     Path((tenant, namespace, funcName)): Path<(String, String, String)>,
 ) -> impl IntoResponse {
-    match NAMESPACE_MGR
+    match OBJ_REPO
         .get()
         .unwrap()
         .GetFuncPods(&tenant, &namespace, &funcName)
@@ -105,11 +106,11 @@ async fn GetFuncPods(
 }
 
 async fn PostFuncPackage(Json(spec): Json<FuncPackageSpec>) -> impl IntoResponse {
-    match NAMESPACE_MGR.get().unwrap().ContainsFuncPackage(
-        &spec.tenant,
-        &spec.namespace,
-        &spec.name,
-    ) {
+    match OBJ_REPO
+        .get()
+        .unwrap()
+        .ContainsFuncPackage(&spec.tenant, &spec.namespace, &spec.name)
+    {
         Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}", e))),
         Ok(contains) => {
             if contains {
@@ -140,7 +141,7 @@ async fn PostFuncPackage(Json(spec): Json<FuncPackageSpec>) -> impl IntoResponse
 async fn DropFuncPackage(
     Path((tenant, namespace, name)): Path<(String, String, String)>,
 ) -> impl IntoResponse {
-    match NAMESPACE_MGR
+    match OBJ_REPO
         .get()
         .unwrap()
         .GetFuncPackage(&tenant, &namespace, &name)
@@ -164,7 +165,7 @@ async fn DropFuncPackage(
 async fn GetFuncPackage(
     Path((tenant, namespace, name)): Path<(String, String, String)>,
 ) -> impl IntoResponse {
-    match NAMESPACE_MGR
+    match OBJ_REPO
         .get()
         .unwrap()
         .GetFuncPackage(&tenant, &namespace, &name)
@@ -178,11 +179,7 @@ async fn GetFuncPackage(
 }
 
 async fn GetFuncPackages(Path((tenant, namespace)): Path<(String, String)>) -> impl IntoResponse {
-    match NAMESPACE_MGR
-        .get()
-        .unwrap()
-        .GetFuncPackages(&tenant, &namespace)
-    {
+    match OBJ_REPO.get().unwrap().GetFuncPackages(&tenant, &namespace) {
         Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}", e))),
         Ok(funcPackages) => {
             let str = serde_json::to_string(&funcPackages).unwrap(); // format!("{:#?}", funcPackages);
@@ -192,7 +189,7 @@ async fn GetFuncPackages(Path((tenant, namespace)): Path<(String, String)>) -> i
 }
 
 async fn PostFuncCall(Json(req): Json<PromptReq>) -> impl IntoResponse {
-    match NAMESPACE_MGR
+    match OBJ_REPO
         .get()
         .unwrap()
         .GetFuncPackage(&req.tenant, &req.namespace, &req.func)

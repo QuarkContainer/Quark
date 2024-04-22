@@ -35,6 +35,7 @@ pub mod etcd;
 pub mod k8s_util;
 pub mod metastore;
 pub mod node;
+pub mod obj_mgr;
 pub mod qlet_config;
 pub mod tsot_msg;
 pub mod types;
