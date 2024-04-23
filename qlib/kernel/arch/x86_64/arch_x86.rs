@@ -248,6 +248,7 @@ impl X86fpstate {
         return buf;
     }
 
+
     pub const fn Init() -> Self {
         return Self {
             data: [0; 4096],
@@ -256,7 +257,9 @@ impl X86fpstate {
     }
 
     pub fn Reset(&self) {
+
         let (size, _align) = HostFeatureSet().ExtendedStateSize();
+
         self.size.store(size as usize, Ordering::SeqCst);
         self.SaveFp();
     }

@@ -3117,11 +3117,12 @@ impl MemoryDef {
                                                                 // RDMA global share memory
     const RDMA_GLOBAL_SHARE_OFFSET: u64 =
         Self::RDMA_LOCAL_SHARE_OFFSET + Self::RDMA_LOCAL_SHARE_SIZE;
-    const RDMA_GLOBAL_SHARE_SIZE: u64 = 2 * Self::ONE_MB;
+    const RDMA_GLOBAL_SHARE_SIZE: u64 = 512 * Self::ONE_MB;
 
     const GUEST_PRIVATE_HEAP_OFFSET: u64 = Self::RDMA_GLOBAL_SHARE_OFFSET + Self::RDMA_GLOBAL_SHARE_SIZE;
     const GUEST_PRIVATE_HEAP_PLUS_SHARED_HEAP_SIZE: u64 = 10 * Self::ONE_GB;
     const GUEST_PRIVATE_HEAP_SIZE: u64 = 5 * Self::ONE_GB;
+    const GUEST_PRIVATE_INIT_HEAP_SIZE: u64 = 1 * Self::ONE_GB;
 
     const GUEST_PRIVATE_HEAP_END: u64 = Self::GUEST_PRIVATE_HEAP_OFFSET + Self::GUEST_PRIVATE_HEAP_SIZE;
 
@@ -3157,7 +3158,17 @@ impl MemoryDef {
 
 #[cfg(feature = "cc")]
 impl MemoryDef {
+    pub const fn gpa_to_hva(gpa: u64) -> u64 {
+        return gpa - Self::ONE_GB;
 
+        // return gpa;
+    }
+
+    pub const fn hva_to_gpa(hva: u64) -> u64 {
+        return hva + Self::ONE_GB;
+
+        // return hva;
+    }
     
     //======================== private ====================//
     pub const fn phy_lower_gpa () -> u64 {
@@ -3165,26 +3176,43 @@ impl MemoryDef {
     }
 
     pub const fn phy_lower_hva () -> u64 {
-        // return Self::PHY_LOWER_ADDR - Self::ONE_GB;
-        return Self::PHY_LOWER_ADDR;
+        // return Self::PHY_LOWER_ADDR;
+        return Self::PHY_LOWER_ADDR - Self::ONE_GB;
     }
 
-    pub const fn guest_private_heap_offset_gpa () -> u64 {
+    pub const fn guest_private_init_heap_offset_gpa () -> u64 {
         return Self::GUEST_PRIVATE_HEAP_OFFSET;
     }
 
-    pub const  fn guest_private_heap_offset_hva () -> u64 {
-        // return Self::GUEST_PRIVATE_HEAP_OFFSET - Self::ONE_GB;
-        return Self::GUEST_PRIVATE_HEAP_OFFSET;
+    pub const  fn guest_private_init_heap_offset_hva () -> u64 {
+        return Self::GUEST_PRIVATE_HEAP_OFFSET - Self::ONE_GB;
+        // return Self::GUEST_PRIVATE_HEAP_OFFSET;
     }
 
-    pub const fn guest_private_heap_end_gpa () -> u64 {
-        return Self::GUEST_PRIVATE_HEAP_END;
+    pub const fn guest_private_init_heap_end_gpa () -> u64 {
+        return Self::GUEST_PRIVATE_INIT_HEAP_SIZE + Self::GUEST_PRIVATE_HEAP_OFFSET;
     }
 
-    pub const fn guest_private_heap_end_hva () -> u64 {
-        // return Self::GUEST_PRIVATE_HEAP_END - Self::ONE_GB;
+    pub const  fn guest_private_init_heap_end_hva () -> u64 {
+        return Self::GUEST_PRIVATE_INIT_HEAP_SIZE + Self::GUEST_PRIVATE_HEAP_OFFSET - Self::ONE_GB;
+        // return Self::GUEST_PRIVATE_HEAP_OFFSET;
+    }
 
+    pub const fn guest_private_init_heap_size () -> u64 {
+        Self::GUEST_PRIVATE_INIT_HEAP_SIZE
+    }
+
+
+    pub const fn guest_private_running_heap_size () -> u64 {
+        return Self::GUEST_PRIVATE_HEAP_SIZE - Self::GUEST_PRIVATE_INIT_HEAP_SIZE; 
+    }
+
+    pub const fn guest_private_running_heap_offset_gpa () -> u64 {
+        return Self::GUEST_PRIVATE_HEAP_OFFSET + Self::GUEST_PRIVATE_INIT_HEAP_SIZE; 
+    }
+
+
+    pub const fn guest_private_running_heap_end_gpa () -> u64 {
         return Self::GUEST_PRIVATE_HEAP_END;
     }
 
@@ -3192,13 +3220,16 @@ impl MemoryDef {
         return Self::RDMA_LOCAL_SHARE_OFFSET;
     }
 
+
     pub const fn rdma_local_shared_hva () -> u64 {
         return Self::RDMA_LOCAL_SHARE_OFFSET;
     }
 
+
     pub const fn rdma_global_shared_gpa () -> u64 {
         return Self::RDMA_GLOBAL_SHARE_OFFSET;
     }
+
 
     pub const fn rdma_global_shared_hva () -> u64 {
         return Self::RDMA_GLOBAL_SHARE_OFFSET;
@@ -3213,9 +3244,6 @@ impl MemoryDef {
     pub const fn phy_upper_hva () -> u64 {
         return Self::PHY_UPPER_ADDR;
     }
-
-
-
 
     pub const fn guest_host_shared_heap_offest_gpa () -> u64 {
         return Self::GUEST_HOST_SHARED_HEAP_OFFEST;
@@ -3258,15 +3286,13 @@ impl MemoryDef {
         return Self::FILE_MAP_OFFSET;
     }
 
-    pub const fn get_guest_heap_total_size () -> u64 {
+
+
+    pub const fn get_shared_heap_size () -> u64 {
         Self::GUEST_PRIVATE_HEAP_PLUS_SHARED_HEAP_SIZE
     }
 
-
-
-    pub const fn get_guest_private_heap_size () -> u64 {
-        Self::GUEST_PRIVATE_HEAP_SIZE
-    }
+    
 
 }
 

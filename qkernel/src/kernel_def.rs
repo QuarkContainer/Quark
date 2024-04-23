@@ -258,6 +258,7 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
 #[cfg (feature = "cc")]
 #[inline(always)]
 pub fn HyperCall64_init(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
+
     let share_para_page  = MemoryDef::hcall_page_gpa() as *mut ShareParaPage;
     let share_para =unsafe{&mut (*share_para_page).SharePara[0]};
     share_para.para1 = para1;
@@ -390,6 +391,15 @@ impl HostAllocator {
 
     pub fn InitPrivateAllocator(&self, privateHeapAddr: u64) {
         self.guest_private_heap.store(privateHeapAddr, Ordering::SeqCst);
+
+        let privateRunningHeapStart = self.guest_private_heap.load(Ordering::Relaxed);
+        let privateRunningHeapEnd = privateRunningHeapStart + MemoryDef::guest_private_running_heap_size() as u64;
+        
+        *self.GuestPrivateAllocator()= ListAllocator::New(privateRunningHeapStart as _, privateRunningHeapEnd);
+        
+        let size = core::mem::size_of::<ListAllocator>();
+        self.GuestPrivateAllocator().Add(MemoryDef::guest_private_running_heap_offset_gpa() as usize + size, 
+            MemoryDef::guest_private_running_heap_size() as usize - size);
     }
 
 
@@ -420,7 +430,7 @@ unsafe impl GlobalAlloc for HostAllocator {
         let addr = ptr as u64;
         if Self::IsGuestPrivateHeapAddr(addr) {
             self.GuestPrivateAllocator().dealloc(ptr, layout);
-        } else {
+        } else if Self::IsGuestPrivateHeapAddr(addr){
             self.GuestHostSharedAllocator().dealloc(ptr, layout);
         }
     }

@@ -85,13 +85,16 @@ pub struct KVMVcpu {
     //index in the cpu arrary
     pub vcpu: kvm_ioctls::VcpuFd,
 
-    pub topStackAddr: u64,
+    pub topStackAddrGpa: u64,
+    #[cfg(feature = "cc")]
+    pub entry_gpa: u64,
+    #[cfg(not(feature = "cc"))]
     pub entry: u64,
 
-    pub gdtAddr: u64,
-    pub idtAddr: u64,
-    pub tssIntStackStart: u64,
-    pub tssAddr: u64,
+    pub gdtAddrGpa: u64,
+    pub idtAddrGpa: u64,
+    pub tssIntStackStartGpa: u64,
+    pub tssAddrGpa: u64,
 
     #[cfg(feature = "cc")]
     pub privateHeapStartGpa: u64,
@@ -191,7 +194,7 @@ impl KVMVcpu {
         id: usize,
         vcpuCnt: usize,
         vm_fd: &kvm_ioctls::VmFd,
-        entry: u64,
+        entry_gpa: u64,
         autoStart: bool,
     ) -> Result<Self> {
         const DEFAULT_STACK_PAGES: u64 = MemoryDef::DEFAULT_STACK_PAGES; //64KB
@@ -248,13 +251,13 @@ impl KVMVcpu {
             state: AtomicU64::new(KVMVcpuState::HOST as u64),
             vcpuCnt,
             vcpu,
-            topStackAddr: topStackAddr,
-            entry: entry,
-            gdtAddr: gdtAddr,
-            idtAddr: idtAddr,
-            tssIntStackStart: tssIntStackStart,
-            tssAddr: tssAddr,
-            privateHeapStartGpa: MemoryDef::guest_private_heap_offset_gpa(),
+            topStackAddrGpa: MemoryDef::hva_to_gpa(topStackAddr),
+            entry_gpa: entry_gpa,
+            gdtAddrGpa: MemoryDef::hva_to_gpa(gdtAddr),
+            idtAddrGpa: MemoryDef::hva_to_gpa(idtAddr),
+            tssIntStackStartGpa: MemoryDef::hva_to_gpa(tssIntStackStart),
+            tssAddrGpa: MemoryDef::hva_to_gpa(tssAddr),
+            privateHeapStartGpa: MemoryDef::guest_private_running_heap_offset_gpa(),
             autoStart: autoStart,
             interrupting: Mutex::new((false, vec![])),
         });

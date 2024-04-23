@@ -74,7 +74,16 @@ pub struct PageTables {
 
 impl PageTables {
     pub fn New(pagePool: &Allocator) -> Result<Self> {
-        let root = pagePool.AllocPage(true)?;
+
+        let root = if IS_GUEST {
+            let root = pagePool.AllocPage(true)?;
+            root
+        } else {
+            // on host
+            let root = pagePool.AllocPage(true)?;
+            MemoryDef::hva_to_gpa(root)
+        };
+
         Ok(Self {
             root: AtomicU64::new(root),
             tlbEpoch: AtomicU64::new(0),
@@ -583,6 +592,7 @@ impl PageTables {
         pagePool: &Allocator,
         _kernel: bool,
     ) -> Result<bool> {
+        assert!(IS_GUEST == false, "MapWith1G");
         if start.0 & (MemoryDef::HUGE_PAGE_SIZE_1G - 1) != 0
             || end.0 & (MemoryDef::HUGE_PAGE_SIZE_1G - 1) != 0
         {
@@ -591,8 +601,9 @@ impl PageTables {
 
         let mut res = false;
 
+ 
         let mut curAddr = start;
-        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
+        let pt: *mut PageTable = MemoryDef::gpa_to_hva(self.GetRoot()) as *mut PageTable;
         unsafe {
             let mut p4Idx = VirtAddr::new(curAddr.0).p4_index();
             let mut p3Idx = VirtAddr::new(curAddr.0).p3_index();
@@ -604,11 +615,11 @@ impl PageTables {
                 if pgdEntry.is_unused() {
                     pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
                     pgdEntry.set_addr(
-                        PhysAddr::new(pudTbl as u64),
+                        PhysAddr::new(MemoryDef::hva_to_gpa(pudTbl as u64) ),
                         default_table_user(),
                     );
                 } else {
-                    pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
+                    pudTbl = MemoryDef::gpa_to_hva(pgdEntry.addr().as_u64()) as *mut PageTable;
                 }
 
                 while curAddr.0 < end.0 {

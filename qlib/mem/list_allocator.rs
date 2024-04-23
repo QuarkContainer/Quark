@@ -307,9 +307,9 @@ impl HostAllocator {
 
     pub fn IsGuestPrivateHeapAddr(addr: u64) -> bool {
         if !IS_GUEST { 
-            return addr < MemoryDef::guest_private_heap_end_hva() && addr >= MemoryDef::guest_private_heap_offset_hva();
+            return addr < MemoryDef::guest_private_init_heap_end_hva() && addr >= MemoryDef::guest_private_init_heap_offset_hva();
         } else {
-            return addr < MemoryDef::guest_private_heap_end_gpa() && addr >= MemoryDef::guest_private_heap_offset_gpa();
+            return addr < MemoryDef::guest_private_running_heap_end_gpa() && addr >= MemoryDef::guest_private_running_heap_offset_gpa();
         }
     }
 
@@ -329,8 +329,17 @@ impl HostAllocator {
     #[inline]
     pub fn GuestPrivateHeapRange(&self) -> (u64, u64) {
         // TODO: guest and host have diffenrent view if private memory is not identical mmaped
+
         let allocator = self.GuestPrivateAllocator();
-        return (allocator.heapStart, allocator.heapEnd);
+
+        let  start_hva = allocator.heapStart;
+        let end_hva =  allocator.heapEnd;
+        if IS_GUEST {
+            return (MemoryDef::hva_to_gpa(start_hva), MemoryDef::hva_to_gpa(end_hva));
+        } else {
+            return (start_hva, end_hva);
+        }
+
     }
 
     // should be called by guest if it want to get buf that can be accessed by host
@@ -346,41 +355,53 @@ impl HostAllocator {
             }
         }
     }
-
-        // should be called by guest if it want to get buf that can be accessed by host
-    pub unsafe fn DeallocSharedBuf(&self,  ptr: *mut u8, layout: Layout) {  
+  
+    
+    pub unsafe fn DeallocShareBuf(&self, ptr: *mut u8, size: usize, align: usize) {
+        let layout = Layout::from_size_align(size, align)
+            .expect("DeallocShareBuf can't dealloc memory");
         cfg_if::cfg_if! {
             if #[cfg(feature = "cc")] {
                 return self.GuestHostSharedAllocator().dealloc(ptr, layout);
             } else {
                 return alloc::alloc::dealloc(ptr, layout);
             }
-        }  
-    }
-
-    #[cfg(feature = "cc")]
-    pub unsafe fn DeallocShareBuf(&self, ptr: *mut u8, size: usize, align: usize) {
-
-        let layout = Layout::from_size_align(size, align)
-            .expect("DeallocShareBuf can't dealloc memory");
-
-        return self.GuestHostSharedAllocator().dealloc(ptr,layout);
+        }
     }
     
     // should be called by host
     pub unsafe fn AllocGuestPrivatMem(&self, size: usize, align: usize) -> *mut u8 {
+        // use core::arch::asm;
+        // unsafe {
+        //     asm!(
+        //         "hlt",
+        //     )
+        // };  
         let layout = Layout::from_size_align(size, align)
             .expect("AllocGuestPrivatMem can't allocate memory");
+ 
 
             cfg_if::cfg_if! {
                 if #[cfg(feature = "cc")] {
-                    return self.GuestPrivateAllocator().alloc(layout);
+
+                    let ptr = self.GuestPrivateAllocator().alloc(layout);
+                    // unsafe {
+                    //     asm!(
+                    //         "hlt",
+                    //     )
+                    // };  
+                    return ptr;
+
+                    
+
                 } else {
                     return alloc::alloc::alloc(layout);
                 }
             }
     }
 }
+
+
 
 #[derive(Debug)]
 pub struct ListAllocator {

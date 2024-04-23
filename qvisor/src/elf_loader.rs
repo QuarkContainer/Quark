@@ -34,15 +34,15 @@ use super::addr::Addr;
 //use xmas_elf::header;
 use super::qlib::common::Error;
 use super::qlib::common::Result;
-
+use crate::MemoryDef;
 use super::memmgr::{MapOption, MappedRegion};
 
 pub struct KernelELF {
-    pub startAddr: Addr,
-    pub endAddr: Addr,
+    pub startAddrHva: Addr,
+    pub endAddrHva: Addr,
     pub mrs: Vec<MappedRegion>,
 
-    pub vdsoStart: u64,
+    pub vdsoStartHva: u64,
     pub vdsoLen: u64,
     pub vdsomr: Option<MappedRegion>,
 }
@@ -50,21 +50,21 @@ pub struct KernelELF {
 impl KernelELF {
     pub fn New() -> Result<Self> {
         return Ok(KernelELF {
-            startAddr: Addr(0),
-            endAddr: Addr(0),
+            startAddrHva: Addr(0),
+            endAddrHva: Addr(0),
             mrs: Vec::new(),
-            vdsoStart: 0,
+            vdsoStartHva: 0,
             vdsoLen: 0,
             vdsomr: None,
         });
     }
 
     pub fn StartAddr(&self) -> Addr {
-        return self.startAddr;
+        return self.startAddrHva;
     }
 
     pub fn EndAddr(&self) -> Addr {
-        return self.endAddr;
+        return self.endAddrHva;
     }
 
     pub fn LoadKernel(&mut self, fileName: &str) -> Result<u64> {
@@ -88,19 +88,21 @@ impl KernelELF {
             //todo : add more check
             if let Ph64(header) = p {
                 if header.get_type().map_err(Error::ELFLoadError)? == Type::Load {
-                    let startMem = Addr(header.virtual_addr).RoundDown()?;
-                    let endMem = Addr(header.virtual_addr)
+                    let header_host_virtual_addr = MemoryDef::gpa_to_hva(header.virtual_addr);
+
+                    let startMem = Addr(header_host_virtual_addr).RoundDown()?;
+                    let endMem = Addr(header_host_virtual_addr)
                         .AddLen(header.file_size)?
                         .RoundUp()?;
                     let pageOffset =
-                        Addr(header.virtual_addr).0 - Addr(header.virtual_addr).RoundDown()?.0;
+                        Addr(header_host_virtual_addr).0 - Addr(header_host_virtual_addr).RoundDown()?.0;
                     let len = Addr(header.file_size).RoundUp()?.0;
 
                     if startMem.0 < startAddr.0 {
                         startAddr = startMem;
                     }
 
-                    let end = Addr(header.virtual_addr)
+                    let end = Addr(header_host_virtual_addr)
                         .AddLen(header.mem_size)?
                         .RoundUp()?;
                     if endAddr.0 < endMem.0 {
@@ -122,7 +124,7 @@ impl KernelELF {
                     assert!(mr.ptr == startMem.0 + pageOffset);
                     self.mrs.push(mr);
 
-                    let adjust = header.virtual_addr - startMem.0;
+                    let adjust = header_host_virtual_addr - startMem.0;
 
                     if adjust + header.file_size < endMem.0 - startMem.0 {
                         let cnt = (endMem.0 - startMem.0 - (adjust + header.file_size)) as usize;
@@ -139,7 +141,7 @@ impl KernelELF {
                     }
 
                     if header.mem_size > header.file_size {
-                        let bssEnd = Addr(header.virtual_addr + header.mem_size).RoundUp()?;
+                        let bssEnd = Addr(header_host_virtual_addr + header.mem_size).RoundUp()?;
                         if bssEnd.0 != endMem.0 {
                             let mut option = &mut MapOption::New();
                             option = option
@@ -160,8 +162,8 @@ impl KernelELF {
         }
 
         info!("kernel start addr {:x}, endaddr {:x}", startAddr.0, endAddr.0);
-        self.startAddr = startAddr;
-        self.endAddr = endAddr;
+        self.startAddrHva = startAddr;
+        self.endAddrHva = endAddr;
 
         return Ok(entry);
     }
@@ -195,7 +197,7 @@ impl KernelELF {
         let source = &mmap[..];
         target.clone_from_slice(source);
 
-        self.vdsoStart = hostAddr;
+        self.vdsoStartHva = hostAddr;
         self.vdsoLen = 3 * 4096;
         self.vdsomr = Some(mr);
 

@@ -556,7 +556,7 @@ impl VirtualMachine {
 
         let mut cap: kvm_enable_cap = Default::default();
         cap.cap = KVM_CAP_X86_DISABLE_EXITS;
-        cap.args[0] = (KVM_X86_DISABLE_EXITS_HLT | KVM_X86_DISABLE_EXITS_MWAIT) as u64;
+        cap.args[0] = (KVM_X86_DISABLE_EXITS_MWAIT) as u64;
         #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
         vm_fd.enable_cap(&cap).unwrap();
         if !kvm.check_extension(Cap::ImmediateExit) {
@@ -564,17 +564,30 @@ impl VirtualMachine {
         }
 
         let mut elf = KernelELF::New()?;
+
+        let guest_private_size = MemoryDef::guest_private_running_heap_end_gpa()  -  MemoryDef::phy_lower_gpa();
+        // Private Region
         Self::SetMemRegion(
             1,
             &vm_fd,
             MemoryDef::phy_lower_gpa(),
             MemoryDef::phy_lower_hva(),
-            MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB,
+            guest_private_size,
+        )?;
+
+        // Shared Region
+        let guest_host_shared = MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB - guest_private_size; 
+        Self::SetMemRegion(
+            2,
+            &vm_fd,
+            MemoryDef::guest_host_shared_heap_offest_gpa(),
+            MemoryDef::guest_host_shared_heap_offset_hva(),
+            guest_host_shared,
         )?;
         
-        if QUARK_CONFIG.lock().EnableCC {
+        if !QUARK_CONFIG.lock().EnableCC {
             Self::SetMemRegion(
-                2,
+                3,
                 &vm_fd,
                 MemoryDef::NVIDIA_START_ADDR,
                 MemoryDef::NVIDIA_START_ADDR,
@@ -605,24 +618,27 @@ impl VirtualMachine {
                     .Val(),
             )?;
 
-            vms.KernelMapHugeTable(
-                addr::Addr(MemoryDef::NVIDIA_START_ADDR),
-                addr::Addr(MemoryDef::NVIDIA_START_ADDR + MemoryDef::NVIDIA_ADDR_SIZE),
-                addr::Addr(MemoryDef::NVIDIA_START_ADDR),
-                addr::PageOpts::Zero()
-                    .SetPresent()
-                    .SetWrite()
-                    .SetGlobal()
-                    .Val(),
-            )?;
+            if !QUARK_CONFIG.lock().EnableCC { 
+                vms.KernelMapHugeTable(
+                    addr::Addr(MemoryDef::NVIDIA_START_ADDR),
+                    addr::Addr(MemoryDef::NVIDIA_START_ADDR + MemoryDef::NVIDIA_ADDR_SIZE),
+                    addr::Addr(MemoryDef::NVIDIA_START_ADDR),
+                    addr::PageOpts::Zero()
+                        .SetPresent()
+                        .SetWrite()
+                        .SetGlobal()
+                        .Val(),
+                )?;
+            }
+
             autoStart = args.AutoStart;
             vms.pivot = args.Pivot;
             vms.args = Some(args);
         }
 
-        let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
+        let entry_gpa = elf.LoadKernel(Self::KERNEL_IMAGE)?;
         elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
-        VMS.write().vdsoAddr = elf.vdsoStart;
+        VMS.write().vdsoAddrGpa = MemoryDef::hva_to_gpa(elf.vdsoStartHva);
 
 
         {
@@ -640,7 +656,7 @@ impl VirtualMachine {
                 i as usize,
                 cpuCount,
                 &vm_fd,
-                entry,
+                entry_gpa,
                 autoStart,
             )?);
 
