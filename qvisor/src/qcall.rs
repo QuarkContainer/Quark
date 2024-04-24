@@ -50,8 +50,11 @@ impl KVMVcpu {
     pub fn qCall(msg: &'static Msg) -> u64 {
         let mut ret = 0;
 
+
+        info!("qCall msg {:?}", msg);
         match msg {
             Msg::LoadProcessKernel(msg) => {
+                info!("qCall LoadProcessKernel {:?}", msg);
                 ret = super::VMS.write().LoadProcessKernel(msg.processAddr) as u64;
             }
             Msg::GetStdfds(msg) => {

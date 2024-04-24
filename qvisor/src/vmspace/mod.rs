@@ -228,7 +228,7 @@ impl VMSpace {
     }
 
     pub fn LoadProcessKernel(&mut self, processAddr: u64) -> i64 {
-        info!("processAddr:0x{:x}",processAddr);
+        info!("LoadProcessKernel processAddr:0x{:x}",processAddr);
         unsafe{core::ptr::write(processAddr as *mut loader::Process, loader::Process::default());};
         let process = unsafe { &mut *(processAddr as *mut loader::Process) };
         process.ID = self.args.as_ref().unwrap().ID.to_string();
@@ -282,6 +282,7 @@ impl VMSpace {
             self.PivotRoot(&rootfs);
         }
         StartSignalHandle();
+
         return 0;
     }
 

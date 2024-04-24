@@ -294,7 +294,7 @@ impl KVMVcpu {
                 }
                 Some(msg) => {
                     count += 1;
-                    //error!("qcall msg is {:x?}", &msg);
+ 
                     AQHostCall(msg, sharespace);
                 }
             }

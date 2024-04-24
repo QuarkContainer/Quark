@@ -87,13 +87,6 @@ extern "C" fn handle_sigintAct(
         if signal == 11 {
             let ucontext = unsafe { &*(addr as *const UContext) };
 
-            //error!("ALLOCATOR is {:x?}", crate::ALLOCATOR);
-
-            /*backtrace::trace(|frame| {
-                print!("panic frame is {:#x?}", frame);
-                true
-            });*/
-
             info!("get signal context is {:#x?}", ucontext);
 
             backtracer::trace(
@@ -116,17 +109,6 @@ extern "C" fn handle_sigintAct(
 // numSignals is the number of normal (non-realtime) signals on Linux.
 pub const NUM_SIGNALS: usize = 32;
 
-pub fn SignAction() {
-    let sig_action = signal::SigAction::new(
-        signal::SigHandler::SigAction(handle_sigintAct),
-        signal::SaFlags::empty(),
-        signal::SigSet::all(),
-    );
-
-    unsafe {
-        signal::sigaction(signal::SIGINT, &sig_action).expect("sigaction set fail");
-    }
-}
 
 pub fn PrepareHandler() -> Result<()> {
     unsafe {

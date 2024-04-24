@@ -604,6 +604,7 @@ impl KVMVcpu {
                                     None
                                 };
 
+                                info!("HYPERCALL_HCALL {:?}", qmsg);
                                 qmsg.ret = Self::qCall(qmsg.msg);
                             }
 

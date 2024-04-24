@@ -47,6 +47,8 @@ use super::qlib::ShareSpace;
 use super::qlib::*;
 #[cfg (feature = "cc")]
 use super::qlib::qmsg::sharepara::*;
+#[cfg (feature = "cc")]
+use Kernel::is_cc_enabled;
 use super::syscalls::sys_file::*;
 use super::Kernel::HostSpace;
 
@@ -310,14 +312,17 @@ pub fn NewSocket(fd: i32) -> i64 {
 
 impl HostSpace {
     pub fn Close(fd: i32) -> i64 {
-        let mut msg = Msg::Close(qcall::Close { fd });
+        #[cfg (feature = "cc")]
+        if is_cc_enabled(){
+            return Self::Close_cc(fd);
+        }
 
+        let mut msg = Msg::Close(qcall::Close { fd });
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
         let current = Task::Current().GetPrivateTaskId();
-
         let qMsg = Box::new_in(QMsg {
             taskId: current,
             globalLock: true,
@@ -345,6 +350,8 @@ impl HostSpace {
             msg: msg,
         },
         GUEST_HOST_SHARED_ALLOCATOR);
+
+        info!("HCall msg {:?} event {:?}", msg, *event);
 
         HyperCall64(HYPERCALL_HCALL, &mut *event as *const _ as u64, 0, 0, 0);
 

@@ -54,6 +54,7 @@ impl HostSpace {
         if is_cc_enabled(){
             return Self::LoadProcessKernel_cc(processAddr);
         }
+
         let mut msg = Msg::LoadProcessKernel(LoadProcessKernel {
             processAddr: processAddr,
         });

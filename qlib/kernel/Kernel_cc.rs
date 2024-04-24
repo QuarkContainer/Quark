@@ -48,6 +48,7 @@ impl HostSpace {
             }),
             GUEST_HOST_SHARED_ALLOCATOR,
         );
+        
         let ret = HostSpace::Call(&mut msg, false) as i64;
         let private_process = unsafe { &mut *(processAddr as *mut Process) };
         private_process.clone_from_shared(process_ptr);
@@ -101,6 +102,15 @@ impl HostSpace {
     pub fn EventfdWrite_cc(fd: i32) -> i64 {
         let mut msg = Box::new_in(
             Msg::EventfdWrite(EventfdWrite { fd }),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        );
+
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
+    pub fn Close_cc(fd: i32) -> i64 {
+        let mut msg = Box::new_in(
+            Msg::Close(qcall::Close { fd }),
             GUEST_HOST_SHARED_ALLOCATOR,
         );
 
