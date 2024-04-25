@@ -292,8 +292,6 @@ impl PodAgent {
     }
 
     pub async fn PodHandler(&self, msg: NodeAgentMsg) -> Result<()> {
-        let oldPodState = self.pod.PodState();
-
         let mut ret = match msg {
             NodeAgentMsg::PodCreate(_msg) => self.Create().await,
             NodeAgentMsg::PodTerminate => self.Terminate(false).await,
@@ -318,14 +316,6 @@ impl PodAgent {
             }
         }
 
-        if self.pod.PodState() != PodState::Deleted
-            && (oldPodState != self.pod.PodState() || self.pod.PodState() == PodState::Cleanup)
-        {
-            self.Notify(NodeAgentMsg::PodStatusChange(PodStatusChange {
-                pod: self.pod.clone(),
-            }));
-        }
-
         return ret;
     }
 
@@ -346,7 +336,10 @@ impl PodAgent {
         if podState == PodState::Terminating || podState == PodState::Failed {
             self.Terminate(true).await?;
         } else if runtimePod.is_none() {
-            self.pod.SetPodState(PodState::Terminated);
+            self.pod.SetPodState(PodState::Terminated)?;
+            self.Notify(NodeAgentMsg::PodStatusChange(PodStatusChange {
+                pod: self.pod.clone(),
+            }));
         } else if runtimePod.is_some() && runtimePod.as_ref().unwrap().sandbox.is_none() {
             let sandbox = RUNTIME_MGR
                 .get()
@@ -354,7 +347,12 @@ impl PodAgent {
                 .GetPodSandbox(&runtimePod.as_ref().unwrap().id)
                 .await?;
             match sandbox {
-                None => self.pod.SetPodState(PodState::Terminated),
+                None => {
+                    self.pod.SetPodState(PodState::Terminated)?;
+                    self.Notify(NodeAgentMsg::PodStatusChange(PodStatusChange {
+                        pod: self.pod.clone(),
+                    }));
+                }
                 Some(_ps) => {
                     self.Terminate(true).await?;
                 }
@@ -457,7 +455,12 @@ impl PodAgent {
         }
 
         if allContainerReady {
-            pod.SetPodState(PodState::Running);
+            if pod.PodState() != PodState::Running {
+                pod.SetPodState(PodState::Running)?;
+                self.Notify(NodeAgentMsg::PodStatusChange(PodStatusChange {
+                    pod: self.pod.clone(),
+                }));
+            }
         }
 
         return Ok(());
@@ -490,7 +493,10 @@ impl PodAgent {
     pub async fn Cleanup(&self) -> Result<()> {
         info!("Cleanup pod {}", self.pod.PodId());
         self.CleanupPod().await?;
-        self.pod.SetPodState(PodState::Cleanup);
+        self.pod.SetPodState(PodState::Cleanup)?;
+        self.Notify(NodeAgentMsg::PodStatusChange(PodStatusChange {
+            pod: self.pod.clone(),
+        }));
         return Ok(());
     }
 
@@ -510,10 +516,17 @@ impl PodAgent {
             )));
         }
 
-        self.pod.SetPodState(PodState::Creating);
+        self.pod.SetPodState(PodState::Creating)?;
+        self.Notify(NodeAgentMsg::PodStatusChange(PodStatusChange {
+            pod: self.pod.clone(),
+        }));
         self.CreatePod().await?;
 
-        self.pod.SetPodState(PodState::Created);
+        error!("set created");
+        self.pod.SetPodState(PodState::Created)?;
+        self.Notify(NodeAgentMsg::PodStatusChange(PodStatusChange {
+            pod: self.pod.clone(),
+        }));
 
         return Ok(());
     }
@@ -541,7 +554,10 @@ impl PodAgent {
             return Ok(());
         }
 
-        self.pod.SetPodState(PodState::Terminating);
+        self.pod.SetPodState(PodState::Terminating)?;
+        self.Notify(NodeAgentMsg::PodStatusChange(PodStatusChange {
+            pod: self.pod.clone(),
+        }));
         let mut gracefulPeriodSeconds = 0;
         if let Some(period) = pod.read().unwrap().deletion_grace_period_seconds {
             gracefulPeriodSeconds = period;
@@ -552,7 +568,10 @@ impl PodAgent {
             forceTerminatePod,
         )
         .await?;
-        self.pod.SetPodState(PodState::Terminated);
+        self.pod.SetPodState(PodState::Terminated)?;
+        self.Notify(NodeAgentMsg::PodStatusChange(PodStatusChange {
+            pod: self.pod.clone(),
+        }));
 
         return Ok(());
     }

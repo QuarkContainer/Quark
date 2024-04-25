@@ -47,26 +47,6 @@ pub const PodReady: &str = "Ready";
 // PodScheduled represents status of the scheduling process for this pod.
 pub const PodScheduled: &str = "PodScheduled";
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-pub enum PodState {
-    Creating,
-    // a preserved state for standby pod use
-    Created,
-    // a state when startup and readiness probe passed
-    Running,
-    // a state preserved for use to evacuate session
-    Evacuating,
-    Terminating,
-    // a normal pod exit status when nodemgr request to terminate
-    Terminated,
-    // a abnormal pod exit status when pod met unexpected condtion
-    Failed,
-    // pod artifacts are cleaned, eg. pod dir, cgroup// pod artifacts are cleaned, eg. pod dir, cgroup
-    Cleanup,
-    //
-    Deleted,
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct QuarkPodJson {
     pub id: String,
@@ -187,8 +167,10 @@ impl QuarkPod {
         return self.lock().unwrap().podState;
     }
 
-    pub fn SetPodState(&self, state: PodState) {
+    pub fn SetPodState(&self, state: PodState) -> Result<()> {
         self.lock().unwrap().podState = state;
+        self.lock().unwrap().pod.write().unwrap().state = state;
+        return Ok(());
     }
 
     pub fn PodInTerminating(&self) -> bool {
@@ -206,7 +188,7 @@ impl QuarkPod {
     pub fn PodInTransitState(&self) -> bool {
         let state = self.PodState();
         return state == PodState::Creating
-            || state == PodState::Evacuating
+            || state == PodState::Draining
             || state == PodState::Terminating
             || state == PodState::Created;
     }

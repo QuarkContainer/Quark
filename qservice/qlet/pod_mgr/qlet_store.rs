@@ -129,6 +129,8 @@ impl QletStore {
     }
 
     pub fn UpdatePod(&self, pod: &QuarkPod) -> Result<()> {
+        // error!("UpdatePod ********** {:?}", pod.PodState());
+
         let obj = self.ToPodDataObject(pod);
         self.podStore.Update(&obj)?;
         return Ok(());

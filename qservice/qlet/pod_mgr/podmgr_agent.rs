@@ -226,12 +226,13 @@ impl PmAgent {
     pub async fn NodeHandler(&self, msg: &NodeAgentMsg) -> Result<()> {
         match msg {
             NodeAgentMsg::PodStatusChange(msg) => {
+                error!("PodStatusChange....");
                 let qpod = msg.pod.clone();
                 if qpod.PodState() == PodState::Cleanup {
                     self.CleanupPodStoreAndAgent(&qpod).await?;
                     NODEAGENT_STORE.DeletePod(&qpod)?;
                     QLET_STORE.get().unwrap().RemovePod(&qpod)?;
-                    qpod.SetPodState(PodState::Deleted);
+                    qpod.SetPodState(PodState::Deleted)?;
                 } else if qpod.PodState() != PodState::Deleted {
                     NODEAGENT_STORE.UpdatePod(&qpod)?;
                     QLET_STORE.get().unwrap().UpdatePod(&qpod)?;
@@ -325,12 +326,7 @@ impl PmAgent {
 
         let hasPod = self.node.pods.lock().unwrap().get(&podId).is_some();
         if !hasPod {
-            let podAgent = match self.CreatePodAgent(
-                PodState::Creating,
-                &pod,
-                &Some(configMap.clone()),
-                false,
-            ) {
+            let podAgent = match self.CreatePodAgent(&pod, &Some(configMap.clone()), false) {
                 Ok(a) => a,
                 Err(e) => {
                     let inner = QuarkPodInner {
@@ -418,7 +414,6 @@ impl PmAgent {
 
     pub fn BuildQuarkPod(
         &self,
-        state: PodState,
         pod: &PodDef,
         configMap: &Option<k8s::ConfigMap>,
         isDaemon: bool,
@@ -427,7 +422,7 @@ impl PmAgent {
 
         let inner = QuarkPodInner {
             id: pod.PodId(),
-            podState: state,
+            podState: PodState::Creating,
             isDaemon: isDaemon,
             pod: Arc::new(RwLock::new(pod)),
             configMap: configMap.clone(),
@@ -468,12 +463,11 @@ impl PmAgent {
 
     pub fn CreatePodAgent(
         &self,
-        state: PodState,
         pod: &PodDef,
         configMap: &Option<k8s::ConfigMap>,
         isDaemon: bool,
     ) -> Result<PodAgent> {
-        let qpod = self.BuildQuarkPod(state, pod, configMap, isDaemon)?;
+        let qpod = self.BuildQuarkPod(pod, configMap, isDaemon)?;
 
         let podAgent = self.StartPodAgent(&qpod)?;
         return Ok(podAgent);

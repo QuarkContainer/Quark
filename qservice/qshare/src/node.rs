@@ -328,6 +328,7 @@ pub struct PodDef {
     pub ipAddr: u32,
 
     pub status: PodStatus,
+    pub state: PodState,
 }
 
 impl PodDef {
@@ -408,6 +409,47 @@ pub struct PodCondition {
 
     /// Type is the type of the condition. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-conditions
     pub type_: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub enum PodState {
+    // init state
+    Init,
+    // scheduler start to creating a new pod
+    Creating,
+    // a state when startup and readiness probe passed
+    Created,
+    // scheduler enable the pod to serve new requests
+    Running,
+    // a state preserved for use to draining requests
+    Draining,
+    // a state qlet is killing the pod
+    Terminating,
+    // a normal pod exit status when nodemgr request to terminate
+    Terminated,
+    // a abnormal pod exit status when pod met unexpected condtion
+    Failed,
+    // pod artifacts are cleaned, eg. pod dir, cgroup// pod artifacts are cleaned, eg. pod dir, cgroup
+    Cleanup,
+    //
+    Deleted,
+
+    // Start to hibernate the XPU HBM data to DRAM
+    MemHibernating,
+    // Finish to hibernate the XPU HBM data to DRAM
+    MemHibernated,
+    // Start to hibernate the Container state to Disk
+    DiskHibernating,
+    // finish to hibernate the Container state to Disk
+    DiskHibernated,
+    // transition state between MemHibernated to Running
+    Waking,
+}
+
+impl Default for PodState {
+    fn default() -> Self {
+        return Self::Init;
+    }
 }
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
