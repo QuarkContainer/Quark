@@ -20,6 +20,8 @@
 
 use qshare::common::*;
 
+pub mod obj_repo;
+
 #[tokio::main]
 async fn main() -> Result<()> {
     log4rs::init_file(
@@ -27,6 +29,37 @@ async fn main() -> Result<()> {
         Default::default(),
     )
     .unwrap();
-  
+
     return Ok(());
+}
+
+pub enum PodState {
+    Creating,
+    Created,
+    Running,
+    Evacuating,
+    Terminating,
+    MemHibernating,
+    MemHibernated,
+    DiskHibernating,
+    DiskHibernated,
+    Waking,
+}
+
+pub struct Scheduler {}
+
+impl Scheduler {
+    // need one more pod for the funcpackage to service request
+    pub fn ScaleOut(&self, _fpKey: &str) -> Result<()> {
+        unimplemented!()
+    }
+
+    // ok to scale in one pod
+    pub fn ScaleIn(&self, _fpKey: &str) -> Result<()> {
+        unimplemented!()
+    }
+
+    pub fn DemissionPod(&self, _podid: &str) -> Result<()> {
+        unimplemented!()
+    }
 }

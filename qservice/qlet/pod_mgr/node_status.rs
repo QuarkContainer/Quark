@@ -23,11 +23,11 @@ use qshare::common::*;
 use qshare::consts::*;
 use qshare::node::Node;
 use qshare::node::NodeCondition;
+use qshare::node::PodState;
 
 use super::cadvisor::client::NodeCAdvisorInfo;
 use super::qnode::QuarkNode;
 use super::qnode::NETWORK_PROVIDER;
-use super::qpod::PodState;
 use super::runtime::k8s_quantity::QuarkResource;
 use super::CADVISOR_PROVIDER;
 use super::RUNTIME_MGR;
