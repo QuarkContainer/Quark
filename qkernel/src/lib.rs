@@ -28,6 +28,7 @@
 #![allow(deprecated)]
 #![recursion_limit = "256"]
 #![allow(invalid_reference_casting)]
+#![feature(btreemap_alloc)]
 
 #[macro_use]
 extern crate alloc;
@@ -511,21 +512,6 @@ cfg_if::cfg_if! {
                 assert!(self::qlib::qmsg::sharepara::SHAREPARA_COUNT >= vcpuCnt);
 
                 let size = core::mem::size_of::<ShareSpace>();
-
-
-                use core::arch::asm;
-
-
-
-                unsafe {
-                    
-
-                    GLOBAL_ALLOCATOR.AllocGuestPrivatMem(size, 2);
-                }
-
-
-          
-
 
                 // info!("ShareSpace size {:x}", size);
                 let shared_space = unsafe {

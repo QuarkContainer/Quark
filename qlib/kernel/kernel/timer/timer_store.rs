@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -106,13 +107,26 @@ impl TimerStore {
     }
 }
 
-#[derive(Default)]
 pub struct TimerStoreIntern {
     // expire time -> Timer
-    pub timerSeq: BTreeMap<TimerUnit, Timer>, // order by expire time
+    pub timerSeq: BTreeMap<TimerUnit, Timer, crate::qlib::mem::list_allocator::GuestHostSharedAllocator>, // order by expire time
     pub nextExpire: i64,
     pub uringExpire: i64,
     pub uringId: u64,
+}
+
+
+impl Default for TimerStoreIntern {
+    fn default() -> Self {
+        let res = Self {
+            timerSeq: BTreeMap::new_in(GUEST_HOST_SHARED_ALLOCATOR),
+            nextExpire: 0,
+            uringExpire: 0,
+            uringId: 0,
+        };
+
+        return res;
+    }
 }
 
 impl TimerStoreIntern {
