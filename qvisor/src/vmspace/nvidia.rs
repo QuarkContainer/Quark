@@ -518,7 +518,7 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
             } else {
                 let mut para1 = parameters.para1 as *mut c_void;
 
-                let ret = unsafe { cudaMallocManaged(&mut para1 as *mut _ as u64 , parameters.para2 as usize) };
+                let ret = unsafe { cudaMallocManaged(&mut para1 as *mut _ as u64 , parameters.para2 as usize, cudaMemAttachGlobal) };
                 if ret as u32 != 0 {
                     error!("nvidia.rs: error caused by cudaMallocManaged: {}", ret as u32);
                 } else {
