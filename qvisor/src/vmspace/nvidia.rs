@@ -23,6 +23,7 @@ use crate::qlib::common::*;
 //use crate::qlib::linux_def::SysErr;
 use crate::qlib::proxy::*;
 use crate::qlib::range::Range;
+use crate::qlib::config::*;
 use crate::xpu::cuda::*;
 
 use cuda_driver_sys::{CUcontext, CUdevice, CUdeviceptr, CUfunction, CUmodule, CUresult, CUstream, CUstream_st, CUfunction_attribute};
@@ -165,9 +166,13 @@ extern "C" {
 
 lazy_static! {
     static ref CUDA_HAS_INIT: AtomicUsize = AtomicUsize::new(0);
-    static ref FAST_SWITCH: bool = true;//enable_fast_switch();
+    pub static ref QUARK_CONFIG: Mutex<Config> = {
+        let mut config = Config::default();
+        config.Load();
+        Mutex::new(config)
+    };
     static ref MEM_RECORDER: Mutex<Vec<(u64, usize)>> = Mutex::new(Vec::new());
-    static ref OFFLOAD_TIMER: AtomicUsize = AtomicUsize::new(0);
+    // static ref OFFLOAD_TIMER: AtomicUsize = AtomicUsize::new(0);
     // pub static ref FAST_SWITCH_HASHSET: HashSet<u64> = HashSet::new();
     // pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
     // pub static ref FUNC_MAP: BTreeMap<ProxyCommand, (XpuLibrary, &'static str)> = BTreeMap::from([
@@ -500,30 +505,29 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
         }
         ProxyCommand::CudaMalloc => {
            // error!("nvidia.rs: cudaMalloc");
-            if *FAST_SWITCH {
+            if QUARK_CONFIG.lock().CudaMode == CudaMode::Native {
                 let mut para1 = parameters.para1 as *mut c_void;
 
-                let ret = unsafe { cudaMallocManaged(&mut para1 as *mut _ as u64 , parameters.para2 as usize, cudaMemAttachGlobal) };
+                let ret = unsafe { cudaMalloc(&mut para1 as *mut _ as *mut *mut _ as *mut *mut c_void, parameters.para2 as usize) };
+                if ret as u32 != 0 {
+                    error!("nvidia.rs: error caused by cudaMalloc: {}", ret as u32);
+                }
+
+                unsafe { *(parameters.para1 as *mut u64) = para1 as u64 };
+                return Ok(ret as i64);
+            } else {
+                let mut para1 = parameters.para1 as *mut c_void;
+
+                let ret = unsafe { cudaMallocManaged(&mut para1 as *mut _ as u64 , parameters.para2 as usize) };
                 if ret as u32 != 0 {
                     error!("nvidia.rs: error caused by cudaMallocManaged: {}", ret as u32);
                 } else {
                     MEM_RECORDER.lock().push((para1 as u64, parameters.para2 as usize));
                 }
 
-                let mut total_mem: usize = 0;
-                let memRecorder = MEM_RECORDER.lock();
-                let mut iterator = memRecorder.iter(); 
-                while let Some(element) = iterator.next() { 
-                    total_mem = total_mem + element.1;
-                }
-                if total_mem > 4000000000 {
-                    error!("nvidia.rs: offloading memory, total mem is {}",total_mem);
-                    OffloadMem();
-                    error!("nvidia.rs: finish offloading memory");
-                    let mut buffer = String::new();
-
-                    std::io::stdin().read_line(&mut buffer).expect("Failed to read line");
-                }
+                // while let Some(element) = iterator.next() { 
+                //     total_mem = total_mem + element.1;
+                // }
 
                 // let location = cudaMemLocation {
                 //     type_: cudaMemLocationType::cudaMemLocationTypeDevice,
@@ -537,16 +541,6 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
                 // if ret as u32 != 0 {
                 //     error!("nvidia.rs: error caused by cudaMalloc(cudaMemAdvise_v2): {}", ret as u32);
                 // }
-                unsafe { *(parameters.para1 as *mut u64) = para1 as u64 };
-                return Ok(ret as i64);
-            } else {
-                let mut para1 = parameters.para1 as *mut c_void;
-
-                let ret = unsafe { cudaMalloc(&mut para1 as *mut _ as *mut *mut _ as *mut *mut c_void, parameters.para2 as usize) };
-                if ret as u32 != 0 {
-                    error!("nvidia.rs: error caused by cudaMalloc: {}", ret as u32);
-                }
-
                 unsafe { *(parameters.para1 as *mut u64) = para1 as u64 };
                 return Ok(ret as i64);
             }

@@ -23,6 +23,15 @@
 #![recursion_limit = "256"]
 #![feature(unix_socket_ancillary_data)]
 #![allow(invalid_reference_casting)]
+/***
+warning: `extern` block uses type `rcublas_sys::cudaMemLocationType`, which is not FFI-safe
+  --> src/vmspace/nvidia.rs:70:92
+   |
+70 |     pub fn cudaMemAdvise_v2(devPtr: u64, count: usize, advice: cudaMemoryAdvise, location: cudaMemLocation) -> cudaError_t;
+   |                                                                                            ^^^^^^^^^^^^^^^ not FFI-safe
+***/
+// #![allow(improper_ctypes)] 
+
 
 extern crate alloc;
 extern crate bit_field;
