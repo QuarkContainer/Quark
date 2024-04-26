@@ -406,6 +406,7 @@ pub extern "C" fn __cudaRegisterFunction(
     gDim: u64,
     wSize: usize
 )  {
+    //println!("Hijacked __cudaRegisterFunction");
         let info = RegisterFunctionInfo {
         fatCubinHandle: fatCubinHandle,
         hostFun: hostFun,
@@ -523,14 +524,15 @@ pub extern "C" fn cudaLaunchKernel(
 #[no_mangle]
 pub extern "C" fn cudaMalloc(dev_ptr: *mut *mut c_void, size: usize) -> usize {
     //println!("Hijacked cudaMalloc");
-    return unsafe {
-        syscall3(SYS_PROXY,ProxyCommand::CudaMalloc as usize, dev_ptr as *const _ as usize, size)
-    };
+    let ret = unsafe { syscall3(SYS_PROXY,ProxyCommand::CudaMalloc as usize, dev_ptr as *const _ as usize, size)};
+    //unsafe { println!("malloc ptr{:x}, size: {}", *(dev_ptr as *mut _ as *mut u64) as u64, size); }
+    return ret;
 }
 
 #[no_mangle]
 pub extern "C" fn cudaFree(dev_ptr: *mut c_void) -> usize {
     //println!("Hijacked cudaFree");
+    // println!("cudaFree ptr: {:x}", dev_ptr as *mut _ as u64);
     return unsafe {
         syscall2(SYS_PROXY, ProxyCommand::CudaFree as usize, dev_ptr as *const _ as usize)
     };
@@ -564,6 +566,7 @@ pub extern "C" fn cudaMemcpyAsync(
     stream: cudaStream_t,
 ) -> usize {
     //println!("Hijacked cudaMemcpyAsync");
+    //println!("memcpy from {:x} to {:x}, with size {} and stream {}",src as *const _ as u64, dst as *mut _ as u64, count, stream as u64);
     if kind == cudaMemcpyKind::cudaMemcpyHostToHost {
         unsafe {
             std::ptr::copy_nonoverlapping(src, dst, count);
