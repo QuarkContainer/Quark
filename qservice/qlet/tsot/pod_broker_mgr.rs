@@ -31,7 +31,8 @@ lazy_static::lazy_static! {
 #[derive(Debug, Default)]
 pub struct PodBrokerMgrInner {
     // addr to PodBroker
-    pub brokers: HashMap<u32, PodBroker>,
+    pub brokersByAddr: HashMap<u32, PodBroker>,
+    pub brokersByName: HashMap<String, PodBroker>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -46,24 +47,25 @@ impl Deref for PodBrokerMgr {
 }
 
 impl PodBrokerMgr {
-    pub fn AddPodBroker(&self, addr: u32, podBroker: PodBroker) -> Result<()> {
+    pub fn AddPodBroker(&self, addr: u32, name: &str, podBroker: PodBroker) -> Result<()> {
         let mut inner = self.write().unwrap();
-        if inner.brokers.contains_key(&addr) {
+        if inner.brokersByAddr.contains_key(&addr) {
             return Err(Error::Exist(format!(
                 "PodBrokerMgr::AddPodBroker addr {:x?} existing",
                 addr
             )));
         }
 
-        inner.brokers.insert(addr, podBroker);
+        inner.brokersByAddr.insert(addr, podBroker.clone());
+        inner.brokersByName.insert(name.to_owned(), podBroker);
         return Ok(());
     }
 
-    fn GetBroker(&self, addr: u32) -> Result<PodBroker> {
-        match self.read().unwrap().brokers.get(&addr) {
+    fn GetBrokerByAddr(&self, addr: u32) -> Result<PodBroker> {
+        match self.read().unwrap().brokersByAddr.get(&addr) {
             None => {
                 return Err(Error::NotExist(format!(
-                    "PodBrokerMgr::GetBroker fail with addr {:x?}",
+                    "PodBrokerMgr::GetBrokerByAddr fail with addr {:x?}",
                     addr
                 )))
             }
@@ -71,16 +73,40 @@ impl PodBrokerMgr {
         }
     }
 
-    pub fn RemoveBroker(&self, addr: u32) -> Result<()> {
-        match self.write().unwrap().brokers.remove(&addr) {
+    fn GetBrokerByName(&self, name: &str) -> Result<PodBroker> {
+        match self.read().unwrap().brokersByName.get(name) {
+            None => {
+                return Err(Error::NotExist(format!(
+                    "PodBrokerMgr::GetBrokerByName fail with addr {:?}",
+                    name
+                )))
+            }
+            Some(b) => return Ok(b.clone()),
+        }
+    }
+
+    pub fn RemoveBroker(&self, addr: u32, name: &str) -> Result<()> {
+        match self.write().unwrap().brokersByAddr.remove(&addr) {
             None => {
                 return Err(Error::NotExist(format!(
                     "PodBrokerMgr::RemoveBroker broker with addr {:x} doesn't exist",
                     addr
                 )));
             }
-            Some(_) => return Ok(()),
+            Some(_) => (),
         }
+
+        match self.write().unwrap().brokersByName.remove(name) {
+            None => {
+                return Err(Error::NotExist(format!(
+                    "PodBrokerMgr::RemoveBroker broker with name {} doesn't exist",
+                    name
+                )));
+            }
+            Some(_) => (),
+        }
+
+        return Ok(());
     }
 }
 
@@ -102,9 +128,15 @@ impl Deref for PodBrokerMgrs {
 }
 
 impl PodBrokerMgrs {
-    pub fn AddPodBroker(&self, namespace: &str, addr: u32, broker: PodBroker) -> Result<()> {
+    pub fn AddPodBroker(
+        &self,
+        namespace: &str,
+        addr: u32,
+        name: &str,
+        broker: PodBroker,
+    ) -> Result<()> {
         let mgr = self.GetOrCreateBrokerMgr(namespace)?;
-        mgr.AddPodBroker(addr, broker)?;
+        mgr.AddPodBroker(addr, name, broker)?;
         return Ok(());
     }
 
@@ -122,6 +154,20 @@ impl PodBrokerMgrs {
         return Ok(mgr);
     }
 
+    pub fn HandlePodHibernate(&self, namespace: &str, name: &str) -> Result<()> {
+        let broker = self.GetBrokerByName(namespace, name)?;
+        broker.HandlePodHibernate()?;
+
+        return Ok(());
+    }
+
+    pub fn HandlePodWakeup(&self, namespace: &str, name: &str) -> Result<()> {
+        let broker = self.GetBrokerByName(namespace, name)?;
+        broker.HandlePodWalkup()?;
+
+        return Ok(());
+    }
+
     pub fn HandlePeerConnect(
         &self,
         namespace: &str,
@@ -131,7 +177,7 @@ impl PodBrokerMgrs {
         peerPort: u16,
         socket: i32,
     ) -> Result<()> {
-        let broker = self.GetBroker(namespace, dstIp)?;
+        let broker = self.GetBrokerByAddr(namespace, dstIp)?;
         broker.HandleNewPeerConnection(peerIp, peerPort, dstPort, socket)?;
 
         return Ok(());
@@ -149,14 +195,20 @@ impl PodBrokerMgrs {
         }
     }
 
-    pub fn GetBroker(&self, namespace: &str, addr: u32) -> Result<PodBroker> {
+    pub fn GetBrokerByAddr(&self, namespace: &str, addr: u32) -> Result<PodBroker> {
         let mgr = self.GetBrokerMgr(namespace)?;
-        let broker = mgr.GetBroker(addr)?;
+        let broker = mgr.GetBrokerByAddr(addr)?;
         return Ok(broker);
     }
 
-    pub fn RemoveBroker(&self, namespace: &str, addr: u32) -> Result<()> {
+    pub fn GetBrokerByName(&self, namespace: &str, name: &str) -> Result<PodBroker> {
         let mgr = self.GetBrokerMgr(namespace)?;
-        return mgr.RemoveBroker(addr);
+        let broker = mgr.GetBrokerByName(name)?;
+        return Ok(broker);
+    }
+
+    pub fn RemoveBroker(&self, namespace: &str, addr: u32, name: &str) -> Result<()> {
+        let mgr = self.GetBrokerMgr(namespace)?;
+        return mgr.RemoveBroker(addr, name);
     }
 }

@@ -107,7 +107,7 @@ impl PodBroker {
         match self.podSandbox.lock().unwrap().take() {
             Some(podSandbox) => {
                 let inner = podSandbox.lock().unwrap();
-                POD_BRORKER_MGRS.RemoveBroker(&inner.namespace, inner.ip.0)?;
+                POD_BRORKER_MGRS.RemoveBroker(&inner.namespace, inner.ip.0, &inner.name)?;
             }
             None => (),
         }
@@ -146,7 +146,12 @@ impl PodBroker {
                 *self.podSandbox.lock().unwrap() = Some(podSandbox.clone());
 
                 let inner = podSandbox.lock().unwrap();
-                POD_BRORKER_MGRS.AddPodBroker(&inner.namespace, inner.ip.0, self.clone())?;
+                POD_BRORKER_MGRS.AddPodBroker(
+                    &inner.namespace,
+                    inner.ip.0,
+                    &inner.name,
+                    self.clone(),
+                )?;
 
                 let resp = PodRegisterResp {
                     containerIp: inner.ip.0,
@@ -178,7 +183,12 @@ impl PodBroker {
                 *self.podSandbox.lock().unwrap() = Some(podSandbox.clone());
 
                 let inner = podSandbox.lock().unwrap();
-                POD_BRORKER_MGRS.AddPodBroker(&inner.namespace, inner.ip.0, self.clone())?;
+                POD_BRORKER_MGRS.AddPodBroker(
+                    &inner.namespace,
+                    inner.ip.0,
+                    &inner.name,
+                    self.clone(),
+                )?;
 
                 let resp = GatewayRegisterResp {
                     errorCode: ErrCode::None as _,
@@ -588,6 +598,28 @@ impl PodBroker {
         };
 
         return self.EnqMsg(TsotMsg::PodRegisterResp(msg).into());
+    }
+
+    pub fn HandlePodHibernate(&self) -> Result<()> {
+        let msg = Hibernate { _type: 1 };
+
+        let message = TsotMessage {
+            socket: 0,
+            msg: TsotMsg::Hibernate(msg),
+        };
+
+        return self.EnqMsg(message);
+    }
+
+    pub fn HandlePodWalkup(&self) -> Result<()> {
+        let msg = Wakeup { _type: 1 };
+
+        let message = TsotMessage {
+            socket: 0,
+            msg: TsotMsg::Wakeup(msg),
+        };
+
+        return self.EnqMsg(message);
     }
 
     pub fn HandleNewPeerConnection(

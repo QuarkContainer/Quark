@@ -177,7 +177,7 @@ pub struct TsotConnect {
 
 #[derive(Clone, Default, Debug)]
 pub struct NividiaDriverVersion {
-    pub ioctlParamsAddr: u64
+    pub ioctlParamsAddr: u64,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -192,9 +192,9 @@ pub struct NvidiaMMap {
 
 #[derive(Clone, Debug, Default)]
 pub struct HostUnixConnect {
-    pub type_: i32, 
-    pub addr: u64, 
-    pub len: usize
+    pub type_: i32,
+    pub addr: u64,
+    pub len: usize,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -220,7 +220,7 @@ pub struct UnmapGuestMemRange {
 #[derive(Clone, Default, Debug)]
 pub struct Proxy {
     pub cmd: ProxyCommand,
-    pub parameters: ProxyParameters
+    pub parameters: ProxyParameters,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -524,7 +524,7 @@ pub struct TryOpenAt {
 pub struct TryOpenWrite {
     pub dirfd: i32,
     pub oldfd: i32,
-    pub name: u64, 
+    pub name: u64,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -960,6 +960,19 @@ pub enum HostOutputMsg {
 }
 
 impl Default for HostOutputMsg {
+    fn default() -> Self {
+        return Self::Default;
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum HostInputMsg {
+    Default,
+    Hibernate,
+    Wakeup,
+}
+
+impl Default for HostInputMsg {
     fn default() -> Self {
         return Self::Default;
     }

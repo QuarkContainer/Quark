@@ -21,6 +21,7 @@ use super::super::kernel::GlobalRDMASvcCli;
 use super::super::linux_def::*;
 use super::super::task_mgr::*;
 use super::super::vcpu_mgr::*;
+use super::kernel::kernel::GetKernel;
 use super::quring::uring_mgr::*;
 use super::task::*;
 use super::threadmgr::task_sched::*;
@@ -30,6 +31,7 @@ use super::ASYNC_PROCESS;
 use super::KERNEL_STACK_ALLOCATOR;
 use super::SHARESPACE;
 use super::TSC;
+use crate::qlib::qcall::*;
 
 static ACTIVE_TASK: AtomicU32 = AtomicU32::new(0);
 
@@ -121,12 +123,19 @@ pub fn WaitFn() -> ! {
             None => {
                 SHARESPACE.scheduler.IncreaseHaltVcpuCnt();
 
-                //debug!("vcpu sleep");
-                let addr = HostSpace::VcpuWait();
-                //debug!("vcpu wakeup {:x}", addr);
-                assert!(addr >= 0);
-                task = TaskId::New(addr as u64);
+                let mut addr;
+                loop {
+                    //debug!("vcpu sleep");
+                    addr = HostSpace::VcpuWait();
+                    //debug!("vcpu wakeup {:x}", addr);
+                    assert!(addr >= 0);
+                    ProcessInputMsgs();
+                    if addr != 0 {
+                        break;
+                    }
+                }
 
+                task = TaskId::New(addr as u64);
                 SHARESPACE.scheduler.DecreaseHaltVcpuCnt();
             }
 
@@ -161,11 +170,40 @@ pub fn WaitFn() -> ! {
     }
 }
 
+pub fn ProcessInputMsgs() {
+    loop {
+        if let Some(msg) = SHARESPACE.QInput.Pop() {
+            match msg {
+                HostInputMsg::Hibernate => {
+                    if !SHARESPACE.hibernatePause.load(Ordering::Relaxed) {
+                        GetKernel().Pause();
+                        GetKernel().ClearFsCache();
+                        HostSpace::SwapOut();
+                        SHARESPACE.hibernatePause.store(true, Ordering::SeqCst);
+                    }
+                }
+                HostInputMsg::Wakeup => {
+                    if SHARESPACE.hibernatePause.load(Ordering::Relaxed) {
+                        SHARESPACE.hibernatePause.store(false, Ordering::SeqCst);
+                        HostSpace::SwapIn();
+                        GetKernel().Unpause();
+                    }
+                }
+                HostInputMsg::Default => {}
+            }
+        } else {
+            break;
+        }
+    }
+}
+
 #[inline]
 pub fn PollAsyncMsg() -> usize {
     if Shutdown() {
         return 0;
     }
+
+    ProcessInputMsgs();
 
     let mut ret = QUringTrigger();
     // ret += GlobalRDMASvcCli().DrainCompletionQueue();

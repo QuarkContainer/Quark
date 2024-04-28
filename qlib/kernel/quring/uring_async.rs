@@ -16,19 +16,19 @@ use crate::qlib::mutex::*;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use spin::Mutex;
 use core::marker::Send;
 use core::ops::Deref;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
 use enum_dispatch::enum_dispatch;
+use spin::Mutex;
 
-use crate::qlib::kernel::socket::hostinet::tsotsocket::TsotSocketOperations;
 use super::super::super::super::kernel_def::*;
 use super::super::super::common::*;
 use super::super::super::linux_def;
 use super::super::super::linux_def::*;
 use super::super::super::socket_buf::*;
+use crate::qlib::kernel::socket::hostinet::tsotsocket::TsotSocketOperations;
 //use super::super::super::uring::squeue;
 use super::super::fs::file::*;
 use super::super::kernel::aio::aio_context::*;
@@ -196,7 +196,8 @@ impl UringAsyncMgr {
         self.ids.lock().push_back(id as u16);
     }
 
-    pub fn SetOps(&self, id: usize, ops: AsyncOps) -> UringEntry { // squeue::Entry {
+    pub fn SetOps(&self, id: usize, ops: AsyncOps) -> UringEntry {
+        // squeue::Entry {
         *self.ops[id].lock() = ops.clone();
 
         let uringEntry = UringEntry {
@@ -205,7 +206,7 @@ impl UringAsyncMgr {
             linked: false,
         };
 
-        return uringEntry
+        return uringEntry;
     }
 }
 
@@ -257,7 +258,7 @@ impl AsyncOpsTrait for AsyncTimeout {
 pub struct AsyncRawTimeout {
     pub timerId: u64,
     pub seqNo: u64,
-    pub timeout: u64
+    pub timeout: u64,
 }
 
 impl AsyncRawTimeout {
@@ -265,7 +266,7 @@ impl AsyncRawTimeout {
         return Self {
             timerId: timerId,
             seqNo: seqNo,
-            timeout: timeout as u64
+            timeout: timeout as u64,
         };
     }
 }
@@ -441,7 +442,7 @@ impl AsyncBufWrite {
             lockGuard: QMutex::new(Some(lockGuard)),
         };
 
-        return Self(Arc::new(inner))
+        return Self(Arc::new(inner));
     }
 }
 
@@ -721,7 +722,7 @@ impl AcceptAddr {
         return Self {
             addr: TcpSockAddr::default(),
             len: AtomicU32::new(16),
-        }
+        };
     }
 }
 
@@ -1072,7 +1073,7 @@ impl AIOWrite {
             eventfops: eventfops,
         };
 
-        return Ok(Self(Arc::new(inner)))
+        return Ok(Self(Arc::new(inner)));
     }
 
     pub fn NewWritev(
@@ -1097,7 +1098,7 @@ impl AIOWrite {
             eventfops: eventfops,
         };
 
-        return Ok(Self(Arc::new(inner)))
+        return Ok(Self(Arc::new(inner)));
     }
 }
 
@@ -1281,13 +1282,13 @@ impl AIOFsync {
             eventfops: eventfops,
         };
 
-        return Ok(Self(Arc::new(inner)))
+        return Ok(Self(Arc::new(inner)));
     }
 }
 
 #[derive(Clone)]
 pub struct AsyncLinkTimeout {
-    pub timeout: i64
+    pub timeout: i64,
 }
 
 impl AsyncOpsTrait for AsyncLinkTimeout {
@@ -1298,9 +1299,7 @@ impl AsyncOpsTrait for AsyncLinkTimeout {
 
 impl AsyncLinkTimeout {
     pub fn New(timeout: i64) -> Self {
-        return Self {
-            timeout: timeout
-        };
+        return Self { timeout: timeout };
     }
 }
 
@@ -1440,12 +1439,11 @@ impl AsyncOpsTrait for DNSRecv {
     }
 }
 
-
 impl DNSRecv {
     pub fn New(fd: i32, msgAddr: u64) -> Self {
-        return Self { 
+        return Self {
             fd: fd,
-            msgAddr: msgAddr
+            msgAddr: msgAddr,
         };
     }
 }
@@ -1483,15 +1481,15 @@ impl AsyncOpsTrait for DNSSend {
 impl DNSSend {
     pub fn New(fd: i32, buf: DataBuff, peerAddr: SockAddrInet) -> Self {
         let iov = IoVec {
-            start: &buf.buf[0] as * const _ as u64,
+            start: &buf.buf[0] as *const _ as u64,
             len: buf.buf.len(),
         };
-        let inner = DNSSendInner { 
+        let inner = DNSSendInner {
             fd: fd,
             buf: buf,
             iov: iov,
             peerAddr: peerAddr,
-            msg: MsgHdr::default()
+            msg: MsgHdr::default(),
         };
 
         let send = Self(Arc::new(Mutex::new(inner)));
@@ -1499,14 +1497,14 @@ impl DNSSend {
         {
             let mut lock = send.lock();
             let mut msg = MsgHdr::default();
-            msg.msgName = &lock.peerAddr as * const _ as u64;
+            msg.msgName = &lock.peerAddr as *const _ as u64;
             msg.nameLen = lock.peerAddr.Len() as u32;
-            msg.iov = &lock.iov as * const _ as u64;
-            msg.iovLen  = 1;
+            msg.iov = &lock.iov as *const _ as u64;
+            msg.iovLen = 1;
             lock.msg = msg;
         }
 
-        return send
+        return send;
     }
 }
 
