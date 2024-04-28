@@ -189,7 +189,10 @@ impl PageTables {
     // The Copy On Write will be done when write to the page
     pub fn ForkRange(&self, to: &Self, start: u64, len: u64, pagePool: &Allocator) -> Result<()> {
         if start & MemoryDef::PAGE_MASK != 0 || len & MemoryDef::PAGE_MASK != 0 {
-            return Err(Error::UnallignedAddress(format!("ForkRange start {:x} len {:x}", start, len)));
+            return Err(Error::UnallignedAddress(format!(
+                "ForkRange start {:x} len {:x}",
+                start, len
+            )));
         }
 
         //change to read only
@@ -368,10 +371,7 @@ impl PageTables {
 
             if pgdEntry.is_unused() {
                 pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                pgdEntry.set_addr(
-                    PhysAddr::new(pudTbl as u64),
-                    default_table_user(),
-                );
+                pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), default_table_user());
             } else {
                 pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
             }
@@ -381,10 +381,7 @@ impl PageTables {
 
             if pudEntry.is_unused() {
                 pmdTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                pudEntry.set_addr(
-                    PhysAddr::new(pmdTbl as u64),
-                    default_table_user(),
-                );
+                pudEntry.set_addr(PhysAddr::new(pmdTbl as u64), default_table_user());
             } else {
                 pmdTbl = pudEntry.addr().as_u64() as *mut PageTable;
             }
@@ -394,10 +391,7 @@ impl PageTables {
 
             if pmdEntry.is_unused() {
                 pteTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                pmdEntry.set_addr(
-                    PhysAddr::new(pteTbl as u64),
-                    default_table_user(),
-                );
+                pmdEntry.set_addr(PhysAddr::new(pteTbl as u64), default_table_user());
             } else {
                 pteTbl = pmdEntry.addr().as_u64() as *mut PageTable;
             }
@@ -601,10 +595,7 @@ impl PageTables {
 
                 if pgdEntry.is_unused() {
                     pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                    pgdEntry.set_addr(
-                        PhysAddr::new(pudTbl as u64),
-                        default_table_user(),
-                    );
+                    pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), default_table_user());
                 } else {
                     pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
                 }
@@ -856,6 +847,12 @@ impl PageTables {
     pub fn GetAllPagetablePages(&self, pages: &mut BTreeSet<u64>) -> Result<()> {
         self.GetAllPagetablePagesWithRange(
             Addr(MemoryDef::PAGE_SIZE),
+            Addr(MemoryDef::NVIDIA_START_ADDR),
+            pages,
+        )?;
+
+        self.GetAllPagetablePagesWithRange(
+            Addr(MemoryDef::NVIDIA_START_ADDR + MemoryDef::NVIDIA_ADDR_SIZE),
             Addr(MemoryDef::PHY_LOWER_ADDR),
             pages,
         )?;
@@ -1134,6 +1131,29 @@ impl PageTables {
 
         self.Traverse(
             Addr(MemoryDef::PAGE_SIZE),
+            Addr(MemoryDef::NVIDIA_START_ADDR),
+            |entry: &mut PageTableEntry, _virtualAddr| {
+                let phyAddr = entry.addr().as_u64();
+                if start <= phyAddr && phyAddr < end {
+                    let mut flags = entry.flags();
+                    let needInsert = flags & PageTableFlags::BIT_9 != PageTableFlags::BIT_9;
+                    if updatePageEntry && needInsert {
+                        flags &= !PageTableFlags::PRESENT;
+                        // flags bit9 which indicate the page is swapped out
+                        flags |= PageTableFlags::BIT_9;
+                        entry.set_flags(flags);
+                    }
+
+                    if needInsert {
+                        pages.insert(phyAddr);
+                    }
+                }
+            },
+            false,
+        )?;
+
+        self.Traverse(
+            Addr(MemoryDef::NVIDIA_START_ADDR + MemoryDef::NVIDIA_ADDR_SIZE),
             Addr(MemoryDef::PHY_LOWER_ADDR),
             |entry: &mut PageTableEntry, _virtualAddr| {
                 let phyAddr = entry.addr().as_u64();
@@ -1306,8 +1326,7 @@ impl PageTables {
     }
 
     #[cfg(target_arch = "aarch64")]
-    pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
-    }
+    pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {}
 
     pub fn MProtect(
         &self,
@@ -1368,10 +1387,7 @@ impl PageTables {
 
                 if pgdEntry.is_unused() {
                     pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                    pgdEntry.set_addr(
-                        PhysAddr::new(pudTbl as u64),
-                        default_table_user(),
-                    );
+                    pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), default_table_user());
                 } else {
                     pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
                 }
@@ -1382,10 +1398,7 @@ impl PageTables {
 
                     if pudEntry.is_unused() {
                         pmdTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                        pudEntry.set_addr(
-                            PhysAddr::new(pmdTbl as u64),
-                            default_table_user(),
-                        );
+                        pudEntry.set_addr(PhysAddr::new(pmdTbl as u64), default_table_user());
                     } else {
                         pmdTbl = pudEntry.addr().as_u64() as *mut PageTable;
                     }
@@ -1396,10 +1409,7 @@ impl PageTables {
 
                         if pmdEntry.is_unused() {
                             pteTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                            pmdEntry.set_addr(
-                                PhysAddr::new(pteTbl as u64),
-                                default_table_user(),
-                            );
+                            pmdEntry.set_addr(PhysAddr::new(pteTbl as u64), default_table_user());
                         } else {
                             pteTbl = pmdEntry.addr().as_u64() as *mut PageTable;
                         }

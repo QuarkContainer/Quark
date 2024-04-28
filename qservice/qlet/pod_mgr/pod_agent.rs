@@ -295,6 +295,8 @@ impl PodAgent {
         let mut ret = match msg {
             NodeAgentMsg::PodCreate(_msg) => self.Create().await,
             NodeAgentMsg::PodTerminate => self.Terminate(false).await,
+            NodeAgentMsg::PodHibernate(_) => self.Hibernate().await,
+            NodeAgentMsg::PodWakeup(_) => self.Wakeup().await,
             NodeAgentMsg::PodContainerCreated(msg) => self.OnPodContainerCreated(msg).await,
             NodeAgentMsg::PodContainerStarted(msg) => self.OnPodContainerStarted(msg).await,
             NodeAgentMsg::PodContainerReady(msg) => self.OnPodContainerReady(msg).await,
@@ -569,6 +571,24 @@ impl PodAgent {
         )
         .await?;
         self.pod.SetPodState(PodState::Terminated)?;
+        self.Notify(NodeAgentMsg::PodStatusChange(PodStatusChange {
+            pod: self.pod.clone(),
+        }));
+
+        return Ok(());
+    }
+
+    pub async fn Hibernate(&self) -> Result<()> {
+        self.pod.SetPodState(PodState::MemHibernating)?;
+        self.Notify(NodeAgentMsg::PodStatusChange(PodStatusChange {
+            pod: self.pod.clone(),
+        }));
+
+        return Ok(());
+    }
+
+    pub async fn Wakeup(&self) -> Result<()> {
+        self.pod.SetPodState(PodState::Waking)?;
         self.Notify(NodeAgentMsg::PodStatusChange(PodStatusChange {
             pod: self.pod.clone(),
         }));

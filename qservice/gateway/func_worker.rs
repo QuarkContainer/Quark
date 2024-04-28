@@ -33,8 +33,8 @@ use hyper_util::rt::TokioIo;
 use qshare::common::*;
 use qshare::na::{self, Env, Kv};
 
-use qshare::obj_mgr::func_mgr::FuncPackage;
 use crate::{PromptReq, FUNCPOD_FUNCNAME, FUNCPOD_PROMPT, FUNCPOD_TYPE, TSOT_CLIENT};
+use qshare::obj_mgr::func_mgr::FuncPackage;
 
 lazy_static::lazy_static! {
     pub static ref FUNCAGENT_MGR: FuncAgentMgr = FuncAgentMgr::default();
@@ -390,9 +390,11 @@ pub struct FuncWorkerInner {
     pub connPool: TMutex<Vec<QHttpCallClient>>,
 }
 
+#[derive(Debug)]
 pub enum FuncWorkerState {
     Idle,
     Processing,
+    Hibernated,
 }
 
 #[derive(Debug, Clone)]
@@ -538,9 +540,44 @@ impl FuncWorker {
                             }
                         }
                         _ = tokio::time::sleep(Duration::from_secs(self.keepaliveTime)) => {
-                            self.funcAgent.SendWorkerStatusUpdate(WorkerUpdate::IdleTimeout(self.clone()));
+                            // self.funcAgent.SendWorkerStatusUpdate(WorkerUpdate::IdleTimeout(self.clone()));
+                            self.HibernateWorker().await?;
+                            state = FuncWorkerState::Hibernated;
                         }
 
+                    }
+                }
+                FuncWorkerState::Hibernated => {
+                    tokio::select! {
+                        _ = self.closeNotify.notified() => {
+                            self.stop.store(false, Ordering::SeqCst);
+                            // we clean all the waiting request
+                            self.DrainReqs(reqQueueRx).await;
+                            self.StopWorker().await?;
+                            return Ok(())
+                        }
+                        req = reqQueueRx.recv() => {
+                            match req {
+                                None => {
+                                    return Ok(())
+                                }
+                                Some(req) => {
+                                    state = FuncWorkerState::Processing;
+                                    self.WakeupWorker().await?;
+                                    self.WaitForPod().await?;
+                                    self.ongoingReqCnt.fetch_add(1, Ordering::SeqCst);
+                                    let workerClient = match self.idleFuncClients.lock().unwrap().pop() {
+                                        None => {
+                                            assert!(self.funcClientCnt.load(Ordering::SeqCst) < self.parallelLevel);
+                                            let client = self.NewFuncWorkerClient();
+                                            client
+                                        }
+                                        Some(client) => client,
+                                    };
+                                    workerClient.SendReq(req);
+                                }
+                            }
+                        }
                     }
                 }
                 FuncWorkerState::Processing => {
@@ -827,6 +864,52 @@ impl FuncWorker {
         if resp.error.len() != 0 {
             error!(
                 "Fail to stop worker {} {} {}",
+                self.namespace, self.funcName, resp.error
+            );
+        }
+
+        return Ok(());
+    }
+
+    pub async fn HibernateWorker(&self) -> Result<()> {
+        let mut client =
+            na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888")
+                .await?;
+
+        let request = tonic::Request::new(na::HibernatePodReq {
+            tenant: self.tenant.clone(),
+            namespace: self.namespace.clone(),
+            name: self.workerName.clone(),
+            hibernate_type: 1,
+        });
+        let response = client.hibernate_pod(request).await?;
+        let resp = response.into_inner();
+        if resp.error.len() != 0 {
+            error!(
+                "Fail to Hibernate worker {} {} {}",
+                self.namespace, self.funcName, resp.error
+            );
+        }
+
+        return Ok(());
+    }
+
+    pub async fn WakeupWorker(&self) -> Result<()> {
+        let mut client =
+            na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888")
+                .await?;
+
+        let request = tonic::Request::new(na::WakeupPodReq {
+            tenant: self.tenant.clone(),
+            namespace: self.namespace.clone(),
+            name: self.workerName.clone(),
+            hibernate_type: 1,
+        });
+        let response = client.wakeup_pod(request).await?;
+        let resp = response.into_inner();
+        if resp.error.len() != 0 {
+            error!(
+                "Fail to Hibernate worker {} {} {}",
                 self.namespace, self.funcName, resp.error
             );
         }

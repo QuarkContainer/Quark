@@ -302,6 +302,48 @@ pub struct TerminatePodResp {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HibernatePodReq {
+    #[prost(string, tag = "1")]
+    pub tenant: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub name: ::prost::alloc::string::String,
+    /// 1: GPU 2: Disk
+    #[prost(uint32, tag = "4")]
+    pub hibernate_type: u32,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HibernatePodResp {
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WakeupPodReq {
+    #[prost(string, tag = "1")]
+    pub tenant: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub name: ::prost::alloc::string::String,
+    /// 1: GPU 2: Disk
+    #[prost(uint32, tag = "4")]
+    pub hibernate_type: u32,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WakeupPodResp {
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetPodReq {
     #[prost(string, tag = "1")]
     pub tenant: ::prost::alloc::string::String,
@@ -623,6 +665,44 @@ pub mod node_agent_service_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
+        pub async fn hibernate_pod(
+            &mut self,
+            request: impl tonic::IntoRequest<super::HibernatePodReq>,
+        ) -> Result<tonic::Response<super::HibernatePodResp>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/na.NodeAgentService/HibernatePod",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn wakeup_pod(
+            &mut self,
+            request: impl tonic::IntoRequest<super::WakeupPodReq>,
+        ) -> Result<tonic::Response<super::WakeupPodResp>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/na.NodeAgentService/WakeupPod",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
         pub async fn node_config(
             &mut self,
             request: impl tonic::IntoRequest<super::NodeConfigReq>,
@@ -832,6 +912,14 @@ pub mod node_agent_service_server {
             &self,
             request: tonic::Request<super::TerminatePodReq>,
         ) -> Result<tonic::Response<super::TerminatePodResp>, tonic::Status>;
+        async fn hibernate_pod(
+            &self,
+            request: tonic::Request<super::HibernatePodReq>,
+        ) -> Result<tonic::Response<super::HibernatePodResp>, tonic::Status>;
+        async fn wakeup_pod(
+            &self,
+            request: tonic::Request<super::WakeupPodReq>,
+        ) -> Result<tonic::Response<super::WakeupPodResp>, tonic::Status>;
         async fn node_config(
             &self,
             request: tonic::Request<super::NodeConfigReq>,
@@ -1004,6 +1092,84 @@ pub mod node_agent_service_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = TerminatePodSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/na.NodeAgentService/HibernatePod" => {
+                    #[allow(non_camel_case_types)]
+                    struct HibernatePodSvc<T: NodeAgentService>(pub Arc<T>);
+                    impl<
+                        T: NodeAgentService,
+                    > tonic::server::UnaryService<super::HibernatePodReq>
+                    for HibernatePodSvc<T> {
+                        type Response = super::HibernatePodResp;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::HibernatePodReq>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).hibernate_pod(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = HibernatePodSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/na.NodeAgentService/WakeupPod" => {
+                    #[allow(non_camel_case_types)]
+                    struct WakeupPodSvc<T: NodeAgentService>(pub Arc<T>);
+                    impl<
+                        T: NodeAgentService,
+                    > tonic::server::UnaryService<super::WakeupPodReq>
+                    for WakeupPodSvc<T> {
+                        type Response = super::WakeupPodResp;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::WakeupPodReq>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).wakeup_pod(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = WakeupPodSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

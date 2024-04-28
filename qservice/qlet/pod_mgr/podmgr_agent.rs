@@ -35,6 +35,7 @@ use qshare::common::*;
 
 use crate::pod_mgr::node_status::{IsNodeStatusReady, SetNodeStatus};
 use crate::pod_mgr::{NAMESPACE_MGR, RUNTIME_MGR};
+use crate::tsot::pod_broker_mgr::POD_BRORKER_MGRS;
 use crate::QLET_CONFIG;
 
 use super::pm_msg::{NodeAgentMsg, PodCreate};
@@ -365,6 +366,56 @@ impl PmAgent {
         } else {
             return Err(Error::CommonError(format!("Pod: {} already exist", podId)));
         }
+    }
+
+    pub fn HibernatePod(
+        &self,
+        tenant: &str,
+        namespace: &str,
+        name: &str,
+        type_: u32,
+    ) -> Result<()> {
+        let podId = format!("{}/{}/{}", tenant, namespace, name);
+        let qpod = self.node.pods.lock().unwrap().get(&podId).cloned();
+        match qpod {
+            None => {
+                return Err(Error::CommonError(format!(
+                    "Pod: {} does not exist, nodemgr is not in sync",
+                    podId
+                )))
+            }
+            Some(_qpod) => {
+                let podAgent = self.pods.lock().unwrap().get(&podId).cloned();
+
+                let podAgent = podAgent.unwrap();
+                POD_BRORKER_MGRS.HandlePodHibernate(&format!("{tenant}/{namespace}"), name)?;
+                podAgent.Send(NodeAgentMsg::PodHibernate(type_))?;
+            }
+        }
+
+        return Ok(());
+    }
+
+    pub fn WakeupPod(&self, tenant: &str, namespace: &str, name: &str, type_: u32) -> Result<()> {
+        let podId = format!("{}/{}/{}", tenant, namespace, name);
+        let qpod = self.node.pods.lock().unwrap().get(&podId).cloned();
+        match qpod {
+            None => {
+                return Err(Error::CommonError(format!(
+                    "Pod: {} does not exist, nodemgr is not in sync",
+                    podId
+                )))
+            }
+            Some(_qpod) => {
+                let podAgent = self.pods.lock().unwrap().get(&podId).cloned();
+
+                let podAgent = podAgent.unwrap();
+                POD_BRORKER_MGRS.HandlePodWakeup(&format!("{tenant}/{namespace}"), name)?;
+                podAgent.Send(NodeAgentMsg::PodWakeup(type_))?;
+            }
+        }
+
+        return Ok(());
     }
 
     pub fn TerminatePod(&self, podId: &str) -> Result<()> {

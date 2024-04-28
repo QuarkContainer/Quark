@@ -80,6 +80,8 @@ pub enum TsotMsg {
     PodConnectResp(PodConnectResp),
     GatewayConnectResp(GatewayConnectResp),
     DnsResp(DnsResp),
+    Hibernate(Hibernate),
+    Wakeup(Wakeup),
 }
 
 pub const BUFF_SIZE: usize = core::mem::size_of::<TsotMsg>();
@@ -206,6 +208,19 @@ pub struct GatewayRegisterResp {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CreateSocketResp {}
+
+// send with new socket fd
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Hibernate {
+    pub _type: u32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Wakeup {
+    pub _type: u32,
+}
 
 // another pod connected to current pod
 // send with new socket fd

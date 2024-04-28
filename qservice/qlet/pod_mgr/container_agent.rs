@@ -116,8 +116,14 @@ impl PodContainerAgent {
     }
 
     pub async fn Process(&self, mut rx: mpsc::Receiver<NodeAgentMsg>) -> Result<()> {
-        let mut interval = time::interval(time::Duration::from_secs(5));
+        let mut containerCreating = true;
         loop {
+            let mut interval = if !containerCreating {
+                time::interval(time::Duration::from_secs(5))
+            } else {
+                time::interval(time::Duration::from_millis(10))
+            };
+
             tokio::select! {
                 _ = self.closeNotify.notified() => {
                     self.stop.store(false, Ordering::SeqCst);
@@ -143,6 +149,8 @@ impl PodContainerAgent {
                             continue;
                         }
                     };
+
+                    containerCreating = status.state != crictl::ContainerState::ContainerCreated as i32;
                     self.OnContainerProbeResult(&status).await;
                 }
                 msg = rx.recv() => {

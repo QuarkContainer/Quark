@@ -80,18 +80,20 @@ pub mod ringbuf;
 pub mod vcpu_mgr;
 
 pub mod hiber_mgr;
+pub mod nvproxy;
 pub mod proxy;
 pub mod rdma_svc_cli;
 pub mod rdmasocket;
-pub mod unix_socket;
-pub mod nvproxy;
 pub mod tsot_msg;
+pub mod unix_socket;
 
 #[cfg(target_arch = "aarch64")]
 mod pagetable_aarch64;
 
 use self::kernel::dns::dns_svc::DnsSvc;
 use self::mutex::*;
+use alloc::collections::VecDeque;
+use alloc::string::String;
 use alloc::vec::Vec;
 use cache_padded::CachePadded;
 use core::sync::atomic::AtomicBool;
@@ -100,11 +102,9 @@ use core::sync::atomic::AtomicU32;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use crossbeam_queue::ArrayQueue;
-use alloc::collections::VecDeque;
-use alloc::string::String;
 
-use self::common::*;
 use self::bytestream::*;
+use self::common::*;
 use self::config::*;
 use self::control_msg::SignalArgs;
 use self::fileinfo::*;
@@ -114,15 +114,15 @@ use self::kernel::kernel::kernel::Kernel;
 use self::kernel::kernel::timer::timekeeper::*;
 use self::kernel::kernel::timer::timer_store::*;
 use self::kernel::memmgr::pma::*;
+use self::kernel::quring::uring_async::UringEntry;
 use self::kernel::quring::uring_mgr::QUring;
+use self::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
 use self::linux_def::*;
 use self::object_ref::ObjectRef;
 use self::qmsg::*;
 use self::rdma_svc_cli::*;
 use self::ringbuf::*;
 use self::task_mgr::*;
-use self::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
-use self::kernel::quring::uring_async::UringEntry;
 
 pub fn InitSingleton() {
     unsafe {
@@ -1095,7 +1095,7 @@ pub enum SysCallID {
     syscall_421,
     syscall_422,
     syscall_423,
-   
+
     UnknowSyscall = 451,
 
     EXTENSION_MAX,
@@ -1160,8 +1160,8 @@ impl Default for UringQueue {
     fn default() -> Self {
         return Self {
             submitq: Default::default(),
-            completeq: ArrayQueue::new(MemoryDef::QURING_SIZE)
-        }
+            completeq: ArrayQueue::new(MemoryDef::QURING_SIZE),
+        };
     }
 }
 
@@ -1169,7 +1169,8 @@ impl Default for UringQueue {
 #[repr(align(128))]
 #[derive(Default)]
 pub struct ShareSpace {
-    pub QOutput: QRingQueue<HostOutputMsg>, //QMutex<VecDeque<HostInputMsg>>,
+    pub QOutput: QRingQueue<HostOutputMsg>,
+    pub QInput: QRingQueue<HostInputMsg>,
 
     // add this pad can decrease the mariadb start time 25 sec to 12 sec
     //todo: root cause this. False share?
@@ -1354,6 +1355,28 @@ impl ShareSpace {
     #[inline]
     pub fn AQHostOutputPop(&self) -> Option<HostOutputMsg> {
         return self.QOutput.Pop();
+    }
+
+    #[inline]
+    pub fn AQHostInputPush(&self, item: &HostInputMsg) {
+        error!("AQHostInputPush 1 {:?}", &item);
+        loop {
+            if self.QInput.IsFull() {
+                continue;
+            }
+
+            self.QInput.Push(item).unwrap();
+            break;
+        }
+
+        error!("AQHostInputPush 2");
+        self.scheduler.WakeOne();
+        error!("AQHostInputPush 3");
+    }
+
+    #[inline]
+    pub fn AQHostInputContainsItem(&self) -> bool {
+        return !self.QInput.IsEmpty();
     }
 
     #[inline]

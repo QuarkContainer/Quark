@@ -13,19 +13,19 @@ use super::qlib::qmsg::qcall::{HostOutputMsg, QMsg};
 use super::qlib::task_mgr::Scheduler;
 use super::qlib::vcpu_mgr::CPULocal;
 use super::qlib::ShareSpace;
+use super::vmspace::VMSpace;
 use super::FD_NOTIFIER;
 use super::VMS;
-use super::vmspace::VMSpace;
 use alloc::alloc::alloc;
-use libc::ioctl;
 use core::alloc::Layout;
 use core::slice;
 use core::sync::atomic::AtomicU64;
+use libc::ioctl;
 use nix::sys::signal;
 use spin::Mutex;
+use std::os::unix::io::AsRawFd;
 use std::sync::atomic::{fence, Ordering};
 use std::sync::mpsc::Sender;
-use std::os::unix::io::AsRawFd;
 
 pub struct HostPageAllocator {
     pub allocator: AlignedAllocator,
@@ -116,7 +116,7 @@ impl KVMVcpu {
         autoStart: bool,
     ) -> Result<Self> {
         const DEFAULT_STACK_PAGES: u64 = MemoryDef::DEFAULT_STACK_PAGES; //64KB
-        //let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
+                                                                         //let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
         let stackSize = DEFAULT_STACK_PAGES << 12;
         let stackAddr = AlignedAllocate(stackSize as usize, stackSize as usize, false).unwrap();
         let topStackAddr = stackAddr + (DEFAULT_STACK_PAGES << 12);
@@ -294,7 +294,10 @@ pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64>
     );
     let layout = Layout::from_size_align(size, align);
     match layout {
-        Err(_e) => Err(Error::UnallignedAddress(format!("AlignedAllocate {:?}", align))),
+        Err(_e) => Err(Error::UnallignedAddress(format!(
+            "AlignedAllocate {:?}",
+            align
+        ))),
         Ok(l) => unsafe {
             let addr = alloc(l);
             if zeroData {
@@ -456,6 +459,10 @@ impl CPULocal {
         match sharespace.scheduler.GetNext() {
             None => (),
             Some(newTask) => return Some(newTask.data),
+        }
+
+        if sharespace.AQHostInputContainsItem() {
+            return Some(0);
         }
 
         // process in vcpu worker thread will decease the throughput of redis/etcd benchmark

@@ -217,6 +217,50 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
         }
     }
 
+    async fn hibernate_pod(
+        &self,
+        request: tonic::Request<na::HibernatePodReq>,
+    ) -> SResult<tonic::Response<na::HibernatePodResp>, tonic::Status> {
+        let req = request.into_inner();
+        match self
+            .pmAgent
+            .HibernatePod(&req.tenant, &req.namespace, &req.name, req.hibernate_type)
+        {
+            Err(e) => {
+                return Ok(tonic::Response::new(na::HibernatePodResp {
+                    error: format!("fail: {:?}", e),
+                }))
+            }
+            Ok(()) => {
+                return Ok(tonic::Response::new(na::HibernatePodResp {
+                    error: "".to_owned(),
+                }));
+            }
+        }
+    }
+
+    async fn wakeup_pod(
+        &self,
+        request: tonic::Request<na::WakeupPodReq>,
+    ) -> SResult<tonic::Response<na::WakeupPodResp>, tonic::Status> {
+        let req = request.into_inner();
+        match self
+            .pmAgent
+            .WakeupPod(&req.tenant, &req.namespace, &req.name, req.hibernate_type)
+        {
+            Err(e) => {
+                return Ok(tonic::Response::new(na::WakeupPodResp {
+                    error: format!("fail: {:?}", e),
+                }))
+            }
+            Ok(()) => {
+                return Ok(tonic::Response::new(na::WakeupPodResp {
+                    error: "".to_owned(),
+                }));
+            }
+        }
+    }
+
     async fn create_func_pod(
         &self,
         request: tonic::Request<na::CreateFuncPodReq>,
