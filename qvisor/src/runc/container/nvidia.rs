@@ -17,7 +17,7 @@ use std::fs;
 use crate::qlib::common::*;
 use crate::runc::oci::Spec;
 
-const NVD_ENV_VAR : &str = "NVIDIA_VISIBLE_DEVICES";
+const NVD_ENV_VAR: &str = "NVIDIA_VISIBLE_DEVICES";
 
 pub fn FindAllGPUDevices() -> Result<Vec<u32>> {
     let paths = fs::read_dir("/dev/").unwrap();
@@ -44,11 +44,17 @@ pub fn FindAllGPUDevices() -> Result<Vec<u32>> {
 // NVIDIA_VISIBLE_DEVICES. In non-Docker mode, this is all Nvidia devices, as
 // we cannot know the set of usable GPUs until subcontainer creation.
 pub fn NvidiaDeviceList(spec: &Spec) -> Result<String> {
+    // so far quark sandbox can't get configuration from cri sandbox config
+    // enable all gpu, work around now
+    // todo: fix this
+    #[cfg(feature = "cuda")]
+    return Ok("all".to_owned());
+
     for env in &spec.process.env {
-        let parts : Vec<&str> = env.split("=").collect();
+        let parts: Vec<&str> = env.split("=").collect();
         if parts.len() != 2 {
             continue;
-        } 
+        }
 
         if parts[0] == NVD_ENV_VAR {
             let nvd = parts[1];
@@ -61,7 +67,7 @@ pub fn NvidiaDeviceList(spec: &Spec) -> Result<String> {
                 return Ok("all".to_owned());
             }
 
-            let gpus : Vec<&str> = nvd.split(",").collect();
+            let gpus: Vec<&str> = nvd.split(",").collect();
             for gpu in gpus {
                 // Validate gpuDev. We only support the following formats for now:
                 // * GPU indices (e.g. 0,1,2)
@@ -69,18 +75,23 @@ pub fn NvidiaDeviceList(spec: &Spec) -> Result<String> {
                 //
                 // We do not support MIG devices yet.
                 if gpu.starts_with("GPU-") {
-                    return Err(Error::Common(format!("We do not support Nvidia device {}", gpu)));
+                    return Err(Error::Common(format!(
+                        "We do not support Nvidia device {}",
+                        gpu
+                    )));
                 }
 
                 if gpu.parse::<u32>().is_err() {
-                    return Err(Error::Common(format!("We do not support Nvidia device {}", gpu)));
+                    return Err(Error::Common(format!(
+                        "We do not support Nvidia device {}",
+                        gpu
+                    )));
                 }
             }
 
-            return Ok(nvd.to_owned())
-        }        
+            return Ok(nvd.to_owned());
+        }
     }
 
     return Ok("".to_owned());
 }
-
