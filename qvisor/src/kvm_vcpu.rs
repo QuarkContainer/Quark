@@ -350,13 +350,13 @@ impl Scheduler {
         }
     }
 
-    pub fn VcpWaitMaskSet(&self, vcpuId: usize) -> bool {
+    pub fn VcpuWaitMaskSet(&self, vcpuId: usize) -> bool {
         let mask = 1 << vcpuId;
         let prev = self.vcpuWaitMask.fetch_or(mask, Ordering::SeqCst);
         return (prev & mask) != 0;
     }
 
-    pub fn VcpWaitMaskClear(&self, vcpuId: usize) -> bool {
+    pub fn VcpuWaitMaskClear(&self, vcpuId: usize) -> bool {
         let mask = 1 << vcpuId;
         let prev = self
             .vcpuWaitMask
@@ -494,8 +494,8 @@ impl CPULocal {
 
         let time = if block { -1 } else { 0 };
 
-        sharespace.scheduler.VcpWaitMaskSet(self.vcpuId);
-        defer!(sharespace.scheduler.VcpWaitMaskClear(self.vcpuId););
+        sharespace.scheduler.VcpuWaitMaskSet(self.vcpuId);
+        defer!(sharespace.scheduler.VcpuWaitMaskClear(self.vcpuId););
 
         match self.Process(sharespace) {
             None => (),
@@ -514,7 +514,7 @@ impl CPULocal {
                 }
             }
 
-            if sharespace.scheduler.VcpWaitMaskSet(self.vcpuId) {
+            if sharespace.scheduler.VcpuWaitMaskSet(self.vcpuId) {
                 match sharespace.scheduler.GetNext() {
                     None => (),
                     Some(newTask) => return Ok(newTask.data),
