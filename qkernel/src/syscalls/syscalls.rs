@@ -659,7 +659,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysCapErr,             // 58  sys_vhangup,
     SysPipe2,              // 59  sys_pipe2,
     SysCapErr,             // 60  sys_quotactl, //60
-    SysGetDents,           // 61  sys_getdents64,
+    SysGetDents64,         // 61  sys_getdents64,
     SysLseek,              // 62  sys_lseek,
     SysRead,               // 63  sys_read,
     SysWrite,              // 64  sys_write,
