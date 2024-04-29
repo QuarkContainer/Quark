@@ -35,7 +35,7 @@ pub fn FindAllGPUDevices() -> Result<Vec<u32>> {
             }
         }
     }
-    
+
     return Ok(list);
 }
 
@@ -48,50 +48,56 @@ pub fn NvidiaDeviceList(spec: &Spec) -> Result<String> {
     // enable all gpu, work around now
     // todo: fix this
     #[cfg(feature = "cuda")]
-    return Ok("all".to_owned());
-
-    for env in &spec.process.env {
-        let parts: Vec<&str> = env.split("=").collect();
-        if parts.len() != 2 {
-            continue;
-        }
-
-        if parts[0] == NVD_ENV_VAR {
-            let nvd = parts[1];
-
-            if nvd == "none" {
-                return Ok("".to_owned());
-            }
-
-            if nvd == "all" {
-                return Ok("all".to_owned());
-            }
-
-            let gpus: Vec<&str> = nvd.split(",").collect();
-            for gpu in gpus {
-                // Validate gpuDev. We only support the following formats for now:
-                // * GPU indices (e.g. 0,1,2)
-                // * GPU UUIDs (e.g. GPU-fef8089b)
-                //
-                // We do not support MIG devices yet.
-                if gpu.starts_with("GPU-") {
-                    return Err(Error::Common(format!(
-                        "We do not support Nvidia device {}",
-                        gpu
-                    )));
-                }
-
-                if gpu.parse::<u32>().is_err() {
-                    return Err(Error::Common(format!(
-                        "We do not support Nvidia device {}",
-                        gpu
-                    )));
-                }
-            }
-
-            return Ok(nvd.to_owned());
-        }
+    {
+        let _ = spec;
+        return Ok("all".to_owned());
     }
 
-    return Ok("".to_owned());
+    #[cfg(not(feature = "cuda"))]
+    {
+        for env in &spec.process.env {
+            let parts: Vec<&str> = env.split("=").collect();
+            if parts.len() != 2 {
+                continue;
+            }
+
+            if parts[0] == NVD_ENV_VAR {
+                let nvd = parts[1];
+
+                if nvd == "none" {
+                    return Ok("".to_owned());
+                }
+
+                if nvd == "all" {
+                    return Ok("all".to_owned());
+                }
+
+                let gpus: Vec<&str> = nvd.split(",").collect();
+                for gpu in gpus {
+                    // Validate gpuDev. We only support the following formats for now:
+                    // * GPU indices (e.g. 0,1,2)
+                    // * GPU UUIDs (e.g. GPU-fef8089b)
+                    //
+                    // We do not support MIG devices yet.
+                    if gpu.starts_with("GPU-") {
+                        return Err(Error::Common(format!(
+                            "We do not support Nvidia device {}",
+                            gpu
+                        )));
+                    }
+
+                    if gpu.parse::<u32>().is_err() {
+                        return Err(Error::Common(format!(
+                            "We do not support Nvidia device {}",
+                            gpu
+                        )));
+                    }
+                }
+
+                return Ok(nvd.to_owned());
+            }
+        }
+
+        return Ok("".to_owned());
+    }
 }
