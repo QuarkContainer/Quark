@@ -33,96 +33,70 @@ use crate::qlib::kernel::arch::__arch::mm::pagetable::{PageTableEntry, PageTable
 
 use crate::{MainRun, SHARESPACE, panic};
 
-#[repr(u64)]
-enum PageFaultErrorFlags {
-    FaultPermission  = 1 << 0,
-    FaultWrite       = 1 << 1,
-    FaultUserMode    = 1 << 2,
-    FaultAddressSize = 1 << 3,
-    FaultInstruction = 1 << 4,
-    FaultTranslation = 1 << 5,
-    FaultAccessFlag  = 1 << 6,
-    FaultKillItFlag  = 1 << 7, //Unhandled, Unforeseen, Unforgiven! Kill it.
-}
-
-#[derive(Debug)]
-pub struct PageFaultErrorCode (u64);
-
-impl LowerHex for PageFaultErrorCode {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{:#x}", self.0)
+bitflags! {
+    #[repr(transparent)]
+    pub struct PageFaultErrorCode: u64 {
+        // Types (should be mutual exclusive)
+        const NO_HANDLER            = 1 << 0; //Unhandled, Unforeseen, Unforgiven! Kill it.
+        const PROTECTION_VIOLATION  = 1 << 1;
+        const ADDRESS_SIZE          = 1 << 2;
+        const TRANSLATION           = 1 << 3;
+        const ACCESS_FLAG           = 1 << 4;
+        const TYPE_MASK             = 0xff;
+        // Attributes
+        const CAUSED_BY_WRITE       = 1 << 8;
+        const USER_MODE             = 1 << 9;
+        const INSTRUCTION_FETCH     = 1 << 10;
     }
 }
 
+impl EsrDefs {
+    // ESR.ISS.xxSC[5:2], Data/Instruction Fault Status Code WITHOUT translation level.
+    pub const SC_MASK: u64 = 0x3c;
+    pub const SC_ADDRESS_SIZE_FAULT: u64 = 0x0;
+    pub const SC_TRANSLATION_FAULT:  u64 = 0x4;
+    pub const SC_ACCESS_FLAG_FAULT:  u64 = 0x8;
+    pub const SC_PERMISSION_FAULT:   u64 = 0xc;
+}
+
 impl PageFaultErrorCode {
-    //
-    // NOTE: ISS[5:0] - Reveal type not level.
-    // NOTE: Maybe not correct place to have them,
-    //       still better than magic numbers.
-    //
-    #[allow(non_upper_case_globals)]
-    pub const GEN_xxSC_MASK: u64 = 0x3c; // Ignore the ll-bits
-    pub const GEN_ADDRESS_SIZE_FAULT: u64 = 0x0;
-    pub const GEN_TRANSLATION_FAULT:  u64 = 0x4;
-    pub const GEN_ACCESS_FLAG_FAULT:  u64 = 0x8;
-    pub const GEN_PERMISSION_FAULT:   u64 = 0xc;
+    pub fn get_type(&self) -> Self{
+        *self & Self::TYPE_MASK
+    }
 
-
-    pub fn new(from_user: bool, esr: u64) -> Self {
-        let mut fault_flags = PageFaultErrorCode(0);
+    pub fn new(from_user: bool, is_instr: bool, esr: u64) -> Self {
+        let mut fault_flags = Self::empty();
 
         if from_user {
-           fault_flags.set_flag(PageFaultErrorFlags::FaultUserMode);
+           fault_flags.insert(Self::USER_MODE);
         }
 
-        let xxsc = esr & Self::GEN_xxSC_MASK;
+        if is_instr {
+            fault_flags.insert(Self::INSTRUCTION_FETCH);
+        } else {
+            fault_flags.set(Self::CAUSED_BY_WRITE, EsrDefs::IsWrite(esr));
+        }
+
+        let xxsc = esr & EsrDefs::SC_MASK;
         match xxsc {
-            Self::GEN_PERMISSION_FAULT  => {
-                fault_flags.set_flag(PageFaultErrorFlags::FaultPermission);
-                let exception_class = EsrDefs::GetExceptionFromESR(esr);
-                if exception_class == EsrDefs::EC_DATA_ABORT_L
-                    || exception_class == EsrDefs::EC_DATA_ABORT {
-                        if GetFaultAccessType(esr, false)
-                            == AccessType(MmapProt::PROT_WRITE) {
-                                fault_flags.set_flag(PageFaultErrorFlags::FaultWrite);
-                            }
-                    } else {
-                         fault_flags.set_flag(PageFaultErrorFlags::FaultInstruction);
-                    }
+            EsrDefs::SC_PERMISSION_FAULT  => {
+                fault_flags.insert(Self::PROTECTION_VIOLATION);
             },
-            Self::GEN_ACCESS_FLAG_FAULT => {
-                fault_flags.set_flag(PageFaultErrorFlags::FaultAccessFlag);
+            EsrDefs::SC_ACCESS_FLAG_FAULT => {
+                fault_flags.insert(Self::ACCESS_FLAG);
             },
-            Self::GEN_ADDRESS_SIZE_FAULT => {
-                fault_flags.set_flag(PageFaultErrorFlags::FaultAddressSize);
+            EsrDefs::SC_ADDRESS_SIZE_FAULT => {
+                fault_flags.insert(Self::ADDRESS_SIZE);
             },
-            Self::GEN_TRANSLATION_FAULT => {
-                fault_flags.set_flag(PageFaultErrorFlags::FaultTranslation);
-                let exception_class = EsrDefs::GetExceptionFromESR(esr);
-                if exception_class == EsrDefs::EC_DATA_ABORT_L
-                    || exception_class == EsrDefs::EC_DATA_ABORT {
-                        if GetFaultAccessType(esr, false)
-                            == AccessType(MmapProt::PROT_WRITE) {
-                                fault_flags.set_flag(PageFaultErrorFlags::FaultWrite);
-                            }
-                    } else {
-                         fault_flags.set_flag(PageFaultErrorFlags::FaultInstruction);
-                    }
+            EsrDefs::SC_TRANSLATION_FAULT => {
+                fault_flags.insert(Self::TRANSLATION);
             },
             _ => {
-                fault_flags.set_flag(PageFaultErrorFlags::FaultKillItFlag);
+                fault_flags.insert(Self::NO_HANDLER);
             }
         };
 
         fault_flags
-    }
-
-    fn set_flag(&mut self, flag: PageFaultErrorFlags) {
-        self.0 |= flag as u64;
-    }
-
-    fn is_flag_set(&self, flag: PageFaultErrorFlags) -> bool {
-        (self.0 & flag as u64) != 0
     }
 }
 
@@ -133,7 +107,7 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
     let currTask = Task::Current();
     // is this call from user
     let fromUser: bool = error_code
-        .is_flag_set(PageFaultErrorFlags::FaultUserMode);
+        .contains(PageFaultErrorCode::USER_MODE);
     //
     // NOTE: ATM only 0x0000xx...x address-space is used.
     //
@@ -179,7 +153,7 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
             Some(vma) => vma.clone(),
         };
 
-        if error_code.is_flag_set(PageFaultErrorFlags::FaultAccessFlag) {
+        if error_code.contains(PageFaultErrorCode::ACCESS_FLAG) {
            let bind = currTask
                      .mm
                      .pagetable
@@ -224,7 +198,7 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
         //
         // Fault for not mapped page.
         //
-        if error_code.is_flag_set(PageFaultErrorFlags::FaultTranslation) {
+        if error_code.contains(PageFaultErrorCode::TRANSLATION) {
             info!("VM: InstallPage 1, range is {:x?}, address is {:#x}, vma.growsDown is {}",
                &range, pageAddr, vma.growsDown);
             //let startTime = TSC.Rdtsc();
@@ -319,12 +293,12 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
         // NOTE: COW flags RO set in ForkRange() for private mappings.
         //
         if vma.private == true {
-            if error_code.is_flag_set(PageFaultErrorFlags::FaultPermission) &&
-                error_code.is_flag_set(PageFaultErrorFlags::FaultWrite) {
+            if error_code.contains(PageFaultErrorCode::PROTECTION_VIOLATION) &&
+                error_code.contains(PageFaultErrorCode::CAUSED_BY_WRITE) {
                     if vma.effectivePerms.Write() == false  ||
                     (vma.kernel == true &&
                         error_code
-                        .is_flag_set(PageFaultErrorFlags::FaultUserMode)) {
+                        .contains(PageFaultErrorCode::USER_MODE)) {
                         debug!("VM: Fault on private vma - Write access on \
                                VMA-perms:{:?}/kernel:{:#}.", vma.realPerms.Effective(), vma.kernel);
                         signal = Signal::SIGSEGV;
@@ -381,8 +355,8 @@ pub fn HandleFault(
         let sigfault = info.SigFault();
         sigfault.addr = fault_address;
 
-        if error_code.is_flag_set(PageFaultErrorFlags::FaultWrite)
-           || error_code.is_flag_set(PageFaultErrorFlags::FaultInstruction) {
+        if error_code.contains(PageFaultErrorCode::CAUSED_BY_WRITE)
+           || error_code.contains(PageFaultErrorCode::INSTRUCTION_FETCH) {
             info.Code = 2; // SEGV_ACCERR
         } else {
             info.Code = 1; // SEGV_MAPPER
