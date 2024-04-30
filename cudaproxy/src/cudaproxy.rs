@@ -24,7 +24,7 @@ use cuda_runtime_sys::{
     cudaStreamCaptureMode, cudaMemcpyKind, cudaEvent_t, cudaStreamCaptureStatus, 
     cudaStream_t,cudaFuncAttributes,cudaFuncAttribute,
     cudaDeviceAttr, cudaDeviceP2PAttr, cudaDeviceProp, cudaFuncCache, cudaLimit,
-    cudaSharedMemConfig,cudaError_t
+    cudaSharedMemConfig,cudaError_t, dim3
 };
 use rcublas_sys::{cublasHandle_t,cublasMath_t,cublasOperation_t};
 use cuda11_cublasLt_sys::{cublasLtHandle_t,cublasLtMatmulDesc_t,cublasLtMatrixLayout_t,cublasLtMatmulAlgo_t,cublasLtMatmulPreference_t,cublasLtMatmulHeuristicResult_t};
@@ -240,7 +240,7 @@ pub extern "C" fn cudaDeviceSetSharedMemConfig(config: cudaSharedMemConfig) -> u
 
 #[no_mangle]
 pub extern "C" fn cudaSetDevice(device: c_int) -> usize {
-    //println!("Hijacked1 cudaSetDevice");
+    println!("Hijacked1 cudaSetDevice");
     return unsafe {
         syscall2(SYS_PROXY, ProxyCommand::CudaSetDevice as usize, device as usize)
     };
@@ -360,23 +360,25 @@ pub fn findPtxJitCompilerLibrary(path: &mut String) -> std::io::Result<()> {
 }
 
 #[no_mangle]
-pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) -> *mut *mut c_void {
-    //println!("Hijacked __cudaRegisterFatBinary");
+pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) -> u64 {
+    println!("Hijacked __cudaRegisterFatBinary");
     let mut ptxlibPath: String = "".to_string();
     findPtxJitCompilerLibrary(&mut ptxlibPath).unwrap();
 
     let len = fatCubin.text.header_size as usize + fatCubin.text.size as usize;
     //let mut result: *mut *mut c_void = ptr::null_mut();
-    let result = unsafe { libc::calloc(1, 0x58) as *mut *mut c_void };
-    if result.is_null() {
-        panic!("CUDA register an atexit handler for fatbin cleanup, but is failed!");
-    }
+    //let result = unsafe { libc::calloc(1, 0x58) as *mut *mut c_void };
+    //if result.is_null() {
+     //   panic!("CUDA register an atexit handler for fatbin cleanup, but is failed!");
+    //}
+    let mut module:u64 = 0;
     // println!("param 4 is {:x}", &ptxlibPath as *const _ as usize);
     unsafe {
         syscall5(SYS_PROXY, ProxyCommand::CudaRegisterFatBinary as usize, len, fatCubin.text as *const _ as usize, 
-            result as usize, &(ptxlibPath.as_bytes()[0]) as *const _ as usize);
+            &mut module as *mut _ as usize, &(ptxlibPath.as_bytes()[0]) as *const _ as usize);
     }
-    return result;
+    println!("register fat bin: {:x}", module as u64);
+    return module;
 }
 
 #[no_mangle]
@@ -388,9 +390,12 @@ pub extern "C" fn __cudaUnregisterFatBinary(fatCubinHandle: u64) {
 }
 
 #[no_mangle]
-pub extern "C" fn __cudaRegisterFatBinaryEnd(_fatCubinHandle: u64) {
-    //println!("Hijacked __cudaRegisterFatBinaryEnd");
+pub extern "C" fn __cudaRegisterFatBinaryEnd(fatCubinHandle: u64) {
+    println!("Hijacked __cudaRegisterFatBinaryEnd, value is {:x}", fatCubinHandle);
     //panic!("TODO: __cudaRegisterFatBinaryEnd not yet implemented");
+    unsafe {
+        syscall2(SYS_PROXY, ProxyCommand::CudaRegisterFatBinaryEnd as usize, fatCubinHandle as usize);
+    }
 }
 
 #[no_mangle]
@@ -404,9 +409,11 @@ pub extern "C" fn __cudaRegisterFunction(
     bid: u64,
     bDim: u64,
     gDim: u64,
-    wSize: usize
-)  {
-    //println!("Hijacked __cudaRegisterFunction");
+    wSize: u64
+)  -> u64 {
+    println!("Hijacked __cudaRegisterFunction");
+    println!("fatCubinHandle: {:x}", fatCubinHandle);
+    println!("hostFun: {:x}", hostFun);
         let info = RegisterFunctionInfo {
         fatCubinHandle: fatCubinHandle,
         hostFun: hostFun,
@@ -419,9 +426,10 @@ pub extern "C" fn __cudaRegisterFunction(
         gDim: gDim,
         wSize: wSize,
     };
-    unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaRegisterFunction as usize, &info as *const _ as usize);
-    }
+    //unsafe {println!("thread_limit: {}, bDim {:?}, gDim {}, wSize{}", thread_limit, *(bDim as *mut u32), *(gDim as *mut u32), *(wSize as *mut u32));}
+    return unsafe {
+        syscall2(SYS_PROXY, ProxyCommand::CudaRegisterFunction as usize, &info as *const _ as usize)
+    } as u64; 
 }
 
 #[no_mangle]
@@ -435,7 +443,7 @@ pub extern "C" fn __cudaRegisterVar(
     constant: i32,
     global: i32,
 ) {
-    //println!("Hijacked __cudaRegisterVar");
+    println!("Hijacked __cudaRegisterVar");
     let info = RegisterVarInfo {
         fatCubinHandle: fatCubinHandle,
         hostVar: hostVar,
@@ -461,7 +469,7 @@ pub extern "C" fn cudaLaunchKernel(
     sharedMem: usize,
     stream: u64,
 ) {
-    //println!("Hijacked cudaLaunchKernel");
+    println!("Hijacked cudaLaunchKernel, func -is {:x}", func);
     let info = LaunchKernelInfo {
         func: func,
         gridDim: gridDim,
@@ -475,6 +483,49 @@ pub extern "C" fn cudaLaunchKernel(
     }
 }
 
+// #[no_mangle]
+// pub extern "C" fn __cudaPushCallConfiguration(
+//     gridDim: Qdim3,
+//     blockDim: Qdim3,
+//     sharedMem: usize,
+//     stream: u64,
+// ) -> usize {
+//     println!("Hijacked __cudaPushCallConfiguration");
+//     let info = LaunchKernelInfo {
+//         func: 0,
+//         gridDim: gridDim,
+//         blockDim: blockDim,
+//         args: 0,
+//         sharedMem: sharedMem,
+//         stream: stream,
+//     };
+//     return unsafe {
+//         syscall2(SYS_PROXY, ProxyCommand::CudaPushCallConfiguration as usize, &info as *const _ as usize)
+//     };
+// }
+
+// #[no_mangle]
+// pub extern "C" fn __cudaPopCallConfiguration(
+//     gridDim: u64,
+//     blockDim: u64,
+//     sharedMem: u64,
+//     stream: u64,
+// ) -> usize {
+//     println!("Hijacked __cudaPopCallConfiguration");
+//     println!("gridDim is {:x}", gridDim);
+//     println!("blockDim is {:x}", blockDim);
+//     println!("sharedMem is {:x}", sharedMem);
+//     println!("stream is {:x}", stream);
+//     let info = PopCallConfigurationInfo {
+//         gridDim: gridDim,
+//         blockDim: blockDim,
+//         sharedMem: sharedMem,
+//         stream: stream,
+//     };
+//     return unsafe {
+//         syscall2(SYS_PROXY, ProxyCommand::CudaPopCallConfiguration as usize, &info as *const _ as usize)
+//     };
+// }
 // #[no_mangle]
 // pub extern "C" fn cudaLaunchCooperativeKernel(
 //     func: u64,
@@ -525,7 +576,7 @@ pub extern "C" fn cudaLaunchKernel(
 pub extern "C" fn cudaMalloc(dev_ptr: *mut *mut c_void, size: usize) -> usize {
     //println!("Hijacked cudaMalloc");
     let ret = unsafe { syscall3(SYS_PROXY,ProxyCommand::CudaMalloc as usize, dev_ptr as *const _ as usize, size)};
-    //unsafe { println!("malloc ptr{:x}, size: {}", *(dev_ptr as *mut _ as *mut u64) as u64, size); }
+    unsafe { println!("malloc ptr{:x}, size: {}", *(dev_ptr as *mut _ as *mut u64) as u64, size); }
     return ret;
 }
 

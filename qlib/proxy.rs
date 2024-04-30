@@ -50,6 +50,9 @@ pub enum ProxyCommand {
     CudaMemcpyAsync,
     CudaFree,
     CudaRegisterFatBinary,
+    CudaRegisterFatBinaryEnd,
+    CudaPushCallConfiguration,
+    CudaPopCallConfiguration,
     CudaUnregisterFatBinary,
     CudaRegisterFunction,
     CudaRegisterVar,
@@ -425,6 +428,15 @@ pub struct LaunchKernelInfo {
 
 #[repr(C)]
 #[derive(Default, Debug, Copy, Clone)]
+pub struct PopCallConfigurationInfo {
+    pub gridDim: u64,
+    pub blockDim: u64,
+    pub sharedMem: u64,
+    pub stream: u64,
+}
+
+#[repr(C)]
+#[derive(Default, Debug, Copy, Clone)]
 pub struct LaunchCooperativeKernelInfo {
     pub func: u64,
     pub gridDim: Qdim3, 
@@ -470,7 +482,7 @@ pub struct RegisterFunctionInfo {
     pub bid:u64, 
     pub bDim:u64, 
     pub gDim:u64, 
-    pub wSize:usize
+    pub wSize:u64
 }
 
 #[repr(C)]

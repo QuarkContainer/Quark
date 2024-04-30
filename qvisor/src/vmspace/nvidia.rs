@@ -28,7 +28,8 @@ use crate::xpu::cuda::*;
 
 use cuda_driver_sys::{CUcontext, CUdevice, CUdeviceptr, CUfunction, CUmodule, CUresult, CUstream, CUstream_st, CUfunction_attribute};
 use cuda_runtime_sys::{cudaDeviceAttr, cudaDeviceProp, cudaError_t, cudaEvent_t, cudaFuncCache, cudaLimit, cudaSharedMemConfig, cudaFuncAttributes,
-    cudaFuncAttribute, cudaDeviceP2PAttr, cudaStreamCaptureStatus, cudaStream_t, cudaStreamCaptureMode, cudaMemoryAdvise, cudaMemAttachGlobal, cudaMemAttachHost};
+    cudaFuncAttribute, cudaDeviceP2PAttr, cudaStreamCaptureStatus, cudaStream_t, cudaStreamCaptureMode, cudaMemoryAdvise, cudaMemAttachGlobal, cudaMemAttachHost,
+    dim3};
 use rcublas_sys::{cublasHandle_t, cublasMath_t, cudaMemLocation, cudaMemLocationType};
 use cuda11_cublasLt_sys::{cublasLtHandle_t, cublasLtMatmulDesc_t, cublasLtMatrixLayout_t, cublasLtMatmulAlgo_t, cublasLtMatmulPreference_t, cublasLtMatmulHeuristicResult_t};
 
@@ -53,6 +54,12 @@ extern "C" {
 
 #[link(name = "cudart")]
 extern "C" {
+    pub fn __cudaRegisterFatBinary(fatCubin: u64) -> *mut *mut c_void; 
+    pub fn __cudaRegisterFunction(fatCubinHandle: u64, hostFun: u64, deviceFun: u64, deviceName: u64, thread_limit: i32, tid: u64, bid: u64, bDim: u64, gDim: u64, wSize: u64) -> u64;
+    pub fn __cudaRegisterFatBinaryEnd(fatCubinHandle: u64);
+    pub fn __cudaPushCallConfiguration(gridDim: Qdim3, blockDim: Qdim3) -> u32;
+    pub fn __cudaPopCallConfiguration(gridDim: u64, blockDim: u64, sharedMem: u64, stream: u64) -> cudaError_t;
+    pub fn cudaLaunchKernel(func: u64, gridDim: Qdim3, blockDim: Qdim3, args: u64, sharedMem: usize, stream: u64) -> cudaError_t;
     pub fn cudaMalloc(devPtr: *mut *mut c_void, size: usize) -> cudaError_t;
     pub fn cudaFree(devPtr: *mut c_void) -> cudaError_t;
     pub fn cudaMemcpy(dst: u64, src: u64, count: u64, kind: u64) -> u32;
@@ -565,12 +572,12 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
             return CudaMemcpyAsync(parameters);
         }
         ProxyCommand::CudaRegisterFatBinary => {
-            //error!("nvidia.rs: cudaRegisterFatBinary");
+            error!("nvidia.rs: cudaRegisterFatBinary222");
             let bytes = unsafe {std::slice::from_raw_parts( parameters.para4 as *const _, parameters.para5 as usize)};
             let ptxlibPath = std::str::from_utf8(bytes).unwrap();
             // todo: use mutex instead of atomic?
             if CUDA_HAS_INIT.fetch_add(1, Ordering::SeqCst) == 0 { //compare_and_swap
-                InitNvidia(containerId, ptxlibPath);
+                //InitNvidia(containerId, ptxlibPath);
             }
           
             let fatElfHeader = unsafe { &*(parameters.para2 as *const u8 as *const FatElfHeader) };
@@ -583,15 +590,44 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
                 }
             }
             
-            let mut module: u64 = 0;
-            let ret = unsafe { cuModuleLoadData(&mut module as *mut _ as u64 as *mut CUmodule, parameters.para2 as *const c_void) };
+            //let ret = unsafe { cuModuleLoadData(&mut module as *mut _ as u64 as *mut CUmodule, parameters.para2 as *const c_void) };
+            let val = unsafe { __cudaRegisterFatBinary(fatElfHeader as *const _ as u64) };
+            error!("ret is {:x}", val as *mut _ as u64);
+            let ret = unsafe { cudaGetLastError() };
             if ret as u32 != 0 {
                 error!("nvidia.rs: error caused by CudaRegisterFatBinary(cuModuleLoadData): {}", ret as u32);
             }
-
+            let module:u64 = val as u64;
             // unsafe{ cudaDeviceSynchronize();}
             MODULES.lock().insert(moduleKey, module);
+
+            unsafe { *(parameters.para3 as *mut u64) = val as u64 };
+            unsafe { error!("parameters.para3 is {:x}", *(parameters.para3 as *mut u64)); }
             // error!("insert module: {:x} -> {:x}", moduleKey, module);
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaRegisterFatBinaryEnd => {
+            error!("nvidia.rs: CudaRegisterFatBinaryEnd");
+            // let moduleKey = parameters.para1;
+
+            // let module = match MODULES.lock().get(&moduleKey) {
+            //     Some(module) => {
+            //         module.clone()
+            //     }
+            //     None => {
+            //         error!("CudaUnregisterFatBinary: no module be found with this fatcubinHandle: {:x}", moduleKey);
+            //         moduleKey.clone()
+            //     }
+            // };
+            error!("value is {:x}", parameters.para1);
+            unsafe { __cudaRegisterFatBinaryEnd(parameters.para1) };
+            let ret = 0;// unsafe { cudaGetLastError() };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by CudaRegisterFatBinaryEnd: {}", ret as u32);
+            }
+
+            // delete the module
+            // MODULES.lock().remove(&moduleKey);
             return Ok(ret as i64);
         }
         ProxyCommand::CudaUnregisterFatBinary => {
@@ -618,43 +654,54 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
             return Ok(ret as i64);
         }
         ProxyCommand::CudaRegisterFunction => {
-            //error!("nvidia.rs: cudaRegisterFunction");
+            error!("nvidia.rs: cudaRegisterFunction");
             let info = unsafe { &*(parameters.para1 as *const u8 as *const RegisterFunctionInfo) };
             let bytes = unsafe { std::slice::from_raw_parts(info.deviceName as *const u8, parameters.para2 as usize) };
             let deviceName = std::str::from_utf8(bytes).unwrap();
 
-            let mut module = match MODULES.lock().get(&info.fatCubinHandle) {
-                Some(module) => {
-                    module.clone()
-                }
-                None => {
-                    error!("CudaRegisterFunction: no module be found with this fatcubinHandle: {:x}", info.fatCubinHandle);
-                    info.fatCubinHandle.clone()
-                }
-            };
+            // let mut module = match MODULES.lock().get(&info.fatCubinHandle) {
+            //     Some(module) => {
+            //         module.clone()
+            //     }
+            //     None => {
+            //         error!("CudaRegisterFunction: no module be found with this fatcubinHandle: {:x}", info.fatCubinHandle);
+            //         info.fatCubinHandle.clone()
+            //     }
+            // };
 
-            let mut hfunc: u64 = 0;
-            let ret = unsafe {
-                // cuda_driver_sys::
-                cuModuleGetFunction(
-                    &mut hfunc as *mut _ as u64 as *mut CUfunction,
-                    *(&mut module as *mut _ as u64 as *mut CUmodule),
-                    CString::new(deviceName).unwrap().clone().as_ptr(),
-                )
-            };
-            if ret as u32 != 0 {
-                error!("nvidia.rs: error caused by CudaRegisterFunction(cuModuleGetFunction): {}", ret as u32);
+            // let mut hfunc: u64 = 0;
+            // let ret = unsafe {
+            //     // cuda_driver_sys::
+            //     cuModuleGetFunction(
+            //         &mut hfunc as *mut _ as u64 as *mut CUfunction,
+            //         *(&mut module as *mut _ as u64 as *mut CUmodule),
+            //         CString::new(deviceName).unwrap().clone().as_ptr(),
+            //     )
+            // };
+
+            // error!("info.fatCubinHandle is {:x}", info.fatCubinHandle);
+            struct uint3 {
+                x: u32, 
+                y: u32,
+                z: u32,
             }
+            let ret = unsafe { __cudaRegisterFunction(info.fatCubinHandle, info.hostFun, CString::new(deviceName).unwrap().clone().as_ptr() as u64, 
+                CString::new(deviceName).unwrap().clone().as_ptr() as u64, -1, 0 as *mut uint3 as *mut _ as u64, 0 as *mut uint3 as *mut _ as u64,
+                  0 as *mut dim3 as *mut _ as u64, 0 as *mut dim3 as *mut _ as u64, 0 as *mut i32 as *mut _ as u64) };
+            // if ret as u32 != 0 {
+            //     error!("nvidia.rs: error caused by CudaRegisterFunction(__cudaRegisterFunction): {}", ret as u32);
+            // }
 
             //unsafe{ cudaDeviceSynchronize(); }
-            FUNCTIONS.lock().insert(info.hostFun, hfunc);
+            // FUNCTIONS.lock().insert(info.hostFun, hfunc);
 
             let kernelInfo = match KERNEL_INFOS.lock().get(&deviceName.to_string()) {
                 Some(kernelInformations) => {
+                    error!("find kernel info");
                     kernelInformations.clone()
                 }
                 None => {
-                    //error!("No kernel infos found with this deviceName : {}", deviceName);
+                    error!("not find kernel info");
                     Arc::new(KernelInfo::default())
                 }
             };
@@ -702,22 +749,63 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
             GLOBALS.lock().insert(info.hostVar, devicePtr);
             return Ok(ret as i64);
         }
-        ProxyCommand::CudaLaunchKernel => {
-            //error!("nvidia.rs: cudaLaunchKernel");
+        ProxyCommand::CudaPushCallConfiguration => {
+            error!("nvidia.rs: CudaPushCallConfiguration");
             let info = unsafe { &*(parameters.para1 as *const u8 as *const LaunchKernelInfo) };
-            let func = match FUNCTIONS.lock().get(&info.func) {
-                Some(func) => {
-                    func.clone()
-                }
-                None => {
-                    //error!("no CUfunction has been found {:x}", info.func);
-                    0
-                }
+            error!("info is {:?}", info);
+            let a = Qdim3 {
+                x: 1,
+                y: 1,
+                z: 1,
             };
+            let ret = unsafe {
+                __cudaPushCallConfiguration(
+                        a,//info.gridDim,
+                        a,
+                    )
+                };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by CudaPushCallConfiguration(__cudaPushCallConfiguration): {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaPopCallConfiguration => {
+            error!("nvidia.rs: CudaPopCallConfiguration");
+            let info = unsafe { &*(parameters.para1 as *const u8 as *const PopCallConfigurationInfo) };
+            error!("info is {:?}", info);
+            let ret = unsafe {
+                __cudaPopCallConfiguration(
+                        info.gridDim,
+                        info.blockDim,
+                        info.sharedMem,
+                        info.stream,
+                    )
+                };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by CudaPopCallConfiguration(CudaPopCallConfiguration): {}", ret as u32);
+            } else {
+                error!("nvidia.rs: ret is: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CudaLaunchKernel => {
+            error!("nvidia.rs: cudaLaunchKernel");
+            let info = unsafe { &*(parameters.para1 as *const u8 as *const LaunchKernelInfo) };
+            // let func = match FUNCTIONS.lock().get(&info.func) {
+            //     Some(func) => {
+            //         func.clone()
+            //     }
+            //     None => {
+            //         //error!("no CUfunction has been found {:x}", info.func);
+            //         0
+            //     }
+            // };
        
             let ret: CUresult = unsafe {
                 cuLaunchKernel(
-                    func as CUfunction,
+                    info.func as CUfunction,
                     info.gridDim.x,
                     info.gridDim.y,
                     info.gridDim.z,
@@ -730,8 +818,19 @@ pub fn NvidiaProxy(cmd: ProxyCommand, parameters: &ProxyParameters, containerId:
                     0 as *mut *mut c_void,
                 )
             };
+            // error!("info is {:?}", info);
+            // let ret = unsafe {
+            //     cudaLaunchKernel(
+            //             info.func,
+            //             info.gridDim,
+            //             info.blockDim,
+            //             info.args,
+            //             info.sharedMem,
+            //             info.stream,
+            //         )
+            //     };
             if ret as u32 != 0 {
-                error!("nvidia.rs: error caused by CudaLaunchKernel(cuLaunchKernel): {}", ret as u32);
+                error!("nvidia.rs: error caused by CudaLaunchKernel(cudaLaunchKernel): {}", ret as u32);
             }
 
             return Ok(ret as i64);

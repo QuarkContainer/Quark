@@ -73,6 +73,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ProxyCommand::CuInit |
         ProxyCommand::NvmlInitWithFlags |
         ProxyCommand::CudaUnregisterFatBinary |
+        ProxyCommand::CudaRegisterFatBinaryEnd |
         ProxyCommand::NvmlInit |
         ProxyCommand::NvmlInitV2 |
         ProxyCommand::NvmlShutdown |
@@ -309,6 +310,9 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
         }
         ProxyCommand::CudaRegisterFatBinary => {
+            let mut module:u64 = 0;
+            parameters.para3 = &mut module as *mut _ as u64;
+
             let data: Vec<u8> = task.CopyInVec(parameters.para2, parameters.para1 as usize)?;
             parameters.para2 = &data[0] as *const _ as u64; 
 
@@ -316,17 +320,26 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             parameters.para4 = &(ptxlibPath.as_bytes()[0]) as * const _ as u64;
             parameters.para5 = ptxlibPath.as_bytes().len() as u64; 
             
+            error!("register fatbin {:?}", module);
             let ret = HostSpace::Proxy(cmd, parameters);
 
+            if ret == 0 {
+                task.CopyOutObj(&module, args.arg3 as u64)?; 
+            }
+            error!("module is {:?}", module);
             return Ok(ret);
         }
         ProxyCommand::CudaRegisterFunction => {
+            error!("registerfunc");
             let mut functionInfo = task.CopyInObj::<RegisterFunctionInfo>(parameters.para1)?;
             // error!("CudaRegisterFunction data {:x?}, parameters {:x?}", functionInfo, parameters);
             let deviceName = CString::ToString(task, functionInfo.deviceName)?;
             functionInfo.deviceName = &(deviceName.as_bytes()[0]) as *const _ as u64;
             parameters.para1 = &functionInfo as *const _ as u64;
             parameters.para2 = deviceName.as_bytes().len() as u64;
+            
+            //parameters.para5 = deviceFun.as_bytes().len() as u64;
+            //error!("hostFun: {:?}, deviceFun: {:?}, deviceName: {:?}", hostFun, deviceFun, deviceName);
             // error!("deviceName {}, data.deviceName {:x}, parameters {:x?}", deviceName, functionInfo.deviceName, parameters);
 
             let mut paramInfo = ParamInfo::default();
@@ -335,6 +348,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let ret = HostSpace::Proxy(cmd, parameters);
             // error!("paramInfo {:x?}", paramInfo);
 
+            error!("paramInfo.paramNum: {}", paramInfo.paramNum);
             let mut params_proxy: Vec<u16>=Vec::new();
             for i in 0..paramInfo.paramNum as usize {
                 params_proxy.push(paramInfo.paramSizes[i]);
@@ -359,10 +373,26 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             return Ok(ret);     
         }
+        ProxyCommand::CudaPushCallConfiguration => {
+            let mut kernelInfo = task.CopyInObj::<LaunchKernelInfo>(parameters.para1)?;
+            parameters.para1 = &kernelInfo as *const _ as u64;
+
+            let ret = HostSpace::Proxy(cmd, parameters);
+
+            return Ok(ret);
+        }
+        ProxyCommand::CudaPopCallConfiguration => {
+            let mut popCallConfigurationInfoInfo = task.CopyInObj::<PopCallConfigurationInfo>(parameters.para1)?;
+            parameters.para1 = &popCallConfigurationInfoInfo as *const _ as u64;
+
+            let ret = HostSpace::Proxy(cmd, parameters);
+
+            return Ok(ret);
+        }
         ProxyCommand::CudaLaunchKernel => {
             let mut kernelInfo = task.CopyInObj::<LaunchKernelInfo>(parameters.para1)?;
             let paramInfo = PARAM_INFOS.lock().get(&kernelInfo.func).unwrap().clone();
-            // error!("LaunchKernelInfo data {:x?}, paramInfo {:x?}, parameters {:x?}", kernelInfo, paramInfo, parameters);
+            error!("LaunchKernelInfo data {:x?}, paramInfo {:x?}", kernelInfo, paramInfo);
 
             let mut paramAddrs:Vec<u64> = task.CopyInVec(kernelInfo.args, paramInfo.len())?;
             let mut paramValues = Vec::new();
