@@ -16,7 +16,6 @@ use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use core::ptr;
-use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
 
 use super::super::super::super::kernel_def::*;

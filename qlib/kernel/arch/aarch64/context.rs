@@ -25,7 +25,8 @@ use arch::__arch::arch_def::*;
 // MAX_ADDR64 is the maximum userspace address. It is TASK_SIZE in Linux
 // for a 64-bit process.
 // ref: linux/latest/source/arch/arm64/include/asm/processor.h
-pub const MAX_ADDR64: u64 = 1 << 48;
+const VA_BITS_4KB_4L_PT: u16 = 48;
+pub const MAX_ADDR64: u64 = 1 << VA_BITS_4KB_4L_PT;
 // MAX_STACK_RAND64 is the maximum randomization to apply to the stack.
 // ref: linux/latest/source/mm/util.c: mmap_base
 const STACK_RND_MASK: u64 = 0x3ffff;

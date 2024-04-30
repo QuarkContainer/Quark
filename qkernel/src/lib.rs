@@ -29,7 +29,6 @@
 #![feature(core_intrinsics)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(panic_info_message)]
-#![feature(map_first_last)]
 #![allow(deprecated)]
 #![recursion_limit = "256"]
 
