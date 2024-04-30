@@ -207,11 +207,11 @@ pub extern "C" fn exception_handler_el1h_sync(ptregs_addr:usize){
     match ec {
         EsrDefs::EC_DATA_ABORT => {
             let far = GetFarEL1();
-            MemAbortKernel(ptregs_addr, esr, far, false);
+            HandleMemAbort(ptregs_addr, esr, far, false, false);
         },
         EsrDefs::EC_INSN_ABORT => {
             let far = GetFarEL1();
-            MemAbortKernel(ptregs_addr, esr, far, true);
+            HandleMemAbort(ptregs_addr, esr, far, true, false);
         },
         _ => {
             debug!("unhandled sync exception from el1: {:#x}\n - ESR_EL1:{:#x}", ec, esr);
@@ -278,11 +278,11 @@ pub extern "C" fn exception_handler_el0_sync(ptregs_addr: usize) {
         },
         EsrDefs::EC_DATA_ABORT_L => {
             let far = GetFarEL1();
-            MemAbortUser(ptregs_addr, esr, far, false);
+            HandleMemAbort(ptregs_addr, esr, far, false, true);
         },
         EsrDefs::EC_INSN_ABORT_L => {
             let far = GetFarEL1();
-            MemAbortUser(ptregs_addr, esr, far, true);
+            HandleMemAbort(ptregs_addr, esr, far, true, true);
         },
         EsrDefs::EC_UNKNOWN => match sysreg::try_emulate_mrs(ctx.pc) {
             sysreg::SysmovResult::ReadSuccess(val, xt) => {
@@ -331,46 +331,19 @@ pub fn GetFaultAccessType(esr:u64, is_exe:bool) -> AccessType{
 
 }
 
-pub fn MemAbortUser(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool){
-    debug!("get {} abort fault from el0",
-           match is_instr {
-               true  => "instruction",
-               false => "data",
-           });
-    let dfsc = esr & EsrDefs::ISS_DFSC_MASK;
-    let access_type = GetFaultAccessType(esr, is_instr);
-    let dfsc_root = dfsc & PageFaultErrorCode::GEN_xxSC_MASK;
-    match dfsc_root {
-        PageFaultErrorCode::GEN_PERMISSION_FAULT |
-        PageFaultErrorCode::GEN_TRANSLATION_FAULT|
-        PageFaultErrorCode::GEN_ACCESS_FLAG_FAULT => {
-            debug!("DFSC/IFSC: 0x{:02x}, FAR: {:#x}, acces-type: {}, isCM: {}",
-                     dfsc, far, access_type.String(), EsrDefs::IsCM(esr));
-            let ptregs_ptr = ptregs_addr as *mut PtRegs;
-            let ptregs = unsafe {
-                &mut *ptregs_ptr
-            };
-            //
-            //TODO: on work
-            //
-            let error_code = PageFaultErrorCode::new(true, esr);
-            PageFaultHandler(ptregs , far, error_code);
-            return;
-        },
-        _ => {
-            // TODO insert proper handler
-            panic!("DFSC/IFSC: 0x{:02x}, FAR: {:#x}, acces-type: {}, isCM: {}",
-                     dfsc, far, access_type.String(), EsrDefs::IsCM(esr));
-        },
-    }
-}
 
-pub fn MemAbortKernel(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool){
-    debug!("get {} abort fault from el1",
-           match is_instr {
-               true  => "instruction",
-               false => "data",
-           });
+pub fn HandleMemAbort(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool, is_user: bool){
+    debug!(
+        "get {} abort fault from {}",
+        match is_instr {
+            true => "instruction",
+            false => "data",
+        },
+        match is_user {
+            true => "el0",
+            false => "el1",
+        }
+    );
     let dfsc = esr & EsrDefs::ISS_DFSC_MASK;
     let access_type = GetFaultAccessType(esr, is_instr);
     let dfsc_root = dfsc & PageFaultErrorCode::GEN_xxSC_MASK;
@@ -384,7 +357,7 @@ pub fn MemAbortKernel(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool){
             let ptregs = unsafe {
                 &mut *ptregs_ptr
             };
-            let error_code = PageFaultErrorCode::new(false, esr);
+            let error_code = PageFaultErrorCode::new(is_user, esr);
             PageFaultHandler(ptregs , far, error_code);
             return;
         },
