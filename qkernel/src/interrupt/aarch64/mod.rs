@@ -405,3 +405,13 @@ pub fn MemAbortKernel(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool){
         },
     }
 }
+
+// A shortcut to return to user(app). Do not use this unless you what you are
+// doing, as it breaks execution flow. also NEVER call this from a EL1 exception
+// handler, which should not return to userspace.
+#[cfg(target_arch="aarch64")]
+pub unsafe fn ReturnToApp(pt: &mut PtRegs) -> !{
+    use crate::qlib::kernel::asm::IRet;
+    let kernelRsp = pt as *const _ as u64;
+    IRet(kernelRsp);
+}
