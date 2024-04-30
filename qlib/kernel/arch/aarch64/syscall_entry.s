@@ -83,5 +83,5 @@ context_swap:
     dsb ish
     isb
     mov     sp, x9
-    str     x4, [x8]
+    str     x2, [x8]
     ret
