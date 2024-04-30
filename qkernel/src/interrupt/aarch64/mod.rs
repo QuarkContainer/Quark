@@ -344,9 +344,8 @@ pub fn MemAbortUser(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool){
         PageFaultErrorCode::GEN_PERMISSION_FAULT |
         PageFaultErrorCode::GEN_TRANSLATION_FAULT|
         PageFaultErrorCode::GEN_ACCESS_FLAG_FAULT => {
-            info!("DFSC/IFSC == {:#X}, FAR == {:#X}, acces-type fault == {}, \
-                  during address translation == {}.", dfsc, far,
-                  access_type.String(), EsrDefs::IsCM(esr));
+            debug!("DFSC/IFSC: 0x{:02x}, FAR: {:#x}, acces-type: {}, isCM: {}",
+                     dfsc, far, access_type.String(), EsrDefs::IsCM(esr));
             let ptregs_ptr = ptregs_addr as *mut PtRegs;
             let ptregs = unsafe {
                 &mut *ptregs_ptr
@@ -360,12 +359,8 @@ pub fn MemAbortUser(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool){
         },
         _ => {
             // TODO insert proper handler
-            panic!("DFSC/IFSC == 0x{:02x}, FAR == {:#x}, acces-type fault = {},\
-                   during address translation: {} ",  dfsc, far, access_type.String(),
-                   match EsrDefs::IsCM(esr) {
-                       true => "Yes",
-                       false => "No",
-                   });
+            panic!("DFSC/IFSC: 0x{:02x}, FAR: {:#x}, acces-type: {}, isCM: {}",
+                     dfsc, far, access_type.String(), EsrDefs::IsCM(esr));
         },
     }
 }
@@ -383,9 +378,8 @@ pub fn MemAbortKernel(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool){
         PageFaultErrorCode::GEN_PERMISSION_FAULT |
         PageFaultErrorCode::GEN_TRANSLATION_FAULT|
         PageFaultErrorCode::GEN_ACCESS_FLAG_FAULT => {
-            info!("DFSC/IFSC == {:#X}, FAR == {:#X}, acces-type fault == {}, \
-                  during address translation == {}.", dfsc, far,
-                  access_type.String(), EsrDefs::IsCM(esr));
+            debug!("DFSC/IFSC: 0x{:02x}, FAR: {:#x}, acces-type: {}, isCM: {}",
+                     dfsc, far, access_type.String(), EsrDefs::IsCM(esr));
             let ptregs_ptr = ptregs_addr as *mut PtRegs;
             let ptregs = unsafe {
                 &mut *ptregs_ptr
@@ -396,12 +390,8 @@ pub fn MemAbortKernel(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool){
         },
         _ => {
             // TODO insert proper handler
-            panic!("DFSC/IFSC == 0x{:02x}, FAR == {:#x}, acces-type fault = {},\
-                   during address translation: {} ",  dfsc, far, access_type.String(),
-                   match EsrDefs::IsCM(esr) {
-                       true => "Yes",
-                       false => "No",
-                   });
+            panic!("DFSC/IFSC: 0x{:02x}, FAR: {:#x}, acces-type: {}, isCM: {}",
+                     dfsc, far, access_type.String(), EsrDefs::IsCM(esr));
         },
     }
 }
