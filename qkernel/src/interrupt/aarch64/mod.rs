@@ -145,6 +145,11 @@ impl EsrDefs{
     pub fn IsWnR(esr:u64) -> bool {
         return (esr & EsrDefs::ESR_WNR) != 0;
     }
+
+    #[inline]
+    pub fn IsWrite(esr: u64) -> bool {
+        return Self::IsWnR(esr) && !Self::IsCM(esr);
+    }
 }
 
 pub fn GetEsrEL1() -> u64 {
@@ -332,9 +337,9 @@ pub fn GetFaultAccessType(esr:u64, is_exe:bool) -> AccessType{
 }
 
 
-pub fn HandleMemAbort(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool, is_user: bool){
+pub fn HandleMemAbort(ptregs_addr: usize, esr: u64, far: u64, is_instr: bool, is_user: bool) {
     debug!(
-        "get {} abort fault from {}",
+        "get {} abort fault from {}, esr: {:#x}",
         match is_instr {
             true => "instruction",
             false => "data",
@@ -342,31 +347,30 @@ pub fn HandleMemAbort(ptregs_addr:usize, esr:u64, far:u64, is_instr:bool, is_use
         match is_user {
             true => "el0",
             false => "el1",
-        }
+        },
+        esr
     );
+    use self::fault::PageFaultErrorCode as PFEC;
     let dfsc = esr & EsrDefs::ISS_DFSC_MASK;
     let access_type = GetFaultAccessType(esr, is_instr);
-    let dfsc_root = dfsc & PageFaultErrorCode::GEN_xxSC_MASK;
-    match dfsc_root {
-        PageFaultErrorCode::GEN_PERMISSION_FAULT |
-        PageFaultErrorCode::GEN_TRANSLATION_FAULT|
-        PageFaultErrorCode::GEN_ACCESS_FLAG_FAULT => {
-            debug!("DFSC/IFSC: 0x{:02x}, FAR: {:#x}, acces-type: {}, isCM: {}",
-                     dfsc, far, access_type.String(), EsrDefs::IsCM(esr));
-            let ptregs_ptr = ptregs_addr as *mut PtRegs;
-            let ptregs = unsafe {
-                &mut *ptregs_ptr
-            };
-            let error_code = PageFaultErrorCode::new(is_user, esr);
-            PageFaultHandler(ptregs , far, error_code);
-            return;
-        },
-        _ => {
-            // TODO insert proper handler
-            panic!("DFSC/IFSC: 0x{:02x}, FAR: {:#x}, acces-type: {}, isCM: {}",
-                     dfsc, far, access_type.String(), EsrDefs::IsCM(esr));
-        },
+    let error_code = PFEC::new(is_user, is_instr, esr);
+    debug!("Page Fault, type: {:?}", error_code);
+    // early panic on faults that won't be handled
+    // TODO kill user instead of panic
+    // actually, this function should do no more than preparing parameters for
+    // the actual handler. if we decide to kill or panic, do it there, not here
+    if !error_code
+        .get_type()
+        .intersects(PFEC::PROTECTION_VIOLATION | PFEC::TRANSLATION | PFEC::ACCESS_FLAG)
+    {
+        panic!("DFSC/IFSC: 0x{:02x}, FAR: {:#x}, acces-type: {}, isCM: {}, No handler!",
+               dfsc, far, access_type.String(), EsrDefs::IsCM(esr));
     }
+    debug!("DFSC/IFSC: 0x{:02x}, FAR: {:#x}, acces-type: {}, isCM: {}",
+           dfsc, far, access_type.String(), EsrDefs::IsCM(esr));
+    let ptregs = unsafe { &mut *(ptregs_addr as * mut PtRegs) };
+    PageFaultHandler(ptregs, far, error_code);
+    return;
 }
 
 // A shortcut to return to user(app). Do not use this unless you what you are
