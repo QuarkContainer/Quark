@@ -23,7 +23,7 @@ use crate::qlib::vcpu_mgr::{CPULocal, VcpuMode};
 use crate::qlib::kernel::{task::Task, threadmgr::task_sched::SchedState,
                           asm::aarch64::{CurrentUserTable},
                           SignalDef::{PtRegs, SignalInfo}};
-use crate::interrupt::aarch64::{EsrDefs, GetFaultAccessType};
+use crate::interrupt::aarch64::{EsrDefs, GetFaultAccessType, ReturnToApp};
 use crate::qlib::addr::{Addr, AccessType};
 use crate::qlib::linux_def::MemoryDef;
 use crate::qlib::linux_def::{MmapProt, Signal};
@@ -126,14 +126,6 @@ impl PageFaultErrorCode {
     }
 }
 
-//
-// TODO fix for arm (perhaps)
-//
-pub fn ReturnToApp(pt: &mut PtRegs) -> ! {
-    let kernelRsp = pt as *const _ as u64;
-    todo!("VM: PF-handled - ReturnToApp is not implemented");
-    // IRet(kernelRsp);
-}
 
 pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
                         error_code: PageFaultErrorCode) {
@@ -412,5 +404,7 @@ pub fn HandleFault(
         task.mm.HandleTlbShootdown();
     }
 
-    ReturnToApp(sf);
+    unsafe{
+        ReturnToApp(sf);
+    }
 }
