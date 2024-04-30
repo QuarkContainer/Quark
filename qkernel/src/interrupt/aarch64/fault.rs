@@ -14,7 +14,7 @@
 
 //use crate::qlib::kernel::TSC;
 //use crate::qlib::singleton::*;
-
+#![allow(unused_imports)]
 use core::fmt;
 use core::fmt::{LowerHex, Formatter};
 
@@ -60,6 +60,7 @@ impl PageFaultErrorCode {
     // NOTE: Maybe not correct place to have them,
     //       still better than magic numbers.
     //
+    #[allow(non_upper_case_globals)]
     pub const GEN_xxSC_MASK: u64 = 0x3c; // Ignore the ll-bits
     pub const GEN_ADDRESS_SIZE_FAULT: u64 = 0x0;
     pub const GEN_TRANSLATION_FAULT:  u64 = 0x4;

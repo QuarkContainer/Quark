@@ -14,8 +14,8 @@
 
 //use super::super::perf_tunning::*;
 
+#![allow(non_upper_case_globals)]
 use core::arch::asm;
-use core::sync::atomic::Ordering;
 
 use bitflags::bitflags;
 
@@ -163,7 +163,8 @@ pub fn GetCurrentUserSp() -> u64 {
 
 // HostID executes a native CPUID instruction.
 // return (ax, bx, cx, dx)
-pub fn AsmHostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
+pub fn AsmHostID(_axArg: u32, _cxArg: u32) -> (u32, u32, u32, u32) {
+    // TODO implement or deprecate for aarch64
     return (0, 0, 0, 0);
 }
 

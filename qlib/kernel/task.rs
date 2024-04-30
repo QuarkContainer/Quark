@@ -20,7 +20,6 @@ use core::mem;
 use core::ops::Deref;
 use core::ptr;
 use core::sync::atomic::Ordering;
-use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
 
 use super::arch::__arch::arch_def::ArchFPState;
