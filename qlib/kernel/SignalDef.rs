@@ -856,7 +856,8 @@ pub struct SignalStruct {
     trapStopPending: bool,
 }
 
-// https://elixir.bootlin.com/linux/latest/source/arch/x86/include/uapi/asm/signal.h#L132
+// Based on linux's 'struct signalstack' in signal.h
+// Same for both x86_64 and Arm
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct SignalStack {
