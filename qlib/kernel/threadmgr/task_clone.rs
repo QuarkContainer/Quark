@@ -647,46 +647,53 @@ impl Task {
 
         return Ok(());
     }
-}
 
-pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
-    let mut from = fromTask.GetKernelSp();
-    let fromSp = fromTask.GetPtRegs() as *const _ as u64;
+    pub fn copy_PtRegs_to_child(&self, clone_task: &mut Task, user_sp: u64) {
+        let parent_context = self.GetPtRegs() as *const _ as *const u64;
+        let child_context = clone_task.GetPtRegs() as *mut _ as *mut u64;
+        let context_size = core::mem::size_of::<PtRegs>();
 
-    let mut to = toTask.GetKernelSp();
-    let toPtRegs = toTask.GetPtRegs();
-
-    unsafe {
-        while from >= fromSp {
-            *(to as *mut u64) = *(from as *const u64);
-            from -= 8;
-            to -= 8;
+        unsafe {
+            core::ptr::copy_nonoverlapping(parent_context, child_context, context_size);
         }
+        clone_task.GetPtRegs().set_stack_pointer(user_sp);
+    }
 
-        toTask.SetReady(1);
-        toTask.context.set_tls(fromTask.context.get_tls());
-        // TODO, what is this?
-        toTask.context.set_sp(toTask.GetPtRegs() as *const _ as u64 - 8);
-        toTask.context.set_para(userSp);
-        toTask.savefpsate = true;
-        toTask.archfpstate = Some(Box::new(
-            fromTask.archfpstate.as_ref().unwrap().Fork(),
-        ));
+    pub fn prepare_clone_entry(&mut self, entry_argument: u64) {
+        let entry_address = child_clone as u64;
+        let pid = 0;
+
+        self.context.set_para(entry_argument);
+        //
         // 1. set sys_clone return value to 0 to indicate child.
         // 2. set child pc (return addr of current call frame)
         //      to child_clone function
         #[cfg(target_arch = "x86_64")]
         {
-            toPtRegs.rax = 0;
-            toTask.context.place_on_stack(child_clone as u64);
+            self.GetPtRegs().rax = pid;
+            self.context.place_on_stack(entry_address);
         }
         #[cfg(target_arch = "aarch64")]
         {
-            toPtRegs.regs[0] = 0;
-            toTask.context.set_pc(child_clone as u64);
+            self.GetPtRegs().regs[0] = pid;
+            self.context.set_pc(entry_address);
         }
-        toPtRegs.set_stack_pointer(userSp);
     }
+}
+
+pub fn CreateCloneTask(from_task: &Task, to_task: &mut Task, user_sp: u64) {
+        from_task.copy_PtRegs_to_child(to_task, user_sp);
+        to_task.savefpsate = true;
+        to_task.archfpstate = Some(Box::new(
+            from_task.archfpstate.as_ref().unwrap().Fork(),
+        ));
+
+        let kernel_stack_top = to_task.GetPtRegs() as *const _ as u64 - 8;
+        to_task.context.set_sp(kernel_stack_top);
+
+        to_task.context.set_tls(from_task.context.get_tls());
+        to_task.prepare_clone_entry(user_sp);
+        to_task.SetReady(1);
 }
 
 pub struct VforkStop {}

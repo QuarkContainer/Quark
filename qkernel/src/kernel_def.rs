@@ -401,18 +401,17 @@ pub fn child_clone(userSp: u64) {
     CPULocal::SetKernelStack(currTask.GetKernelSp());
 
     currTask.AccountTaskEnter(SchedState::RunningApp);
-    let pt = currTask.GetPtRegs();
 
-    let kernelRsp = pt as *const _ as u64;
+    let pt_regs_top = currTask.GetPtRegs() as *const _ as u64;
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
     //currTask.mm.VcpuEnter();
     CPULocal::Myself().SetMode(VcpuMode::User);
     currTask.mm.HandleTlbShootdown();
-    debug!("entering child task: kernelSp/PtRegs @ {:x}", kernelRsp);
+    debug!("entering child task: kernelSp => PtRegs @ {:x}", pt_regs_top);
     #[cfg(target_arch = "x86_64")]
-    SyscallRet(kernelRsp);
+    SyscallRet(pt_regs_top);
     #[cfg(target_arch = "aarch64")]
-    IRet(kernelRsp);
+    IRet(pt_regs_top);
 }
 
 extern "C" {
