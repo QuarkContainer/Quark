@@ -148,10 +148,8 @@ impl TimerStoreIntern {
                 }
                 None => break,
             }
-
             now = MONOTONIC_CLOCK.Now().0;
         }
-
         if self.nextExpire == 0 {
             return -1;
         }

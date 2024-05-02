@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::GuestHostSharedAllocator;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use alloc::sync::Arc;
 use core::ops::Deref;
 use core::sync::atomic::AtomicBool;
@@ -28,13 +30,22 @@ use super::timer::Clock;
 use super::timer::*;
 use super::*;
 
-#[derive(Clone, Default)]
-pub struct TimeKeeper(Arc<QRwLock<TimeKeeperInternal>>);
+#[derive(Clone)]
+pub struct TimeKeeper(Arc<QRwLock<TimeKeeperInternal>, GuestHostSharedAllocator>);
+
+impl Default for TimeKeeper {
+    fn default() -> Self {
+        return TimeKeeper(Arc::new_in(
+            QRwLock::new(TimeKeeperInternal::default()),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
+    }
+}
 
 impl Deref for TimeKeeper {
-    type Target = Arc<QRwLock<TimeKeeperInternal>>;
+    type Target = Arc<QRwLock<TimeKeeperInternal>, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<QRwLock<TimeKeeperInternal>> {
+    fn deref(&self) -> &Arc<QRwLock<TimeKeeperInternal>, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -68,7 +79,7 @@ impl TimeKeeper {
             c: clockId,
         };
 
-        let clock = Clock::TimeKeeperClock(Arc::new(c));
+        let clock = Clock::TimeKeeperClock(Arc::new_in(c,GUEST_HOST_SHARED_ALLOCATOR));
         return clock;
     }
 
@@ -155,10 +166,8 @@ impl TimeKeeperInternal {
         //PerfPrint();
         //super::super::super::perflog::THREAD_COUNTS.lock().Print(true);
         //super::super::super::AllocatorPrint();
-
         assert!(self.inited.load(Ordering::Relaxed), "TimeKeeper not inited");
         let (monotonicParams, monotonicOk, realtimeParams, realtimeOk) = self.clocks.Update();
-
         let mut p = VdsoParams::default();
         if monotonicOk {
             p.monotonicReady = 1;

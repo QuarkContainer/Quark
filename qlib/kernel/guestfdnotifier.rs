@@ -85,7 +85,6 @@ impl IOMgr {
 
     pub fn SetWaitInfo(&self, fd: i32, queue: Queue) {
         let waitinfo = FdWaitInfo::New(queue, 0);
-
         let fdInfo = match self.GetByHost(fd) {
             Some(info) => info,
             None => {
@@ -102,7 +101,6 @@ impl IOMgr {
             None => return,
             Some(fi) => fi,
         };
-
         fi.Notify(mask);
     }
 }
