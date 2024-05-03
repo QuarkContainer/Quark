@@ -21,6 +21,10 @@ use std::sync::Mutex;
 use crate::common::*;
 use crate::metastore::data_obj::*;
 
+pub const FUNCPOD_TYPE: &str = "funcpod_type.qservice.io";
+pub const FUNCPOD_FUNCNAME: &str = "fun_name.qservice.io";
+pub const FUNCPOD_PROMPT: &str = "prompt";
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct FuncPackageId {
     pub namespace: String,

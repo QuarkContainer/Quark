@@ -33,11 +33,9 @@ use qshare::obj_mgr::pod_mgr::PodMgr;
 #[derive(Debug)]
 pub struct ObjRepoInner {
     pub funcPackageMgr: FuncPackageMgr,
-    pub namespaceMgr: NamespaceMgr,
     pub podMgr: PodMgr,
 
     pub factory: InformerFactory,
-    pub namespaceInformer: Informer,
     pub funcPackageInformer: Informer,
 }
 
@@ -56,12 +54,6 @@ impl ObjRepo {
     pub async fn New(addresses: Vec<String>) -> Result<Self> {
         let factory = InformerFactory::New(addresses, "", "").await?;
 
-        // namespaceSpec
-        factory
-            .AddInformer(NamespaceSpec::KEY, &ListOption::default())
-            .await?;
-        let namespaceInformer = factory.GetInformer(NamespaceSpec::KEY).await?;
-
         // funcpackageSpec
         factory
             .AddInformer(FuncPackageSpec::KEY, &ListOption::default())
@@ -74,17 +66,12 @@ impl ObjRepo {
 
         let inner = ObjRepoInner {
             funcPackageMgr: FuncPackageMgr::default(),
-            namespaceMgr: NamespaceMgr::default(),
             podMgr: PodMgr::default(),
             factory: factory,
-            namespaceInformer: namespaceInformer.clone(),
             funcPackageInformer: funcPackageInformer.clone(),
         };
 
         let mgr = Self(Arc::new(inner));
-        let _id1 = namespaceInformer
-            .AddEventHandler(Arc::new(mgr.clone()))
-            .await?;
         let _id2 = funcPackageInformer
             .AddEventHandler(Arc::new(mgr.clone()))
             .await?;
@@ -93,9 +80,6 @@ impl ObjRepo {
         tokio::spawn(async move {
             // todo: handle statesvc crash
             tokio::select! {
-                _ = namespaceInformer.Process(notify.clone()) => {
-
-                }
                 _ = funcPackageInformer.Process(notify.clone()) => {
 
                 }
@@ -107,18 +91,7 @@ impl ObjRepo {
         return Ok(mgr);
     }
 
-    pub fn ContainsNamespace(&self, tenant: &str, namespace: &str) -> bool {
-        return self.namespaceMgr.Contains(tenant, namespace);
-    }
-
     pub fn ContainsFuncPackage(&self, tenant: &str, namespace: &str, name: &str) -> Result<bool> {
-        if !self.ContainsNamespace(tenant, namespace) {
-            return Err(Error::NotExist(format!(
-                "ContainersFuncPackage has no namespace {}/{}",
-                tenant, namespace
-            )));
-        }
-
         let key = format!("{}/{}/{}", tenant, namespace, name);
         return Ok(self.funcPackageMgr.ContainsFuncPackage(&key));
     }
@@ -166,10 +139,6 @@ impl ObjRepo {
                     let spec = FuncPackageSpec::FromDataObject(obj)?;
                     self.AddFuncPackage(spec)?;
                 }
-                NamespaceSpec::KEY => {
-                    let spec: NamespaceSpec = NamespaceSpec::FromDataObject(obj)?;
-                    self.namespaceMgr.Add(spec)?;
-                }
                 PodDef::KEY => {
                     let podDef = PodDef::FromDataObject(obj)?;
                     self.podMgr.Add(podDef)?;
@@ -185,10 +154,6 @@ impl ObjRepo {
                 FuncPackageSpec::KEY => {
                     let spec = FuncPackageSpec::FromDataObject(obj)?;
                     self.UpdateFuncPackage(spec)?;
-                }
-                NamespaceSpec::KEY => {
-                    let spec: NamespaceSpec = NamespaceSpec::FromDataObject(obj)?;
-                    self.namespaceMgr.Update(spec)?;
                 }
                 PodDef::KEY => {
                     let podDef = PodDef::FromDataObject(obj)?;

@@ -18,9 +18,20 @@
 #![allow(non_upper_case_globals)]
 #![allow(deprecated)]
 
+#[macro_use]
+extern crate log;
+extern crate simple_logging;
+
+use once_cell::sync::OnceCell;
+
 use qshare::common::*;
 
 pub mod obj_repo;
+pub mod pod_handler;
+
+use obj_repo::ObjRepo;
+
+pub static OBJ_REPO: OnceCell<ObjRepo> = OnceCell::new();
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -29,6 +40,10 @@ async fn main() -> Result<()> {
         Default::default(),
     )
     .unwrap();
+
+    OBJ_REPO
+        .set(ObjRepo::New(vec!["http://127.0.0.1:8890".to_owned()]).await?)
+        .unwrap();
 
     return Ok(());
 }
