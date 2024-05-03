@@ -33,9 +33,6 @@ use crate::func_worker::FUNCAGENT_MGR;
 use crate::NAMESPACE_STORE;
 use crate::OBJ_REPO;
 
-pub const FUNCPOD_TYPE: &str = "funcpod_type.qservice.io";
-pub const FUNCPOD_FUNCNAME: &str = "fun_name.qservice.io";
-pub const FUNCPOD_PROMPT: &str = "prompt";
 
 pub struct HttpGateway {}
 

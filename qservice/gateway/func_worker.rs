@@ -33,8 +33,8 @@ use hyper_util::rt::TokioIo;
 use qshare::common::*;
 use qshare::na::{self, Env, Kv};
 
-use crate::{PromptReq, FUNCPOD_FUNCNAME, FUNCPOD_PROMPT, FUNCPOD_TYPE, TSOT_CLIENT};
-use qshare::obj_mgr::func_mgr::FuncPackage;
+use crate::{PromptReq, TSOT_CLIENT};
+use qshare::obj_mgr::func_mgr::*;
 
 lazy_static::lazy_static! {
     pub static ref FUNCAGENT_MGR: FuncAgentMgr = FuncAgentMgr::default();
