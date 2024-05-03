@@ -114,20 +114,22 @@ pub struct CreateFuncPodReq {
     #[prost(string, tag = "2")]
     pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub name: ::prost::alloc::string::String,
+    pub funcname: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
     pub image: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "5")]
-    pub labels: ::prost::alloc::vec::Vec<Kv>,
     #[prost(message, repeated, tag = "6")]
+    pub labels: ::prost::alloc::vec::Vec<Kv>,
+    #[prost(message, repeated, tag = "7")]
     pub annotations: ::prost::alloc::vec::Vec<Kv>,
-    #[prost(string, repeated, tag = "7")]
+    #[prost(string, repeated, tag = "8")]
     pub commands: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(message, repeated, tag = "8")]
-    pub envs: ::prost::alloc::vec::Vec<Env>,
     #[prost(message, repeated, tag = "9")]
-    pub mounts: ::prost::alloc::vec::Vec<Mount>,
+    pub envs: ::prost::alloc::vec::Vec<Env>,
     #[prost(message, repeated, tag = "10")]
+    pub mounts: ::prost::alloc::vec::Vec<Mount>,
+    #[prost(message, repeated, tag = "11")]
     pub ports: ::prost::alloc::vec::Vec<ContainerPort>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -230,7 +232,7 @@ pub struct ReadFuncLogReq {
     #[prost(string, tag = "1")]
     pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub func_name: ::prost::alloc::string::String,
+    pub funcname: ::prost::alloc::string::String,
     #[prost(uint64, tag = "3")]
     pub offset: u64,
     #[prost(uint32, tag = "4")]
@@ -290,7 +292,9 @@ pub struct TerminatePodReq {
     #[prost(string, tag = "2")]
     pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub name: ::prost::alloc::string::String,
+    pub funcname: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -308,9 +312,11 @@ pub struct HibernatePodReq {
     #[prost(string, tag = "2")]
     pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub name: ::prost::alloc::string::String,
+    pub funcname: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub id: ::prost::alloc::string::String,
     /// 1: GPU 2: Disk
-    #[prost(uint32, tag = "4")]
+    #[prost(uint32, tag = "5")]
     pub hibernate_type: u32,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -329,9 +335,11 @@ pub struct WakeupPodReq {
     #[prost(string, tag = "2")]
     pub namespace: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub name: ::prost::alloc::string::String,
+    pub funcname: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub id: ::prost::alloc::string::String,
     /// 1: GPU 2: Disk
-    #[prost(uint32, tag = "4")]
+    #[prost(uint32, tag = "5")]
     pub hibernate_type: u32,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -347,10 +355,12 @@ pub struct WakeupPodResp {
 pub struct GetPodReq {
     #[prost(string, tag = "1")]
     pub tenant: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag = "2")]
     pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub funcname: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
-    pub name: ::prost::alloc::string::String,
+    pub id: ::prost::alloc::string::String,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

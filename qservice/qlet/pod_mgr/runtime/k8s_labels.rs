@@ -80,7 +80,7 @@ pub fn NewPodAnnotations(pod: &PodDef) -> HashMap<String, String> {
 
 pub fn NewPodLabels(pod: &PodDef) -> HashMap<String, String> {
     let mut labels = HashMap::new();
-    labels.insert(KUBERNETES_POD_NAME_LABEL.to_string(), pod.name.clone());
+    labels.insert(KUBERNETES_POD_NAME_LABEL.to_string(), pod.PodName());
     labels.insert(
         KUBERNETES_POD_NAMESPACE_LABEL.to_string(),
         pod.namespace.clone(),
@@ -114,12 +114,12 @@ pub fn NewContainerLabels(
 ) -> HashMap<String, String> {
     let pod = &pod.read().unwrap();
     let mut labels = HashMap::new();
-    labels.insert(KUBERNETES_POD_NAME_LABEL.to_string(), pod.name.clone());
+    labels.insert(KUBERNETES_POD_NAME_LABEL.to_string(), pod.PodName());
     labels.insert(
         KUBERNETES_POD_NAMESPACE_LABEL.to_string(),
         pod.namespace.clone(),
     );
-    labels.insert(KUBERNETES_POD_UIDLABEL.to_string(), pod.name.clone());
+    labels.insert(KUBERNETES_POD_UIDLABEL.to_string(), pod.PodName());
     labels.insert(
         KUBERNETES_CONTAINER_NAME_LABEL.to_string(),
         container.name.clone(),

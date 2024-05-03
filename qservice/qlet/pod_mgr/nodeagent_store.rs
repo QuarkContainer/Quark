@@ -264,7 +264,7 @@ impl NodeAgentStoreInner {
     }
 
     pub fn CreatePod(&mut self, obj: &QuarkPod) -> Result<()> {
-        let key = obj.lock().unwrap().id.clone();
+        let key = obj.lock().unwrap().key.clone();
 
         self.revision += 1;
         obj.Pod().write().unwrap().resource_version = self.revision.to_string();
@@ -296,7 +296,7 @@ impl NodeAgentStoreInner {
     }
 
     pub fn UpdatePod(&mut self, obj: &QuarkPod) -> Result<()> {
-        let key = obj.lock().unwrap().id.clone();
+        let key = obj.lock().unwrap().key.clone();
         self.revision += 1;
         obj.Pod().write().unwrap().resource_version = self.revision.to_string();
         let jsonObj = obj.ToQuarkPodJson();

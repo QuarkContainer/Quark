@@ -83,14 +83,15 @@ message KV {
 message CreateFuncPodReq {
   string tenant = 1;
   string namespace = 2;
-  string name = 3;
-  string image = 4;
-  repeated KV labels = 5;
-  repeated KV annotations = 6;
-  repeated string commands = 7;
-  repeated Env envs = 8;
-  repeated Mount mounts = 9;
-  repeated ContainerPort ports = 10;
+  string funcname = 3;
+  string id = 4;
+  string image = 5;
+  repeated KV labels = 6;
+  repeated KV annotations = 7;
+  repeated string commands = 8;
+  repeated Env envs = 9;
+  repeated Mount mounts = 10;
+  repeated ContainerPort ports = 11;
 }
 
 message CreateFuncPodResp {
@@ -142,7 +143,7 @@ message CreateFuncServiceResp {
 
 message ReadFuncLogReq {
   string namespace = 1;
-  string funcName = 2;
+  string funcname = 2;
   uint64 offset = 3;
   uint32 len = 4;
 }
@@ -176,7 +177,8 @@ message CreatePodResp {
 message TerminatePodReq {
   string tenant = 1;
   string namespace = 2;
-  string name = 3;
+  string funcname = 3;
+  string id = 4;
 }
 
 message TerminatePodResp {
@@ -186,8 +188,9 @@ message TerminatePodResp {
 message HibernatePodReq {
   string tenant = 1;
   string namespace = 2;
-  string name = 3;
-  uint32 hibernateType = 4; // 1: GPU 2: Disk
+  string funcname = 3;
+  string id = 4;
+  uint32 hibernateType = 5; // 1: GPU 2: Disk
 }
 
 message HibernatePodResp {
@@ -197,8 +200,9 @@ message HibernatePodResp {
 message WakeupPodReq {
   string tenant = 1;
   string namespace = 2;
-  string name = 3;
-  uint32 hibernateType = 4; // 1: GPU 2: Disk
+  string funcname = 3;
+  string id = 4;
+  uint32 hibernateType = 5; // 1: GPU 2: Disk
 }
 
 message WakeupPodResp {
@@ -207,8 +211,9 @@ message WakeupPodResp {
 
 message GetPodReq {
   string tenant = 1;
-  string namespace = 3;
-  string name = 4;
+  string namespace = 2;
+  string funcname = 3;
+  string id = 4;
 }
 
 message GetPodResp {

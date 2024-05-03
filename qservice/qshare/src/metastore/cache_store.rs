@@ -481,11 +481,9 @@ impl CacheStoreInner {
     ) -> Result<Vec<WatchCacheEvent>> {
         let size = self.cache.Size();
 
-        error!("GetAllEvents 1 {}/{}", revision, self.listRevision);
         let oldest = if self.listRevision >= 0 && self.cache.tail == 0 {
             // If no event was removed from the buffer since last relist, the oldest watch
             // event we can deliver is one greater than the resource version of the list.
-            error!("GetAllEvents 2");
             self.listRevision + 1
         } else if size > 0 {
             self.cache.buf[self.cache.OldestIdx()]
@@ -516,7 +514,6 @@ impl CacheStoreInner {
             )));
         }
 
-        error!("GetAllEvents 3");
         return self.cache.GetAllEvents(revision, pred);
     }
 

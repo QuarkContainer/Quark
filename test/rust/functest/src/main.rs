@@ -28,6 +28,6 @@ async fn post_func_call(
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct PromptReq {
     pub namespace: String,
-    pub func: String,
+    pub funcname: String,
     pub prompt: String,
 }

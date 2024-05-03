@@ -77,8 +77,9 @@ impl PodBrokerMgr {
         match self.read().unwrap().brokersByName.get(name) {
             None => {
                 return Err(Error::NotExist(format!(
-                    "PodBrokerMgr::GetBrokerByName fail with addr {:?}",
-                    name
+                    "PodBrokerMgr::GetBrokerByName fail with addr {:?}/{:#?}",
+                    name,
+                    self.read().unwrap().brokersByName.keys()
                 )))
             }
             Some(b) => return Ok(b.clone()),
@@ -161,8 +162,8 @@ impl PodBrokerMgrs {
         return Ok(());
     }
 
-    pub fn HandlePodWakeup(&self, namespace: &str, name: &str) -> Result<()> {
-        let broker = self.GetBrokerByName(namespace, name)?;
+    pub fn HandlePodWakeup(&self, namespace: &str, key: &str) -> Result<()> {
+        let broker = self.GetBrokerByName(namespace, key)?;
         broker.HandlePodWalkup()?;
 
         return Ok(());

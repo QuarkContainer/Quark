@@ -278,7 +278,7 @@ impl PodAgent {
                         match self.PodHandler(msg).await {
                             Ok(()) => (),
                             Err(e) => {
-                                error!("PodHandler get failure {:?}", e);
+                                error!("PodHandler get failure {:#?}", e);
                             }
                         }
                     } else {
@@ -779,7 +779,7 @@ impl PodAgent {
         let podUID = pod.uid.clone();
         let mut podSandboxConfig = crictl::PodSandboxConfig {
             metadata: Some(crictl::PodSandboxMetadata {
-                name: pod.name.clone(),
+                name: pod.PodName(), 
                 namespace: pod.PodNamespace().clone(),
                 uid: podUID,
                 ..Default::default()
@@ -798,8 +798,12 @@ impl PodAgent {
             podSandboxConfig.hostname = pod.host_name.clone();
         }
 
-        podSandboxConfig.log_directory =
-            GetPodLogDir(DefaultPodLogsRootPath, &pod.namespace, &pod.name, &pod.uid);
+        podSandboxConfig.log_directory = GetPodLogDir(
+            DefaultPodLogsRootPath,
+            &pod.namespace,
+            &pod.PodName(),
+            &pod.uid,
+        );
 
         let mut podMapping = Vec::new();
         for c in &pod.containers {
@@ -1011,7 +1015,7 @@ pub const DEFAULT_POD_LOGS_ROOT_PATH: &str = "/var/log/pods";
 
 pub fn BuildContainerLogsDirectory(pod: &PodDef, containerName: &str) -> Result<String> {
     let namespace = &pod.namespace;
-    let name = &pod.name;
+    let name = &pod.PodName();
     let uid = &pod.uid;
 
     let podPath = Path::new(DEFAULT_POD_LOGS_ROOT_PATH)

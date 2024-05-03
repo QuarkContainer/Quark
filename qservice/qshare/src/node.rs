@@ -305,7 +305,8 @@ pub struct FuncServiceInstance {}
 pub struct PodDef {
     pub tenant: String,
     pub namespace: String,
-    pub name: String,
+    pub funcname: String,
+    pub id: String,
     pub uid: String,
     pub resource_version: String,
     pub labels: BTreeMap<String, String>,
@@ -334,8 +335,15 @@ pub struct PodDef {
 impl PodDef {
     pub const KEY: &'static str = "pod";
 
-    pub fn PodId(&self) -> String {
-        return format!("{}/{}/{}", &self.tenant, &self.namespace, &self.name);
+    pub fn PodKey(&self) -> String {
+        return format!(
+            "{}/{}/{}/{}",
+            &self.tenant, &self.namespace, &self.funcname, &self.id
+        );
+    }
+
+    pub fn PodName(&self) -> String {
+        return format!("{}_{}", &self.funcname, &self.id);
     }
 
     pub fn PodNamespace(&self) -> String {
@@ -350,7 +358,7 @@ impl PodDef {
         let spec = match serde_json::from_str::<Self>(&obj.data) {
             Err(e) => {
                 return Err(Error::CommonError(format!(
-                    "FuncPackageSpec::FromDataObject {:?}",
+                    "PodDef::FromDataObject {:?}",
                     e
                 )))
             }
@@ -364,7 +372,7 @@ impl PodDef {
             kind: Self::KEY.to_owned(),
             tenant: self.tenant.clone(),
             namespace: self.namespace.clone(),
-            name: self.name.clone(),
+            name: format!("{}/{}", &self.funcname, &self.id),
             data: serde_json::to_string_pretty(&self).unwrap(),
             ..Default::default()
         };

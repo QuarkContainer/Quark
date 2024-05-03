@@ -36,7 +36,7 @@ pub struct FuncPackageSpec {
     #[serde(default)]
     pub tenant: String,
     pub namespace: String,
-    pub name: String,
+    pub funcname: String,
     pub revision: i64,
 
     pub image: String,
@@ -68,7 +68,7 @@ impl FuncPackageSpec {
             kind: Self::KEY.to_owned(),
             tenant: self.tenant.clone(),
             namespace: self.namespace.clone(),
-            name: self.name.clone(),
+            name: self.funcname.clone(),
             data: serde_json::to_string_pretty(&self).unwrap(),
             ..Default::default()
         };
@@ -81,7 +81,7 @@ impl FuncPackageSpec {
     }
 
     pub fn Key(&self) -> String {
-        return format!("{}/{}/{}", &self.tenant, &self.namespace, &self.name);
+        return format!("{}/{}/{}", &self.tenant, &self.namespace, &self.funcname);
     }
 }
 

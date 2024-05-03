@@ -1,4 +1,4 @@
-all: na ss cni test gw sched
+all: na ss cni gw sched
 
 na: 
 	cargo +nightly-x86_64-unknown-linux-gnu build --bin na

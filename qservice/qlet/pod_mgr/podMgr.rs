@@ -78,7 +78,8 @@ impl PodMgr {
         let mut pod = PodDef {
             tenant: req.tenant.to_owned(),
             namespace: req.namespace.to_owned(),
-            name: req.name.to_owned(),
+            funcname: req.funcname.to_owned(),
+            id: req.id.to_owned(),
             uid: uuid::Uuid::new_v4().to_string(),
             labels: labels,
             annotations: annotations,
@@ -124,7 +125,7 @@ impl PodMgr {
         }
 
         let container = ContainerDef {
-            name: req.name.clone(),
+            name: pod.PodKey(),
             image: req.image.to_owned(),
             commands: req.commands,
             envs: containerEnvs,
@@ -148,8 +149,8 @@ impl PodMgr {
         return Ok(());
     }
 
-    pub fn PodId(&self, tenant: &str, namespace: &str, name: &str) -> String {
-        return format!("{}/{}/{}", tenant, namespace, name);
+    pub fn PodKey(&self, tenant: &str, namespace: &str, funcname: &str, id: &str) -> String {
+        return format!("{}/{}/{}/{}", tenant, namespace, funcname, id);
     }
 }
 
@@ -178,8 +179,8 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
         request: tonic::Request<na::GetPodReq>,
     ) -> SResult<tonic::Response<na::GetPodResp>, tonic::Status> {
         let req = request.into_inner();
-        let podId = &self.PodId(&req.tenant, &&req.namespace, &req.name);
-        match NODEAGENT_STORE.GetPod(podId) {
+        let podKey = &self.PodKey(&req.tenant, &&req.namespace, &req.funcname, &req.id);
+        match NODEAGENT_STORE.GetPod(podKey) {
             Ok((rev, pod)) => {
                 error!("pod is {:?}", serde_json::to_string_pretty(&pod).unwrap());
                 return Ok(tonic::Response::new(na::GetPodResp {
@@ -202,8 +203,10 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
         request: tonic::Request<na::TerminatePodReq>,
     ) -> SResult<tonic::Response<na::TerminatePodResp>, tonic::Status> {
         let req = request.into_inner();
-        let podId = &Self::PodId(&self, &req.tenant, &req.namespace, &req.name);
-        match self.pmAgent.TerminatePod(podId) {
+        match self
+            .pmAgent
+            .TerminatePod(&req.tenant, &req.namespace, &req.funcname, &req.id)
+        {
             Err(e) => {
                 return Ok(tonic::Response::new(na::TerminatePodResp {
                     error: format!("fail: {:?}", e),
@@ -222,10 +225,13 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
         request: tonic::Request<na::HibernatePodReq>,
     ) -> SResult<tonic::Response<na::HibernatePodResp>, tonic::Status> {
         let req = request.into_inner();
-        match self
-            .pmAgent
-            .HibernatePod(&req.tenant, &req.namespace, &req.name, req.hibernate_type)
-        {
+        match self.pmAgent.HibernatePod(
+            &req.tenant,
+            &req.namespace,
+            &req.funcname,
+            &req.id,
+            req.hibernate_type,
+        ) {
             Err(e) => {
                 return Ok(tonic::Response::new(na::HibernatePodResp {
                     error: format!("fail: {:?}", e),
@@ -244,10 +250,13 @@ impl na::node_agent_service_server::NodeAgentService for PodMgr {
         request: tonic::Request<na::WakeupPodReq>,
     ) -> SResult<tonic::Response<na::WakeupPodResp>, tonic::Status> {
         let req = request.into_inner();
-        match self
-            .pmAgent
-            .WakeupPod(&req.tenant, &req.namespace, &req.name, req.hibernate_type)
-        {
+        match self.pmAgent.WakeupPod(
+            &req.tenant,
+            &req.namespace,
+            &req.funcname,
+            &req.id,
+            req.hibernate_type,
+        ) {
             Err(e) => {
                 return Ok(tonic::Response::new(na::WakeupPodResp {
                     error: format!("fail: {:?}", e),

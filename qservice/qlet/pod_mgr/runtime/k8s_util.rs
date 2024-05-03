@@ -50,7 +50,7 @@ pub fn MakePodDataDir(rootPath: &str, pod: &PodDef) -> Result<()> {
 
 pub fn CleanupPodLogDir(rootPath: &str, pod: &PodDef) -> Result<()> {
     let namespace = &pod.namespace;
-    let name = &pod.name;
+    let name = &pod.PodName();
     let uid = &pod.uid;
     fs::remove_dir_all(&GetPodLogDir(rootPath, namespace, name, uid)).ok();
     return Ok(());
@@ -58,7 +58,7 @@ pub fn CleanupPodLogDir(rootPath: &str, pod: &PodDef) -> Result<()> {
 
 pub fn MakePodLogDir(rootPath: &str, pod: &PodDef) -> Result<()> {
     let namespace = &pod.namespace;
-    let name = &pod.name;
+    let name = &pod.PodName();
     let uid = &pod.uid;
     fs::create_dir_all(&GetPodLogDir(rootPath, namespace, name, uid)).ok();
     return Ok(());
