@@ -57,7 +57,7 @@
     ldp x30, x9,  [sp, #16 * 15]
     msr elr_el1, x10
     msr spsr_el1, x11
-.if elx == 0
+.if \elx == 0
     msr sp_el0, x9
 .endif
 
