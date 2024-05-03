@@ -57,18 +57,22 @@ pub fn GetVcpuId() -> usize {
 }
 
 #[inline]
-pub fn LoadUserTable(table: u64) {
+pub fn LoadTranslationTable(table: u64) {
     unsafe {
-        asm!("msr ttbr0_el1, {0}
-        ic iallu
-        dsb nsh
-        isb",
+        asm!("
+            dsb sy
+            isb
+            ic iallu
+            msr ttbr0_el1, {0}
+            tlbi vmalle1is
+        ",
         in(reg) table);
     };
 }
 
 #[inline]
 pub fn CurrentUserTable() -> u64 {
+    // The function name is misleading. user and kernel use the same table.
     let table: u64;
     unsafe {
         asm!("mrs {0}, ttbr0_el1", out(reg) table);
@@ -78,9 +82,10 @@ pub fn CurrentUserTable() -> u64 {
 
 #[inline]
 pub fn CurrentKernelTable() -> u64 {
+    // qkernel lives in lower half. ttbr1_el1 is not in use.
     let table: u64;
     unsafe {
-        asm!("mrs {0}, ttbr1_el1", out(reg) table);
+        asm!("mrs {0}, ttbr0_el1", out(reg) table);
     };
     return table;
 }
