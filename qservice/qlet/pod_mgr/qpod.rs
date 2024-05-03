@@ -61,7 +61,7 @@ pub struct QuarkPodJson {
 
 #[derive(Debug)]
 pub struct QuarkPodInner {
-    pub id: String,
+    pub key: String,
     pub podState: PodState,
     pub isDaemon: bool,
     pub pod: Arc<RwLock<PodDef>>,
@@ -116,7 +116,7 @@ impl QuarkPod {
         };
 
         return QuarkPodJson {
-            id: inner.id.clone(),
+            id: inner.key.clone(),
             podState: inner.podState,
             isDaemon: inner.isDaemon,
             pod: pod,
@@ -129,7 +129,7 @@ impl QuarkPod {
 
     pub fn FromQuarkPodJosn(pod: QuarkPodJson) -> Self {
         let inner = QuarkPodInner {
-            id: pod.id,
+            key: pod.id,
             podState: pod.podState,
             isDaemon: pod.isDaemon,
             pod: Arc::new(RwLock::new(pod.pod)),
@@ -156,7 +156,7 @@ impl QuarkPod {
     }
 
     pub fn PodId(&self) -> String {
-        return self.Pod().read().unwrap().PodId();
+        return self.Pod().read().unwrap().PodKey();
     }
 
     pub fn RuntimePod(&self) -> Option<Arc<RuntimePod>> {

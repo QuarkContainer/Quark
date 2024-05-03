@@ -64,7 +64,7 @@ impl PodMgr {
     }
 
     pub fn Add(&self, podDef: PodDef) -> Result<()> {
-        let key = format!("{}/{}/{}", &podDef.tenant, &podDef.namespace, &podDef.name);
+        let key = podDef.PodKey();
         let mut inner = self.lock().unwrap();
         if inner.pods.contains_key(&key) {
             return Err(Error::Exist(format!("PodMgr::add {}", key)));
@@ -76,7 +76,7 @@ impl PodMgr {
     }
 
     pub fn Update(&self, podDef: PodDef) -> Result<()> {
-        let key = format!("{}/{}/{}", &podDef.tenant, &podDef.namespace, &podDef.name);
+        let key = podDef.PodKey();
         let mut inner = self.lock().unwrap();
         if !inner.pods.contains_key(&key) {
             return Err(Error::NotExist(format!("PodMgr::update {}", key)));
@@ -88,7 +88,7 @@ impl PodMgr {
     }
 
     pub fn Remove(&self, podDef: PodDef) -> Result<()> {
-        let key = format!("{}/{}/{}", &podDef.tenant, &podDef.namespace, &podDef.name);
+        let key = podDef.PodKey();
         let mut inner = self.lock().unwrap();
         if !inner.pods.contains_key(&key) {
             return Err(Error::NotExist(format!("PodMgr::Remove {}", key)));

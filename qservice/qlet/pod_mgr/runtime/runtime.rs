@@ -115,7 +115,7 @@ impl RuntimeMgr {
     ) -> Result<RuntimePod> {
         let _s = self.concurrency.acquire().await?;
 
-        info!("Run pod sandbox SandboxConfig {:?}", &sandboxConfig);
+        info!("Run pod sandbox SandboxConfig {:#?}", &sandboxConfig);
 
         let podSandBoxId = self
             .runtimeService

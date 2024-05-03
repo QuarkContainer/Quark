@@ -33,7 +33,6 @@ use crate::func_worker::FUNCAGENT_MGR;
 use crate::NAMESPACE_STORE;
 use crate::OBJ_REPO;
 
-
 pub struct HttpGateway {}
 
 impl HttpGateway {
@@ -106,7 +105,7 @@ async fn PostFuncPackage(Json(spec): Json<FuncPackageSpec>) -> impl IntoResponse
     match OBJ_REPO
         .get()
         .unwrap()
-        .ContainsFuncPackage(&spec.tenant, &spec.namespace, &spec.name)
+        .ContainsFuncPackage(&spec.tenant, &spec.namespace, &spec.funcname)
     {
         Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}", e))),
         Ok(contains) => {
@@ -189,7 +188,7 @@ async fn PostFuncCall(Json(req): Json<PromptReq>) -> impl IntoResponse {
     match OBJ_REPO
         .get()
         .unwrap()
-        .GetFuncPackage(&req.tenant, &req.namespace, &req.func)
+        .GetFuncPackage(&req.tenant, &req.namespace, &req.funcname)
     {
         Err(e) => {
             return (StatusCode::BAD_REQUEST, Json(format!("{:?}", e)));
@@ -206,6 +205,6 @@ async fn PostFuncCall(Json(req): Json<PromptReq>) -> impl IntoResponse {
 pub struct PromptReq {
     pub tenant: String,
     pub namespace: String,
-    pub func: String,
+    pub funcname: String,
     pub prompt: String,
 }

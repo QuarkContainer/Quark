@@ -227,7 +227,6 @@ impl PmAgent {
     pub async fn NodeHandler(&self, msg: &NodeAgentMsg) -> Result<()> {
         match msg {
             NodeAgentMsg::PodStatusChange(msg) => {
-                error!("PodStatusChange....");
                 let qpod = msg.pod.clone();
                 if qpod.PodState() == PodState::Cleanup {
                     self.CleanupPodStoreAndAgent(&qpod).await?;
@@ -257,7 +256,7 @@ impl PmAgent {
             pod.PodId(),
             pod.PodState()
         );
-        let podId = pod.lock().unwrap().id.clone();
+        let podId = pod.lock().unwrap().key.clone();
         let agent = self.pods.lock().unwrap().remove(&podId);
         match agent {
             Some(pa) => {
@@ -303,10 +302,10 @@ impl PmAgent {
     }
 
     pub fn CreatePod(&self, pod: &PodDef, configMap: &k8s::ConfigMap) -> Result<IpAddress> {
-        let podId = pod.PodId();
+        let podKey = pod.PodKey();
         if self.State() != PmAgentState::Ready {
             let inner = QuarkPodInner {
-                id: podId.clone(),
+                key: podKey.clone(),
                 podState: PodState::Cleanup,
                 isDaemon: false,
                 pod: Arc::new(RwLock::new(pod.clone())),
@@ -325,13 +324,13 @@ impl PmAgent {
             ));
         }
 
-        let hasPod = self.node.pods.lock().unwrap().get(&podId).is_some();
+        let hasPod = self.node.pods.lock().unwrap().get(&podKey).is_some();
         if !hasPod {
             let podAgent = match self.CreatePodAgent(&pod, &Some(configMap.clone()), false) {
                 Ok(a) => a,
                 Err(e) => {
                     let inner = QuarkPodInner {
-                        id: pod.PodId(),
+                        key: pod.PodKey(),
                         podState: PodState::Cleanup,
                         isDaemon: false,
                         pod: Arc::new(RwLock::new(pod.clone())),
@@ -351,7 +350,7 @@ impl PmAgent {
 
             let uid = pod.uid.clone();
             let namespace = pod.PodNamespace();
-            let podname = pod.name.clone();
+            let podname = pod.PodName();
 
             let addr = NAMESPACE_MGR.NewPodSandbox(&namespace, &uid, &podname)?;
 
@@ -364,7 +363,7 @@ impl PmAgent {
 
             return Ok(addr);
         } else {
-            return Err(Error::CommonError(format!("Pod: {} already exist", podId)));
+            return Err(Error::CommonError(format!("Pod: {} already exist", podKey)));
         }
     }
 
@@ -372,23 +371,27 @@ impl PmAgent {
         &self,
         tenant: &str,
         namespace: &str,
-        name: &str,
+        funcname: &str,
+        id: &str,
         type_: u32,
     ) -> Result<()> {
-        let podId = format!("{}/{}/{}", tenant, namespace, name);
-        let qpod = self.node.pods.lock().unwrap().get(&podId).cloned();
+        let podKey = format!("{}/{}/{}/{}", tenant, namespace, funcname, id);
+        let qpod = self.node.pods.lock().unwrap().get(&podKey).cloned();
         match qpod {
             None => {
                 return Err(Error::CommonError(format!(
                     "Pod: {} does not exist, nodemgr is not in sync",
-                    podId
+                    podKey
                 )))
             }
             Some(_qpod) => {
-                let podAgent = self.pods.lock().unwrap().get(&podId).cloned();
+                let podAgent = self.pods.lock().unwrap().get(&podKey).cloned();
 
                 let podAgent = podAgent.unwrap();
-                POD_BRORKER_MGRS.HandlePodHibernate(&format!("{tenant}/{namespace}"), name)?;
+                POD_BRORKER_MGRS.HandlePodHibernate(
+                    &format!("{tenant}/{namespace}"),
+                    &format!("{funcname}_{id}"),
+                )?;
                 podAgent.Send(NodeAgentMsg::PodHibernate(type_))?;
             }
         }
@@ -396,21 +399,31 @@ impl PmAgent {
         return Ok(());
     }
 
-    pub fn WakeupPod(&self, tenant: &str, namespace: &str, name: &str, type_: u32) -> Result<()> {
-        let podId = format!("{}/{}/{}", tenant, namespace, name);
-        let qpod = self.node.pods.lock().unwrap().get(&podId).cloned();
+    pub fn WakeupPod(
+        &self,
+        tenant: &str,
+        namespace: &str,
+        funcname: &str,
+        id: &str,
+        type_: u32,
+    ) -> Result<()> {
+        let podKey = format!("{}/{}/{}/{}", tenant, namespace, funcname, id);
+        let qpod = self.node.pods.lock().unwrap().get(&podKey).cloned();
         match qpod {
             None => {
                 return Err(Error::CommonError(format!(
                     "Pod: {} does not exist, nodemgr is not in sync",
-                    podId
+                    podKey
                 )))
             }
             Some(_qpod) => {
-                let podAgent = self.pods.lock().unwrap().get(&podId).cloned();
+                let podAgent = self.pods.lock().unwrap().get(&podKey).cloned();
 
                 let podAgent = podAgent.unwrap();
-                POD_BRORKER_MGRS.HandlePodWakeup(&format!("{tenant}/{namespace}"), name)?;
+                POD_BRORKER_MGRS.HandlePodWakeup(
+                    &format!("{tenant}/{namespace}"),
+                    &format!("{funcname}_{id}"),
+                )?;
                 podAgent.Send(NodeAgentMsg::PodWakeup(type_))?;
             }
         }
@@ -418,17 +431,24 @@ impl PmAgent {
         return Ok(());
     }
 
-    pub fn TerminatePod(&self, podId: &str) -> Result<()> {
-        let qpod = self.node.pods.lock().unwrap().get(podId).cloned();
+    pub fn TerminatePod(
+        &self,
+        tenant: &str,
+        namespace: &str,
+        funcname: &str,
+        id: &str,
+    ) -> Result<()> {
+        let podKey = format!("{}/{}/{}/{}", tenant, namespace, funcname, id);
+        let qpod = self.node.pods.lock().unwrap().get(&podKey).cloned();
         match qpod {
             None => {
                 return Err(Error::CommonError(format!(
                     "Pod: {} does not exist, nodemgr is not in sync",
-                    podId
+                    podKey
                 )))
             }
             Some(qpod) => {
-                let mut podAgent = self.pods.lock().unwrap().get(podId).cloned();
+                let mut podAgent = self.pods.lock().unwrap().get(&podKey).cloned();
                 if qpod.PodInTerminating() && podAgent.is_some() {
                     // avoid repeating termination if pod is in terminating process and has a pod actor work on it
                     return Ok(());
@@ -436,7 +456,7 @@ impl PmAgent {
 
                 // todo: when will it happen?
                 if podAgent.is_none() {
-                    warn!("Pod actor {} already exit, create a new one", podId);
+                    warn!("Pod actor {} already exit, create a new one", podKey);
                     podAgent = Some(self.StartPodAgent(&qpod)?);
                 }
 
@@ -472,7 +492,7 @@ impl PmAgent {
         let pod = pod.clone();
 
         let inner = QuarkPodInner {
-            id: pod.PodId(),
+            key: pod.PodKey(),
             podState: PodState::Creating,
             isDaemon: isDaemon,
             pod: Arc::new(RwLock::new(pod)),
@@ -502,7 +522,7 @@ impl PmAgent {
             .insert(AnnotationNodeMgrNode.to_string(), nodeId);
 
         let podAgent = PodAgent::New(self.agentChann.clone(), qpod, &self.node.nodeConfig);
-        let podId = qpod.lock().unwrap().id.clone();
+        let podId = qpod.lock().unwrap().key.clone();
         self.node
             .pods
             .lock()

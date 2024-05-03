@@ -111,7 +111,7 @@ impl QletStore {
             kind: "pod".to_owned(),
             tenant: pod.tenant.clone(),
             namespace: pod.namespace.clone(),
-            name: pod.name.clone(),
+            name: pod.PodName(),
             lables: labels.into(),
             annotations: annotations.into(),
             channelRev: channelRev,

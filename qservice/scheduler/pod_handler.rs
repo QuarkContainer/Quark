@@ -120,7 +120,7 @@ impl PodHandler {
             OBJ_REPO
                 .get()
                 .unwrap()
-                .GetFuncPods(&spec.tenant, &spec.namespace, &spec.name)?;
+                .GetFuncPods(&spec.tenant, &spec.namespace, &spec.funcname)?;
 
         if pods.len() >= 1 {
             return Ok(());
@@ -137,7 +137,7 @@ impl PodHandler {
             OBJ_REPO
                 .get()
                 .unwrap()
-                .GetFuncPods(&spec.tenant, &spec.namespace, &spec.name)?;
+                .GetFuncPods(&spec.tenant, &spec.namespace, &spec.funcname)?;
 
         if pods.len() >= 1 {
             return Ok(());
@@ -155,9 +155,8 @@ impl PodHandler {
     pub async fn StartWorker(&self, funcPackage: &FuncPackage) -> Result<IpAddress> {
         let tenant = &funcPackage.spec.tenant;
         let namespace = &funcPackage.spec.namespace;
-        let funcName = &funcPackage.spec.name;
+        let funcname = &funcPackage.spec.funcname;
         let id = self.NextWorkerId();
-        let workerName = format!("{}_{}", funcName, id);
 
         let mut client =
             na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888")
@@ -186,13 +185,14 @@ impl PodHandler {
 
         annotations.push(Kv {
             key: FUNCPOD_FUNCNAME.to_owned(),
-            val: funcName.to_owned(),
+            val: funcname.to_owned(),
         });
 
         let request = tonic::Request::new(na::CreateFuncPodReq {
             tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
-            name: workerName.to_owned(),
+            funcname: funcname.to_owned(),
+            id: format!("{id}"),
             image: funcPackage.spec.image.clone(),
             labels: Vec::new(),
             annotations: annotations,
@@ -220,7 +220,8 @@ impl PodHandler {
         &self,
         tenant: &str,
         namespace: &str,
-        workerName: &str,
+        funcname: &str,
+        id: &str,
     ) -> Result<()> {
         let mut client =
             na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888")
@@ -229,15 +230,16 @@ impl PodHandler {
         let request = tonic::Request::new(na::HibernatePodReq {
             tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
-            name: workerName.to_owned(),
+            funcname: funcname.to_owned(),
+            id: id.to_owned(),
             hibernate_type: 1,
         });
         let response = client.hibernate_pod(request).await?;
         let resp = response.into_inner();
         if resp.error.len() != 0 {
             error!(
-                "Fail to Hibernate worker {} {} {}",
-                namespace, workerName, resp.error
+                "Fail to Hibernate worker {} {} {} {}",
+                namespace, funcname, id, resp.error
             );
         }
 
@@ -248,7 +250,8 @@ impl PodHandler {
         &self,
         tenant: &str,
         namespace: &str,
-        workerName: &str,
+        funcname: &str,
+        id: &str,
     ) -> Result<()> {
         let mut client =
             na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888")
@@ -257,22 +260,29 @@ impl PodHandler {
         let request = tonic::Request::new(na::WakeupPodReq {
             tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
-            name: workerName.to_owned(),
+            funcname: funcname.to_owned(),
+            id: id.to_owned(),
             hibernate_type: 1,
         });
         let response = client.wakeup_pod(request).await?;
         let resp = response.into_inner();
         if resp.error.len() != 0 {
             error!(
-                "Fail to Hibernate worker {} {} {}",
-                namespace, workerName, resp.error
+                "Fail to Hibernate worker {} {} {} {}",
+                namespace, funcname, id, resp.error
             );
         }
 
         return Ok(());
     }
 
-    pub async fn StopWorker(&self, tenant: &str, namespace: &str, workerName: &str) -> Result<()> {
+    pub async fn StopWorker(
+        &self,
+        tenant: &str,
+        namespace: &str,
+        funcname: &str,
+        id: &str,
+    ) -> Result<()> {
         let mut client =
             na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888")
                 .await?;
@@ -280,14 +290,15 @@ impl PodHandler {
         let request = tonic::Request::new(na::TerminatePodReq {
             tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
-            name: workerName.to_owned(),
+            funcname: funcname.to_owned(),
+            id: id.to_owned(),
         });
         let response = client.terminate_pod(request).await?;
         let resp = response.into_inner();
         if resp.error.len() != 0 {
             error!(
-                "Fail to stop worker {} {} {} {}",
-                tenant, namespace, workerName, resp.error
+                "Fail to stop worker {} {} {} {} {}",
+                tenant, namespace, funcname, id, resp.error
             );
         }
 

@@ -173,7 +173,7 @@ impl FuncAgent {
             stop: AtomicBool::new(false),
             tenant: funcPackage.spec.tenant.clone(),
             namespace: funcPackage.spec.namespace.clone(),
-            funcName: funcPackage.spec.name.to_owned(),
+            funcName: funcPackage.spec.funcname.to_owned(),
             funcPackge: funcPackage.clone(),
             waitingReqs: VecDeque::new(),
             reqQueueTx: rtx,
@@ -200,7 +200,7 @@ impl FuncAgent {
             reqId: self.lock().unwrap().NextReqId(),
             tenant: req.tenant,
             namespace: req.namespace,
-            funcName: req.func,
+            funcName: req.funcname,
             request: req.prompt,
             tx: tx,
         };
@@ -374,7 +374,8 @@ pub struct FuncWorkerInner {
 
     pub tenant: String,
     pub namespace: String,
-    pub funcName: String,
+    pub funcname: String,
+    pub id: String,
     pub ipAddr: IpAddress,
     pub port: u16,
     pub parallelLevel: usize,
@@ -413,16 +414,16 @@ impl FuncWorker {
         id: u64,
         tenant: &str,
         namespace: &str,
-        funcName: &str,
+        funcname: &str,
         parallelLeve: usize,
         keepaliveTime: u64,
         funcAgent: &FuncAgent,
     ) -> Result<Self> {
         let funcPackage = funcAgent.lock().unwrap().funcPackge.clone();
 
-        let workerName = format!("{}_{}", funcName, id);
+        let workerName = format!("{}", id);
         let addr =
-            Self::StartWorker(tenant, namespace, funcName, &workerName, &funcPackage).await?;
+            Self::StartWorker(tenant, namespace, funcname, &workerName, &funcPackage).await?;
         let (tx, rx) = mpsc::channel::<FuncReq>(parallelLeve);
         let (workerTx, workerRx) = mpsc::channel::<FuncWorkerClient>(parallelLeve);
 
@@ -433,7 +434,8 @@ impl FuncWorker {
             workerId: id,
             tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
-            funcName: funcName.to_owned(),
+            funcname: funcname.to_owned(),
+            id: format!("{id}"),
             workerName: workerName.clone(),
             ipAddr: addr,
             port: WORKER_PORT,
@@ -473,7 +475,7 @@ impl FuncWorker {
         let client = FuncWorkerClient::New(
             &self.tenant,
             &self.namespace,
-            &self.funcName,
+            &self.funcname,
             &self.ipAddr,
             self.port,
             &self,
@@ -788,8 +790,8 @@ impl FuncWorker {
     pub async fn StartWorker(
         tenant: &str,
         namespace: &str,
-        funcName: &str,
-        workerName: &str,
+        funcname: &str,
+        id: &str,
         funcPackage: &FuncPackage,
     ) -> Result<IpAddress> {
         let mut client =
@@ -819,13 +821,14 @@ impl FuncWorker {
 
         annotations.push(Kv {
             key: FUNCPOD_FUNCNAME.to_owned(),
-            val: funcName.to_owned(),
+            val: funcname.to_owned(),
         });
 
         let request = tonic::Request::new(na::CreateFuncPodReq {
             tenant: tenant.to_owned(),
             namespace: namespace.to_owned(),
-            name: workerName.to_owned(),
+            funcname: funcname.to_owned(),
+            id: id.to_owned(),
             image: funcPackage.spec.image.clone(),
             labels: Vec::new(),
             annotations: annotations,
@@ -834,6 +837,8 @@ impl FuncWorker {
             mounts: mounts,
             ports: Vec::new(),
         });
+
+        // error!("StartWorker {:#?}", &request);
 
         let response = client.create_func_pod(request).await?;
         let resp = response.into_inner();
@@ -857,14 +862,15 @@ impl FuncWorker {
         let request = tonic::Request::new(na::TerminatePodReq {
             tenant: self.tenant.clone(),
             namespace: self.namespace.clone(),
-            name: self.workerName.clone(),
+            funcname: self.funcname.clone(),
+            id: self.id.clone(),
         });
         let response = client.terminate_pod(request).await?;
         let resp = response.into_inner();
         if resp.error.len() != 0 {
             error!(
                 "Fail to stop worker {} {} {}",
-                self.namespace, self.funcName, resp.error
+                self.namespace, self.funcname, resp.error
             );
         }
 
@@ -879,7 +885,8 @@ impl FuncWorker {
         let request = tonic::Request::new(na::HibernatePodReq {
             tenant: self.tenant.clone(),
             namespace: self.namespace.clone(),
-            name: self.workerName.clone(),
+            funcname: self.funcname.clone(),
+            id: self.id.clone(),
             hibernate_type: 1,
         });
         let response = client.hibernate_pod(request).await?;
@@ -887,7 +894,7 @@ impl FuncWorker {
         if resp.error.len() != 0 {
             error!(
                 "Fail to Hibernate worker {} {} {}",
-                self.namespace, self.funcName, resp.error
+                self.namespace, self.funcname, resp.error
             );
         }
 
@@ -902,7 +909,8 @@ impl FuncWorker {
         let request = tonic::Request::new(na::WakeupPodReq {
             tenant: self.tenant.clone(),
             namespace: self.namespace.clone(),
-            name: self.workerName.clone(),
+            funcname: self.funcname.clone(),
+            id: self.id.clone(),
             hibernate_type: 1,
         });
         let response = client.wakeup_pod(request).await?;
@@ -910,7 +918,7 @@ impl FuncWorker {
         if resp.error.len() != 0 {
             error!(
                 "Fail to Hibernate worker {} {} {}",
-                self.namespace, self.funcName, resp.error
+                self.namespace, self.funcname, resp.error
             );
         }
 
@@ -1024,7 +1032,7 @@ impl FuncWorkerClient {
         let promptReq = PromptReq {
             tenant: req.tenant.clone(),
             namespace: req.namespace.clone(),
-            func: req.funcName.clone(),
+            funcname: req.funcName.clone(),
             prompt: req.request.clone(),
         };
 

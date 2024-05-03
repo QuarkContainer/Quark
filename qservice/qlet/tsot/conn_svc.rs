@@ -243,11 +243,9 @@ pub struct TcpClientConnection {
 impl TcpClientConnection {
     pub async fn PodConnectProcess(self) {
         let podBroker = self.podBroker.clone();
-        error!("before ProcessConnection");
         match self.ProcessConnection().await {
             Ok(_stream) => {
                 // drop the TcpStream and close the socket
-                error!("before ProcessConnection 2");
                 podBroker
                     .HandlePodConnectResp(self.reqId, ErrCode::None as i32)
                     .unwrap();
@@ -262,11 +260,9 @@ impl TcpClientConnection {
 
     pub async fn GatewayConnectProcess(self) {
         let podBroker = self.podBroker.clone();
-        error!("before ProcessConnection");
         match self.ProcessConnection().await {
             Ok(_stream) => {
                 // drop the TcpStream and close the socket
-                error!("before ProcessConnection 2");
                 podBroker
                     .HandleGatewayConnectResp(self.reqId, ErrCode::None as i32)
                     .unwrap();
@@ -280,7 +276,6 @@ impl TcpClientConnection {
     }
 
     pub async fn ProcessConnection(&self) -> Result<TcpStream> {
-        error!("ProcessConnection 1");
         let stream = self.Connect().await?;
         let mut req = TsotConnReq {
             podNamespace: [0; 64],
