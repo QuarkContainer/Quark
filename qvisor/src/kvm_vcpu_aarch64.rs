@@ -256,7 +256,8 @@ impl KVMVcpu {
         // ttbr0_el1
         let data = VMS.lock().pageTables.GetRoot();
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_TTBR0_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
-        // TODO set ttbr1_el1
+        // TODO set ttbr1_el1 if we need upper half address space.
+
         // cntkctl_el1
         let data = _CNTKCTL_EL1_DEFAULT;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_CNTKCTL_EL1, data).map_err(|e| Error::SysError(e.errno()))?;

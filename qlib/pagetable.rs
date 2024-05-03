@@ -203,7 +203,7 @@ impl PageTables {
 
     #[cfg(target_arch = "aarch64")]
     pub fn Switch(table: u64) {
-        LoadUserTable(table)
+        LoadTranslationTable(table)
     }
 
     pub fn SetRoot(&self, root: u64) {
