@@ -197,6 +197,7 @@ pub fn MapSegment(
                 4096,
                 &AccessType::AnyAccess(),
                 false,
+                false
             )
             .unwrap();
         task.CopyOutSlice(&buf[0..cnt], vaddr, cnt)?;
