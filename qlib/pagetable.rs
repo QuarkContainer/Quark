@@ -480,9 +480,9 @@ impl PageTables {
 
             let mut _f = flags;
             _f |= PageTableFlags::PAGE;
-            debug!("VM: Map UPage VA-{:#x}, PH-{:#x}, flags-{:b}",
-                   vaddr.0, phyAddr.0, _f);
             pteEntry.set_addr(PhysAddr::new(phyAddr.0), _f);
+            debug!("VM: Installed page: VA-{:#x}, PH-{:#x}, flags-{:#?}",
+                   vaddr.0, pteEntry.addr(), pteEntry.flags());
             Invlpg(vaddr.0);
         }
 
@@ -1392,8 +1392,6 @@ impl PageTables {
 
                 // Has another thread swapped in the page?
                 if !is_pte_swapped(flags) {
-                    info!("VM: vaddr:{:#x} in PTE:{:?} has the swapped bit not set.",
-                   vaddr, pteEntry);
                     return;
                 }
 
@@ -1449,16 +1447,34 @@ impl PageTables {
     ) -> Result<()> {
         //info!("MProtoc: start={:x}, end={:x}, flag = {:?}", start.0, end.0, flags);
         defer!(self.EnableTlbShootdown());
-        return self.Traverse(
-            start,
-            end,
-            |entry, virtualAddr| {
-                self.HandlingSwapInPage(virtualAddr, entry);
-                entry.set_flags(flags);
-                Invlpg(virtualAddr);
-            },
-            failFast,
-        );
+        #[cfg(target_arch = "x86_64")]{
+            return self.Traverse(
+                start,
+                end,
+                |entry, virtualAddr| {
+                    self.HandlingSwapInPage(virtualAddr, entry);
+                    entry.set_flags(flags);
+                    Invlpg(virtualAddr);
+                },
+                failFast,
+            );
+
+        }
+        #[cfg(target_arch = "aarch64")]{
+            return self.Traverse(
+                start,
+                end,
+                |entry, virtualAddr| {
+                    if PageTableFlags::MProtectBits.contains(flags) {
+                        entry.set_flags_perms_only(flags);
+                    } else {
+                        entry.set_flags(flags);
+                    }
+                    Invlpg(virtualAddr);
+                },
+                failFast,
+            );
+        }
     }
 
     fn freeEntry(&self, entry: &mut PageTableEntry, pagePool: &Allocator) -> Result<bool> {

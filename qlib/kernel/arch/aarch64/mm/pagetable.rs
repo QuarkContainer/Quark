@@ -100,9 +100,15 @@ impl PageTableEntry {
     //}
 
     /// Sets the flags of this entry.
+    /// TODO: Enforcing PAGE here is not an optimal fix.
     #[inline]
     pub fn set_flags(&mut self, flags: PageTableFlags) {
-        self.entry = self.addr().as_u64() | flags.bits();
+        self.entry = self.addr().as_u64() | flags.bits() | PageTableFlags::PAGE.bits();
+    }
+    /// Sets the flags of this entry but only sets permission bits.
+    #[inline]
+    pub fn set_flags_perms_only(&mut self, flags: PageTableFlags){
+        self.entry = (self.entry & !PageTableFlags::MProtectBits.bits()) | flags.bits()
     }
 }
 
@@ -158,6 +164,15 @@ bitflags! {
         const TAKEN           = 1 << 57; //Another thread is using the PTE.
     }
 }
+
+impl PageTableFlags {
+    pub const MProtectBits:PageTableFlags = PageTableFlags::from_bits_truncate(
+        PageTableFlags::USER_ACCESSIBLE.bits() |
+        PageTableFlags::READ_ONLY.bits() |
+        PageTableFlags::PXN.bits() |
+        PageTableFlags::UXN.bits());
+}
+
 
 /// The number of entries in a page table.
 const ENTRY_COUNT: usize = 512;
