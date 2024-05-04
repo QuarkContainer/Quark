@@ -449,6 +449,7 @@ impl MemoryManager {
         len: u64,
         realPerms: &AccessType,
         growsDown: bool,
+        permOnly: bool,
     ) -> Result<()> {
         let _ml = self.MappingWriteLock();
 
@@ -521,6 +522,13 @@ impl MemoryManager {
             // } else {
             //     PageOpts::UserNonAccessable().Val()
             // };
+
+            // mprotect should not modify other PTE fields.
+            // #[cfg(target_arch="aarch64")]
+            // if permOnly {
+            //     use crate::qlib::kernel::arch::__arch::mm::pagetable::PageTableFlags;
+            //     pageopts = pageopts & PageTableFlags::MProtectBits;
+            // }
 
             //change pagetable permission
             // let mut end = range.End();
