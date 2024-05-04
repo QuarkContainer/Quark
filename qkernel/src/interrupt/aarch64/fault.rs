@@ -101,165 +101,102 @@ impl PageFaultErrorCode {
 }
 
 
-pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
-                        error_code: PageFaultErrorCode) {
+pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64, error_code: PageFaultErrorCode) {
+    use self::PageFaultErrorCode as PFEC;
     CPULocal::Myself().SetMode(VcpuMode::Kernel);
     let currTask = Task::Current();
-    // is this call from user
-    let fromUser: bool = error_code
-        .contains(PageFaultErrorCode::USER_MODE);
-    //
-    // NOTE: ATM only 0x0000xx...x address-space is used.
-    //
+    let fromUser: bool = error_code.contains(PFEC::USER_MODE);
     let ttbr = CurrentUserTable();
 
     if !SHARESPACE.config.read().CopyDataWithPf && !fromUser {
-        error!("VM: PageFault in kernel FAR: {:#x}, TTBR: {:#x}, PtRegs: {:#x}, error_code: {:#x}",
-               fault_address, ttbr, ptRegs, error_code);
-       //backtracer::trace(ptRegs.pc, ptRegs.get_stack_pointer(), ptRegs.rbp, &mut |frame| {
-       //      print!("pagefault frame is {:#x?}", frame);
-        //     true
-        // });
+        error!(
+            "VM: PageFault in kernel FAR: {:#x}, TTBR: {:#x}, PtRegs: {:#x}, error_code: {:#x}",
+            fault_address, ttbr, ptRegs, error_code
+        );
         panic!("VM: PageFault from kernel non recuperable.");
     }
 
-    //
-    // Ignore as PerfStuff...
-    //
-    //currTask.PerfGoto(PerfType::PageFault);
-    //defer!(Task::Current().PerfGofrom(PerfType::PageFault));
-
     let PRINT_EXECPTION: bool = SHARESPACE.config.read().PrintException;
     if PRINT_EXECPTION {
-        info!("VM: PageFaultHandler - FAR: {:#x}, PC: {:#x},\
+        info!(
+            "VM: PageFaultHandler - FAR: {:#x}, PC: {:#x},\
                TTBR: {:#x}, is-user: {}, error code: {:#x}.",
-               fault_address, ptRegs.pc, ttbr, fromUser, error_code);
+            fault_address, ptRegs.pc, ttbr, fromUser, error_code
+        );
     }
 
     let signal;
     // no need loop, just need to enable break
-    loop {
+    'pf_handle: loop {
         let _ml = currTask.mm.MappingWriteLock();
-        let (vma, range) = match currTask.mm
-            .GetVmaAndRangeLocked(fault_address) {
+        let (vma, range) = match currTask.mm.GetVmaAndRangeLocked(fault_address) {
             None => {
                 if fault_address > MemoryDef::PAGE_SIZE {
                     let map = currTask.mm.GetSnapshotLocked(currTask, false);
                     error!("VM: The map is {}, fault address is not part of it.", &map);
                 }
                 signal = Signal::SIGSEGV;
-                break;
+                break 'pf_handle;
             }
             Some(vma) => vma.clone(),
         };
 
-        if error_code.contains(PageFaultErrorCode::ACCESS_FLAG) {
-           let bind = currTask
-                     .mm
-                     .pagetable
-                     .write();
-           let pte = bind
-                     .pt
-                     .VirtualToEntry(fault_address).unwrap();
-           let mut flags = pte.flags();
-           if flags.contains(PageTableFlags::ACCESSED) {
-                panic!("VM: Error - PF with Accessed-Flag not set while flag set in PTE.");
-           } else {
-               flags.insert(PageTableFlags::ACCESSED);
-               let fault_addr_alligned = Addr(fault_address)
-                                         .RoundDown()
-                                         .unwrap();
-               bind.pt.SetPageFlags(fault_addr_alligned, flags);
-               return;
-           }
+        if error_code.contains(PFEC::ACCESS_FLAG) {
+            // we don't utilize access flag for now. Simply insert the flag and continue.
+            let bind = currTask.mm.pagetable.write();
+            let pte = bind.pt.VirtualToEntry(fault_address).unwrap();
+            let mut flags = pte.flags();
+            assert!(!flags.contains(PageTableFlags::ACCESSED),
+                    "Access flag fault while access flag is set.");
+            flags.insert(PageTableFlags::ACCESSED);
+            let fault_addr_alligned = Addr(fault_address).RoundDown().unwrap();
+            bind.pt.SetPageFlags(fault_addr_alligned, flags);
+            return;
         }
 
-        //
-        // PF in Kernel VMA cannot be handlet => Should not happen!
-        //
+        // A PF happened, fault address within kernel VMAs
+        // from user    => kill it
+        // from kernel  => panic
         if vma.kernel == true {
-            let k_map = currTask.mm.GetSnapshotLocked(currTask, false);
-            info!("VM: vma_kernel:True - k_map:{}", &k_map);
+            assert!(!fromUser, "FATAL: kernel hits PF on kernel VMA.");
             signal = Signal::SIGSEGV;
-            break;
+            break 'pf_handle;
         }
 
         if !vma.effectivePerms.Read() {
             error!("VM: No Read-Permission on mem-area.");
             signal = Signal::SIGSEGV;
-            break;
+            break 'pf_handle;
         }
 
         let pageAddr = Addr(fault_address).RoundDown().unwrap().0;
-        assert!(range.Contains(pageAddr),
+        assert!(
+            range.Contains(pageAddr),
             "PageFaultHandler vm-addr is not in the VM-Area range"
         );
 
-        //
-        // Fault for not mapped page.
-        //
-        if error_code.contains(PageFaultErrorCode::TRANSLATION) {
-            info!("VM: InstallPage 1, range is {:x?}, address is {:#x}, vma.growsDown is {}",
-               &range, pageAddr, vma.growsDown);
-            //let startTime = TSC.Rdtsc();
-            let addr = currTask
-                .mm
-                .pagetable
-                .write()
-                .pt
-                .SwapInPage(Addr(pageAddr))
-                .unwrap();
-            //let endtime = TSC.Rdtsc();
-            if addr > 0 {
-                //use crate::qlib::kernel::Tsc;
-                info!("VM: Page {:x?}/{:x} is mapped", Addr(pageAddr).RoundDown().unwrap(), addr/*, Tsc::Scale(endtime - startTime)*/);
-                //
-                // Check if PAGE-/VALID-flagbits are set.
-                // We take this path after being sure from above that the page
-                // is present.
-                //
-                {
-                    let bind = currTask
-                        .mm
-                        .pagetable
-                        .write();
-                    let pte = bind.pt
-                        .VirtualToEntry(pageAddr).unwrap();
-                    debug!("VM: Found virt-addr - {:#x}; PTE - {:?}", pageAddr, *pte);
-                    let mut flags = pte.flags();
-                    let page_bit_set = flags.contains(PageTableFlags::PAGE);
-                    let valid_bit_set = flags.contains(PageTableFlags::VALID);
-                    if valid_bit_set && page_bit_set {
-                         panic!("VM: Error - Translation-PF with mapped page, PAGE-/VALID-Flag are set in PTE.");
-                    } else {
-                        if !page_bit_set {
-                            flags.insert(PageTableFlags::PAGE);
-                        }
-                        if !valid_bit_set {
-                            flags.insert(PageTableFlags::VALID);
-                        }
-                    }
-                    bind.pt.SetPageFlags(Addr(pageAddr), flags);
-                }
-                return;
-            }
-            //
-            // Could not swap in page
-            //
-            match currTask.mm
-                .InstallPageLocked(currTask, &vma, pageAddr, &range)
-            {
+        // handle translation fault
+        // NOTE: swap not enabled for aarch64 atm.
+        // let addr = currTask.mm.pagetable.write().pt.SwapInPage(Addr(pageAddr)).unwrap();
+        if error_code.contains(PFEC::TRANSLATION) {
+            debug!(
+                "VM: InstallPage, range is: {:x?}, address: {:#x}, vma.growsDown: {}",
+                &range, pageAddr, vma.growsDown
+            );
+            let res = currTask.mm.InstallPageLocked(currTask, &vma, pageAddr, &range);
+            match res {
                 Err(Error::FileMapError) => {
-                    error!("VM: Installing page failed with FILE_MAP_ERROR.");
+                    error!("VM: failed to install page: FILE_MAP_ERROR.");
                     signal = Signal::SIGBUS;
-                    break;
+                    break 'pf_handle;
                 }
                 Err(e) => {
-                    panic!("VM: Installing page failed with panic. PageFaultHandler error is {:?}", e)
+                    panic!("VM: failed to install page. Err: {:?}",e)
                 }
                 _ => (),
             };
 
+            // proactively install subsequential pages.
             for i in 1..8 {
                 let addr = if vma.growsDown {
                     pageAddr - i * MemoryDef::PAGE_SIZE
@@ -267,20 +204,14 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
                     pageAddr + i * MemoryDef::PAGE_SIZE
                 };
 
-                if range.Contains(addr) {
-                    match currTask.mm.InstallPageLocked(currTask, &vma, addr, &range) {
-                        Err(_) => {
-                            break;
-                        }
-                        _ => (),
-                    };
-                } else {
+                if !range.Contains(addr) {break;}
+
+                if let Err(_) = currTask.mm.InstallPageLocked(currTask, &vma, addr, &range) {
                     break;
                 }
             }
 
             if fromUser {
-                //PerfGoto(PerfType::User);
                 currTask.AccountTaskEnter(SchedState::RunningApp);
             }
             CPULocal::Myself().SetMode(VcpuMode::User);
@@ -292,39 +223,34 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64,
         // NOTE: Handle possible COW-modyfie events.
         // NOTE: COW flags RO set in ForkRange() for private mappings.
         //
-        if vma.private == true {
-            if error_code.contains(PageFaultErrorCode::PROTECTION_VIOLATION) &&
-                error_code.contains(PageFaultErrorCode::CAUSED_BY_WRITE) {
-                    if vma.effectivePerms.Write() == false  ||
-                    (vma.kernel == true &&
-                        error_code
-                        .contains(PageFaultErrorCode::USER_MODE)) {
-                        debug!("VM: Fault on private vma - Write access on \
-                               VMA-perms:{:?}/kernel:{:#}.", vma.realPerms.Effective(), vma.kernel);
-                        signal = Signal::SIGSEGV;
-                        break;
-                    } else {
-                       //
-                       // Handle COW write-event
-                       //
-                       debug!("VM: Handle COW-Write event.");
-                       currTask.mm.CopyOnWriteLocked(pageAddr, &vma);
-                       currTask.mm.TlbShootdown();
-                       if fromUser {
-                           //PerfGoto(PerfType::User);
-                           currTask.AccountTaskEnter(SchedState::RunningApp);
-                       }
-                    }
+        if !vma.private {
+            signal = Signal::SIGSEGV;
+            break 'pf_handle;
+        }
+
+        if error_code.contains(PFEC::PROTECTION_VIOLATION | PFEC::CAUSED_BY_WRITE) {
+            if !vma.effectivePerms.Write() {
+                signal = Signal::SIGSEGV;
+                break 'pf_handle;
             }
+            debug!("VM: Handle COW.");
+            currTask.mm.CopyOnWriteLocked(pageAddr, &vma);
+            currTask.mm.TlbShootdown();
+            if fromUser {
+                currTask.AccountTaskEnter(SchedState::RunningApp);
+            }
+        } else {
+            // unexpected fault from user.
+            signal = Signal::SIGSEGV;
+            break 'pf_handle
         }
 
         CPULocal::Myself().SetMode(VcpuMode::User);
         currTask.mm.HandleTlbShootdown();
         return;
-    }
+    } // end pf_handle loop
 
-    HandleFault(currTask, fromUser, error_code, fault_address,
-                ptRegs, signal);
+    HandleFault(currTask, fromUser, error_code, fault_address, ptRegs, signal);
 }
 
 pub fn HandleFault(
