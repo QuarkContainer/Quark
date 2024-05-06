@@ -160,24 +160,39 @@ fn DecompressSingleSection(inputPosition:u64, outputPosition:&mut Vec<u8>, outpu
     // error!("padding after subtraction is: {:x}", padding);
     padding = padding % 8;
     
-    let slice1 = unsafe{std::slice::from_raw_parts((inputPosition + inputRead) as *const u8, padding as usize) };
-    let slice2 = unsafe {std::slice::from_raw_parts(&zeros[0] as *const u8, padding as usize)};
+    // let slice1 = unsafe{std::slice::from_raw_parts((inputPosition + inputRead) as *const u8, padding as usize) };
+    // let slice2 = unsafe {std::slice::from_raw_parts(&zeros[0] as *const u8, padding as usize)};
 
-    if slice1 != slice2 {
-        // error!("expected {:x} zero bytes", padding);
-        hexdump(inputPosition + inputRead, 0x60);
-        return Err(Error::DecompressFatbinError(String::from("padding length is wrong")));
-    }
+    // if slice1 != slice2 {
+    //     // error!("expected {:x} zero bytes", padding);
+    //     hexdump(inputPosition + inputRead, 0x60);
+    //     return Err(Error::DecompressFatbinError(String::from("padding length is wrong")));
+    // }
     // error!("slice1 is: {:?}", slice1);
 
     // error!("slice2 is: {:?}", slice2);
+
+    unsafe {
+        libc::memcmp(
+            (inputPosition + inputRead) as *const libc::c_void,
+            zeros.as_ptr() as *const libc::c_void,
+            padding as usize
+        );
+    }
 
     inputRead += padding;
     
     padding = (8u64.wrapping_sub(fatTextHeader.decompressed_size)) % 8;
   
-    for i in 0..padding {
-        outputPosition[i as usize] = 0;
+    // for i in 0..padding {
+    //     outputPosition[i as usize] = 0;
+    // }
+    unsafe {
+        libc::memset(
+            outputPosition.as_ptr() as *mut libc::c_void,
+            0,
+            padding as usize
+        );
     }
 
     outputWritten += padding;
@@ -221,8 +236,15 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, out
         }
 
         ipos += 1;
-        for i in 0..nextNonCompressed_length {
-            outputPosition[(opos + i) as usize] =  unsafe {*((inputPosition + ipos + i) as *const u8)};
+        // for i in 0..nextNonCompressed_length {
+        //     outputPosition[(opos + i) as usize] =  unsafe {*((inputPosition + ipos + i) as *const u8)};
+        // }
+        unsafe {
+            libc::memcpy(
+                outputPosition.as_mut_ptr().add(opos as usize) as *mut libc::c_void,
+                (inputPosition + ipos) as *const libc::c_void,
+                nextNonCompressed_length as usize
+            );
         }
 
         ipos += nextNonCompressed_length;
@@ -255,13 +277,27 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, out
         }
 
         if nextCompressed_length <= backOffset {
-            for i in 0..nextCompressed_length {
-                outputPosition[(opos + i) as usize] =  outputPosition[(opos - backOffset + i) as usize];
+            // for i in 0..nextCompressed_length {
+            //     outputPosition[(opos + i) as usize] =  outputPosition[(opos - backOffset + i) as usize];
+            // }
+            unsafe {
+                libc::memcpy(
+                    outputPosition.as_mut_ptr().add(opos as usize) as *mut libc::c_void,
+                    outputPosition.as_mut_ptr().add((opos - backOffset) as usize) as *const libc::c_void,
+                    nextCompressed_length as libc::size_t,
+                );
             }
 
         }else{
-            for i in 0..backOffset {
-                outputPosition[(opos + i) as usize] =  outputPosition[(opos - backOffset + i) as usize];
+            // for i in 0..backOffset {
+            //     outputPosition[(opos + i) as usize] =  outputPosition[(opos - backOffset + i) as usize];
+            // }
+            unsafe {
+                libc::memcpy(
+                    outputPosition.as_mut_ptr().add(opos as usize) as *mut libc::c_void,
+                    outputPosition.as_mut_ptr().add((opos - backOffset) as usize) as *const libc::c_void,
+                    backOffset as libc::size_t,
+                );
             }
             for i in backOffset..nextCompressed_length {
                outputPosition[(opos + i) as usize] = outputPosition[(opos + i - backOffset) as usize];  
