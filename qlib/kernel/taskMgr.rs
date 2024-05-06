@@ -209,6 +209,7 @@ pub fn Wait() {
                 unsafe {
                     asm!("pause");
                 }
+                // todo: perhaps a similar instruction for aarh64?
             }
 
             next = SHARESPACE.scheduler.GetNext();

@@ -1126,6 +1126,8 @@ impl Task {
     pub const XFEATURE_MASK_FPSSE: u64 = 0x3;
 
     pub fn deliverSignalToHandler(&mut self, info: &SignalInfo, sigAct: &SigAct) -> Result<()> {
+        #[cfg(target_arch="aarch64")]
+        todo!("deliverSignalToHandler not implemented for aarch64");
         let pt = self.GetPtRegs();
         let mut userStack = Stack::New(pt.get_stack_pointer() - 128); // red zone
 
@@ -1264,6 +1266,6 @@ impl Task {
     // TODO has to define a SignalRestore for each arch
     #[cfg(target_arch = "aarch64")]
     pub fn SignalReturn(&mut self, _rt: bool) -> Result<i64> {
-        return Err(Error::SysCallRetCtrl(TaskRunState::RunSyscallRet));
+        todo!("task_signals: SignalReturn not implemented for aarch64");
     }
 }
