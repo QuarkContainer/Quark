@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::GLOBAL_ALLOCATOR;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::string::String;
@@ -20,6 +22,8 @@ use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ops::Deref;
+use crate::GuestHostSharedAllocator;
+
 
 use super::super::super::super::addr::*;
 use super::super::super::super::common::*;
@@ -301,10 +305,9 @@ pub struct IOEvent {
 
 pub const IOEVENT_SIZE: u64 = 32; // sizeof(IOEvent)
 
-#[derive(Default)]
 pub struct AIOContextIntern {
     // results is the set of completed requests.
-    pub results: VecDeque<IOEvent>,
+    pub results: VecDeque<IOEvent, GuestHostSharedAllocator>,
 
     // maxOutstanding is the maximum number of outstanding entries; this value
     // is immutable.
@@ -318,14 +321,33 @@ pub struct AIOContextIntern {
     pub queue: Queue,
 }
 
-#[derive(Default, Clone)]
-pub struct AIOContext(Arc<QMutex<AIOContextIntern>>);
+impl Default for AIOContextIntern {
+    fn default() -> Self {
+       return Self {
+        results: VecDeque::new_in(GUEST_HOST_SHARED_ALLOCATOR),
+        maxOutstanding: 0,
+        outstanding: 0,
+        dead:false,
+        queue: Queue::default()
+       }
+    }
+}
+
+#[derive(Clone)]
+pub struct AIOContext(Arc<QMutex<AIOContextIntern>, GuestHostSharedAllocator>);
 
 impl Deref for AIOContext {
-    type Target = Arc<QMutex<AIOContextIntern>>;
+    type Target = Arc<QMutex<AIOContextIntern>, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<QMutex<AIOContextIntern>> {
+    fn deref(&self) -> &Arc<QMutex<AIOContextIntern>, GuestHostSharedAllocator> {
         &self.0
+    }
+}
+
+impl Default for AIOContext {
+    fn default() -> Self {
+       return Self (
+        Arc::new_in(QMutex::<AIOContextIntern>::default(), GUEST_HOST_SHARED_ALLOCATOR))
     }
 }
 
@@ -365,7 +387,7 @@ impl AIOContext {
             ..Default::default()
         };
 
-        return Self(Arc::new(QMutex::new(intern)));
+        return Self(Arc::new_in(QMutex::new(intern), GUEST_HOST_SHARED_ALLOCATOR));
     }
 
     // destroy marks the context dead.

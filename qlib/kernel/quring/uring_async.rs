@@ -51,6 +51,7 @@ pub enum UringOps {
     AsyncOps(AsyncOps),
 }
 
+
 pub struct UringEntry {
     pub ops: UringOps,
     pub linked: bool,
@@ -229,18 +230,25 @@ pub struct AsyncBufWriteInner {
 }
 
 #[derive(Clone)]
-pub struct AsyncBufWrite(Arc<AsyncBufWriteInner>);
+pub struct AsyncBufWrite(Arc<AsyncBufWriteInner, GuestHostSharedAllocator>);
 
 impl Deref for AsyncBufWrite {
-    type Target = Arc<AsyncBufWriteInner>;
+    type Target = Arc<AsyncBufWriteInner, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<AsyncBufWriteInner> {
+    fn deref(&self) -> &Arc<AsyncBufWriteInner, GuestHostSharedAllocator> {
         &self.0
     }
 }
 
 impl AsyncOpsTrait for AsyncBufWrite {
     fn Process(&mut self, result: i32) -> bool {
+
+        info!(
+            "result is {}, self.buf.len() is {}, fd is {}",
+            result,
+            self.buf.Len(),
+            self.fd
+        );
         assert!(
             result as usize == self.buf.Len(),
             "result is {}, self.buf.len() is {}, fd is {}",
@@ -264,7 +272,7 @@ impl AsyncBufWrite {
             lockGuard: QMutex::new(Some(lockGuard)),
         };
 
-        return Self(Arc::new(inner))
+        return Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR))
     }
 }
 
@@ -700,12 +708,12 @@ pub struct AIOWriteInner {
 }
 
 #[derive(Clone)]
-pub struct AIOWrite(Arc<AIOWriteInner>);
+pub struct AIOWrite(Arc<AIOWriteInner, GuestHostSharedAllocator>);
 
 impl Deref for AIOWrite {
-    type Target = Arc<AIOWriteInner>;
+    type Target = Arc<AIOWriteInner, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<AIOWriteInner> {
+    fn deref(&self) -> &Arc<AIOWriteInner, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -761,7 +769,7 @@ impl AIOWrite {
             eventfops: eventfops,
         };
 
-        return Ok(Self(Arc::new(inner)))
+        return Ok(Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR)))
     }
 
     pub fn NewWritev(
@@ -786,14 +794,14 @@ impl AIOWrite {
             eventfops: eventfops,
         };
 
-        return Ok(Self(Arc::new(inner)))
+        return Ok(Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR)))
     }
 }
 
 pub struct AIOReadInner {
     pub fd: i32,
     pub buf: DataBuff,
-    pub iovs: Vec<IoVec>,
+    pub iovs: Vec<IoVec, GuestHostSharedAllocator>,
     pub offset: i64,
     pub taskId: u64,
 
@@ -804,12 +812,12 @@ pub struct AIOReadInner {
 }
 
 #[derive(Clone)]
-pub struct AIORead(Arc<AIOReadInner>);
+pub struct AIORead(Arc<AIOReadInner, GuestHostSharedAllocator>);
 
 impl Deref for AIORead {
-    type Target = Arc<AIOReadInner>;
+    type Target = Arc<AIOReadInner, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<AIOReadInner> {
+    fn deref(&self) -> &Arc<AIOReadInner, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -858,7 +866,8 @@ impl AIORead {
     ) -> Result<Self> {
         let iov = IoVec::NewFromAddr(cb.buf, cb.bytes as usize);
 
-        let iovs = vec![iov];
+        let mut iovs = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
+        iovs.push(iov);
         task.FixPermissionForIovs(&iovs, true)?;
         let buf = DataBuff::New(cb.bytes as usize);
 
@@ -874,7 +883,7 @@ impl AIORead {
             eventfops: eventfops,
         };
 
-        return Ok(Self(Arc::new(inner)));
+        return Ok(Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR)));
     }
 
     pub fn NewReadv(
@@ -889,10 +898,16 @@ impl AIORead {
         let size = IoVec::NumBytes(&iovs);
         let buf = DataBuff::New(size as usize);
 
+        let mut iovs_s = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
+
+        for a in iovs{
+            iovs_s.push(a)
+        }
+
         let inner = AIOReadInner {
             fd: cb.fd as i32,
             buf: buf,
-            iovs: iovs,
+            iovs: iovs_s,
             offset: cb.offset,
             taskId: task.taskId,
             cbAddr: cbAddr,
@@ -901,7 +916,7 @@ impl AIORead {
             eventfops: eventfops,
         };
 
-        return Ok(Self(Arc::new(inner)));
+        return Ok(Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR)));
     }
 }
 
@@ -916,12 +931,12 @@ pub struct AIOFsyncInner {
 }
 
 #[derive(Clone)]
-pub struct AIOFsync(Arc<AIOFsyncInner>);
+pub struct AIOFsync(Arc<AIOFsyncInner, GuestHostSharedAllocator>);
 
 impl Deref for AIOFsync {
-    type Target = Arc<AIOFsyncInner>;
+    type Target = Arc<AIOFsyncInner, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<AIOFsyncInner> {
+    fn deref(&self) -> &Arc<AIOFsyncInner, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -970,7 +985,7 @@ impl AIOFsync {
             eventfops: eventfops,
         };
 
-        return Ok(Self(Arc::new(inner)))
+        return Ok(Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR)))
     }
 }
 

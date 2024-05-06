@@ -285,6 +285,7 @@ impl UringAsyncOpsTrait for AsyncWritev {
 impl UringAsyncOpsTrait for AsyncBufWrite {
     fn Entry(&self) -> squeue::Entry {
         //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
+        info!("AsyncBufWrite buf {:x}, len {:?}", self.bufAddr, self.bufLen);
         let op = opcode::Write::new(
             types::Fd(self.fd),
             self.bufAddr as *const u8,

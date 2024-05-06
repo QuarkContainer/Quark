@@ -13,11 +13,12 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use alloc::sync::Arc;
 use core::any::Any;
 use core::ops::Deref;
 use core::slice;
-
+use crate::GuestHostSharedAllocator;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::mem::seq::*;
@@ -60,7 +61,7 @@ pub fn NewEventfd(task: &Task, initVal: u64, semMode: bool) -> File {
         semMode: semMode,
     };
 
-    let ops = EventOperations(Arc::new(QMutex::new(internal)));
+    let ops = EventOperations(Arc::new_in(QMutex::new(internal), GUEST_HOST_SHARED_ALLOCATOR));
 
     return File::New(
         &dirent,
@@ -74,12 +75,12 @@ pub fn NewEventfd(task: &Task, initVal: u64, semMode: bool) -> File {
 }
 
 #[derive(Clone)]
-pub struct EventOperations(Arc<QMutex<EventOperationsInternal>>);
+pub struct EventOperations(Arc<QMutex<EventOperationsInternal>, GuestHostSharedAllocator>);
 
 impl Deref for EventOperations {
-    type Target = Arc<QMutex<EventOperationsInternal>>;
+    type Target = Arc<QMutex<EventOperationsInternal>, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<QMutex<EventOperationsInternal>> {
+    fn deref(&self) -> &Arc<QMutex<EventOperationsInternal>, GuestHostSharedAllocator> {
         &self.0
     }
 }

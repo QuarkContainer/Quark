@@ -2,7 +2,7 @@
 # Paths
 #
 _QROOT_DIR = $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
-QROOT_DIR = $(realpath $(_QROOT_DIR)../Quark)
+QROOT_DIR = $(realpath $(_QROOT_DIR)../Quark_cc)
 QKERNEL_BUILD_DIR = $(QROOT_DIR)/build
 QTARGET_RELASE = $(QROOT_DIR)/target/release
 QTARGET_DEBUG = $(QROOT_DIR)/target/debug
