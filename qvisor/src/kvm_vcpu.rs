@@ -557,7 +557,7 @@ impl CPULocal {
             }
 
             super::GLOBAL_ALLOCATOR.Clear();
-
+            //debug!("epoll_wait epollfd:{:x},time:{:x}",self.epollfd,time);
             let _nfds = unsafe { libc::epoll_wait(self.epollfd, &mut events[0], 2, time) };
            
             {

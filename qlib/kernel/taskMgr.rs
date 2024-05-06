@@ -106,7 +106,7 @@ pub fn WaitFn() -> ! {
 
                 //debug!("vcpu sleep");
                 task = HostSpace::VcpuWait();
-                //debug!("vcpu wakeup {:x}", addr);
+                //debug!("vcpu wakeup");
                 SHARESPACE.scheduler.DecreaseHaltVcpuCnt();
             }
 

@@ -12,18 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::qlib::mutex::*;
-use alloc::sync::Arc;
-use alloc::sync::Weak;
-use core::cell::*;
-use core::ops::Deref;
-
 use super::super::epoll::epoll_entry::*;
 use super::super::fasync::*;
 use super::super::futex::*;
 use super::waiter::*;
 use super::*;
+#[cfg(feature = "cc")]
+use crate::qlib::mem::list_allocator::GuestHostSharedAllocator;
+use crate::qlib::mutex::*;
 use crate::qlib::TaskId;
+#[cfg(feature = "cc")]
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+#[cfg(feature = "cc")]
+use alloc::boxed::Box;
+use alloc::sync::Arc;
+use alloc::sync::Weak;
+use core::cell::*;
+use core::ops::Deref;
 
 pub enum WaitContext {
     None,
@@ -133,8 +138,13 @@ pub struct EntryInternal {
     pub context: WaitContext,
 }
 
-#[derive(Clone, Default)]
-pub struct WaitEntryWeak(pub Weak<QMutex<EntryInternal>>);
+#[derive(Clone)]
+pub struct WaitEntryWeak(pub Weak<QMutex<EntryInternal>, GuestHostSharedAllocator>);
+impl Default for WaitEntryWeak {
+    fn default() -> Self {
+        return WaitEntry::default().Downgrade();
+    }
+}
 
 impl WaitEntryWeak {
     pub fn Upgrade(&self) -> Option<WaitEntry> {
@@ -147,13 +157,21 @@ impl WaitEntryWeak {
     }
 }
 
-#[derive(Default, Clone)]
-pub struct WaitEntry(Arc<QMutex<EntryInternal>>);
+#[derive(Clone)]
+pub struct WaitEntry(Arc<QMutex<EntryInternal>, GuestHostSharedAllocator>);
 
+impl Default for WaitEntry {
+    fn default() -> Self {
+        return WaitEntry(Arc::new_in(
+            QMutex::new(EntryInternal::default()),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
+    }
+}
 impl Deref for WaitEntry {
-    type Target = Arc<QMutex<EntryInternal>>;
+    type Target = Arc<QMutex<EntryInternal>, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<QMutex<EntryInternal>> {
+    fn deref(&self) -> &Arc<QMutex<EntryInternal>, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -184,7 +202,10 @@ impl WaitEntry {
             context: WaitContext::None,
         };
 
-        return Self(Arc::new(QMutex::new(internal)));
+        return Self(Arc::new_in(
+            QMutex::new(internal),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
     }
 
     pub fn Timeout(&self) {
@@ -192,21 +213,27 @@ impl WaitEntry {
     }
 
     pub fn NewThreadContext(waiter: &Waiter, waiterId: WaiterID, mask: EventMask) -> Self {
-        let context = ThreadContext {
-            waiterID: waiterId,
-            waiter: waiter.clone(),
-            tid: 0,
-            key: Key::default(),
-        };
+        let context = Box::new_in(
+            ThreadContext {
+                waiterID: waiterId,
+                waiter: waiter.clone(),
+                tid: 0,
+                key: Key::default(),
+            },
+            GUEST_HOST_SHARED_ALLOCATOR,
+        );
 
         let internal = EntryInternal {
             next: None,
             prev: None,
             mask: mask,
-            context: WaitContext::ThreadContext(RefCell::new(context)),
+            context: WaitContext::ThreadContext(RefCell::new(*context)),
         };
 
-        return Self(Arc::new(QMutex::new(internal)));
+        return Self(Arc::new_in(
+            QMutex::new(internal),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
     }
 
     pub fn ID(&self) -> WaiterID {
@@ -227,6 +254,7 @@ impl WaitEntry {
 
     pub fn Notify(&self, mask: EventMask) -> bool {
         let e = self.lock();
+
         if mask & e.mask != 0 {
             e.context.CallBack(mask);
             return true;

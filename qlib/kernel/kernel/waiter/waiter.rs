@@ -15,11 +15,14 @@
 use alloc::sync::Arc;
 use core::ops::Deref;
 
-use crate::qlib::mutex::*;
-
 use super::super::super::super::task_mgr::*;
 use super::super::super::taskMgr;
 use super::super::super::SHARESPACE;
+#[cfg(feature = "cc")]
+use crate::qlib::mem::list_allocator::GuestHostSharedAllocator;
+use crate::qlib::mutex::*;
+#[cfg(feature = "cc")]
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 use super::entry::*;
 use super::*;
@@ -47,13 +50,21 @@ impl Default for WaiterInternal {
     }
 }
 
-#[derive(Clone, Default)]
-pub struct Waiter(Arc<QMutex<WaiterInternal>>);
+#[derive(Clone)]
+pub struct Waiter(Arc<QMutex<WaiterInternal>, GuestHostSharedAllocator>);
 
+impl Default for Waiter {
+    fn default() -> Self {
+        return Waiter(Arc::new_in(
+            QMutex::new(WaiterInternal::default()),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
+    }
+}
 impl Deref for Waiter {
-    type Target = Arc<QMutex<WaiterInternal>>;
+    type Target = Arc<QMutex<WaiterInternal>, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<QMutex<WaiterInternal>> {
+    fn deref(&self) -> &Arc<QMutex<WaiterInternal>, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -65,7 +76,10 @@ impl Waiter {
             ..Default::default()
         };
 
-        return Self(Arc::new(QMutex::new(internal)));
+        return Self(Arc::new_in(
+            QMutex::new(internal),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
     }
 
     fn NextWaiterId(&self) -> WaiterID {
@@ -120,6 +134,7 @@ impl Waiter {
     pub fn Wait(&self, mask: u64) -> WaiterID {
         loop {
             {
+
                 loop {
                     let mut b = self.lock();
                     //error!("b.bitmap {:b} mask is {:b}", b.bitmap, mask);

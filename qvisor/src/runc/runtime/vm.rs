@@ -527,7 +527,7 @@ impl VirtualMachine {
         }
 
         let cpuCount = cpuCount.max(4); // minimal 2 cpus
-
+        //let cpuCount = 3;
         VMS.write().vcpuCount = cpuCount; //VMSpace::VCPUCount();
         VMS.write().RandomVcpuMapping();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;

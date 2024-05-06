@@ -1278,6 +1278,7 @@ impl HostSpace {
         unsafe {
             core::ptr::copy_nonoverlapping(addr as *const u8, new_addr, addrlen as usize);
         }
+
         let mut msg = Box::new_in(
             Msg::IOBind(IOBind {
                 sockfd,
