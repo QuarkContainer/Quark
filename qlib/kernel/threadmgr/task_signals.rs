@@ -1023,6 +1023,7 @@ impl Task {
     // deliverSignal delivers the given signal and returns the following run state.
     pub fn ThreadDeliverSignal(&mut self, info: &SignalInfo, act: &SigAct) -> TaskRunState {
         let sigact = ComputeAction(Signal(info.Signo), act);
+        debug!("task_signals: thread deliver signal {:#?}", act);
 
         if self.haveSyscallReturn {
             let ret = self.Return();
@@ -1125,11 +1126,11 @@ impl Task {
     // xsave features that are always enabled in signal frame fpstate.
     pub const XFEATURE_MASK_FPSSE: u64 = 0x3;
 
+    #[cfg(target_arch="x86")]
     pub fn deliverSignalToHandler(&mut self, info: &SignalInfo, sigAct: &SigAct) -> Result<()> {
-        #[cfg(target_arch="aarch64")]
-        todo!("deliverSignalToHandler not implemented for aarch64");
         let pt = self.GetPtRegs();
         let mut userStack = Stack::New(pt.get_stack_pointer() - 128); // red zone
+
 
         if sigAct.flags.IsOnStack() && self.signalStack.IsEnable() {
             self.signalStack.SetOnStack();
@@ -1202,25 +1203,23 @@ impl Task {
         let currTask = Task::Current();
         let regs = currTask.GetPtRegs();
         *regs = PtRegs::default();
-        #[cfg(target_arch = "x86_64")]
-        {
-            regs.rsp = rsp;
-            regs.rcx = sigAct.handler;
-            regs.r11 = 0x2;
-            regs.rdi = signo;
-            regs.rsi = sigInfoAddr;
-            regs.rdx = sigCtxAddr;
-            regs.rax = 0;
-            regs.rip = regs.rcx;
-            regs.eflags = regs.r11;
-        }
-
+        regs.rsp = rsp;
+        regs.rcx = sigAct.handler;  // x86 return address
+        regs.r11 = 0x2;             // x86 rflags
+        regs.rdi = signo;           // paras to handler
+        regs.rsi = sigInfoAddr;
+        regs.rdx = sigCtxAddr;
+        regs.rax = 0;
+        regs.rip = regs.rcx;
+        regs.eflags = regs.r11;
 
         return Ok(());
     }
 
     #[cfg(target_arch = "x86_64")]
     pub fn SignalReturn(&mut self, _rt: bool) -> Result<i64> {
+        // sigret from user signal handler
+        // sys_sigreturn
         let pt = self.GetPtRegs();
 
         let mut userStack = Stack::New(pt.get_stack_pointer());
@@ -1239,6 +1238,7 @@ impl Task {
             self.savefpsate = true;
         }
 
+        // restore user stack?
         let alt = uc.Stack;
 
         self.SetSignalStack(alt);
@@ -1263,9 +1263,97 @@ impl Task {
         return Err(Error::SysCallRetCtrl(TaskRunState::RunSyscallRet));
     }
 
-    // TODO has to define a SignalRestore for each arch
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn deliverSignalToHandler(&mut self, info: &SignalInfo, sigAct: &SigAct) -> Result<()> {
+        let pt = self.GetPtRegs();
+        let mut userStack = Stack::New(pt.get_stack_pointer() - 128); // red zone
+
+        // if user specifies their own stack
+        if sigAct.flags.IsOnStack() && self.signalStack.IsEnable() {
+            self.signalStack.SetOnStack();
+            if !self.signalStack.Contains(pt.get_stack_pointer()) {
+                userStack = Stack::New(self.signalStack.Top());
+            }
+        }
+        let t = self.Thread();
+        let mut mask = t.lock().signalMask;
+        let haveSavedSignalMask = t.lock().haveSavedSignalMask;
+        if haveSavedSignalMask {
+            mask = t.lock().savedSignalMask;
+            t.lock().haveSavedSignalMask = false;
+        }
+
+        let mut newMask = t.lock().signalMask;
+        newMask.0 |= sigAct.mask;
+        if !sigAct.flags.IsNoDefer() {
+            newMask.0 |= SignalSet::New(Signal(info.Signo)).0;
+        }
+        t.SetSignalMask(newMask);
+
+        let mut fault_addr = 0;
+        if info.Signo == Signal::SIGBUS || info.Signo == Signal::SIGSEGV {
+            fault_addr = info.SigFault().addr;
+        }
+
+        // set up signal frame
+
+        // let's forget about the fp units for the moment
+        let uc = UContext::New(pt, mask.0, fault_addr, 0, &self.signalStack);
+        // TODO if SA_SIGINFO is not requested, the handler takes the form
+        //      void handler(int signo)
+        // we should push the siginfo and sigctx conditionally
+        let sigInfoAddr = userStack.PushType::<SignalInfo>(self, info)?;
+        let sigCtxAddr = userStack.PushType::<UContext>(self, &uc)?;
+        let signo = info.Signo as u64;
+        let currTask = Task::Current();
+        let regs = currTask.GetPtRegs();
+        *regs = PtRegs::default();
+        regs.sp = sigCtxAddr;
+        regs.pc = sigAct.handler;
+        regs.pstate = 0x0;
+
+        // parameters to the handler
+        // handler(int signo, siginfo_t *info, void *context)
+        regs.regs[0] = signo;
+        regs.regs[1] = sigInfoAddr;
+        regs.regs[2] = sigCtxAddr;
+        // TODO set frame pointer regs[29] if there are other sig frames
+        if sigAct.flags.HasRestorer() {
+            regs.regs[30] = sigAct.restorer;
+        } else {
+            let vdsoAddr = Task::Current().mm.GetUserVDSOBase();
+            assert!(vdsoAddr != 0);
+            regs.regs[30] = vdsoAddr + VDSO_OFFSET_SIGRETURN;
+        }
+        return Ok(());
+    }
+
     #[cfg(target_arch = "aarch64")]
     pub fn SignalReturn(&mut self, _rt: bool) -> Result<i64> {
-        todo!("task_signals: SignalReturn not implemented for aarch64");
+        let pt = self.GetPtRegs();
+        // pop the signal frame
+        let mut userStack = Stack::New(pt.get_stack_pointer());
+        let mut uc = UContext::default();
+        userStack.PopType::<UContext>(self, &mut uc)?;
+        let mut sigInfo = SignalInfo::default();
+        userStack.PopType::<SignalInfo>(self, &mut sigInfo)?;
+
+        let alt = uc.Stack;
+        self.SetSignalStack(alt);
+        // restore user context
+        // ignore restoring fpstate for now.
+        pt.Set(&uc.MContext);
+
+        let oldMask = uc.MContext.oldmask & !(UNBLOCKED_SIGNALS.0);
+        let t = self.Thread();
+        t.SetSignalMask(SignalSet(oldMask));
+        // TODO restart syscall if needed
+        if t.lock().HasSignal() {
+            t.lock().interruptSelf();
+        }
+
+        // TODO Segfault if badframe
+        return Err(Error::SysCallRetCtrl(TaskRunState::RunSyscallRet));
     }
 }

@@ -398,18 +398,21 @@ impl Default for UContext {
 
 #[cfg(target_arch = "aarch64")]
 impl UContext {
-    pub fn New(ptRegs: &PtRegs, oldMask: u64, cr2: u64, fpstate: u64, alt: &SignalStack) -> Self {
+    pub fn New(ptRegs: &PtRegs, oldMask: u64, fault_address: u64, fpstate: u64, alt: &SignalStack) -> Self {
         return Self {
             Flags: 0,
             Link: 0,
             Stack: alt.clone(),
             Sigset: 0,
             __pad: [0u8; (1024 / 8) - core::mem::size_of::<u64>()],
-            MContext: SigContext::New(ptRegs, oldMask, cr2, fpstate),
+            MContext: SigContext::New(ptRegs, oldMask, fault_address, fpstate),
         };
     }
 }
 
+// HACK. TODO Refactor this as soon as we have proper VDSO perser.
+#[cfg(target_arch = "aarch64")]
+pub const VDSO_OFFSET_SIGRETURN: u64 = 0x1120;
 
 // https://elixir.bootlin.com/linux/latest/source/arch/x86/include/uapi/asm/sigcontext.h#L284
 #[cfg(target_arch = "x86_64")]
@@ -460,6 +463,7 @@ pub struct SigContext {
 	pub sp: u64,
 	pub pc: u64,
 	pub pstate: u64,
+    pub oldmask: u64, /* should we do it here? */
 	/* 4K reserved for FP/SIMD state and future expansion */
 	pub __reserved: [u8; 4096],
 }
@@ -504,8 +508,13 @@ impl SigContext {
 impl Default for SigContext {
     fn default() -> Self {
         Self {
+            fault_address: 0,
+            regs: [0u64; 31],
+            sp: 0,
+            pc: 0,
+            pstate: 0,
+            oldmask: 0,
             __reserved: [0u8;4096],
-            ..Default::default()
         }
     }
 }
@@ -523,16 +532,17 @@ impl fmt::Debug for SigContext {
     }
 }
 
-//TODO  how to set sigcontext
+//TODO support fpstate
 #[cfg(target_arch = "aarch64")]
 impl SigContext {
-    pub fn New(ptRegs: &PtRegs, oldMask: u64, cr2: u64, fpstate: u64) -> Self {
+    pub fn New(ptRegs: &PtRegs, oldMask: u64, fault_address: u64, _fpstate: u64) -> Self {
         return Self {
-            fault_address: 0,
+            fault_address: fault_address,
             regs: ptRegs.regs.clone(),
             pc: ptRegs.pc,
             sp: ptRegs.sp,
             pstate: ptRegs.pstate,
+            oldmask: oldMask,
             ..Default::default()
         };
     }
@@ -606,13 +616,13 @@ impl fmt::Debug for SigAct {
             f,
             "SigAction {{ \n\
         handler: {:x}, \n\
-        flag : {:x}, \n \
-        flags::HasRestorer: {}, \n \
-        flags::IsOnStack: {}, \n \
-        flags::IsRestart: {}, \n \
-        flags::IsResetHandler: {}, \n \
-        flags::IsNoDefer: {}, \n \
-        flags::IsSigInfo: {}, \n \
+        flag : {:x}, \n\
+        flags::HasRestorer: {}, \n\
+        flags::IsOnStack: {}, \n\
+        flags::IsRestart: {}, \n\
+        flags::IsResetHandler: {}, \n\
+        flags::IsNoDefer: {}, \n\
+        flags::IsSigInfo: {}, \n\
         restorer : {:x},  \n\
         mask: {:x},  \n}}",
             self.handler,
