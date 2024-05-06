@@ -1665,6 +1665,7 @@ dependencies = [
  "local-ip-address",
  "log",
  "log4rs",
+ "nix",
  "once_cell",
  "prost 0.11.9",
  "pyo3",

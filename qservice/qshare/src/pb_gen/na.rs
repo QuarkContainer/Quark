@@ -1,6 +1,44 @@
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AskFuncPodReq {
+    #[prost(string, tag = "1")]
+    pub tenant: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub funcname: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AskFuncPodResp {
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DisableFuncPodReq {
+    #[prost(string, tag = "1")]
+    pub tenant: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub namespace: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub funcname: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub id: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DisableFuncPodResp {
+    #[prost(string, tag = "1")]
+    pub error: ::prost::alloc::string::String,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NodeAgentRespMsg {
     #[prost(oneof = "node_agent_resp_msg::MessageBody", tags = "100, 200")]
     pub message_body: ::core::option::Option<node_agent_resp_msg::MessageBody>,
@@ -460,15 +498,15 @@ impl EventType {
     }
 }
 /// Generated client implementations.
-pub mod schedule_service_client {
+pub mod scheduler_service_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
     use tonic::codegen::http::Uri;
     #[derive(Debug, Clone)]
-    pub struct ScheduleServiceClient<T> {
+    pub struct SchedulerServiceClient<T> {
         inner: tonic::client::Grpc<T>,
     }
-    impl ScheduleServiceClient<tonic::transport::Channel> {
+    impl SchedulerServiceClient<tonic::transport::Channel> {
         /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
@@ -479,7 +517,7 @@ pub mod schedule_service_client {
             Ok(Self::new(conn))
         }
     }
-    impl<T> ScheduleServiceClient<T>
+    impl<T> SchedulerServiceClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::BoxBody>,
         T::Error: Into<StdError>,
@@ -497,7 +535,7 @@ pub mod schedule_service_client {
         pub fn with_interceptor<F>(
             inner: T,
             interceptor: F,
-        ) -> ScheduleServiceClient<InterceptedService<T, F>>
+        ) -> SchedulerServiceClient<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
@@ -511,7 +549,7 @@ pub mod schedule_service_client {
                 http::Request<tonic::body::BoxBody>,
             >>::Error: Into<StdError> + Send + Sync,
         {
-            ScheduleServiceClient::new(InterceptedService::new(inner, interceptor))
+            SchedulerServiceClient::new(InterceptedService::new(inner, interceptor))
         }
         /// Compress requests with the given encoding.
         ///
@@ -528,10 +566,10 @@ pub mod schedule_service_client {
             self.inner = self.inner.accept_compressed(encoding);
             self
         }
-        pub async fn create_func_service(
+        pub async fn ask_func_pod(
             &mut self,
-            request: impl tonic::IntoRequest<super::CreateFuncServiceReq>,
-        ) -> Result<tonic::Response<super::CreateFuncServiceResp>, tonic::Status> {
+            request: impl tonic::IntoRequest<super::AskFuncPodReq>,
+        ) -> Result<tonic::Response<super::AskFuncPodResp>, tonic::Status> {
             self.inner
                 .ready()
                 .await
@@ -543,7 +581,26 @@ pub mod schedule_service_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/na.ScheduleService/CreateFuncService",
+                "/na.SchedulerService/AskFuncPod",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn disable_func_pod(
+            &mut self,
+            request: impl tonic::IntoRequest<super::DisableFuncPodReq>,
+        ) -> Result<tonic::Response<super::DisableFuncPodResp>, tonic::Status> {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::new(
+                        tonic::Code::Unknown,
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/na.SchedulerService/DisableFuncPod",
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
@@ -754,25 +811,29 @@ pub mod node_agent_service_client {
     }
 }
 /// Generated server implementations.
-pub mod schedule_service_server {
+pub mod scheduler_service_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
-    /// Generated trait containing gRPC methods that should be implemented for use with ScheduleServiceServer.
+    /// Generated trait containing gRPC methods that should be implemented for use with SchedulerServiceServer.
     #[async_trait]
-    pub trait ScheduleService: Send + Sync + 'static {
-        async fn create_func_service(
+    pub trait SchedulerService: Send + Sync + 'static {
+        async fn ask_func_pod(
             &self,
-            request: tonic::Request<super::CreateFuncServiceReq>,
-        ) -> Result<tonic::Response<super::CreateFuncServiceResp>, tonic::Status>;
+            request: tonic::Request<super::AskFuncPodReq>,
+        ) -> Result<tonic::Response<super::AskFuncPodResp>, tonic::Status>;
+        async fn disable_func_pod(
+            &self,
+            request: tonic::Request<super::DisableFuncPodReq>,
+        ) -> Result<tonic::Response<super::DisableFuncPodResp>, tonic::Status>;
     }
     #[derive(Debug)]
-    pub struct ScheduleServiceServer<T: ScheduleService> {
+    pub struct SchedulerServiceServer<T: SchedulerService> {
         inner: _Inner<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
     }
     struct _Inner<T>(Arc<T>);
-    impl<T: ScheduleService> ScheduleServiceServer<T> {
+    impl<T: SchedulerService> SchedulerServiceServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
@@ -806,9 +867,9 @@ pub mod schedule_service_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for ScheduleServiceServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for SchedulerServiceServer<T>
     where
-        T: ScheduleService,
+        T: SchedulerService,
         B: Body + Send + 'static,
         B::Error: Into<StdError> + Send + 'static,
     {
@@ -824,25 +885,25 @@ pub mod schedule_service_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
-                "/na.ScheduleService/CreateFuncService" => {
+                "/na.SchedulerService/AskFuncPod" => {
                     #[allow(non_camel_case_types)]
-                    struct CreateFuncServiceSvc<T: ScheduleService>(pub Arc<T>);
+                    struct AskFuncPodSvc<T: SchedulerService>(pub Arc<T>);
                     impl<
-                        T: ScheduleService,
-                    > tonic::server::UnaryService<super::CreateFuncServiceReq>
-                    for CreateFuncServiceSvc<T> {
-                        type Response = super::CreateFuncServiceResp;
+                        T: SchedulerService,
+                    > tonic::server::UnaryService<super::AskFuncPodReq>
+                    for AskFuncPodSvc<T> {
+                        type Response = super::AskFuncPodResp;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::CreateFuncServiceReq>,
+                            request: tonic::Request<super::AskFuncPodReq>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
                             let fut = async move {
-                                (*inner).create_func_service(request).await
+                                (*inner).ask_func_pod(request).await
                             };
                             Box::pin(fut)
                         }
@@ -852,7 +913,47 @@ pub mod schedule_service_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
-                        let method = CreateFuncServiceSvc(inner);
+                        let method = AskFuncPodSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/na.SchedulerService/DisableFuncPod" => {
+                    #[allow(non_camel_case_types)]
+                    struct DisableFuncPodSvc<T: SchedulerService>(pub Arc<T>);
+                    impl<
+                        T: SchedulerService,
+                    > tonic::server::UnaryService<super::DisableFuncPodReq>
+                    for DisableFuncPodSvc<T> {
+                        type Response = super::DisableFuncPodResp;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::DisableFuncPodReq>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).disable_func_pod(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = DisableFuncPodSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -879,7 +980,7 @@ pub mod schedule_service_server {
             }
         }
     }
-    impl<T: ScheduleService> Clone for ScheduleServiceServer<T> {
+    impl<T: SchedulerService> Clone for SchedulerServiceServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -889,7 +990,7 @@ pub mod schedule_service_server {
             }
         }
     }
-    impl<T: ScheduleService> Clone for _Inner<T> {
+    impl<T: SchedulerService> Clone for _Inner<T> {
         fn clone(&self) -> Self {
             Self(self.0.clone())
         }
@@ -899,8 +1000,8 @@ pub mod schedule_service_server {
             write!(f, "{:?}", self.0)
         }
     }
-    impl<T: ScheduleService> tonic::server::NamedService for ScheduleServiceServer<T> {
-        const NAME: &'static str = "na.ScheduleService";
+    impl<T: SchedulerService> tonic::server::NamedService for SchedulerServiceServer<T> {
+        const NAME: &'static str = "na.SchedulerService";
     }
 }
 /// Generated server implementations.

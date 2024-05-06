@@ -164,11 +164,21 @@ impl Scheduler {
         return self.haltVcpuCnt.load(Ordering::SeqCst);
     }
 
+    pub fn IdleVcpuCnt(&self) -> usize {
+        return self.vcpuWaitMask.load(Ordering::SeqCst).count_ones() as usize;
+    }
+
     pub fn ReadyForHibernate(&self) -> bool {
         // Hibernate needs to wait all vcpu is halt
         // there are 2 exception: first is io_thread, second is the hibernate vcpu
-        let ret = self.HaltVcpuCnt() + 2 == self.vcpuCnt;
-        //error!("ReadyForHibernate haltvcpu {}, vcpu count is {}", self.HaltVcpuCnt(), self.vcpuCnt);
+        let ret = self.IdleVcpuCnt() + 2 == self.vcpuCnt;
+        // error!(
+        //     "ReadyForHibernate haltvcpu {}/{}, vcpu count is {}/{:b}",
+        //     self.HaltVcpuCnt(),
+        //     self.IdleVcpuCnt(),
+        //     self.vcpuCnt,
+        //     self.vcpuWaitMask.load(Ordering::SeqCst)
+        // );
         return ret;
     }
 

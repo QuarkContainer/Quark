@@ -45,7 +45,7 @@ impl PodMgr {
         funcname: &str,
     ) -> Result<Vec<PodDef>> {
         use std::ops::Bound::*;
-        let start = format!("{}/{}/{}_", tenant, namespace, funcname);
+        let start = format!("{}/{}/{}/", tenant, namespace, funcname);
         let mut vec = Vec::new();
         for (key, val) in self
             .lock()

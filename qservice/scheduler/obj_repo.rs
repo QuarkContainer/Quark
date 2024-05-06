@@ -30,6 +30,8 @@ use qshare::obj_mgr::func_mgr::*;
 use qshare::obj_mgr::namespace_mgr::*;
 use qshare::obj_mgr::pod_mgr::PodMgr;
 
+use crate::POD_HANDLER;
+
 #[derive(Debug)]
 pub struct ObjRepoInner {
     pub funcPackageMgr: FuncPackageMgr,
@@ -189,6 +191,8 @@ impl ObjRepo {
                 )));
             }
         }
+
+        POD_HANDLER.get().unwrap().EnqEvent(event)?;
 
         return Ok(());
     }

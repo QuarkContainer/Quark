@@ -29,7 +29,7 @@ use qshare::common::*;
 use qshare::obj_mgr::func_mgr::*;
 use qshare::obj_mgr::namespace_mgr::NamespaceSpec;
 
-use crate::func_worker::FUNCAGENT_MGR;
+use crate::func_agent_mgr::FUNCAGENT_MGR;
 use crate::NAMESPACE_STORE;
 use crate::OBJ_REPO;
 

@@ -16,8 +16,9 @@
 syntax = "proto3";
 package na;
 
-service ScheduleService {
-  rpc CreateFuncService(CreateFuncServiceReq) returns (CreateFuncServiceResp) {}
+service SchedulerService {
+  rpc AskFuncPod(AskFuncPodReq) returns (AskFuncPodResp) {}
+  rpc DisableFuncPod(DisableFuncPodReq) returns (DisableFuncPodResp) {}
 }
 
 service NodeAgentService {
@@ -28,9 +29,29 @@ service NodeAgentService {
   rpc WakeupPod(WakeupPodReq) returns (WakeupPodResp) {}
   rpc NodeConfig(NodeConfigReq) returns (NodeConfigResp) {}
   rpc CreateFuncPod(CreateFuncPodReq) returns (CreateFuncPodResp) {}
-  //rpc CreateFuncService(CreateFuncServiceReq) returns (CreateFuncServiceResp) {}
 }
 ///////////////////////////////////////////////////////////////////////
+
+message AskFuncPodReq {
+  string tenant = 1;
+  string namespace = 2;
+  string funcname = 3;
+}
+
+message AskFuncPodResp {
+  string error = 1;
+}
+
+message DisableFuncPodReq {
+  string tenant = 1;
+  string namespace = 2;
+  string funcname = 3;
+  string id = 4;
+}
+
+message DisableFuncPodResp {
+  string error = 1;
+}
 
 message NodeAgentRespMsg {
   oneof MessageBody {
