@@ -218,10 +218,13 @@ pub extern "C" fn exception_handler_el1h_sync(ptregs_addr:usize){
             let far = GetFarEL1();
             HandleMemAbort(ptregs_addr, esr, far, true, false);
         },
+        EsrDefs::EC_BRK => {
+            debug!("BRK from EL1, ignored");
+        }
         _ => {
             debug!("unhandled sync exception from el1: {:#x}\n - ESR_EL1:{:#x}", ec, esr);
             if ptregs_addr == 0 {
-               panic!("VM: exception frame is null pointer\n")
+               panic!("VM: exception frame is null pointer\n");
             } else {
                 let ctx_p = ptregs_addr as *mut PtRegs;
                 let ctx_p = ctx_p.cast::<PtRegs>();
