@@ -52,7 +52,9 @@ impl PageMgr {
     }
 
     #[cfg(target_arch = "aarch64")]
-    pub fn Clear(&self) {}
+    pub fn Clear(&self) {
+        // todo!("PageMgr::Clear not implemented for aarch64");
+    }
 }
 
 impl RefMgr for PageMgr {
