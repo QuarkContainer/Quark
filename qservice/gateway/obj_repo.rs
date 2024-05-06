@@ -320,8 +320,14 @@ impl NamespaceStore {
         return Ok(());
     }
 
-    pub async fn DropFuncPackage(&self, namespace: &str, name: &str, revision: i64) -> Result<()> {
-        let key = format!("{}/{}/{}", FuncPackageSpec::KEY, namespace, name);
+    pub async fn DropFuncPackage(
+        &self,
+        tenant: &str,
+        namespace: &str,
+        name: &str,
+        revision: i64,
+    ) -> Result<()> {
+        let key = format!("{}/{}/{}/{}", FuncPackageSpec::KEY, tenant, namespace, name);
         self.store.Delete(&key, revision).await?;
         return Ok(());
     }

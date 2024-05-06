@@ -128,7 +128,16 @@ impl PodHandler {
                                 }
                             }
                             EventType::Modified => {}
-                            EventType::Deleted => {}
+                            EventType::Deleted => {
+                                match &obj.kind as &str {
+                                    FuncPackageSpec::KEY => {
+                                        let spec = FuncPackageSpec::FromDataObject(obj)?;
+                                        self.ProcessRemoveFuncPackage(&spec).await?;
+                                    }
+                                    _ => {
+                                    }
+                                }
+                            }
                             _o => {
                                 return Err(Error::CommonError(format!(
                                     "PodHandler::ProcessDeltaEvent {:?}",
@@ -195,8 +204,7 @@ impl PodHandler {
         return Ok(());
     }
 
-    pub async fn ProcessRemoveFuncPackage(&self, fp: &FuncPackage) -> Result<()> {
-        let spec = &fp.spec;
+    pub async fn ProcessRemoveFuncPackage(&self, spec: &FuncPackageSpec) -> Result<()> {
         let pods =
             OBJ_REPO
                 .get()

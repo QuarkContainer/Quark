@@ -344,7 +344,7 @@ impl FuncWorker {
                                 unreachable!("FuncWorker::Process eventQueueRx closed");
                             }
                         }
-                        e = self.ProbeLiveness() => {
+                        _e = self.ProbeLiveness() => {
                             self.funcAgent.SendWorkerStatusUpdate(WorkerUpdate::WorkerFail(self.clone()));
                             break;
                         }
@@ -384,9 +384,9 @@ impl FuncWorker {
                             self.StopWorker().await?;
                             return Ok(())
                         }
-                        e = self.ProbeLiveness() => {
+                        _e = self.ProbeLiveness() => {
                             self.funcAgent.SendWorkerStatusUpdate(WorkerUpdate::WorkerFail(self.clone()));
-                            
+
                             break;
                         }
                         req = reqQueueRx.recv() => {

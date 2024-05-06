@@ -148,7 +148,7 @@ async fn DropFuncPackage(
             match NAMESPACE_STORE
                 .get()
                 .unwrap()
-                .DropFuncPackage(&namespace, &name, revision)
+                .DropFuncPackage(&tenant, &namespace, &name, revision)
                 .await
             {
                 Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}", e))),
