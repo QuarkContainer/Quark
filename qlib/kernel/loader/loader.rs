@@ -279,6 +279,7 @@ pub fn Load(
     extraAuxv: &[AuxEntry],
 ) -> Result<(u64, u64, u64)> {
     let vdsoAddr = LoadVDSO(task)?;
+    task.mm.SetUserVDSOBase(vdsoAddr);
 
     let (loaded, executable, tmpArgv) = LoadExecutable(task, filename, argv)?;
     let argv = tmpArgv;
