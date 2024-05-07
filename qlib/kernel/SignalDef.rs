@@ -346,6 +346,7 @@ pub const UC_SIGCONTEXT_SS: u64 = 2;
 pub const UC_STRICT_RESTORE_SS: u64 = 4;
 
 // https://elixir.bootlin.com/linux/latest/source/include/uapi/asm-generic/ucontext.h#L5
+#[cfg(target_arch = "x86_64")]
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct UContext {
@@ -356,6 +357,7 @@ pub struct UContext {
     pub Sigset: u64,
 }
 
+#[cfg(target_arch = "x86_64")]
 impl UContext {
     pub fn New(ptRegs: &PtRegs, oldMask: u64, cr2: u64, fpstate: u64, alt: &SignalStack) -> Self {
         return Self {
@@ -367,6 +369,47 @@ impl UContext {
         };
     }
 }
+
+#[cfg(target_arch = "aarch64")]
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct UContext {
+    pub Flags: u64,
+    pub Link: u64,
+    pub Stack: SignalStack,
+    pub Sigset: u64,
+    __pad: [u8; (1024 / 8) - core::mem::size_of::<u64>()],
+    pub MContext: SigContext,
+}
+
+#[cfg(target_arch = "aarch64")]
+impl Default for UContext {
+    fn default() -> Self {
+        Self {
+            Flags: 0,
+            Link: 0,
+            Stack: SignalStack::default(),
+            Sigset: 0,
+            __pad: [0; (1024 / 8) - core::mem::size_of::<u64>()],
+            MContext: SigContext::default(),
+        }
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+impl UContext {
+    pub fn New(ptRegs: &PtRegs, oldMask: u64, cr2: u64, fpstate: u64, alt: &SignalStack) -> Self {
+        return Self {
+            Flags: 0,
+            Link: 0,
+            Stack: alt.clone(),
+            Sigset: 0,
+            __pad: [0u8; (1024 / 8) - core::mem::size_of::<u64>()],
+            MContext: SigContext::New(ptRegs, oldMask, cr2, fpstate),
+        };
+    }
+}
+
 
 // https://elixir.bootlin.com/linux/latest/source/arch/x86/include/uapi/asm/sigcontext.h#L284
 #[cfg(target_arch = "x86_64")]
