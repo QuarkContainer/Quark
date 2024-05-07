@@ -158,6 +158,7 @@ pub struct MemoryManagerInternal {
     pub vcpuMapping: AtomicU64,
     pub tlbShootdownMask: AtomicU64,
 
+    pub userVDSOBase: AtomicU64,
     pub mappingLock: QUpgradableLock,
     pub mapping: QMutex<MMMapping>,
 
@@ -291,6 +292,7 @@ impl MemoryManager {
             inited: true,
             vcpuMapping: AtomicU64::new(0),
             tlbShootdownMask: AtomicU64::new(0),
+            userVDSOBase: AtomicU64::new(0),
             mappingLock: QUpgradableLock::default(),
             mapping: QMutex::new(mapping),
             pagetable: QRwLock::new(pagetable),
@@ -306,6 +308,14 @@ impl MemoryManager {
         SHARESPACE.hiberMgr.AddMemMgr(&mm);
 
         return mm;
+    }
+
+    pub fn SetUserVDSOBase(&self, addr: u64) {
+        return self.userVDSOBase.store(addr, Ordering::Release);
+    }
+
+    pub fn GetUserVDSOBase(&self) -> u64 {
+        return self.userVDSOBase.load(Ordering::Acquire);
     }
 
     pub fn EnableMembarrierPrivate(&self) {
@@ -1611,6 +1621,9 @@ impl MemoryManager {
 
             let ptInternal1 = self.pagetable.write();
             let mut ptInternal2 = mm2.pagetable.write();
+
+            let vdsoAddr = self.GetUserVDSOBase();
+            mm2.SetUserVDSOBase(vdsoAddr);
 
             ptInternal2.sharedLoadsOffset = ptInternal1.sharedLoadsOffset;
             ptInternal2.curRSS = ptInternal1.curRSS;
