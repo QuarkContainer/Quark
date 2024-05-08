@@ -18,6 +18,8 @@ use core::sync::atomic::Ordering;
 use super::mem::list_allocator::GuestHostSharedAllocator;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
+#[cfg(feature = "cc")]
+use crate::ENABLE_EMULATION_CC;
 use super::super::kernel_def::*;
 
 pub struct Xattr {}
@@ -3047,7 +3049,11 @@ impl MemoryDef {
     pub const fn gpa_to_hva(gpa: u64) -> u64 {
         cfg_if::cfg_if! {
             if #[cfg(feature = "cc")] {
-                return gpa - Self::ONE_GB;
+                if ENABLE_EMULATION_CC {
+                    return gpa - Self::ONE_GB;
+                } else {
+                    return gpa;
+                }
             } else {
                 return gpa;
             }
@@ -3056,10 +3062,14 @@ impl MemoryDef {
         // return gpa;
     }
 
-    pub const fn hva_to_gpa(hva: u64) -> u64 {
+    pub fn hva_to_gpa(hva: u64) -> u64 {
         cfg_if::cfg_if! {
             if #[cfg(feature = "cc")] {
-                return hva + Self::ONE_GB;
+                if ENABLE_EMULATION_CC {
+                    return hva + Self::ONE_GB;
+                } else {
+                    return hva;
+                }
             } else {
                 return hva;
             }
@@ -3075,7 +3085,11 @@ impl MemoryDef {
     pub const fn phy_lower_hva () -> u64 {
         cfg_if::cfg_if! {
             if #[cfg(feature = "cc")] {
-                return Self::PHY_LOWER_ADDR - Self::ONE_GB;
+                if ENABLE_EMULATION_CC {
+                    return Self::PHY_LOWER_ADDR - Self::ONE_GB;
+                } else {
+                    return Self::PHY_LOWER_ADDR;
+                }
             } else {
                 return Self::PHY_LOWER_ADDR;
             }
@@ -3086,11 +3100,15 @@ impl MemoryDef {
         return Self::GUEST_PRIVATE_HEAP_OFFSET;
     }
 
-    pub const  fn guest_private_init_heap_offset_hva () -> u64 {
+    pub const fn guest_private_init_heap_offset_hva () -> u64 {
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "cc")] {
-                return Self::GUEST_PRIVATE_HEAP_OFFSET - Self::ONE_GB;
+                if ENABLE_EMULATION_CC {
+                    return Self::GUEST_PRIVATE_HEAP_OFFSET - Self::ONE_GB;
+                } else {
+                    return Self::GUEST_PRIVATE_HEAP_OFFSET;
+                }
             } else {
                 return Self::GUEST_PRIVATE_HEAP_OFFSET;
             }
@@ -3101,10 +3119,14 @@ impl MemoryDef {
         return Self::GUEST_PRIVATE_INIT_HEAP_SIZE + Self::GUEST_PRIVATE_HEAP_OFFSET;
     }
 
-    pub const  fn guest_private_init_heap_end_hva () -> u64 {
+    pub const fn guest_private_init_heap_end_hva () -> u64 {
         cfg_if::cfg_if! {
             if #[cfg(feature = "cc")] {
-                return Self::GUEST_PRIVATE_INIT_HEAP_SIZE + Self::GUEST_PRIVATE_HEAP_OFFSET - Self::ONE_GB;
+                if ENABLE_EMULATION_CC {
+                    return Self::GUEST_PRIVATE_INIT_HEAP_SIZE + Self::GUEST_PRIVATE_HEAP_OFFSET - Self::ONE_GB;
+                } else {
+                    return Self::GUEST_PRIVATE_INIT_HEAP_SIZE + Self::GUEST_PRIVATE_HEAP_OFFSET;
+                }
             } else {
                 return Self::GUEST_PRIVATE_INIT_HEAP_SIZE + Self::GUEST_PRIVATE_HEAP_OFFSET;
             }
