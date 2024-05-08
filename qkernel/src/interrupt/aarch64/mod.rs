@@ -20,9 +20,11 @@ use crate::qlib::linux_def::MmapProt;
 use crate::qlib::addr::AccessType;
 use crate::qlib::kernel::task;
 use crate::qlib::kernel::threadmgr::task_sched::SchedState;
-use crate::qlib::kernel::SignalDef::PtRegs;
+use crate::qlib::kernel::SignalDef::{PtRegs, SignalInfo};
 use crate::qlib::vcpu_mgr::*;
-use crate::kernel_def;
+use crate::qlib::linux_def::Signal;
+use crate::qlib::common::TaskRunState;
+use crate::{kernel_def, MainRun};
 use self::fault::{PageFaultHandler, PageFaultErrorCode};
 
 pub unsafe fn InitSingleton() {
@@ -301,12 +303,25 @@ pub extern "C" fn exception_handler_el0_sync(ptregs_addr: usize) {
             _ => {
                 unsafe {
                      if let Some(opcode) = kernel_def::read_user_opcode(ctx.pc) {
-                         debug!("VM: UNKNOWN_EXCEPTION from EL0, current-PC: {:#x}, retrieved PC[opcode]:{:#x}.", ctx.pc, opcode);
+                         debug!("VM: UNKNOWN_EXCEPTION {} from EL0, current-PC: {:#x}, retrieved PC[opcode]:{:#x}.", ec, ctx.pc, opcode);
                      } else {
-                         debug!("VM: UNKNOWN_EXCEPTION from EL0, current-PC: {:#x}, can not retrieve PC[opcode].", ctx.pc);
+                         debug!("VM: UNKNOWN_EXCEPTION {} from EL0, current-PC: {:#x}, can not retrieve PC[opcode].", ec, ctx.pc);
                      }
                 }
-                panic!("VM: panic on UNKNOWN_EXCEPTION from EL0 - current-context: {:?}", ctx);
+
+                let mut info = SignalInfo {
+                    Signo: Signal::SIGILL,
+                    ..Default::default()
+                };
+                let thread = currTask.Thread();
+                thread.forceSignal(Signal(Signal::SIGILL), false);
+                thread
+                    .SendSignal(&info)
+                    .expect("PageFaultHandler send signal fail");
+                MainRun(currTask, TaskRunState::RunApp);
+                // FIXME: this set-sigill-and-return may not be done correctly.
+                // should we call ReturnToApp here??
+                // see qkernel/src/interrupt/x86_64/mod.rs:336
             }
         },
         _ => {
