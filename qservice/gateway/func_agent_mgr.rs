@@ -24,8 +24,8 @@ use tokio::sync::{mpsc, Notify};
 
 use qshare::{common::*, na};
 
-use crate::func_worker::{FuncReq, FuncWorker, HttpResponse, DEFAULT_PARALLEL_LEVEL};
-use crate::{PromptReq, OBJ_REPO};
+use crate::func_worker::*;
+use crate::OBJ_REPO;
 use qshare::obj_mgr::func_mgr::*;
 
 lazy_static::lazy_static! {
@@ -49,14 +49,24 @@ impl Deref for FuncAgentMgr {
 }
 
 impl FuncAgentMgr {
-    pub async fn Call(&self, funcPackage: &FuncPackage, req: PromptReq) -> HttpResponse {
+    pub async fn GetClient(
+        &self,
+        tenant: &str,
+        namespace: &str,
+        funcname: &str,
+    ) -> Result<QHttpCallClient> {
+        let funcPackage = OBJ_REPO
+            .get()
+            .unwrap()
+            .GetFuncPackage(tenant, namespace, funcname)?;
+
         let agent = {
             let key = funcPackage.spec.Key();
             let mut inner = self.lock().unwrap();
             match inner.agents.get(&key) {
                 Some(agent) => agent.clone(),
                 None => {
-                    let agent = FuncAgent::New(funcPackage);
+                    let agent = FuncAgent::New(&funcPackage);
                     inner.agents.insert(key, agent.clone());
                     agent
                 }
@@ -64,9 +74,14 @@ impl FuncAgentMgr {
         };
 
         let (tx, rx) = oneshot::channel();
-        agent.EnqReq(req, tx);
-        let resp = rx.await.unwrap();
-        return resp;
+        agent.EnqReq(tenant, namespace, funcname, tx);
+        let client = match rx.await {
+            Err(_) => {
+                return Err(Error::CommonError(format!("funcworker fail ...")));
+            }
+            Ok(client) => client,
+        };
+        return Ok(client);
     }
 
     pub fn FuncPodEventHandler(&self, event: DeltaEvent) -> Result<()> {
@@ -124,8 +139,8 @@ pub struct FuncAgentInner {
     pub funcName: String,
     pub funcPackge: FuncPackage,
 
-    pub waitingReqs: VecDeque<FuncReq>,
-    pub reqQueueTx: mpsc::Sender<FuncReq>,
+    pub waitingReqs: VecDeque<FuncClientReq>,
+    pub reqQueueTx: mpsc::Sender<FuncClientReq>,
     pub eventChann: mpsc::Sender<DeltaEvent>,
     pub workerStateUpdateTx: mpsc::Sender<WorkerUpdate>,
     pub availableSlot: usize,
@@ -160,7 +175,7 @@ impl FuncAgentInner {
         return self.nextWorkerId;
     }
 
-    pub fn AssignReq(&mut self, req: FuncReq) {
+    pub fn AssignReq(&mut self, req: FuncClientReq) {
         for (_, worker) in &self.workers {
             if worker.AvailableSlot() > 0 {
                 worker.AssignReq(req);
@@ -220,13 +235,18 @@ impl FuncAgent {
         return ret;
     }
 
-    pub fn EnqReq(&self, req: PromptReq, tx: oneshot::Sender<HttpResponse>) {
-        let funcReq = FuncReq {
+    pub fn EnqReq(
+        &self,
+        tenant: &str,
+        namespace: &str,
+        funcname: &str,
+        tx: oneshot::Sender<QHttpCallClient>,
+    ) {
+        let funcReq = FuncClientReq {
             reqId: self.lock().unwrap().NextReqId(),
-            tenant: req.tenant,
-            namespace: req.namespace,
-            funcName: req.funcname,
-            request: req.prompt,
+            tenant: tenant.to_owned(),
+            namespace: namespace.to_owned(),
+            funcName: funcname.to_owned(),
             tx: tx,
         };
         self.lock().unwrap().reqQueueTx.try_send(funcReq).unwrap();
@@ -270,7 +290,7 @@ impl FuncAgent {
 
     pub async fn Process(
         &self,
-        reqQueueRx: mpsc::Receiver<FuncReq>,
+        reqQueueRx: mpsc::Receiver<FuncClientReq>,
         eventQueueRx: mpsc::Receiver<DeltaEvent>,
         workerStateUpdateRx: mpsc::Receiver<WorkerUpdate>,
     ) -> Result<()> {
@@ -463,7 +483,7 @@ impl FuncAgent {
         }
     }
 
-    pub async fn ProcessReq(&self, req: FuncReq) {
+    pub async fn ProcessReq(&self, req: FuncClientReq) {
         // let key = self.lock().unwrap().Key();
         if self.lock().unwrap().availableSlot == 0 {
             let mut needNewWorker = false;

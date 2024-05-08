@@ -24,7 +24,7 @@ use tokio::sync::{mpsc, Notify};
 use tokio::sync::{oneshot, Mutex as TMutex};
 use tokio::time::Duration;
 
-use http_body_util::{BodyExt, Empty};
+use http_body_util::Empty;
 use hyper::body::{Bytes, Incoming};
 use hyper::client::conn::http1::SendRequest;
 use hyper::Request;
@@ -35,7 +35,7 @@ use qshare::common::*;
 use qshare::na::{self, Env, Kv};
 
 use crate::func_agent_mgr::{FuncAgent, WorkerUpdate};
-use crate::{PromptReq, TSOT_CLIENT};
+use crate::TSOT_CLIENT;
 use qshare::obj_mgr::func_mgr::*;
 
 pub const DEFAULT_PARALLEL_LEVEL: usize = 1;
@@ -63,10 +63,9 @@ pub struct FuncWorkerInner {
     pub keepaliveTime: u64,
     pub ongoingReqCnt: AtomicUsize,
 
-    pub reqQueue: mpsc::Sender<FuncReq>,
-    pub idleFuncClientQueue: mpsc::Sender<FuncWorkerClient>,
+    pub reqQueue: mpsc::Sender<FuncClientReq>,
+    pub finishQueue: mpsc::Sender<()>,
     pub eventChann: mpsc::Sender<DeltaEvent>,
-    pub idleFuncClients: Mutex<Vec<FuncWorkerClient>>,
     pub funcClientCnt: AtomicUsize,
     pub funcAgent: FuncAgent,
 
@@ -112,8 +111,8 @@ impl FuncWorker {
         funcAgent: &FuncAgent,
     ) -> Result<Self> {
         let workerName = format!("{}", id);
-        let (tx, rx) = mpsc::channel::<FuncReq>(parallelLeve);
-        let (workerTx, workerRx) = mpsc::channel::<FuncWorkerClient>(parallelLeve);
+        let (tx, rx) = mpsc::channel::<FuncClientReq>(parallelLeve);
+        let (finishTx, finishRx) = mpsc::channel::<()>(parallelLeve);
         let (etx, erx) = mpsc::channel(30);
 
         let inner = FuncWorkerInner {
@@ -133,9 +132,8 @@ impl FuncWorker {
             ongoingReqCnt: AtomicUsize::new(0),
 
             reqQueue: tx,
-            idleFuncClientQueue: workerTx,
+            finishQueue: finishTx,
             eventChann: etx,
-            idleFuncClients: Mutex::new(Vec::new()),
             funcClientCnt: AtomicUsize::new(0),
             funcAgent: funcAgent.clone(),
             state: Mutex::new(FuncWorkerState::Probation),
@@ -146,7 +144,7 @@ impl FuncWorker {
 
         let clone = worker.clone();
         tokio::spawn(async move {
-            clone.Process(rx, erx, workerRx).await.unwrap();
+            clone.Process(rx, erx, finishRx).await.unwrap();
         });
 
         return Ok(worker);
@@ -199,20 +197,7 @@ impl FuncWorker {
         }
     }
 
-    pub fn NewFuncWorkerClient(&self) -> FuncWorkerClient {
-        self.funcClientCnt.fetch_add(1, Ordering::SeqCst);
-        let client = FuncWorkerClient::New(
-            &self.tenant,
-            &self.namespace,
-            &self.funcname,
-            &self.ipAddr,
-            self.port,
-            &self,
-        );
-        return client;
-    }
-
-    pub fn AssignReq(&self, req: FuncReq) {
+    pub fn AssignReq(&self, req: FuncClientReq) {
         self.reqQueue.try_send(req).unwrap();
     }
 
@@ -220,16 +205,11 @@ impl FuncWorker {
         self.eventChann.try_send(event).unwrap();
     }
 
-    pub fn RequestDone(&self, client: &FuncWorkerClient) {
-        // ignore failure
-        self.idleFuncClientQueue.try_send(client.clone()).ok();
-    }
-
     pub async fn Process(
         &self,
-        reqQueueRx: mpsc::Receiver<FuncReq>,
+        reqQueueRx: mpsc::Receiver<FuncClientReq>,
         eventQueueRx: mpsc::Receiver<DeltaEvent>,
-        idleClientRx: mpsc::Receiver<FuncWorkerClient>,
+        idleClientRx: mpsc::Receiver<()>,
     ) -> Result<()> {
         let mut reqQueueRx = reqQueueRx;
         let mut eventQueueRx = eventQueueRx;
@@ -242,8 +222,6 @@ impl FuncWorker {
                     tokio::select! {
                         _ = self.closeNotify.notified() => {
                             self.stop.store(false, Ordering::SeqCst);
-                            // we clean all the waiting request
-                            self.DrainReqs(reqQueueRx).await;
                             self.StopWorker().await?;
                             return Ok(())
                         }
@@ -281,7 +259,6 @@ impl FuncWorker {
                         _ = self.closeNotify.notified() => {
                             self.stop.store(false, Ordering::SeqCst);
                             // we clean all the waiting request
-                            self.DrainReqs(reqQueueRx).await;
                             self.StopWorker().await?;
                             return Ok(())
                         }
@@ -319,7 +296,6 @@ impl FuncWorker {
                         _ = self.closeNotify.notified() => {
                             self.stop.store(false, Ordering::SeqCst);
                             // we clean all the waiting request
-                            self.DrainReqs(reqQueueRx).await;
                             self.StopWorker().await?;
                             return Ok(())
                         }
@@ -356,15 +332,8 @@ impl FuncWorker {
                                 Some(req) => {
                                     self.SetState(FuncWorkerState::Processing);
                                     self.ongoingReqCnt.fetch_add(1, Ordering::SeqCst);
-                                    let workerClient = match self.idleFuncClients.lock().unwrap().pop() {
-                                        None => {
-                                            assert!(self.funcClientCnt.load(Ordering::SeqCst) < self.parallelLevel);
-                                            let client = self.NewFuncWorkerClient();
-                                            client
-                                        }
-                                        Some(client) => client,
-                                    };
-                                    workerClient.SendReq(req);
+                                    let client = self.NewHttpCallClient().await?;
+                                    req.Send(client);
                                 }
                             }
                         }
@@ -380,7 +349,6 @@ impl FuncWorker {
                     tokio::select! {
                         _ = self.closeNotify.notified() => {
                             self.stop.store(false, Ordering::SeqCst);
-                            self.DrainReqs(reqQueueRx).await;
                             self.StopWorker().await?;
                             return Ok(())
                         }
@@ -396,15 +364,8 @@ impl FuncWorker {
                                 }
                                 Some(req) => {
                                     self.ongoingReqCnt.fetch_add(1, Ordering::SeqCst);
-                                    let workerClient = match self.idleFuncClients.lock().unwrap().pop() {
-                                        None => {
-                                            assert!(self.funcClientCnt.load(Ordering::SeqCst) < self.parallelLevel);
-                                            let client = self.NewFuncWorkerClient();
-                                            client
-                                        }
-                                        Some(client) => client,
-                                    };
-                                    workerClient.SendReq(req);
+                                    let client = self.NewHttpCallClient().await?;
+                                    req.Send(client);
                                 }
                             }
                         }
@@ -413,13 +374,12 @@ impl FuncWorker {
                                 None => {
                                     return Ok(())
                                 }
-                                Some(worker) => {
+                                Some(()) => {
                                     let cnt = self.ongoingReqCnt.fetch_sub(1, Ordering::SeqCst);
                                     if cnt == 1 {
                                         self.SetState(FuncWorkerState::Idle);
                                     }
                                     self.funcAgent.SendWorkerStatusUpdate(WorkerUpdate::RequestDone(self.clone()));
-                                    self.idleFuncClients.lock().unwrap().push(worker);
                                 }
                             }
                         }
@@ -431,31 +391,9 @@ impl FuncWorker {
         return Ok(());
     }
 
-    pub async fn DrainReqs(&self, reqQueueRx: mpsc::Receiver<FuncReq>) {
-        let mut reqQueueRx = reqQueueRx;
-        loop {
-            let req = reqQueueRx.try_recv();
-            match req {
-                Err(_e) => {
-                    break;
-                }
-                Ok(req) => {
-                    let response = HttpResponse {
-                        status: StatusCode::BAD_GATEWAY,
-                        response: format!("Service Unavaiable {}", self.workerId),
-                    };
-
-                    // accept the failure.
-                    // todo: do we need to handle failure?
-                    req.tx.send(response).ok();
-                }
-            }
-        }
-    }
-
     pub async fn NewHttpCallClient(&self) -> Result<QHttpCallClient> {
         let stream = self.ConnectPod().await?;
-        let client = QHttpCallClient::New(stream).await?;
+        let client = QHttpCallClient::New(self.finishQueue.clone(), stream).await?;
         return Ok(client);
     }
 
@@ -719,180 +657,27 @@ impl FuncWorker {
 }
 
 #[derive(Debug)]
-pub struct FuncWorkerClientInner {
-    pub closeNotify: Arc<Notify>,
-    pub stop: AtomicBool,
-
-    pub tenant: String,
-    pub namespace: String,
-    pub funcName: String,
-    pub ipAddr: IpAddress,
-    pub port: u16,
-
-    pub reqQueue: mpsc::Sender<FuncReq>,
-    pub funcWorker: FuncWorker,
-}
-
-#[derive(Debug, Clone)]
-pub struct FuncWorkerClient(Arc<FuncWorkerClientInner>);
-
-impl Deref for FuncWorkerClient {
-    type Target = Arc<FuncWorkerClientInner>;
-
-    fn deref(&self) -> &Arc<FuncWorkerClientInner> {
-        &self.0
-    }
-}
-
-impl FuncWorkerClient {
-    pub fn New(
-        tenant: &str,
-        namespace: &str,
-        funcName: &str,
-        ipAddr: &IpAddress,
-        port: u16,
-        funcWorker: &FuncWorker,
-    ) -> Self {
-        let (tx, rx) = mpsc::channel::<FuncReq>(1);
-        let inner = FuncWorkerClientInner {
-            closeNotify: Arc::new(Notify::new()),
-            stop: AtomicBool::new(false),
-
-            tenant: tenant.to_owned(),
-            namespace: namespace.to_owned(),
-            funcName: funcName.to_owned(),
-            ipAddr: ipAddr.clone(),
-            port: port,
-
-            reqQueue: tx,
-            funcWorker: funcWorker.clone(),
-        };
-
-        let client = Self(Arc::new(inner));
-
-        let clone = client.clone();
-        tokio::spawn(async move {
-            clone.Process(rx).await.unwrap();
-        });
-
-        return client;
-    }
-
-    pub fn SendReq(&self, req: FuncReq) {
-        self.reqQueue.try_send(req).unwrap();
-    }
-
-    pub async fn TryConnectPod(&self) -> Result<QHttpCallClient> {
-        let addr = self.ipAddr.AsBytes();
-        let stream = TSOT_CLIENT
-            .get()
-            .unwrap()
-            .Connect(&self.tenant, &self.namespace, addr, self.port)
-            .await?;
-        let client: QHttpCallClient = QHttpCallClient::New(stream).await?;
-
-        return Ok(client);
-    }
-
-    pub async fn Process(&self, reqQueueRx: mpsc::Receiver<FuncReq>) -> Result<()> {
-        let mut reqQueueRx = reqQueueRx;
-
-        loop {
-            tokio::select! {
-                _ = self.closeNotify.notified() => {
-                    self.stop.store(false, Ordering::SeqCst);
-                    return Ok(())
-                }
-                req = reqQueueRx.recv() => {
-                    match req {
-                        None => {
-                            // the Funcworker close the req channel
-                            return Ok(())
-                        }
-                        Some(req) => {
-                            let mut client = self.TryConnectPod().await?;
-                            self.HttpCall(&mut client, req).await?;
-                            self.funcWorker.RequestDone(self);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    pub async fn HttpCall(&self, client: &mut QHttpCallClient, req: FuncReq) -> Result<()> {
-        let promptReq = PromptReq {
-            tenant: req.tenant.clone(),
-            namespace: req.namespace.clone(),
-            funcname: req.funcName.clone(),
-            prompt: req.request.clone(),
-        };
-
-        let body = serde_json::to_string(&promptReq)?;
-
-        let url = FUNCCALL_URL.parse::<hyper::Uri>()?;
-
-        let authority = url.authority().unwrap().clone();
-
-        let httpReq = Request::post(url.path())
-            .header(hyper::header::HOST, authority.as_str())
-            .header(hyper::header::CONTENT_TYPE, "application/json")
-            .body(body)?;
-
-        match client.Send(httpReq).await {
-            Err(e) => {
-                let resp = HttpResponse {
-                    status: StatusCode::BAD_REQUEST,
-                    response: format!("service fail with error {:?}", e),
-                };
-                req.tx.send(resp).unwrap();
-                return Ok(());
-            }
-            Ok(mut res) => {
-                let mut output = String::new();
-                while let Some(next) = res.frame().await {
-                    match next {
-                        Err(e) => {
-                            let resp = HttpResponse {
-                                status: StatusCode::BAD_REQUEST,
-                                response: format!("service fail with error {:?}", e),
-                            };
-                            req.tx.send(resp).unwrap();
-                            return Ok(());
-                        }
-                        Ok(frame) => {
-                            let chunk = frame.data_ref().unwrap().to_vec();
-                            let str = String::from_utf8(chunk).unwrap();
-                            output = output + &str;
-                        }
-                    }
-                }
-
-                let resp = HttpResponse {
-                    status: res.status(),
-                    response: output,
-                };
-                req.tx.send(resp).unwrap();
-                return Ok(());
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct HttpResponse {
     pub status: StatusCode,
     pub response: String,
 }
 
 #[derive(Debug)]
-pub struct FuncReq {
+pub struct FuncClientReq {
     pub reqId: u64,
     pub tenant: String,
     pub namespace: String,
     pub funcName: String,
-    pub request: String,
-    pub tx: oneshot::Sender<HttpResponse>,
+    pub tx: oneshot::Sender<QHttpCallClient>,
+}
+
+impl FuncClientReq {
+    pub fn Send(self, client: QHttpCallClient) {
+        match self.tx.send(client) {
+            Ok(()) => (),
+            Err(_) => (),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -926,11 +711,18 @@ impl QHttpClient {
 
 #[derive(Debug)]
 pub struct QHttpCallClient {
-    sender: SendRequest<String>,
+    pub finishQueue: mpsc::Sender<()>,
+    sender: SendRequest<axum::body::Body>,
+}
+
+impl Drop for QHttpCallClient {
+    fn drop(&mut self) {
+        self.finishQueue.try_send(()).ok();
+    }
 }
 
 impl QHttpCallClient {
-    pub async fn New(stream: TcpStream) -> Result<Self> {
+    pub async fn New(finishQueue: mpsc::Sender<()>, stream: TcpStream) -> Result<Self> {
         let io = TokioIo::new(stream);
         let (sender, conn) = hyper::client::conn::http1::handshake(io).await?;
         tokio::spawn(async move {
@@ -938,10 +730,13 @@ impl QHttpCallClient {
                 error!("Error in connection: {}", e);
             }
         });
-        return Ok(Self { sender: sender });
+        return Ok(Self {
+            finishQueue: finishQueue,
+            sender: sender,
+        });
     }
 
-    pub async fn Send(&mut self, req: Request<String>) -> Result<Response<Incoming>> {
+    pub async fn Send(&mut self, req: Request<axum::body::Body>) -> Result<Response<Incoming>> {
         tokio::select! {
             res = self.sender.send_request(req) => {
                 match res {
