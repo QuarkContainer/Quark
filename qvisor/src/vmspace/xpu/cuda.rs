@@ -15,6 +15,10 @@ use std::collections::BTreeMap;
 use spin::Mutex;
 use std::mem::MaybeUninit;
 use std::sync::Arc;
+use std::time::{Duration,Instant};
+use core::ffi::CStr;
+use std::ptr::null_mut;
+use std::ops::Add;
 
 use crate::qlib::common::*;
 use crate::qlib::proxy::*;
@@ -56,6 +60,9 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
     let mut textDataSize:u64 = 0; 
     // error!("inputPosition:{:x} endPosition:{:x}", inputPosition, endPosition);
     let mut decompressedByte: Vec<u8>;
+    let mut text_data: *mut u8 = std::ptr::null_mut();
+    let mut get_param_info = Duration::new(0, 0);
+    let mut decompress_single_section = Duration::new(0, 0);
 
     while inputPosition < endPosition {
         let fatTextHeader = unsafe { &*(inputPosition as *const u8 as *const FatTextHeader) };        
@@ -75,21 +82,32 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
             // error!("fatbin contains compressed device code. Decompressing...");
             let input_read:i64;
       
-            decompressedByte = Vec::with_capacity((fatTextHeader.decompressed_size + 7) as usize);
-            unsafe{
-            decompressedByte.set_len((fatTextHeader.decompressed_size + 7) as usize); 
-            }
+            let now1 = Instant::now();
+
+            // decompressedByte = Vec::with_capacity((fatTextHeader.decompressed_size + 7) as usize);
+            // unsafe{
+            // decompressedByte.set_len((fatTextHeader.decompressed_size + 7) as usize); 
+            // }
  
-            textDatAddr = &decompressedByte[0] as *const _ as u64;   
-            // error!("textDatAddr is {:x}", textDatAddr );
-            // error!("textDatasize before function call is {}", textDataSize);
-                                                                            
-            match DecompressSingleSection(inputPosition, &mut decompressedByte, &mut textDataSize, fatTextHeader) {
+            // textDatAddr = &decompressedByte[0] as *const _ as u64;   
+            // // error!("textDatAddr is {:x}", textDatAddr );
+            // // error!("textDatasize before function call is {}", textDataSize);
+                
+            // match DecompressSingleSection(inputPosition, &mut decompressedByte, &mut textDataSize, fatTextHeader) {
+            //     Ok(inputRead) => { input_read = inputRead; },
+            //     Err(error) => {
+            //         return Err(error)
+            //     },
+            // }
+
+            match DecompressSingleSection_2(inputPosition,  &mut text_data, &mut textDataSize, fatTextHeader) {
                 Ok(inputRead) => { input_read = inputRead; },
                 Err(error) => {
                     return Err(error)
                 },
             }
+
+            decompress_single_section += now1.elapsed();
             // error!("textDatasize after function call is {}", textDataSize);
 
             // error!("decompressedByte is: {:?}", decompressedByte);
@@ -103,18 +121,28 @@ pub fn GetFatbinInfo(addr:u64, fatElfHeader:&FatElfHeader) -> Result<i64> {
             inputPosition += input_read as u64;                           
         }else {
             textDatAddr = inputPosition;
+            text_data = inputPosition as *mut u8;
             textDataSize = fatTextHeader.size;
 
             inputPosition += fatTextHeader.size;   
         }
 
-        match GetParameterInfo( textDatAddr, textDataSize) {
+        let now2 = Instant::now();
+        // match GetParameterInfo( textDatAddr, textDataSize) {
+        //     Ok(v) => v,
+        //     Err(e) => return Err(e),
+        // };
+
+        match GetParameterInfo(text_data as u64, textDataSize) {
             Ok(v) => v,
             Err(e) => return Err(e),
         };
 
-       
+        get_param_info += now2.elapsed();
+
     }
+    error!("[cuda.rs] DecompressSingleSection: {:?}", decompress_single_section.as_micros());
+    error!("[cuda.rs] GetParameterInfo: {:?}", get_param_info.as_micros());
     // error!("Complete handling FatTextHeader");
     Ok(0)
 }
@@ -138,8 +166,12 @@ fn DecompressSingleSection(inputPosition:u64, outputPosition:&mut Vec<u8>, outpu
     // fatTextHeader.flags
     // );
     // error!("fatTextHeader unknown fields: unknown1: {:x}, unknown2: {:x}, zeros: {:x}", fatTextHeader.unknown1, fatTextHeader.unknown2, fatTextHeader.zero);
+
+    // let now = Instant::now();
                                                                                                                         
     decompressResult = decompress(inputPosition, fatTextHeader.compressed_size as u64, outputPosition, fatTextHeader.decompressed_size);
+
+    // error!("[cuda.rs] Decompress: {:?}", now.elapsed().as_micros());
 
     if decompressResult != fatTextHeader.decompressed_size {
         error!("Decompression failed: decompressed size is {:x}, but header says {:x}.", decompressResult, fatTextHeader.decompressed_size);
@@ -200,26 +232,98 @@ fn DecompressSingleSection(inputPosition:u64, outputPosition:&mut Vec<u8>, outpu
 
     return Ok(inputRead as i64);
 }
-                                          
-// Decompressed a fatbin file 
-///
-/// # Arguments
-///
-/// * `inputPosition` - inputPosition for compressed input data.
-/// * `inputSize` - Size of compressed data.
-/// * `output` - Preallocated memory where decompressed output should be stored.
-/// * `outputSize` - Size of output buffer. Should be equal to the size of the decompressed data.
 
-fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, outputSize: u64) -> u64 {
+fn DecompressSingleSection_2(inputPosition:u64, outputPosition:&mut *mut u8, outputSize:&mut u64,fatTextHeader:&FatTextHeader) -> Result<i64> {
+    let mut padding:u64;
+    let mut inputRead:u64 = 0;
+    let mut outputWritten:u64 = 0;
+    let zeros: [u8; 8] = [0; 8];
+
+    // // error!("fatTextHeader: fatbin_kind:{:x}, header_size:{:x}, size:{:x}, compressed_size:{:x}, minor:{:x}, major:{:x}, arch:{:x}, decompressed_size:{:x}, flags:{:#x?}",
+    // // fatTextHeader.kind,
+    // // fatTextHeader.header_size, 
+    // // fatTextHeader.size, 
+    // // fatTextHeader.compressed_size, 
+    // // fatTextHeader.minor, 
+    // // fatTextHeader.major, 
+    // // fatTextHeader.arch, 
+    // // fatTextHeader.decompressed_size, 
+    // // fatTextHeader.flags
+    // // );
+    // // error!("fatTextHeader unknown fields: unknown1: {:x}, unknown2: {:x}, zeros: {:x}", fatTextHeader.unknown1, fatTextHeader.unknown2, fatTextHeader.zero);
+
+    unsafe {
+        *outputPosition = libc::malloc(fatTextHeader.decompressed_size as usize + 7) as *mut u8;
+        // if *outputPosition.is_null() {
+        //     // Handle allocation failure
+        //     return Err(Error::DecompressFatbinError(String::from("Memory allocation failed")));
+        // }
+    }
+    
+    // let now = Instant::now();
+
+    let decompressResult = decompress_2(inputPosition, fatTextHeader.compressed_size as u64, *outputPosition, fatTextHeader.decompressed_size);
+
+    // error!("[cuda.rs] Decompress: {:?}", now.elapsed().as_micros());
+
+    if decompressResult != fatTextHeader.decompressed_size {
+        error!("Decompression failed: decompressed size is {:x}, but header says {:x}.", decompressResult, fatTextHeader.decompressed_size);
+        hexdump(inputPosition, 0x160);
+        if decompressResult >= 0x60 {
+                hexdump(*outputPosition as u64 + decompressResult - 0x60, 0x60); 
+        }
+        return Err(Error::DecompressFatbinError(String::from("decompression failed")));
+    }
+
+    // // error!("decompressResult should equal to fatTextHeader.decompressed_size, decompressResult: {:x}, fatTextHeader.decompressed_size: {:x}", decompressResult, fatTextHeader.decompressed_size);
+    inputRead += fatTextHeader.compressed_size as u64;
+    outputWritten += fatTextHeader.decompressed_size;
+
+    // // error!("inputPosition is: {:x}, inputRead is: {:x}", inputPosition, inputRead);
+    // // error!("inputPosition + inputRead = {:x}", inputPosition + inputRead);
+    padding = 8u64.wrapping_sub(inputPosition +inputRead);
+    // // error!("padding after subtraction is: {:x}", padding);
+    padding = padding % 8;
+
+    unsafe {
+        libc::memcmp(
+            (inputPosition + inputRead) as *const libc::c_void,
+            zeros.as_ptr() as *const libc::c_void,
+            padding as usize
+        );
+    }
+
+
+    inputRead += padding;
+    
+    padding = (8u64.wrapping_sub(fatTextHeader.decompressed_size)) % 8;
+
+    unsafe {
+        libc::memset(
+            *outputPosition as *mut libc::c_void,
+            0,
+            padding as usize
+        );
+    }
+
+
+
+    outputWritten += padding;
+    *outputSize = outputWritten;
+
+    return Ok(inputRead as i64);
+}
+
+fn decompress_2(inputPosition:u64, inputSize:u64, outputPosition: *mut u8, outputSize: u64) -> u64 {
     let mut ipos:u64 = 0;
     let mut opos:u64 = 0;
     let mut nextNonCompressed_length:u64;
     let mut nextCompressed_length:u64;
     let mut backOffset:u64;
   
-    // error!("size of compressed data is {}",inputSize);
+    // // error!("size of compressed data is {}",inputSize);
 
-    while ipos < inputSize {      
+    while ipos < inputSize {    
         nextNonCompressed_length = unsafe { ((*((inputPosition + ipos) as *const u8) & 0xf0) >> 4) as u64};
         nextCompressed_length = unsafe{ 4 + (*((inputPosition + ipos) as *const u8) & 0xf) as u64  };
          
@@ -236,15 +340,19 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, out
         }
 
         ipos += 1;
-        // for i in 0..nextNonCompressed_length {
-        //     outputPosition[(opos + i) as usize] =  unsafe {*((inputPosition + ipos + i) as *const u8)};
+
+        // unsafe {
+        //     libc::memcpy(
+        //         (outputPosition.wrapping_add(opos as usize)) as *mut libc::c_void,
+        //         (inputPosition + ipos) as *const libc::c_void,
+        //         nextNonCompressed_length as usize
+        //     );
         // }
+
         unsafe {
-            libc::memcpy(
-                outputPosition.as_mut_ptr().add(opos as usize) as *mut libc::c_void,
-                (inputPosition + ipos) as *const libc::c_void,
-                nextNonCompressed_length as usize
-            );
+            let dest_ptr = outputPosition.wrapping_add(opos as usize);
+            let src_ptr = (inputPosition as *const u8).add(ipos as usize);
+            std::ptr::copy_nonoverlapping(src_ptr, dest_ptr, nextNonCompressed_length as usize);
         }
 
         ipos += nextNonCompressed_length;
@@ -253,7 +361,141 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, out
         if ipos >= inputSize || opos >= outputSize {
             break;
         }
-       
+
+       backOffset = unsafe{ (*((inputPosition + ipos) as *const u8)) as u64 };
+
+       let inputvalue:u64 =unsafe{ *((inputPosition + ipos +1) as *const u8) as u64 };  
+       let shiftvalue = inputvalue << 8;
+    //     // error!("backOffset before shift is: {}", backOffset);
+    //     // error!("input[ipos+1] is {}",inputvalue );
+    //     // error!("input[ipos+1] << 8 is {}",shiftvalue);
+       backOffset =  backOffset + shiftvalue;
+    //    // error!("backOffset after shift is {}",backOffset);
+       ipos += 2;
+
+       if nextCompressed_length == (0xf + 4){
+            loop {
+                nextCompressed_length += unsafe{ *((inputPosition + ipos) as *const u8) as u64 };
+                ipos += 1;
+                if unsafe {*((inputPosition + ipos - 1) as *const u8)} != 0xff {
+                    break;
+                }
+            }        
+        }
+
+        if nextCompressed_length <= backOffset {
+            // unsafe {
+            //     libc::memcpy(
+            //         outputPosition.wrapping_add(opos as usize) as *mut libc::c_void,
+            //         outputPosition.wrapping_add((opos - backOffset) as usize) as *const libc::c_void,
+            //         nextCompressed_length as libc::size_t,
+            //     );
+            // }
+            unsafe {
+                let dest_ptr = outputPosition.wrapping_add(opos as usize);
+                let src_ptr = outputPosition.wrapping_add((opos - backOffset) as usize);
+                std::ptr::copy_nonoverlapping(src_ptr, dest_ptr, nextCompressed_length as usize);
+            }
+
+        }else{
+            // unsafe {
+            //     libc::memcpy(
+            //         outputPosition.wrapping_add(opos as usize) as *mut libc::c_void,
+            //         outputPosition.wrapping_add((opos - backOffset) as usize) as *const libc::c_void,
+            //         backOffset as libc::size_t,
+            //     );
+            // }
+
+            unsafe {
+                let dest_ptr = outputPosition.wrapping_add(opos as usize);
+                let src_ptr = outputPosition.wrapping_add((opos - backOffset) as usize);
+                std::ptr::copy_nonoverlapping(src_ptr, dest_ptr, backOffset as usize);
+            }
+
+            for i in backOffset..nextCompressed_length {
+                unsafe {
+                    *outputPosition.wrapping_add((opos + i) as usize) = *outputPosition.wrapping_add((opos + i - backOffset) as usize);
+                }
+                  
+            }
+        }
+        opos += nextCompressed_length;
+      
+    }
+    // // error!("{:?}, {:?}, {:?}, {:?}", part1_duration, part2_duration, part3_duration, part4_duration);
+    return opos;
+}
+
+                                          
+// Decompressed a fatbin file 
+///
+/// # Arguments
+///
+/// * `inputPosition` - inputPosition for compressed input data.
+/// * `inputSize` - Size of compressed data.
+/// * `output` - Preallocated memory where decompressed output should be stored.
+/// * `outputSize` - Size of output buffer. Should be equal to the size of the decompressed data.
+
+fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, outputSize: u64) -> u64 {
+    let mut ipos:u64 = 0;
+    let mut opos:u64 = 0;
+    let mut nextNonCompressed_length:u64;
+    let mut nextCompressed_length:u64;
+    let mut backOffset:u64;
+
+    // error!("size of compressed data is {}",inputSize);
+
+    while ipos < inputSize {
+        nextNonCompressed_length = unsafe { ((*((inputPosition + ipos) as *const u8) & 0xf0) >> 4) as u64};
+        nextCompressed_length = unsafe{ 4 + (*((inputPosition + ipos) as *const u8) & 0xf) as u64  };
+         
+        if nextNonCompressed_length == 0xf{
+            loop {
+                ipos += 1;
+                unsafe{
+                    let next_byte = *((inputPosition + ipos) as *const u8) as u64;
+                    nextNonCompressed_length += next_byte;
+                    if next_byte != 0xff  {
+                        break; 
+                    }
+                };
+            }
+        }
+
+        ipos += 1;
+
+        // unsafe {
+        //     let input_slice = std::slice::from_raw_parts((inputPosition + ipos) as *const u8, nextNonCompressed_length as usize);
+        //     let output_slice = &mut outputPosition[opos as usize..opos as usize + nextNonCompressed_length as usize];
+        //     output_slice.copy_from_slice(input_slice);
+        // }
+        
+
+        unsafe {
+            let dest_ptr = outputPosition.as_mut_ptr().add(opos as usize);
+            let src_ptr = (inputPosition as *const u8).add(ipos as usize);
+            std::ptr::copy_nonoverlapping(src_ptr, dest_ptr, nextNonCompressed_length as usize);
+        }
+        
+        // for i in 0..nextNonCompressed_length {
+        //     outputPosition[(opos + i) as usize] =  unsafe {*((inputPosition + ipos + i) as *const u8)};
+        // }
+
+        // unsafe {
+        //     libc::memcpy(
+        //         outputPosition.as_mut_ptr().add(opos as usize) as *mut libc::c_void,
+        //         (inputPosition + ipos) as *const libc::c_void,
+        //         nextNonCompressed_length as usize
+        //     );
+        // }
+
+        ipos += nextNonCompressed_length;
+        opos += nextNonCompressed_length;
+
+        if ipos >= inputSize || opos >= outputSize {
+            break;
+        }
+
 
        backOffset = unsafe{ (*((inputPosition + ipos) as *const u8)) as u64 };
 
@@ -280,28 +522,44 @@ fn decompress(inputPosition:u64, inputSize:u64, outputPosition:&mut Vec<u8>, out
             // for i in 0..nextCompressed_length {
             //     outputPosition[(opos + i) as usize] =  outputPosition[(opos - backOffset + i) as usize];
             // }
+            // unsafe {
+            //     libc::memcpy(
+            //         outputPosition.as_mut_ptr().add(opos as usize) as *mut libc::c_void,
+            //         outputPosition.as_mut_ptr().add((opos - backOffset) as usize) as *const libc::c_void,
+            //         nextCompressed_length as libc::size_t,
+            //     );
+            // }
+
             unsafe {
-                libc::memcpy(
-                    outputPosition.as_mut_ptr().add(opos as usize) as *mut libc::c_void,
-                    outputPosition.as_mut_ptr().add((opos - backOffset) as usize) as *const libc::c_void,
-                    nextCompressed_length as libc::size_t,
-                );
+                let dest_ptr = outputPosition.as_mut_ptr().add(opos as usize);
+                let src_ptr = outputPosition.as_mut_ptr().add((opos - backOffset) as usize);
+                std::ptr::copy_nonoverlapping(src_ptr, dest_ptr, nextCompressed_length as usize);
             }
+
+            // outputPosition.copy_within((opos - backOffset) as usize..(opos - backOffset + nextCompressed_length) as usize, opos as usize);
 
         }else{
             // for i in 0..backOffset {
             //     outputPosition[(opos + i) as usize] =  outputPosition[(opos - backOffset + i) as usize];
             // }
+            // unsafe {
+            //     libc::memcpy(
+            //         outputPosition.as_mut_ptr().add(opos as usize) as *mut libc::c_void,
+            //         outputPosition.as_mut_ptr().add((opos - backOffset) as usize) as *const libc::c_void,
+            //         backOffset as libc::size_t,
+            //     );
+            // }
             unsafe {
-                libc::memcpy(
-                    outputPosition.as_mut_ptr().add(opos as usize) as *mut libc::c_void,
-                    outputPosition.as_mut_ptr().add((opos - backOffset) as usize) as *const libc::c_void,
-                    backOffset as libc::size_t,
-                );
+                let dest_ptr = outputPosition.as_mut_ptr().add(opos as usize);
+                let src_ptr = outputPosition.as_mut_ptr().add((opos - backOffset) as usize);
+                std::ptr::copy_nonoverlapping(src_ptr, dest_ptr, backOffset as usize);
             }
+            
+            // outputPosition.copy_within((opos - backOffset) as usize..(opos - backOffset + backOffset) as usize, opos as usize);
             for i in backOffset..nextCompressed_length {
                outputPosition[(opos + i) as usize] = outputPosition[(opos + i - backOffset) as usize];  
             }
+            // outputPosition.copy_within((opos + backOffset) as usize..(opos - backOffset + nextCompressed_length) as usize, opos as usize);
         }
 
         opos += nextCompressed_length;
@@ -390,6 +648,8 @@ pub fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
 
     let mut secpos:usize = 0;
     let infoSize = std::mem::size_of::<NvInfoEntry>();
+    // let now = Instant::now();
+    // let mut get_param_kernel = Duration::new(0, 0);
     while secpos < data.d_size {
         let position = data.d_buf as u64 + secpos as u64;
         let entry_p = position as *const u8 as *const NvInfoEntry;
@@ -413,18 +673,46 @@ pub fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
 
         ptr_sym = unsafe { gelf_getsym(symbol_table_data_p, entry.kernel_id as libc::c_int, ptr_sym) };
         
-        let kernel_str = unsafe { CString::FromAddr(elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*ptr_sym).st_name as usize) as u64).Str().unwrap().to_string() };
+        // let kernel_str = unsafe { CString::FromAddr(elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*ptr_sym).st_name as usize) as u64).Str().unwrap().to_string() };
         // error!("kernel_str: {}", kernel_str);
 
-        if KERNEL_INFOS.lock().contains_key(&kernel_str) {
+        // if KERNEL_INFOS.lock().contains_key(&kernel_str) {
+        //     secpos += infoSize;
+        //     continue;
+        // }
+
+        let kernel_cstr_ptr = unsafe { 
+            elf_strptr(elf, (*symtab_shdr).sh_link as usize, (*ptr_sym).st_name as usize) 
+        };
+        let kernel_str = unsafe { 
+            CStr::from_ptr(kernel_cstr_ptr).to_str().unwrap()
+        };
+
+        if KERNEL_INFOS.lock().contains_key(kernel_str) {
             secpos += infoSize;
             continue;
         }
+
+        // match kernel_str {
+        //     Ok(kernel_str) => {
+        //         if KERNEL_INFOS.lock().contains_key(kernel_str) {
+        //             secpos += infoSize;
+        //             continue;
+        //         }
+        //     },
+        //     Err(e) => {
+        //         error!("Failed to convert kernel string to UTF-8: {}", e);
+        //         continue;
+        //     }
+        // }
         
         // error!("found new kernel: {} (symbol table id: {:x})", kernel_str, entry.kernel_id);
-
+        
+        // let temp = Instant::now();
         let mut ki = KernelInfo::default();
-        ki.name = kernel_str.clone();
+        // ki.name = kernel_str.clone();
+        ki.name = kernel_str.to_string();
+
         
         if kernel_str.chars().next().unwrap() != '$' {
             match GetParamForKernel(elf, &mut ki){
@@ -434,23 +722,31 @@ pub fn GetParameterInfo(inputPosition:u64, memSize:u64) -> Result<i64> {
                 },
             }
         }
+
         // error!("ki: {:x?}", ki);
 
-        KERNEL_INFOS.lock().insert(kernel_str.clone(), Arc::new(ki));
+        // KERNEL_INFOS.lock().insert(kernel_str.clone(), Arc::new(ki));
+        KERNEL_INFOS.lock().insert(ki.name.clone(), Arc::new(ki));
+        // get_param_kernel += temp.elapsed();
         secpos += infoSize;
     }
+    // error!("[cuda.rs] GetParameterInfo_loop: {:?}", now.elapsed().as_micros());
+    // error!("[cuda.rs] GetParamForKernel: {:?}", get_param_kernel.as_micros());
 
     Ok(0)
 }
 
 pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> {
+    // let mut kernel_offset = Duration::new(0, 0);
     let sectionName = GetKernelSectionFromKernelName(unsafe { (*kernel).name.clone() });
+    // let now = Instant::now();
 
     let mut section = &mut(0 as u64 as *mut Elf_Scn);
     match GetSectionByName(elf, sectionName.clone(), &mut section) {
         Ok(v) => v,
         Err(e) => return Err(e),
     };
+    // error!("[cuda.rs] kernel_offset: {:?}", now.elapsed().as_micros());
     // error!("GetSectionByName({}) got section: {:?}", sectionName, section);
     let data = unsafe { &*(elf_getdata(*section, 0 as _)) };
     // error!("data: {:x?}", data);
@@ -481,7 +777,6 @@ pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> 
                 (*kernel).paramSizes[kparam.ordinal as usize] = kparam.GetSize();
                 // error!("changed value kernel: {:x?}, kparam: {:x?}", *kernel, *kparam);
             }
-
             secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4 + entry.values_size as usize;
         } else if entry.format as u64 == EIFMT_HVAL && entry.attribute as u64 == EIATTR_CBANK_PARAM_SIZE {
             unsafe { 
@@ -500,7 +795,7 @@ pub fn GetParamForKernel(elf: *mut Elf, kernel: *mut KernelInfo) -> Result<i64> 
             secpos += std::mem::size_of::<NvInfoKernelEntry>() - 4;
         }            
     }
-
+    // kernel_offset += now.elapsed();
     Ok(0)
 }
 
@@ -521,7 +816,10 @@ pub fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn
     }
 
     let mut found = false;
+    // let mut time = Duration::new(0,0);
+    // let mut first = Duration::new(0,0);
     loop {
+        // let first_time = Instant::now();
         let scnNew = unsafe { elf_nextscn(elf, scn) };
         if scnNew == std::ptr::null_mut() {
             break;
@@ -530,16 +828,42 @@ pub fn GetSectionByName(elf: *mut Elf, name: String,  section: &mut *mut Elf_Scn
         let mut shdr : MaybeUninit<GElf_Shdr> = MaybeUninit::uninit();
         let mut symtab_shdr = shdr.as_mut_ptr();
         symtab_shdr = unsafe { gelf_getshdr(scnNew, symtab_shdr) };
-        let section_name = CString::FromAddr(unsafe { elf_strptr(elf, *str_section_index, (*symtab_shdr).sh_name as usize) as u64 }).Str().unwrap().to_string();
-        // error!("section_name {}", section_name);
-        if name.eq(&section_name) {
-            // error!("Found section {}", section_name);
-            *section = scnNew;
-            found = true;
-            break;
+        // first += first_time.elapsed(); 
+        // let now = Instant::now();
+        // let section_name = CString::FromAddr(unsafe { elf_strptr(elf, *str_section_index, (*symtab_shdr).sh_name as usize) as u64 }).Str().unwrap().to_string();
+        // // error!("section_name {}", section_name);
+        // if name.eq(&section_name) {
+        //     // error!("Found section {}", section_name);
+        //     *section = scnNew;
+        //     found = true;
+        //     break;
+        // }
+ 
+        let section_name_ptr = unsafe { elf_strptr(elf, *str_section_index, (*symtab_shdr).sh_name as usize) };
+        let section_name_cstr = unsafe { CStr::from_ptr(section_name_ptr) };
+
+        // Handle UTF-8 conversion error directly in the comparison logic
+        match section_name_cstr.to_str() {
+            Ok(section_name) if section_name == name => {
+                *section = scnNew;
+                found = true;
+                break;
+            },
+            Ok(_) => { /* Continue searching if not matched */ },
+            Err(e) => {
+                // Log error or handle it accordingly
+                error!("[cuda.rs] Invalid UTF-8 sequence: {}", e);
+                break;
+            }
         }
+
+                  
+        // time += now.elapsed();
         scn = scnNew;
     }
+
+    // error!("[cuda.rs] first: {:?}", first.as_micros());
+    // error!("[cuda.rs] GetSectionByName: {:?}", time.as_micros());
 
     if found {
         Ok(0)

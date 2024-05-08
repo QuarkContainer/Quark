@@ -18,6 +18,7 @@ use std::ffi::CString;
 use std::os::raw::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::qlib::common::*;
 //use crate::qlib::linux_def::SysErr;
@@ -842,6 +843,7 @@ pub fn NvidiaProxy(
         }
         ProxyCommand::CudaRegisterFatBinary => {
             //error!("nvidia.rs: cudaRegisterFatBinary");
+            let init = Instant::now();
             let bytes = unsafe {
                 std::slice::from_raw_parts(parameters.para4 as *const _, parameters.para5 as usize)
             };
@@ -852,6 +854,9 @@ pub fn NvidiaProxy(
                 InitNvidia(containerId, ptxlibPath);
             }
 
+            let init_finish = init.elapsed().as_micros();
+            let fatBibInfo = Instant::now();
+
             let fatElfHeader = unsafe { &*(parameters.para2 as *const u8 as *const FatElfHeader) };
             // error!("fatElfHeader magic is :{:x}, version is :{:x}, header size is :{:x}, size is :{:x}", fatElfHeader.magic, fatElfHeader.version, fatElfHeader.header_size, fatElfHeader.size);
             let moduleKey = parameters.para3;
@@ -861,6 +866,9 @@ pub fn NvidiaProxy(
                     return Err(e);
                 }
             }
+
+            let fatBibInfo_finish = fatBibInfo.elapsed().as_micros();
+            let moduleLoad = Instant::now();
 
             let mut module: u64 = 0;
             let ret = unsafe {
@@ -878,6 +886,8 @@ pub fn NvidiaProxy(
 
             // unsafe{ cudaDeviceSynchronize();}
             MODULES.lock().insert(moduleKey, module);
+            let moduleLoad_finish = moduleLoad.elapsed().as_micros();
+            error!("[Time elapsed nvidia.rs] Init: {:?}, GetFatBinInfo: {:?}, ModuleLoad: {:?}", init_finish, fatBibInfo_finish, moduleLoad_finish);
             // error!("insert module: {:x} -> {:x}", moduleKey, module);
             return Ok(ret as i64);
         }
