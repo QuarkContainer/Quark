@@ -213,7 +213,7 @@ impl MemoryManagerWeak {
 
 impl MemoryManager {
     pub fn Init(kernel: bool) -> Self {
-
+        #[cfg(feature = "cc")]
         assert!(IS_GUEST == true, "MemoryManager Init");
         
         let mut vmas = AreaSet::New(0, MemoryDef::LOWER_TOP);

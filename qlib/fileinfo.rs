@@ -230,7 +230,7 @@ impl FdWaitInfo {
     pub fn New(queue: Queue, mask: EventMask) -> Self {
         let intern = FdWaitIntern { queue, mask };
 
-        return Self(Arc::new_in(QMutex::new(intern)));
+        return Self(Arc::new(QMutex::new(intern)));
     }
 
     #[cfg(feature = "cc")]

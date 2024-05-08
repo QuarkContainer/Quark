@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
-use crate::GLOBAL_ALLOCATOR;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::vec_deque::VecDeque;

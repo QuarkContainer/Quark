@@ -2928,121 +2928,8 @@ impl OpenFlags {
     pub const O_CLOEXEC: i32 = 0x80000;
 }
 
-#[cfg(not(feature = "cc"))]
 pub struct MemoryDef {}
 
-#[cfg(not(feature = "cc"))]
-impl MemoryDef {
-    pub const PTE_SHIFT: usize = 12;
-    pub const PMD_SHIFT: usize = 21;
-    pub const PUD_SHIFT: usize = 30;
-    pub const PGD_SHIFT: usize = 39;
-
-    // used for socket/tty buffer
-    pub const DEFAULT_BUF_PAGE_COUNT: u64 = 16;
-
-    pub const PTE_MASK: u64 = 0x1ff << Self::PTE_SHIFT;
-    pub const PMD_MASK: u64 = 0x1ff << Self::PMD_SHIFT;
-    pub const PUD_MASK: u64 = 0x1ff << Self::PUD_SHIFT;
-    pub const PGD_MASK: u64 = 0x1ff << Self::PGD_SHIFT;
-
-    pub const PTE_SIZE: u64 = 1 << Self::PTE_SHIFT;
-    pub const PMD_SIZE: u64 = 1 << Self::PMD_SHIFT;
-    pub const PUD_SIZE: u64 = 1 << Self::PUD_SHIFT;
-    pub const PGD_SIZE: u64 = 1 << Self::PGD_SHIFT;
-
-    //the blocks count put on stack to avoid heap allocation, total handle buffer size 32 * 4k = 128K
-    pub const ON_STACK_BLOCKS: usize = 32;
-
-    pub const PAGE_SHIFT: u64 = 12;
-    pub const HUGE_PAGE_SHIFT: u64 = 21;
-    pub const HUGE_1GPAGE_SHIFT: u64 = 30;
-
-    pub const ONE_KB: u64 = 1 << 10; //0x100_000;
-    pub const ONE_MB: u64 = 1 << 20; //0x100_000;
-    pub const ONE_GB: u64 = 1 << 30; //0x40_000_000;
-    pub const ONE_TB: u64 = 1 << 40; //0x1_000_000_000; //0x10_000_000_000;
-    pub const TWO_MB: u64 = 2 * Self::ONE_MB;
-
-    //interrupt stack pages
-    pub const INTERRUPT_STACK_PAGES: u64 = 1;
-
-    pub const TASK_QLEN: usize = 512;
-    pub const MSG_QLEN: usize = 1024;
-    pub const QURING_SIZE: usize = 4096;
-    pub const DEFAULT_STACK_PAGES: u64 = 32;
-
-    pub const DEFAULT_STACK_SIZE: u64 = Self::DEFAULT_STACK_PAGES * Self::PAGE_SIZE; //64 KB
-    pub const PAGE_SIZE: u64 = 1 << Self::PAGE_SHIFT; //0x1000;
-    pub const HUGE_PAGE_SIZE: u64 = 1 << Self::HUGE_PAGE_SHIFT;
-    pub const HUGE_PAGE_SIZE_1G: u64 = 1 << Self::HUGE_1GPAGE_SHIFT;
-
-    pub const PAGE_MASK: u64 = Self::PAGE_SIZE - 1;
-
-    pub const PAGE_SIZE_4K: u64 = 1 << Self::PAGE_SHIFT; //0x1000;
-    pub const PAGE_SIZE_2M: u64 = (2 * Self::ONE_MB);
-    pub const PAGE_SIZE_2M_MASK: u64 = !(Self::PAGE_SIZE_2M - 1);
-    pub const BLOCK_SIZE: u64 = 64 * Self::ONE_GB;
-
-    pub const PHY_LOWER_ADDR: u64 = 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernel space
-    pub const PHY_UPPER_ADDR: u64 = Self::PHY_LOWER_ADDR + 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernel space
-  
-    pub const NVIDIA_START_ADDR: u64 = 0x200000000;
-    pub const NVIDIA_ADDR_SIZE: u64 = 2 * Self::ONE_GB;
-
-    // memory layout
-    // PHY_LOWER_ADDR: qkernel image 512MB
-    pub const QKERNEL_IMAGE_SIZE: u64 = 512 * Self::ONE_MB;
-    // RDMA Local share memory
-    pub const RDMA_LOCAL_SHARE_OFFSET: u64 = Self::PHY_LOWER_ADDR + Self::QKERNEL_IMAGE_SIZE;
-    pub const RDMA_LOCAL_SHARE_SIZE: u64 = 1024 * Self::ONE_MB; // 1GB
-                                                                // RDMA global share memory
-    pub const RDMA_GLOBAL_SHARE_OFFSET: u64 =
-        Self::RDMA_LOCAL_SHARE_OFFSET + Self::RDMA_LOCAL_SHARE_SIZE;
-    pub const RDMA_GLOBAL_SHARE_SIZE: u64 = 2 * Self::ONE_MB;
-
-    // heap
-    pub const HOST_INIT_HEAP_OFFSET: u64 = MemoryDef::NVIDIA_START_ADDR + Self::NVIDIA_ADDR_SIZE;
-    pub const HOST_INIT_HEAP_SIZE: u64 = 5 * Self::ONE_GB;
-    pub const HOST_INIT_HEAP_END: u64 = Self::HOST_INIT_HEAP_OFFSET + Self::HOST_INIT_HEAP_SIZE;
-
-
-    pub const GUEST_PRIVATE_HEAP_OFFSET: u64 = Self::RDMA_GLOBAL_SHARE_OFFSET + Self::RDMA_GLOBAL_SHARE_SIZE;
-    pub const GUEST_PRIVATE_HEAP_PLUS_SHARED_HEAP_SIZE: u64 = 10 * Self::ONE_GB;
-    pub const GUEST_PRIVATE_HEAP_SIZE: u64 = 5 * Self::ONE_GB;
-
-    pub const GUEST_PRIVATE_HEAP_END: u64 = Self::GUEST_PRIVATE_HEAP_OFFSET + Self::GUEST_PRIVATE_HEAP_SIZE;
-    pub const GUEST_HOST_SHARED_HEAP_SIZE: u64 =  MemoryDef::GUEST_PRIVATE_HEAP_PLUS_SHARED_HEAP_SIZE 
-                                                            - MemoryDef::GUEST_PRIVATE_HEAP_SIZE;
-    pub const GUEST_HOST_SHARED_HEAP_OFFEST: u64 =  MemoryDef::GUEST_PRIVATE_HEAP_END;
-    pub const GUEST_HOST_SHARED_HEAP_END: u64 =  MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE;
-
-    pub const GHCB_OFFSET: u64 = MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::PAGE_SIZE*2;
-    pub const HYPERCALL_PARA_PAGE_OFFSET :u64 = MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::PAGE_SIZE*3;
-
-    // file map area
-    pub const FILE_MAP_OFFSET: u64 = Self::GUEST_HOST_SHARED_HEAP_OFFEST + Self::GUEST_HOST_SHARED_HEAP_SIZE;
-    pub const FILE_MAP_SIZE: u64 = Self::KERNEL_MEM_INIT_REGION_SIZE * Self::ONE_GB + Self::PHY_LOWER_ADDR - Self::FILE_MAP_OFFSET;
-
-    // Create 24GB Init memory region for KVM VM
-    pub const KERNEL_MEM_INIT_REGION_SIZE: u64 = 24; // 24 GB
-
-    // start address for memmap and dynamic load address space, there is heap address space between PHY_UPPER_ADDR + VIR_MMAP_START
-    pub const VIR_MMAP_START: u64 = Self::PHY_UPPER_ADDR + 128 * Self::ONE_GB; // 512GB + 128 GB
-    pub const SHARED_START: u64 = Self::VIR_MMAP_START + 1 * Self::ONE_TB; //512GB + 128 GB + 1TB
-    pub const LOWER_TOP: u64 = 0x0000_8000_0000_0000;
-    pub const UPPER_BOTTOM: u64 = 0xffff_8000_0000_0000;
-    pub const ENTRY_COUNT: u16 = 512 as u16;
-
-    pub const KERNEL_START_P2_ENTRY: usize = (Self::PHY_LOWER_ADDR / Self::ONE_GB) as usize; //256
-    pub const KERNEL_END_P2_ENTRY: usize = (Self::PHY_UPPER_ADDR / Self::ONE_GB) as usize; //512
-}
-
-
-#[cfg(feature = "cc")]
-pub struct MemoryDef {}
-
-#[cfg(feature = "cc")]
 impl MemoryDef {
     pub const PTE_SHIFT: usize = 12;
     pub const PMD_SHIFT: usize = 21;
@@ -3156,17 +3043,27 @@ impl MemoryDef {
 }
 
 
-#[cfg(feature = "cc")]
 impl MemoryDef {
     pub const fn gpa_to_hva(gpa: u64) -> u64 {
-        return gpa - Self::ONE_GB;
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                return gpa - Self::ONE_GB;
+            } else {
+                return gpa;
+            }
+        }
 
         // return gpa;
     }
 
     pub const fn hva_to_gpa(hva: u64) -> u64 {
-        return hva + Self::ONE_GB;
-
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                return hva + Self::ONE_GB;
+            } else {
+                return hva;
+            }
+        }
         // return hva;
     }
     
@@ -3176,8 +3073,13 @@ impl MemoryDef {
     }
 
     pub const fn phy_lower_hva () -> u64 {
-        // return Self::PHY_LOWER_ADDR;
-        return Self::PHY_LOWER_ADDR - Self::ONE_GB;
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                return Self::PHY_LOWER_ADDR - Self::ONE_GB;
+            } else {
+                return Self::PHY_LOWER_ADDR;
+            }
+        }
     }
 
     pub const fn guest_private_init_heap_offset_gpa () -> u64 {
@@ -3185,8 +3087,14 @@ impl MemoryDef {
     }
 
     pub const  fn guest_private_init_heap_offset_hva () -> u64 {
-        return Self::GUEST_PRIVATE_HEAP_OFFSET - Self::ONE_GB;
-        // return Self::GUEST_PRIVATE_HEAP_OFFSET;
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                return Self::GUEST_PRIVATE_HEAP_OFFSET - Self::ONE_GB;
+            } else {
+                return Self::GUEST_PRIVATE_HEAP_OFFSET;
+            }
+        }
     }
 
     pub const fn guest_private_init_heap_end_gpa () -> u64 {
@@ -3194,8 +3102,13 @@ impl MemoryDef {
     }
 
     pub const  fn guest_private_init_heap_end_hva () -> u64 {
-        return Self::GUEST_PRIVATE_INIT_HEAP_SIZE + Self::GUEST_PRIVATE_HEAP_OFFSET - Self::ONE_GB;
-        // return Self::GUEST_PRIVATE_HEAP_OFFSET;
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                return Self::GUEST_PRIVATE_INIT_HEAP_SIZE + Self::GUEST_PRIVATE_HEAP_OFFSET - Self::ONE_GB;
+            } else {
+                return Self::GUEST_PRIVATE_INIT_HEAP_SIZE + Self::GUEST_PRIVATE_HEAP_OFFSET;
+            }
+        }
     }
 
     pub const fn guest_private_init_heap_size () -> u64 {

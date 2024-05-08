@@ -17,13 +17,10 @@ use super::super::fasync::*;
 use super::super::futex::*;
 use super::waiter::*;
 use super::*;
-#[cfg(feature = "cc")]
 use crate::qlib::mem::list_allocator::GuestHostSharedAllocator;
 use crate::qlib::mutex::*;
 use crate::qlib::TaskId;
-#[cfg(feature = "cc")]
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
-#[cfg(feature = "cc")]
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::sync::Weak;

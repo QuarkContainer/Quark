@@ -607,16 +607,10 @@ cfg_if::cfg_if! {
             vcpuCnt: u64,
             autoStart: bool,
         ) {
-
-            use crate::qlib::kernel::asm;
-     
-
-            
-
             self::qlib::kernel::asm::fninit();
             if id == 0 {
                 GLOBAL_ALLOCATOR.InitPrivateAllocator(heapStart);
-                GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
+                GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::guest_host_shared_heap_offest_gpa());
 
                 SHARESPACE.SetValue(shareSpaceAddr);
                 SingletonInit();

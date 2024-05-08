@@ -596,6 +596,7 @@ impl PageTables {
         if start.0 & (MemoryDef::HUGE_PAGE_SIZE_1G - 1) != 0
             || end.0 & (MemoryDef::HUGE_PAGE_SIZE_1G - 1) != 0
         {
+            info!("start/end address not 1G aligned");
             panic!("start/end address not 1G aligned")
         }
 
@@ -604,15 +605,17 @@ impl PageTables {
  
         let mut curAddr = start;
         let pt: *mut PageTable = MemoryDef::gpa_to_hva(self.GetRoot()) as *mut PageTable;
+
         unsafe {
             let mut p4Idx = VirtAddr::new(curAddr.0).p4_index();
             let mut p3Idx = VirtAddr::new(curAddr.0).p3_index();
-
+  
             while curAddr.0 < end.0 {
                 let pgdEntry = &mut (*pt)[p4Idx];
                 let pudTbl: *mut PageTable;
 
                 if pgdEntry.is_unused() {
+
                     pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
                     pgdEntry.set_addr(
                         PhysAddr::new(MemoryDef::hva_to_gpa(pudTbl as u64) ),
@@ -630,7 +633,6 @@ impl PageTables {
                     if !pudEntry.is_unused() {
                         res = self.freeEntry(pudEntry, pagePool)?;
                     }
-
                     pudEntry.set_addr(
                         PhysAddr::new(newphysAddr),
                         flags | PageTableFlags::HUGE_PAGE,
@@ -648,7 +650,6 @@ impl PageTables {
                 p4Idx = PageTableIndex::new(u16::from(p4Idx) + 1);
             }
         }
-
         return Ok(res);
     }
 

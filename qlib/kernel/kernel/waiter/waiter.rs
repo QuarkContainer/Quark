@@ -18,10 +18,8 @@ use core::ops::Deref;
 use super::super::super::super::task_mgr::*;
 use super::super::super::taskMgr;
 use super::super::super::SHARESPACE;
-#[cfg(feature = "cc")]
 use crate::qlib::mem::list_allocator::GuestHostSharedAllocator;
 use crate::qlib::mutex::*;
-#[cfg(feature = "cc")]
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 use super::entry::*;
