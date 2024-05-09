@@ -276,15 +276,20 @@ impl KVMVcpu {
                 ret = super::VMSpace::SwapInPage(msg.addr) as u64;
             }
             Msg::SwapOut(_msg) => {
-                let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
-                SHARE_SPACE
-                    .hiberMgr
-                    .SwapOut(heapStart, heapEnd - heapStart)
-                    .unwrap();
+                // let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
+                //error!("qcall.rs swapout");
+                super::VMS.lock().SwapOutGPUPage();
+                
+                // SHARE_SPACE
+                //     .hiberMgr
+                //     .SwapOut(heapStart, heapEnd - heapStart)
+                //     .unwrap();
                 ret = 0;
             }
             Msg::SwapIn(_msg) => {
-                SHARE_SPACE.hiberMgr.ReapSwapIn().unwrap();
+                // SHARE_SPACE.hiberMgr.ReapSwapIn().unwrap();
+                //error!("qcall.rs swapin");
+                super::VMS.lock().SwapInGPUPage();
                 ret = 0;
             }
             Msg::Proxy(msg) => {

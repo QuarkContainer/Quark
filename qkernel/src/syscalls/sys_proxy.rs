@@ -691,10 +691,10 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret); 
         }
         ProxyCommand::CublasLtMatmulAlgoGetHeuristic => {
-            let CublasLtMatmulAlgoGetHeuristicInfo = task.CopyInObj::<CublasLtMatmulAlgoGetHeuristicInfo>(parameters.para1)?;
-            parameters.para1 = &CublasLtMatmulAlgoGetHeuristicInfo as *const _ as u64;
-            let mut heuristicResultsArray: Vec<CublasLtMatmulHeuristicResult> = Vec::with_capacity(CublasLtMatmulAlgoGetHeuristicInfo.requestedAlgoCount as usize);
-            unsafe { heuristicResultsArray.set_len(CublasLtMatmulAlgoGetHeuristicInfo.requestedAlgoCount as usize); };
+            let cublasLtMatmulAlgoGetHeuristicInfo = task.CopyInObj::<CublasLtMatmulAlgoGetHeuristicInfo>(parameters.para1)?;
+            parameters.para1 = &cublasLtMatmulAlgoGetHeuristicInfo as *const _ as u64;
+            let mut heuristicResultsArray: Vec<CublasLtMatmulHeuristicResult> = Vec::with_capacity(cublasLtMatmulAlgoGetHeuristicInfo.requestedAlgoCount as usize);
+            unsafe { heuristicResultsArray.set_len(cublasLtMatmulAlgoGetHeuristicInfo.requestedAlgoCount as usize); };
             let mut returnAlgoCoun: i32 = 0;
             parameters.para2=&mut heuristicResultsArray[0] as *mut _ as u64;
             parameters.para3=&mut returnAlgoCoun as *mut _ as u64;
@@ -707,11 +707,36 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
             return Ok(ret); 
         }
+        ProxyCommand::CublasGemmEx => {
+            let gemmExInfo = task.CopyInObj::<GemmExInfo>(parameters.para1)?;
+            parameters.para1 = &gemmExInfo as *const _ as u64;
+            let alpha = unsafe { *(parameters.para2 as *const f32)};
+            let beta = unsafe { *(parameters.para3 as *const f32) };
+            parameters.para2 = &alpha as *const _ as u64;
+            parameters.para3 = &beta as *const _ as u64;
+
+            let ret = HostSpace::Proxy(cmd, parameters);
+
+            return Ok(ret); 
+        }
+        ProxyCommand::CublasGemmStridedBatchedEx => {
+            let gemmStridedBatchedExInfo = task.CopyInObj::<GemmStridedBatchedExInfo>(parameters.para1)?;
+            parameters.para1 = &gemmStridedBatchedExInfo as *const _ as u64;
+            let alpha = unsafe { *(parameters.para2 as *const f32)};
+            let beta = unsafe { *(parameters.para3 as *const f32) };
+            parameters.para2 = &alpha as *const _ as u64;
+            parameters.para3 = &beta as *const _ as u64;
+
+            let ret = HostSpace::Proxy(cmd, parameters);
+
+            return Ok(ret); 
+        }
         //_ => todo!()
     }
 }
 
 pub fn CudaMemcpy(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyKind) -> Result<i64> {
+    //error!("CudaMemcpy: count:{}, kind{}", count, kind);
     match kind {
         CUDA_MEMCPY_HOST_TO_HOST => {
             // error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
@@ -783,6 +808,7 @@ pub fn CudaMemcpy(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyK
 }
 
 fn CudaMemcpyAsync(task: &Task, dst: u64, src: u64, count: u64, kind: CudaMemcpyKind, stream: u64) -> Result<i64> {
+    // error!("CudaMemcpyAsync: count:{}, kind{}", count, kind);
     match kind {
         CUDA_MEMCPY_HOST_TO_HOST => {
             error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
