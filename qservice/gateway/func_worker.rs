@@ -531,8 +531,8 @@ impl FuncWorker {
                 .await?;
 
         let mounts = vec![na::Mount {
-            host_path: "/home/brad/rust/Quark/test".to_owned(),
-            mount_path: "/test".to_owned(),
+            host_path: "/home/huawei/cchen/".to_owned(),
+            mount_path: "/cchen".to_owned(),
         }];
 
         let commands = funcPackage.spec.commands.clone();

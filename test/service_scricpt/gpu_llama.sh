@@ -7,7 +7,7 @@ namespace_def="curl --header \"Content-Type: application/json\" --request POST -
 
 #func_del="curl --request \"DELETE\" http://localhost:4000/funcpackages/t1/ns1/$serve_name"
 
-func_def="curl --header \"Content-Type: application/json\" --data '{ \"tenant\":\"t1\", \"namespace\":\"ns1\", \"funcname\": \"$serve_name\", \"revision\": 0, \"image\": \"llama\", \"commands\": [\"python3\", \"/cchen/service_scricpt/pytorch_llama1b.py\"], \"envs\": [[\"LD_PRELOAD\", \"/cchen/Quark/target/release/libcudaproxy.so\"], [\"HF_DATASETS_OFFLINE\",\"1\"], [\"TRANSFORMERS_OFFLINE\",\"1\"], [\"LD_LIBRARY_PATH\", \"/cchen/Quark/target/release/:$LD_LIBRARY_PATH\"]] }' -X POST  http://localhost:4000/funcpackages/ | jq";
+func_def="curl --header \"Content-Type: application/json\" --data '{ \"tenant\":\"t1\", \"namespace\":\"ns1\", \"funcname\": \"$serve_name\", \"revision\": 0, \"image\": \"llama2\", \"commands\": [\"python3\", \"/cchen/Quark/test/service_scricpt/pytorch_llama1b.py\"], \"envs\": [[\"LD_PRELOAD\", \"/cchen/Quark/target/release/libcudaproxy.so\"], [\"HF_DATASETS_OFFLINE\",\"1\"], [\"TRANSFORMERS_OFFLINE\",\"1\"], [\"LD_LIBRARY_PATH\", \"/cchen/Quark/target/release/:$LD_LIBRARY_PATH\"]] }' -X POST  http://localhost:4000/funcpackages/ | jq";
 
 func_poll="curl http://localhost:4000/funcpackages/t1/ns1/$serve_name"
 

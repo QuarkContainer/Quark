@@ -1,9 +1,9 @@
 {
-  "DebugLevel"    : "Error",
-  "KernelMemSize" : 24,
+  "DebugLevel"    : "Debug",
+  "KernelMemSize" : 30,
   "LogType"       : "Sync",
   "LogLevel"      : "Simple",
-  "CudaMode"      : "Native",
+  "CudaMode"      : "FastSwitch",
   "UringIO"       : true,
   "UringFixedFile": false,
   "EnableAIO"     : true,
@@ -16,9 +16,9 @@
   "AsyncAccept"   : true,
   "EnableRDMA"    : false,
   "RDMAPort"      : 1,
-  "PerSandboxLog" : false,
+  "PerSandboxLog" : true,
   "ReserveCpuCount": 1,
-  "ShimMode"      : false,
+  "ShimMode"      : true,
   "EnableInotify" : true,
   "ReaddirCache"  : true,
   "HiberODirect"  : true,
@@ -28,5 +28,5 @@
   "Sandboxed"     : false,
   "Realtime"      : false,
   "EnableIOBuf"   : false,
-  "EnableTsot"    : false
+  "EnableTsot"    : true
 }
