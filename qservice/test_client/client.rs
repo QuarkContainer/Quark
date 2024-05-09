@@ -164,8 +164,8 @@ async fn NewPod() -> Result<(), Box<dyn std::error::Error>> {
     }];
 
     let mounts = vec![na::Mount {
-        host_path: "/home/brad/rust/Quark/test".to_owned(),
-        mount_path: "/test".to_owned(),
+        host_path: "/home/huawei/cchen/".to_owned(),
+        mount_path: "/cchen".to_owned(),
     }];
 
     let request: tonic::Request<CreateFuncPodReq> = tonic::Request::new(CreateFuncPodReq {
