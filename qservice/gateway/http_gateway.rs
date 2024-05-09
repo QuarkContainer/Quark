@@ -12,14 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under
 
+use axum::extract::{Request, State};
+use axum::response::Response;
 use axum::{
     body::Body, extract::Path, response::IntoResponse, routing::delete, routing::get,
     routing::post, Json, Router,
 };
-use hyper::StatusCode;
+use hyper::{StatusCode, Uri};
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
 use serde::{Deserialize, Serialize};
+use std::result::Result as SResult;
 
 //use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor};
 
@@ -29,7 +32,7 @@ use qshare::common::*;
 use qshare::obj_mgr::func_mgr::*;
 use qshare::obj_mgr::namespace_mgr::NamespaceSpec;
 
-use crate::func_worker::FUNCAGENT_MGR;
+use crate::func_agent_mgr::FUNCAGENT_MGR;
 use crate::NAMESPACE_STORE;
 use crate::OBJ_REPO;
 
@@ -54,7 +57,7 @@ impl HttpGateway {
             )
             .route("/funcpackages/:tenant/:namespace", get(GetFuncPackages))
             .route("/funcpods/:tenant/:namespace/:name", get(GetFuncPods))
-            .route("/funccall/", post(PostFuncCall))
+            .route("/funccall/*rest", post(PostCall))
             .with_state(client);
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:4000")
@@ -148,7 +151,7 @@ async fn DropFuncPackage(
             match NAMESPACE_STORE
                 .get()
                 .unwrap()
-                .DropFuncPackage(&namespace, &name, revision)
+                .DropFuncPackage(&tenant, &namespace, &name, revision)
                 .await
             {
                 Err(e) => (StatusCode::BAD_REQUEST, Json(format!("{:?}", e))),
@@ -184,21 +187,62 @@ async fn GetFuncPackages(Path((tenant, namespace)): Path<(String, String)>) -> i
     }
 }
 
-async fn PostFuncCall(Json(req): Json<PromptReq>) -> impl IntoResponse {
-    match OBJ_REPO
-        .get()
-        .unwrap()
-        .GetFuncPackage(&req.tenant, &req.namespace, &req.funcname)
+async fn PostCall(
+    State(_client): State<Client>,
+    mut req: Request,
+) -> SResult<Response, StatusCode> {
+    let path = req.uri().path();
+
+    let parts = path.split("/").collect::<Vec<&str>>();
+
+    let mut client = match FUNCAGENT_MGR
+        .GetClient(&parts[2], &parts[3], &parts[4])
+        .await
     {
         Err(e) => {
-            return (StatusCode::BAD_REQUEST, Json(format!("{:?}", e)));
+            return Ok(Response::new(Body::from(format!("error1 is {:?}", e))));
         }
-        Ok(funcPackage) => {
-            let resp = FUNCAGENT_MGR.Call(&funcPackage, req).await;
+        Ok(client) => client,
+    };
 
-            return (resp.status, Json(resp.response));
-        }
-    }
+    let uri = format!("http://127.0.0.1/funccall");
+    *req.uri_mut() = Uri::try_from(uri).unwrap();
+
+    let mut res = client.Send(req).await.unwrap();
+
+    use http_body_util::BodyExt;
+    let bytes = res
+        .frame()
+        .await
+        //.map(|frame| frame.data_ref().unwrap())
+        .map(|f| f.unwrap().into_data().unwrap())
+        .unwrap();
+
+    // we have to get whole body instead of streaming the output to client
+    // todo: fix this.
+
+    // res = hyper::Response<hyper::body::Incoming>
+    // axum::body::Body
+
+    // error!("PostCall 3");
+    // let mut output = String::new();
+
+    // while let Some(next) = res.frame().await {
+    //     match next {
+    //         Err(e) => return Ok(Response::new(Body::from(format!("error2 is {:?}", e)))),
+    //         Ok(frame) => {
+    //             let chunk = frame.data_ref().unwrap().to_vec();
+    //             let str = String::from_utf8(chunk).unwrap();
+    //             output = output + &str;
+    //         }
+    //     }
+    // }
+
+    // error!("PostCall 4 {}", &output);
+    // return Ok(Response::new(Body::from(output)));
+
+    let body: Body = Body::from(bytes);
+    return Ok(Response::new(body));
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]

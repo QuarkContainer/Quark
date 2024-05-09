@@ -30,6 +30,8 @@ use qshare::obj_mgr::func_mgr::*;
 use qshare::obj_mgr::namespace_mgr::*;
 use qshare::obj_mgr::pod_mgr::PodMgr;
 
+use crate::func_agent_mgr::FUNCAGENT_MGR;
+
 #[derive(Debug)]
 pub struct ObjRepoInner {
     pub funcPackageMgr: FuncPackageMgr,
@@ -204,6 +206,7 @@ impl ObjRepo {
                 PodDef::KEY => {
                     let podDef = PodDef::FromDataObject(obj)?;
                     self.podMgr.Add(podDef)?;
+                    FUNCAGENT_MGR.FuncPodEventHandler(event.clone())?;
                 }
                 _ => {
                     return Err(Error::CommonError(format!(
@@ -224,6 +227,7 @@ impl ObjRepo {
                 PodDef::KEY => {
                     let podDef = PodDef::FromDataObject(obj)?;
                     self.podMgr.Update(podDef)?;
+                    FUNCAGENT_MGR.FuncPodEventHandler(event.clone())?;
                 }
                 _ => {
                     return Err(Error::CommonError(format!(
@@ -240,6 +244,7 @@ impl ObjRepo {
                 PodDef::KEY => {
                     let podDef = PodDef::FromDataObject(obj)?;
                     self.podMgr.Remove(podDef)?;
+                    FUNCAGENT_MGR.FuncPodEventHandler(event.clone())?;
                 }
                 _ => {
                     return Err(Error::CommonError(format!(
@@ -315,8 +320,14 @@ impl NamespaceStore {
         return Ok(());
     }
 
-    pub async fn DropFuncPackage(&self, namespace: &str, name: &str, revision: i64) -> Result<()> {
-        let key = format!("{}/{}/{}", FuncPackageSpec::KEY, namespace, name);
+    pub async fn DropFuncPackage(
+        &self,
+        tenant: &str,
+        namespace: &str,
+        name: &str,
+        revision: i64,
+    ) -> Result<()> {
+        let key = format!("{}/{}/{}/{}", FuncPackageSpec::KEY, tenant, namespace, name);
         self.store.Delete(&key, revision).await?;
         return Ok(());
     }

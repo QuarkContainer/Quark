@@ -205,13 +205,15 @@ impl FuncPackageMgr {
     pub fn Remove(&self, spec: FuncPackageSpec) -> Result<()> {
         let key = spec.Key();
         let mut inner = self.lock().unwrap();
-        if inner.funcPackages.contains_key(&key) {
-            return Err(Error::NotExist(format!("FuncPackageMgr::Remove {}", key)));
+        if !inner.funcPackages.contains_key(&key) {
+            return Err(Error::NotExist(format!(
+                "FuncPackageMgr::Remove {}/{:?}",
+                key,
+                inner.funcPackages.keys()
+            )));
         }
 
         inner.funcPackages.remove(&key);
-
-        // todo: clean all the package instance
 
         return Ok(());
     }

@@ -20,14 +20,8 @@ async fn main() {
 }
 
 async fn post_func_call(
-    Json(req): Json<PromptReq>
+    req: String
 ) -> impl IntoResponse {
-    return (StatusCode::OK, Json(req))
+    return (StatusCode::OK, req)
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
-pub struct PromptReq {
-    pub namespace: String,
-    pub funcname: String,
-    pub prompt: String,
-}

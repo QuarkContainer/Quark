@@ -148,6 +148,12 @@ impl HiberMgr {
     }
 
     pub fn SwapOut(&self, start: u64, len: u64) -> Result<()> {
+        // error!(
+        //     "SwapOut 1 {} {} {:b}",
+        //     SHARE_SPACE.scheduler.HaltVcpuCnt(),
+        //     SHARE_SPACE.scheduler.vcpuCnt,
+        //     SHARE_SPACE.scheduler.vcpuWaitMask.load(Ordering::SeqCst)
+        // );
         while !SHARE_SPACE.scheduler.ReadyForHibernate() {
             // wait until all other vcpu halt
             for _ in 0..100 {

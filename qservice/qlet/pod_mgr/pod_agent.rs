@@ -262,27 +262,60 @@ impl PodAgent {
         return Ok(());
     }
 
+    pub fn IpAddr(&self) -> IpAddress {
+        let addr = self.pod.Pod().read().unwrap().ipAddr;
+        return IpAddress(addr);
+    }
+
     pub async fn Process(&self, mut rx: mpsc::Receiver<NodeAgentMsg>) -> Result<()> {
         let mut interval = time::interval(Self::HouseKeepingPeriod);
         loop {
-            tokio::select! {
-                _ = self.closeNotify.notified() => {
-                    self.stop.store(false, Ordering::SeqCst);
-                    break;
-                }
-                _ = interval.tick() => {
-                    self.Send(NodeAgentMsg::HouseKeeping)?;
-                }
-                msg = rx.recv() => {
-                    if let Some(msg) = msg {
-                        match self.PodHandler(msg).await {
-                            Ok(()) => (),
-                            Err(e) => {
-                                error!("PodHandler get failure {:#?}", e);
+            let state = self.pod.PodState();
+            match state {
+                PodState::Running => {
+                    tokio::select! {
+                        _ = self.closeNotify.notified() => {
+                            self.stop.store(false, Ordering::SeqCst);
+                            break;
+                        }
+                        _ = interval.tick() => {
+                            self.Send(NodeAgentMsg::HouseKeeping)?;
+                        }
+                        msg = rx.recv() => {
+                            if let Some(msg) = msg {
+                                match self.PodHandler(msg).await {
+                                    Ok(()) => (),
+                                    Err(e) => {
+                                        error!("PodHandler get failure {:#?}", e);
+                                    }
+                                }
+                            } else {
+                                break;
                             }
                         }
-                    } else {
-                        break;
+                    }
+                }
+                _ => {
+                    tokio::select! {
+                        _ = self.closeNotify.notified() => {
+                            self.stop.store(false, Ordering::SeqCst);
+                            break;
+                        }
+                        _ = interval.tick() => {
+                            self.Send(NodeAgentMsg::HouseKeeping)?;
+                        }
+                        msg = rx.recv() => {
+                            if let Some(msg) = msg {
+                                match self.PodHandler(msg).await {
+                                    Ok(()) => (),
+                                    Err(e) => {
+                                        error!("PodHandler get failure {:#?}", e);
+                                    }
+                                }
+                            } else {
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -579,7 +612,7 @@ impl PodAgent {
     }
 
     pub async fn Hibernate(&self) -> Result<()> {
-        self.pod.SetPodState(PodState::MemHibernating)?;
+        self.pod.SetPodState(PodState::MemHibernated)?;
         self.Notify(NodeAgentMsg::PodStatusChange(PodStatusChange {
             pod: self.pod.clone(),
         }));
@@ -588,7 +621,7 @@ impl PodAgent {
     }
 
     pub async fn Wakeup(&self) -> Result<()> {
-        self.pod.SetPodState(PodState::Waking)?;
+        self.pod.SetPodState(PodState::Running)?;
         self.Notify(NodeAgentMsg::PodStatusChange(PodStatusChange {
             pod: self.pod.clone(),
         }));
@@ -779,7 +812,7 @@ impl PodAgent {
         let podUID = pod.uid.clone();
         let mut podSandboxConfig = crictl::PodSandboxConfig {
             metadata: Some(crictl::PodSandboxMetadata {
-                name: pod.PodName(), 
+                name: pod.PodName(),
                 namespace: pod.PodNamespace().clone(),
                 uid: podUID,
                 ..Default::default()

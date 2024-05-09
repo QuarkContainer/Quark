@@ -17,31 +17,46 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
+
+use qshare::node::PodState;
+use tokio::sync::mpsc;
+use tokio::sync::Notify;
+use tokio::time;
 
 use qshare::metastore::data_obj::EventType;
 use qshare::na;
 use qshare::na::Env;
 use qshare::na::Kv;
 use qshare::obj_mgr::func_mgr::*;
-use tokio::sync::mpsc;
-use tokio::sync::Notify;
 
 use qshare::common::*;
 use qshare::metastore::data_obj::DeltaEvent;
-use tokio::time;
 
 use crate::OBJ_REPO;
 
+#[derive(Debug, Clone)]
+pub enum PodHandlerMsg {
+    AskFuncPod(na::AskFuncPodReq),
+    DisableFuncPod(na::DisableFuncPodReq),
+}
+
+#[derive(Debug)]
 pub struct PodHandlerInner {
     pub closeNotify: Arc<Notify>,
     pub stop: AtomicBool,
 
     pub fpChann: mpsc::Sender<DeltaEvent>,
+    pub msgChann: mpsc::Sender<PodHandlerMsg>,
+
+    pub rxChann: Mutex<Option<mpsc::Receiver<DeltaEvent>>>,
+    pub msgRxChann: Mutex<Option<mpsc::Receiver<PodHandlerMsg>>>,
+
     pub nextWorkId: AtomicU64,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct PodHandler(pub Arc<PodHandlerInner>);
 
 impl Deref for PodHandler {
@@ -53,32 +68,41 @@ impl Deref for PodHandler {
 }
 
 impl PodHandler {
-    pub async fn New() -> Self {
+    pub fn New() -> Self {
         let (tx, rx) = mpsc::channel::<DeltaEvent>(1000);
+        let (mtx, mrx) = mpsc::channel::<PodHandlerMsg>(1000);
 
         let inner = PodHandlerInner {
             closeNotify: Arc::new(Notify::new()),
             stop: AtomicBool::new(false),
 
             fpChann: tx,
+            msgChann: mtx,
+
+            rxChann: Mutex::new(Some(rx)),
+            msgRxChann: Mutex::new(Some(mrx)),
             nextWorkId: AtomicU64::new(1),
         };
 
         let handler = Self(Arc::new(inner));
-
-        let clone = handler.clone();
-
-        tokio::spawn(async move {
-            clone.Process(rx).await.unwrap();
-        });
-
         return handler;
     }
 
     // wait for the cluster funcpod state fully updated
     pub const WAITING_PERIOD: Duration = Duration::from_secs(5);
 
-    pub async fn Process(&self, mut rx: mpsc::Receiver<DeltaEvent>) -> Result<()> {
+    pub fn EnqEvent(&self, event: &DeltaEvent) -> Result<()> {
+        self.fpChann.try_send(event.clone()).unwrap();
+        return Ok(());
+    }
+
+    pub fn EnqMsg(&self, msg: &PodHandlerMsg) {
+        self.msgChann.try_send(msg.clone()).unwrap();
+    }
+
+    pub async fn Process(&self) -> Result<()> {
+        let mut rx = self.rxChann.lock().unwrap().take().unwrap();
+        let mut mrx = self.msgRxChann.lock().unwrap().take().unwrap();
         let mut interval = time::interval(Self::WAITING_PERIOD);
 
         let _ = interval.tick().await;
@@ -89,14 +113,31 @@ impl PodHandler {
                     self.stop.store(false, Ordering::SeqCst);
                     break;
                 }
-                msg = rx.recv() => {
-                    if let Some(event) = msg {
+                event = rx.recv() => {
+                    if let Some(event) = event {
                         let obj = event.obj.clone();
-                        assert!(&obj.kind == FuncPackageSpec::KEY);
                         match &event.type_ {
-                            EventType::Added => {}
+                            EventType::Added => {
+                                match &obj.kind as &str {
+                                    FuncPackageSpec::KEY => {
+                                        let spec = FuncPackageSpec::FromDataObject(obj)?;
+                                        self.ProcessAddFuncPackage(&spec).await?;
+                                    }
+                                    _ => {
+                                    }
+                                }
+                            }
                             EventType::Modified => {}
-                            EventType::Deleted => {}
+                            EventType::Deleted => {
+                                match &obj.kind as &str {
+                                    FuncPackageSpec::KEY => {
+                                        let spec = FuncPackageSpec::FromDataObject(obj)?;
+                                        self.ProcessRemoveFuncPackage(&spec).await?;
+                                    }
+                                    _ => {
+                                    }
+                                }
+                            }
                             _o => {
                                 return Err(Error::CommonError(format!(
                                     "PodHandler::ProcessDeltaEvent {:?}",
@@ -108,14 +149,46 @@ impl PodHandler {
                         break;
                     }
                 }
+                m = mrx.recv() => {
+                    if let Some(msg) = m {
+                        match msg {
+                            PodHandlerMsg::AskFuncPod(m) => {
+                                let pods = OBJ_REPO
+                                    .get()
+                                    .unwrap()
+                                    .GetFuncPods(&m.tenant, &m.namespace, &m.funcname)?;
+
+                                let mut needNewWorker = true;
+                                for pod in &pods {
+                                    if pod.state == PodState::MemHibernated || pod.state == PodState::DiskHibernated {
+                                        self.WakeupWorker(&m.tenant, &m.namespace, &m.funcname, &pod.id).await?;
+                                        needNewWorker = false;
+                                    }
+                                }
+
+                                if needNewWorker {
+                                    let fp = OBJ_REPO
+                                    .get()
+                                    .unwrap()
+                                    .GetFuncPackage(&m.tenant, &m.namespace, &m.funcname)?;
+                                    let _ip = self.StartWorker(&fp.spec).await?;
+                                }
+                            }
+                            PodHandlerMsg::DisableFuncPod(m) => {
+                                self.HibernateWorker(&m.tenant, &m.namespace, &m.funcname, &m.id).await?;
+                            }
+                        }
+                    }else {
+                        break;
+                    }
+                }
             }
         }
 
         return Ok(());
     }
 
-    pub async fn ProcessAddFuncPackage(&self, fp: &FuncPackage) -> Result<()> {
-        let spec = &fp.spec;
+    pub async fn ProcessAddFuncPackage(&self, spec: &FuncPackageSpec) -> Result<()> {
         let pods =
             OBJ_REPO
                 .get()
@@ -126,24 +199,37 @@ impl PodHandler {
             return Ok(());
         }
 
-        let _ip = self.StartWorker(&fp).await?;
+        let _ip = self.StartWorker(&spec).await?;
 
         return Ok(());
     }
 
-    pub async fn ProcessRemoveFuncPackage(&self, fp: &FuncPackage) -> Result<()> {
-        let spec = &fp.spec;
+    pub async fn ProcessRemoveFuncPackage(&self, spec: &FuncPackageSpec) -> Result<()> {
         let pods =
             OBJ_REPO
                 .get()
                 .unwrap()
                 .GetFuncPods(&spec.tenant, &spec.namespace, &spec.funcname)?;
 
-        if pods.len() >= 1 {
+        if pods.len() == 0 {
             return Ok(());
         }
 
-        let _ip = self.StartWorker(&fp).await?;
+        for pod in &pods {
+            match self
+                .StopWorker(&pod.tenant, &pod.namespace, &pod.funcname, &pod.id)
+                .await
+            {
+                Ok(()) => (),
+                Err(e) => {
+                    error!(
+                        "fail to stopper func worker {:?} with error {:#?}",
+                        pod.PodKey(),
+                        e
+                    );
+                }
+            }
+        }
 
         return Ok(());
     }
@@ -152,10 +238,10 @@ impl PodHandler {
         return self.nextWorkId.fetch_add(1, Ordering::AcqRel);
     }
 
-    pub async fn StartWorker(&self, funcPackage: &FuncPackage) -> Result<IpAddress> {
-        let tenant = &funcPackage.spec.tenant;
-        let namespace = &funcPackage.spec.namespace;
-        let funcname = &funcPackage.spec.funcname;
+    pub async fn StartWorker(&self, spec: &FuncPackageSpec) -> Result<IpAddress> {
+        let tenant = &spec.tenant;
+        let namespace = &spec.namespace;
+        let funcname = &spec.funcname;
         let id = self.NextWorkerId();
 
         let mut client =
@@ -167,10 +253,10 @@ impl PodHandler {
             mount_path: "/test".to_owned(),
         }];
 
-        let commands = funcPackage.spec.commands.clone();
+        let commands = spec.commands.clone();
         let mut envs = Vec::new();
 
-        for e in &funcPackage.spec.envs {
+        for e in &spec.envs {
             envs.push(Env {
                 name: e.0.clone(),
                 value: e.1.clone(),
@@ -193,7 +279,7 @@ impl PodHandler {
             namespace: namespace.to_owned(),
             funcname: funcname.to_owned(),
             id: format!("{id}"),
-            image: funcPackage.spec.image.clone(),
+            image: spec.image.clone(),
             labels: Vec::new(),
             annotations: annotations,
             commands: commands,

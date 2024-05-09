@@ -24,14 +24,18 @@ extern crate simple_logging;
 
 use once_cell::sync::OnceCell;
 
+use crate::scheduler_svc::RunSchedulerSvc;
+use pod_handler::PodHandler;
 use qshare::common::*;
 
 pub mod obj_repo;
 pub mod pod_handler;
+pub mod scheduler_svc;
 
 use obj_repo::ObjRepo;
 
 pub static OBJ_REPO: OnceCell<ObjRepo> = OnceCell::new();
+pub static POD_HANDLER: OnceCell<PodHandler> = OnceCell::new();
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -45,20 +49,22 @@ async fn main() -> Result<()> {
         .set(ObjRepo::New(vec!["http://127.0.0.1:8890".to_owned()]).await?)
         .unwrap();
 
-    return Ok(());
-}
+    POD_HANDLER.set(PodHandler::New()).unwrap();
+    let podhandlerFuture = POD_HANDLER.get().unwrap().Process();
+    let schedulerSvcFuture = RunSchedulerSvc();
 
-pub enum PodState {
-    Creating,
-    Created,
-    Running,
-    Evacuating,
-    Terminating,
-    MemHibernating,
-    MemHibernated,
-    DiskHibernating,
-    DiskHibernated,
-    Waking,
+    tokio::select! {
+        _ = podhandlerFuture => {
+            error!("podhandler finish");
+        }
+        _ = schedulerSvcFuture => {
+            error!("schedulersvc finish");
+        }
+    }
+
+    error!("scheduler finish");
+
+    return Ok(());
 }
 
 pub struct Scheduler {}

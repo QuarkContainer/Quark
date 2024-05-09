@@ -17,7 +17,7 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(deprecated)]
-
+#![feature(unix_socket_ancillary_data)]
 #[macro_use]
 extern crate scopeguard;
 
@@ -37,6 +37,7 @@ pub mod metastore;
 pub mod node;
 pub mod obj_mgr;
 pub mod qlet_config;
+pub mod tsot_client;
 pub mod tsot_msg;
 pub mod types;
 

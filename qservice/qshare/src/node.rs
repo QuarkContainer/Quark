@@ -314,6 +314,7 @@ pub struct PodDef {
 
     pub init_containers: Vec<ContainerDef>,
     pub containers: Vec<ContainerDef>,
+
     pub volumes: Vec<Volume>,
     pub host_network: bool,
     pub host_name: String,
@@ -340,6 +341,10 @@ impl PodDef {
             "{}/{}/{}/{}",
             &self.tenant, &self.namespace, &self.funcname, &self.id
         );
+    }
+
+    pub fn FuncPackageKey(&self) -> String {
+        return format!("{}/{}/{}", &self.tenant, &self.namespace, &self.funcname);
     }
 
     pub fn PodName(&self) -> String {

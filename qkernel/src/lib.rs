@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 #![no_std]
 #![feature(proc_macro_hygiene)]
 #![feature(alloc_error_handler)]
@@ -46,11 +45,11 @@ extern crate lazy_static;
 extern crate scopeguard;
 #[macro_use]
 extern crate serde_derive;
+extern crate log;
 extern crate spin;
-#[cfg(target_arch="x86_64")]
+#[cfg(target_arch = "x86_64")]
 extern crate x86_64;
 extern crate xmas_elf;
-extern crate log;
 
 use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
@@ -260,7 +259,7 @@ pub extern "C" fn syscall_handler(
     let startTime = TSC.Rdtsc();
     let enterAppTimestamp = CPULocal::Myself().ResetEnterAppTimestamp() as i64;
     let worktime = Tsc::Scale(startTime - enterAppTimestamp) * 1000; // the thread has used up time slot
-    
+
     let tick = if SHARESPACE.config.read().Realtime {
         REALTIME_CLOCK_TICK
     } else {
@@ -294,7 +293,8 @@ pub extern "C" fn syscall_handler(
         {
             callId = if nr < SysCallID::UnknowSyscall as u64 {
                 unsafe { mem::transmute(nr as u64) }
-            } else if SysCallID::sys_socket_produce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64
+            } else if SysCallID::sys_socket_produce as u64 <= nr
+                && nr < SysCallID::EXTENSION_MAX as u64
             {
                 unsafe { mem::transmute(nr as u64) }
             } else {
@@ -347,7 +347,8 @@ pub extern "C" fn syscall_handler(
     if debugLevel > DebugLevel::Error {
         let gap = if self::SHARESPACE.config.read().PerfDebug {
             let gap = TSC.Rdtsc() - startTime;
-            crate::qlib::kernel::threadmgr::task_exit::SYS_CALL_TIME[nr as usize].fetch_add(gap as u64, Ordering::SeqCst);
+            crate::qlib::kernel::threadmgr::task_exit::SYS_CALL_TIME[nr as usize]
+                .fetch_add(gap as u64, Ordering::SeqCst);
             gap
         } else {
             0
@@ -440,8 +441,8 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     // mm needs to be clean as last function before SwitchToNewTask
                     // after this is called, another vcpu might drop the pagetable
                     core::mem::drop(mm);
-                    unsafe { 
-                        (*CPULocal::Myself().pageAllocator.get()).Clean(); 
+                    unsafe {
+                        (*CPULocal::Myself().pageAllocator.get()).Clean();
                     }
                 }
 
@@ -652,4 +653,3 @@ fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
     self::Kernel::HostSpace::Panic(&format!("alloc_error_handler layout: {:?}", layout));
     loop {}
 }
-

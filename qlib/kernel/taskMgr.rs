@@ -122,6 +122,7 @@ pub fn WaitFn() -> ! {
         match next {
             None => {
                 SHARESPACE.scheduler.IncreaseHaltVcpuCnt();
+                defer!(SHARESPACE.scheduler.DecreaseHaltVcpuCnt());
 
                 let mut addr;
                 loop {
@@ -136,7 +137,6 @@ pub fn WaitFn() -> ! {
                 }
 
                 task = TaskId::New(addr as u64);
-                SHARESPACE.scheduler.DecreaseHaltVcpuCnt();
             }
 
             Some(newTask) => {

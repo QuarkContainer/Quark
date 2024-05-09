@@ -29,8 +29,8 @@ use std::sync::{Arc, Mutex};
 use tokio::net::{TcpSocket, TcpStream, UnixStream};
 use tokio::sync::oneshot;
 
-use qshare::common::*;
-use qshare::tsot_msg::*;
+use crate::common::*;
+use crate::tsot_msg::*;
 use tokio::sync::{mpsc, Notify};
 
 #[derive(Debug)]

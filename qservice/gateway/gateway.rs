@@ -17,26 +17,23 @@
 #![allow(non_camel_case_types)]
 #![allow(non_upper_case_globals)]
 #![allow(deprecated)]
-#![feature(unix_socket_ancillary_data)]
 
 #[macro_use]
 extern crate log;
 extern crate simple_logging;
 
-#[macro_use]
-extern crate scopeguard;
-
+pub mod func_agent_mgr;
 pub mod func_worker;
 pub mod http_gateway;
 pub mod obj_repo;
-pub mod tsot_client;
+//pub mod tsot_client;
 
 use obj_repo::{NamespaceStore, ObjRepo};
 use once_cell::sync::OnceCell;
 
 use http_gateway::*;
 use qshare::common::*;
-use tsot_client::TsotClient;
+use qshare::tsot_client::TsotClient;
 
 pub static OBJ_REPO: OnceCell<ObjRepo> = OnceCell::new();
 pub static NAMESPACE_STORE: OnceCell<NamespaceStore> = OnceCell::new();
