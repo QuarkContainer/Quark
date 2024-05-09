@@ -99,6 +99,7 @@ endif
 # endif
 
 # Always Install config for debug purpose
+	sudo mkdir -p $(QCONFIG_GLOBAL_DIR)
 	sudo cp -f $(QROOT_DIR)/config.json $(QCONFIG_GLOBAL_DIR)
 
 cuda_make:
