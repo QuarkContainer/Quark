@@ -18,9 +18,11 @@ use std::ffi::CString;
 use std::os::raw::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+// use std::time::{Duration, Instant};
 
 use crate::qlib::common::*;
 //use crate::qlib::linux_def::SysErr;
+use crate::QUARK_CONFIG;
 use crate::qlib::config::*;
 use crate::qlib::proxy::*;
 use crate::qlib::range::Range;
@@ -39,7 +41,7 @@ use cuda_runtime_sys::{
     cudaFuncAttributes, cudaFuncCache, cudaLimit, cudaMemAttachGlobal, cudaMemoryAdvise,
     cudaSharedMemConfig, cudaStreamCaptureMode, cudaStreamCaptureStatus, cudaStream_t,
 };
-use rcublas_sys::{cublasHandle_t, cublasMath_t, cudaMemLocation};
+use rcublas_sys::{cublasHandle_t, cudaMemLocation};
 
 #[link(name = "cuda")]
 extern "C" {
@@ -79,11 +81,8 @@ extern "C" {
     pub fn cuCtxCreate(pctx: *mut CUcontext, flags: c_uint, dev: CUdevice) -> CUresult;
     pub fn cuCtxPushCurrent(pctx: CUcontext) -> CUresult;
     pub fn cuDevicePrimaryCtxRetain(pctx: *mut CUcontext, dev: CUdevice) -> CUresult;
-    pub fn cuFuncGetAttribute(
-        pi: *mut c_int,
-        attrib: CUfunction_attribute,
-        hfunc: CUfunction,
-    ) -> CUresult;
+    pub fn cuFuncGetAttribute(pi: *mut c_int, attrib: CUfunction_attribute, hfunc: CUfunction) -> CUresult;
+    pub fn cuFuncSetAttribute(hfunc: CUfunction, attrib: u32, value: i32) -> CUresult;
     pub fn cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
         numBlocks: *mut c_int,
         func: CUfunction,
@@ -234,7 +233,7 @@ extern "C" {
         workspace: *mut c_void,
         workspaceSizeInBytes: usize,
     ) -> u32;
-    pub fn cublasSetMathMode(handle: cublasHandle_t, mode: cublasMath_t) -> u32;
+    pub fn cublasSetMathMode(handle: cublasHandle_t, mode: u32) -> u32;
     pub fn cublasSgemmStridedBatched(
         handle: cublasHandle_t,
         transa: u32,
@@ -272,6 +271,52 @@ extern "C" {
         C: *mut f32,
         ldc: c_int,
     ) -> u32;
+    pub fn cublasGemmEx(
+        handle: cublasHandle_t,
+        transa: u32,
+        transb: u32,
+        m: c_int,
+        n: c_int,
+        k: c_int,
+        alpha: u64,
+        A: u64,
+        Atype: u32,
+        lda: c_int,
+        B: u64,
+        Btype: u32,
+        ldb: c_int,
+        beta: u64,
+        C: u64,
+        Ctype: u32,
+        ldc: c_int,
+        computeType: u32,
+        algo: u32
+    ) -> u32; 
+    pub fn cublasGemmStridedBatchedEx(
+        handle: cublasHandle_t,
+        transa: u32,
+        transb: u32,
+        m: i32,
+        n: i32,
+        k: i32,
+        alpha: u64,
+        A: u64,
+        Atype: u32,
+        lda: i32,
+        strideA: i64,
+        B: u64,
+        Btype: u32,
+        ldb: i32,
+        strideB: i64,
+        beta: u64,
+        C: u64,
+        Ctype: u32,
+        ldc: i32,
+        strideC: i64,
+        batchCount: i32,
+        computeType: u32,
+        algo: u32
+    ) -> u32; 
 }
 
 #[link(name = "cublasLt")]
@@ -320,11 +365,6 @@ extern "C" {
 
 lazy_static! {
     static ref CUDA_HAS_INIT: AtomicUsize = AtomicUsize::new(0);
-    pub static ref QUARK_CONFIG: Mutex<Config> = {
-        let mut config = Config::default();
-        config.Load();
-        Mutex::new(config)
-    };
     static ref MEM_RECORDER: Mutex<Vec<(u64, usize)>> = Mutex::new(Vec::new());
     // static ref OFFLOAD_TIMER: AtomicUsize = AtomicUsize::new(0);
     // pub static ref FAST_SWITCH_HASHSET: HashSet<u64> = HashSet::new();
@@ -761,8 +801,9 @@ pub fn NvidiaProxy(
             return Ok(ret as i64);
         }
         ProxyCommand::CudaMalloc => {
-            // error!("nvidia.rs: cudaMalloc");
+            // error!("nvidia.rs: cudaMalloc, mode{:?}", QUARK_CONFIG.lock().CudaMode);
             if QUARK_CONFIG.lock().CudaMode == CudaMode::Native {
+                // error!("nvidia.rs: CudaMode::Native()");
                 let mut para1 = parameters.para1 as *mut c_void;
 
                 let ret = unsafe {
@@ -778,6 +819,7 @@ pub fn NvidiaProxy(
                 unsafe { *(parameters.para1 as *mut u64) = para1 as u64 };
                 return Ok(ret as i64);
             } else {
+                // error!("nvidia.rs: CudaMode::fastswitch()");
                 let mut para1 = parameters.para1 as *mut c_void;
 
                 let ret = unsafe {
@@ -815,6 +857,7 @@ pub fn NvidiaProxy(
                 //     error!("nvidia.rs: error caused by cudaMalloc(cudaMemAdvise_v2): {}", ret as u32);
                 // }
                 unsafe { *(parameters.para1 as *mut u64) = para1 as u64 };
+                // error!("nvidia.rs: malloc ptr:{:x}, size:{:x}", para1 as u64, parameters.para2);
                 return Ok(ret as i64);
             }
         }
@@ -1478,16 +1521,22 @@ pub fn NvidiaProxy(
         }
         ProxyCommand::CudaFuncSetAttribute => {
             //error!("nvidia.rs: CudaFuncSetAttribute");
+            let dev_func = match FUNCTIONS.lock().get(&parameters.para1) {
+                Some(func) => func.clone(),
+                None => {
+                    0
+                }
+            };
             let ret = unsafe {
-                cudaFuncSetAttribute(
-                    parameters.para1 as *const c_void,
-                    *(&parameters.para2 as *const _ as *const cudaFuncAttribute),
-                    parameters.para3 as c_int,
+                cuFuncSetAttribute(
+                    dev_func as CUfunction,
+                    parameters.para2 as u32,
+                    parameters.para3 as i32,
                 )
             };
             if ret as u32 != 0 {
                 error!(
-                    "nvidia.rs: error caused by cudaFuncSetAttribute: {}",
+                    "nvidia.rs: error caused by cudaFuncSetAttribute(cuFuncSetAttribute): {}",
                     ret as u32
                 );
             }
@@ -1709,10 +1758,7 @@ pub fn NvidiaProxy(
         ProxyCommand::CublasSetMathMode => {
             //error!("nvidia.rs: CublasSetMathMode");
             let ret = unsafe {
-                cublasSetMathMode(
-                    parameters.para1 as cublasHandle_t,
-                    *(&parameters.para2 as *const _ as *const cublasMath_t),
-                )
+                cublasSetMathMode(parameters.para1 as cublasHandle_t, parameters.para2 as u32)
             };
             if ret as u32 != 0 {
                 error!(
@@ -2049,14 +2095,90 @@ pub fn NvidiaProxy(
             }
 
             return Ok(ret as i64);
-        } //_ => todo!()
+        } 
+        ProxyCommand::CublasGemmEx => {
+            //error!("nvidia.rs: CublasSgemm_v2");
+            let info = unsafe { *(parameters.para1 as *const u8 as *const GemmExInfo) };
+            let alpha = unsafe { *(parameters.para2 as *const f32) };
+            let beta = unsafe { *(parameters.para3 as *const f32) };
+
+            let ret = unsafe {
+                cublasGemmEx(
+                    info.handle as cublasHandle_t,
+                    info.transa,
+                    info.transb,
+                    info.m,
+                    info.n,
+                    info.k,
+                    &alpha as *const _ as u64,
+                    info.A,
+                    info.Atype,
+                    info.lda,
+                    info.B,
+                    info.Btype,
+                    info.ldb,
+                    &beta as *const _ as u64,
+                    info.C,
+                    info.Ctype,
+                    info.ldc,
+                    info.computeType,
+                    info.algo
+                )
+            };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cublasGemmEx: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        }
+        ProxyCommand::CublasGemmStridedBatchedEx => {
+            //error!("nvidia.rs: CublasSgemm_v2");
+            let info = unsafe { *(parameters.para1 as *const u8 as *const GemmStridedBatchedExInfo) };
+            let alpha = unsafe { *(parameters.para2 as *const f32) };
+            let beta = unsafe { *(parameters.para3 as *const f32) };
+
+            let ret = unsafe {
+                cublasGemmStridedBatchedEx(
+                    info.handle as cublasHandle_t,
+                    info.transa,
+                    info.transb,
+                    info.m,
+                    info.n,
+                    info.k,
+                    &alpha as *const _ as u64,
+                    info.A,
+                    info.Atype,
+                    info.lda,
+                    info.strideA,
+                    info.B,
+                    info.Btype,
+                    info.ldb,
+                    info.strideB,
+                    &beta as *const _ as u64,
+                    info.C,
+                    info.Ctype,
+                    info.ldc,
+                    info.strideC,
+                    info.batchCount,
+                    info.computeType,
+                    info.algo
+                )
+            };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cublasGemmStridedBatchedEx: {}", ret as u32);
+            }
+
+            return Ok(ret as i64);
+        } 
+        //_ => todo!()
+        
     }
 }
 
 pub fn CudaMemcpy(parameters: &ProxyParameters) -> Result<i64> {
     //error!("nvidia.rs: cudaMemcpy");
     // let func: extern "C" fn(u64, u64, u64, u64) -> u32 = unsafe { std::mem::transmute(handle) };
-
+    //error!("nvidia.rs: CudaMemcpy: count:{}, len:{}", parameters.para4 as usize, parameters.para3 as usize);
     let kind = parameters.para5;
 
     match kind {
@@ -2124,7 +2246,7 @@ pub fn CudaMemcpy(parameters: &ProxyParameters) -> Result<i64> {
 
 pub fn CudaMemcpyAsync(parameters: &ProxyParameters) -> Result<i64> {
     //error!("nvidia.rs: cudaMemcpyAsync");
-
+    //error!("nvidia.rs: CudaMemcpy: count:{}, len:{}", parameters.para4 as usize, parameters.para3 as usize);
     let kind = parameters.para5;
     let stream = parameters.para6 as cudaStream_t;
     match kind {
@@ -2206,54 +2328,50 @@ fn InitNvidia(containerId: &str, ptxlibPath: &str) {
     }
 }
 
-pub fn OffloadMem() {
+pub fn SwapOutMem() -> Result<i64> {
+    error!("nvidia rs:SwapOutMem2"); 
+    let now = Instant::now();
     let memRecorder = MEM_RECORDER.lock();
     let mut iterator = memRecorder.iter();
+    let mut totalSize = 0;
     while let Some(element) = iterator.next() {
         let ret = unsafe { cudaMemPrefetchAsync(element.0, element.1, -1, 0 as cudaStream_t) }; // -1 means cudaCpuDeviceId
-        error!(
-            "cudaMemPrefetchAsync to host, ptr: {:x}, count: {}",
-            element.0, element.1
-        );
+        totalSize = totalSize + element.1;
+        error!("cudaMemPrefetchAsync to host, ptr: {:x}, count: {}", element.0, element.1);
+        
         if ret as u32 != 0 {
-            error!(
-                "nvidia.rs: error caused by cudaMemPrefetchAsync to host: {}",
-                ret as u32
-            );
+            error!("nvidia.rs: error caused by cudaMemPrefetchAsync to host: {}", ret as u32);
         }
     }
     let ret2 = unsafe { cudaStreamSynchronize(0 as cudaStream_t) };
     if ret2 as u32 != 0 {
-        error!(
-            "nvidia.rs: error caused by cudaMemPrefetchAsync to host: {}",
-            ret2 as u32
-        );
+        error!("nvidia.rs: error caused by cudaMemPrefetchAsync to host: {}", ret2 as u32);
     }
+    // error!("total mem is: {}, SwapOutMem time{:?}", totalSize, now.elapsed());
+    return Ok(0);
 }
 
-pub fn RestoreOffloadedMem() {
+pub fn SwapInMem() -> Result<i64> {
+    error!("nvidia rs:SwapInMem2"); 
+    let now = Instant::now();
     let memRecorder = MEM_RECORDER.lock();
+    error!("mem recorder size: {}", memRecorder.len());
     let mut iterator = memRecorder.iter();
+    let mut totalSize = 0;
     while let Some(element) = iterator.next() {
-        let ret = unsafe { cudaMemPrefetchAsync(element.0, element.1, 0, 0 as cudaStream_t) };
-        error!(
-            "cudaMemPrefetchAsync back to gpu, ptr: {:x}, count: {}",
-            element.0, element.1
-        );
+        let ret = unsafe { cudaMemPrefetchAsync(element.0, element.1, 0, 0 as cudaStream_t) }; // for now, hard coded to device 0
+        totalSize = totalSize + element.1;
+        error!("cudaMemPrefetchAsync back to gpu, ptr: {:x}, count: {}", element.0, element.1);
         if ret as u32 != 0 {
-            error!(
-                "nvidia.rs: error caused by cudaMemPrefetchAsync to gpu: {}",
-                ret as u32
-            );
+            error!("nvidia.rs: error caused by cudaMemPrefetchAsync to gpu: {}", ret as u32);
         }
     }
     let ret2 = unsafe { cudaStreamSynchronize(0 as cudaStream_t) };
     if ret2 as u32 != 0 {
-        error!(
-            "nvidia.rs: error caused by cudaMemPrefetchAsync to host: {}",
-            ret2 as u32
-        );
+        error!("nvidia.rs: error caused by cudaMemPrefetchAsync to gpu: {}", ret2 as u32);
     }
+    error!("total mem is: {},SwapInMem time:{:?}", totalSize, now.elapsed());
+    return Ok(0);
 }
 // pub struct NvidiaHandlersInner {
 //     pub cudaHandler: u64,

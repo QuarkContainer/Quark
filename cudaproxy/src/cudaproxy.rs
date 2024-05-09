@@ -26,7 +26,7 @@ use cuda_runtime_sys::{
     cudaDeviceAttr, cudaDeviceP2PAttr, cudaDeviceProp, cudaFuncCache, cudaLimit,
     cudaSharedMemConfig,cudaError_t
 };
-use rcublas_sys::{cublasHandle_t,cublasMath_t,cublasOperation_t};
+use rcublas_sys::{cublasHandle_t,cublasMath_t,cublasOperation_t, cublasComputeType_t, cublasGemmAlgo_t, cudaDataType_t};
 use cuda11_cublasLt_sys::{cublasLtHandle_t,cublasLtMatmulDesc_t,cublasLtMatrixLayout_t,cublasLtMatmulAlgo_t,cublasLtMatmulPreference_t,cublasLtMatmulHeuristicResult_t};
 
 use crate::proxy::*;
@@ -974,6 +974,111 @@ pub extern "C" fn cublasSgemm_v2(
             syscall4(SYS_PROXY, ProxyCommand::CublasSgemmV2 as usize, &info as *const _ as usize, 
                 alpha as *const _ as usize, beta as *const _ as usize)
         };
+}
+
+#[no_mangle]
+pub extern "C" fn cublasGemmEx(
+    handle: cublasHandle_t,
+    transa: cublasOperation_t,
+    transb: cublasOperation_t,
+    m: c_int,
+    n: c_int,
+    k: c_int,
+    alpha: u64,
+    A: u64,
+    Atype: cudaDataType_t,
+    lda: c_int,
+    B: u64,
+    Btype: cudaDataType_t,
+    ldb: c_int,
+    beta: u64,
+    C: u64,
+    Ctype: cudaDataType_t,
+    ldc: c_int,
+    computeType: cublasComputeType_t,
+    algo: cublasGemmAlgo_t) -> usize {
+        let info: GemmExInfo = GemmExInfo {
+            handle: handle as u64,
+            transa: transa as u32,
+            transb: transb as u32,
+            m: m as i32,
+            n: n as i32,
+            k: k as i32,
+            alpha: alpha,
+            A: A,
+            Atype: Atype as u32,
+            lda: lda as i32,
+            B: B,
+            Btype: Btype as u32,
+            ldb: ldb as i32,
+            beta: beta,
+            C: C,
+            Ctype: Ctype as u32,
+            ldc: ldc as i32,
+            computeType: computeType as u32,
+            algo: algo as u32,
+    };
+    //  println!("SgemmStridedBatchedInfo {:x?}", info);
+    return unsafe {
+        syscall4(SYS_PROXY,ProxyCommand::CublasGemmEx as usize,
+            &info as *const _ as usize, alpha as usize, beta as usize)
+    };
+}
+
+#[no_mangle]
+pub extern "C" fn cublasGemmStridedBatchedEx(
+    handle: cublasHandle_t,
+    transa: cublasOperation_t,
+    transb: cublasOperation_t,
+    m: i32,
+    n: i32,
+    k: i32,
+    alpha: u64,
+    A: u64,
+    Atype: cudaDataType_t,
+    lda: i32,
+    strideA: i64,
+    B: u64,
+    Btype: cudaDataType_t,
+    ldb: i32,
+    strideB: i64,
+    beta: u64,
+    C: u64,
+    Ctype: cudaDataType_t,
+    ldc: i32,
+    strideC: i64,
+    batchCount: i32,
+    computeType: cublasComputeType_t,
+    algo: cublasGemmAlgo_t) -> usize {
+        let info: GemmStridedBatchedExInfo = GemmStridedBatchedExInfo {
+            handle: handle as u64,
+            transa: transa as u32,
+            transb: transb as u32,
+            m: m,
+            n: n,
+            k: k,
+            alpha: alpha,
+            A: A,
+            Atype: Atype as u32,
+            lda: lda,
+            strideA: strideA,
+            B: B,
+            Btype: Btype as u32,
+            ldb: ldb,
+            strideB: strideB,
+            beta: beta,
+            C: C,
+            Ctype: Ctype as u32,
+            ldc: ldc,
+            strideC: strideC,
+            batchCount: batchCount,
+            computeType: computeType as u32,
+            algo: algo as u32,
+    };
+    return unsafe {
+        syscall4(SYS_PROXY,ProxyCommand::CublasGemmStridedBatchedEx as usize,
+            &info as *const _ as usize, alpha as usize, beta as usize)
+    };
 }
 
 // #[no_mangle]

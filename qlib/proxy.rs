@@ -112,6 +112,8 @@ pub enum ProxyCommand {
     CublasLtMatmulAlgoGetHeuristic,
     CublasGetMathMode,
     CublasSgemmV2,
+    CublasGemmEx,
+    CublasGemmStridedBatchedEx,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]
@@ -695,4 +697,56 @@ pub struct CudaFuncAttributes {
     pub cacheModeCA: core::ffi::c_int,
     pub maxDynamicSharedSizeBytes: core::ffi::c_int,
     pub preferredShmemCarveout: core::ffi::c_int,
+}
+
+#[repr(C)]
+#[derive(Default,Debug, Copy, Clone)]
+pub struct GemmExInfo {
+    pub handle: u64,
+    pub transa: u32,
+    pub transb: u32,
+    pub m: i32,
+    pub n: i32,
+    pub k: i32,
+    pub alpha: u64,
+    pub A: u64,
+    pub Atype: u32,
+    pub lda: i32,
+    pub B: u64,
+    pub Btype: u32,
+    pub ldb: i32,
+    pub beta: u64,
+    pub C: u64,
+    pub Ctype: u32,
+    pub ldc: i32,
+    pub computeType: u32,
+    pub algo: u32,
+}
+
+#[repr(C)]
+#[derive(Default,Debug, Copy, Clone)]
+pub struct GemmStridedBatchedExInfo {
+    pub handle: u64,
+    pub transa: u32,
+    pub transb: u32,
+    pub m: i32,
+    pub n: i32,
+    pub k: i32,
+    pub alpha: u64,
+    pub A: u64,
+    pub Atype: u32,
+    pub lda: i32,
+    pub strideA: i64,
+    pub B: u64,
+    pub Btype: u32,
+    pub ldb: i32,
+    pub strideB: i64,
+    pub beta: u64,
+    pub C: u64,
+    pub Ctype: u32,
+    pub ldc: i32,
+    pub strideC: i64,
+    pub batchCount: i32,
+    pub computeType: u32,
+    pub algo: u32
 }

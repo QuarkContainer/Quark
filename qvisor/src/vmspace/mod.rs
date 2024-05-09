@@ -57,7 +57,7 @@ use crate::vmspace::kernel::GlobalRDMASvcCli;
 
 use self::limits::*;
 #[cfg(feature = "cuda")]
-use self::nvidia::NvidiaProxy;
+use self::nvidia::{NvidiaProxy, SwapOutMem, SwapInMem};
 use self::random::*;
 use self::syscall::*;
 use self::tsot_agent::TSOT_AGENT;
@@ -1936,6 +1936,32 @@ impl VMSpace {
             Ok(v) => return v,
             Err(e) => {
                 error!("nvidia proxy get error {:?}", e);
+                return 0;
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        return 0;
+    }
+
+    pub fn SwapInGPUPage(&self) -> i64 { 
+        #[cfg(feature = "cuda")]
+        match SwapInMem() {
+            Ok(v) => return v,
+            Err(e) => {
+                error!("SwapInGPUPage get error {:?}", e);
+                return 0;
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        return 0;
+    }
+
+    pub fn SwapOutGPUPage(&self) -> i64 { 
+        #[cfg(feature = "cuda")]  
+        match SwapOutMem() {
+            Ok(v) => return v,
+            Err(e) => {
+                error!("SwapOutGPUPage get error {:?}", e);
                 return 0;
             }
         }
