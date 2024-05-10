@@ -1377,8 +1377,14 @@ impl VMSpace {
             slice::from_raw_parts_mut(addr as *mut i8, len)
         };
 
+        #[cfg(target_arch="aarch64")]
         for i in 0..slice.len() {
-            socketAddr.sun_path[i] = slice[i]
+            socketAddr.sun_path[i] = slice[i] as u8;
+        };
+
+        #[cfg(target_arch="x86_64")]
+        for i in 0..slice.len() {
+            socketAddr.sun_path[i] = slice[i];
         };
 
         let ret = unsafe {
