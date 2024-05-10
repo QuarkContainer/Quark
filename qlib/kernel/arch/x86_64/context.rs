@@ -90,6 +90,10 @@ pub struct Context64 {
     pub state: State,
 }
 
+//
+// signal.rs: impl Context64 -> seems 'useles';
+// maybe remove it?
+//
 impl Context64 {
     // Fork returns an exact copy of this context.
     pub fn Fork(&self, regs: &'static mut PtRegs) -> Self {
@@ -108,6 +112,14 @@ impl Context64 {
         self.state.Regs.rax = val;
     }
 
+    //
+    // ARM aquivalent ~ PC; can't be read directly
+    //                  (or directly writen AFAIK)
+    //
+    // Either raname them or put them behing an
+    // arch-agnostic function.
+    // NOTE: A 'grep' shows no usage of them...
+    //
     // IP returns the current instruction pointer.
     pub fn IP(&self) -> u64 {
         return self.state.Regs.rip;
@@ -117,7 +129,11 @@ impl Context64 {
     pub fn SetIP(&mut self, val: u64) {
         self.state.Regs.rip = val;
     }
-
+    // ...if so maybe remove them?
+    ////////////////////////////////////////////
+    
+    //
+    // NOTE: A 'grep' shows no usage of them...
     // Stack returns the current stack pointer.
     pub fn Stack(&self) -> u64 {
         return self.state.Regs.rsp;
@@ -127,6 +143,8 @@ impl Context64 {
     pub fn SetStack(&mut self, val: u64) {
         self.state.Regs.rsp = val;
     }
+    // ...if so maybe remove them?
+    ////////////////////////////////////////////
 
     // NewMmapLayout implements Context.NewMmapLayout consistently with Linux.
     pub fn NewMmapLayout(min: u64, max: u64, r: &LimitSet) -> Result<MmapLayout> {
