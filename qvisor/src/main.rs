@@ -92,6 +92,8 @@ mod vmspace;
 
 use alloc::sync::Arc;
 use lazy_static::lazy_static;
+use once_cell::sync::OnceCell;
+use runc::runtime::vm::VirtualMachine;
 use spin::Mutex;
 use std::cell::RefCell;
 use std::env;
@@ -128,6 +130,8 @@ pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 
 thread_local!(static THREAD_ID: RefCell<i32> = RefCell::new(0));
 thread_local!(static VCPU: RefCell<Option<Arc<KVMVcpu>>> = RefCell::new(None));
+
+pub static VIRTUAL_MACHINE: OnceCell<VirtualMachine> = OnceCell::new();
 
 pub fn ThreadId() -> i32 {
     let mut i = 0;

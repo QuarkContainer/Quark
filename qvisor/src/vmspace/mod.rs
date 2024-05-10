@@ -20,13 +20,13 @@ pub mod host_uring;
 pub mod hostfdnotifier;
 pub mod kernel_io_thread;
 pub mod limits;
+#[cfg(feature = "cuda")]
+pub mod nvidia;
 pub mod random;
 pub mod syscall;
 pub mod time;
-pub mod uringMgr;
-#[cfg(feature = "cuda")]
-pub mod nvidia;
 pub mod tsot_agent;
+pub mod uringMgr;
 pub mod xpu;
 
 use core::arch::asm;
@@ -45,13 +45,13 @@ use uuid::Uuid;
 
 use crate::qlib::cstring::CString;
 use crate::qlib::fileinfo::*;
-use crate::qlib::kernel::socket::control::*;
 use crate::qlib::kernel::socket::control::Parse;
+use crate::qlib::kernel::socket::control::*;
 use crate::qlib::nvproxy::frontend::FrontendIoctlCmd;
-use crate::qlib::nvproxy::frontend_type::NV_ESC_CHECK_VERSION_STR;
 use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
-use crate::qlib::range::Range;
+use crate::qlib::nvproxy::frontend_type::NV_ESC_CHECK_VERSION_STR;
 use crate::qlib::proxy::*;
+use crate::qlib::range::Range;
 use crate::vmspace::kernel::GlobalIOMgr;
 use crate::vmspace::kernel::GlobalRDMASvcCli;
 
@@ -63,7 +63,6 @@ use self::syscall::*;
 use self::tsot_agent::TSOT_AGENT;
 use self::tsot_msg::TsotMessage;
 use super::kvm_vcpu::HostPageAllocator;
-use super::kvm_vcpu::KVMVcpu;
 use super::namespace::MountNs;
 use super::qlib::addr::Addr;
 use super::qlib::common::{Error, Result};
@@ -71,8 +70,8 @@ use super::qlib::control_msg::*;
 use super::qlib::kernel::SignalProcess;
 use super::qlib::linux::membarrier::*;
 use super::qlib::linux_def::*;
-use super::qlib::pagetable::PageTables;
 use super::qlib::pagetable::PageTableFlags;
+use super::qlib::pagetable::PageTables;
 use super::qlib::perf_tunning::*;
 use super::qlib::qmsg::*;
 use super::qlib::socket_buf::*;
@@ -132,7 +131,6 @@ pub struct VMSpace {
     pub pivot: bool,
     pub waitingMsgCall: Option<WaitingMsgCall>,
     pub controlSock: i32,
-    pub vcpus: Vec<Arc<KVMVcpu>>,
     pub haveMembarrierGlobal: bool,
     pub haveMembarrierPrivateExpedited: bool,
 }
@@ -143,7 +141,7 @@ unsafe impl Send for VMSpace {}
 impl VMSpace {
     pub fn Init() -> Self {
         let (haveMembarrierGlobal, haveMembarrierPrivateExpedited) = Self::MembarrierInit();
-        
+
         return VMSpace {
             podUid: "".to_owned(),
             allocator: HostPageAllocator::New(),
@@ -159,7 +157,6 @@ impl VMSpace {
             pivot: false,
             waitingMsgCall: None,
             controlSock: -1,
-            vcpus: Vec::new(),
             haveMembarrierGlobal: haveMembarrierGlobal,
             haveMembarrierPrivateExpedited: haveMembarrierPrivateExpedited,
         };
@@ -183,9 +180,8 @@ impl VMSpace {
         return fdInfo.IOReadDir(addr, len, reset);
     }
 
-
     pub fn PivotRoot(&self, rootfs: &str) {
-                let mns = MountNs::New(rootfs.to_string());
+        let mns = MountNs::New(rootfs.to_string());
         mns.PivotRoot();
     }
 
@@ -434,12 +430,13 @@ impl VMSpace {
             return fd as i64;
         }
 
-        let ret = unsafe {
-            libc::dup2(fd, oldfd)
-        };
+        let ret = unsafe { libc::dup2(fd, oldfd) };
 
         if ret < 0 {
-            error!("TryOpenWrite can't dup new fd to old fd with error {}", errno::errno().0);
+            error!(
+                "TryOpenWrite can't dup new fd to old fd with error {}",
+                errno::errno().0
+            );
             unsafe {
                 libc::close(fd);
             }
@@ -525,29 +522,22 @@ impl VMSpace {
         };
 
         let tryOpenAt = unsafe { &mut *(addr as *mut TryOpenStruct) };
-        let ret =
-            unsafe { 
-                libc::fstatat(
-                    dirfd, 
-                    name as *const c_char,
-                    tryOpenAt.fstat as *const _ as u64 as *mut stat,
-                    libc::AT_SYMLINK_NOFOLLOW
-
-                ) as i64 
-            };
+        let ret = unsafe {
+            libc::fstatat(
+                dirfd,
+                name as *const c_char,
+                tryOpenAt.fstat as *const _ as u64 as *mut stat,
+                libc::AT_SYMLINK_NOFOLLOW,
+            ) as i64
+        };
 
         if ret < 0 {
             return Self::GetRet(ret as i64);
         }
-        
-        let (fd, writeable) = unsafe { 
-            Self::TryOpenHelper(
-                dirfd, 
-                name, 
-                skiprw && tryOpenAt.fstat.IsRegularFile()
-            ) 
-        };
-        
+
+        let (fd, writeable) =
+            unsafe { Self::TryOpenHelper(dirfd, name, skiprw && tryOpenAt.fstat.IsRegularFile()) };
+
         //error!("TryOpenAt dirfd {}, name {} ret {}", dirfd, Self::GetStr(name), fd);
 
         if fd < 0 {
@@ -604,34 +594,27 @@ impl VMSpace {
     }
 
     pub fn NividiaDriverVersion(ioctlParamsAddr: u64) -> i64 {
-        let ioctlParams = unsafe {
-            &mut *(ioctlParamsAddr as * mut RMAPIVersion) 
-        };
+        let ioctlParams = unsafe { &mut *(ioctlParamsAddr as *mut RMAPIVersion) };
 
         let drvName = CString::New("/dev/nvidiactl");
 
-        let ret = unsafe { 
-            libc::openat(
-                -1, 
-                drvName.Ptr() as *const c_char, 
-                O_RDONLY | O_NOFOLLOW, 
-                0
-            ) 
-        };
+        let ret =
+            unsafe { libc::openat(-1, drvName.Ptr() as *const c_char, O_RDONLY | O_NOFOLLOW, 0) };
         let fd = Self::GetRet(ret as i64) as i32;
         if fd < 0 {
             return fd as i64;
         }
 
         // From src/nvidia/arch/nvalloc/unix/include/nv-ioctl.h:
-	    const NV_RM_API_VERSION_REPLY_RECOGNIZED : u32 = 1;
+        const NV_RM_API_VERSION_REPLY_RECOGNIZED: u32 = 1;
         ioctlParams.cmd = '2' as _;
 
-        let req = FrontendIoctlCmd(NV_ESC_CHECK_VERSION_STR, core::mem::size_of::<RMAPIVersion>() as _);
+        let req = FrontendIoctlCmd(
+            NV_ESC_CHECK_VERSION_STR,
+            core::mem::size_of::<RMAPIVersion>() as _,
+        );
 
-        let ret = unsafe {
-            ioctl(fd, req, ioctlParamsAddr)
-        };
+        let ret = unsafe { ioctl(fd, req, ioctlParamsAddr) };
 
         unsafe {
             close(fd);
@@ -641,9 +624,8 @@ impl VMSpace {
     }
 
     pub fn NvidiaMMap(addr: u64, len: u64, prot: i32, flags: i32, fd: i32, offset: u64) -> i64 {
-        let ret = unsafe {
-            libc::mmap(addr as _, len as usize, prot, flags, fd, offset as i64) as i64
-        };
+        let ret =
+            unsafe { libc::mmap(addr as _, len as usize, prot, flags, fd, offset as i64) as i64 };
 
         let ret: i64 = Self::GetRet(ret);
         return ret;
@@ -653,33 +635,17 @@ impl VMSpace {
         let ptr = addr as *const Range;
         let ranges = unsafe { slice::from_raw_parts(ptr, count) };
         let flags = libc::MAP_PRIVATE | libc::MAP_ANON;
-        let ret = unsafe {
-            libc::mmap(
-                0 as _,
-                len as usize,
-                libc::PROT_NONE,
-                flags,
-                -1,
-                0,
-            ) as i64
-        };
+        let ret = unsafe { libc::mmap(0 as _, len as usize, libc::PROT_NONE, flags, -1, 0) as i64 };
 
         if ret < 0 {
             return -errno::errno().0 as i64;
         }
 
         let mut addr = ret as u64;
-        let flags = libc::MREMAP_MAYMOVE | libc::MREMAP_FIXED;// | libc::MREMAP_DONTUNMAP;
+        let flags = libc::MREMAP_MAYMOVE | libc::MREMAP_FIXED; // | libc::MREMAP_DONTUNMAP;
         for r in ranges {
-            let ret = unsafe {
-                libc::mremap(
-                    r.Start() as _,
-                    0, 
-                    r.len as usize, 
-                    flags,
-                    addr
-                ) as i32
-            } as i64;
+            let ret = unsafe { libc::mremap(r.Start() as _, 0, r.len as usize, flags, addr) as i32 }
+                as i64;
 
             if ret == -1 {
                 return -errno::errno().0 as i64;
@@ -692,9 +658,7 @@ impl VMSpace {
     }
 
     pub fn UnmapGuestMemRange(start: u64, len: u64) -> i64 {
-        let ret = unsafe {
-            libc::munmap(start as _, len as usize) as i64
-        };
+        let ret = unsafe { libc::munmap(start as _, len as usize) as i64 };
 
         return Self::GetRet(ret as i64);
     }
@@ -1290,31 +1254,24 @@ impl VMSpace {
 
     pub fn HostUnixRecvMsg(fd: i32, msghdr: u64, flags: i32) -> i64 {
         match Self::HostUnixRecvMsgHelper(fd, msghdr, flags) {
-            Err(Error::SysError(errno)) => {
-                return -errno as i64
-            }
+            Err(Error::SysError(errno)) => return -errno as i64,
             Ok(()) => return 0,
             _ => panic!("HostUnixRecvMsg impossible"),
         }
     }
 
     pub fn HostUnixRecvMsgHelper(fd: i32, msghdr: u64, flags: i32) -> Result<()> {
-        let ret = unsafe {
-            libc::recvmsg(fd, msghdr as * mut _, flags)
-        };
+        let ret = unsafe { libc::recvmsg(fd, msghdr as *mut _, flags) };
 
         if ret < 0 {
             return Err(Error::SysError(Self::GetRet(ret as i64) as i32));
         }
 
-        let hdr = unsafe {
-            &mut *(msghdr as * mut MsgHdr)
-        };
+        let hdr = unsafe { &mut *(msghdr as *mut MsgHdr) };
 
         if hdr.msgControlLen > 0 {
-            let controlVec = unsafe {
-                slice::from_raw_parts_mut(hdr.msgControl as *mut u8, hdr.msgControlLen)
-            };
+            let controlVec =
+                unsafe { slice::from_raw_parts_mut(hdr.msgControl as *mut u8, hdr.msgControlLen) };
 
             let ctrlMsg = Parse(controlVec)?;
             let mut fds = Vec::new();
@@ -1323,13 +1280,8 @@ impl VMSpace {
                     for fd in &right.0 {
                         let fd = *fd;
                         let mut stat = LibcStat::default();
-                        unsafe { 
-                            libc::fstat(
-                                fd, 
-                                &mut stat as * mut _ as u64 as *mut _
-                            ) as i64 
-                        };
-    
+                        unsafe { libc::fstat(fd, &mut stat as *mut _ as u64 as *mut _) as i64 };
+
                         if true || stat.IsRegularFile() {
                             let hostfd = GlobalIOMgr().AddFile(fd);
                             URING_MGR.lock().Addfd(hostfd).unwrap();
@@ -1339,7 +1291,7 @@ impl VMSpace {
                         }
                     }
                 }
-                None => ()
+                None => (),
             }
 
             let totalLen = controlVec.len();
@@ -1350,19 +1302,14 @@ impl VMSpace {
             hdr.msgControlLen = new_size;
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn HostUnixConnect(type_: i32, addr: u64, len: usize) -> i64 {
         let blockedType = type_ & (!SocketFlags::SOCK_NONBLOCK);
 
-        let fd = unsafe {
-            libc::socket(
-                AFType::AF_UNIX,
-                blockedType | SocketFlags::SOCK_CLOEXEC,
-                0
-            )
-        };
+        let fd =
+            unsafe { libc::socket(AFType::AF_UNIX, blockedType | SocketFlags::SOCK_CLOEXEC, 0) };
 
         if fd < 0 {
             return Self::GetRet(fd as i64);
@@ -1373,23 +1320,19 @@ impl VMSpace {
             sun_path: [0; 108],
         };
 
-        let slice = unsafe {
-            slice::from_raw_parts_mut(addr as *mut i8, len)
-        };
+        let slice = unsafe { slice::from_raw_parts_mut(addr as *mut i8, len) };
 
         for i in 0..slice.len() {
             socketAddr.sun_path[i] = slice[i]
-        };
+        }
 
-        let ret = unsafe {
-            libc::connect(fd, &socketAddr as * const _ as u64 as * const _, 108 + 2)
-        };
+        let ret = unsafe { libc::connect(fd, &socketAddr as *const _ as u64 as *const _, 108 + 2) };
 
         if ret < 0 {
             unsafe {
                 libc::close(fd);
             }
-            
+
             return Self::GetRet(ret as i64);
         }
 
@@ -1407,9 +1350,7 @@ impl VMSpace {
     pub fn TsotRecvMsg(msgAddr: u64) -> i64 {
         match TSOT_AGENT.RecvMsg() {
             Ok(msg) => {
-                let m = unsafe {
-                    &mut *(msgAddr as * mut TsotMessage)
-                };
+                let m = unsafe { &mut *(msgAddr as *mut TsotMessage) };
                 *m = msg;
                 return 0;
             }
@@ -1418,9 +1359,7 @@ impl VMSpace {
     }
 
     pub fn TsotSendMsg(msgAddr: u64) -> i64 {
-        let msg = unsafe {
-            &*(msgAddr as * const TsotMessage)
-        };
+        let msg = unsafe { &*(msgAddr as *const TsotMessage) };
         match TSOT_AGENT.SendMsg(msg) {
             Ok(()) => {
                 return 0;
@@ -1931,7 +1870,7 @@ impl VMSpace {
     }
 
     pub fn Proxy(&self, _cmd: ProxyCommand, _parameters: &ProxyParameters) -> i64 {
-        #[cfg(feature = "cuda")]  
+        #[cfg(feature = "cuda")]
         match NvidiaProxy(_cmd, _parameters, &self.args.as_ref().unwrap().ID) {
             Ok(v) => return v,
             Err(e) => {
@@ -2030,16 +1969,6 @@ impl VMSpace {
         );
     }
 
-    #[cfg(target_arch = "x86_64")]
-    pub fn GetVcpuFreq(&self) -> i64 {
-        let freq = self.vcpus[0].vcpu.get_tsc_khz().unwrap() * 1000;
-        return freq as i64;
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    pub fn GetVcpuFreq(&self) -> i64 {
-        return 0;
-    }
 
     pub fn Membarrier(cmd: i32) -> i32 {
         let nr = SysCallID::sys_membarrier as usize;
@@ -2095,7 +2024,6 @@ impl VMSpace {
 
         return (haveMembarrierGlobal, haveMembarrierPrivateExpedited);
     }
-
 }
 
 impl PostRDMAConnect {

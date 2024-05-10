@@ -37,6 +37,7 @@ use super::qlib::common::Result;
 
 use super::memmgr::{MapOption, MappedRegion};
 
+#[derive(Debug)]
 pub struct KernelELF {
     pub startAddr: Addr,
     pub endAddr: Addr,
