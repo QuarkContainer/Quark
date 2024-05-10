@@ -239,7 +239,6 @@ impl MemoryManager {
             vma.clone(),
         );
 
-
         let mapping = MMMapping {
             vmas: vmas,
             brkInfo: BrkInfo::default(),
@@ -493,13 +492,13 @@ impl MemoryManager {
     // SHOULD be called before return to user space,
     // to make sure the tlb flushed
     pub fn HandleTlbShootdown(&self) {
-        let localTLBEpoch = CPULocal::Myself().tlbEpoch.load(Ordering::Relaxed);
+        let localTLBEpoch = CPULocal::Myself().tlbEpoch.load(Ordering::Acquire);
         let currTLBEpoch = self.TLBEpoch();
 
         if localTLBEpoch != currTLBEpoch {
             CPULocal::Myself()
                 .tlbEpoch
-                .store(currTLBEpoch, Ordering::Relaxed);
+                .store(currTLBEpoch, Ordering::Release);
             #[cfg(target_arch = "aarch64")]
             let curr = CurrentUserTable();
             #[cfg(target_arch = "x86_64")]

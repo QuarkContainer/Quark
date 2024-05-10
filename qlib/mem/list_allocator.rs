@@ -225,7 +225,6 @@ impl VcpuAllocator {
         } else {
             unsafe { ret = GLOBAL_ALLOCATOR.alloc(layout) as u64 };
         }
-
         return ret as *mut u8;
     }
 

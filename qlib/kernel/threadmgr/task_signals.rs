@@ -1142,14 +1142,12 @@ impl Task {
 
         userStack.sp = fpStart + fpSize as u64;
         userStack.PushU32(self, Self::FP_XSTATE_MAGIC2)?;
-        if !self.context.savefpsate {
-            self.SaveFp();
-        }
-        let fpstate = self.context.archfpstate.as_ref().unwrap().Slice();
+        self.SaveFp();
+        let fpstate = self.archfpstate.as_ref().unwrap().Slice();
         if fpstate.len() > 512 {
             userStack.PushSlice(
                 self,
-                &self.context.archfpstate.as_ref().unwrap().Slice()[512..],
+                &self.archfpstate.as_ref().unwrap().Slice()[512..],
             )?;
         }
 
@@ -1164,7 +1162,7 @@ impl Task {
         userStack.PushType::<FPSoftwareFrame>(self, &fpsw)?;
         let fpstateAddr = userStack.PushSlice(self, &fpstate[..464])?;
 
-        self.context.archfpstate = Some(Box::new(ArchFPState::default()));
+        self.archfpstate = Some(Box::new(ArchFPState::default()));
 
         let t = self.Thread();
         let mut mask = t.lock().signalMask;
@@ -1225,13 +1223,13 @@ impl Task {
         userStack.PopType::<SignalInfo>(self, &mut sigInfo)?;
 
         if uc.MContext.fpstate == 0 {
-            self.context.archfpstate = Some(Box::new(ArchFPState::default()));
+            self.archfpstate = Some(Box::new(ArchFPState::default()));
         } else {
             userStack.sp = uc.MContext.fpstate;
-            let slice = self.context.archfpstate.as_ref().unwrap().Slice();
+            let slice = self.archfpstate.as_ref().unwrap().Slice();
             userStack.PopSlice(self, slice)?;
-            self.context.archfpstate.as_ref().unwrap().SanitizeUser();
-            self.context.savefpsate = true;
+            self.archfpstate.as_ref().unwrap().SanitizeUser();
+            self.savefpsate = true;
         }
 
         let alt = uc.Stack;

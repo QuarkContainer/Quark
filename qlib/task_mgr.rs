@@ -45,13 +45,8 @@ impl TaskId {
     }
 
     #[inline]
-    pub fn Context(&self) -> &'static Context {
-        unsafe { return &*(self.data as *const Context) }
-    }
-
-    #[inline]
     pub fn Queue(&self) -> u64 {
-        return self.Context().queueId.load(Ordering::Relaxed) as u64;
+        return self.GetTask().QueueId() as u64;
     }
 }
 
@@ -59,61 +54,6 @@ impl TaskId {
 pub struct Links {
     pub prev: AtomicU64,
     pub next: AtomicU64,
-}
-
-#[derive(Debug)]
-#[repr(C)]
-pub struct Context {
-    pub rsp: u64,
-    pub r15: u64,
-    pub r14: u64,
-    pub r13: u64,
-    pub r12: u64,
-    pub rbx: u64,
-    pub rbp: u64,
-    pub rdi: u64,
-
-    pub ready: AtomicU64,
-    pub fs: u64,
-    pub savefpsate: bool,
-    //
-    // ARM PORT
-    //
-    pub archfpstate: Option<Box<ArchFPState>>,
-    // job queue id
-    pub queueId: AtomicUsize,
-    pub links: Links,
-}
-
-impl Context {
-    pub fn New() -> Self {
-        return Self {
-            rsp: 0,
-            r15: 0,
-            r14: 0,
-            r13: 0,
-            r12: 0,
-            rbx: 0,
-            rbp: 0,
-            rdi: 0,
-
-            ready: AtomicU64::new(1),
-
-            fs: 0,
-            savefpsate: false,
-            archfpstate: Some(Default::default()),
-            queueId: AtomicUsize::new(0),
-            links: Links::default(),
-        };
-    }
-
-    pub fn Ready(&self) -> u64 {
-        return self.ready.load(Ordering::Acquire);
-    }
-
-    pub fn SetReady(&self, val: u64) {
-        return self.ready.store(val, Ordering::SeqCst);
-    }
 }
 
 #[derive(Default)]
@@ -357,7 +297,7 @@ impl TaskQueue {
                     match data.queue.pop_front() {
                         None => panic!("TaskQueue none task"),
                         Some(taskId) => {
-                            if taskId.GetTask().context.Ready() != 0 {
+                            if taskId.GetTask().Ready() != 0 {
                                 self.queueSize.fetch_sub(1, Ordering::Release);
                                 return Some(taskId);
                             }

@@ -228,7 +228,6 @@ impl PageTables {
 
     pub fn NewWithKernelPageTables(&self, pagePool: &PageMgr) -> Result<Self> {
         let ret = Self::New(pagePool)?;
-
         unsafe {
             let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
             let pgdEntry = &(*pt)[0];
@@ -236,7 +235,6 @@ impl PageTables {
                 return Err(Error::AddressNotMap(0));
             }
             let pudTbl = pgdEntry.addr().as_u64() as *const PageTable;
-
             let nPt: *mut PageTable = ret.GetRoot() as *mut PageTable;
             let nPgdEntry = &mut (*nPt)[0];
             let nPudTbl = pagePool.AllocPage(true)? as *mut PageTable;
@@ -258,6 +256,20 @@ impl PageTables {
                 *(&mut (*nPudTbl)[i] as *mut _ as *mut u64) =
                     *(&(*pudTbl)[i] as *const _ as *const u64);
             }
+        }
+        let mut opts = PageOpts::Kernel();
+        #[cfg(target_arch = "aarch64")]
+        opts.SetMtNormal().SetDirty().SetAccessed().SetWrite().SetGlobal().SetPresent();
+
+        #[cfg(target_arch = "aarch64")]
+        {
+            let mut opts = PageOpts::Zero();
+            opts.SetWrite().SetGlobal().SetPresent().SetAccessed();
+            opts.SetDeviceMMIO();
+            ret.MapPage(Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+            Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+            opts.Val(),
+            pagePool)?;
         }
 
         #[cfg(target_arch = "x86_64")]
@@ -406,7 +418,6 @@ impl PageTables {
     pub fn UnmapAll(&self) -> Result<()> {
         self.Unmap(MemoryDef::PAGE_SIZE, MemoryDef::PHY_LOWER_ADDR, &*PAGE_MGR)?;
         self.Unmap(MemoryDef::PHY_UPPER_ADDR, MemoryDef::LOWER_TOP, &*PAGE_MGR)?;
-
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
 
         let pgdEntry = unsafe { &(*pt)[0] };

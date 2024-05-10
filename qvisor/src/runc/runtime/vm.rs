@@ -373,21 +373,20 @@ impl VirtualMachine {
                     .SetGlobal()
                     .Val(),
             )?;
-            // vms.KernelMap(
-            //     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
-            //     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE + 0x1000),
-            //     addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
-            //     opts.Val(),
-            // )?;
-            let mut opts = addr::PageOpts::Zero();
-			opts.SetWrite().SetGlobal().SetPresent().SetAccessed();
-			opts.SetDeviceMMIO();
-            vms.KernelMap(
-                addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
-                addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE + 0x1000),
-                addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
-				opts.Val(),
-            )?;
+            #[cfg(target_arch = "aarch64")]
+            {
+                let mut opts = addr::PageOpts::Zero();
+
+                opts.SetWrite().SetGlobal().SetPresent().SetAccessed();
+                opts.SetDeviceMMIO();
+                vms.KernelMap(
+                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE + 0x1000),
+                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+                    opts.Val(),
+                )?;
+            }
+
             autoStart = args.AutoStart;
             vms.pivot = args.Pivot;
             vms.args = Some(args);
@@ -442,7 +441,7 @@ impl VirtualMachine {
 
         #[cfg(target_arch = "aarch64")]
         let kvi = get_kvm_vcpu_init(&vm_fd)?;
-        info!("kvm_vcpu_init {:?}", kvi);
+
         let mut vcpus = Vec::with_capacity(cpuCount);
         for i in 0..cpuCount
         /*args.NumCPU*/

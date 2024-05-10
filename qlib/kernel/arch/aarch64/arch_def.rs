@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use core::{slice, sync::atomic::{AtomicUsize, Ordering}};
+use core::{slice, sync::atomic::{AtomicUsize, AtomicU64, Ordering}};
 use alloc::sync::Arc;
 
 use crate::qlib as qlib;
@@ -194,5 +193,87 @@ impl State {
             Regs: regs,
             archFPState: Arc::new(QMutex::new(self.archFPState.lock().Fork()))
         }
+    }
+}
+
+pub type Context = Aarch64Context;
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct Aarch64Context {
+    pub x19: u64,
+    pub x20: u64,
+    pub x21: u64,
+    pub x22: u64,
+    pub x23: u64,
+    pub x24: u64,
+    pub x25: u64,
+    pub x26: u64,
+    pub x27: u64,
+    pub x28: u64,
+    pub fp: u64,
+    pub sp: u64,
+    pub pc: u64,
+    pub x0: u64,
+    pub ready: AtomicU64,
+    pub tls: u64,
+}
+
+impl Aarch64Context {
+    pub fn New() -> Self {
+        return Self {
+         x19:    0,
+         x20:    0,
+         x21:    0,
+         x22:    0,
+         x23:    0,
+         x24:    0,
+         x25:    0,
+         x26:    0,
+         x27:    0,
+         x28:    0,
+         fp:     0,
+         sp:     0,
+         pc:     0,
+         x0:     0,
+         ready:  AtomicU64::new(1),
+         tls:    0,
+        };
+    }
+
+    pub fn set_tls(&mut self, tls: u64) {
+        self.tls = tls;
+    }
+
+    pub fn get_tls(&self) -> u64 {
+        self.tls
+    }
+
+    pub fn set_sp(&mut self, sp: u64) {
+        self.sp = sp;
+    }
+
+    pub fn get_sp(&self) -> u64 {
+        self.sp
+    }
+
+    pub fn set_para(&mut self, para: u64) {
+        self.x0 = para;
+    }
+
+    pub fn get_pc(&self) -> u64 {
+        self.pc
+    }
+
+    pub fn set_pc(&mut self, pc: u64) {
+        self.pc = pc;
+    }
+
+    pub fn set_ready(&self, val: u64) {
+        self.ready.store(val, Ordering::Release);
+    }
+
+    pub fn get_ready(&self) -> u64 {
+        return self.ready.load(Ordering::Acquire);
     }
 }

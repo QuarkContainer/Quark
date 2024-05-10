@@ -147,8 +147,8 @@ pub fn SingletonInit() {
     unsafe {
         vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
         vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
-        set_tls(0);
-        KERNEL_PAGETABLE.Init(PageTables::Init(CurrentKernelTable()));
+        set_cpu_local(0);
+        KERNEL_PAGETABLE.Init(PageTables::Init(CurrentUserTable()));
         //init fp state with current fp state as it is brand new vcpu
         FP_STATE.Reset();
         SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
@@ -425,14 +425,14 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
 }
 
 #[cfg(target_arch = "x86_64")]
-fn set_tls(id: u64) {
+fn set_cpu_local(id: u64) {
     SetGs(&CPU_LOCAL[id as usize] as *const _ as u64);
     SwapGs();
 }
 
 #[cfg(target_arch = "aarch64")]
-fn set_tls(id: u64) {
-    unsafe { tpidr_el1_write(&CPU_LOCAL[id as usize] as *const _ as u64) };
+fn set_cpu_local(id: u64) {
+    tpidr_el1_write(&CPU_LOCAL[id as usize] as *const _ as u64);
 }
 
 pub fn LogInit(pages: u64) {
@@ -494,7 +494,7 @@ pub extern "C" fn rust_main(
         // release other vcpus
         HyperCall64(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
     } else {
-        set_tls(id);
+        set_cpu_local(id);
         //PerfGoto(PerfType::Kernel);
     }
 
@@ -515,13 +515,11 @@ pub extern "C" fn rust_main(
     };
 
     if id == 1 {
-        info!("heap start is {:x}", heapStart);
+        debug!("heap start is {:x}", heapStart);
         self::Init();
-
         if autoStart {
             CreateTask(StartRootContainer as u64, ptr::null(), false);
         }
-
         CreateTask(ControllerProcess as u64, ptr::null(), true);
     }
 
