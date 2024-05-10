@@ -7,7 +7,6 @@ use libc::{gettid, clock_gettime, clockid_t, timespec};
 use kvm_ioctls::VcpuExit;
 
 use super::qlib::common::{Result, Error};
-use crate::qlib::kernel::IOURING;
 use crate::qlib::linux::time::Timespec;
 use crate::qlib::qmsg::{Print, QMsg};
 use crate::vmspace::VMSpace;
@@ -22,6 +21,7 @@ use crate::SHARE_SPACE;
 use crate::syncmgr::SyncMgr;
 use crate::qlib::perf_tunning::PerfPrint;
 use crate::runc::runtime::vm::{SetExitStatus, VirtualMachine};
+use crate::host_uring::HostSubmit;
 
 const _KVM_ARM_VCPU_PSCI_0_2: u32 = 2;
 const _KVM_ARM_VCPU_INIT: u64 = 0x4020aeae;
@@ -446,7 +446,7 @@ impl KVMVcpu {
             }
 
             qlib::HYPERCALL_VCPU_YIELD => {
-                let _ret = IOURING.IOUring().HostSubmit().unwrap();
+                let _ret = HostSubmit().unwrap();
             }
 
             qlib::HYPERCALL_VCPU_DEBUG => {
