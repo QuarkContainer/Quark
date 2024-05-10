@@ -295,7 +295,6 @@ impl ThreadGroupWeak {
             None => return None,
             Some(t) => t,
         };
-
         return Some(ThreadGroup {
             uid: self.uid,
             data: t,

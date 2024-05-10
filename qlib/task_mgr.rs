@@ -206,7 +206,7 @@ impl Scheduler {
         if self.queue[vcpuId as usize].Enqueue(task, cpuAff) {
             self.IncReadyTaskCount();
         }
-
+        
         //error!("ScheduleQ task {:x?}, vcpuId {}", task, vcpuId);
         if vcpuId == 0 {
             self.WakeOne();

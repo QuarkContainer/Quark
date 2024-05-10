@@ -22,7 +22,7 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use crate::qlib::kernel::SHARESPACE;
-use crate::GLOBAL_ALLOCATOR;
+use crate::{GLOBAL_ALLOCATOR, IS_GUEST};
 
 cfg_x86_64! {
    pub use x86_64::structures::paging::page_table::PageTableEntry;
@@ -74,7 +74,16 @@ pub struct PageTables {
 
 impl PageTables {
     pub fn New(pagePool: &Allocator) -> Result<Self> {
-        let root = pagePool.AllocPage(true)?;
+
+        let root = if IS_GUEST {
+            let root = pagePool.AllocPage(true)?;
+            root
+        } else {
+            // on host
+            let root = pagePool.AllocPage(true)?;
+            MemoryDef::hva_to_gpa(root)
+        };
+
         Ok(Self {
             root: AtomicU64::new(root),
             tlbEpoch: AtomicU64::new(0),
@@ -583,32 +592,36 @@ impl PageTables {
         pagePool: &Allocator,
         _kernel: bool,
     ) -> Result<bool> {
+        assert!(IS_GUEST == false, "MapWith1G");
         if start.0 & (MemoryDef::HUGE_PAGE_SIZE_1G - 1) != 0
             || end.0 & (MemoryDef::HUGE_PAGE_SIZE_1G - 1) != 0
         {
+            info!("start/end address not 1G aligned");
             panic!("start/end address not 1G aligned")
         }
 
         let mut res = false;
 
+ 
         let mut curAddr = start;
-        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
+        let pt: *mut PageTable = MemoryDef::gpa_to_hva(self.GetRoot()) as *mut PageTable;
+
         unsafe {
             let mut p4Idx = VirtAddr::new(curAddr.0).p4_index();
             let mut p3Idx = VirtAddr::new(curAddr.0).p3_index();
-
             while curAddr.0 < end.0 {
                 let pgdEntry = &mut (*pt)[p4Idx];
                 let pudTbl: *mut PageTable;
 
                 if pgdEntry.is_unused() {
+
                     pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
                     pgdEntry.set_addr(
-                        PhysAddr::new(pudTbl as u64),
+                        PhysAddr::new(MemoryDef::hva_to_gpa(pudTbl as u64) ),
                         default_table_user(),
                     );
                 } else {
-                    pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
+                    pudTbl = MemoryDef::gpa_to_hva(pgdEntry.addr().as_u64()) as *mut PageTable;
                 }
 
                 while curAddr.0 < end.0 {
@@ -619,7 +632,6 @@ impl PageTables {
                     if !pudEntry.is_unused() {
                         res = self.freeEntry(pudEntry, pagePool)?;
                     }
-
                     pudEntry.set_addr(
                         PhysAddr::new(newphysAddr),
                         flags | PageTableFlags::HUGE_PAGE,
@@ -637,7 +649,6 @@ impl PageTables {
                 p4Idx = PageTableIndex::new(u16::from(p4Idx) + 1);
             }
         }
-
         return Ok(res);
     }
 
@@ -722,6 +733,8 @@ impl PageTables {
     }
 
     pub fn Unmap(&self, start: u64, end: u64, pagePool: &Allocator) -> Result<()> {
+
+
         Addr(start).PageAligned()?;
         Addr(end).PageAligned()?;
         let mut start = start;
@@ -856,14 +869,16 @@ impl PageTables {
     }
 
     pub fn GetAllPagetablePages(&self, pages: &mut BTreeSet<u64>) -> Result<()> {
+
+        assert!(IS_GUEST == false, "GetAllPagetablePages");
         self.GetAllPagetablePagesWithRange(
             Addr(MemoryDef::PAGE_SIZE),
-            Addr(MemoryDef::PHY_LOWER_ADDR),
+            Addr(MemoryDef::phy_lower_hva()),
             pages,
         )?;
 
         self.GetAllPagetablePagesWithRange(
-            Addr(MemoryDef::PHY_UPPER_ADDR),
+            Addr(MemoryDef::phy_upper_hva()),
             Addr(MemoryDef::LOWER_TOP),
             pages,
         )?;
@@ -1129,11 +1144,11 @@ impl PageTables {
         pages: &mut BTreeSet<u64>,
         updatePageEntry: bool,
     ) -> Result<()> {
+        assert!(IS_GUEST == false);
         let end = start + len;
-
         self.Traverse(
             Addr(MemoryDef::PAGE_SIZE),
-            Addr(MemoryDef::PHY_LOWER_ADDR),
+            Addr(MemoryDef::phy_lower_hva()),
             |entry: &mut PageTableEntry, _virtualAddr| {
                 let phyAddr = entry.addr().as_u64();
                 if start <= phyAddr && phyAddr < end {
@@ -1156,7 +1171,7 @@ impl PageTables {
         )?;
 
         return self.Traverse(
-            Addr(MemoryDef::PHY_UPPER_ADDR),
+            Addr(MemoryDef::phy_upper_hva()),
             Addr(MemoryDef::LOWER_TOP),
             |entry, _virtualAddr| {
                 let phyAddr = entry.addr().as_u64();

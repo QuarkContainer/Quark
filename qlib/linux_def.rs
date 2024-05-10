@@ -18,6 +18,8 @@ use core::sync::atomic::Ordering;
 use super::mem::list_allocator::GuestHostSharedAllocator;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
+#[cfg(feature = "cc")]
+use crate::ENABLE_EMULATION_CC;
 use super::super::kernel_def::*;
 
 pub struct Xattr {}
@@ -2928,7 +2930,6 @@ impl OpenFlags {
     pub const O_CLOEXEC: i32 = 0x80000;
 }
 
-
 pub struct MemoryDef {}
 
 impl MemoryDef {
@@ -2983,47 +2984,51 @@ impl MemoryDef {
     pub const PAGE_SIZE_2M_MASK: u64 = !(Self::PAGE_SIZE_2M - 1);
     pub const BLOCK_SIZE: u64 = 64 * Self::ONE_GB;
 
-    pub const PHY_LOWER_ADDR: u64 = 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernel space
-    pub const PHY_UPPER_ADDR: u64 = Self::PHY_LOWER_ADDR + 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernel space
+    const PHY_LOWER_ADDR: u64 = 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernel space
+    const PHY_UPPER_ADDR: u64 = Self::PHY_LOWER_ADDR + 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernel space
   
     pub const NVIDIA_START_ADDR: u64 = 0x200000000;
     pub const NVIDIA_ADDR_SIZE: u64 = 2 * Self::ONE_GB;
-
-    // memory layout
-    // PHY_LOWER_ADDR: qkernel image 512MB
-    pub const QKERNEL_IMAGE_SIZE: u64 = 512 * Self::ONE_MB;
-    // RDMA Local share memory
-    pub const RDMA_LOCAL_SHARE_OFFSET: u64 = Self::PHY_LOWER_ADDR + Self::QKERNEL_IMAGE_SIZE;
-    pub const RDMA_LOCAL_SHARE_SIZE: u64 = 1024 * Self::ONE_MB; // 1GB
-                                                                // RDMA global share memory
-    pub const RDMA_GLOBAL_SHARE_OFFSET: u64 =
-        Self::RDMA_LOCAL_SHARE_OFFSET + Self::RDMA_LOCAL_SHARE_SIZE;
-    pub const RDMA_GLOBAL_SHARE_SIZE: u64 = 2 * Self::ONE_MB;
-
-    // file map area
-    pub const FILE_MAP_OFFSET: u64 = Self::RDMA_GLOBAL_SHARE_OFFSET + Self::RDMA_GLOBAL_SHARE_SIZE;
-    pub const FILE_MAP_SIZE: u64 = Self::GUEST_PRIVATE_HEAP_OFFSET - Self::FILE_MAP_OFFSET;
 
     // heap
     pub const HOST_INIT_HEAP_OFFSET: u64 = MemoryDef::NVIDIA_START_ADDR + Self::NVIDIA_ADDR_SIZE;
     pub const HOST_INIT_HEAP_SIZE: u64 = 5 * Self::ONE_GB;
     pub const HOST_INIT_HEAP_END: u64 = Self::HOST_INIT_HEAP_OFFSET + Self::HOST_INIT_HEAP_SIZE;
 
+    // memory layout
+    // PHY_LOWER_ADDR: qkernel image 512MB
+    pub const QKERNEL_IMAGE_SIZE: u64 = 512 * Self::ONE_MB;
 
-    pub const GUEST_PRIVATE_HEAP_OFFSET: u64 = MemoryDef::PHY_LOWER_ADDR
-        + Self::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB
-        - Self::GUEST_PRIVATE_HEAP_PLUS_SHARED_HEAP_SIZE;
-    pub const GUEST_PRIVATE_HEAP_PLUS_SHARED_HEAP_SIZE: u64 = 10 * Self::ONE_GB;
-    pub const GUEST_PRIVATE_HEAP_SIZE: u64 = 5 * Self::ONE_GB;
+    //=============== private =====================//
+    // RDMA Local share memory
+    const RDMA_LOCAL_SHARE_OFFSET: u64 = Self::PHY_LOWER_ADDR + Self::QKERNEL_IMAGE_SIZE;
+    const RDMA_LOCAL_SHARE_SIZE: u64 = 1024 * Self::ONE_MB; // 1GB
+                                                                // RDMA global share memory
+    const RDMA_GLOBAL_SHARE_OFFSET: u64 =
+        Self::RDMA_LOCAL_SHARE_OFFSET + Self::RDMA_LOCAL_SHARE_SIZE;
+    const RDMA_GLOBAL_SHARE_SIZE: u64 = 512 * Self::ONE_MB;
 
-    pub const GUEST_PRIVATE_HEAP_END: u64 = Self::GUEST_PRIVATE_HEAP_OFFSET + Self::GUEST_PRIVATE_HEAP_SIZE;
+    const GUEST_PRIVATE_HEAP_OFFSET: u64 = Self::RDMA_GLOBAL_SHARE_OFFSET + Self::RDMA_GLOBAL_SHARE_SIZE;
+    const GUEST_PRIVATE_HEAP_PLUS_SHARED_HEAP_SIZE: u64 = 10 * Self::ONE_GB;
+    const GUEST_PRIVATE_HEAP_SIZE: u64 = 5 * Self::ONE_GB;
+    const GUEST_PRIVATE_INIT_HEAP_SIZE: u64 = 1 * Self::ONE_GB;
+
+    const GUEST_PRIVATE_HEAP_END: u64 = Self::GUEST_PRIVATE_HEAP_OFFSET + Self::GUEST_PRIVATE_HEAP_SIZE;
+
+    //================ shared ==================//
     pub const GUEST_HOST_SHARED_HEAP_SIZE: u64 =  MemoryDef::GUEST_PRIVATE_HEAP_PLUS_SHARED_HEAP_SIZE 
                                                             - MemoryDef::GUEST_PRIVATE_HEAP_SIZE;
-    pub const GUEST_HOST_SHARED_HEAP_OFFEST: u64 =  MemoryDef::GUEST_PRIVATE_HEAP_END;
-    pub const GUEST_HOST_SHARED_HEAP_END: u64 =  MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE;
+    const GUEST_HOST_SHARED_HEAP_OFFEST: u64 =  MemoryDef::GUEST_PRIVATE_HEAP_END;
+    const GUEST_HOST_SHARED_HEAP_END: u64 =  MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE;
 
-    pub const GHCB_OFFSET: u64 = MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::PAGE_SIZE*2;
-    pub const HYPERCALL_PARA_PAGE_OFFSET :u64 = MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::PAGE_SIZE*3;
+    const GHCB_OFFSET: u64 = MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::PAGE_SIZE*2;
+    const HYPERCALL_PARA_PAGE_OFFSET :u64 = MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST + MemoryDef::PAGE_SIZE*3;
+
+    // file map area
+    const FILE_MAP_OFFSET: u64 = Self::GUEST_HOST_SHARED_HEAP_OFFEST + Self::GUEST_HOST_SHARED_HEAP_SIZE;
+    pub const FILE_MAP_SIZE: u64 = Self::KERNEL_MEM_INIT_REGION_SIZE * Self::ONE_GB + Self::PHY_LOWER_ADDR - Self::FILE_MAP_OFFSET;
+
+    //=================== shared end ===============//
 
     // Create 24GB Init memory region for KVM VM
     pub const KERNEL_MEM_INIT_REGION_SIZE: u64 = 24; // 24 GB
@@ -3037,6 +3042,193 @@ impl MemoryDef {
 
     pub const KERNEL_START_P2_ENTRY: usize = (Self::PHY_LOWER_ADDR / Self::ONE_GB) as usize; //256
     pub const KERNEL_END_P2_ENTRY: usize = (Self::PHY_UPPER_ADDR / Self::ONE_GB) as usize; //512
+}
+
+
+impl MemoryDef {
+    pub const fn gpa_to_hva(gpa: u64) -> u64 {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                if ENABLE_EMULATION_CC {
+                    return gpa - Self::ONE_GB;
+                } else {
+                    return gpa;
+                }
+            } else {
+                return gpa;
+            }
+        }
+
+        // return gpa;
+    }
+
+    pub fn hva_to_gpa(hva: u64) -> u64 {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                if ENABLE_EMULATION_CC {
+                    return hva + Self::ONE_GB;
+                } else {
+                    return hva;
+                }
+            } else {
+                return hva;
+            }
+        }
+        // return hva;
+    }
+    
+    //======================== private ====================//
+    pub const fn phy_lower_gpa () -> u64 {
+        return Self::PHY_LOWER_ADDR;
+    }
+
+    pub const fn phy_lower_hva () -> u64 {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                if ENABLE_EMULATION_CC {
+                    return Self::PHY_LOWER_ADDR - Self::ONE_GB;
+                } else {
+                    return Self::PHY_LOWER_ADDR;
+                }
+            } else {
+                return Self::PHY_LOWER_ADDR;
+            }
+        }
+    }
+
+    pub const fn guest_private_init_heap_offset_gpa () -> u64 {
+        return Self::GUEST_PRIVATE_HEAP_OFFSET;
+    }
+
+    pub const fn guest_private_init_heap_offset_hva () -> u64 {
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                if ENABLE_EMULATION_CC {
+                    return Self::GUEST_PRIVATE_HEAP_OFFSET - Self::ONE_GB;
+                } else {
+                    return Self::GUEST_PRIVATE_HEAP_OFFSET;
+                }
+            } else {
+                return Self::GUEST_PRIVATE_HEAP_OFFSET;
+            }
+        }
+    }
+
+    pub const fn guest_private_init_heap_end_gpa () -> u64 {
+        return Self::GUEST_PRIVATE_INIT_HEAP_SIZE + Self::GUEST_PRIVATE_HEAP_OFFSET;
+    }
+
+    pub const fn guest_private_init_heap_end_hva () -> u64 {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                if ENABLE_EMULATION_CC {
+                    return Self::GUEST_PRIVATE_INIT_HEAP_SIZE + Self::GUEST_PRIVATE_HEAP_OFFSET - Self::ONE_GB;
+                } else {
+                    return Self::GUEST_PRIVATE_INIT_HEAP_SIZE + Self::GUEST_PRIVATE_HEAP_OFFSET;
+                }
+            } else {
+                return Self::GUEST_PRIVATE_INIT_HEAP_SIZE + Self::GUEST_PRIVATE_HEAP_OFFSET;
+            }
+        }
+    }
+
+    pub const fn guest_private_init_heap_size () -> u64 {
+        Self::GUEST_PRIVATE_INIT_HEAP_SIZE
+    }
+
+
+    pub const fn guest_private_running_heap_size () -> u64 {
+        return Self::GUEST_PRIVATE_HEAP_SIZE - Self::GUEST_PRIVATE_INIT_HEAP_SIZE; 
+    }
+
+    pub const fn guest_private_running_heap_offset_gpa () -> u64 {
+        return Self::GUEST_PRIVATE_HEAP_OFFSET + Self::GUEST_PRIVATE_INIT_HEAP_SIZE; 
+    }
+
+
+    pub const fn guest_private_running_heap_end_gpa () -> u64 {
+        return Self::GUEST_PRIVATE_HEAP_END;
+    }
+
+    pub const fn rdma_local_shared_gpa () -> u64 {
+        return Self::RDMA_LOCAL_SHARE_OFFSET;
+    }
+
+
+    pub const fn rdma_local_shared_hva () -> u64 {
+        return Self::RDMA_LOCAL_SHARE_OFFSET;
+    }
+
+
+    pub const fn rdma_global_shared_gpa () -> u64 {
+        return Self::RDMA_GLOBAL_SHARE_OFFSET;
+    }
+
+
+    pub const fn rdma_global_shared_hva () -> u64 {
+        return Self::RDMA_GLOBAL_SHARE_OFFSET;
+    }
+
+    //======================== shared ====================//
+
+    pub const fn phy_upper_gpa () -> u64 {
+        return Self::PHY_UPPER_ADDR;
+    }
+
+    pub const fn phy_upper_hva () -> u64 {
+        return Self::PHY_UPPER_ADDR;
+    }
+
+    pub const fn guest_host_shared_heap_offest_gpa () -> u64 {
+        return Self::GUEST_HOST_SHARED_HEAP_OFFEST;
+    }
+
+    pub const fn guest_host_shared_heap_offset_hva () -> u64 {
+        return Self::GUEST_HOST_SHARED_HEAP_OFFEST;
+    }
+
+    pub const fn guest_host_shared_heap_end_gpa () -> u64 {
+        return Self::GUEST_HOST_SHARED_HEAP_END;
+    }
+
+    pub const fn guest_host_shared_heap_end_hva () -> u64 {
+        return Self::GUEST_HOST_SHARED_HEAP_END;
+    }
+
+
+    pub const fn ghcb_gpa () -> u64 {
+        return Self::GHCB_OFFSET;
+    }
+
+    pub const fn gbcb_hva () -> u64 {
+        return Self::GHCB_OFFSET;
+    }
+
+    pub const fn hcall_page_gpa () -> u64 {
+        return Self::HYPERCALL_PARA_PAGE_OFFSET;
+    }
+
+    pub const fn hcall_page_hva () -> u64 {
+        return Self::HYPERCALL_PARA_PAGE_OFFSET;
+    }
+
+    pub const fn file_map_offset_gpa () -> u64 {
+        return Self::FILE_MAP_OFFSET;
+    }
+    
+    pub const fn file_map_offset_hva () -> u64 {
+        return Self::FILE_MAP_OFFSET;
+    }
+
+
+
+    pub const fn get_shared_heap_size () -> u64 {
+        Self::GUEST_PRIVATE_HEAP_PLUS_SHARED_HEAP_SIZE
+    }
+
+    
+
 }
 
 //mmap prot

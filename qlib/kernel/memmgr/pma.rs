@@ -29,6 +29,7 @@ use super::super::super::pagetable::*;
 use super::super::super::range::*;
 use super::super::task::*;
 use super::super::PAGE_MGR;
+use crate::IS_GUEST;
 
 use crate::kernel_def::Invlpg;
 //use crate::qlib::kernel::memmgr::pmamgr::PagePool;
@@ -398,8 +399,9 @@ impl PageTables {
     }
 
     pub fn UnmapAll(&self) -> Result<()> {
-        self.Unmap(MemoryDef::PAGE_SIZE, MemoryDef::PHY_LOWER_ADDR, &*PAGE_MGR)?;
-        self.Unmap(MemoryDef::PHY_UPPER_ADDR, MemoryDef::LOWER_TOP, &*PAGE_MGR)?;
+        assert!(IS_GUEST == true, "page table unmap");
+        self.Unmap(MemoryDef::PAGE_SIZE, MemoryDef::phy_lower_gpa(), &*PAGE_MGR)?;
+        self.Unmap(MemoryDef::phy_upper_gpa(), MemoryDef::LOWER_TOP, &*PAGE_MGR)?;
 
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
 

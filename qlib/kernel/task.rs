@@ -315,9 +315,9 @@ impl Task {
     pub fn DummyTask() -> Self {
         #[cfg(feature = "cc")]
         assert!(IS_GUEST == true, "DummyTask should only be called from guest");
+        
         let creds = Credentials::default();
         let userns = creds.lock().UserNamespace.clone();
-
         let futexMgr = FutexMgr::default();
         let mm = MemoryManager::Init(true);
         let mountNS = MountNs::default();
@@ -326,7 +326,6 @@ impl Task {
         let ipcns = IPCNamespace::New(&userns);
         let fdTbl = FDTable::default();
         let blocker = Blocker::Dummy();
-
         let ret = Task {
             context: Context::New(),
             taskId: 0,
@@ -355,7 +354,6 @@ impl Task {
             perfcounters: None,
             guard: Guard::default(),
         };
-
         return ret;
     }
 

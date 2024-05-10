@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 use alloc::vec::Vec;
@@ -58,6 +59,7 @@ use crate::qlib::kernel::kernel::waiter::Queue;
 use crate::qlib::kernel::socket::hostinet::loopbacksocket::*;
 use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFConf;
 use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFReq;
+use crate::GuestHostSharedAllocator;
 
 pub fn newUringSocketFile(
     task: &Task,
@@ -180,7 +182,7 @@ pub struct UringSocketOperationsIntern {
 }
 
 #[derive(Clone)]
-pub struct UringSocketOperationsWeak(pub Weak<UringSocketOperationsIntern>);
+pub struct UringSocketOperationsWeak(pub Weak<UringSocketOperationsIntern, GuestHostSharedAllocator>);
 
 impl UringSocketOperationsWeak {
     pub fn Upgrade(&self) -> Option<UringSocketOperations> {
@@ -194,7 +196,7 @@ impl UringSocketOperationsWeak {
 }
 
 #[derive(Clone)]
-pub struct UringSocketOperations(Arc<UringSocketOperationsIntern>);
+pub struct UringSocketOperations(Arc<UringSocketOperationsIntern, GuestHostSharedAllocator>);
 
 impl Drop for UringSocketOperations {
     fn drop(&mut self) {
@@ -284,7 +286,7 @@ impl UringSocketOperations {
             passInq: AtomicBool::new(false),
         };
 
-        let ret = Self(Arc::new(ret));
+        let ret = Self(Arc::new_in(ret, GUEST_HOST_SHARED_ALLOCATOR));
         return Ok(ret);
     }
 
@@ -466,9 +468,9 @@ impl UringSocketOperations {
 }
 
 impl Deref for UringSocketOperations {
-    type Target = Arc<UringSocketOperationsIntern>;
+    type Target = Arc<UringSocketOperationsIntern, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<UringSocketOperationsIntern> {
+    fn deref(&self) -> &Arc<UringSocketOperationsIntern, GuestHostSharedAllocator> {
         &self.0
     }
 }

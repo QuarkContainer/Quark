@@ -24,6 +24,7 @@
 #![feature(allocator_api)]
 #![feature(stmt_expr_attributes)]
 #![allow(invalid_reference_casting)]
+#![feature(btreemap_alloc)]
 
 extern crate alloc;
 extern crate bit_field;
@@ -117,6 +118,8 @@ pub fn AllocatorPrint(_class: usize) -> String {
 }
 
 pub static IS_GUEST: bool = false;
+pub const ENABLE_EMULATION_CC: bool = true;
+
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 
 thread_local!(static THREAD_ID: RefCell<i32> = RefCell::new(0));

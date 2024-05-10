@@ -62,9 +62,7 @@ impl KIOThread {
         count += HostSubmit().unwrap();
         count += FD_NOTIFIER.HostEpollWait() as usize;
         count += HostSubmit().unwrap();
-
         sharespace.CheckVcpuTimeout();
-
         return count;
     }
 

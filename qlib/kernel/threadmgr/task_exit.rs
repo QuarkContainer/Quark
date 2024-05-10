@@ -279,7 +279,6 @@ impl Thread {
             self.lock().exitStatus = tg.lock().exitStatus;
             return;
         }
-
         tg.lock().exiting = true;
         tg.lock().exitStatus = es;
         self.lock().exitStatus = es;

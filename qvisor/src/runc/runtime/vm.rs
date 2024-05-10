@@ -178,12 +178,10 @@ impl VirtualMachine {
         rdmaSvcCliSock: i32,
         podId: [u8; 64],
     ) {
-
         let supportMemoryBarrier = VMS.read().haveMembarrierGlobal;
         crate::SHARE_SPACE_STRUCT
             .lock()
             .Init(cpuCount, controlSock, rdmaSvcCliSock, podId, supportMemoryBarrier);
-
         let spAddr = &(*crate::SHARE_SPACE_STRUCT.lock()) as *const _ as u64;
         SHARE_SPACE.SetValue(spAddr);
         SHARESPACE.SetValue(spAddr);
@@ -191,14 +189,13 @@ impl VirtualMachine {
         unsafe {
             vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
         }
-
+  
         let sharespace = SHARE_SPACE.Ptr();
         let logfd = super::super::super::print::LOG.Logfd();
         
         URING_MGR.lock().Addfd(logfd).unwrap();
 
         KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
-
         URING_MGR
             .lock()
             .Addfd(sharespace.HostHostEpollfd())
@@ -207,9 +204,9 @@ impl VirtualMachine {
         IOURING.SetValue(sharespace.GetIOUringAddr());
 
         unsafe {
+
             crate::qlib::kernel::KERNEL_PAGETABLE.SetRoot(VMS.read().pageTables.GetRoot());
             crate::qlib::kernel::PAGE_MGR.SetValue(sharespace.GetPageMgrAddr());
-
             crate::qlib::kernel::KERNEL_STACK_ALLOCATOR.Init(crate::qlib::pagetable::AlignedAllocator::New(
                 MemoryDef::DEFAULT_STACK_SIZE as usize,
                 MemoryDef::DEFAULT_STACK_SIZE as usize,
@@ -220,6 +217,7 @@ impl VirtualMachine {
             timer::InitSingleton();
         }
 
+
         if SHARESPACE.config.read().EnableTsot {
             // initialize the tost_agent
             TSOT_AGENT.NextReqId();
@@ -227,7 +225,6 @@ impl VirtualMachine {
         };
 
         *SHARESPACE.bootId.lock() = uuid::Uuid::new_v4().to_string();
-        
         let syncPrint = sharespace.config.read().SyncPrint();
         super::super::super::print::SetSyncPrint(syncPrint);
     }
@@ -370,8 +367,8 @@ impl VirtualMachine {
         Self::SetMemRegion(
             1,
             &vm_fd,
-            MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::PHY_LOWER_ADDR,
+            MemoryDef::phy_lower_gpa(),
+            MemoryDef::phy_lower_gpa(),
             MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB,
         )?;
 
@@ -383,14 +380,14 @@ impl VirtualMachine {
             MemoryDef::NVIDIA_ADDR_SIZE,
         )?;
 
-        let heapStartAddr = MemoryDef::GUEST_PRIVATE_HEAP_OFFSET;
+        let heapStartAddr = MemoryDef::guest_private_init_heap_offset_gpa();
 
-        PMA_KEEPER.Init(MemoryDef::FILE_MAP_OFFSET, MemoryDef::FILE_MAP_SIZE);
+        PMA_KEEPER.Init(MemoryDef::file_map_offset_gpa(), MemoryDef::FILE_MAP_SIZE);
 
         info!(
             "set map region start={:x}, end={:x}",
-            MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::PHY_LOWER_ADDR + MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB
+            MemoryDef::phy_lower_gpa(),
+            MemoryDef::phy_lower_gpa() + MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB
         );
 
         let autoStart;
@@ -411,20 +408,19 @@ impl VirtualMachine {
             vms.controlSock = controlSock;
             PMA_KEEPER.InitHugePages();
 
-            vms.hostAddrTop =
-                MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
             vms.pageTables = PageTables::New(&vms.allocator)?;
 
             vms.KernelMapHugeTable(
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR),
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR),
+                addr::Addr(MemoryDef::phy_lower_gpa()),
+                addr::Addr(MemoryDef::phy_lower_gpa() + kernelMemRegionSize * MemoryDef::ONE_GB),
+                addr::Addr(MemoryDef::phy_lower_gpa()),
                 addr::PageOpts::Zero()
                     .SetPresent()
                     .SetWrite()
                     .SetGlobal()
                     .Val(),
             )?;
+
 
             vms.KernelMapHugeTable(
                 addr::Addr(MemoryDef::NVIDIA_START_ADDR),
@@ -443,10 +439,10 @@ impl VirtualMachine {
 
         Self::InitShareSpace(cpuCount, controlSock, rdmaSvcCliSock, podId);
 
-        let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
+        let entry_gpa = elf.LoadKernel(Self::KERNEL_IMAGE)?;
         //let vdsoMap = VDSOMemMap::Init(&"/home/brad/rust/quark/vdso/vdso.so".to_string()).unwrap();
         elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
-        VMS.write().vdsoAddr = elf.vdsoStart;
+        VMS.write().vdsoAddrGpa = MemoryDef::hva_to_gpa(elf.vdsoStartHva);
 
         {
             super::super::super::URING_MGR.lock();
@@ -463,7 +459,7 @@ impl VirtualMachine {
                 i as usize,
                 cpuCount,
                 &vm_fd,
-                entry,
+                entry_gpa,
                 heapStartAddr,
                 SHARE_SPACE.Value(),
                 autoStart,
@@ -529,7 +525,7 @@ impl VirtualMachine {
         }
 
         let cpuCount = cpuCount.max(4); // minimal 2 cpus
-
+        //let cpuCount = 3;
         VMS.write().vcpuCount = cpuCount; //VMSpace::VCPUCount();
         VMS.write().RandomVcpuMapping();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
@@ -558,7 +554,7 @@ impl VirtualMachine {
 
         let mut cap: kvm_enable_cap = Default::default();
         cap.cap = KVM_CAP_X86_DISABLE_EXITS;
-        cap.args[0] = (KVM_X86_DISABLE_EXITS_HLT | KVM_X86_DISABLE_EXITS_MWAIT) as u64;
+        cap.args[0] = (KVM_X86_DISABLE_EXITS_MWAIT) as u64;
         #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
         vm_fd.enable_cap(&cap).unwrap();
         if !kvm.check_extension(Cap::ImmediateExit) {
@@ -566,17 +562,30 @@ impl VirtualMachine {
         }
 
         let mut elf = KernelELF::New()?;
+
+        let guest_private_size = MemoryDef::guest_private_running_heap_end_gpa()  -  MemoryDef::phy_lower_gpa();
+        // Private Region
         Self::SetMemRegion(
             1,
             &vm_fd,
-            MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB,
+            MemoryDef::phy_lower_gpa(),
+            MemoryDef::phy_lower_hva(),
+            guest_private_size,
+        )?;
+
+        // Shared Region
+        let guest_host_shared = MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB - guest_private_size; 
+        Self::SetMemRegion(
+            2,
+            &vm_fd,
+            MemoryDef::guest_host_shared_heap_offest_gpa(),
+            MemoryDef::guest_host_shared_heap_offset_hva(),
+            guest_host_shared,
         )?;
         
-        if QUARK_CONFIG.lock().EnableCC {
+        if !QUARK_CONFIG.lock().EnableCC {
             Self::SetMemRegion(
-                2,
+                3,
                 &vm_fd,
                 MemoryDef::NVIDIA_START_ADDR,
                 MemoryDef::NVIDIA_START_ADDR,
@@ -585,7 +594,7 @@ impl VirtualMachine {
         }
 
 
-        PMA_KEEPER.Init(MemoryDef::FILE_MAP_OFFSET, MemoryDef::FILE_MAP_SIZE);
+        PMA_KEEPER.Init(MemoryDef::file_map_offset_hva(), MemoryDef::FILE_MAP_SIZE);
 
 
         let autoStart;
@@ -594,14 +603,12 @@ impl VirtualMachine {
             vms.controlSock = controlSock;
             PMA_KEEPER.InitHugePages(); 
 
-            vms.hostAddrTop =
-                MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
             vms.pageTables = PageTables::New(&vms.allocator)?;
 
             vms.KernelMapHugeTable(
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR),
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR),
+                addr::Addr(MemoryDef::phy_lower_gpa()),
+                addr::Addr(MemoryDef::phy_lower_gpa() + kernelMemRegionSize * MemoryDef::ONE_GB),
+                addr::Addr(MemoryDef::phy_lower_gpa()),
                 addr::PageOpts::Zero()
                     .SetPresent()
                     .SetWrite()
@@ -609,24 +616,27 @@ impl VirtualMachine {
                     .Val(),
             )?;
 
-            vms.KernelMapHugeTable(
-                addr::Addr(MemoryDef::NVIDIA_START_ADDR),
-                addr::Addr(MemoryDef::NVIDIA_START_ADDR + MemoryDef::NVIDIA_ADDR_SIZE),
-                addr::Addr(MemoryDef::NVIDIA_START_ADDR),
-                addr::PageOpts::Zero()
-                    .SetPresent()
-                    .SetWrite()
-                    .SetGlobal()
-                    .Val(),
-            )?;
+            if !QUARK_CONFIG.lock().EnableCC { 
+                vms.KernelMapHugeTable(
+                    addr::Addr(MemoryDef::NVIDIA_START_ADDR),
+                    addr::Addr(MemoryDef::NVIDIA_START_ADDR + MemoryDef::NVIDIA_ADDR_SIZE),
+                    addr::Addr(MemoryDef::NVIDIA_START_ADDR),
+                    addr::PageOpts::Zero()
+                        .SetPresent()
+                        .SetWrite()
+                        .SetGlobal()
+                        .Val(),
+                )?;
+            }
+
             autoStart = args.AutoStart;
             vms.pivot = args.Pivot;
             vms.args = Some(args);
         }
 
-        let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
+        let entry_gpa = elf.LoadKernel(Self::KERNEL_IMAGE)?;
         elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
-        VMS.write().vdsoAddr = elf.vdsoStart;
+        VMS.write().vdsoAddrGpa = MemoryDef::hva_to_gpa(elf.vdsoStartHva);
 
 
         {
@@ -644,7 +654,7 @@ impl VirtualMachine {
                 i as usize,
                 cpuCount,
                 &vm_fd,
-                entry,
+                entry_gpa,
                 autoStart,
             )?);
 

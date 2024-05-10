@@ -90,7 +90,6 @@ impl HostFdNotifier {
 
         let epollfd = self.epollfd;
         let nfds = unsafe { epoll_wait(epollfd, addr as _, Self::MAX_EVENTS as i32, 0) };
-
         if nfds > 0 {
             for e in &events[0..nfds as usize] {
                 let fd = e.U64 as i32;
@@ -98,7 +97,6 @@ impl HostFdNotifier {
                 Self::FdNotify(fd, event);
             }
         }
-
         if nfds < 0 {
             return nfds as i64;
         }

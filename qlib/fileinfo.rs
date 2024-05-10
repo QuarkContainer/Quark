@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(feature = "cc")]
+use super::mem::list_allocator::GuestHostSharedAllocator;
 use alloc::sync::Arc;
 use core::fmt;
 use core::ops::Deref;
@@ -56,7 +58,7 @@ impl fmt::Debug for SockInfo {
 
 impl SockInfo {
     pub fn Notify(&self, eventmask: EventMask, waitinfo: FdWaitInfo) {
-                match self {
+        match self {
             Self::File => {
                 waitinfo.Notify(eventmask);
             }
@@ -187,10 +189,25 @@ impl fmt::Debug for FdWaitIntern {
             .finish()
     }
 }
-
+#[cfg(not(feature = "cc"))]
 #[derive(Default, Clone, Debug)]
 pub struct FdWaitInfo(Arc<QMutex<FdWaitIntern>>);
 
+#[cfg(feature = "cc")]
+#[derive(Clone, Debug)]
+pub struct FdWaitInfo(Arc<QMutex<FdWaitIntern>, GuestHostSharedAllocator>);
+
+#[cfg(feature = "cc")]
+impl Default for FdWaitInfo {
+    fn default() -> Self {
+        return FdWaitInfo(Arc::new_in(
+            QMutex::new(FdWaitIntern::default()),
+            crate::GUEST_HOST_SHARED_ALLOCATOR,
+        ));
+    }
+}
+
+#[cfg(not(feature = "cc"))]
 impl Deref for FdWaitInfo {
     type Target = Arc<QMutex<FdWaitIntern>>;
 
@@ -199,15 +216,35 @@ impl Deref for FdWaitInfo {
     }
 }
 
+#[cfg(feature = "cc")]
+impl Deref for FdWaitInfo {
+    type Target = Arc<QMutex<FdWaitIntern>, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<QMutex<FdWaitIntern>, GuestHostSharedAllocator> {
+        &self.0
+    }
+}
+
 impl FdWaitInfo {
+    #[cfg(not(feature = "cc"))]
     pub fn New(queue: Queue, mask: EventMask) -> Self {
         let intern = FdWaitIntern { queue, mask };
 
         return Self(Arc::new(QMutex::new(intern)));
     }
 
+    #[cfg(feature = "cc")]
+    pub fn New(queue: Queue, mask: EventMask) -> Self {
+        let intern = FdWaitIntern { queue, mask };
+
+        return Self(Arc::new_in(
+            QMutex::new(intern),
+            crate::GUEST_HOST_SHARED_ALLOCATOR,
+        ));
+    }
+
     pub fn UpdateFDAsync(&self, fd: i32, epollfd: i32) -> Result<()> {
-                let op;
+        let op;
         let mask = {
             let mut fi = self.lock();
 

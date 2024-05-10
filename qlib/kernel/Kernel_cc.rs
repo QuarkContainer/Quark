@@ -48,6 +48,7 @@ impl HostSpace {
             }),
             GUEST_HOST_SHARED_ALLOCATOR,
         );
+
         let ret = HostSpace::Call(&mut msg, false) as i64;
         let private_process = unsafe { &mut *(processAddr as *mut Process) };
         *private_process = (*new_process).clone();
@@ -102,6 +103,12 @@ impl HostSpace {
             Msg::EventfdWrite(EventfdWrite { fd }),
             GUEST_HOST_SHARED_ALLOCATOR,
         );
+
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
+    pub fn Close_cc(fd: i32) -> i64 {
+        let mut msg = Box::new_in(Msg::Close(qcall::Close { fd }), GUEST_HOST_SHARED_ALLOCATOR);
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
@@ -406,6 +413,11 @@ impl HostSpace {
             new_msghdr.msgControl = new_control_buff as u64;
         }
 
+        let mut new_iov = Box::new_in(IoVec::default(), GUEST_HOST_SHARED_ALLOCATOR);
+        let private_iov = unsafe { *(private_msghdr.iov as *const IoVec) };
+        *new_iov = private_iov;
+        new_msghdr.iov = &mut *new_iov as *const _ as u64;
+
         let mut msg = Box::new_in(
             Msg::IORecvMsg(IORecvMsg {
                 fd,
@@ -545,6 +557,11 @@ impl HostSpace {
             }
             new_msghdr.msgControl = new_control_buff as u64;
         }
+
+        let mut new_iov = Box::new_in(IoVec::default(), GUEST_HOST_SHARED_ALLOCATOR);
+        let private_iov = unsafe { *(private_msghdr.iov as *const IoVec) };
+        *new_iov = private_iov;
+        new_msghdr.iov = &mut *new_iov as *const _ as u64;
 
         let mut msg = Box::new_in(
             Msg::IOSendMsg(IOSendMsg {
@@ -1260,6 +1277,7 @@ impl HostSpace {
         unsafe {
             core::ptr::copy_nonoverlapping(addr as *const u8, new_addr, addrlen as usize);
         }
+
         let mut msg = Box::new_in(
             Msg::IOBind(IOBind {
                 sockfd,
@@ -1578,6 +1596,12 @@ impl HostSpace {
             }
             new_msghdr.msgControl = new_control_buff as u64;
         }
+
+        let mut new_iov = Box::new_in(IoVec::default(), GUEST_HOST_SHARED_ALLOCATOR);
+        let private_iov = unsafe { *(private_msghdr.iov as *const IoVec) };
+        *new_iov = private_iov;
+        new_msghdr.iov = &mut *new_iov as *const _ as u64;
+
         let mut msg = Box::new_in(
             Msg::HostUnixRecvMsg(HostUnixRecvMsg {
                 fd: fd,
@@ -1763,7 +1787,7 @@ impl HostSpace {
     }
 
     pub fn VcpuWait_cc() -> TaskId {
-        let mut next = Box::new_in(TaskId::New(0, 0),GUEST_HOST_SHARED_ALLOCATOR);
+        let mut next = Box::new_in(TaskId::New(0, 0), GUEST_HOST_SHARED_ALLOCATOR);
         let next_ptr = &mut *next as *mut _;
         HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, next_ptr as u64, 0);
         assert!(next.PrivateTaskAddr() != 0);

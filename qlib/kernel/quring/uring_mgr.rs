@@ -404,6 +404,7 @@ impl QUring {
             //error!("uring process: call is {:x?}", &call);
             ScheduleQ(call.taskId, true);
         } else {
+            info!("Process CompleteEntry {:?}", cqe);
             let idx = data as usize;
             let rerun = {
                 let mut ops = self.asyncMgr.ops[idx].lock();

@@ -60,7 +60,7 @@ pub struct SignalMaskStruct {
 
 impl KVMVcpu {
     fn SetupGDT(&self, sregs: &mut kvm_sregs) {
-        let gdtTbl = unsafe { std::slice::from_raw_parts_mut(self.gdtAddr as *mut u64, 4096 / 8) };
+        let gdtTbl = unsafe { std::slice::from_raw_parts_mut(MemoryDef::gpa_to_hva(self.gdtAddrGpa) as *mut u64, 4096 / 8) };
 
         let KernelCodeSegment = SegmentDescriptor::default().SetCode64(0, 0, 0);
         let KernelDataSegment = SegmentDescriptor::default().SetData(0, 0xffffffff, 0);
@@ -87,19 +87,19 @@ impl KVMVcpu {
         gdtTbl[3] = UserDataSegment.AsU64();
         gdtTbl[4] = UserCodeSegment64.AsU64();
 
-        let stack_end = x86_64::VirtAddr::from_ptr(
-            (self.tssIntStackStart + MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE)
+        let stack_end_gpa = x86_64::VirtAddr::from_ptr(
+            (self.tssIntStackStartGpa + MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE)
                 as *const u64,
         );
 
-        let tssSegment = self.tssAddr as *mut x86_64::structures::tss::TaskStateSegment;
+        let tssSegment = MemoryDef::gpa_to_hva(self.tssAddrGpa) as *mut x86_64::structures::tss::TaskStateSegment;
         unsafe {
-            (*tssSegment).interrupt_stack_table[0] = stack_end;
+            (*tssSegment).interrupt_stack_table[0] = stack_end_gpa;
             (*tssSegment).iomap_base = -1 as i16 as u16;
             info!(
                 "[{}] the tssSegment stack is {:x}",
                 self.id,
-                self.tssIntStackStart + MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE
+                self.tssIntStackStartGpa + MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE
             );
             let (tssLow, tssHigh, limit) = Self::TSStoDescriptor(&(*tssSegment));
 
@@ -107,7 +107,7 @@ impl KVMVcpu {
             gdtTbl[6] = tssHigh;
 
             sregs.tr = SegmentDescriptor::New(tssLow).GenKvmSegment(TSS);
-            sregs.tr.base = self.tssAddr;
+            sregs.tr.base = self.tssAddrGpa;
             sregs.tr.limit = limit as u32;
         }
     }
@@ -119,9 +119,9 @@ impl KVMVcpu {
     }
 
     fn TSStoDescriptor(tss: &x86_64::structures::tss::TaskStateSegment) -> (u64, u64, u16) {
-        let (tssBase, tssLimit) = Self::TSS(tss);
+        let (tssBasehHva, tssLimit) = Self::TSS(tss);
         let low = SegmentDescriptor::default().Set(
-            tssBase as u32,
+            MemoryDef::hva_to_gpa(tssBasehHva) as u32,
             tssLimit as u32,
             0,
             SEGMENT_DESCRIPTOR_PRESENT
@@ -130,7 +130,7 @@ impl KVMVcpu {
                 | SEGMENT_DESCRIPTOR_EXECUTE,
         );
 
-        let hi = SegmentDescriptor::default().SetHi((tssBase >> 32) as u32);
+        let hi = SegmentDescriptor::default().SetHi((MemoryDef::hva_to_gpa(tssBasehHva) >> 32) as u32);
 
         return (low.AsU64(), hi.AsU64(), tssLimit);
     }
@@ -157,7 +157,7 @@ impl KVMVcpu {
         };
 
         vcpu_sregs.gdt = kvm_bindings::kvm_dtable {
-            base: self.gdtAddr,
+            base: self.gdtAddrGpa,
             limit: 4095,
             ..Default::default()
         };
@@ -200,16 +200,16 @@ impl KVMVcpu {
             if #[cfg(feature = "cc")] {
                 let regs: kvm_regs = kvm_regs {
                     rflags: KERNEL_FLAGS_SET,
-                    rip: self.entry,
-                    rsp: self.topStackAddr,
+                    rip: self.entry_gpa,
+                    rsp: self.topStackAddrGpa,
                     rax: 0x11,
                     rbx: 0xdd,
                     //arg0
-                    rdi: self.privateHeapStartAddr, // self.pageAllocatorBaseAddr + self.,
+                    rdi: self.privateHeapStartGpa, // self.pageAllocatorBaseAddr + self.,
                     //arg1
                     rsi: self.id as u64,
                     //arg2
-                    rdx: VMS.read().vdsoAddr,
+                    rdx: VMS.read().vdsoAddrGpa,
                     //arg3
                     rcx: self.vcpuCnt as u64,
                     //arg4
@@ -222,8 +222,8 @@ impl KVMVcpu {
             } else {
                 let regs: kvm_regs = kvm_regs {
                     rflags: KERNEL_FLAGS_SET,
-                    rip: self.entry,
-                    rsp: self.topStackAddr,
+                    rip: self.entry_gpa,
+                    rsp: self.topStackAddrGpa,
                     rax: 0x11,
                     rbx: 0xdd,
                     //arg0
@@ -233,7 +233,7 @@ impl KVMVcpu {
                     //arg2
                     rdx: self.id as u64,
                     //arg3
-                    rcx: VMS.read().vdsoAddr,
+                    rcx: VMS.read().vdsoAddrGpa,
                     //arg4
                     r8: self.vcpuCnt as u64,
                     //arg5
@@ -267,7 +267,7 @@ impl KVMVcpu {
 
         info!(
             "start enter guest[{}]: entry is {:x}, stack is {:x}",
-            self.id, self.entry, self.topStackAddr
+            self.id, self.entry_gpa, self.topStackAddrGpa
         );
         info!("kvm registers state {:#x?}", regs);
         loop {
@@ -345,7 +345,7 @@ impl KVMVcpu {
                     }
                     cfg_if::cfg_if! {
                         if #[cfg(feature = "cc")] {
-                            let share_para_page  = unsafe{* (MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *const ShareParaPage)};
+                            let share_para_page  = unsafe{* (MemoryDef::hcall_page_hva() as *const ShareParaPage)};
                             let share_para = share_para_page.SharePara[self.id];
                             let para1 = share_para.para1;
                             let para2 = share_para.para2;
@@ -604,6 +604,7 @@ impl KVMVcpu {
                                     None
                                 };
 
+                                info!("HYPERCALL_HCALL {:?}", qmsg);
                                 qmsg.ret = Self::qCall(qmsg.msg);
                             }
 
@@ -800,8 +801,8 @@ impl KVMVcpu {
         let mut frames = String::new();
         crate::qlib::backtracer::trace(regs.rip, regs.rsp, regs.rbp, &mut |frame| {
             frames.push_str(&format!("{:#x?}\n", frame));
-            if frame.rbp < MemoryDef::PHY_LOWER_ADDR
-                || frame.rbp >= MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB
+            if frame.rbp < MemoryDef::phy_lower_gpa()
+                || frame.rbp >= MemoryDef::phy_lower_gpa() + kernelMemRegionSize * MemoryDef::ONE_GB
             {
                 false
             } else {

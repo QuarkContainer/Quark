@@ -106,7 +106,7 @@ pub fn WaitFn() -> ! {
 
                 //debug!("vcpu sleep");
                 task = HostSpace::VcpuWait();
-                //debug!("vcpu wakeup {:x}", addr);
+                //debug!("vcpu wakeup");
                 SHARESPACE.scheduler.DecreaseHaltVcpuCnt();
             }
 
@@ -134,7 +134,7 @@ pub fn WaitFn() -> ! {
                     let layout = core::alloc::Layout::from_size_align(tw_size, 2).
                                                 expect("WaitFn layout for TaskWrapper failed");
                     unsafe {
-                        GLOBAL_ALLOCATOR.DeallocSharedBuf(pendingFreeStackWrapper as *mut u8, layout);
+                        GLOBAL_ALLOCATOR.DeallocShareBuf(pendingFreeStackWrapper as *mut u8, layout.size(), layout.align());
                     };
 
                     CPULocal::SetPendingFreeStack(0, 0);

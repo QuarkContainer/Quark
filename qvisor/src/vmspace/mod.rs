@@ -120,9 +120,7 @@ pub struct VMSpace {
     pub podUid: String,
     pub pageTables: PageTables,
     pub allocator: HostPageAllocator,
-    pub hostAddrTop: u64,
-    pub sharedLoasdOffset: u64,
-    pub vdsoAddr: u64,
+    pub vdsoAddrGpa: u64,
     pub vcpuCount: usize,
     pub cpuAffinit: bool,
     pub vcpuMappingDelta: usize,
@@ -152,9 +150,7 @@ impl VMSpace {
             podUid: "".to_owned(),
             allocator: HostPageAllocator::New(),
             pageTables: PageTables::default(),
-            hostAddrTop: 0,
-            sharedLoasdOffset: 0x0000_5555_0000_0000,
-            vdsoAddr: 0,
+            vdsoAddrGpa: 0,
             cpuAffinit: false,
             vcpuCount: 0,
             vcpuMappingDelta: 0,
@@ -232,7 +228,7 @@ impl VMSpace {
     }
 
     pub fn LoadProcessKernel(&mut self, processAddr: u64) -> i64 {
-        info!("processAddr:0x{:x}",processAddr);
+        info!("LoadProcessKernel processAddr:0x{:x}",processAddr);
         unsafe{core::ptr::write(processAddr as *mut loader::Process, loader::Process::default());};
         let process = unsafe { &mut *(processAddr as *mut loader::Process) };
         process.ID = self.args.as_ref().unwrap().ID.to_string();
@@ -286,6 +282,7 @@ impl VMSpace {
             self.PivotRoot(&rootfs);
         }
         StartSignalHandle();
+
         return 0;
     }
 

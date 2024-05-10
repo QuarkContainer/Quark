@@ -85,18 +85,16 @@ pub struct KVMVcpu {
     //index in the cpu arrary
     pub vcpu: kvm_ioctls::VcpuFd,
 
-    pub topStackAddr: u64,
-    pub entry: u64,
+    pub topStackAddrGpa: u64,
+    pub entry_gpa: u64,
 
-    pub gdtAddr: u64,
-    pub idtAddr: u64,
-    pub tssIntStackStart: u64,
-    pub tssAddr: u64,
+    pub gdtAddrGpa: u64,
+    pub idtAddrGpa: u64,
+    pub tssIntStackStartGpa: u64,
+    pub tssAddrGpa: u64,
 
     #[cfg(feature = "cc")]
-    pub privateHeapStartAddr: u64,
-    #[cfg(feature = "cc")]
-    pub sharedHeapStartAddr: u64,
+    pub privateHeapStartGpa: u64,
 
     #[cfg(not(feature = "cc"))]
     pub heapStartAddr: u64,
@@ -111,13 +109,14 @@ pub struct KVMVcpu {
 unsafe impl Send for KVMVcpu {}
 
 impl KVMVcpu {
-    #[cfg(not(feature = "cc"))]
     pub fn Init(
         id: usize,
         vcpuCnt: usize,
         vm_fd: &kvm_ioctls::VmFd,
-        entry: u64,
+        entry_gpa: u64,
+        #[cfg(not(feature = "cc"))]
         pageAllocatorBaseAddr: u64,
+        #[cfg(not(feature = "cc"))]
         shareSpaceAddr: u64,
         autoStart: bool,
     ) -> Result<Self> {
@@ -167,100 +166,49 @@ impl KVMVcpu {
             VMS.read().ComputeVcpuCoreId(id) as isize
         };
 
-        return Ok(Self {
-            id: id,
-            cordId: vcpuCoreId,
-            threadid: AtomicU64::new(0),
-            tgid: AtomicU64::new(0),
-            state: AtomicU64::new(KVMVcpuState::HOST as u64),
-            vcpuCnt,
-            vcpu,
-            topStackAddr: topStackAddr,
-            entry: entry,
-            gdtAddr: gdtAddr,
-            idtAddr: idtAddr,
-            tssIntStackStart: tssIntStackStart,
-            tssAddr: tssAddr,
-            heapStartAddr: pageAllocatorBaseAddr,
-            shareSpaceAddr: shareSpaceAddr,
-            autoStart: autoStart,
-            interrupting: Mutex::new((false, vec![])),
-        });
-    }
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] { 
+                return Ok(Self {
+                    id: id,
+                    cordId: vcpuCoreId,
+                    threadid: AtomicU64::new(0),
+                    tgid: AtomicU64::new(0),
+                    state: AtomicU64::new(KVMVcpuState::HOST as u64),
+                    vcpuCnt,
+                    vcpu,
+                    topStackAddrGpa: MemoryDef::hva_to_gpa(topStackAddr),
+                    entry_gpa: entry_gpa,
+                    gdtAddrGpa: MemoryDef::hva_to_gpa(gdtAddr),
+                    idtAddrGpa: MemoryDef::hva_to_gpa(idtAddr),
+                    tssIntStackStartGpa: MemoryDef::hva_to_gpa(tssIntStackStart),
+                    tssAddrGpa: MemoryDef::hva_to_gpa(tssAddr),
+                    privateHeapStartGpa: MemoryDef::guest_private_running_heap_offset_gpa(),
+                    autoStart: autoStart,
+                    interrupting: Mutex::new((false, vec![])),
+                });
+            } else {
+                return Ok(Self {
+                    id: id,
+                    cordId: vcpuCoreId,
+                    threadid: AtomicU64::new(0),
+                    tgid: AtomicU64::new(0),
+                    state: AtomicU64::new(KVMVcpuState::HOST as u64),
+                    vcpuCnt,
+                    vcpu,
+                    topStackAddrGpa: MemoryDef::hva_to_gpa(topStackAddr),
+                    entry_gpa: entry_gpa,
+                    gdtAddrGpa: MemoryDef::hva_to_gpa(gdtAddr),
+                    idtAddrGpa: MemoryDef::hva_to_gpa(idtAddr),
+                    tssIntStackStartGpa: MemoryDef::hva_to_gpa(tssIntStackStart),
+                    tssAddrGpa: MemoryDef::hva_to_gpa(tssAddr),
+                    heapStartAddr: pageAllocatorBaseAddr,
+                    shareSpaceAddr: shareSpaceAddr,
+                    autoStart: autoStart,
+                    interrupting: Mutex::new((false, vec![])),
+                });
+            }
+        }
 
-    #[cfg(feature = "cc")]
-    pub fn Init(
-        id: usize,
-        vcpuCnt: usize,
-        vm_fd: &kvm_ioctls::VmFd,
-        entry: u64,
-        autoStart: bool,
-    ) -> Result<Self> {
-        const DEFAULT_STACK_PAGES: u64 = MemoryDef::DEFAULT_STACK_PAGES; //64KB
-        //let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
-        let stackSize = DEFAULT_STACK_PAGES << 12;
-        let stackAddr = AlignedAllocate(stackSize as usize, stackSize as usize, false).unwrap();
-        let topStackAddr = stackAddr + (DEFAULT_STACK_PAGES << 12);
-
-        let gdtAddr = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-        let idtAddr = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-
-        let tssIntStackStart = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-        let tssAddr = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-
-        // info!("the tssIntStackStart is {:x}, tssAddr address is {:x}, idt addr is {:x}, gdt addr is {:x}",
-        //     tssIntStackStart, tssAddr, idtAddr, gdtAddr);
-
-        let vcpu = vm_fd
-            .create_vcpu(id as u64)
-            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))
-            .expect("create vcpu fail");
-        let cpuAffinit = VMS.read().cpuAffinit;
-        let vcpuCoreId = if !cpuAffinit {
-            -1
-        } else {
-            VMS.read().ComputeVcpuCoreId(id) as isize
-        };
-
-        return Ok(Self {
-            id: id,
-            cordId: vcpuCoreId,
-            threadid: AtomicU64::new(0),
-            tgid: AtomicU64::new(0),
-            state: AtomicU64::new(KVMVcpuState::HOST as u64),
-            vcpuCnt,
-            vcpu,
-            topStackAddr: topStackAddr,
-            entry: entry,
-            gdtAddr: gdtAddr,
-            idtAddr: idtAddr,
-            tssIntStackStart: tssIntStackStart,
-            tssAddr: tssAddr,
-            privateHeapStartAddr: MemoryDef::GUEST_PRIVATE_HEAP_OFFSET,
-            sharedHeapStartAddr: MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST,
-            autoStart: autoStart,
-            interrupting: Mutex::new((false, vec![])),
-        });
     }
 
     pub fn GuestMsgProcess(sharespace: &ShareSpace) -> usize {
@@ -294,7 +242,7 @@ impl KVMVcpu {
                 }
                 Some(msg) => {
                     count += 1;
-                    //error!("qcall msg is {:x?}", &msg);
+ 
                     AQHostCall(msg, sharespace);
                 }
             }
@@ -557,7 +505,7 @@ impl CPULocal {
             }
 
             super::GLOBAL_ALLOCATOR.Clear();
-
+            //debug!("epoll_wait epollfd:{:x},time:{:x}",self.epollfd,time);
             let _nfds = unsafe { libc::epoll_wait(self.epollfd, &mut events[0], 2, time) };
            
             {

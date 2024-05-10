@@ -24,6 +24,7 @@ use core::sync::atomic::Ordering;
 
 use crate::kernel_def::Invlpg;
 use crate::qlib::mutex::*;
+use crate::IS_GUEST;
 
 use super::super::super::pagetable::PageTableFlags;
 use super::super::super::addr::*;
@@ -212,6 +213,9 @@ impl MemoryManagerWeak {
 
 impl MemoryManager {
     pub fn Init(kernel: bool) -> Self {
+        #[cfg(feature = "cc")]
+        assert!(IS_GUEST == true, "MemoryManager Init");
+        
         let mut vmas = AreaSet::New(0, MemoryDef::LOWER_TOP);
         let vma = VMA {
             mappable: MMappable::None,
@@ -231,13 +235,13 @@ impl MemoryManager {
             numaNodemask: 0,
         };
 
-        let gap: AreaGap<VMA> = vmas.FindGap(MemoryDef::PHY_LOWER_ADDR);
+        let gap: AreaGap<VMA> = vmas.FindGap(MemoryDef::phy_lower_gpa());
 
         vmas.Insert(
             &gap,
             &Range::New(
-                MemoryDef::PHY_LOWER_ADDR,
-                MemoryDef::PHY_UPPER_ADDR - MemoryDef::PHY_LOWER_ADDR,
+                MemoryDef::phy_lower_gpa(),
+                MemoryDef::phy_upper_gpa() - MemoryDef::phy_lower_gpa(),
             ),
             vma.clone(),
         );
@@ -1217,10 +1221,11 @@ impl MemoryManager {
         writable: bool,
         allowPartial: bool,
     ) -> Result<()> {
-        if MemoryDef::PHY_LOWER_ADDR <= start && start <= MemoryDef::PHY_UPPER_ADDR {
+        assert!(IS_GUEST == true, "V2PLocked");
+        if MemoryDef::phy_lower_gpa() <= start && start <= MemoryDef::phy_upper_gpa() {
             // Kernel phy address
             let end = start + len;
-            assert!(MemoryDef::PHY_LOWER_ADDR <= end && end <= MemoryDef::PHY_UPPER_ADDR);
+            assert!(MemoryDef::phy_lower_gpa() <= end && end <= MemoryDef::phy_upper_gpa());
             output.push(IoVec {
                 start: start,
                 len: len as usize,
@@ -1354,6 +1359,7 @@ impl MemoryManager {
         allowPartial: bool,
     ) -> Result<u64> {
         assert!(!rlock.Writable());
+        assert!(IS_GUEST == true, "FixPermissionLocked");
 
         defer!({
             if rlock.Writable() {
@@ -1366,10 +1372,10 @@ impl MemoryManager {
         }
 
         // todo: fix the security check issue
-        if MemoryDef::PHY_LOWER_ADDR <= vAddr && vAddr <= MemoryDef::PHY_UPPER_ADDR {
+        if MemoryDef::phy_lower_gpa() <= vAddr && vAddr <= MemoryDef::phy_upper_gpa() {
             // Kernel phy address
             let end = vAddr + len;
-            assert!(MemoryDef::PHY_LOWER_ADDR <= end && end <= MemoryDef::PHY_UPPER_ADDR);
+            assert!(MemoryDef::phy_lower_gpa() <= end && end <= MemoryDef::phy_upper_gpa());
             return Ok(len);
         }
 

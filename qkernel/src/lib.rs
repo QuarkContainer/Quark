@@ -28,6 +28,7 @@
 #![allow(deprecated)]
 #![recursion_limit = "256"]
 #![allow(invalid_reference_casting)]
+#![feature(btreemap_alloc)]
 
 #[macro_use]
 extern crate alloc;
@@ -137,6 +138,7 @@ pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
 
 pub static  IS_GUEST: bool = true;
+pub  const ENABLE_EMULATION_CC: bool = true;
 
 
 lazy_static! {
@@ -159,12 +161,12 @@ pub fn SingletonInit() {
         vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
         vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
         InitGs(0);
-        KERNEL_PAGETABLE.Init(PageTables::Init(CurrentKernelTable()));
-        //init fp state with current fp state as it is brand new vcpu
-        FP_STATE.Reset();
 
+        KERNEL_PAGETABLE.Init(PageTables::Init(CurrentKernelTable()));
+        FP_STATE.Reset();
         cfg_if::cfg_if! {
             if #[cfg(feature = "cc")] {
+
                 IOURING.SetValue(IO_URING_HOLDER.Addr());
             } else {
                 IOURING.SetValue(SHARESPACE.GetIOUringAddr());
@@ -482,29 +484,39 @@ cfg_if::cfg_if! {
             vcpuCnt: u64,
             autoStart: bool,
         ) {
+
             self::qlib::kernel::asm::fninit();
             if id == 0 {
-                GLOBAL_ALLOCATOR.InitPrivateAllocator(privateHeapStart);
+
+
+                GLOBAL_ALLOCATOR.InitPrivateAllocator(MemoryDef::guest_private_running_heap_offset_gpa());
+
                 
+    
                 //check msr to see if sev-snp enabled
                 ENABLE_CC.store(true,Ordering::Release);
                 // ghcb convert shared memory
                 
-                GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
+                GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::guest_host_shared_heap_offest_gpa());
 
                 assert!(self::qlib::qmsg::sharepara::SHAREPARA_COUNT >= vcpuCnt);
-                
+
                 let size = core::mem::size_of::<ShareSpace>();
+
                 // info!("ShareSpace size {:x}", size);
                 let shared_space = unsafe {
                     GLOBAL_ALLOCATOR.AllocSharedBuf(size, 2)
                 };
-                HyperCall64_init(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, PAGE_MGR_HOLDER.Addr(), 0, 0);
-        
-        
-                SHARESPACE.SetValue(shared_space as u64);
+
+                let pd_adr = PAGE_MGR_HOLDER.Addr();
+                HyperCall64_init(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, pd_adr, 0, 0);
+
+                
+                SHARESPACE.SetValue(shared_space as u64);                
+
+
                 SingletonInit();
-        
+
                 SetVCPCount(vcpuCnt as usize);
                 VCPU_ALLOCATOR.Print();
                 VCPU_ALLOCATOR.Initializated();
@@ -588,7 +600,7 @@ cfg_if::cfg_if! {
             self::qlib::kernel::asm::fninit();
             if id == 0 {
                 GLOBAL_ALLOCATOR.InitPrivateAllocator(heapStart);
-                GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFEST);
+                GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::guest_host_shared_heap_offest_gpa());
 
                 SHARESPACE.SetValue(shareSpaceAddr);
                 SingletonInit();
