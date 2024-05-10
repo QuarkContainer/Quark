@@ -11,8 +11,9 @@ use crate::kernel_def::kernel::dns::dns_svc::DNS_SVC_PORT;
 use crate::kernel_def::kernel::socket::unix::transport::unix::SockType;
 use crate::kernel_def::kernel::tcpip::tcpip::SockAddrInet;
 use crate::kernel_def::kernel::IOURING;
-use crate::SHARE_SPACE;
 use crate::qlib::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
+use crate::SHARE_SPACE;
+use crate::VIRTUAL_MACHINE;
 
 use self::kernel::dns::dns_svc::DnsSvc;
 use self::tsot_agent::TSOT_AGENT;
@@ -170,7 +171,7 @@ impl ShareSpace {
             if ((1 << i) & vcpuMask != 0)
                 && SHARE_SPACE.scheduler.VcpuArr[i].GetMode() == VcpuMode::User
             {
-                let cpu = VMS.lock().vcpus[i].clone();
+                let cpu = VIRTUAL_MACHINE.get().unwrap().GetVcpu(i);
                 SHARE_SPACE.scheduler.VcpuArr[i].InterruptTlbShootdown();
                 if tlbshootdown_wait {
                     let (tx, rx) = channel();
@@ -214,7 +215,7 @@ impl ShareSpace {
                 self.scheduler.VcpuArr[i].SetEnterAppTimestamp(now);
                 self.scheduler.VcpuArr[i].InterruptThreadTimeout();
                 //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
-                let vcpu = VMS.lock().vcpus[i].clone();
+                let vcpu = VIRTUAL_MACHINE.get().unwrap().GetVcpu(i);
                 vcpu.interrupt(None);
             }
         }
@@ -307,7 +308,7 @@ pub fn ClockGetTime(clockId: i32) -> i64 {
 }
 
 pub fn VcpuFreq() -> i64 {
-    return VMS.lock().GetVcpuFreq();
+    return VIRTUAL_MACHINE.get().unwrap().GetVcpuFreq();
 }
 
 pub fn NewSocket(fd: i32) -> i64 {
@@ -373,17 +374,21 @@ pub static TSOT_SOCKET_PATH: &'static str = "/var/run/quark/tsot-socket";
 
 impl TsotSocketMgr {
     pub fn SendMsg(m: &TsotMessage) -> Result<()> {
-        return TSOT_AGENT.SendMsg(m)
+        return TSOT_AGENT.SendMsg(m);
     }
 
     pub fn RecvMsg() -> Result<TsotMessage> {
-        return TSOT_AGENT.RecvMsg()
+        return TSOT_AGENT.RecvMsg();
     }
 }
 
 impl DnsSvc {
     pub fn Init(&self) -> Result<()> {
-        let sock = VMSpace::Socket(AFType::AF_INET, SockType::SOCK_DGRAM | SocketFlags::SOCK_CLOEXEC, 0);
+        let sock = VMSpace::Socket(
+            AFType::AF_INET,
+            SockType::SOCK_DGRAM | SocketFlags::SOCK_CLOEXEC,
+            0,
+        );
         if sock < 0 {
             return Err(Error::SysError(-sock as i32));
         }
@@ -393,14 +398,14 @@ impl DnsSvc {
         self.lock().fd = sock;
 
         let addr = SockAddrInet::New(DNS_SVC_PORT, &DNS_SVC_ADDR);
-        let ret = VMSpace::Bind(sock, &addr as * const _ as u64, addr.Len() as u32, 0);
+        let ret = VMSpace::Bind(sock, &addr as *const _ as u64, addr.Len() as u32, 0);
         if ret < 0 {
             return Err(Error::SysError(-sock as i32));
         }
 
-        let msgAddr = &self.lock().msg as * const _ as u64;
+        let msgAddr = &self.lock().msg as *const _ as u64;
         IOURING.DNSRecvInit(sock, msgAddr);
 
-        return Ok(())
+        return Ok(());
     }
 }

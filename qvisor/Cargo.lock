@@ -849,9 +849,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.13.0"
+version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18a6dbe30758c9f83eb00cbea4ac95966305f5a7772f3f42ebfc7fc7eddbd8e1"
+checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 
 [[package]]
 name = "os_pipe"
@@ -997,6 +997,7 @@ dependencies = [
  "num-traits 0.2.14",
  "num_cpus",
  "oci-spec",
+ "once_cell",
  "os_pipe",
  "prctl",
  "procfs",

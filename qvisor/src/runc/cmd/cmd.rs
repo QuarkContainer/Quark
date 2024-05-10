@@ -18,6 +18,8 @@ use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use kvm_ioctls::Kvm;
 use std::fs;
 
+use crate::VIRTUAL_MACHINE;
+
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::config::*;
 use super::super::cmd::config::*;
@@ -64,9 +66,12 @@ impl CmdCmd {
             args.Spec.process.args.push(a.to_string());
         }
 
-        match VirtualMachine::Init(args) {
-            Ok(mut vm) => {
-                vm.run().expect("vm.run() fail");
+        let virtualMachine = VirtualMachine::New(&args).expect("VirtualMachine create fail");
+
+        VIRTUAL_MACHINE.set(virtualMachine).unwrap();
+        match VIRTUAL_MACHINE.get().unwrap().Init(args) {
+            Ok(()) => {
+                VirtualMachine::run().expect("vm.run() fail");
             }
             Err(e) => info!("error is {:?}", e),
         }

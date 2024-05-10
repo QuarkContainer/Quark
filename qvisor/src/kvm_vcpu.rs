@@ -77,6 +77,7 @@ pub struct SignalMaskStruct {
     _pad: u32,
 }
 
+#[derive(Debug)]
 pub struct KVMVcpu {
     pub id: usize,
     pub cordId: isize,
@@ -526,7 +527,7 @@ impl CPULocal {
             super::GLOBAL_ALLOCATOR.Clear();
 
             let _nfds = unsafe { libc::epoll_wait(self.epollfd, &mut events[0], 2, time) };
-           
+
             {
                 let mut data: u64 = 0;
                 let ret = unsafe {
