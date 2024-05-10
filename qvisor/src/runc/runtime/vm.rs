@@ -360,8 +360,6 @@ impl VirtualMachine {
     #[cfg(not(debug_assertions))]
     pub const KERNEL_IMAGE: &'static str = "/usr/local/bin/qkernel.bin";
 
-    pub const VDSO_PATH: &'static str = "/usr/local/bin/vdso.so";
-
     pub fn InitShareSpace(cpuCount: usize, controlSock: i32, rdmaSvcCliSock: i32, podId: [u8; 64]) {
         SHARE_SPACE_STRUCT
             .lock()
@@ -612,12 +610,29 @@ impl VirtualMachine {
 }
 
 #[cfg(target_arch = "aarch64")]
-fn get_kvm_vcpu_init(vmfd: &VmFd) -> Result<kvm_vcpu_init> {
-    let mut kvi = kvm_vcpu_init::default();
-    vmfd.get_preferred_target(&mut kvi)
-        .map_err(|e| Error::SysError(e.errno()))?;
-    kvi.features[0] |= 1 << kvm_bindings::KVM_ARM_VCPU_PSCI_0_2;
-    Ok(kvi)
+const _KVM_ARM_PREFERRED_TARGET: u64 = 0x8020aeaf;
+
+#[cfg(target_arch = "aarch64")]
+fn set_kvm_vcpu_init(vmfd: &VmFd) -> Result<()> {
+    use crate::kvm_vcpu_aarch64::KVM_VCPU_INIT;
+
+    let mut kvm_vcpu_init = KVMVcpuInit::default();
+    let raw_fd = vmfd.as_raw_fd();
+    let ret = unsafe {
+        libc::ioctl(
+            raw_fd,
+            _KVM_ARM_PREFERRED_TARGET,
+            &kvm_vcpu_init as *const _ as u64,
+        )
+    };
+    if ret != 0 {
+        return Err(Error::SysError(ret));
+    }
+    kvm_vcpu_init.set_psci_0_2();
+    unsafe {
+        KVM_VCPU_INIT.Init(kvm_vcpu_init);
+    }
+    Ok(())
 }
 
 fn SetSigusr1Handler() {
