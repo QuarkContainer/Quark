@@ -609,7 +609,6 @@ impl PageTables {
         unsafe {
             let mut p4Idx = VirtAddr::new(curAddr.0).p4_index();
             let mut p3Idx = VirtAddr::new(curAddr.0).p3_index();
-  
             while curAddr.0 < end.0 {
                 let pgdEntry = &mut (*pt)[p4Idx];
                 let pudTbl: *mut PageTable;

@@ -2999,7 +2999,7 @@ impl MemoryDef {
     // PHY_LOWER_ADDR: qkernel image 512MB
     pub const QKERNEL_IMAGE_SIZE: u64 = 512 * Self::ONE_MB;
 
-    //==================================================== private ==============================================//
+    //=============== private =====================//
     // RDMA Local share memory
     const RDMA_LOCAL_SHARE_OFFSET: u64 = Self::PHY_LOWER_ADDR + Self::QKERNEL_IMAGE_SIZE;
     const RDMA_LOCAL_SHARE_SIZE: u64 = 1024 * Self::ONE_MB; // 1GB
@@ -3015,7 +3015,7 @@ impl MemoryDef {
 
     const GUEST_PRIVATE_HEAP_END: u64 = Self::GUEST_PRIVATE_HEAP_OFFSET + Self::GUEST_PRIVATE_HEAP_SIZE;
 
-    //==================================================== shared ==============================================//
+    //================ shared ==================//
     pub const GUEST_HOST_SHARED_HEAP_SIZE: u64 =  MemoryDef::GUEST_PRIVATE_HEAP_PLUS_SHARED_HEAP_SIZE 
                                                             - MemoryDef::GUEST_PRIVATE_HEAP_SIZE;
     const GUEST_HOST_SHARED_HEAP_OFFEST: u64 =  MemoryDef::GUEST_PRIVATE_HEAP_END;
@@ -3028,7 +3028,7 @@ impl MemoryDef {
     const FILE_MAP_OFFSET: u64 = Self::GUEST_HOST_SHARED_HEAP_OFFEST + Self::GUEST_HOST_SHARED_HEAP_SIZE;
     pub const FILE_MAP_SIZE: u64 = Self::KERNEL_MEM_INIT_REGION_SIZE * Self::ONE_GB + Self::PHY_LOWER_ADDR - Self::FILE_MAP_OFFSET;
 
-    //==================================================== shared end ==============================================//
+    //=================== shared end ===============//
 
     // Create 24GB Init memory region for KVM VM
     pub const KERNEL_MEM_INIT_REGION_SIZE: u64 = 24; // 24 GB

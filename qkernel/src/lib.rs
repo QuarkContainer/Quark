@@ -163,18 +163,7 @@ pub fn SingletonInit() {
         InitGs(0);
 
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentKernelTable()));
-        // unsafe {
-        //     asm!(
-        //         "hlt",
-        //     )
-        // };    //init fp state with current fp state as it is brand new vcpu
-
         FP_STATE.Reset();
-        // unsafe {
-        //     asm!(
-        //         "hlt",
-        //     )
-        // };
         cfg_if::cfg_if! {
             if #[cfg(feature = "cc")] {
 
