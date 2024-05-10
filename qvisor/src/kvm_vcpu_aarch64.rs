@@ -260,6 +260,8 @@ impl KVMVcpu {
         let data = _CNTKCTL_EL1_DEFAULT;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_CNTKCTL_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
         // cpacr_el1
+        // NOTE: FPEN[21:20] - Do not cause instructions related
+        //                     to FP registers to be trapped.
         let data = (3 << 20);
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_CPACR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
         // sctlr_el1
@@ -286,7 +288,6 @@ impl KVMVcpu {
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_R4, data).map_err(|e| Error::SysError(e.errno()))?;
         let data = self.autoStart as u64;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_R5, data).map_err(|e| Error::SysError(e.errno()))?;
-        
         Ok(())
     }
 
