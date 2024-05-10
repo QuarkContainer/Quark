@@ -84,8 +84,8 @@ pub fn CmpExchg(addr: u64, old: u64, new: u64) -> u64 {
 
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
-pub fn CmpExchg(addr: u64, old: u64, new: u64) -> u64 {
-    return 0;
+pub fn CmpExchg(_addr: u64, _old: u64, _new: u64) -> u64 {
+    todo!("CmpExchg not implemented for aarch64");
 }
 
 #[inline(always)]
@@ -120,8 +120,8 @@ pub fn LoadOnce(addr: u64) -> u64 {
 
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
-pub fn LoadOnce(addr: u64) -> u64 {
-    return 0;
+pub fn LoadOnce(_addr: u64) -> u64 {
+    todo!("LoadOnce not implemented for aarch64");
 }
 
 impl<T: ?Sized> QMutexIntern<T> {

@@ -1,7 +1,8 @@
+#![allow(non_upper_case_globals)]
 use std::os::fd::AsRawFd;
 use std::sync::atomic::Ordering;
 
-use kvm_bindings::{kvm_vcpu_events, kvm_vcpu_events__bindgen_ty_1, kvm_vcpu_init};
+use kvm_bindings::{kvm_vcpu_events, kvm_vcpu_init};
 use libc::{gettid, clock_gettime, clockid_t, timespec};
 use kvm_ioctls::VcpuExit;
 
@@ -165,20 +166,19 @@ impl KVMVcpu {
             };
             self.state.store(KVMVcpuState::HOST as u64, Ordering::Release);
             match kvmRet {
-                VcpuExit::MmioRead(addr, data) => {
+                VcpuExit::MmioRead(addr, _data) => {
                     self.backtrace()?;
                     panic!(
                         "CPU[{}] Received an MMIO Read Request for the address {:#x}.",
                         self.id, addr,
                     );
                 }
-                VcpuExit::MmioWrite(addr, data) => {
+                VcpuExit::MmioWrite(addr, _data) => {
                     {
                         let mut interrupting = self.interrupting.lock();
                         interrupting.0 = false;
                         interrupting.1.clear();
                     }
-                    
                     // reading hypercall parameters from vcpu register file
                     // x0 and x1 (w1) are used by the str instruction
                     // the 64-bit parameters 1,2,3,4 are passed via
@@ -191,8 +191,9 @@ impl KVMVcpu {
                     if hypercall_id > u16::MAX {
                         panic!("cpu[{}] Received hypercall id max than 255", self.id);
                     }
-                    info!("hypecall: {}, paras: {:x} {:x} {:x} {:x}", hypercall_id, para1, para2, para3, para4);
-                    self.handle_hypercall(hypercall_id, data, para1, para2, para3, para4)?;
+                    // logging all hypercalls can be very noisy. Disabled by default.
+                    // debug!("hypecall: {}, paras: {:x} {:x} {:x} {:x}", hypercall_id, para1, para2, para3, para4);
+                    self.handle_hypercall(hypercall_id, para1, para2, para3, para4)?;
                 }
                 VcpuExit::Hlt => {
                     error!("in hlt....");
@@ -262,7 +263,7 @@ impl KVMVcpu {
         // cpacr_el1
         // NOTE: FPEN[21:20] - Do not cause instructions related
         //                     to FP registers to be trapped.
-        let data = (3 << 20);
+        let data = 3 << 20;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_CPACR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
         // sctlr_el1
         let data = _SCTLR_EL1_DEFAULT;
@@ -308,7 +309,7 @@ impl KVMVcpu {
         }
     }
 
-    fn handle_hypercall(&self, hypercall_id: u16, data: &[u8], para1: u64, para2: u64,para3: u64, para4: u64) -> Result<()> {
+    fn handle_hypercall(&self, hypercall_id: u16, para1: u64, para2: u64,para3: u64, para4: u64) -> Result<()> {
         match  hypercall_id {
             qlib::HYPERCALL_IOWAIT => {
                 if !super::runc::runtime::vm::IsRunning() {
@@ -399,8 +400,8 @@ impl KVMVcpu {
                 unsafe { libc::_exit(0) }
             }
 
-            qlib::HYPERCALL_U64 => unsafe {
-                
+            qlib::HYPERCALL_U64 => {
+                info!("HYPERCALL_U64 is not handled");
             },
 
             qlib::HYPERCALL_GETTIME => {

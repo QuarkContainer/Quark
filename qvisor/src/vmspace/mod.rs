@@ -1836,8 +1836,8 @@ impl VMSpace {
     }
 
     #[cfg(target_arch = "aarch64")]
-    pub fn HostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
-        return (0, 0, 0, 0);
+    pub fn HostID(_axArg: u32, _cxArg: u32) -> (u32, u32, u32, u32) {
+        todo!("HostID not implemented for aarch64");
     }
 
     pub fn SymLinkAt(oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {
