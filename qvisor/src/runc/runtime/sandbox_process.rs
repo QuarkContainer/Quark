@@ -26,6 +26,7 @@ use std::sync::mpsc::channel;
 use std::sync::Arc;
 
 use crate::NIVIDIA_CONTAINER_NAME;
+use crate::VIRTUAL_MACHINE;
 use containerd_shim::protos::create_task;
 use containerd_shim::protos::ttrpc::Server;
 use containerd_shim::ExitSignal;
@@ -201,15 +202,18 @@ impl SandboxProcess {
             args.Pivot = false;
         }
 
-        let exitStatus = match VirtualMachine::Init(args) {
-            Ok(mut vm) => {
+        let virtualMachine = VirtualMachine::New(&args).expect("VirtualMachine create fail");
+
+        VIRTUAL_MACHINE.set(virtualMachine).unwrap();
+        let exitStatus = match VIRTUAL_MACHINE.get().unwrap().Init(args) {
+            Ok(()) => {
                 if taskSockFd > 0 {
                     if self.pivot {
                         crate::VMS.lock().PivotRoot(&self.SandboxRootDir);
                     }
                     self.StartTaskService(taskSockFd as RawFd).unwrap();
                 }
-                let ret = vm.run().expect("vm.run() fail");
+                let ret = VirtualMachine::run().expect("vm.run() fail");
                 ret
             }
             Err(e) => {
