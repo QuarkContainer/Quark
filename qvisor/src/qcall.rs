@@ -18,8 +18,15 @@ use super::qlib::kernel::*;
 use super::qlib::qmsg::*;
 use super::qlib::range::*;
 use super::qlib::ShareSpace;
+use crate::qlib::proxy::*;
 use super::*;
+use std::time::{Duration, Instant};
+use std::collections::BTreeMap;
+use std::sync::Mutex;
 
+lazy_static! {
+    static ref COUNTER: Mutex<BTreeMap<ProxyCommand, Duration>>  = Mutex::new(BTreeMap::new());
+}
 pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
     let _l = super::GLOCK.lock();
     match msg {
@@ -293,7 +300,19 @@ impl KVMVcpu {
                 ret = 0;
             }
             Msg::Proxy(msg) => {
-                ret = super::VMS.lock().Proxy(msg.cmd, &msg.parameters) as u64;
+                // if !COUNTER.contains_key(&msg.cmd) {
+                //     COUNTER.insert(msg.cmd.clone(), 0.0);
+                // }
+                let start = Instant::now();
+                ret = super::VMS.lock().Proxy(&msg.cmd, &msg.parameters) as u64;
+                let duration = start.elapsed();
+                COUNTER.lock().unwrap().entry(msg.cmd.clone()).and_modify(|time| *time += duration).or_insert(duration);
+                // for (cmd, time) in &COUNTER.lock().unwrap {
+                //     println!("{cmd}: \"{time}\"");
+                // }
+                if msg.cmd.clone() == ProxyCommand::CudaUnregisterFatBinary {
+                    error!("counter is: {:#?}", &COUNTER.lock().unwrap());
+                }
             }
             Msg::SymLinkAt(msg) => {
                 ret = super::VMSpace::SymLinkAt(msg.oldpath, msg.newdirfd, msg.newpath) as u64;

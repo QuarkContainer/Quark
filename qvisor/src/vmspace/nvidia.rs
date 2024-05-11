@@ -413,7 +413,7 @@ lazy_static! {
 }
 
 pub fn NvidiaProxy(
-    cmd: ProxyCommand,
+    cmd: &ProxyCommand,
     parameters: &ProxyParameters,
     containerId: &str,
 ) -> Result<i64> {
