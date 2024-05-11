@@ -25,13 +25,13 @@ use core::sync::atomic::Ordering;
 use crate::kernel_def::Invlpg;
 use crate::qlib::mutex::*;
 
-use super::super::super::pagetable::PageTableFlags;
 use super::super::super::addr::*;
 use super::super::super::auxv::*;
 use super::super::super::common::*;
 use super::super::super::limits::*;
 use super::super::super::linux_def::*;
 use super::super::super::mem::areaset::*;
+use super::super::super::pagetable::PageTableFlags;
 use super::super::super::pagetable::*;
 use super::super::super::range::*;
 use super::super::super::vcpu_mgr::CPULocal;
@@ -241,7 +241,6 @@ impl MemoryManager {
             ),
             vma.clone(),
         );
-
 
         let mapping = MMMapping {
             vmas: vmas,
@@ -1276,21 +1275,17 @@ impl MemoryManager {
         self.FixPermissionLocked(task, &rl, vAddr, len, writeReq, allowPartial)
     }
 
-    pub fn Pin(&self, 
-        task: &Task,         
-        vAddr: u64,
-        len: u64
-    ) -> Result<Vec<Range>> {
+    pub fn Pin(&self, task: &Task, vAddr: u64, len: u64) -> Result<Vec<Range>> {
         let rl = self.MappingReadLock();
-        return self.PinLocked(task, &rl, vAddr, len)
+        return self.PinLocked(task, &rl, vAddr, len);
     }
 
     pub fn PinLocked(
-        &self, 
-        task: &Task,         
+        &self,
+        task: &Task,
         rlock: &QUpgradableLockGuard,
         vAddr: u64,
-        len: u64
+        len: u64,
     ) -> Result<Vec<Range>> {
         self.FixPermissionLocked(task, rlock, vAddr, len, false, false)?;
 
@@ -1299,14 +1294,15 @@ impl MemoryManager {
         let mut lastAddr = 0;
         let mut lastLen = 0;
         let mut ranges = Vec::new();
-                while vaddr < startAddr + len {
+        while vaddr < startAddr + len {
             let (paddr, _) = self.VirtualToPhyLocked(vaddr)?;
             super::super::PAGE_MGR.RefPage(paddr);
-            if paddr != lastAddr + lastLen { //+ MemoryDef::PAGE_SIZE {
+            if paddr != lastAddr + lastLen {
+                //+ MemoryDef::PAGE_SIZE {
                 if lastAddr != 0 {
                     ranges.push(Range::New(lastAddr, lastLen));
-                                    }
-                
+                }
+
                 lastAddr = paddr;
                 lastLen = MemoryDef::PAGE_SIZE;
             } else {
@@ -1316,11 +1312,10 @@ impl MemoryManager {
             vaddr += MemoryDef::PAGE_SIZE;
         }
 
-        assert!(lastAddr!= 0 && lastLen != 0);
+        assert!(lastAddr != 0 && lastLen != 0);
         ranges.push(Range::New(lastAddr, lastLen));
-        return Ok(ranges)
+        return Ok(ranges);
     }
-
 
     // check whether the address range is legal.
     // 1. whether the range belong to user's space
@@ -1411,23 +1406,23 @@ impl MemoryManager {
                 Some(vma) => vma.clone(),
             };
 
-            if vma.maxPerms.Write() && !permission.Write() {
-                if !rlock.Writable() {
-                    rlock.Upgrade();
-                }
-                self.CopyOnWriteLocked(addr, &vma);
-                needTLBShootdown = true;
-            }
+            if writeReq && !permission.Write() {
+                if vma.effectivePerms.Write() {
+                    if !rlock.Writable() {
+                        rlock.Upgrade();
+                    }
+                    self.CopyOnWriteLocked(addr, &vma);
+                    needTLBShootdown = true;
+                } else {
+                    if !allowPartial || addr < vAddr {
+                        return Err(Error::SysError(SysErr::EFAULT));
+                    }
 
-            if writeReq && !vma.effectivePerms.Write() {
-                if !allowPartial || addr < vAddr {
-                    return Err(Error::SysError(SysErr::EFAULT));
+                    if needTLBShootdown {
+                        self.TlbShootdown();
+                    }
+                    return Ok(addr - vAddr);
                 }
-
-                if needTLBShootdown {
-                    self.TlbShootdown();
-                }
-                return Ok(addr - vAddr);
             }
 
             addr += MemoryDef::PAGE_SIZE;
@@ -1455,7 +1450,7 @@ impl MemoryManager {
         if vma.private & vma.mappable.HostIops().is_some() {
             perms.ClearWrite();
         }
-        
+
         self.pagetable.write().pt.MUnmap(ar.Start(), ar.Len())?;
         let segAr = vmaSeg.Range();
         let iops = match &vma.mappable {
@@ -1474,7 +1469,7 @@ impl MemoryManager {
                         true,
                     )?;
                 }
-                return Ok(()); 
+                return Ok(());
             }
             MMappable::NvFrontend(iops) => {
                 self.AddRssLock(ar);
@@ -1483,9 +1478,9 @@ impl MemoryManager {
                     ar.Start(),
                     iops,
                     &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()),
-                    &perms
+                    &perms,
                 )?;
-                return Ok(()); 
+                return Ok(());
             }
             MMappable::Uvm(iops) => {
                 self.AddRssLock(ar);
@@ -1494,16 +1489,12 @@ impl MemoryManager {
                     ar.Start(),
                     iops,
                     &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()),
-                    &perms
+                    &perms,
                 )?;
-                return Ok(()); 
+                return Ok(());
             }
-            MMappable::HostIops(iops) => {
-                iops.clone()
-            }
-            MMappable::Shm(shm)=> {
-                shm.HostIops()
-            }
+            MMappable::HostIops(iops) => iops.clone(),
+            MMappable::Shm(shm) => shm.HostIops(),
             _ => {
                 return Err(Error::SysError(SysErr::EINVAL));
             }
