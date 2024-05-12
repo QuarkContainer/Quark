@@ -1353,8 +1353,40 @@ impl MemoryManager {
 
         let mut addr = Addr(vAddr).RoundDown()?.0;
         let mut needTLBShootdown = false;
+
+        let (mut vma, mut range) = match self.GetVmaAndRangeLocked(addr) {
+            None => {
+                if !allowPartial || addr < vAddr {
+                    return Err(Error::SysError(SysErr::EFAULT));
+                }
+
+                return Ok(0);
+            }
+            Some((v, r)) => (v, r),
+        };
+
         //error!("FixPermission vaddr {:x} addr {:x} len is {:x}", vAddr, addr, len);
         while addr <= vAddr + len - 1 {
+            if addr >= range.End() {
+                match self.GetVmaAndRangeLocked(addr) {
+                    None => {
+                        if !allowPartial || addr < vAddr {
+                            return Err(Error::SysError(SysErr::EFAULT));
+                        }
+
+                        if needTLBShootdown {
+                            self.TlbShootdown();
+                        }
+
+                        return Ok(addr - vAddr);
+                    }
+                    Some((v, r)) => {
+                        vma = v;
+                        range = r;
+                    }
+                };
+            }
+
             let (_, permission) = match self.VirtualToPhyLocked(addr) {
                 Err(Error::AddressNotMap(_)) => {
                     if !rlock.Writable() {
@@ -1390,21 +1422,6 @@ impl MemoryManager {
                 }
                 return Ok(addr - vAddr);
             }
-
-            let (vma, _) = match self.GetVmaAndRangeLocked(addr) {
-                None => {
-                    if !allowPartial || addr < vAddr {
-                        return Err(Error::SysError(SysErr::EFAULT));
-                    }
-
-                    if needTLBShootdown {
-                        self.TlbShootdown();
-                    }
-
-                    return Ok(addr - vAddr);
-                }
-                Some(vma) => vma.clone(),
-            };
 
             if writeReq && !permission.Write() {
                 if vma.effectivePerms.Write() {

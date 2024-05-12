@@ -50,7 +50,6 @@ cfg_aarch64! {
    }
 }
 
-
 use super::super::asm::*;
 use super::addr::*;
 use super::common::{Allocator, Error, Result};
@@ -349,6 +348,7 @@ impl PageTables {
         }
     }
 
+    // return whether the page has memory page proviously
     pub fn MapPage(
         &self,
         vaddr: Addr,
