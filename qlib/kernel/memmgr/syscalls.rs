@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
 use core::u64;
 
 use super::super::super::addr::*;
@@ -731,8 +730,7 @@ impl MemoryManager {
             });
         }
 
-        let mut iovs = Vec::with_capacity(4);
-        self.V2PLocked(task, &rl, addr, 4, &mut iovs, true, false)?;
+        let iovs = self.V2PLocked(task, &rl, addr, 4, true, false)?;
         assert!(iovs.len() == 1);
 
         return Ok(Key {

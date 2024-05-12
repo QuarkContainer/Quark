@@ -1180,7 +1180,7 @@ impl MemoryManager {
             .SetPageFlags(Addr(addr), PageOpts::New(true, true, exec).Val());
     }
 
-    pub fn CopyOnWriteLocked(&self, pageAddr: u64, vma: &VMA) {
+    pub fn CopyOnWriteLocked(&self, pageAddr: u64, vma: &VMA) -> u64 {
         let (phyAddr, permission) = self
             .VirtualToPhyLocked(pageAddr)
             .expect(&format!("addr is {:x}", pageAddr));
@@ -1188,13 +1188,14 @@ impl MemoryManager {
         if permission.Write() {
             // another thread has cow, return
             Invlpg(pageAddr);
-            return;
+            return phyAddr;
         }
 
         let exec = vma.effectivePerms.Exec();
         let page = { super::super::PAGE_MGR.AllocPage(false).unwrap() };
         CopyPage(page, phyAddr);
         let _ = self.MapPageWriteLocked(pageAddr, page, exec);
+        return page;
     }
 
     pub fn CopyOnWrite(&self, pageAddr: u64, vma: &VMA) {
@@ -1210,12 +1211,11 @@ impl MemoryManager {
         task: &Task,
         start: u64,
         len: u64,
-        output: &mut Vec<IoVec>,
         writable: bool,
         allowPartial: bool,
-    ) -> Result<()> {
+    ) -> Result<Vec<IoVec>> {
         if len == 0 {
-            return Ok(());
+            return Ok(Vec::new());
         }
 
         if start == 0 {
@@ -1224,13 +1224,21 @@ impl MemoryManager {
 
         let rl = self.MappingReadLock();
 
-        return self.V2PLocked(task, &rl, start, len, output, writable, allowPartial);
+        return self.V2PLocked(task, &rl, start, len, writable, allowPartial);
     }
 
     pub fn FixPermissionForIovs(&self, task: &Task, iovs: &[IoVec], writable: bool) -> Result<()> {
         let rl = self.MappingReadLock();
         for iov in iovs {
-            self.FixPermissionLocked(task, &rl, iov.Start(), iov.Len() as u64, writable, false)?;
+            self.FixPermissionLocked(
+                task,
+                &rl,
+                iov.Start(),
+                iov.Len() as u64,
+                writable,
+                None,
+                false,
+            )?;
         }
 
         return Ok(());
@@ -1242,62 +1250,47 @@ impl MemoryManager {
         rlock: &QUpgradableLockGuard,
         start: u64,
         len: u64,
-        output: &mut Vec<IoVec>,
         writable: bool,
         allowPartial: bool,
-    ) -> Result<()> {
+    ) -> Result<Vec<IoVec>> {
         if MemoryDef::PHY_LOWER_ADDR <= start && start <= MemoryDef::PHY_UPPER_ADDR {
             // Kernel phy address
             let end = start + len;
             assert!(MemoryDef::PHY_LOWER_ADDR <= end && end <= MemoryDef::PHY_UPPER_ADDR);
+            let mut output = Vec::with_capacity(1);
             output.push(IoVec {
                 start: start,
                 len: len as usize,
             });
-            return Ok(());
+            return Ok(output);
         }
 
-        let len = self.FixPermissionLocked(task, rlock, start, len, writable, allowPartial)?;
+        let mut output =
+            Vec::with_capacity(((len + MemoryDef::PAGE_SIZE - 1) / MemoryDef::PAGE_SIZE) as usize);
+        let len = self.FixPermissionLocked(
+            task,
+            rlock,
+            start,
+            len,
+            writable,
+            Some(&mut output),
+            allowPartial,
+        )?;
 
-        let mut start = start;
-        let end = start + len;
+        if output.len() > 0 {
+            let offset = Addr(start).PageOffset();
+            output[0].start += offset;
+            output[0].len -= offset as usize;
 
-        while start < end {
-            let next = if Addr(start).IsPageAligned() {
-                start + MemoryDef::PAGE_SIZE
-            } else {
-                Addr(start).RoundUp().unwrap().0
-            };
-
-            match self.VirtualToPhyLocked(start) {
-                Err(e) => {
-                    info!("convert to phyaddress fail, addr = {:x} e={:?}", start, e);
-                    return Err(Error::SysError(SysErr::EFAULT));
-                }
-                Ok((pAddr, _)) => {
-                    let iov = IoVec {
-                        start: pAddr,
-                        len: if end < next {
-                            (end - start) as usize
-                        } else {
-                            (next - start) as usize
-                        },
-                    };
-
-                    let cnt = output.len();
-                    if cnt > 0 && output[cnt - 1].End() == iov.start {
-                        // use the last entry
-                        output[cnt - 1].len += iov.len;
-                    } else {
-                        output.push(iov);
-                    }
-                }
+            let last = output.len() - 1;
+            let end: u64 = start + len;
+            let endoffset = Addr(end).PageOffset();
+            if endoffset != 0 {
+                output[last].len -= (MemoryDef::PAGE_SIZE - endoffset) as usize;
             }
-
-            start = next;
         }
 
-        return Ok(());
+        return Ok(output);
     }
 
     // check whether the address range is legal.
@@ -1319,7 +1312,7 @@ impl MemoryManager {
 
         let rl = self.MappingReadLock();
 
-        self.FixPermissionLocked(task, &rl, vAddr, len, writeReq, allowPartial)
+        self.FixPermissionLocked(task, &rl, vAddr, len, writeReq, None, allowPartial)
     }
 
     pub fn Pin(&self, task: &Task, vAddr: u64, len: u64) -> Result<Vec<Range>> {
@@ -1334,7 +1327,7 @@ impl MemoryManager {
         vAddr: u64,
         len: u64,
     ) -> Result<Vec<Range>> {
-        self.FixPermissionLocked(task, rlock, vAddr, len, false, false)?;
+        self.FixPermissionLocked(task, rlock, vAddr, len, false, None, false)?;
 
         let startAddr = vAddr;
         let mut vaddr = vAddr;
@@ -1364,6 +1357,21 @@ impl MemoryManager {
         return Ok(ranges);
     }
 
+    pub fn AppendOutput(output: &mut Vec<IoVec>, paddr: u64) {
+        let iov = IoVec {
+            start: paddr,
+            len: MemoryDef::PAGE_SIZE as usize,
+        };
+
+        let cnt = output.len();
+        if cnt > 0 && output[cnt - 1].End() == iov.start {
+            // use the last entry
+            output[cnt - 1].len += iov.len;
+        } else {
+            output.push(iov);
+        }
+    }
+
     // check whether the address range is legal.
     // 1. whether the range belong to user's space
     // 2. Whether the read/write permission meet requirement
@@ -1376,6 +1384,7 @@ impl MemoryManager {
         vAddr: u64,
         len: u64,
         writeReq: bool,
+        paddrRanges: Option<&mut Vec<IoVec>>,
         allowPartial: bool,
     ) -> Result<u64> {
         assert!(!rlock.Writable());
@@ -1403,9 +1412,15 @@ impl MemoryManager {
 
         let mut vma = VMA::default();
         let mut range = Range::default();
+        let mut vec = Vec::new();
+
+        let (output, needOutput) = match paddrRanges {
+            Some(output) => (output, true),
+            None => (&mut vec, false),
+        };
 
         while addr <= vAddr + len - 1 {
-            let (_, permission) = match self.VirtualToPhyLocked(addr) {
+            let (paddr, permission) = match self.VirtualToPhyLocked(addr) {
                 Err(Error::AddressNotMap(_)) => {
                     if !rlock.Writable() {
                         rlock.Upgrade();
@@ -1444,6 +1459,7 @@ impl MemoryManager {
                         }
                         Ok((entry, _)) => entry,
                     };
+
                     (
                         entry.addr().as_u64(),
                         AccessType::NewFromPageFlags(entry.flags()),
@@ -1462,6 +1478,10 @@ impl MemoryManager {
                 if needTLBShootdown {
                     self.TlbShootdown();
                 }
+
+                if needOutput {
+                    Self::AppendOutput(output, paddr);
+                }
                 return Ok(addr - vAddr);
             }
 
@@ -1477,6 +1497,10 @@ impl MemoryManager {
                                 self.TlbShootdown();
                             }
 
+                            if needOutput {
+                                Self::AppendOutput(output, paddr);
+                            }
+
                             return Ok(addr - vAddr);
                         }
                         Some((v, r)) => {
@@ -1490,7 +1514,12 @@ impl MemoryManager {
                     if !rlock.Writable() {
                         rlock.Upgrade();
                     }
-                    self.CopyOnWriteLocked(addr, &vma);
+
+                    let paddr = self.CopyOnWriteLocked(addr, &vma);
+
+                    if needOutput {
+                        Self::AppendOutput(output, paddr);
+                    }
                     needTLBShootdown = true;
                 } else {
                     if !allowPartial || addr < vAddr {
@@ -1500,7 +1529,15 @@ impl MemoryManager {
                     if needTLBShootdown {
                         self.TlbShootdown();
                     }
+
+                    if needOutput {
+                        Self::AppendOutput(output, paddr);
+                    }
                     return Ok(addr - vAddr);
+                }
+            } else {
+                if needOutput {
+                    Self::AppendOutput(output, paddr);
                 }
             }
 
@@ -1819,62 +1856,6 @@ impl MemoryManager {
 
     pub fn ID(&self) -> u64 {
         return self.uid;
-    }
-
-    pub fn V2PIov(
-        &self,
-        task: &Task,
-        start: u64,
-        len: u64,
-        output: &mut Vec<IoVec>,
-        writable: bool,
-    ) -> Result<()> {
-        let rl = self.MappingReadLock();
-        return self.V2PIovLocked(task, &rl, start, len, output, writable);
-    }
-
-    pub fn V2PIovLocked(
-        &self,
-        task: &Task,
-        rlock: &QUpgradableLockGuard,
-        start: u64,
-        len: u64,
-        output: &mut Vec<IoVec>,
-        writable: bool,
-    ) -> Result<()> {
-        self.FixPermissionLocked(task, rlock, start, len, writable, false)?;
-
-        let mut start = start;
-        let end = start + len;
-
-        while start < end {
-            let next = if Addr(start).IsPageAligned() {
-                start + MemoryDef::PAGE_SIZE
-            } else {
-                Addr(start).RoundUp().unwrap().0
-            };
-
-            match self.VirtualToPhyLocked(start) {
-                Err(e) => {
-                    info!("convert to phyaddress fail, addr = {:x} e={:?}", start, e);
-                    return Err(Error::SysError(SysErr::EFAULT));
-                }
-                Ok((pAddr, _)) => {
-                    output.push(IoVec {
-                        start: pAddr,
-                        len: if end < next {
-                            (end - start) as usize
-                        } else {
-                            (next - start) as usize
-                        }, //iov.len,
-                    });
-                }
-            }
-
-            start = next;
-        }
-
-        return Ok(());
     }
 }
 
