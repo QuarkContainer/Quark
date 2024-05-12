@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
 use core::u64;
 
 use super::super::super::addr::*;
@@ -40,7 +39,7 @@ impl MemoryManager {
     // MMap establishes a memory mapping.
     pub fn MMap(&self, task: &Task, opts: &mut MMapOpts) -> Result<u64> {
         let _ml = self.MappingWriteLock();
-        
+
         if opts.Length == 0 {
             return Err(Error::SysError(SysErr::EINVAL));
         }
@@ -88,11 +87,11 @@ impl MemoryManager {
         if opts.GrowsDown && opts.Mappable.HostIops().is_some() {
             return Err(Error::SysError(SysErr::EINVAL));
         }
-        
+
         let (vseg, ar) = self.CreateVMAlocked(task, opts)?;
-        
+
         self.PopulateVMALocked(task, &vseg, &ar, opts.Precommit, opts.VDSO)?;
-        
+
         self.TlbShootdown();
         return Ok(ar.Start());
     }
@@ -723,8 +722,7 @@ impl MemoryManager {
             });
         }
 
-        let mut iovs = Vec::with_capacity(4);
-        self.V2PLocked(task, &rl, addr, 4, &mut iovs, true, false)?;
+        let iovs = self.V2PLocked(task, &rl, addr, 4, true, false)?;
         assert!(iovs.len() == 1);
 
         return Ok(Key {

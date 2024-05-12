@@ -88,8 +88,7 @@ impl MemoryManager {
         if vaddr == 0 && len == 0 {
             return Ok(());
         }
-        let mut iovs = Vec::with_capacity(4);
-        self.V2PLocked(task, rl, vaddr, len as u64, &mut iovs, false, allowPartial)?;
+        let iovs = self.V2PLocked(task, rl, vaddr, len as u64, false, allowPartial)?;
 
         let mut offset = 0;
         for iov in &iovs {
@@ -117,8 +116,7 @@ impl MemoryManager {
         if vaddr == 0 && len == 0 {
             return Ok(());
         }
-        let mut iovs = Vec::with_capacity(4);
-        self.V2PLocked(task, rl, vaddr, len as u64, &mut iovs, true, allowPartial)?;
+        let iovs = self.V2PLocked(task, rl, vaddr, len as u64, true, allowPartial)?;
 
         let mut offset = 0;
         for iov in &iovs {
@@ -142,8 +140,7 @@ impl MemoryManager {
         len: usize,
         allowPartial: bool,
     ) -> Result<usize> {
-        let mut iovs = Vec::with_capacity(4);
-        self.V2PLocked(task, rl, vaddr, len as u64, &mut iovs, true, allowPartial)?;
+        let iovs = self.V2PLocked(task, rl, vaddr, len as u64, true, allowPartial)?;
 
         let mut len = 0;
         for iov in &iovs {
@@ -719,8 +716,7 @@ impl MemoryManager {
 
         assert!(vaddr % 4 == 0);
 
-        let mut iovs = Vec::with_capacity(1);
-        self.V2PLocked(task, &rl, vaddr, 4, &mut iovs, false, false)?;
+        let iovs = self.V2PLocked(task, &rl, vaddr, 4, false, false)?;
 
         assert!(iovs.len() == 1);
         let addr = iovs[0].start;
@@ -735,8 +731,7 @@ impl MemoryManager {
 
         assert!(vaddr % 4 == 0);
 
-        let mut iovs = Vec::with_capacity(1);
-        self.V2PLocked(task, &rl, vaddr, 4, &mut iovs, false, false)?;
+        let iovs = self.V2PLocked(task, &rl, vaddr, 4, false, false)?;
 
         assert!(iovs.len() == 1);
         let addr = iovs[0].start;
@@ -878,7 +873,7 @@ impl MemoryManager {
             return Err(Error::SysError(SysErr::EFAULT));
         }
 
-        return self.FixPermissionLocked(task, rl, vAddr, len, writeReq, allowPartial);
+        return self.FixPermissionLocked(task, rl, vAddr, len, writeReq, None, allowPartial);
     }
 }
 
@@ -1086,36 +1081,9 @@ impl Task {
         &self,
         start: u64,
         len: u64,
-        output: &mut Vec<IoVec>,
         writable: bool,
         allowPartial: bool,
-    ) -> Result<()> {
-        return self
-            .mm
-            .V2P(self, start, len, output, writable, allowPartial);
-    }
-
-    pub fn V2PIov(
-        &self,
-        iov: &IoVec,
-        output: &mut Vec<IoVec>,
-        writable: bool,
-        allowPartial: bool,
-    ) -> Result<()> {
-        return self.V2P(iov.start, iov.len as u64, output, writable, allowPartial);
-    }
-
-    pub fn V2PIovs(
-        &self,
-        iovs: &[IoVec],
-        writable: bool,
-        output: &mut Vec<IoVec>,
-        allowPartial: bool,
-    ) -> Result<()> {
-        for iov in iovs {
-            self.V2PIov(iov, output, writable, allowPartial)?;
-        }
-
-        return Ok(());
+    ) -> Result<Vec<IoVec>> {
+        return self.mm.V2P(self, start, len, writable, allowPartial);
     }
 }
