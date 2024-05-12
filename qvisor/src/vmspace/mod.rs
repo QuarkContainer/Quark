@@ -62,16 +62,12 @@ use self::random::*;
 use self::syscall::*;
 use self::tsot_agent::TSOT_AGENT;
 use self::tsot_msg::TsotMessage;
-use super::kvm_vcpu::HostPageAllocator;
 use super::namespace::MountNs;
-use super::qlib::addr::Addr;
 use super::qlib::common::{Error, Result};
 use super::qlib::control_msg::*;
 use super::qlib::kernel::SignalProcess;
 use super::qlib::linux::membarrier::*;
 use super::qlib::linux_def::*;
-use super::qlib::pagetable::PageTableFlags;
-use super::qlib::pagetable::PageTables;
 use super::qlib::perf_tunning::*;
 use super::qlib::qmsg::*;
 use super::qlib::socket_buf::*;
@@ -117,8 +113,7 @@ pub struct WaitingMsgCall {
 
 pub struct VMSpace {
     pub podUid: String,
-    pub pageTables: PageTables,
-    pub allocator: HostPageAllocator,
+
     pub hostAddrTop: u64,
     pub sharedLoasdOffset: u64,
     pub vdsoAddr: u64,
@@ -144,8 +139,7 @@ impl VMSpace {
 
         return VMSpace {
             podUid: "".to_owned(),
-            allocator: HostPageAllocator::New(),
-            pageTables: PageTables::default(),
+
             hostAddrTop: 0,
             sharedLoasdOffset: 0x0000_5555_0000_0000,
             vdsoAddr: 0,
@@ -1920,33 +1914,6 @@ impl VMSpace {
         let ret = unsafe { futimens(fd, times as *const timespec) };
 
         return Self::GetRet(ret as i64);
-    }
-
-    //map kernel table
-    pub fn KernelMap(
-        &mut self,
-        start: Addr,
-        end: Addr,
-        physical: Addr,
-        flags: PageTableFlags,
-    ) -> Result<bool> {
-        info!("KernelMap start is {:x}, end is {:x}", start.0, end.0);
-        return self
-            .pageTables
-            .Map(start, end, physical, flags, &mut self.allocator, true);
-    }
-
-    pub fn KernelMapHugeTable(
-        &mut self,
-        start: Addr,
-        end: Addr,
-        physical: Addr,
-        flags: PageTableFlags,
-    ) -> Result<bool> {
-        info!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
-        return self
-            .pageTables
-            .MapWith1G(start, end, physical, flags, &mut self.allocator, true);
     }
 
     pub fn PrintStr(phAddr: u64) {
