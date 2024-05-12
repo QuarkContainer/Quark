@@ -27,6 +27,7 @@ use std::os::unix::io::AsRawFd;
 use std::sync::atomic::{fence, Ordering};
 use std::sync::mpsc::Sender;
 
+#[derive(Debug, Clone)]
 pub struct HostPageAllocator {
     pub allocator: AlignedAllocator,
 }
@@ -34,7 +35,7 @@ pub struct HostPageAllocator {
 impl HostPageAllocator {
     pub fn New() -> Self {
         return Self {
-            allocator: AlignedAllocator::New(0x1000, 0x10000),
+            allocator: AlignedAllocator::New(0x1000, 0x1000),
         };
     }
 }
