@@ -113,11 +113,9 @@ cfg_aarch64! {
    }
 }
 
-
-
-use super::kernel::asm::*;
 use super::addr::*;
 use super::common::{Allocator, Error, Result};
+use super::kernel::asm::*;
 use super::kernel::Kernel::HostSpace;
 use super::linux_def::*;
 use super::mutex::*;
@@ -413,6 +411,7 @@ impl PageTables {
         }
     }
 
+    // return whether the page has memory page proviously
     pub fn MapPage(
         &self,
         vaddr: Addr,
@@ -468,9 +467,9 @@ impl PageTables {
                 res = true;
             }
 
-            #[cfg(target_arch="x86_64")]
+            #[cfg(target_arch = "x86_64")]
             pteEntry.set_addr(PhysAddr::new(phyAddr.0), flags);
-            #[cfg(target_arch="aarch64")]
+            #[cfg(target_arch = "aarch64")]
             pteEntry.set_addr(PhysAddr::new(phyAddr.0), flags | PageTableFlags::PAGE);
 
             Invlpg(vaddr.0);
@@ -646,10 +645,7 @@ impl PageTables {
                         res = self.freeEntry(pudEntry, pagePool)?;
                     }
 
-                    pudEntry.set_addr(
-                        PhysAddr::new(newphysAddr),
-                        hugepage_flags,
-                    );
+                    pudEntry.set_addr(PhysAddr::new(newphysAddr), hugepage_flags);
                     curAddr = curAddr.AddLen(MemoryDef::HUGE_PAGE_SIZE_1G)?;
 
                     if p3Idx == PageTableIndex::new(MemoryDef::ENTRY_COUNT - 1) {
@@ -1422,8 +1418,10 @@ impl PageTables {
             };
 
             if needSwapin {
-                info!("VM: vaddr:{:#x} in PTE:{:?} needs swapped.",
-                   vaddr, pteEntry);
+                info!(
+                    "VM: vaddr:{:#x} in PTE:{:?} needs swapped.",
+                    vaddr, pteEntry
+                );
                 let addr = pteEntry.addr().as_u64();
                 //
                 // NOTE: How can we detect if it succeeded or not?
@@ -1437,15 +1435,19 @@ impl PageTables {
                 Invlpg(vaddr);
                 fence(Ordering::SeqCst);
             } else {
-                info!("VM: vaddr:{:#x} in PTE:{:?} will wait for swapp.",
-                   vaddr, pteEntry);
+                info!(
+                    "VM: vaddr:{:#x} in PTE:{:?} will wait for swapp.",
+                    vaddr, pteEntry
+                );
                 loop {
                     let flags = pteEntry.flags();
 
                     // Wait for the other thread to finish swapping-in
                     if !is_pte_swapped(flags) {
-                        info!("VM: vaddr:{:#x} in PTE:{:?} was swapped from others.",
-                   vaddr, pteEntry);
+                        info!(
+                            "VM: vaddr:{:#x} in PTE:{:?} was swapped from others.",
+                            vaddr, pteEntry
+                        );
                         return;
                     }
                     spin_loop();
@@ -1463,7 +1465,8 @@ impl PageTables {
     ) -> Result<()> {
         //info!("MProtoc: start={:x}, end={:x}, flag = {:?}", start.0, end.0, flags);
         defer!(self.EnableTlbShootdown());
-        #[cfg(target_arch = "x86_64")]{
+        #[cfg(target_arch = "x86_64")]
+        {
             return self.Traverse(
                 start,
                 end,
@@ -1474,9 +1477,9 @@ impl PageTables {
                 },
                 failFast,
             );
-
         }
-        #[cfg(target_arch = "aarch64")]{
+        #[cfg(target_arch = "aarch64")]
+        {
             return self.Traverse(
                 start,
                 end,
@@ -1570,9 +1573,9 @@ impl PageTables {
                                 res = self.freeEntry(pteEntry, pagePool)?;
                             }
 
-                            #[cfg(target_arch="x86_64")]
+                            #[cfg(target_arch = "x86_64")]
                             pteEntry.set_addr(PhysAddr::new(newAddr), flags);
-                            #[cfg(target_arch="aarch64")]
+                            #[cfg(target_arch = "aarch64")]
                             pteEntry.set_addr(PhysAddr::new(newAddr), flags | PageTableFlags::PAGE);
 
                             Invlpg(curAddr.0);
