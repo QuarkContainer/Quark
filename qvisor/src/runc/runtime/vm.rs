@@ -20,12 +20,14 @@ use std::os::unix::io::AsRawFd;
 use std::os::unix::io::FromRawFd;
 use std::sync::atomic::AtomicU32;
 use std::thread;
+use x86_64::structures::paging::PageTableFlags;
 
 use kvm_bindings::*;
 use kvm_ioctls::{Cap, Kvm, VmFd};
 use lazy_static::lazy_static;
 use nix::sys::signal;
 
+use crate::qlib::addr::Addr;
 use crate::qlib::MAX_VCPU_COUNT;
 use crate::tsot_agent::TSOT_AGENT;
 use crate::VIRTUAL_MACHINE;
@@ -106,6 +108,8 @@ pub struct VirtualMachine {
     pub entry: u64,
     pub nextSlotId: AtomicU32,
     pub vcpus: Mutex<Vec<Arc<KVMVcpu>>>,
+    pub pageTables: PageTables,
+    pub allocator: HostPageAllocator,
 }
 
 impl VirtualMachine {
@@ -225,7 +229,7 @@ impl VirtualMachine {
         IOURING.SetValue(sharespace.GetIOUringAddr());
 
         unsafe {
-            KERNEL_PAGETABLE.SetRoot(VMS.lock().pageTables.GetRoot());
+            KERNEL_PAGETABLE.SetRoot(VIRTUAL_MACHINE.get().unwrap().pageTables.GetRoot());
             PAGE_MGR.SetValue(sharespace.GetPageMgrAddr());
 
             KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
@@ -295,6 +299,7 @@ impl VirtualMachine {
 
         let cpuCount = Self::CpuCount(&args);
 
+        let allocator = HostPageAllocator::New();
         let vm = Self {
             kvm: kvm,
             vmfd: vm_fd,
@@ -303,9 +308,39 @@ impl VirtualMachine {
             entry: entry,
             nextSlotId: AtomicU32::new(1),
             vcpus: Mutex::new(Vec::with_capacity(cpuCount)),
+            pageTables: PageTables::New(&allocator)?,
+            allocator: allocator,
         };
 
         return Ok(vm);
+    }
+
+    pub fn KernelMapHugeTable(
+        &self,
+        start: Addr,
+        end: Addr,
+        physical: Addr,
+        flags: PageTableFlags,
+    ) -> Result<bool> {
+        info!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
+        return self
+            .pageTables
+            .MapWith1G(start, end, physical, flags, &self.allocator, true);
+    }
+
+    pub fn AllocRegion(&self, start: u64, pageMmapsize: u64) -> Result<()> {
+        self.SetMemRegion(start, start, pageMmapsize)?;
+        self.KernelMapHugeTable(
+            Addr(start),
+            Addr(start + pageMmapsize),
+            Addr(start),
+            addr::PageOpts::Zero()
+                .SetPresent()
+                .SetWrite()
+                .SetGlobal()
+                .Val(),
+        )?;
+        return Ok(());
     }
 
     pub fn Init(&self, args: Args) -> Result<()> {
@@ -349,27 +384,16 @@ impl VirtualMachine {
         VMS.lock().vcpuCount = vm.cpuCount; //VMSpace::VCPUCount();
         VMS.lock().RandomVcpuMapping();
 
-        vm.SetMemRegion(
-            MemoryDef::PHY_LOWER_ADDR,
+        vm.AllocRegion(
             MemoryDef::PHY_LOWER_ADDR,
             MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB,
         )?;
 
-        vm.SetMemRegion(
-            MemoryDef::NVIDIA_START_ADDR,
-            MemoryDef::NVIDIA_START_ADDR,
-            MemoryDef::NVIDIA_ADDR_SIZE,
-        )?;
+        vm.AllocRegion(MemoryDef::NVIDIA_START_ADDR, MemoryDef::NVIDIA_ADDR_SIZE)?;
 
         let heapStartAddr = MemoryDef::HEAP_OFFSET;
 
         PMA_KEEPER.Init(MemoryDef::FILE_MAP_OFFSET, MemoryDef::FILE_MAP_SIZE);
-
-        info!(
-            "set map region start={:x}, end={:x}",
-            MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::PHY_LOWER_ADDR + MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB
-        );
 
         let autoStart = args.AutoStart;
         let podIdStr = args.ID.clone();
@@ -383,29 +407,6 @@ impl VirtualMachine {
 
             vms.hostAddrTop =
                 MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
-            vms.pageTables = PageTables::New(&vms.allocator)?;
-
-            vms.KernelMapHugeTable(
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR),
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR),
-                addr::PageOpts::Zero()
-                    .SetPresent()
-                    .SetWrite()
-                    .SetGlobal()
-                    .Val(),
-            )?;
-
-            vms.KernelMapHugeTable(
-                addr::Addr(MemoryDef::NVIDIA_START_ADDR),
-                addr::Addr(MemoryDef::NVIDIA_START_ADDR + MemoryDef::NVIDIA_ADDR_SIZE),
-                addr::Addr(MemoryDef::NVIDIA_START_ADDR),
-                addr::PageOpts::Zero()
-                    .SetPresent()
-                    .SetWrite()
-                    .SetGlobal()
-                    .Val(),
-            )?;
 
             vms.pivot = args.Pivot;
             vms.args = Some(args);

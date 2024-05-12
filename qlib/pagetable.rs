@@ -50,7 +50,6 @@ cfg_aarch64! {
    }
 }
 
-
 use super::super::asm::*;
 use super::addr::*;
 use super::common::{Allocator, Error, Result};
@@ -60,7 +59,7 @@ use super::mutex::*;
 use crate::kernel_def::Invlpg;
 use crate::qlib::kernel::PAGE_MGR;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct PageTables {
     //Root page guest physical address
     pub root: AtomicU64,
@@ -1504,7 +1503,7 @@ impl PageBufAllocator {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AlignedAllocator {
     pub size: usize,
     pub align: usize,
