@@ -418,11 +418,12 @@ impl PageTables {
         phyAddr: Addr,
         flags: PageTableFlags,
         pagePool: &Allocator,
-    ) -> Result<bool> {
+    ) -> Result<(PageTableEntry, bool)> {
         let mut res = false;
 
         let vaddr = Addr(vaddr.0 & !(PAGE_SIZE - 1));
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
+        let pteEntry;
         unsafe {
             let p4Idx = VirtAddr::new(vaddr.0).p4_index();
             let p3Idx = VirtAddr::new(vaddr.0).p3_index();
@@ -459,7 +460,7 @@ impl PageTables {
                 pteTbl = pmdEntry.addr().as_u64() as *mut PageTable;
             }
 
-            let pteEntry = &mut (*pteTbl)[p1Idx];
+            pteEntry = &mut (*pteTbl)[p1Idx];
 
             pagePool.Ref(phyAddr.0).unwrap();
             if !pteEntry.is_unused() {
@@ -475,7 +476,7 @@ impl PageTables {
             Invlpg(vaddr.0);
         }
 
-        return Ok(res);
+        return Ok((pteEntry.clone(), res));
     }
 
     pub fn FreePage(&self, page: u64) {

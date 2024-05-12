@@ -1007,7 +1007,12 @@ impl MemoryManager {
         return Some((vseg.Value(), vseg.Range()));
     }
 
-    pub fn MapPageLocked(&self, vaddr: Addr, phyAddr: Addr, flags: PageTableFlags) -> Result<bool> {
+    pub fn MapPageLocked(
+        &self,
+        vaddr: Addr,
+        phyAddr: Addr,
+        flags: PageTableFlags,
+    ) -> Result<(PageTableEntry, bool)> {
         let pt = self.pagetable.write();
         return pt.pt.MapPage(vaddr, phyAddr, flags, &*PAGE_MGR);
     }
@@ -1032,7 +1037,21 @@ impl MemoryManager {
         return pagetable.pt.VirtualToPhy(vAddr);
     }
 
-    pub fn InstallPageWithAddrLocked(&self, task: &Task, pageAddr: u64) -> Result<()> {
+    pub fn VirtualToEntryLocked(&self, vAddr: u64) -> Result<PageTableEntry> {
+        if vAddr == 0 {
+            return Err(Error::SysError(SysErr::EFAULT));
+        }
+
+        let pagetable = self.pagetable.read();
+        let entry = pagetable.pt.VirtualToEntry(vAddr)?;
+        return Ok(entry.clone());
+    }
+
+    pub fn InstallPageWithAddrLocked(
+        &self,
+        task: &Task,
+        pageAddr: u64,
+    ) -> Result<(PageTableEntry, bool)> {
         let (vma, range) = match self.GetVmaAndRangeLocked(pageAddr) {
             None => return Err(Error::SysError(SysErr::EFAULT)),
             Some(data) => data,
@@ -1047,10 +1066,10 @@ impl MemoryManager {
         vma: &VMA,
         pageAddr: u64,
         range: &Range,
-    ) -> Result<()> {
-        match self.VirtualToPhyLocked(pageAddr) {
+    ) -> Result<(PageTableEntry, bool)> {
+        match self.VirtualToEntryLocked(pageAddr) {
             Err(_) => (),
-            Ok(_) => return Ok(()),
+            Ok(entry) => return Ok((entry, true)),
         }
 
         if !vma.effectivePerms.Any() {
@@ -1073,21 +1092,20 @@ impl MemoryManager {
                     if writeable {
                         let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
                         CopyPage(page, phyAddr);
-                        self.MapPageWriteLocked(pageAddr, page, exec);
+                        let ret = self.MapPageWriteLocked(pageAddr, page, exec);
                         super::super::PAGE_MGR.DerefPage(page);
+                        return ret;
                     } else {
-                        self.MapPageReadLocked(pageAddr, phyAddr, exec);
+                        return self.MapPageReadLocked(pageAddr, phyAddr, exec);
                     }
                 } else {
                     let writeable = vma.effectivePerms.Write();
                     if writeable {
-                        self.MapPageWriteLocked(pageAddr, phyAddr, exec);
+                        return self.MapPageWriteLocked(pageAddr, phyAddr, exec);
                     } else {
-                        self.MapPageReadLocked(pageAddr, phyAddr, exec);
+                        return self.MapPageReadLocked(pageAddr, phyAddr, exec);
                     }
                 }
-
-                return Ok(());
             }
             None => {
                 // for mmappable socket
@@ -1100,12 +1118,10 @@ impl MemoryManager {
                         let phyAddr = phyAddr + fileOffset;
                         let writeable = vma.effectivePerms.Write();
                         if writeable {
-                            self.MapPageWriteLocked(pageAddr, phyAddr, exec);
+                            return self.MapPageWriteLocked(pageAddr, phyAddr, exec);
                         } else {
-                            self.MapPageWriteLocked(pageAddr, phyAddr, exec);
+                            return self.MapPageWriteLocked(pageAddr, phyAddr, exec);
                         }
-
-                        return Ok(());
                     }
                     None => (),
                 }
@@ -1116,39 +1132,46 @@ impl MemoryManager {
                 let phyAddr = super::super::PAGE_MGR.AllocPage(true).unwrap();
                 let writeable = vma.effectivePerms.Write();
                 if writeable {
-                    self.MapPageWriteLocked(pageAddr, phyAddr, exec);
+                    let ret = self.MapPageWriteLocked(pageAddr, phyAddr, exec);
+                    super::super::PAGE_MGR.DerefPage(phyAddr);
+                    return ret;
                 } else {
-                    self.MapPageReadLocked(pageAddr, phyAddr, exec);
+                    let ret = self.MapPageReadLocked(pageAddr, phyAddr, exec);
+                    super::super::PAGE_MGR.DerefPage(phyAddr);
+                    return ret;
                 }
-
-                super::super::PAGE_MGR.DerefPage(phyAddr);
-                return Ok(());
             }
         }
     }
 
-    pub fn MapPageWriteLocked(&self, vAddr: u64, pAddr: u64, exec: bool) {
+    pub fn MapPageWriteLocked(
+        &self,
+        vAddr: u64,
+        pAddr: u64,
+        exec: bool,
+    ) -> Result<(PageTableEntry, bool)> {
         let pt = self.pagetable.write();
-        pt.pt
-            .MapPage(
-                Addr(vAddr),
-                Addr(pAddr),
-                PageOpts::New(true, true, exec).Val(),
-                &*PAGE_MGR,
-            )
-            .unwrap();
+        return pt.pt.MapPage(
+            Addr(vAddr),
+            Addr(pAddr),
+            PageOpts::New(true, true, exec).Val(),
+            &*PAGE_MGR,
+        );
     }
 
-    pub fn MapPageReadLocked(&self, vAddr: u64, pAddr: u64, exec: bool) {
+    pub fn MapPageReadLocked(
+        &self,
+        vAddr: u64,
+        pAddr: u64,
+        exec: bool,
+    ) -> Result<(PageTableEntry, bool)> {
         let pt = self.pagetable.write();
-        pt.pt
-            .MapPage(
-                Addr(vAddr),
-                Addr(pAddr),
-                PageOpts::New(true, false, exec).Val(),
-                &*PAGE_MGR,
-            )
-            .unwrap();
+        return pt.pt.MapPage(
+            Addr(vAddr),
+            Addr(pAddr),
+            PageOpts::New(true, false, exec).Val(),
+            &*PAGE_MGR,
+        );
     }
 
     pub fn EnableWriteLocked(&self, addr: u64, exec: bool) {
@@ -1171,7 +1194,7 @@ impl MemoryManager {
         let exec = vma.effectivePerms.Exec();
         let page = { super::super::PAGE_MGR.AllocPage(false).unwrap() };
         CopyPage(page, phyAddr);
-        self.MapPageWriteLocked(pageAddr, page, exec);
+        let _ = self.MapPageWriteLocked(pageAddr, page, exec);
     }
 
     pub fn CopyOnWrite(&self, pageAddr: u64, vma: &VMA) {
@@ -1378,45 +1401,37 @@ impl MemoryManager {
         let mut addr = Addr(vAddr).RoundDown()?.0;
         let mut needTLBShootdown = false;
 
-        let (mut vma, mut range) = match self.GetVmaAndRangeLocked(addr) {
-            None => {
-                if !allowPartial || addr < vAddr {
-                    return Err(Error::SysError(SysErr::EFAULT));
-                }
+        let mut vma = VMA::default();
+        let mut range = Range::default();
 
-                return Ok(0);
-            }
-            Some((v, r)) => (v, r),
-        };
-
-        //error!("FixPermission vaddr {:x} addr {:x} len is {:x}", vAddr, addr, len);
         while addr <= vAddr + len - 1 {
-            if addr >= range.End() {
-                match self.GetVmaAndRangeLocked(addr) {
-                    None => {
-                        if !allowPartial || addr < vAddr {
-                            return Err(Error::SysError(SysErr::EFAULT));
-                        }
-
-                        if needTLBShootdown {
-                            self.TlbShootdown();
-                        }
-
-                        return Ok(addr - vAddr);
-                    }
-                    Some((v, r)) => {
-                        vma = v;
-                        range = r;
-                    }
-                };
-            }
-
             let (_, permission) = match self.VirtualToPhyLocked(addr) {
                 Err(Error::AddressNotMap(_)) => {
                     if !rlock.Writable() {
                         rlock.Upgrade();
                     }
-                    match self.InstallPageWithAddrLocked(task, addr) {
+
+                    if addr >= range.End() {
+                        match self.GetVmaAndRangeLocked(addr) {
+                            None => {
+                                if !allowPartial || addr < vAddr {
+                                    return Err(Error::SysError(SysErr::EFAULT));
+                                }
+
+                                if needTLBShootdown {
+                                    self.TlbShootdown();
+                                }
+
+                                return Ok(addr - vAddr);
+                            }
+                            Some((v, r)) => {
+                                vma = v;
+                                range = r;
+                            }
+                        };
+                    }
+
+                    let entry = match self.InstallPageLocked(task, &vma, addr, &range) {
                         Err(_) => {
                             if !allowPartial || addr < vAddr {
                                 return Err(Error::SysError(SysErr::EFAULT));
@@ -1427,9 +1442,12 @@ impl MemoryManager {
                             }
                             return Ok(addr - vAddr);
                         }
-                        Ok(()) => (),
-                    }
-                    self.VirtualToPhyLocked(addr)?
+                        Ok((entry, _)) => entry,
+                    };
+                    (
+                        entry.addr().as_u64(),
+                        AccessType::NewFromPageFlags(entry.flags()),
+                    )
                 }
                 Err(e) => return Err(e),
                 Ok(ret) => ret,
@@ -1448,6 +1466,26 @@ impl MemoryManager {
             }
 
             if writeReq && !permission.Write() {
+                if addr >= range.End() {
+                    match self.GetVmaAndRangeLocked(addr) {
+                        None => {
+                            if !allowPartial || addr < vAddr {
+                                return Err(Error::SysError(SysErr::EFAULT));
+                            }
+
+                            if needTLBShootdown {
+                                self.TlbShootdown();
+                            }
+
+                            return Ok(addr - vAddr);
+                        }
+                        Some((v, r)) => {
+                            vma = v;
+                            range = r;
+                        }
+                    };
+                }
+
                 if vma.effectivePerms.Write() {
                     if !rlock.Writable() {
                         rlock.Upgrade();
