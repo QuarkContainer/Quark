@@ -1126,7 +1126,7 @@ impl Task {
     // xsave features that are always enabled in signal frame fpstate.
     pub const XFEATURE_MASK_FPSSE: u64 = 0x3;
 
-    #[cfg(target_arch="x86")]
+    #[cfg(target_arch="x86_64")]
     pub fn deliverSignalToHandler(&mut self, info: &SignalInfo, sigAct: &SigAct) -> Result<()> {
         let pt = self.GetPtRegs();
         let mut userStack = Stack::New(pt.get_stack_pointer() - 128); // red zone

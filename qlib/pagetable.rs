@@ -42,7 +42,7 @@ cfg_x86_64! {
    }
 
    fn unset_pte_swapped(flags: &mut PageTableFlags) {
-       flags.unset(PageTableFlags::BIT_9);
+       flags.remove(PageTableFlags::BIT_9);
    }
 
    //
@@ -57,7 +57,7 @@ cfg_x86_64! {
    }
 
    fn unset_pte_taken(flags: &mut PageTableFlags) {
-       flags.unset(PageTableFlags::BIT_10);
+       flags.remove(PageTableFlags::BIT_10);
    }
 
    #[inline]
@@ -472,11 +472,11 @@ impl PageTables {
                 res = true;
             }
 
-            let mut _f = flags;
-            _f |= PageTableFlags::PAGE;
-            pteEntry.set_addr(PhysAddr::new(phyAddr.0), _f);
-            debug!("VM: Installed page: VA-{:#x}, PH-{:#x}, flags-{:#?}",
-                   vaddr.0, pteEntry.addr(), pteEntry.flags());
+            #[cfg(target_arch="x86_64")]
+            pteEntry.set_addr(PhysAddr::new(phyAddr.0), flags);
+            #[cfg(target_arch="aarch64")]
+            pteEntry.set_addr(PhysAddr::new(phyAddr.0), flags | PageTableFlags::PAGE);
+
             Invlpg(vaddr.0);
         }
 
@@ -1574,10 +1574,11 @@ impl PageTables {
                                 res = self.freeEntry(pteEntry, pagePool)?;
                             }
 
-                            let mut _f = flags;
-                            _f |= PageTableFlags::PAGE;
+                            #[cfg(target_arch="x86_64")]
+                            pteEntry.set_addr(PhysAddr::new(newAddr), flags);
+                            #[cfg(target_arch="aarch64")]
+                            pteEntry.set_addr(PhysAddr::new(newAddr), flags | PageTableFlags::PAGE);
 
-                            pteEntry.set_addr(PhysAddr::new(newAddr), _f);
                             Invlpg(curAddr.0);
                             curAddr = curAddr.AddLen(MemoryDef::PAGE_SIZE_4K)?;
 

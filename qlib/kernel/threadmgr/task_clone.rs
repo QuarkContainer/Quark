@@ -665,7 +665,6 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
 
         toTask.SetReady(1);
         toTask.context.set_tls(fromTask.context.get_tls());
-        // TODO, what is this?
         toTask.context.set_sp(toTask.GetPtRegs() as *const _ as u64 - 8);
         toTask.context.set_para(userSp);
         toTask.savefpsate = true;
@@ -678,7 +677,7 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
         #[cfg(target_arch = "x86_64")]
         {
             toPtRegs.rax = 0;
-            toTask.context.place_on_stack(child_clone as u64);
+			*(toTask.context.rsp as *mut u64) = child_clone as u64;
         }
         #[cfg(target_arch = "aarch64")]
         {

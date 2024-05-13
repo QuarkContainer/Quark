@@ -258,6 +258,7 @@ fn fstat(task: &Task, f: &File, statAddr: u64) -> Result<()> {
     return Ok(());
 }
 
+// TODO: this needs more care because the stat struct is different per arch
 fn copyOutStat(task: &Task, statAddr: u64, sattr: &StableAttr, uattr: &UnstableAttr) -> Result<()> {
     //let mut s: &mut LibcStat = task.GetTypeMut(statAddr)?;
 
@@ -274,7 +275,7 @@ fn copyOutStat(task: &Task, statAddr: u64, sattr: &StableAttr, uattr: &UnstableA
     #[cfg(target_arch = "aarch64")]
     let st_blksize = uattr.Links as i32;
     #[cfg(target_arch = "x86_64")]
-    let st_blksize = uattr.Links;
+    let st_blksize = sattr.BlockSize;
 
     s.st_dev = sattr.DeviceId as u64;
     s.st_ino = sattr.InodeId;

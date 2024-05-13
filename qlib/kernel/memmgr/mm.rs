@@ -232,13 +232,15 @@ impl MemoryManager {
 
         let gap = vmas.FindGap(MemoryDef::PHY_LOWER_ADDR);
         // kernel memory
-        let kernel_range_start = if cfg!(target_arch = "x86_64") {
-                                    MemoryDef::PHY_LOWER_ADDR
-                                 } else if cfg!(target_arch = "aarch64") {
-                                    MemoryDef::HYPERCALL_MMIO_BASE
-                                 } else {
-                                    panic!("VM: Unknown architecture - Can not set QKernel memory base.");
-                                 };
+        let kernel_range_start;
+		#[cfg(target_arch="x86_64")]{
+			kernel_range_start = MemoryDef::PHY_LOWER_ADDR;
+		}
+
+		#[cfg(target_arch="aarch64")]{
+			kernel_range_start = MemoryDef::HYPERCALL_MMIO_BASE;
+		}
+
         let kernel_range_length = MemoryDef::PHY_UPPER_ADDR - kernel_range_start;
 
         vmas.Insert(

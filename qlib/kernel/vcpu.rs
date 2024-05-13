@@ -82,7 +82,7 @@ pub fn RegisterExceptionTable(addr: u64) {
 }
 
 
-#[cfg(target_arch = "x86")]
+#[cfg(target_arch = "x86_64")]
 #[inline]
 pub fn SetTLS(addr: u64) {
     //println!("SetFs from {:x} to {:x}", GetFs(), addr);
@@ -96,19 +96,19 @@ pub fn SetTLS(addr: u64) {
     tpidr_el0_write(addr);
 }
 
-#[cfg(target_arch = "x86")]
+#[cfg(target_arch = "x86_64")]
 #[inline]
 pub fn GetFs() -> u64 {
     return ReadMsr(MSR::MSR_FS_BASE as u32);
 }
 
-#[cfg(target_arch = "x86")]
+#[cfg(target_arch = "x86_64")]
 #[inline]
 pub fn SetGs(addr: u64) {
     WriteMsr(MSR::MSR_KERNEL_GS_BASE as u32, addr);
 }
 
-#[cfg(target_arch = "x86")]
+#[cfg(target_arch = "x86_64")]
 #[inline]
 pub fn GetGs() -> u64 {
     return ReadMsr(MSR::MSR_KERNEL_GS_BASE as u32);
