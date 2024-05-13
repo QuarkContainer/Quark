@@ -143,16 +143,6 @@ impl HostPMAKeeper {
         return self.Map(&mut mo, &Range::New(start, len));
     }
 
-    pub fn MapAnon(&self, len: u64, prot: i32) -> Result<u64> {
-        let mut mo = &mut MapOption::New();
-        mo = mo.MapAnan().Proto(prot).Len(len);
-        mo.MapShare();
-
-        let start = self.Allocate(len, MemoryDef::PAGE_SIZE)?;
-        mo.Addr(start);
-        return self.Map(&mut mo, &Range::New(start, len));
-    }
-
     pub fn MapFile(&self, len: u64, prot: i32, fd: i32, offset: u64) -> Result<u64> {
         let osfd = fd;
         let mut mo = &mut MapOption::New();
