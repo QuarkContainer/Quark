@@ -18,7 +18,6 @@ use core::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use spin::mutex::Mutex;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::io::FromRawFd;
-use std::sync::atomic::AtomicU32;
 use std::thread;
 use x86_64::structures::paging::PageTableFlags;
 
@@ -100,39 +99,77 @@ pub fn ClearDump(id: usize) {
 }
 
 #[derive(Debug)]
-pub struct VirtualMachine {
-    pub kvm: Kvm,
+pub struct MemRegionMgr {
     pub vmfd: VmFd,
-    pub elf: KernelELF,
-    pub cpuCount: usize,
-    pub entry: u64,
-    pub nextSlotId: AtomicU32,
-    pub vcpus: Mutex<Vec<Arc<KVMVcpu>>>,
-    pub pageTables: PageTables,
+    pub nextSlotId: u32,
+
+    // mem regions mgr
+    pub start: u64,
+    pub end: u64,
+
+    // containers ranges with 1GB
+    pub ranges: Vec<u64>,
+
     pub allocator: HostPageAllocator,
+    pub pagetables: PageTables,
 }
 
-impl VirtualMachine {
-    pub fn NextSlotId(&self) -> u32 {
-        return self.nextSlotId.fetch_add(1, Ordering::SeqCst);
+impl MemRegionMgr {
+    pub const REGION_SIZE: u64 = 16 * MemoryDef::ONE_GB;
+
+    pub fn New(vmfd: VmFd) -> Result<Self> {
+        let allocator = HostPageAllocator::New();
+        let pagetables = PageTables::New(&allocator)?;
+        return Ok(Self {
+            vmfd: vmfd,
+            nextSlotId: 0,
+            start: 0,
+            end: 0,
+            ranges: Vec::with_capacity(16),
+
+            allocator: allocator,
+            pagetables: pagetables,
+        });
     }
 
-    pub fn GetVcpu(&self, idx: usize) -> Arc<KVMVcpu> {
-        return self.vcpus.lock()[idx].clone();
+    pub fn AllocRegion(&mut self) -> Result<u64> {
+        if self.start + Self::REGION_SIZE > self.end {
+            return Err(Error::Common(format!(
+                "MemRagionMgr::AllocRegion has no enough region"
+            )));
+        }
+        let ret = self.start;
+        self.start += Self::REGION_SIZE;
+
+        let mut addr = ret;
+
+        self.SetRegion(addr, Self::REGION_SIZE)?;
+
+        while addr < ret + Self::REGION_SIZE {
+            self.ranges.push(addr);
+            addr += MemoryDef::ONE_GB;
+        }
+
+        return Ok(ret);
     }
 
-    #[cfg(target_arch = "x86_64")]
-    pub fn GetVcpuFreq(&self) -> i64 {
-        let freq = self.GetVcpu(0).vcpu.get_tsc_khz().unwrap() * 1000;
-        return freq as i64;
+    pub fn AllocRange(&mut self) -> Result<u64> {
+        match self.ranges.pop() {
+            Some(addr) => return Ok(addr),
+            None => {
+                self.AllocRegion()?;
+                let addr = self.ranges.pop().unwrap();
+                return Ok(addr);
+            }
+        }
     }
 
-    #[cfg(target_arch = "aarch64")]
-    pub fn GetVcpuFreq(&self) -> i64 {
-        return 0;
+    pub fn NextSlotId(&mut self) -> u32 {
+        self.nextSlotId += 1;
+        return self.nextSlotId;
     }
 
-    pub fn SetMemRegion(&self, phyAddr: u64, hostAddr: u64, pageMmapsize: u64) -> Result<()> {
+    pub fn SetMemRegion(&mut self, phyAddr: u64, hostAddr: u64, pageMmapsize: u64) -> Result<()> {
         info!(
             "SetMemRegion phyAddr = {:x}, hostAddr={:x}; pageMmapsize = {:x} MB",
             phyAddr,
@@ -158,6 +195,102 @@ impl VirtualMachine {
         }
 
         return Ok(());
+    }
+
+    pub fn KernelMapHugeTable(
+        &self,
+        start: Addr,
+        end: Addr,
+        physical: Addr,
+        flags: PageTableFlags,
+    ) -> Result<bool> {
+        info!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
+        return self
+            .pagetables
+            .MapWith1G(start, end, physical, flags, &self.allocator, true);
+    }
+
+    pub fn SetRegion(&mut self, start: u64, pageMmapsize: u64) -> Result<()> {
+        self.SetMemRegion(start, start, pageMmapsize)?;
+        self.KernelMapHugeTable(
+            Addr(start),
+            Addr(start + pageMmapsize),
+            Addr(start),
+            addr::PageOpts::Zero()
+                .SetPresent()
+                .SetWrite()
+                .SetGlobal()
+                .Val(),
+        )?;
+        return Ok(());
+    }
+}
+
+#[derive(Debug)]
+pub struct VirtualMachine {
+    pub kvm: Kvm,
+    pub elf: KernelELF,
+    pub cpuCount: usize,
+    pub entry: u64,
+    pub vcpus: Mutex<Vec<Arc<KVMVcpu>>>,
+    pub memRegionMgr: Mutex<MemRegionMgr>,
+}
+
+impl VirtualMachine {
+    pub fn New(args: &Args) -> Result<Self> {
+        let kvmfd = args.KvmFd;
+
+        let mut elf = KernelELF::New()?;
+        let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
+        //let vdsoMap = VDSOMemMap::Init(&"/home/brad/rust/quark/vdso/vdso.so".to_string()).unwrap();
+        elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
+
+        let kvm = unsafe { Kvm::from_raw_fd(kvmfd) };
+
+        let vmfd = kvm
+            .create_vm()
+            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+
+        let mut cap: kvm_enable_cap = Default::default();
+        cap.cap = KVM_CAP_X86_DISABLE_EXITS;
+        cap.args[0] = (KVM_X86_DISABLE_EXITS_HLT | KVM_X86_DISABLE_EXITS_MWAIT) as u64;
+        #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
+        vmfd.enable_cap(&cap).unwrap();
+        if !kvm.check_extension(Cap::ImmediateExit) {
+            panic!("KVM_CAP_IMMEDIATE_EXIT not supported");
+        }
+
+        let memRegionMgr = MemRegionMgr::New(vmfd)?;
+        let cpuCount = Self::CpuCount(&args);
+        let vm = Self {
+            kvm: kvm,
+            elf: elf,
+            cpuCount: cpuCount,
+            entry: entry,
+            vcpus: Mutex::new(Vec::with_capacity(cpuCount)),
+            memRegionMgr: Mutex::new(memRegionMgr),
+        };
+
+        return Ok(vm);
+    }
+
+    pub fn GetRoot(&self) -> u64 {
+        return self.memRegionMgr.lock().pagetables.GetRoot();
+    }
+
+    pub fn GetVcpu(&self, idx: usize) -> Arc<KVMVcpu> {
+        return self.vcpus.lock()[idx].clone();
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    pub fn GetVcpuFreq(&self) -> i64 {
+        let freq = self.GetVcpu(0).vcpu.get_tsc_khz().unwrap() * 1000;
+        return freq as i64;
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn GetVcpuFreq(&self) -> i64 {
+        return 0;
     }
 
     pub fn Umask() -> u32 {
@@ -229,7 +362,7 @@ impl VirtualMachine {
         IOURING.SetValue(sharespace.GetIOUringAddr());
 
         unsafe {
-            KERNEL_PAGETABLE.SetRoot(VIRTUAL_MACHINE.get().unwrap().pageTables.GetRoot());
+            KERNEL_PAGETABLE.SetRoot(VIRTUAL_MACHINE.get().unwrap().GetRoot());
             PAGE_MGR.SetValue(sharespace.GetPageMgrAddr());
 
             KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
@@ -274,75 +407,6 @@ impl VirtualMachine {
         return cpuCount;
     }
 
-    pub fn New(args: &Args) -> Result<Self> {
-        let kvmfd = args.KvmFd;
-
-        let mut elf = KernelELF::New()?;
-        let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
-        //let vdsoMap = VDSOMemMap::Init(&"/home/brad/rust/quark/vdso/vdso.so".to_string()).unwrap();
-        elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
-
-        let kvm = unsafe { Kvm::from_raw_fd(kvmfd) };
-
-        let vm_fd = kvm
-            .create_vm()
-            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-
-        let mut cap: kvm_enable_cap = Default::default();
-        cap.cap = KVM_CAP_X86_DISABLE_EXITS;
-        cap.args[0] = (KVM_X86_DISABLE_EXITS_HLT | KVM_X86_DISABLE_EXITS_MWAIT) as u64;
-        #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
-        vm_fd.enable_cap(&cap).unwrap();
-        if !kvm.check_extension(Cap::ImmediateExit) {
-            panic!("KVM_CAP_IMMEDIATE_EXIT not supported");
-        }
-
-        let cpuCount = Self::CpuCount(&args);
-
-        let allocator = HostPageAllocator::New();
-        let vm = Self {
-            kvm: kvm,
-            vmfd: vm_fd,
-            elf: elf,
-            cpuCount: cpuCount,
-            entry: entry,
-            nextSlotId: AtomicU32::new(1),
-            vcpus: Mutex::new(Vec::with_capacity(cpuCount)),
-            pageTables: PageTables::New(&allocator)?,
-            allocator: allocator,
-        };
-
-        return Ok(vm);
-    }
-
-    pub fn KernelMapHugeTable(
-        &self,
-        start: Addr,
-        end: Addr,
-        physical: Addr,
-        flags: PageTableFlags,
-    ) -> Result<bool> {
-        info!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
-        return self
-            .pageTables
-            .MapWith1G(start, end, physical, flags, &self.allocator, true);
-    }
-
-    pub fn AllocRegion(&self, start: u64, pageMmapsize: u64) -> Result<()> {
-        self.SetMemRegion(start, start, pageMmapsize)?;
-        self.KernelMapHugeTable(
-            Addr(start),
-            Addr(start + pageMmapsize),
-            Addr(start),
-            addr::PageOpts::Zero()
-                .SetPresent()
-                .SetWrite()
-                .SetGlobal()
-                .Val(),
-        )?;
-        return Ok(());
-    }
-
     pub fn Init(&self, args: Args) -> Result<()> {
         PerfGoto(PerfType::Other);
 
@@ -370,26 +434,22 @@ impl VirtualMachine {
             }
         }
 
-        let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
         let controlSock = args.ControlSock;
 
         let rdmaSvcCliSock = args.RDMASvcCliSock;
 
-        let umask = Self::Umask();
-        info!(
-            "reset umask from {:o} to {}, kernelMemRegionSize is {:x}",
-            umask, 0, kernelMemRegionSize
-        );
-
         VMS.lock().vcpuCount = vm.cpuCount; //VMSpace::VCPUCount();
         VMS.lock().RandomVcpuMapping();
 
-        vm.AllocRegion(
+        let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
+        vm.memRegionMgr.lock().SetRegion(
             MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB,
+            kernelMemRegionSize * MemoryDef::ONE_GB,
         )?;
 
-        vm.AllocRegion(MemoryDef::NVIDIA_START_ADDR, MemoryDef::NVIDIA_ADDR_SIZE)?;
+        vm.memRegionMgr
+            .lock()
+            .SetRegion(MemoryDef::NVIDIA_START_ADDR, MemoryDef::NVIDIA_ADDR_SIZE)?;
 
         let heapStartAddr = MemoryDef::HEAP_OFFSET;
 
@@ -421,7 +481,7 @@ impl VirtualMachine {
             let vcpu = Arc::new(KVMVcpu::Init(
                 i as usize,
                 vm.cpuCount,
-                &vm.vmfd,
+                &vm.memRegionMgr.lock().vmfd,
                 vm.entry,
                 heapStartAddr,
                 SHARE_SPACE.Value(),

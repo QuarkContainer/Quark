@@ -186,7 +186,7 @@ impl TcpSockAddr {
     pub fn Dup(&self) -> Self {
         return Self {
             data: self.data.clone(),
-        }
+        };
     }
 }
 
@@ -2982,42 +2982,50 @@ impl MemoryDef {
     pub const PHY_LOWER_ADDR: u64 = 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernel space
     pub const PHY_UPPER_ADDR: u64 = Self::PHY_LOWER_ADDR + 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernel space
 
-    pub const NVIDIA_START_ADDR: u64 = 0x200000000;
-    pub const NVIDIA_ADDR_SIZE: u64 = 2 * Self::ONE_GB;
+    // Create 24GB Init memory region for KVM VM
+    pub const KERNEL_MEM_INIT_REGION_SIZE: u64 = 24; // 24 GB
+    pub const KERNEL_MEM_END: u64 =
+        Self::PHY_LOWER_ADDR + Self::KERNEL_MEM_INIT_REGION_SIZE * Self::ONE_GB;
 
     // memory layout
     // PHY_LOWER_ADDR: qkernel image 512MB
-    pub const QKERNEL_IMAGE_SIZE: u64 = 512 * Self::ONE_MB;
-    // RDMA Local share memory
-    pub const RDMA_LOCAL_SHARE_OFFSET: u64 = Self::PHY_LOWER_ADDR + Self::QKERNEL_IMAGE_SIZE;
-    pub const RDMA_LOCAL_SHARE_SIZE: u64 = 1024 * Self::ONE_MB; // 1GB
-                                                                // RDMA global share memory
-    pub const RDMA_GLOBAL_SHARE_OFFSET: u64 =
-        Self::RDMA_LOCAL_SHARE_OFFSET + Self::RDMA_LOCAL_SHARE_SIZE;
-    pub const RDMA_GLOBAL_SHARE_SIZE: u64 = 2 * Self::ONE_MB;
-
-    // file map area
-    pub const FILE_MAP_OFFSET: u64 = Self::RDMA_GLOBAL_SHARE_OFFSET + Self::RDMA_GLOBAL_SHARE_SIZE;
-    pub const FILE_MAP_SIZE: u64 = Self::HEAP_OFFSET - Self::FILE_MAP_OFFSET;
+    pub const QKERNEL_IMAGE_SIZE: u64 = 1024 * Self::ONE_MB;
+    pub const QKERNEL_IMAGE_END: u64 = Self::PHY_LOWER_ADDR + Self::QKERNEL_IMAGE_SIZE;
 
     // heap
-    pub const HEAP_OFFSET: u64 = MemoryDef::PHY_LOWER_ADDR
-        + Self::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB
-        - Self::HEAP_SIZE
-        - Self::IO_HEAP_SIZE;
-    pub const HEAP_SIZE: u64 = 10 * Self::ONE_GB;
+    pub const HEAP_OFFSET: u64 = Self::QKERNEL_IMAGE_END;
+    pub const HEAP_SIZE: u64 = 1 * Self::ONE_GB;
     pub const HEAP_END: u64 = Self::HEAP_OFFSET + Self::HEAP_SIZE;
     pub const IO_HEAP_SIZE: u64 = 1 * Self::ONE_GB;
     pub const IO_HEAP_END: u64 = Self::HEAP_END + Self::IO_HEAP_SIZE;
-    
-    // Create 24GB Init memory region for KVM VM
-    pub const KERNEL_MEM_INIT_REGION_SIZE: u64 = 24; // 24 GB
+
+    // RDMA global share memory
+    pub const RDMA_GLOBAL_SHARE_OFFSET: u64 = Self::IO_HEAP_END;
+    pub const RDMA_GLOBAL_SHARE_SIZE: u64 = 2 * Self::ONE_MB;
+
+    // RDMA Local share memory
+    pub const RDMA_LOCAL_SHARE_OFFSET: u64 =
+        Self::RDMA_GLOBAL_SHARE_OFFSET + Self::RDMA_GLOBAL_SHARE_SIZE;
+    // to make RDMA memory usage to 1GB we have to use weird 1022 MB
+    // todo: make sure whether it works
+    pub const RDMA_LOCAL_SHARE_SIZE: u64 = 1022 * Self::ONE_MB; // 1GB - 2MB
+    pub const RDMA_LOCAL_SHARE_END: u64 =
+        Self::RDMA_LOCAL_SHARE_OFFSET + Self::RDMA_LOCAL_SHARE_SIZE;
+
+    // file map area
+    pub const FILE_MAP_OFFSET: u64 = Self::RDMA_LOCAL_SHARE_END;
+    pub const FILE_MAP_SIZE: u64 = Self::KERNEL_MEM_END - Self::FILE_MAP_OFFSET;
+
+    pub const NVIDIA_START_ADDR: u64 = 0x200000000;
+    pub const NVIDIA_ADDR_SIZE: u64 = 2 * Self::ONE_GB;
 
     // start address for memmap and dynamic load address space, there is heap address space between PHY_UPPER_ADDR + VIR_MMAP_START
     pub const VIR_MMAP_START: u64 = Self::PHY_UPPER_ADDR + 128 * Self::ONE_GB; // 512GB + 128 GB
     pub const SHARED_START: u64 = Self::VIR_MMAP_START + 1 * Self::ONE_TB; //512GB + 128 GB + 1TB
     pub const LOWER_TOP: u64 = 0x0000_8000_0000_0000;
     pub const UPPER_BOTTOM: u64 = 0xffff_8000_0000_0000;
+
+    // pagetable entry count per page
     pub const ENTRY_COUNT: u16 = 512 as u16;
 
     pub const KERNEL_START_P2_ENTRY: usize = (Self::PHY_LOWER_ADDR / Self::ONE_GB) as usize; //256
