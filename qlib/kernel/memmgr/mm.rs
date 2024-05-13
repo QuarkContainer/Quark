@@ -1022,26 +1022,13 @@ impl MemoryManager {
         let entry = pagetable.pt.VirtualToEntry(vAddr)?;
         return Ok(entry.clone());
     }
-
-    pub fn InstallPageWithAddrLocked(
-        &self,
-        task: &Task,
-        pageAddr: u64,
-    ) -> Result<(PageTableEntry, bool)> {
-        let (vma, range) = match self.GetVmaAndRangeLocked(pageAddr) {
-            None => return Err(Error::SysError(SysErr::EFAULT)),
-            Some(data) => data,
-        };
-
-        return self.InstallPageLocked(task, &vma, pageAddr, &range);
-    }
-
     pub fn InstallPageLocked(
         &self,
         task: &Task,
         vma: &VMA,
         pageAddr: u64,
         range: &Range,
+        needWrite: bool,
     ) -> Result<(PageTableEntry, bool)> {
         match self.VirtualToEntryLocked(pageAddr) {
             Err(_) => (),
@@ -1062,10 +1049,9 @@ impl MemoryManager {
                 //      vma.mappable.is_some(), pageAddr, phyAddr);
 
                 if vma.private {
-                    //self.MapPageReadLocked(pageAddr, phyAddr, exec);
-
                     let writeable = vma.effectivePerms.Write();
-                    if writeable {
+
+                    if needWrite && writeable {
                         let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
                         CopyPage(page, phyAddr);
                         let ret = self.MapPageWriteLocked(pageAddr, page, exec);
@@ -1422,7 +1408,7 @@ impl MemoryManager {
                         };
                     }
 
-                    let entry = match self.InstallPageLocked(task, &vma, addr, &range) {
+                    let entry = match self.InstallPageLocked(task, &vma, addr, &range, writeReq) {
                         Err(_) => {
                             if !allowPartial || addr < vAddr {
                                 return Err(Error::SysError(SysErr::EFAULT));
