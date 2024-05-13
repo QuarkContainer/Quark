@@ -56,7 +56,7 @@ pub enum ExceptionStackVec {
     NrInterrupts,
 }
 
-#[cfg(target_arch="x86_64")]
+#[cfg(target_arch = "x86_64")]
 pub fn test_breakpoint_exception() {
     // invoke a breakpoint exception
     x86_64::instructions::interrupts::int3();
@@ -546,9 +546,12 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                 return;
             }
 
+            let needWrite = (errbits & PageFaultErrorCode::CAUSED_BY_WRITE)
+                == PageFaultErrorCode::CAUSED_BY_WRITE;
+
             match currTask
                 .mm
-                .InstallPageLocked(currTask, &vma, pageAddr, &range)
+                .InstallPageLocked(currTask, &vma, pageAddr, &range, needWrite)
             {
                 Err(Error::FileMapError) => {
                     signal = Signal::SIGBUS;
@@ -568,7 +571,10 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                 };
 
                 if range.Contains(addr) {
-                    match currTask.mm.InstallPageLocked(currTask, &vma, addr, &range) {
+                    match currTask
+                        .mm
+                        .InstallPageLocked(currTask, &vma, addr, &range, needWrite)
+                    {
                         Err(_) => {
                             break;
                         }
