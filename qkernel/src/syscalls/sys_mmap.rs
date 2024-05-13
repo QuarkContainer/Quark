@@ -39,7 +39,8 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let shared = flags & MmapFlags::MAP_SHARED != 0;
     let anon = flags & MmapFlags::MAP_ANONYMOUS != 0;
     let map32bit = flags & MmapFlags::MAP_32BIT != 0;
-
+    error!("SyscallArguments: {:#x?}",args);
+    error!("MAP_HUGETLB: {:#x?}", flags & MmapFlags::MAP_HUGETLB);
 
     // Require exactly one of MAP_PRIVATE and MAP_SHARED.
     if private == shared {

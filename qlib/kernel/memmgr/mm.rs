@@ -24,6 +24,7 @@ use core::sync::atomic::Ordering;
 
 use crate::kernel_def::Invlpg;
 use crate::qlib::mutex::*;
+use crate::qlib::perf_tunning::Counter;
 
 use super::super::super::addr::*;
 use super::super::super::auxv::*;
@@ -54,6 +55,17 @@ use super::vma::*;
 use super::*;
 use crate::qlib::kernel::SHARESPACE;
 use crate::qlib::vcpu_mgr::VcpuMode;
+
+lazy_static! {
+    pub static ref COUNTER1: Counter=Counter::default();
+    pub static ref COUNTER2: Counter=Counter::default();
+    pub static ref COUNTER3: Counter=Counter::default();
+    pub static ref COUNTER4: Counter=Counter::default();
+    pub static ref COUNTER5: Counter=Counter::default();
+
+    //pub static ref COUNT: AtomicU64 = AtomicU64::new(0);
+}
+
 
 pub struct MMMapping {
     pub vmas: AreaSet<VMA>,
@@ -1382,14 +1394,20 @@ impl MemoryManager {
         };
 
         while addr <= vAddr + len - 1 {
-            let (paddr, permission) = match self.VirtualToPhyLocked(addr) {
+            COUNTER1.Enter();
+            let x = self.VirtualToPhyLocked(addr); 
+            COUNTER1.Leave();
+            let (paddr, permission) = match x {
                 Err(Error::AddressNotMap(_)) => {
                     if !rlock.Writable() {
                         rlock.Upgrade();
                     }
 
                     if addr >= range.End() {
-                        match self.GetVmaAndRangeLocked(addr) {
+                        COUNTER2.Enter();
+                        let a = self.GetVmaAndRangeLocked(addr);
+                        COUNTER2.Leave();
+                        match a {
                             None => {
                                 if !allowPartial || addr < vAddr {
                                     return Err(Error::SysError(SysErr::EFAULT));
@@ -1407,8 +1425,10 @@ impl MemoryManager {
                             }
                         };
                     }
-
-                    let entry = match self.InstallPageLocked(task, &vma, addr, &range, writeReq) {
+                    COUNTER3.Enter();
+                    let b = self.InstallPageLocked(task, &vma, addr, &range, writeReq);
+                    COUNTER3.Leave();
+                    let entry = match b {
                         Err(_) => {
                             if !allowPartial || addr < vAddr {
                                 return Err(Error::SysError(SysErr::EFAULT));
@@ -1430,6 +1450,29 @@ impl MemoryManager {
                 Err(e) => return Err(e),
                 Ok(ret) => ret,
             };
+            COUNTER3.Enter();
+            {
+                let pageAddr = addr;
+                for i in 1..16 {
+                    let addr = if vma.growsDown {
+                        pageAddr - i * PAGE_SIZE
+                    } else {
+                        pageAddr + i * PAGE_SIZE
+                    };
+
+                    if range.Contains(addr) {
+                        match self.InstallPageLocked(task, &vma, addr, &range) {
+                            Err(_) => {
+                                break;
+                            }
+                            _ => (),
+                        };
+                    } else {
+                        break;
+                    }
+                }
+            }   
+            COUNTER3.Leave();
 
             if !permission.Read() {
                 // No read permission
@@ -1449,7 +1492,10 @@ impl MemoryManager {
 
             if writeReq && !permission.Write() {
                 if addr >= range.End() {
-                    match self.GetVmaAndRangeLocked(addr) {
+                    COUNTER2.Enter();
+                    let c: Option<(VMA, Range)> = self.GetVmaAndRangeLocked(addr);
+                    COUNTER2.Leave();
+                    match c {
                         None => {
                             if !allowPartial || addr < vAddr {
                                 return Err(Error::SysError(SysErr::EFAULT));
@@ -1507,7 +1553,9 @@ impl MemoryManager {
         }
 
         if needTLBShootdown {
+            COUNTER4.Enter();
             self.TlbShootdown();
+            COUNTER4.Leave();
         }
         return Ok(len);
     }

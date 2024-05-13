@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::sync::atomic::{AtomicU64, Ordering};
+
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -19,14 +21,20 @@ use spin::Mutex;
 
 use super::super::util::cstring::*;
 use crate::qlib::common::*;
+use crate::qlib::kernel::memmgr::mm::{COUNTER1, COUNTER2, COUNTER3, COUNTER4};
 use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::Scale;
 use crate::qlib::linux_def::SysErr;
+use crate::qlib::perf_tunning::Counter;
 use crate::qlib::proxy::*;
 use crate::syscalls::syscalls::*;
 use crate::task::*;
 
 lazy_static! {
     pub static ref PARAM_INFOS: Mutex<BTreeMap<u64, Arc<Vec<u16>>>> = Mutex::new(BTreeMap::new());
+    pub static ref COUNTER1_: Counter=Counter::default();
+    pub static ref COUNTER2_: Counter=Counter::default();
+    pub static ref COUNT: AtomicU64 = AtomicU64::new(0);
 }
 
 pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -80,6 +88,15 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         | ProxyCommand::CublasSetWorkspaceV2
         | ProxyCommand::CublasSetMathMode
         | ProxyCommand::CublasSetStreamV2 => {
+            if cmd == ProxyCommand::CudaUnregisterFatBinary {
+                error!("Counter1_ val {}",Scale(COUNTER1_.Val() as i64));
+                error!("Counter2_ val {}",Scale(COUNTER2_.Val() as i64));
+                error!("Count {}", COUNT.load(Ordering::SeqCst));
+                error!("v2p {}-{}-{}-{}", Scale(COUNTER1.Val() as i64),
+                Scale(COUNTER2.Val() as i64),
+                Scale(COUNTER3.Val() as i64),
+                Scale(COUNTER4.Val() as i64));
+            }
             let ret = HostSpace::Proxy(cmd, parameters);
 
             return Ok(ret);
@@ -819,16 +836,18 @@ fn CudaMemcpyAsync(
     kind: CudaMemcpyKind,
     stream: u64,
 ) -> Result<i64> {
-    // error!("CudaMemcpyAsync: count:{}, kind{}", count, kind);
+    error!("CudaMemcpyAsync: count:{:x}, kind{}, src:{:x}, dst:{:x}", count, kind, src, dst);
     match kind {
         CUDA_MEMCPY_HOST_TO_HOST => {
             error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
             return Ok(1);
         }
         CUDA_MEMCPY_HOST_TO_DEVICE => {
+            COUNTER1_.Enter();
+            COUNT.fetch_add(1, Ordering::SeqCst);
             // src is the virtual addr(src is host memory ), address and # of bytes
             let prs = task.V2P(src, count, true, false)?;
-
+            COUNTER1_.Leave();
             let parameters = ProxyParameters {
                 para1: dst,
                 para2: &prs[0] as *const _ as u64,
@@ -844,9 +863,10 @@ fn CudaMemcpyAsync(
             return Ok(ret);
         }
         CUDA_MEMCPY_DEVICE_TO_HOST => {
+            COUNTER2_.Enter();
             // dst is the virtual addr(host memory)
             let prs = task.V2P(dst, count, true, false)?;
-
+            COUNTER2_.Leave();
             let parameters = ProxyParameters {
                 para1: &prs[0] as *const _ as u64,
                 para2: prs.len() as u64,

@@ -61,11 +61,11 @@ impl Default for Counter {
 
 impl Counter {
     pub fn Enter(&self) {
-        self.lastVal.store(TSC.Rdtsc() as u64, Ordering::SeqCst);
+        self.lastVal.store(TSC.Rdtsc() as u64 / 1000, Ordering::SeqCst);
     }
 
     pub fn Leave(&self) {
-        let currentVal = TSC.Rdtsc() as u64;
+        let currentVal = TSC.Rdtsc() as u64 / 1000;
         let lastVal = self.lastVal.load(Ordering::SeqCst);
         if lastVal != 0 {
             self.count.fetch_add(
@@ -83,7 +83,7 @@ impl Counter {
         if last == 0 {
             return ret;
         } else {
-            ret + (TSC.Rdtsc() as u64 - last)
+            ret + (TSC.Rdtsc() as u64 / 1000 - last)
         }
     }
 }

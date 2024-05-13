@@ -60,6 +60,11 @@ pub unsafe fn syscall2(n: usize, a1: usize, a2: usize) -> usize {
     COUNTER.lock().unwrap().entry(a1.clone()).and_modify(|time| *time += duration).or_insert(duration);
     if a1==30 {
         println!("counter in cuda proxy is: {:#?}", &COUNTER.lock().unwrap());
+        let mut accu = Duration::default();
+        for (_key, val) in COUNTER.lock().unwrap().iter() {
+            accu += *val;
+        }
+        println!("total time is {:?}", accu);
     }
     ret
 }
