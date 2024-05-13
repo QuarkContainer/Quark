@@ -761,7 +761,7 @@ pub fn CudaMemcpy(
         }
         CUDA_MEMCPY_HOST_TO_DEVICE => {
             // src is the virtual addr
-            let prs = task.V2P(src, count, true, false)?;
+            let prs = task.V2P(src, count, false, false)?;
 
             let parameters = ProxyParameters {
                 para1: dst,
