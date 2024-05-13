@@ -1450,29 +1450,6 @@ impl MemoryManager {
                 Err(e) => return Err(e),
                 Ok(ret) => ret,
             };
-            COUNTER3.Enter();
-            {
-                let pageAddr = addr;
-                for i in 1..16 {
-                    let addr = if vma.growsDown {
-                        pageAddr - i * PAGE_SIZE
-                    } else {
-                        pageAddr + i * PAGE_SIZE
-                    };
-
-                    if range.Contains(addr) {
-                        match self.InstallPageLocked(task, &vma, addr, &range) {
-                            Err(_) => {
-                                break;
-                            }
-                            _ => (),
-                        };
-                    } else {
-                        break;
-                    }
-                }
-            }   
-            COUNTER3.Leave();
 
             if !permission.Read() {
                 // No read permission

@@ -312,6 +312,11 @@ impl KVMVcpu {
                 // }
                 if msg.cmd.clone() == ProxyCommand::CudaUnregisterFatBinary {
                     error!("counter is: {:#?}", &COUNTER.lock().unwrap());
+                    let mut accu = Duration::default();
+                    for (_key, val) in COUNTER.lock().unwrap().iter() {
+                        accu += *val;
+                    }
+                    error!("total time nvidiaproxy is {:?}", accu);
                 }
             }
             Msg::SymLinkAt(msg) => {

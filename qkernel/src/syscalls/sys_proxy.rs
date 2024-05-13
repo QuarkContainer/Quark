@@ -88,15 +88,15 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         | ProxyCommand::CublasSetWorkspaceV2
         | ProxyCommand::CublasSetMathMode
         | ProxyCommand::CublasSetStreamV2 => {
-            if cmd == ProxyCommand::CudaUnregisterFatBinary {
-                error!("Counter1_ val {}",Scale(COUNTER1_.Val() as i64));
-                error!("Counter2_ val {}",Scale(COUNTER2_.Val() as i64));
-                error!("Count {}", COUNT.load(Ordering::SeqCst));
-                error!("v2p {}-{}-{}-{}", Scale(COUNTER1.Val() as i64),
-                Scale(COUNTER2.Val() as i64),
-                Scale(COUNTER3.Val() as i64),
-                Scale(COUNTER4.Val() as i64));
-            }
+            // if cmd == ProxyCommand::CudaUnregisterFatBinary {
+            //     error!("Counter1_ val {}",Scale(COUNTER1_.Val() as i64));
+            //     error!("Counter2_ val {}",Scale(COUNTER2_.Val() as i64));
+            //     error!("Count {}", COUNT.load(Ordering::SeqCst));
+            //     error!("v2p {}-{}-{}-{}", Scale(COUNTER1.Val() as i64),
+            //     Scale(COUNTER2.Val() as i64),
+            //     Scale(COUNTER3.Val() as i64),
+            //     Scale(COUNTER4.Val() as i64));
+            // }
             let ret = HostSpace::Proxy(cmd, parameters);
 
             return Ok(ret);
@@ -836,7 +836,7 @@ fn CudaMemcpyAsync(
     kind: CudaMemcpyKind,
     stream: u64,
 ) -> Result<i64> {
-    error!("CudaMemcpyAsync: count:{:x}, kind{}, src:{:x}, dst:{:x}", count, kind, src, dst);
+    //error!("CudaMemcpyAsync: count:{:x}, kind{}, src:{:x}, dst:{:x}", count, kind, src, dst);
     match kind {
         CUDA_MEMCPY_HOST_TO_HOST => {
             error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
@@ -846,7 +846,7 @@ fn CudaMemcpyAsync(
             COUNTER1_.Enter();
             COUNT.fetch_add(1, Ordering::SeqCst);
             // src is the virtual addr(src is host memory ), address and # of bytes
-            let prs = task.V2P(src, count, true, false)?;
+            let prs = task.V2P(src, count, false, false)?;
             COUNTER1_.Leave();
             let parameters = ProxyParameters {
                 para1: dst,
