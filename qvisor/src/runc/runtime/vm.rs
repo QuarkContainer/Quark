@@ -172,7 +172,7 @@ impl VirtualMachine {
     #[cfg(not(debug_assertions))]
     pub const KERNEL_IMAGE: &'static str = "/usr/local/bin/qkernel.bin";
 
-    pub const VDSO_PATH: &str = "/usr/local/bin/vdso.so";
+    pub const VDSO_PATH: &'static str = "/usr/local/bin/vdso.so";
 
     pub fn InitShareSpace(
         cpuCount: usize,

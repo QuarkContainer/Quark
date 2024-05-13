@@ -79,10 +79,6 @@ impl Context64 {
             .0)
     }
 
-    pub fn MMapRand(max: u64) -> Result<u64> {
-        let _new_addr: u64 = RandU64().unwrap() % max;
-        Ok(Addr(_new_addr).RoundDown().unwrap().0)
-    }
 
     pub fn NewMmapLayout(min: u64, max: u64, r: &LimitSet) -> Result<MmapLayout> {
         //
@@ -150,4 +146,10 @@ impl Context64 {
 
         Ok(layout)
     }
+}
+
+// mmapRand returns a random adjustment for randomizing an mmap layout.
+pub fn MMapRand(max: u64) -> Result<u64> {
+	let _new_addr: u64 = RandU64().unwrap() % max;
+	Ok(Addr(_new_addr).RoundDown().unwrap().0)
 }
