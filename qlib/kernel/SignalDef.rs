@@ -112,13 +112,19 @@ pub struct PtRegs {
 #[cfg(target_arch = "aarch64")]
 impl fmt::LowerHex for PtRegs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "SP:[{:#x}]
-                   PC:[{:#x}]
-                   State:[{:#x}]
-                   X0:[{:#x}]
-                   GenRegs:[{:#?}]",
-                   self.sp, self.pc, self.pstate,
-                   self.orig_x0, self.regs)
+        write!(f, "\nSP:[{:#x}]\nPC:[{:#x}]\nState:[{:#x}]\nX0:[{:#x}]\nGenReg:[x0:{:#x}\n\
+                   \tx1:{:#x}\n\tx2:{:#x}\n\tx3:{:#x}\n\tx4:{:#x}\n\tx5:{:#x}\n\
+                   \tx6:{:#x}\n\tx7:{:#x}\n\tx8:{:#x}\n\tx9:{:#x}\n\tx10:{:#x}\n\tx11:{:#x}\n\
+                   \tx12:{:#x}\n\tx13:{:#x}\n\tx14:{:#x}\n\tx15:{:#x}\n\tx16:{:#x}\n\tx17:{:#x}\n\
+                   \tx18:{:#x}\n\tx19:{:#x}\n\tx20:{:#x}\n\tx21:{:#x}\n\tx22:{:#x}\n\tx23:{:#x}\n\
+                   \tx24:{:#x}\n\tx25:{:#x}\n\tx26:{:#x}\n\tx27:{:#x}\n\tx28:{:#x}\n\tx29:{:#x}\n\
+                   \tx30:{:#x}]\n", self.sp, self.pc, self.pstate, self.orig_x0, self.regs[0],
+                   self.regs[1], self.regs[2], self.regs[3], self.regs[4], self.regs[5],
+                   self.regs[6], self.regs[7], self.regs[8], self.regs[9], self.regs[10],
+                   self.regs[11], self.regs[12], self.regs[13], self.regs[14], self.regs[15],
+                   self.regs[16], self.regs[17], self.regs[18], self.regs[19], self.regs[20],
+                   self.regs[21], self.regs[22], self.regs[23], self.regs[24], self.regs[25],
+                   self.regs[26], self.regs[27], self.regs[28], self.regs[29], self.regs[30])
     }
 }
 #[cfg(target_arch = "aarch64")]
@@ -909,7 +915,9 @@ pub struct SignalStruct {
     trapStopPending: bool,
 }
 
-// https://elixir.bootlin.com/linux/latest/source/arch/x86/include/uapi/asm/signal.h#L132
+// Based on linux's 'struct signalstack' in signal.h
+// Same for both x86_64 and Arm
+// Ref: https://elixir.bootlin.com/linux/latest/source/arch/x86/include/uapi/asm/signal.h#L103
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct SignalStack {
