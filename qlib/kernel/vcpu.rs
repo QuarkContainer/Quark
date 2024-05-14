@@ -14,7 +14,6 @@
 
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
-use core::arch::asm;
 
 use super::asm::*;
 //use super::IOURING;

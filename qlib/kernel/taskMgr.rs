@@ -24,7 +24,6 @@ use super::super::vcpu_mgr::*;
 use super::kernel::kernel::GetKernel;
 use super::quring::uring_mgr::*;
 use super::task::*;
-use super::threadmgr::task_sched::*;
 use super::Kernel::HostSpace;
 use super::Shutdown;
 use super::ASYNC_PROCESS;
