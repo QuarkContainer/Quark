@@ -7,7 +7,11 @@ CLEANEXTS   = o so
 SOURCES     = vdso.cc vdso_time.cc
 OUTPUTFILE  = vdso.so
 
-LINKER_SCRIPT = vdso_$(arch).lds
+ifeq ($(arch), "aarch64")
+	LINKER_SCRIPT = vdso_$(arch).lds
+else
+	LINKER_SCRIPT = vdso_amd64.lds
+endif
 
 .PHONY: all
 all: $(OUTPUTFILE)

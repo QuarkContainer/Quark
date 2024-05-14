@@ -24,7 +24,12 @@ QUARK_BIN_RELEASE = $(QTARGET_RELASE)/$(QUARK)
 #
 # Flags
 #
-MAKEFLAGS += -j4
+MAKEFLAGS += -j$(shell nproc)
+#
+# We do not support cross-compilation yet.
+#
+ARCH := ${shell uname -m}
+RUST_TOOLCHAIN = nightly-2023-12-11-$(ARCH)-unknown-linux-gnu
 
 .PHONY: all release debug clean install qvisor_release qvisor_debug cuda_make cuda_all
 
@@ -35,19 +40,19 @@ cuda_all:: cuda_release cuda_debug
 release:: qvisor_release qkernel_release 
 
 qvisor_release:
-	make -C ./qvisor release
+	make -C ./qvisor TOOLCHAIN=$(RUST_TOOLCHAIN) release
 	
 qkernel_release:
-	make -C ./qkernel release
+	make -C ./qkernel TOOLCHAIN=$(RUST_TOOLCHAIN) release
 	make -C ./vdso
 
 debug:: qvisor_debug qkernel_debug 
 
 qvisor_debug:
-	make -C ./qvisor debug
+	make -C ./qvisor TOOLCHAIN=$(RUST_TOOLCHAIN) debug
 
 qkernel_debug:
-	make -C ./qkernel debug
+	make -C ./qkernel TOOLCHAIN=$(RUST_TOOLCHAIN) debug
 	make -C ./vdso
 
 clean:
@@ -77,7 +82,7 @@ ifneq ("$(wildcard $(QUARK_BIN_RELEASE))","")
 	sudo cp -f $(QUARK_BIN_RELEASE) $(QBIN_DIR)/containerd-shim-quark-v1
 endif
 else
-	@echo "Qurk release is not build, will not be installed."
+	@echo "Quark-release is not built, will not be installed."
 endif
 #
 # Debug if present
@@ -89,7 +94,7 @@ ifneq ("$(wildcard $(QUARK_BIN_DEBUG))","")
 	sudo cp -f $(QUARK_BIN_DEBUG) $(QBIN_DIR)/containerd-shim-quarkd-v1
 endif
 else
-	@echo "Qurk debug is not build, will not be installed."
+	@echo "Quark-debug is not built, will not be installed."
 endif
 	sudo cp -f $(QROOT_DIR)/vdso/vdso.so $(QBIN_DIR)/vdso.so
 #
