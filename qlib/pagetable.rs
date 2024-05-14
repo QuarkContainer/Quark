@@ -343,28 +343,24 @@ impl PageTables {
         unsafe {
             let pgdEntry = &(*pt)[p4Idx];
             if pgdEntry.is_unused() {
-                debug!("VM: V2PTE pgdEntry not mapped - VA:{:#x}.", vaddr);
                 return Err(Error::AddressNotMap(addr));
             }
 
             let pudTbl = pgdEntry.addr().as_u64() as *const PageTable;
             let pudEntry = &(*pudTbl)[p3Idx];
             if pudEntry.is_unused() {
-                debug!("VM: V2PTE pudEntry not mapped - VA:{:#x}.", vaddr);
                 return Err(Error::AddressNotMap(addr));
             }
 
             let pmdTbl = pudEntry.addr().as_u64() as *const PageTable;
             let pmdEntry = &(*pmdTbl)[p2Idx];
             if pmdEntry.is_unused() {
-                debug!("VM: V2PTE pmdEntry not mapped - VA:{:#x}.", vaddr);
                 return Err(Error::AddressNotMap(addr));
             }
 
             let pteTbl = pmdEntry.addr().as_u64() as *mut PageTable;
             let pteEntry = &mut (*pteTbl)[p1Idx];
             if pteEntry.is_unused() {
-                debug!("VM: V2PTE pteEntry not mapped - VA:{:#x}.", vaddr);
                 return Err(Error::AddressNotMap(addr));
             }
 

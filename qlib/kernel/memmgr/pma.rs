@@ -16,15 +16,15 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use spin::Mutex;
 
-use super::super::super::pagetable::PageTableFlags;
-use super::super::super::pagetable::PageTable;
-use super::super::super::pagetable::PhysAddr;
-use super::super::super::pagetable::VirtAddr;
 use super::super::super::addr::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::mem::block_allocator::*;
 use super::super::super::object_ref::*;
+use super::super::super::pagetable::PageTable;
+use super::super::super::pagetable::PageTableFlags;
+use super::super::super::pagetable::PhysAddr;
+use super::super::super::pagetable::VirtAddr;
 use super::super::super::pagetable::*;
 use super::super::super::range::*;
 use super::super::task::*;
@@ -250,7 +250,10 @@ impl PageTables {
             #[cfg(target_arch = "aarch64")]
             nPgdEntry.set_addr(
                 PhysAddr::new(nPudTbl as u64),
-                PageTableFlags::VALID | PageTableFlags::TABLE | PageTableFlags::ACCESSED | PageTableFlags::USER_ACCESSIBLE,
+                PageTableFlags::VALID
+                    | PageTableFlags::TABLE
+                    | PageTableFlags::ACCESSED
+                    | PageTableFlags::USER_ACCESSIBLE,
             );
             for i in MemoryDef::KERNEL_START_P2_ENTRY..MemoryDef::KERNEL_END_P2_ENTRY {
                 //memspace between 256GB to 512GB
@@ -259,19 +262,29 @@ impl PageTables {
                     *(&(*pudTbl)[i] as *const _ as *const u64);
             }
         }
-        let mut opts = PageOpts::Kernel();
+
         #[cfg(target_arch = "aarch64")]
-        opts.SetMtNormal().SetDirty().SetAccessed().SetWrite().SetGlobal().SetPresent();
+        {
+            let mut opts = PageOpts::Kernel();
+            opts.SetMtNormal()
+                .SetDirty()
+                .SetAccessed()
+                .SetWrite()
+                .SetGlobal()
+                .SetPresent();
+        }
 
         #[cfg(target_arch = "aarch64")]
         {
             let mut opts = PageOpts::Zero();
             opts.SetWrite().SetGlobal().SetPresent().SetAccessed();
             opts.SetMMIOPage();
-            ret.MapPage(Addr(MemoryDef::HYPERCALL_MMIO_BASE),
-            Addr(MemoryDef::HYPERCALL_MMIO_BASE),
-            opts.Val(),
-            pagePool)?;
+            ret.MapPage(
+                Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+                Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+                opts.Val(),
+                pagePool,
+            )?;
         }
 
         #[cfg(target_arch = "x86_64")]

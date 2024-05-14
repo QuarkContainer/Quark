@@ -55,5 +55,4 @@ pub fn sysreg_mov_el0(opcode: u32) -> SysmovResult {
         _ => SysmovResult::Invalid,
     };
     return result;
-    // SysmovResult::Invalid
 }

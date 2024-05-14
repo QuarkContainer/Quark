@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::mutex::*;
-use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -23,8 +22,6 @@ use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
-
-use super::kernel::arch::__arch::arch_def::ArchFPState;
 
 use super::vcpu_mgr::*;
 

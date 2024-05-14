@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// NOTE: we don't have a aarch64 equivalent for this module
+#![allow(unused_imports)]
+
 use core::mem;
 
 use super::super::arch::__arch::context::MAX_ADDR64;

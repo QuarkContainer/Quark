@@ -126,15 +126,11 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64, error_code: Pag
     }
 
     let signal;
-    // no need loop, just need to enable break
+    // no need to loop, just need to enable break
     'pf_handle: loop {
         let _ml = currTask.mm.MappingWriteLock();
         let (vma, range) = match currTask.mm.GetVmaAndRangeLocked(fault_address) {
             None => {
-                if fault_address > MemoryDef::PAGE_SIZE {
-                    let map = currTask.mm.GetSnapshotLocked(currTask, false);
-                    error!("VM: The map is {}, fault address is not part of it.", &map);
-                }
                 signal = Signal::SIGSEGV;
                 break 'pf_handle;
             }
@@ -158,13 +154,12 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64, error_code: Pag
         // from user    => kill it
         // from kernel  => panic
         if vma.kernel == true {
-            assert!(!fromUser, "FATAL: kernel hits PF on kernel VMA.");
+            assert!(fromUser, "FATAL: kernel hits PF on kernel VMA.");
             signal = Signal::SIGSEGV;
             break 'pf_handle;
         }
 
         if !vma.effectivePerms.Read() {
-            error!("VM: No Read-Permission on mem-area.");
             signal = Signal::SIGSEGV;
             break 'pf_handle;
         }
@@ -179,10 +174,6 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64, error_code: Pag
         // NOTE: swap not enabled for aarch64 atm.
         // let addr = currTask.mm.pagetable.write().pt.SwapInPage(Addr(pageAddr)).unwrap();
         if error_code.contains(PFEC::TRANSLATION) {
-            debug!(
-                "VM: InstallPage, range is: {:x?}, address: {:#x}, vma.growsDown: {}",
-                &range, pageAddr, vma.growsDown
-            );
             let res = currTask.mm.InstallPageLocked(currTask, &vma, pageAddr, &range);
             match res {
                 Err(Error::FileMapError) => {
@@ -197,7 +188,7 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64, error_code: Pag
             };
 
             // proactively install subsequential pages.
-            for i in 1..8 {
+            for i in 1..16 {
                 let addr = if vma.growsDown {
                     pageAddr - i * MemoryDef::PAGE_SIZE
                 } else {
@@ -220,7 +211,7 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64, error_code: Pag
         }
 
         //
-        // NOTE: Handle possible COW-modyfie events.
+        // NOTE: Handle possible COW-modify events.
         // NOTE: COW flags RO set in ForkRange() for private mappings.
         //
         if !vma.private {
@@ -233,7 +224,6 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64, error_code: Pag
                 signal = Signal::SIGSEGV;
                 break 'pf_handle;
             }
-            debug!("VM: Handle COW.");
             currTask.mm.CopyOnWriteLocked(pageAddr, &vma);
             currTask.mm.TlbShootdown();
             if fromUser {
@@ -262,15 +252,13 @@ pub fn HandleFault(
     signal: i32,
     ) -> ! {
     {
-        debug!("VM: Entered HandleFault.");
         if !user {
             let map = task.mm.GetSnapshotLocked(task, false);
-            print!("VM: Unhandled EXCEPTION: PageFault in Kernel -
-                        error code: {:#x},
-                        FAR: {:#x},
-                        GPR: {:#x}",
-                        error_code, fault_address, task.GetPtRegs());
-            panic!("the k_map is {:?}", &map);
+            panic!("unhandled pagefault in kernel.\
+                    error code: {:#?}, FAR: {:#x}.\n\
+                    PtRegs: {:#x}\n\
+                    kernel map is {}\n",
+                   error_code, fault_address, sf, &map);
         }
 
         let mut info = SignalInfo {

@@ -50,6 +50,7 @@ use super::super::syscalls::sys_thread::*;
 use super::super::syscalls::sys_time::*;
 use super::super::syscalls::sys_timer::*;
 use super::super::syscalls::sys_timerfd::*;
+#[cfg(target_arch="x86_64")]
 use super::super::syscalls::sys_tls::*;
 use super::super::syscalls::sys_utsname::*;
 use super::super::syscalls::sys_write::*;

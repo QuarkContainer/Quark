@@ -13,14 +13,12 @@
 // limitations under the License.
 
 use crate::qlib;
+use arch::__arch::arch_def::*;
 use memmgr::arch::{MmapLayout, MMAP_BOTTOM_UP, MMAP_TOP_DOWN};
 use qlib::common::*;
 use qlib::kernel::{arch, kernel_util::RandU64, memmgr};
 use qlib::limits::{LimitSet, LimitType, INFINITY};
 use qlib::{addr::Addr, linux_def::SysErr, MemoryDef};
-
-use super::super::super::SignalDef::*;
-use arch::__arch::arch_def::*;
 
 // MAX_ADDR64 is the maximum userspace address. It is TASK_SIZE in Linux
 // for a 64-bit process.
@@ -73,7 +71,7 @@ impl Context64 {
             pref_base = (l.TopDownBase * 2) / 3;
         }
 
-        Ok(Addr(pref_base + Self::MMapRand(MAX_MMAP_RAND64).unwrap())
+        Ok(Addr(pref_base + MMapRand(MAX_MMAP_RAND64).unwrap())
             .RoundDown()
             .unwrap()
             .0)
@@ -118,7 +116,7 @@ impl Context64 {
             }
         }
 
-        let rand: u64 = Self::MMapRand(max_rand)?;
+        let rand: u64 = MMapRand(max_rand)?;
 
         let layout = MmapLayout {
             MinAddr: min_addr,

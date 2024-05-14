@@ -171,11 +171,7 @@ impl MemoryManager {
             self.HandleTlbShootdown();
             return self.CopyDataWithPf(task, from, vaddr, len, allowPartial);
         }
-
-        debug!("VM: CopyDataWithPf: false -> CDOL: from:{:#x}, VA:{:#x}, size:{:#x}",
-               from, vaddr, len);
         let rl = self.MappingReadLock();
-
         return self.CopyDataOutLocked(task, &rl, from, vaddr, len, allowPartial);
     }
 
@@ -543,7 +539,6 @@ impl MemoryManager {
         unsafe {
             let dstPtr = dst as *mut u8;
             let srcPtr = src as *const u8;
-            debug!("VM: Memcpy - from:{:#x}; to:{:#x}.", src, dst);
             core::ptr::copy_nonoverlapping(srcPtr, dstPtr, count);
         }
     }

@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+#![allow(unused_imports)]
 use alloc::string::String;
 use core::arch::asm;
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -24,7 +24,6 @@ use super::super::vcpu_mgr::*;
 use super::kernel::kernel::GetKernel;
 use super::quring::uring_mgr::*;
 use super::task::*;
-use super::threadmgr::task_sched::*;
 use super::Kernel::HostSpace;
 use super::Shutdown;
 use super::ASYNC_PROCESS;

@@ -25,7 +25,7 @@ use crate::qlib::vcpu_mgr::*;
 use crate::qlib::linux_def::Signal;
 use crate::qlib::common::TaskRunState;
 use crate::{kernel_def, MainRun};
-use self::fault::{PageFaultHandler, PageFaultErrorCode};
+use self::fault::PageFaultHandler;
 
 pub unsafe fn InitSingleton() {
 }
@@ -44,7 +44,7 @@ impl EsrDefs{
     pub const ESR_IL:u64            = 0x01 << 25;
     pub const ESR_EC_SHIFT:u64      = 26;
     pub const ESR_EC_MASK:u64       = 0x3f << 26;
-    pub const EC_UNKNOWN:u64        = 0x00;    /* Unkwn exception */
+    pub const EC_UNKNOWN:u64        = 0x00;    /* Unknown exception */
     pub const EC_FP_SIMD:u64        = 0x07;    /* FP/SIMD trap */
     pub const EC_BRANCH_TGT:u64     = 0x0d;    /* Branch target exception */
     pub const EC_ILL_STATE:u64      = 0x0e;    /* Illegal execution state */
@@ -52,10 +52,10 @@ impl EsrDefs{
     pub const EC_MSR:u64            = 0x18;    /* MSR/MRS trap */
     pub const EC_FPAC:u64           = 0x1c;    /* Faulting PAC trap */
     pub const EC_INSN_ABORT_L:u64   = 0x20;    /* Instruction abort, from lower EL */
-    pub const EC_INSN_ABORT:u64     = 0x21;    /* Instruction abort, from same EL */ 
+    pub const EC_INSN_ABORT:u64     = 0x21;    /* Instruction abort, from same EL */
     pub const EC_PC_ALIGN:u64       = 0x22;    /* PC alignment fault */
     pub const EC_DATA_ABORT_L:u64   = 0x24;    /* Data abort, from lower EL */
-    pub const EC_DATA_ABORT:u64     = 0x25;    /* Data abort, from same EL */ 
+    pub const EC_DATA_ABORT:u64     = 0x25;    /* Data abort, from same EL */
     pub const EC_SP_ALIGN:u64       = 0x26;    /* SP alignment fault */
     pub const EC_TRAP_FP:u64        = 0x2c;    /* Trapped FP exception */
     pub const EC_SERROR:u64         = 0x2f;    /* SError interrupt */
@@ -71,58 +71,58 @@ impl EsrDefs{
     pub const ISS_FNV:u64       = 0x01 << 10;      /* FAR not valid */
     pub const ISS_DFSC_MASK:u64 = 0x3f << 0;    /* DFSC and IFSC masks are the same */
     // Access Size Fault L0~3
-    pub const DFSC_ASF_L0:u64  = 0x0;
-    pub const DFSC_ASF_L1:u64  = 0x1;
-    pub const DFSC_ASF_L2:u64  = 0x2;
-    pub const DFSC_ASF_L3:u64  = 0x3;
+    pub const DFSC_ASF_L0:u64   = 0x0;
+    pub const DFSC_ASF_L1:u64   = 0x1;
+    pub const DFSC_ASF_L2:u64   = 0x2;
+    pub const DFSC_ASF_L3:u64   = 0x3;
 
     // Translation Fault L0~3
-    pub const DFSC_TF_L0:u64   = 0x4;
-    pub const DFSC_TF_L1:u64   = 0x5;
-    pub const DFSC_TF_L2:u64   = 0x6;
-    pub const DFSC_TF_L3:u64   = 0x7;
+    pub const DFSC_TF_L0:u64    = 0x4;
+    pub const DFSC_TF_L1:u64    = 0x5;
+    pub const DFSC_TF_L2:u64    = 0x6;
+    pub const DFSC_TF_L3:u64    = 0x7;
 
     // Access Flag Fault L0~3
-    pub const DFSC_AF_L0:u64   = 0x8;      /* if FEAT_LPA2 is implmented */
-    pub const DFSC_AF_L1:u64   = 0x9;
-    pub const DFSC_AF_L2:u64   = 0xa;
-    pub const DFSC_AF_L3:u64   = 0xb;
+    pub const DFSC_AF_L0:u64    = 0x8;      /* if FEAT_LPA2 is implmented */
+    pub const DFSC_AF_L1:u64    = 0x9;
+    pub const DFSC_AF_L2:u64    = 0xa;
+    pub const DFSC_AF_L3:u64    = 0xb;
 
     // Permission Fault L0 ~ 3
-    pub const DFSC_PF_L0:u64   = 0xc;      /* if FEAT_LPA2 is implemented */
-    pub const DFSC_PF_L1:u64   = 0xd;
-    pub const DFSC_PF_L2:u64   = 0xe;
-    pub const DFSC_PF_L3:u64   = 0xf;
+    pub const DFSC_PF_L0:u64    = 0xc;      /* if FEAT_LPA2 is implemented */
+    pub const DFSC_PF_L1:u64    = 0xd;
+    pub const DFSC_PF_L2:u64    = 0xe;
+    pub const DFSC_PF_L3:u64    = 0xf;
 
     // Synchronous External Abort (SEA)
     // not on translation table walk
     pub const DFSC_SEA:u64      = 0x10;
     // on translation table walk, L -1~3
     pub const DFSC_SEA_M1:u64   = 0x13;     /* if FEAT_LPA2 is implemented*/
-    pub const DFSC_SEA_L0:u64  = 0x14;
-    pub const DFSC_SEA_L1:u64  = 0x15;
-    pub const DFSC_SEA_L2:u64  = 0x16;
-    pub const DFSC_SEA_L3:u64  = 0x17;
+    pub const DFSC_SEA_L0:u64   = 0x14;
+    pub const DFSC_SEA_L1:u64   = 0x15;
+    pub const DFSC_SEA_L2:u64   = 0x16;
+    pub const DFSC_SEA_L3:u64   = 0x17;
 
     // Synchronous parity or ECC error when FEAT_RAS NOT implemented.
     // not on table walk
     pub const DFSC_ECC:u64      = 0x18;
     // on table walk: L-1~3
     pub const DFSC_ECC_M1:u64   = 0x1b;
-    pub const DFSC_ECC_L0:u64  = 0x1c;
-    pub const DFSC_ECC_L1:u64  = 0x1d;
-    pub const DFSC_ECC_L2:u64  = 0x1e;
-    pub const DFSC_ECC_L3:u64  = 0x1f;
+    pub const DFSC_ECC_L0:u64   = 0x1c;
+    pub const DFSC_ECC_L1:u64   = 0x1d;
+    pub const DFSC_ECC_L2:u64   = 0x1e;
+    pub const DFSC_ECC_L3:u64   = 0x1f;
 
     pub const DFSC_ALIGN:u64    = 0x21;
 
     // the Granule Protection Faults
     // GPF on table walk, L-1~3
     pub const DFSC_GPF_M1:u64   = 0x23;
-    pub const DFSC_GPF_L0:u64  = 0x23;
-    pub const DFSC_GPF_L1:u64  = 0x25;
-    pub const DFSC_GPF_L2:u64  = 0x26;
-    pub const DFSC_GPF_L3:u64  = 0x27;
+    pub const DFSC_GPF_L0:u64   = 0x23;
+    pub const DFSC_GPF_L1:u64   = 0x25;
+    pub const DFSC_GPF_L2:u64   = 0x26;
+    pub const DFSC_GPF_L3:u64   = 0x27;
     // GPF not on table walk
     pub const DFSC_GPF:u64      = 0x28;
 
@@ -221,7 +221,8 @@ pub extern "C" fn exception_handler_el1h_sync(ptregs_addr:usize){
             HandleMemAbort(ptregs_addr, esr, far, true, false);
         },
         EsrDefs::EC_BRK => {
-            debug!("BRK from EL1, ignored");
+            // ignore BRK exception
+            return;
         }
         _ => {
             debug!("unhandled sync exception from el1: {:#x}\n - ESR_EL1:{:#x}", ec, esr);
@@ -296,20 +297,11 @@ pub extern "C" fn exception_handler_el0_sync(ptregs_addr: usize) {
         },
         EsrDefs::EC_UNKNOWN => match sysreg::try_emulate_mrs(ctx.pc) {
             sysreg::SysmovResult::ReadSuccess(val, xt) => {
-                debug!("el0 mrs emulated: set X{} to 0x{:x}", xt, val);
                 ctx.regs[xt as usize] = val;
                 ctx.pc += 4;
             }
             _ => {
-                unsafe {
-                     if let Some(opcode) = kernel_def::read_user_opcode(ctx.pc) {
-                         debug!("VM: UNKNOWN_EXCEPTION {} from EL0, current-PC: {:#x}, retrieved PC[opcode]:{:#x}.", ec, ctx.pc, opcode);
-                     } else {
-                         debug!("VM: UNKNOWN_EXCEPTION {} from EL0, current-PC: {:#x}, can not retrieve PC[opcode].", ec, ctx.pc);
-                     }
-                }
-
-                let mut info = SignalInfo {
+                let info = SignalInfo {
                     Signo: Signal::SIGILL,
                     ..Default::default()
                 };
@@ -325,12 +317,10 @@ pub extern "C" fn exception_handler_el0_sync(ptregs_addr: usize) {
             }
         },
         _ => {
-            panic!(
-                "unhandled sync exception from el0: {},\n current-context: {:?}",
-                ec, ctx
-            );
-        } // TODO (default case) for a unhandled exception from user,
-          // the kill the user process instead of panicing
+            // TODO (default case) for a unhandled exception from user,
+            // the kill the user process instead of panicing
+            panic!("unhandled sync exception from el0: {}", ec);
+        }
     }
     CPULocal::Myself().SetMode(VcpuMode::User);
 }
@@ -356,23 +346,12 @@ pub fn GetFaultAccessType(esr:u64, is_exe:bool) -> AccessType{
 
 
 pub fn HandleMemAbort(ptregs_addr: usize, esr: u64, far: u64, is_instr: bool, is_user: bool) {
-    debug!(
-        "get {} abort fault from {}, esr: {:#x}",
-        match is_instr {
-            true => "instruction",
-            false => "data",
-        },
-        match is_user {
-            true => "el0",
-            false => "el1",
-        },
-        esr
-    );
     use self::fault::PageFaultErrorCode as PFEC;
     let dfsc = esr & EsrDefs::ISS_DFSC_MASK;
     let access_type = GetFaultAccessType(esr, is_instr);
     let error_code = PFEC::new(is_user, is_instr, esr);
-    debug!("Page Fault, type: {:?}", error_code);
+    // debug!("Page Fault, type: {:?}", error_code);
+
     // early panic on faults that won't be handled
     // TODO kill user instead of panic
     // actually, this function should do no more than preparing parameters for
@@ -384,8 +363,6 @@ pub fn HandleMemAbort(ptregs_addr: usize, esr: u64, far: u64, is_instr: bool, is
         panic!("DFSC/IFSC: 0x{:02x}, FAR: {:#x}, acces-type: {}, isCM: {}, No handler!",
                dfsc, far, access_type.String(), EsrDefs::IsCM(esr));
     }
-    debug!("DFSC/IFSC: 0x{:02x}, FAR: {:#x}, acces-type: {}, isCM: {}",
-           dfsc, far, access_type.String(), EsrDefs::IsCM(esr));
     let ptregs = unsafe { &mut *(ptregs_addr as * mut PtRegs) };
     PageFaultHandler(ptregs, far, error_code);
     return;

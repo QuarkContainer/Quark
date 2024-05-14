@@ -14,9 +14,9 @@
 
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
-use core::arch::asm;
-
 use super::asm::*;
+#[cfg(target_arch = "aarch64")]
+use core::arch::asm;
 //use super::IOURING;
 use super::super::singleton::*;
 use super::super::vcpu_mgr::*;

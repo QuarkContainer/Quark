@@ -211,7 +211,6 @@ pub fn Init() {
     print::init().unwrap();
 }
 
-#[cfg(target_arch = "x86_64")]
 #[no_mangle]
 #[cfg(target_arch = "x86_64")]
 pub extern "C" fn syscall_handler(
@@ -346,10 +345,10 @@ pub extern "C" fn syscall_handler(
     }
 }
 
-// syscall_handler implementation for aarch64:
-// Unlike x86, this function is NOT directly called 
-// from the asm code (vector). The C calling convention
-// is not necessary here.
+// syscall_handler implementation for aarch64: Unlike x86, this function is NOT
+// directly called from the asm code (vector). The C calling convention is not
+// necessary. Also No AccountTaskLeave here because it's called already in the
+// exception handler
 // TODO move this function to a proper place.
 #[no_mangle]
 #[cfg(target_arch = "aarch64")]
@@ -365,13 +364,13 @@ pub fn syscall_dispatch_aarch64(
     CPULocal::Myself().SetMode(VcpuMode::Kernel);
 
     let currTask = task::Task::Current();
-    // No AccountTaskLeave here because it's called already in the exception handler
 
     let mut nr = call_no as u64;
 
     let startTime = TSC.Rdtsc();
     let enterAppTimestamp = CPULocal::Myself().ResetEnterAppTimestamp() as i64;
-    let worktime = Tsc::Scale(startTime - enterAppTimestamp) * 1000; // the thread has used up time slot
+    let worktime = Tsc::Scale(startTime - enterAppTimestamp) * 1000;
+    // the thread has used up time slot
     if worktime > CLOCK_TICK {
         taskMgr::Yield();
     }
@@ -422,12 +421,6 @@ pub fn syscall_dispatch_aarch64(
     MainRun(currTask, state);
     res = currTask.Return();
     currTask.DoStop();
-    // not needed because user stack not used here
-    // CPULocal::SetUserStack(pt.rsp);
-    // TODO not implemented?
-    // CPULocal::SetKernelStack(currTask.GetKernelSp());
-    // currTask.AccountTaskEnter(SchedState::RunningApp);
-    // currTask.RestoreFp();
 
     if debugLevel > DebugLevel::Error {
         let gap = if self::SHARESPACE.config.read().PerfDebug {

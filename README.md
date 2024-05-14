@@ -176,7 +176,7 @@ Please refer to [this link](doc/k8s_setup.md) to set up k8s using quark
 container and RDMA support.
 
 ## aarch64 support
-Quark now has prelimilary aarch64 support (still under active development).
+Quark now has preliminary aarch64 support (still under active development).
 
 **Notes on newer arm64 architectures**:  
 

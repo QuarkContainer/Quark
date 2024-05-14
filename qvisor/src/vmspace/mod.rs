@@ -453,6 +453,7 @@ impl VMSpace {
         return 0;
     }
 
+    #[cfg(target_arch="x86_64")]
     pub unsafe fn TryOpenHelper(dirfd: i32, name: u64, skiprw: bool) -> (i32, bool) {
         let flags = Flags::O_NOFOLLOW;
 
@@ -513,6 +514,7 @@ impl VMSpace {
         return (Self::GetRet(ret as i64) as i32, false);
     }
 
+    #[cfg(target_arch="x86_64")]
     pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64, skiprw: bool) -> i64 {
         //info!("TryOpenAt1: the filename is {}", Self::GetStr(name));
         let dirfd = if dirfd < 0 {

@@ -3,25 +3,25 @@ use std::os::fd::AsRawFd;
 use std::sync::atomic::Ordering;
 
 use kvm_bindings::{kvm_vcpu_events, kvm_vcpu_init};
-use libc::{gettid, clock_gettime, clockid_t, timespec};
 use kvm_ioctls::VcpuExit;
+use libc::{clock_gettime, clockid_t, gettid, timespec};
 
-use super::qlib::common::{Result, Error};
-use crate::qlib::linux::time::Timespec;
-use crate::qlib::qmsg::{Print, QMsg};
-use crate::vmspace::VMSpace;
-use crate::{KVMVcpu, VMS, kvm_vcpu::SetExitSignal};
-use crate::qlib::singleton::Singleton;
+use super::qlib::common::{Error, Result};
+use crate::host_uring::HostSubmit;
 use crate::kvm_vcpu::KVMVcpuState;
-use crate::qlib::linux_def::{SysErr, MemoryDef};
-use crate::qlib::{backtracer, VcpuFeq, GetTimeCall};
-use crate::{qlib, URING_MGR};
+use crate::qlib::linux::time::Timespec;
+use crate::qlib::linux_def::{MemoryDef, SysErr};
+use crate::qlib::perf_tunning::PerfPrint;
+use crate::qlib::qmsg::{Print, QMsg};
+use crate::qlib::singleton::Singleton;
+use crate::qlib::{backtracer, GetTimeCall, VcpuFeq};
+use crate::runc::runtime::vm::{SetExitStatus, VirtualMachine};
+use crate::syncmgr::SyncMgr;
+use crate::vmspace::VMSpace;
 use crate::KERNEL_IO_THREAD;
 use crate::SHARE_SPACE;
-use crate::syncmgr::SyncMgr;
-use crate::qlib::perf_tunning::PerfPrint;
-use crate::runc::runtime::vm::{SetExitStatus, VirtualMachine};
-use crate::host_uring::HostSubmit;
+use crate::{kvm_vcpu::SetExitSignal, KVMVcpu, VMS};
+use crate::qlib;
 
 const _KVM_ARM_VCPU_PSCI_0_2: u32 = 2;
 const _KVM_ARM_VCPU_INIT: u64 = 0x4020aeae;
@@ -52,8 +52,8 @@ const _KVM_ARM64_REGS_MDSCR_EL1  :u64 = 0x6030000000138012;
 const _KVM_ARM64_REGS_CNTKCTL_EL1:u64 = 0x603000000013c708;
 const _KVM_ARM64_REGS_TPIDR_EL1  :u64 = 0x603000000013c684;
 
-const _TCR_IPS_40BITS:u64 = 2 << 32; // PA=40
-const _TCR_IPS_48BITS :u64 = 5 << 32;// PA=48
+const _TCR_IPS_40BITS: u64 = 2 << 32; // PA=40
+const _TCR_IPS_48BITS: u64 = 5 << 32; // PA=48
 
 const _TCR_T0SZ_OFFSET :u64 = 0;
 const _TCR_T1SZ_OFFSET :u64 = 16;
@@ -108,7 +108,12 @@ const _MT_ATTR_NORMAL_NC    :u64 = 0x44;
 const _MT_ATTR_NORMAL_WT    :u64 = 0xbb;
 const _MT_ATTR_NORMAL       :u64 = 0xff;
 const _MT_ATTR_MASK         :u64 = 0xff;
-const _MT_EL1_INIT          :u64 = (_MT_ATTR_DEVICE_nGnRnE << (_MT_DEVICE_nGnRnE * 8)) | (_MT_ATTR_DEVICE_nGnRE << (_MT_DEVICE_nGnRE * 8)) | (_MT_ATTR_DEVICE_GRE << (_MT_DEVICE_GRE * 8)) | (_MT_ATTR_NORMAL_NC << (_MT_NORMAL_NC * 8)) | (_MT_ATTR_NORMAL << (_MT_NORMAL * 8)) | (_MT_ATTR_NORMAL_WT << (_MT_NORMAL_WT * 8));
+const _MT_EL1_INIT: u64 = (_MT_ATTR_DEVICE_nGnRnE << (_MT_DEVICE_nGnRnE * 8))
+                        | (_MT_ATTR_DEVICE_nGnRE << (_MT_DEVICE_nGnRE * 8))
+                        | (_MT_ATTR_DEVICE_GRE << (_MT_DEVICE_GRE * 8))
+                        | (_MT_ATTR_NORMAL_NC << (_MT_NORMAL_NC * 8))
+                        | (_MT_ATTR_NORMAL << (_MT_NORMAL * 8))
+                        | (_MT_ATTR_NORMAL_WT << (_MT_NORMAL_WT * 8));
 
 const _CNTKCTL_EL0PCTEN:u64 = 1 << 0;
 const _CNTKCTL_EL0VCTEN:u64 = 1 << 1;
@@ -297,12 +302,17 @@ impl KVMVcpu {
     }
 
     fn ioctl_set_kvm_vcpu_init(&self) -> Result<()> {
-        let ret = unsafe { libc::ioctl(self.vcpu.as_raw_fd(), _KVM_ARM_VCPU_INIT, &KVM_VCPU_INIT as *const _ as u64) };
+        let ret = unsafe {
+            libc::ioctl(
+                self.vcpu.as_raw_fd(),
+                _KVM_ARM_VCPU_INIT,
+                &KVM_VCPU_INIT as *const _ as u64,
+            )
+        };
         if ret != 0 {
             return Err(Error::SysError(ret));
         }
         Ok(())
-
     }
 
     pub fn InterruptGuest(&self) {
@@ -439,7 +449,7 @@ impl KVMVcpu {
                 // the actual frequency.
                 let freq = self.get_frequency().unwrap();
                 if freq == 0 {
-                    panic!("system counter frequency (cntfrq_el0) reads 0. It
+                    panic!("system counter frequency (cntfrq_el0) reads 0. It\
                            may not be properly programmed by the firmware");
                 }
                 unsafe {
@@ -508,7 +518,7 @@ impl KVMVcpu {
                 }
             }
 
-            _ => panic!("Unknow hypercall {}", hypercall_id),
+            _ => panic!("Unknown hypercall {}", hypercall_id),
         }
         Ok(())
     }

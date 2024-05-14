@@ -116,7 +116,7 @@ impl fmt::LowerHex for PtRegs {
                    PC:[{:#x}]
                    State:[{:#x}]
                    X0:[{:#x}]
-                   GenRegs:[{:#?}]",
+                   GenRegs:[{:#x?}]",
                    self.sp, self.pc, self.pstate,
                    self.orig_x0, self.regs)
     }

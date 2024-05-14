@@ -3043,7 +3043,7 @@ impl MemoryDef {
 impl MemoryDef {
     pub const USER_UPPER_ADDR: u64 = Self::HYPERCALL_MMIO_BASE;
     //
-    // One (device) page, placed two pages bellow the PHY_LOWER_ADDR.
+    // Page not backed up by guest physical frame, access causes KVM_EXIT_MMIO.
     //
     pub const HYPERCALL_MMIO_BASE: u64 = Self::PHY_LOWER_ADDR
                                          - Self::PAGE_SIZE;

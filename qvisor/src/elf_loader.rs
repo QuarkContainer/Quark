@@ -107,7 +107,6 @@ impl KernelELF {
                     if endAddr.0 < endMem.0 {
                         endAddr = end;
                     }
-                    //info!("start mem {}, len {}, offset {}", startMem.0, len, Addr(header.offset).RoundDown()?.0);
                     info!("start mem {:x}, len {:x}, offset {:x}", startMem.0, len, Addr(header.offset).RoundDown()?.0);
                     let mut option = &mut MapOption::New();
                     option = option
