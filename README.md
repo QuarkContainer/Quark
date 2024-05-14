@@ -175,5 +175,16 @@ the logs will be generated in the /var/log/quark/quark.log.
 Please refer to [this link](doc/k8s_setup.md) to set up k8s using quark
 container and RDMA support.
 
+## aarch64 support
+Quark now has prelimilary aarch64 support (still under active development).
+
+**Notes on newer arm64 architectures**:  
+
+newer arm64 architectures add PAN (Privilege Access Never) bit in the pstate
+which prevents the kernel (el1) from accessing user (el0) memory. Full support
+is WIP. As a temporary workaround we simply clear the PAN in the qkernel. To do
+this, you need to manually apply
+[this patch](https://lists.sr.ht/~quark/QuarkContainer/patches/51839)
+
 ## Communications
 Slack: https://join.slack.com/t/quarksoftgroup/shared_invite/zt-oj7dgqet-6iUXmOnMbqHj4g_XAd_3Mg
