@@ -65,7 +65,7 @@ pub fn PrintPrefix() -> String {
     };
 
     return format!(
-        "[{}/{:x}|{}]",
+        "[QKernel] [{}/{:x}|{}]",
         CPULocal::CpuId(),
         Task::TaskId().Addr(),
         now
