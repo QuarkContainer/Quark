@@ -119,8 +119,9 @@ const _SCTLR_C          :u64 = 1 << 2;
 const _SCTLR_I          :u64 = 1 << 12;
 const _SCTLR_DZE        :u64 = 1 << 14;
 const _SCTLR_UCT        :u64 = 1 << 15;
+const _SCTLR_SPAN       :u64 = 1 << 23;
 const _SCTLR_UCI        :u64 = 1 << 26;
-const _SCTLR_EL1_DEFAULT:u64 = _SCTLR_M | _SCTLR_C | _SCTLR_I | _SCTLR_UCT | _SCTLR_UCI | _SCTLR_DZE;
+const _SCTLR_EL1_DEFAULT:u64 = _SCTLR_M | _SCTLR_C | _SCTLR_I | _SCTLR_UCT | _SCTLR_UCI | _SCTLR_DZE | _SCTLR_SPAN;
 
 lazy_static! {
     pub static ref KVM_VCPU_INIT: Singleton<kvm_vcpu_init> = Singleton::<kvm_vcpu_init>::New();
@@ -267,6 +268,8 @@ impl KVMVcpu {
         let data = 3 << 20;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_CPACR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
         // sctlr_el1
+        // NOTE: before PAN is fully supported, we disable this feature by setting SCTLR_EL1.SPAN
+        // to 1, preventing PSTATE.PAN from being set to 1 upon exception to EL1
         let data = _SCTLR_EL1_DEFAULT;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_SCTLR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
         // tpidr_el1 has to be set in kernel
