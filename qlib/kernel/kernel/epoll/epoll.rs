@@ -47,12 +47,27 @@ pub unsafe fn InitSingleton() {
 // Event describes the event mask that was observed and the user data to be
 // returned when one of the events occurs. It has this format to match the linux
 // format to avoid extra copying/allocation when writing events to userspace.
+#[cfg(target_arch = "x86_64")]
 #[derive(Default, Clone, Copy, Debug)]
 pub struct Event {
     // Events is the event mask containing the set of events that have been
     // observed on an entry.
     pub Events: u32,
 
+    // Data is an opaque 64-bit value provided by the caller when adding the
+    // entry, and returned to the caller when the entry reports an event.
+    pub Data: [i32; 2],
+}
+
+#[cfg(target_arch = "aarch64")]
+#[derive(Default, Clone, Copy, Debug)]
+#[repr(C)]
+pub struct Event {
+    // Events is the event mask containing the set of events that have been
+    // observed on an entry.
+    pub Events: u32,
+
+    _pad: i32,
     // Data is an opaque 64-bit value provided by the caller when adding the
     // entry, and returned to the caller when the entry reports an event.
     pub Data: [i32; 2],
@@ -208,6 +223,13 @@ impl EventPoll {
             //let mask = entry.lock().mask;
             //error!("ReadEvents event fd is {}, ready is {:x}, mask is {:x}", entry.lock().id.Fd, ready, mask);
             // Add event to the array that will be returned to caller.
+            #[cfg(target_arch = "aarch64")]
+            events.Push(Event {
+                Events: ready as u32,
+                Data: entry.lock().userData,
+                _pad: 0,
+            });
+            #[cfg(target_arch = "x86_64")]
             events.Push(Event {
                 Events: ready as u32,
                 Data: entry.lock().userData,

@@ -253,10 +253,21 @@ pub struct LibcSysinfo {
     //pub _f: [i8; 0],
 }
 
+#[cfg(target_arch = "x86_64")]
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct EpollEvent {
     pub Events: u32,
+    pub FD: i32,
+    pub Pad: i32,
+}
+
+#[cfg(target_arch = "aarch64")]
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct EpollEvent {
+    pub Events: u32,
+    pub _pad: i32,
     pub FD: i32,
     pub Pad: i32,
 }
