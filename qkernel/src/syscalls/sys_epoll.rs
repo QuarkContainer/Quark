@@ -260,7 +260,10 @@ pub fn SysEpollCtl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 // copyOutEvents copies epoll events from the kernel to user memory.
 pub fn CopyOutEvents(task: &Task, addr: u64, e: &[Event]) -> Result<()> {
+    #[cfg(target_arch = "x86_64")]
     let itemLen: usize = 12;
+    #[cfg(target_arch = "aarch64")]
+    let itemLen: usize = 16;
 
     Addr(addr).AddLen((itemLen * e.len()) as u64)?;
 
