@@ -28,7 +28,7 @@ use crate::qlib::range::Range;
 use crate::xpu::cuda::*;
 use crate::xpu::cuda_api::*;
 use crate::xpu::cuda_mem_manager::*;
-use crate::{SwapOut, QUARK_CONFIG};
+use crate::QUARK_CONFIG;
 
 use cuda11_cublasLt_sys::{
     cublasLtHandle_t, cublasLtMatmulAlgo_t, cublasLtMatmulDesc_t, cublasLtMatmulHeuristicResult_t,
@@ -36,14 +36,14 @@ use cuda11_cublasLt_sys::{
 };
 use cuda_driver_sys::{
     CUcontext, CUdevice, CUdeviceptr, CUfunction, CUfunction_attribute, CUmodule, CUresult,
-    CUstream, CUstream_st,
+    CUstream_st,
 };
 use cuda_runtime_sys::{
-    cudaDeviceAttr, cudaDeviceP2PAttr, cudaDeviceProp, cudaError_t, cudaEvent_t, cudaFuncAttribute,
-    cudaFuncAttributes, cudaFuncCache, cudaLimit, cudaMemAttachGlobal, cudaMemoryAdvise,
-    cudaSharedMemConfig, cudaStreamCaptureMode, cudaStreamCaptureStatus, cudaStream_t,
+    cudaDeviceAttr, cudaDeviceP2PAttr, cudaDeviceProp, cudaError_t, cudaEvent_t,
+    cudaFuncAttributes, cudaFuncCache, cudaLimit, cudaMemAttachGlobal, cudaStream_t,
+    cudaSharedMemConfig, cudaStreamCaptureMode, cudaStreamCaptureStatus,
 };
-use rcublas_sys::{cublasHandle_t, cudaMemLocation};
+use rcublas_sys::{cublasHandle_t};
 
 lazy_static! {
     static ref CUDA_HAS_INIT: AtomicUsize = AtomicUsize::new(0);
