@@ -32,6 +32,13 @@ pub struct FuncPackageId {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
+
+pub struct Mount {
+    pub hostpath: String,
+    pub mountpath: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct FuncPackageSpec {
     #[serde(default)]
     pub tenant: String,
@@ -42,6 +49,7 @@ pub struct FuncPackageSpec {
     pub image: String,
     pub commands: Vec<String>,
     pub envs: Vec<(String, String)>,
+    pub mounts: Vec<Mount>,
 
     #[serde(default, rename = "keepalive_policy")]
     pub keepalivePolicy: KeepAlivePolicy,
