@@ -21,6 +21,7 @@ use super::super::linux_def::*;
 use super::kernel::posixtimer::*;
 use super::task::*;
 
+#[cfg(target_arch = "x86_64")]
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 //copy from https://elixir.bootlin.com/linux/latest/source/arch/x86/include/uapi/asm/ptrace.h#L18
@@ -61,6 +62,7 @@ pub struct PtRegs {
     /* top of stack page */
 }
 
+#[cfg(target_arch = "x86_64")]
 impl PtRegs {
     pub fn Set(&mut self, ctx: &SigContext) {
         self.r15 = ctx.r15;
@@ -84,6 +86,57 @@ impl PtRegs {
         self.eflags = ctx.eflags;
         self.rsp = ctx.rsp;
         self.ss = ctx.ss as u64;
+    }
+
+    pub fn get_stack_pointer(&self) -> u64 {
+        return self.rsp;
+    }
+
+    pub fn set_stack_pointer(&mut self, sp: u64) {
+        self.rsp = sp;
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct PtRegs {
+    pub regs: [u64; 31],
+    pub sp: u64,
+    pub pc: u64,
+    pub pstate: u64,
+    pub orig_x0: u64,
+    pub __pad: u64,
+}
+
+#[cfg(target_arch = "aarch64")]
+impl fmt::LowerHex for PtRegs {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SP:[{:#x}]
+                   PC:[{:#x}]
+                   State:[{:#x}]
+                   X0:[{:#x}]
+                   GenRegs:[{:#x?}]",
+                   self.sp, self.pc, self.pstate,
+                   self.orig_x0, self.regs)
+    }
+}
+#[cfg(target_arch = "aarch64")]
+impl PtRegs {
+    pub fn Set(&mut self, ctx: &SigContext) {
+        self.regs = ctx.regs.clone();
+        self.sp = ctx.sp;
+        self.pc = ctx.pc;
+        self.pstate = ctx.pstate;
+        self.orig_x0 = ctx.regs[0];
+    }
+
+    pub fn get_stack_pointer(&self) -> u64 {
+        return self.sp;
+    }
+
+    pub fn set_stack_pointer(&mut self, sp: u64) {
+        self.sp = sp;
     }
 }
 
@@ -293,6 +346,7 @@ pub const UC_SIGCONTEXT_SS: u64 = 2;
 pub const UC_STRICT_RESTORE_SS: u64 = 4;
 
 // https://elixir.bootlin.com/linux/latest/source/include/uapi/asm-generic/ucontext.h#L5
+#[cfg(target_arch = "x86_64")]
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct UContext {
@@ -303,6 +357,7 @@ pub struct UContext {
     pub Sigset: u64,
 }
 
+#[cfg(target_arch = "x86_64")]
 impl UContext {
     pub fn New(ptRegs: &PtRegs, oldMask: u64, cr2: u64, fpstate: u64, alt: &SignalStack) -> Self {
         return Self {
@@ -315,7 +370,52 @@ impl UContext {
     }
 }
 
+#[cfg(target_arch = "aarch64")]
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct UContext {
+    pub Flags: u64,
+    pub Link: u64,
+    pub Stack: SignalStack,
+    pub Sigset: u64,
+    __pad: [u8; (1024 / 8) - core::mem::size_of::<u64>()],
+    pub MContext: SigContext,
+}
+
+#[cfg(target_arch = "aarch64")]
+impl Default for UContext {
+    fn default() -> Self {
+        Self {
+            Flags: 0,
+            Link: 0,
+            Stack: SignalStack::default(),
+            Sigset: 0,
+            __pad: [0; (1024 / 8) - core::mem::size_of::<u64>()],
+            MContext: SigContext::default(),
+        }
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+impl UContext {
+    pub fn New(ptRegs: &PtRegs, oldMask: u64, fault_address: u64, fpstate: u64, alt: &SignalStack) -> Self {
+        return Self {
+            Flags: 0,
+            Link: 0,
+            Stack: alt.clone(),
+            Sigset: 0,
+            __pad: [0u8; (1024 / 8) - core::mem::size_of::<u64>()],
+            MContext: SigContext::New(ptRegs, oldMask, fault_address, fpstate),
+        };
+    }
+}
+
+// HACK. TODO Refactor this as soon as we have proper VDSO perser.
+#[cfg(target_arch = "aarch64")]
+pub const VDSO_OFFSET_SIGRETURN: u64 = 0x1120;
+
 // https://elixir.bootlin.com/linux/latest/source/arch/x86/include/uapi/asm/sigcontext.h#L284
+#[cfg(target_arch = "x86_64")]
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SigContext {
@@ -353,6 +453,22 @@ pub struct SigContext {
     pub reserved: [u64; 8],
 }
 
+#[cfg(target_arch = "aarch64")]
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct SigContext {
+	pub fault_address: u64,
+	/* AArch64 registers */
+	pub regs: [u64; 31],
+	pub sp: u64,
+	pub pc: u64,
+	pub pstate: u64,
+    pub oldmask: u64, /* should we do it here? */
+	/* 4K reserved for FP/SIMD state and future expansion */
+	pub __reserved: [u8; 4096],
+}
+
+#[cfg(target_arch = "x86_64")]
 impl SigContext {
     pub fn New(ptRegs: &PtRegs, oldMask: u64, cr2: u64, fpstate: u64) -> Self {
         return Self {
@@ -383,6 +499,50 @@ impl SigContext {
             oldmask: oldMask,
             cr2: cr2,
             fpstate: fpstate,
+            ..Default::default()
+        };
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+impl Default for SigContext {
+    fn default() -> Self {
+        Self {
+            fault_address: 0,
+            regs: [0u64; 31],
+            sp: 0,
+            pc: 0,
+            pstate: 0,
+            oldmask: 0,
+            __reserved: [0u8;4096],
+        }
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+impl fmt::Debug for SigContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SigContext")
+            .field("fault_address", &self.fault_address)
+            .field("Regs", &self.regs)
+            .field("sp", &self.sp)
+            .field("pc", &self.pc)
+            .field("pstate", &self.pstate)
+            .finish()
+    }
+}
+
+//TODO support fpstate
+#[cfg(target_arch = "aarch64")]
+impl SigContext {
+    pub fn New(ptRegs: &PtRegs, oldMask: u64, fault_address: u64, _fpstate: u64) -> Self {
+        return Self {
+            fault_address: fault_address,
+            regs: ptRegs.regs.clone(),
+            pc: ptRegs.pc,
+            sp: ptRegs.sp,
+            pstate: ptRegs.pstate,
+            oldmask: oldMask,
             ..Default::default()
         };
     }
@@ -456,13 +616,13 @@ impl fmt::Debug for SigAct {
             f,
             "SigAction {{ \n\
         handler: {:x}, \n\
-        flag : {:x}, \n \
-        flags::HasRestorer: {}, \n \
-        flags::IsOnStack: {}, \n \
-        flags::IsRestart: {}, \n \
-        flags::IsResetHandler: {}, \n \
-        flags::IsNoDefer: {}, \n \
-        flags::IsSigInfo: {}, \n \
+        flag : {:x}, \n\
+        flags::HasRestorer: {}, \n\
+        flags::IsOnStack: {}, \n\
+        flags::IsRestart: {}, \n\
+        flags::IsResetHandler: {}, \n\
+        flags::IsNoDefer: {}, \n\
+        flags::IsSigInfo: {}, \n\
         restorer : {:x},  \n\
         mask: {:x},  \n}}",
             self.handler,

@@ -35,8 +35,7 @@ use super::super::super::mem::areaset::*;
 use super::super::super::pagetable::*;
 use super::super::super::range::*;
 use super::super::super::vcpu_mgr::CPULocal;
-use super::super::arch::x86_64::context::*;
-use super::super::asm::*;
+use super::super::arch::__arch::context::Context64;
 use super::super::fs::dirent::*;
 use super::super::kernel::aio::aio_context::*;
 use super::super::mm::*;
@@ -46,13 +45,12 @@ use super::super::uid::*;
 use super::super::Kernel::HostSpace;
 use super::super::KERNEL_PAGETABLE;
 use super::super::PAGE_MGR;
-//use super::super::asm::*;
 use super::arch::*;
 use super::metadata::*;
 use super::syscalls::*;
 use super::vma::*;
 use super::*;
-use crate::qlib::kernel::SHARESPACE;
+use crate::qlib::kernel::{SHARESPACE, asm::*};
 use crate::qlib::vcpu_mgr::VcpuMode;
 
 pub struct MMMapping {
@@ -160,6 +158,7 @@ pub struct MemoryManagerInternal {
     pub vcpuMapping: AtomicU64,
     pub tlbShootdownMask: AtomicU64,
 
+    pub userVDSOBase: AtomicU64,
     pub mappingLock: QUpgradableLock,
     pub mapping: QMutex<MMMapping>,
 
@@ -231,17 +230,27 @@ impl MemoryManager {
             numaNodemask: 0,
         };
 
-        let gap: AreaGap<VMA> = vmas.FindGap(MemoryDef::PHY_LOWER_ADDR);
+        let gap = vmas.FindGap(MemoryDef::PHY_LOWER_ADDR);
+        // kernel memory
+        let kernel_range_start;
+		#[cfg(target_arch="x86_64")]{
+			kernel_range_start = MemoryDef::PHY_LOWER_ADDR;
+		}
+
+		#[cfg(target_arch="aarch64")]{
+			kernel_range_start = MemoryDef::HYPERCALL_MMIO_BASE;
+		}
+
+        let kernel_range_length = MemoryDef::PHY_UPPER_ADDR - kernel_range_start;
 
         vmas.Insert(
             &gap,
             &Range::New(
-                MemoryDef::PHY_LOWER_ADDR,
-                MemoryDef::PHY_UPPER_ADDR - MemoryDef::PHY_LOWER_ADDR,
+                kernel_range_start,
+                kernel_range_length,
             ),
             vma.clone(),
         );
-
 
         let mapping = MMMapping {
             vmas: vmas,
@@ -285,6 +294,7 @@ impl MemoryManager {
             inited: true,
             vcpuMapping: AtomicU64::new(0),
             tlbShootdownMask: AtomicU64::new(0),
+            userVDSOBase: AtomicU64::new(0),
             mappingLock: QUpgradableLock::default(),
             mapping: QMutex::new(mapping),
             pagetable: QRwLock::new(pagetable),
@@ -300,6 +310,14 @@ impl MemoryManager {
         SHARESPACE.hiberMgr.AddMemMgr(&mm);
 
         return mm;
+    }
+
+    pub fn SetUserVDSOBase(&self, addr: u64) {
+        return self.userVDSOBase.store(addr, Ordering::Release);
+    }
+
+    pub fn GetUserVDSOBase(&self) -> u64 {
+        return self.userVDSOBase.load(Ordering::Acquire);
     }
 
     pub fn EnableMembarrierPrivate(&self) {
@@ -404,6 +422,9 @@ impl MemoryManager {
         let (mut vseg, vgap) = mapping.vmas.Find(0);
         if vgap.Ok() {
             vseg = vgap.NextSeg();
+            debug!("VM: Start clean VMAs - KEY.0 ->\nvseg:{:?}\nvgap:{:?}", vseg.Value(), vgap.Range());
+        } else {
+            debug!("VM: No VMAs to cleanup.");
         }
 
         while vseg.Ok() {
@@ -496,17 +517,17 @@ impl MemoryManager {
     // SHOULD be called before return to user space,
     // to make sure the tlb flushed
     pub fn HandleTlbShootdown(&self) {
-        let localTLBEpoch = CPULocal::Myself().tlbEpoch.load(Ordering::Relaxed);
+        let localTLBEpoch = CPULocal::Myself().tlbEpoch.load(Ordering::Acquire);
         let currTLBEpoch = self.TLBEpoch();
 
         if localTLBEpoch != currTLBEpoch {
             CPULocal::Myself()
                 .tlbEpoch
-                .store(currTLBEpoch, Ordering::Relaxed);
+                .store(currTLBEpoch, Ordering::Release);
             #[cfg(target_arch = "aarch64")]
-            let curr = super::super::super::super::asm::CurrentUserTable();
+            let curr = CurrentUserTable();
             #[cfg(target_arch = "x86_64")]
-            let curr = super::super::super::super::asm::CurrentCr3();
+            let curr = CurrentCr3();
             PageTables::Switch(curr);
         }
     }
@@ -664,10 +685,12 @@ impl MemoryManager {
             seg = seg.NextSeg();
         }
 
-        ret += Self::VSYSCALL_MAPS_ENTRY;
+        #[cfg(target_arch = "x86_64")]
+        {
+            ret += Self::VSYSCALL_MAPS_ENTRY;
+        }
 
         return ret;
-        //return ret.as_bytes().to_vec();
     }
 
     pub fn GenMapsSnapshot(&self, task: &Task) -> Vec<u8> {
@@ -1600,6 +1623,9 @@ impl MemoryManager {
 
             let ptInternal1 = self.pagetable.write();
             let mut ptInternal2 = mm2.pagetable.write();
+
+            let vdsoAddr = self.GetUserVDSOBase();
+            mm2.SetUserVDSOBase(vdsoAddr);
 
             ptInternal2.sharedLoadsOffset = ptInternal1.sharedLoadsOffset;
             ptInternal2.curRSS = ptInternal1.curRSS;

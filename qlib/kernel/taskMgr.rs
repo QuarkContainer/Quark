@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+#![allow(unused_imports)]
 use alloc::string::String;
 use core::arch::asm;
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -24,7 +24,6 @@ use super::super::vcpu_mgr::*;
 use super::kernel::kernel::GetKernel;
 use super::quring::uring_mgr::*;
 use super::task::*;
-use super::threadmgr::task_sched::*;
 use super::Kernel::HostSpace;
 use super::Shutdown;
 use super::ASYNC_PROCESS;
@@ -57,23 +56,6 @@ pub fn CreateTask(runFnAddr: u64, para: *const u8, kernel: bool) {
 extern "C" {
     pub fn context_swap(_fromCxt: u64, _toCtx: u64, _one: u64, _zero: u64);
     pub fn context_swap_to(_fromCxt: u64, _toCtx: u64, _one: u64, _zero: u64);
-}
-
-fn switch_to(to: TaskId) {
-    to.GetTask().AccountTaskLeave(SchedState::Blocked);
-
-    CPULocal::SetCurrentTask(to.Addr());
-    let toCtx = to.GetTask();
-
-    //toCtx.mm.VcpuEnter();
-
-    if !SHARESPACE.config.read().KernelPagetable {
-        toCtx.SwitchPageTable();
-    }
-    toCtx.SetFS();
-    unsafe {
-        context_swap_to(0, toCtx.GetContext(), 1, 0);
-    }
 }
 
 pub const IO_WAIT_CYCLES: i64 = 20_000_000;
@@ -135,24 +117,21 @@ pub fn WaitFn() -> ! {
                         break;
                     }
                 }
-
                 task = TaskId::New(addr as u64);
             }
 
             Some(newTask) => {
                 let current = TaskId::New(CPULocal::CurrentTask());
                 CPULocal::Myself().SwitchToRunning();
-                if !Task::Current().context.savefpsate {
-                    Task::Current().SaveFp();
-                }
+                Task::Current().SaveFp();
                 switch(current, newTask);
 
                 let pendingFreeStack = CPULocal::PendingFreeStack();
                 if pendingFreeStack != 0 {
                     //(*PAGE_ALLOCATOR).Free(pendingFreeStack, DEFAULT_STACK_PAGES).unwrap();
                     let task = TaskId::New(pendingFreeStack).GetTask();
-                    //free X86fpstate
-                    task.context.X86fpstate.take();
+                    //free FPstate
+                    task.archfpstate.take();
 
                     KERNEL_STACK_ALLOCATOR.Free(pendingFreeStack).unwrap();
                     CPULocal::SetPendingFreeStack(0);
@@ -239,9 +218,7 @@ pub fn Wait() {
 
             CPULocal::Myself().SwitchToRunning();
             if current.data != newTask.data {
-                if !Task::Current().context.savefpsate {
-                    Task::Current().SaveFp();
-                }
+                Task::Current().SaveFp();
                 switch(current, newTask);
             }
 
@@ -259,9 +236,7 @@ pub fn Wait() {
 
             match oldTask {
                 None => {
-                    if !Task::Current().context.savefpsate {
-                        Task::Current().SaveFp();
-                    }
+                    Task::Current().SaveFp();
                     switch(current, waitTask);
                     break;
                 }
@@ -273,6 +248,7 @@ pub fn Wait() {
                 unsafe {
                     asm!("pause");
                 }
+                // todo: perhaps a similar instruction for aarh64?
             }
 
             next = SHARESPACE.scheduler.GetNext();

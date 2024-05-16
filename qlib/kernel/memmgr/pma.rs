@@ -16,15 +16,15 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use spin::Mutex;
 
-use super::super::super::pagetable::PageTableFlags;
-use super::super::super::pagetable::PageTable;
-use super::super::super::pagetable::PhysAddr;
-use super::super::super::pagetable::VirtAddr;
 use super::super::super::addr::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::mem::block_allocator::*;
 use super::super::super::object_ref::*;
+use super::super::super::pagetable::PageTable;
+use super::super::super::pagetable::PageTableFlags;
+use super::super::super::pagetable::PhysAddr;
+use super::super::super::pagetable::VirtAddr;
 use super::super::super::pagetable::*;
 use super::super::super::range::*;
 use super::super::task::*;
@@ -42,12 +42,18 @@ pub struct PageMgr {
 }
 
 impl PageMgr {
+    #[cfg(target_arch = "x86_64")]
     pub fn Clear(&self) {
         let mut pages = self.vsyscallPages.lock();
         for p in pages.iter() {
             self.pagepool.Deref(*p).unwrap();
         }
         *pages = Arc::new(Vec::new());
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn Clear(&self) {
+        // todo!("PageMgr::Clear not implemented for aarch64");
     }
 }
 
@@ -117,6 +123,7 @@ impl PageMgr {
         return self.pagepool.FreePage(addr);
     }
 
+    #[cfg(target_arch = "x86_64")]
     pub fn VsyscallPages(&self) -> Arc<Vec<u64>> {
         let pages = {
             let mut pages = self.vsyscallPages.lock();
@@ -223,7 +230,6 @@ impl PageTables {
 
     pub fn NewWithKernelPageTables(&self, pagePool: &PageMgr) -> Result<Self> {
         let ret = Self::New(pagePool)?;
-
         unsafe {
             let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
             let pgdEntry = &(*pt)[0];
@@ -231,7 +237,6 @@ impl PageTables {
                 return Err(Error::AddressNotMap(0));
             }
             let pudTbl = pgdEntry.addr().as_u64() as *const PageTable;
-
             let nPt: *mut PageTable = ret.GetRoot() as *mut PageTable;
             let nPgdEntry = &mut (*nPt)[0];
             let nPudTbl = pagePool.AllocPage(true)? as *mut PageTable;
@@ -245,7 +250,10 @@ impl PageTables {
             #[cfg(target_arch = "aarch64")]
             nPgdEntry.set_addr(
                 PhysAddr::new(nPudTbl as u64),
-                PageTableFlags::VALID | PageTableFlags::TABLE | PageTableFlags::ACCESSED | PageTableFlags::USER_ACCESSIBLE,
+                PageTableFlags::VALID
+                    | PageTableFlags::TABLE
+                    | PageTableFlags::ACCESSED
+                    | PageTableFlags::USER_ACCESSIBLE,
             );
             for i in MemoryDef::KERNEL_START_P2_ENTRY..MemoryDef::KERNEL_END_P2_ENTRY {
                 //memspace between 256GB to 512GB
@@ -255,6 +263,31 @@ impl PageTables {
             }
         }
 
+        #[cfg(target_arch = "aarch64")]
+        {
+            let mut opts = PageOpts::Kernel();
+            opts.SetMtNormal()
+                .SetDirty()
+                .SetAccessed()
+                .SetWrite()
+                .SetGlobal()
+                .SetPresent();
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        {
+            let mut opts = PageOpts::Zero();
+            opts.SetWrite().SetGlobal().SetPresent().SetAccessed();
+            opts.SetMMIOPage();
+            ret.MapPage(
+                Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+                Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+                opts.Val(),
+                pagePool,
+            )?;
+        }
+
+        #[cfg(target_arch = "x86_64")]
         {
             let vsyscallPages = pagePool.VsyscallPages();
             ret.MapVsyscall(vsyscallPages);
@@ -344,21 +377,7 @@ impl PageTables {
         at: &AccessType,
         user: bool,
     ) -> Result<()> {
-        let pageOpts = if user {
-            if at.Write() {
-                PageOpts::UserReadWrite().Val()
-            } else if at.Read() || at.Exec() {
-                PageOpts::UserReadOnly().Val()
-            } else {
-                PageOpts::UserNonAccessable().Val()
-            }
-        } else {
-            if at.Write() {
-                PageOpts::KernelReadWrite().Val()
-            } else {
-                PageOpts::KernelReadOnly().Val()
-            }
-        };
+        let pageOpts = PageOpts::New(user, at.Write(), at.Exec()).Val();
 
         self.Map(
             Addr(addr),
@@ -398,9 +417,8 @@ impl PageTables {
     }
 
     pub fn UnmapAll(&self) -> Result<()> {
-        self.Unmap(MemoryDef::PAGE_SIZE, MemoryDef::PHY_LOWER_ADDR, &*PAGE_MGR)?;
+        self.Unmap(MemoryDef::PAGE_SIZE, MemoryDef::USER_UPPER_ADDR, &*PAGE_MGR)?;
         self.Unmap(MemoryDef::PHY_UPPER_ADDR, MemoryDef::LOWER_TOP, &*PAGE_MGR)?;
-
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
 
         let pgdEntry = unsafe { &(*pt)[0] };

@@ -19,7 +19,7 @@ use super::super::super::super::linux_def::*;
 use super::super::super::kernel_util::*;
 use super::super::super::memmgr::arch::*;
 use super::super::super::SignalDef::*;
-use super::arch_x86::*;
+use super::arch_def::*;
 
 // These constants come directly from Linux.
 
@@ -90,19 +90,9 @@ pub struct Context64 {
     pub state: State,
 }
 
+//
+// TODO: Some code here seems unused.
 impl Context64 {
-    /*pub fn New() -> Self {
-        return Self {
-            state: State {
-                Regs: unsafe {
-                    &mut *(0 as *mut PtRegs)
-                },
-                x86FPState: Arc::new(QMutex::new(X86fpstate::NewX86FPState())),
-            },
-            sigFPState: Vec::new(),
-        }
-    }*/
-
     // Fork returns an exact copy of this context.
     pub fn Fork(&self, regs: &'static mut PtRegs) -> Self {
         return Self {
@@ -115,27 +105,22 @@ impl Context64 {
         return self.state.Regs.rax;
     }
 
-    // Return returns the current syscall return value.
     pub fn SetReturn(&mut self, val: u64) {
         self.state.Regs.rax = val;
     }
 
-    // IP returns the current instruction pointer.
     pub fn IP(&self) -> u64 {
         return self.state.Regs.rip;
     }
 
-    // SetIP sets the current instruction pointer.
     pub fn SetIP(&mut self, val: u64) {
         self.state.Regs.rip = val;
     }
 
-    // Stack returns the current stack pointer.
     pub fn Stack(&self) -> u64 {
         return self.state.Regs.rsp;
     }
 
-    // SetStack sets the current stack pointer.
     pub fn SetStack(&mut self, val: u64) {
         self.state.Regs.rsp = val;
     }

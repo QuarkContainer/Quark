@@ -40,7 +40,7 @@ impl MemoryManager {
     // MMap establishes a memory mapping.
     pub fn MMap(&self, task: &Task, opts: &mut MMapOpts) -> Result<u64> {
         let _ml = self.MappingWriteLock();
-        
+
         if opts.Length == 0 {
             return Err(Error::SysError(SysErr::EINVAL));
         }
@@ -88,11 +88,11 @@ impl MemoryManager {
         if opts.GrowsDown && opts.Mappable.HostIops().is_some() {
             return Err(Error::SysError(SysErr::EINVAL));
         }
-        
+
         let (vseg, ar) = self.CreateVMAlocked(task, opts)?;
-        
+
         self.PopulateVMALocked(task, &vseg, &ar, opts.Precommit, opts.VDSO)?;
-        
+
         self.TlbShootdown();
         return Ok(ar.Start());
     }
@@ -449,6 +449,7 @@ impl MemoryManager {
         len: u64,
         realPerms: &AccessType,
         growsDown: bool,
+        _permOnly: bool,
     ) -> Result<()> {
         let _ml = self.MappingWriteLock();
 
@@ -521,6 +522,13 @@ impl MemoryManager {
             // } else {
             //     PageOpts::UserNonAccessable().Val()
             // };
+
+            // mprotect should not modify other PTE fields.
+            // #[cfg(target_arch="aarch64")]
+            // if permOnly {
+            //     use crate::qlib::kernel::arch::__arch::mm::pagetable::PageTableFlags;
+            //     pageopts = pageopts & PageTableFlags::MProtectBits;
+            // }
 
             //change pagetable permission
             // let mut end = range.End();

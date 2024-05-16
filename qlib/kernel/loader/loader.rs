@@ -279,6 +279,7 @@ pub fn Load(
     extraAuxv: &[AuxEntry],
 ) -> Result<(u64, u64, u64)> {
     let vdsoAddr = LoadVDSO(task)?;
+    task.mm.SetUserVDSOBase(vdsoAddr);
 
     let (loaded, executable, tmpArgv) = LoadExecutable(task, filename, argv)?;
     let argv = tmpArgv;
@@ -320,7 +321,10 @@ pub fn SetupUserStack(
     vdsoAddr: u64,
 ) -> Result<u64> {
     /* auxv dagta */
-    let x86_64 = stack.PushStr(task, "x86_64")?;
+    #[cfg(target_arch = "x86_64")]
+    let arch = stack.PushStr(task, "x86_64")?;
+    #[cfg(target_arch = "aarch64")]
+    let arch = stack.PushStr(task, "aarch64")?;
 
     /* random */
     let (rand1, rand2) = RandU128().unwrap();
@@ -337,7 +341,7 @@ pub fn SetupUserStack(
     });
     auxv.push(AuxEntry {
         Key: AuxVec::AT_PLATFORM,
-        Val: x86_64,
+        Val: arch,
     });
     auxv.push(AuxEntry {
         Key: AuxVec::AT_EXECFN,
@@ -383,6 +387,7 @@ pub fn SetupUserStack(
         Key: AuxVec::AT_PAGESZ,
         Val: 4096,
     });
+    #[cfg(target_arch = "x86_64")]
     auxv.push(AuxEntry {
         Key: AuxVec::AT_HWCAP,
         Val: 0xbfebfbff,

@@ -1,25 +1,27 @@
+#![allow(non_upper_case_globals)]
 use std::os::fd::AsRawFd;
 use std::sync::atomic::Ordering;
 
-use kvm_bindings::{kvm_vcpu_events, kvm_vcpu_events__bindgen_ty_1};
-use libc::{gettid, clock_gettime, clockid_t, timespec};
+use kvm_bindings::{kvm_vcpu_events, kvm_vcpu_init};
 use kvm_ioctls::VcpuExit;
+use libc::{clock_gettime, clockid_t, gettid, timespec};
 
-use super::qlib::common::{Result, Error};
-use crate::qlib::kernel::IOURING;
-use crate::qlib::linux::time::Timespec;
-use crate::qlib::qmsg::{Print, QMsg};
-use crate::{KVMVcpu, VMS, kvm_vcpu::SetExitSignal};
-use crate::qlib::singleton::Singleton;
+use super::qlib::common::{Error, Result};
+use crate::host_uring::HostSubmit;
 use crate::kvm_vcpu::KVMVcpuState;
-use crate::qlib::linux_def::SysErr;
-use crate::qlib::{backtracer, VcpuFeq, GetTimeCall};
-use crate::{qlib, URING_MGR};
+use crate::qlib::linux::time::Timespec;
+use crate::qlib::linux_def::{MemoryDef, SysErr};
+use crate::qlib::perf_tunning::PerfPrint;
+use crate::qlib::qmsg::{Print, QMsg};
+use crate::qlib::singleton::Singleton;
+use crate::qlib::{backtracer, GetTimeCall, VcpuFeq};
+use crate::runc::runtime::vm::{SetExitStatus, VirtualMachine};
+use crate::syncmgr::SyncMgr;
+use crate::vmspace::VMSpace;
 use crate::KERNEL_IO_THREAD;
 use crate::SHARE_SPACE;
-use crate::syncmgr::SyncMgr;
-use crate::qlib::perf_tunning::PerfPrint;
-use crate::runc::runtime::vm::{SetExitStatus, VirtualMachine};
+use crate::{kvm_vcpu::SetExitSignal, KVMVcpu, VMS};
+use crate::qlib;
 
 const _KVM_ARM_VCPU_PSCI_0_2: u32 = 2;
 const _KVM_ARM_VCPU_INIT: u64 = 0x4020aeae;
@@ -35,7 +37,7 @@ const _KVM_ARM64_REGS_R6         :u64 = 0x603000000010000c;
 const _KVM_ARM64_REGS_R7         :u64 = 0x603000000010000e;
 const _KVM_ARM64_REGS_R8         :u64 = 0x6030000000100010;
 const _KVM_ARM64_REGS_R18        :u64 = 0x6030000000100024;
-const _KVM_ARM64_REGS_R29        :u64 = 0x6030000000100036;
+const _KVM_ARM64_REGS_R29        :u64 = 0x603000000010003a;
 const _KVM_ARM64_REGS_PC         :u64 = 0x6030000000100040;
 const _KVM_ARM64_REGS_MAIR_EL1   :u64 = 0x603000000013c510;
 const _KVM_ARM64_REGS_TCR_EL1    :u64 = 0x603000000013c102;
@@ -50,8 +52,8 @@ const _KVM_ARM64_REGS_MDSCR_EL1  :u64 = 0x6030000000138012;
 const _KVM_ARM64_REGS_CNTKCTL_EL1:u64 = 0x603000000013c708;
 const _KVM_ARM64_REGS_TPIDR_EL1  :u64 = 0x603000000013c684;
 
-const _TCR_IPS_40BITS:u64 = 2 << 32; // PA=40
-const _TCR_IPS_48BITS :u64 = 5 << 32;// PA=48
+const _TCR_IPS_40BITS: u64 = 2 << 32; // PA=40
+const _TCR_IPS_48BITS: u64 = 5 << 32; // PA=48
 
 const _TCR_T0SZ_OFFSET :u64 = 0;
 const _TCR_T1SZ_OFFSET :u64 = 16;
@@ -106,7 +108,12 @@ const _MT_ATTR_NORMAL_NC    :u64 = 0x44;
 const _MT_ATTR_NORMAL_WT    :u64 = 0xbb;
 const _MT_ATTR_NORMAL       :u64 = 0xff;
 const _MT_ATTR_MASK         :u64 = 0xff;
-const _MT_EL1_INIT          :u64 = (_MT_ATTR_DEVICE_nGnRnE << (_MT_DEVICE_nGnRnE * 8)) | (_MT_ATTR_DEVICE_nGnRE << (_MT_DEVICE_nGnRE * 8)) | (_MT_ATTR_DEVICE_GRE << (_MT_DEVICE_GRE * 8)) | (_MT_ATTR_NORMAL_NC << (_MT_NORMAL_NC * 8)) | (_MT_ATTR_NORMAL << (_MT_NORMAL * 8)) | (_MT_ATTR_NORMAL_WT << (_MT_NORMAL_WT * 8));
+const _MT_EL1_INIT: u64 = (_MT_ATTR_DEVICE_nGnRnE << (_MT_DEVICE_nGnRnE * 8))
+                        | (_MT_ATTR_DEVICE_nGnRE << (_MT_DEVICE_nGnRE * 8))
+                        | (_MT_ATTR_DEVICE_GRE << (_MT_DEVICE_GRE * 8))
+                        | (_MT_ATTR_NORMAL_NC << (_MT_NORMAL_NC * 8))
+                        | (_MT_ATTR_NORMAL << (_MT_NORMAL * 8))
+                        | (_MT_ATTR_NORMAL_WT << (_MT_NORMAL_WT * 8));
 
 const _CNTKCTL_EL0PCTEN:u64 = 1 << 0;
 const _CNTKCTL_EL0VCTEN:u64 = 1 << 1;
@@ -117,24 +124,12 @@ const _SCTLR_C          :u64 = 1 << 2;
 const _SCTLR_I          :u64 = 1 << 12;
 const _SCTLR_DZE        :u64 = 1 << 14;
 const _SCTLR_UCT        :u64 = 1 << 15;
+const _SCTLR_SPAN       :u64 = 1 << 23;
 const _SCTLR_UCI        :u64 = 1 << 26;
-const _SCTLR_EL1_DEFAULT:u64 = _SCTLR_M | _SCTLR_C | _SCTLR_I | _SCTLR_UCT | _SCTLR_UCI | _SCTLR_DZE;
+const _SCTLR_EL1_DEFAULT:u64 = _SCTLR_M | _SCTLR_C | _SCTLR_I | _SCTLR_UCT | _SCTLR_UCI | _SCTLR_DZE | _SCTLR_SPAN;
 
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
-pub struct KVMVcpuInit {
-    target: u32,
-    features: [u32;7],
-}
-
-impl KVMVcpuInit {
-    pub fn set_psci_0_2(&mut self) {
-        self.features[0] |= _KVM_ARM_VCPU_PSCI_0_2;
-    }
-}
 lazy_static! {
-    pub static ref KVM_VCPU_INIT: Singleton<KVMVcpuInit> = Singleton::<KVMVcpuInit>::New();
+    pub static ref KVM_VCPU_INIT: Singleton<kvm_vcpu_init> = Singleton::<kvm_vcpu_init>::New();
 }
 
 impl KVMVcpu {
@@ -159,6 +154,7 @@ impl KVMVcpu {
             let kvmRet = match self.vcpu.run() {
                 Ok(ret) => ret,
                 Err(e) => {
+                    error!("kvm vcpu exit {}", e);
                     if e.errno() == SysErr::EINTR {
                         self.vcpu.set_kvm_immediate_exit(0);
                         self.dump()?;
@@ -168,42 +164,42 @@ impl KVMVcpu {
                             VcpuExit::Intr
                         }
                     } else {
-                        let pc = self.vcpu.get_one_reg(_KVM_ARM64_REGS_PC).map_err(|e| Error::SysError(e.errno()))?;
-                        let rsp = self.vcpu.get_one_reg(_KVM_ARM64_REGS_SP_EL1).map_err(|e| Error::SysError(e.errno()))?;
-                        let rbp = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R29).map_err(|e| Error::SysError(e.errno()))?;
+                        self.backtrace()?;
                         error!("vcpu error: {:?}", e);
-                        backtracer::trace(pc, rsp, rbp, &mut |frame| {
-                            print!("host frame is {:#x?}", frame);
-                            true
-                        });
-
                         panic!("kvm virtual cpu[{}] run failed: Error {:?}", self.id, e)
                     }
                 }
             };
-            self.state
-            .store(KVMVcpuState::HOST as u64, Ordering::Release);
+            self.state.store(KVMVcpuState::HOST as u64, Ordering::Release);
             match kvmRet {
-                VcpuExit::MmioRead(addr, data) => {
+                VcpuExit::MmioRead(addr, _data) => {
+                    self.backtrace()?;
                     panic!(
                         "CPU[{}] Received an MMIO Read Request for the address {:#x}.",
                         self.id, addr,
                     );
                 }
-                VcpuExit::MmioWrite(addr, data) => {
+                VcpuExit::MmioWrite(addr, _data) => {
                     {
                         let mut interrupting = self.interrupting.lock();
                         interrupting.0 = false;
                         interrupting.1.clear();
                     }
-                    let para1 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R0).map_err(|e| Error::SysError(e.errno()))?;
-                    let para2 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R1).map_err(|e| Error::SysError(e.errno()))?;
-                    let para3 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R2).map_err(|e| Error::SysError(e.errno()))?;
-                    let para4 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R3).map_err(|e| Error::SysError(e.errno()))?;
-                    if addr > (u16::MAX as u64) {
-                        panic!("cpu[{}] Received hypercall id max than 255");
+                    // reading hypercall parameters from vcpu register file
+                    // x0 and x1 (w1) are used by the str instruction
+                    // the 64-bit parameters 1,2,3,4 are passed via
+                    // x2,x3,x4,x5
+                    let para1 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R2).map_err(|e| Error::SysError(e.errno()))?;
+                    let para2 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R3).map_err(|e| Error::SysError(e.errno()))?;
+                    let para3 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R4).map_err(|e| Error::SysError(e.errno()))?;
+                    let para4 = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R5).map_err(|e| Error::SysError(e.errno()))?;
+                    let hypercall_id = (addr - MemoryDef::HYPERCALL_MMIO_BASE) as u16;
+                    if hypercall_id > u16::MAX {
+                        panic!("cpu[{}] Received hypercall id max than 255", self.id);
                     }
-                    self.handle_hypercall(addr as u16, data, para1, para2, para3, para4)?;
+                    // logging all hypercalls can be very noisy. Disabled by default.
+                    // debug!("hypecall: {}, paras: {:x} {:x} {:x} {:x}", hypercall_id, para1, para2, para3, para4);
+                    self.handle_hypercall(hypercall_id, para1, para2, para3, para4)?;
                 }
                 VcpuExit::Hlt => {
                     error!("in hlt....");
@@ -216,6 +212,7 @@ impl KVMVcpu {
                     info!("get exception");
                 }
                 VcpuExit::IrqWindowOpen => {
+                    info!("irq window open");
                     self.InterruptGuest();
                     self.vcpu.set_kvm_request_interrupt_window(0);
                     {
@@ -225,6 +222,7 @@ impl KVMVcpu {
                     }
                 }
                 VcpuExit::Intr => {
+                    info!("handle interruptted");
                     self.vcpu.set_kvm_request_interrupt_window(1);
                     {
                         let mut interrupting = self.interrupting.lock();
@@ -248,25 +246,35 @@ impl KVMVcpu {
         Ok(())
     }
 
+    pub fn get_frequency(&self) -> Result<u64> {
+        //self.vcpu.get_one_reg(_KVM_ARM64_REGS_CNTFRQ_EL0).map_err(|e| Error::SysError(e.errno()))
+        Ok(VMSpace::get_cpu_frequency())
+    }
+
     fn setup_registers(&self) -> Result<()> {
-        self.ioctl_set_kvm_vcpu_init()?;
         // tcr_el1
         let data = _TCR_TXSZ_VA48 |  _TCR_CACHE_FLAGS | _TCR_SHARED | _TCR_TG_FLAGS |  _TCR_ASID16 |  _TCR_IPS_40BITS;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_TCR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
         // mair_el1
+        //
         let data = _MT_EL1_INIT;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_MAIR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
         // ttbr0_el1
         let data = VMS.lock().pageTables.GetRoot();
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_TTBR0_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
-        // TODO set ttbr1_el1
+        // TODO set ttbr1_el1 if we need upper half address space.
+
         // cntkctl_el1
         let data = _CNTKCTL_EL1_DEFAULT;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_CNTKCTL_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
         // cpacr_el1
-        let data = 0;
+        // NOTE: FPEN[21:20] - Do not cause instructions related
+        //                     to FP registers to be trapped.
+        let data = 3 << 20;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_CPACR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
         // sctlr_el1
+        // NOTE: before PAN is fully supported, we disable this feature by setting SCTLR_EL1.SPAN
+        // to 1, preventing PSTATE.PAN from being set to 1 upon exception to EL1
         let data = _SCTLR_EL1_DEFAULT;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_SCTLR_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
         // tpidr_el1 has to be set in kernel
@@ -274,7 +282,7 @@ impl KVMVcpu {
         let data = self.topStackAddr;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_SP_EL1, data).map_err(|e| Error::SysError(e.errno()))?;
         // pc
-        let data = self.entry;
+        let data: u64 = self.entry;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_PC, data).map_err(|e| Error::SysError(e.errno()))?;
         // vbar_el1 holds exception vector base address, should be set in kernel
         // system time, is it necessary?
@@ -290,17 +298,21 @@ impl KVMVcpu {
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_R4, data).map_err(|e| Error::SysError(e.errno()))?;
         let data = self.autoStart as u64;
         self.vcpu.set_one_reg(_KVM_ARM64_REGS_R5, data).map_err(|e| Error::SysError(e.errno()))?;
-        
         Ok(())
     }
 
     fn ioctl_set_kvm_vcpu_init(&self) -> Result<()> {
-        let ret = unsafe { libc::ioctl(self.vcpu.as_raw_fd(), _KVM_ARM_VCPU_INIT, &KVM_VCPU_INIT as *const _ as u64) };
+        let ret = unsafe {
+            libc::ioctl(
+                self.vcpu.as_raw_fd(),
+                _KVM_ARM_VCPU_INIT,
+                &KVM_VCPU_INIT as *const _ as u64,
+            )
+        };
         if ret != 0 {
             return Err(Error::SysError(ret));
         }
         Ok(())
-
     }
 
     pub fn InterruptGuest(&self) {
@@ -311,8 +323,8 @@ impl KVMVcpu {
         }
     }
 
-    fn handle_hypercall(&self, addr: u16, data: &[u8], para1: u64, para2: u64,para3: u64, para4: u64) -> Result<()> {
-        match addr {
+    fn handle_hypercall(&self, hypercall_id: u16, para1: u64, para2: u64,para3: u64, para4: u64) -> Result<()> {
+        match  hypercall_id {
             qlib::HYPERCALL_IOWAIT => {
                 if !super::runc::runtime::vm::IsRunning() {
                     return Ok(());
@@ -368,7 +380,6 @@ impl KVMVcpu {
             qlib::HYPERCALL_PRINT => {
                 let addr = para1;
                 let msg = unsafe { &*(addr as *const Print) };
-
                 log!("{}", msg.str);
             }
 
@@ -403,8 +414,8 @@ impl KVMVcpu {
                 unsafe { libc::_exit(0) }
             }
 
-            qlib::HYPERCALL_U64 => unsafe {
-                
+            qlib::HYPERCALL_U64 => {
+                info!("HYPERCALL_U64 is not handled");
             },
 
             qlib::HYPERCALL_GETTIME => {
@@ -431,9 +442,16 @@ impl KVMVcpu {
 
             qlib::HYPERCALL_VCPU_FREQ => {
                 let data = para1;
-
-                // TODO get cpu freq
-                let freq = 1000 * 1000 * 1000;
+                // TODO: the cntfreq_el0 register may not be properly programmed
+                // to represent the system counter frequency in many platforms
+                // (careless firmware implementations). There should be a sanity
+                // check here, if the cntfreq reads 0, work around it and get
+                // the actual frequency.
+                let freq = self.get_frequency().unwrap();
+                if freq == 0 {
+                    panic!("system counter frequency (cntfrq_el0) reads 0. It\
+                           may not be properly programmed by the firmware");
+                }
                 unsafe {
                     let call = &mut *(data as *mut VcpuFeq);
                     call.res = freq as i64;
@@ -441,7 +459,7 @@ impl KVMVcpu {
             }
 
             qlib::HYPERCALL_VCPU_YIELD => {
-                let _ret = IOURING.IOUring().HostSubmit().unwrap();
+                let _ret = HostSubmit().unwrap();
             }
 
             qlib::HYPERCALL_VCPU_DEBUG => {
@@ -500,8 +518,20 @@ impl KVMVcpu {
                 }
             }
 
-            _ => info!("Unknow hyper call!!!!! address is {}", addr),
+            _ => panic!("Unknown hypercall {}", hypercall_id),
         }
+        Ok(())
+    }
+
+    fn backtrace(&self) -> Result<()> {
+        let pc = self.vcpu.get_one_reg(_KVM_ARM64_REGS_PC).map_err(|e| Error::SysError(e.errno()))?;
+        let rsp = self.vcpu.get_one_reg(_KVM_ARM64_REGS_SP_EL1).map_err(|e| Error::SysError(e.errno()))?;
+        let rbp = self.vcpu.get_one_reg(_KVM_ARM64_REGS_R29).map_err(|e| Error::SysError(e.errno()))?;
+
+        backtracer::trace(pc, rsp, rbp, &mut |frame| {
+            print!("host frame is {:#x?}", frame);
+            true
+        });
         Ok(())
     }
 }

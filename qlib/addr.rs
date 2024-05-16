@@ -62,14 +62,14 @@ impl AccessType {
 
     #[cfg(target_arch = "aarch64")]
     pub fn NewFromPageFlags(flags: PageTableFlags) -> Self {
-        let present: bool = flags & PageTableFlags::VALID == PageTableFlags::VALID;
-        let useraccess = flags & PageTableFlags::USER_ACCESSIBLE == PageTableFlags::USER_ACCESSIBLE;
+        let present = flags.contains(PageTableFlags::VALID);
+        let useraccess = flags.contains(PageTableFlags::USER_ACCESSIBLE);
         if !present || !useraccess {
             return Self::New(false, false, false);
         }
+        let write = !flags.contains(PageTableFlags::READ_ONLY);
+        let exec = !flags.contains(PageTableFlags::UXN);
 
-        let write = flags & !PageTableFlags::READ_ONLY != PageTableFlags::READ_ONLY;
-        let exec = flags & !PageTableFlags::UXN != PageTableFlags::UXN;
         return Self::New(present, write, exec);
     }
 
@@ -246,8 +246,10 @@ pub struct PageOpts(PageTableFlags);
 #[cfg(target_arch = "aarch64")]
 impl PageOpts {
     //const Empty : PageTableFlags = PageTableFlags::PRESENT & PageTableFlags::WRITABLE; //set 0
+
     pub fn New(user: bool, write: bool, exec: bool) -> Self {
-        let mut flags = PageTableFlags::VALID;
+        let mut flags = PageTableFlags::VALID | PageTableFlags::MT_NORMAL
+                        | PageTableFlags::ACCESSED;
         if !write {
             flags |= PageTableFlags::READ_ONLY;
         }
@@ -280,25 +282,34 @@ impl PageOpts {
     }
 
     pub fn UserReadOnly() -> Self {
-        return PageOpts(PageTableFlags::VALID | PageTableFlags::USER_ACCESSIBLE | PageTableFlags::READ_ONLY);
+        return PageOpts(
+            PageTableFlags::VALID |
+            PageTableFlags::USER_ACCESSIBLE |
+            PageTableFlags::READ_ONLY |
+            PageTableFlags::MT_NORMAL |
+            PageTableFlags::ACCESSED
+        );
     }
 
     pub fn UserNonAccessable() -> Self {
-        return PageOpts(PageTableFlags::VALID | PageTableFlags::ACCESSED);
+        return PageOpts(PageTableFlags::VALID | PageTableFlags::ACCESSED | PageTableFlags::MT_NORMAL);
     }
 
     pub fn UserReadWrite() -> Self {
         return PageOpts(
-            PageTableFlags::VALID | PageTableFlags::USER_ACCESSIBLE,
+            PageTableFlags::VALID |
+            PageTableFlags::USER_ACCESSIBLE |
+            PageTableFlags::MT_NORMAL |
+            PageTableFlags::ACCESSED
         );
     }
 
     pub fn KernelReadOnly() -> Self {
-        return PageOpts(PageTableFlags::VALID | PageTableFlags::READ_ONLY);
+        return PageOpts(PageTableFlags::VALID | PageTableFlags::READ_ONLY | PageTableFlags::MT_NORMAL | PageTableFlags::ACCESSED);
     }
     
     pub fn KernelReadWrite() -> Self {
-        return PageOpts(PageTableFlags::VALID);
+        return PageOpts(PageTableFlags::VALID | PageTableFlags::MT_NORMAL | PageTableFlags::ACCESSED);
     }
 
     pub fn Present(&self) -> bool {
@@ -334,6 +345,38 @@ impl PageOpts {
 
     pub fn SetGlobal(&mut self) -> &mut Self {
         self.0 &= !PageTableFlags::NON_GLOBAL;
+        return self;
+    }
+
+	// Set a collection of PT flags to configure
+	// device memory for MMIO.
+    pub fn SetMMIOPage(&mut self) -> &mut Self {
+        self.0 |= PageTableFlags::MT_NORMAL_NC |
+                  PageTableFlags::VALID |
+                  PageTableFlags::PAGE |
+                  PageTableFlags::INNER_SHAREABLE |
+                  PageTableFlags::UXN |
+                  PageTableFlags::PXN;
+        return self;
+    }
+
+    pub fn SetBlock(&mut self) -> &mut Self {
+        self.0 &= !PageTableFlags::TABLE;
+        return self;
+    }
+
+    pub fn SetMtNormal(&mut self) -> &mut Self {
+        self.0 |= PageTableFlags::MT_NORMAL;
+        return self;
+    }
+
+    pub fn SetDirty(&mut self) -> &mut Self {
+        self.0 |= PageTableFlags::DIRTY;
+        return self;
+    }
+
+    pub fn SetAccessed(&mut self) -> &mut Self {
+        self.0 |= PageTableFlags::ACCESSED;
         return self;
     }
 

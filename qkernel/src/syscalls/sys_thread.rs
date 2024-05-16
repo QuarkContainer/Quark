@@ -38,7 +38,7 @@ use super::super::vcpu::*;
 use super::super::SignalDef::*;
 use super::super::SHARESPACE;
 use super::sys_rusage::*;
-use arch::x86_64::arch_x86::X86fpstate;
+use arch::__arch::arch_def::ArchFPState;
 
 #[derive(Default, Debug)]
 pub struct ElfInfo {
@@ -328,10 +328,10 @@ pub fn Execvat(
 
             t.UnstopVforkParent();
 
-            SetFs(0);
+            SetTLS(0);
             task.tidInfo = TidInfo::default();
-            task.context.fs = 0;
-            task.context.X86fpstate = Some(Box::new(X86fpstate::default()));
+            task.context.set_tls(0);
+            task.archfpstate = Some(Box::new(ArchFPState::default()));
 
             let newMM = MemoryManager::Init(false);
             let oldMM = task.mm.clone();
@@ -400,13 +400,24 @@ pub fn SysExitThreadGroup(task: &mut Task, args: &SyscallArguments) -> Result<i6
 // sys_clone has so many flavors. We implement the default one in linux 3.11
 // x86_64:
 //    sys_clone(clone_flags, newsp, parent_tidptr, child_tidptr, tls_val)
+// aarch64:
+//    sys_clone(clone_flags, newsp, parent_tidptr, tls_val, child_tidptr)
 pub fn SysClone(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let flags = args.arg0;
     let cStack = args.arg1;
     let pTid = args.arg2;
-    let cTid = args.arg3;
-    let tls = args.arg4;
-
+    let cTid;
+    let tls;
+    #[cfg(target_arch = "x86_64")]{
+        cTid = args.arg3;
+        tls = args.arg4;
+    }
+    // the linux kernel people decides to flip the position of tls and cTid....
+    #[cfg(target_arch = "aarch64")]{
+        tls = args.arg3;
+        cTid = args.arg4;
+    }
+    // aarch64: should be different!
     let pid = task.Clone(flags, cStack, pTid, cTid, tls)?;
     return Ok(pid as i64);
 }

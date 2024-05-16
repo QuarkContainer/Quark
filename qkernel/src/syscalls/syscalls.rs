@@ -50,6 +50,7 @@ use super::super::syscalls::sys_thread::*;
 use super::super::syscalls::sys_time::*;
 use super::super::syscalls::sys_timer::*;
 use super::super::syscalls::sys_timerfd::*;
+#[cfg(target_arch="x86_64")]
 use super::super::syscalls::sys_tls::*;
 use super::super::syscalls::sys_utsname::*;
 use super::super::syscalls::sys_write::*;
@@ -134,6 +135,7 @@ pub const EXTENSION_CALL_TABLE: &'static [SyscallFn] = &[
     SysProxy,         // 10003 sys_proxy
 ];
 
+#[cfg(target_arch = "x86_64")]
 pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysRead,                // 000 sys_read
     SysWrite,               // 001 sys_write,
@@ -593,6 +595,462 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //	449 sys_futex_waitv
     NotImplementSyscall, //	450 sys_set_mempolicy_home_node
     NotExisting,         // 451 unknow syscall
+];
+
+#[cfg(target_arch = "aarch64")]
+pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
+    SysIoSetup,            // 0   sys_io_setup = 0 as u64,
+    SysIoDestroy,          // 1   sys_io_destroy,
+    SysIOSubmit,           // 2   sys_io_submit,
+    SysIOCancel,           // 3   sys_io_cancel,
+    SysIoGetevents,        // 4   sys_io_getevents,
+    SysSetXattr,           // 5   sys_setxattr,
+    SysLSetXattr,          // 6   sys_lsetxattr,
+    SysFSetXattr,          // 7   sys_fsetxattr,
+    SysGetXattr,           // 8   sys_getxattr,
+    SysLGetXattr,          // 9   sys_lgetxattr,
+    SysFGetXattr,          // 10  sys_fgetxattr, //10
+    SysListXattr,          // 11  sys_listxattr,
+    SysLListXattr,         // 12  sys_llistxattr,
+    SysFListXattr,         // 13  sys_flistxattr,
+    SysRemoveXattr,        // 14  sys_removexattr,
+    SysLRemoveXattr,       // 15  sys_lremovexattr,
+    SysFRemoveXattr,       // 16  sys_fremovexattr,
+    SysGetcwd,             // 17  sys_getcwd,
+    NotImplementSyscall,   // 18  sys_lookup_dcookie,
+    SysEventfd2,           // 19  sys_eventfd2,
+    SysEpollCreate1,       // 20  sys_epoll_create1, //20
+    SysEpollCtl,           // 21  sys_epoll_ctl,
+    SysPwait,              // 22  sys_epoll_pwait,
+    SysDup,                // 23  sys_dup,
+    SysDup3,               // 24  sys_dup3,
+    SysFcntl,              // 25  sys_fcntl,
+    SysInotifyInit,        // 26  sys_inotify_init1,
+    SysInotifyAddWatch,    // 27  sys_inotify_add_watch,
+    SysInotifyRmWatch,     // 28  sys_inotify_rm_watch,
+    SysIoctl,              // 29  sys_ioctl,
+    SysCapErr,             // 30  sys_ioprio_set, //30
+    SysCapErr,             // 31  sys_ioprio_get,
+    SysFlock,              // 32  sys_flock,
+    SysMknodeat,           // 33  sys_mknodat,
+    SysMkdirat,            // 34  sys_mkdirat,
+    SysUnlinkat,           // 35  sys_unlinkat,
+    SysSymlinkat,          // 36  sys_symlinkat,
+    SysLinkat,             // 37  sys_linkat,
+    SysRenameat,           // 38  sys_renameat,
+    NotImplementSyscall,   // 39  sys_umount2,
+    NotImplementSyscall,   // 40  sys_mount, //40
+    SysNoPermission,       // 41  sys_pivot_root,
+    SysNoSys,              // 42  sys_nfsservctl,
+    SysStatfs,             // 43  sys_statfs,
+    SysFstatfs,            // 44  sys_fstatfs,
+    SysTruncate,           // 45  sys_truncate,
+    SysFtruncate,          // 46  sys_ftruncate,
+    SysFallocate,          // 47  sys_fallocate,
+    SysFaccessat,          // 48  sys_faccessat,
+    SysChdir,              // 49  sys_chdir,
+    SysFchdir,             // 50  sys_fchdir, //50
+    SysChroot,             // 51  sys_chroot,
+    SysFchmod,             // 52  sys_fchmod,
+    SysFchmodat,           // 53  sys_fchmodat,
+    SysFchownat,           // 54  sys_fchownat,
+    SysFchown,             // 55  sys_fchown,
+    SysOpenAt,             // 56  sys_openat,
+    SysClose,              // 57  sys_close,
+    SysCapErr,             // 58  sys_vhangup,
+    SysPipe2,              // 59  sys_pipe2,
+    SysCapErr,             // 60  sys_quotactl, //60
+    SysGetDents64,         // 61  sys_getdents64,
+    SysLseek,              // 62  sys_lseek,
+    SysRead,               // 63  sys_read,
+    SysWrite,              // 64  sys_write,
+    SysReadv,              // 65  sys_readv,
+    SysWritev,             // 66  sys_writev,
+    SysPread64,            // 67  sys_pread64,
+    SysPwrite64,           // 68  sys_pwrite64,
+    SysPreadv,             // 69  sys_preadv,
+    SysPwritev,            // 70  sys_pwritev, //70
+    SysSendfile,           // 71  sys_sendfile,
+    SysPSelect,            // 72  sys_pselect6,
+    SysPpoll,              // 73  sys_ppoll,
+    SysSignalfd4,          // 74  sys_signalfd4,
+    NotImplementSyscall,   // 75  sys_vmsplice,
+    SysSplice,             // 76  sys_splice,
+    SysTee,                // 77  sys_tee,
+    SysReadLinkAt,         // 78  sys_readlinkat,
+    SysFstatat,            // 79  sys_newfstatat,
+    SysFstat,              // 80  sys_fstat, //80
+    SysSync,               // 81  sys_sync,
+    SysFsync,              // 82  sys_fsync,
+    SysDatasync,           // 83  sys_fdatasync,
+    SysSyncFileRange,      // 84  sys_sync_file_range,
+    SysTimerfdCreate,      // 85  sys_timerfd_create,
+    SysTimerfdSettime,     // 86  sys_timerfd_settime,
+    SysTimerfdGettime,     // 87  sys_timerfd_gettime,
+    SysUtimensat,          // 88  sys_utimensat,
+    SysCapErr,             // 89  sys_acct,
+    SysCapget,             // 90  sys_capget, //90
+    SysCapSet,             // 91  sys_capset,
+    SysInvalid,            // 92  sys_personality,
+    SysExit,               // 93  sys_exit,
+    SysExitThreadGroup,    // 94  sys_exit_group,
+    SysWaitid,             // 95  sys_waitid,
+    SysSetTidAddr,         // 96  sys_set_tid_address,
+    SysUnshare,            // 97  sys_unshare,
+    SysFutex,              // 98  sys_futex,
+    SysSetRobustList,      // 99  sys_set_robust_list,
+    SysGetRobustList,      // 100 sys_get_robust_list, //100
+    SysNanoSleep,          // 101 sys_nanosleep,
+    SysGetitimer,          // 102 sys_getitimer,
+    SysSetitimer,          // 103 sys_setitimer,
+    SysCapErr,             // 104 sys_kexec_load,
+    SysCapErr,             // 105 sys_init_module,
+    SysCapErr,             // 106 sys_delete_module,
+    SysTimerCreate,        // 107 sys_timer_create,
+    SysTimerGettime,       // 108 sys_timer_gettime,
+    SysTimerGetoverrun,    // 109 sys_timer_getoverrun,
+    SysTimerSettime,       // 110 sys_timer_settime, //110
+    SysTimerDelete,        // 111 sys_timer_delete,
+    SysClockSettime,       // 112 sys_clock_settime,
+    SysClockGetTime,       // 113 sys_clock_gettime,
+    SysClockGetRes,        // 114 sys_clock_getres,
+    SysClockNanosleep,     // 115 sys_clock_nanosleep,
+    SysSysLog,             // 116 sys_syslog,
+    SysNoSupport,          // 117 sys_ptrace,
+    SysCapErr,             // 118 sys_sched_setparam,
+    SysSchedSetscheduler,  // 119 sys_sched_setscheduler,
+    SysSchedGetscheduler,  // 120 sys_sched_getscheduler, //120
+    SysSchedGetparam,      // 121 sys_sched_getparam,
+    SysSchedSetaffinity,   // 122 sys_sched_setaffinity,
+    SysSchedGetaffinity,   // 123 sys_sched_getaffinity,
+    SysScheduleYield,      // 124 sys_sched_yield,
+    SysSchedGetPriorityMax,// 125 sys_sched_get_priority_max,
+    SysSchedGetPriorityMin,// 126 sys_sched_get_priority_min,
+    SysNoPermission,       // 127 sys_sched_rr_get_interval,
+    SysRestartSyscall,     // 128 sys_restart_syscall,
+    SysKill,               // 129 sys_kill,
+    SysTkill,              // 130 sys_tkill, //130
+    SysTgkill,             // 131 sys_tgkill,
+    SysSigaltstack,        // 132 sys_sigaltstack,
+    SysRtSigsuspend,       // 133 sys_rt_sigsuspend,
+    SysRtSigaction,        // 134 sys_rt_sigaction,
+    SysRtSigProcMask,      // 135 sys_rt_sigprocmask,
+    SysRtSigpending,       // 136 sys_rt_sigpending,
+    SysRtSigtimedwait,     // 137 sys_rt_sigtimedwait,
+    SysRtSigqueueinfo,     // 138 sys_rt_sigqueueinfo,
+    SysRtSigreturn,        // 139 sys_rt_sigreturn,
+    SysSetpriority,        // 140 sys_setpriority, //140
+    SysGetpriority,        // 141 sys_getpriority,
+    SysCapErr,             // 142 sys_reboot,
+    SysSetregid,           // 143 sys_setregid,
+    SysSetgid,             // 144 sys_setgid,
+    SysSetreuid,           // 145 sys_setreuid,
+    SysSetuid,             // 146 sys_setuid,
+    SysSetresuid,          // 147 sys_setresuid,
+    SysGetresuid,          // 148 sys_getresuid,
+    SysSetresgid,          // 149 sys_setresgid,
+    SysGetresgid,          // 150 sys_getresgid, //150
+    NotImplementSyscall,   // 151 sys_setfsuid,
+    NotImplementSyscall,   // 152 sys_setfsgid,
+    SysTimes,              // 153 sys_times,
+    SysSetpgid,            // 154 sys_setpgid,
+    SysGetpgid,            // 155 sys_getpgid,
+    SysGetsid,             // 156 sys_getsid,
+    SysSetsid,             // 157 sys_setsid,
+    SysGetgroups,          // 158 sys_getgroups,
+    SysSetgroups,          // 159 sys_setgroups,
+    SysUname,              // 160 sys_uname, // 160
+    SysSethostname,        // 161 sys_sethostname,
+    SysSetdomainname,      // 162 sys_setdomainname,
+    SysGetrlimit,          // 163 sys_getrlimit,
+    SysSetrlimit,          // 164 sys_setrlimit,
+    SysGetrusage,          // 165 sys_getrusage,
+    SysUmask,              // 166 sys_umask,
+    SysPrctl,              // 167 sys_prctl,
+    SysGetcpu,             // 168 sys_getcpu,
+    SysGettimeofday,       // 169 sys_gettimeofday,
+    SysCapErr,             // 170 sys_settimeofday, //170
+    SysCapErr,             // 171 sys_adjtimex,
+    SysGetPid,             // 172 sys_getpid,
+    SysGetPpid,            // 173 sys_getppid,
+    SysGetuid,             // 174 sys_getuid,
+    SysGeteuid,            // 175 sys_geteuid,
+    SysGetgid,             // 176 sys_getgid,
+    SysGetegid,            // 177 sys_getegid,
+    SysGetTid,             // 178 sys_gettid,
+    SysInfo,               // 179 sys_sysinfo,
+    SysNoSupport,          // 180 sys_mq_open, //180
+    SysNoSupport,          // 181 sys_mq_unlink,
+    SysNoSupport,          // 182 sys_mq_timedsend,
+    SysNoSupport,          // 183 sys_mq_timedreceive,
+    SysNoSupport,          // 184 sys_mq_notify,
+    SysNoSupport,          // 185 sys_mq_getsetattr,
+    SysMsgget,             // 186 sys_msgget,
+    SysMsgctl,             // 187 sys_msgctl,
+    SysMsgrcv,             // 188 sys_msgrcv,
+    SysMsgsnd,             // 189 sys_msgsnd,
+    SysSemgetl,            // 190 sys_semget, //190
+    SysSemctl,             // 191 sys_semctl,
+    SysSemtimedop,         // 192 sys_semtimedop,
+    SysSemop,              // 193 sys_semop,
+    SysShmget,             // 194 sys_shmget,
+    SysShmctl,             // 195 sys_shmctl,
+    SysShmat,              // 196 sys_shmat,
+    SysShmdt,              // 197 sys_shmdt,
+    SysSocket,             // 198 sys_socket,
+    SysSocketPair,         // 199 sys_socketpair,
+    SysBind,               // 200 sys_bind, //200
+    SysListen,             // 201 sys_listen,
+    SysAccept,             // 202 sys_accept,
+    SysConnect,            // 203 sys_connect,
+    SysGetSockName,        // 204 sys_getsockname,
+    SysGetPeerName,        // 205 sys_getpeername,
+    SysSendTo,             // 206 sys_sendto,
+    SysRecvFrom,           // 207 sys_recvfrom,
+    SysSetSockOpt,         // 208 sys_setsockopt,
+    SysGetSockOpt,         // 209 sys_getsockopt,
+    SysShutdown,           // 210 sys_shutdown, //210
+    SysSendMsg,            // 211 sys_sendmsg,
+    SysRecvMsg,            // 212 sys_recvmsg,
+    SysReadahead,          // 213 sys_readahead,
+    SysBrk,                // 214 sys_brk,
+    SysUnmap,              // 215 sys_munmap,
+    SysMremap,             // 216 sys_mremap,
+    SysNoAccess,           // 217 sys_add_key,
+    SysNoAccess,           // 218 sys_request_key,
+    SysNoAccess,           // 219 sys_keyctl,
+    SysClone,              // 220 sys_clone, //220
+    SysExecve,             // 221 sys_execve,
+    SysMmap,               // 222 sys_mmap,
+    SysFadvise64,          // 223 sys_fadvise64,
+    SysCapErr,             // 224 sys_swapon,
+    SysCapErr,             // 225 sys_swapoff,
+    SysMprotect,           // 226 sys_mprotect,
+    SysMsync,              // 227 sys_msync,
+    SysMlock,              // 228 sys_mlock,
+    SysMunlock,            // 229 sys_munlock,
+    SysMlockall,           // 230 sys_mlockall, //230
+    SysMunlockall,         // 231 sys_munlockall,
+    SysMincore,            // 232 sys_mincore,
+    SysMadvise,            // 233 sys_madvise,
+    SysNoSys,              // 234 sys_remap_file_pages,
+    SysMbind,              // 235 sys_mbind,
+    SysGetMempolicy,       // 236 sys_get_mempolicy,
+    SysSetMempolicy,       // 237 sys_set_mempolicy,
+    SysCapErr,             // 238 sys_migrate_pages,
+    SysCapErr,             // 239 sys_move_pages,
+    SysRtTgsigqueueinfo,   // 240 sys_rt_tgsigqueueinfo, //240
+    SysNoDev,              // 241 sys_perf_event_open,
+    SysAccept4,            // 242 sys_accept4,
+    SysRecvMMsg,           // 243 sys_recvmmsg,
+    NotImplementSyscall,   // 244 syscall_244,
+    NotImplementSyscall,   // 245 syscall_245,
+    NotImplementSyscall,   // 246 syscall_246,
+    NotImplementSyscall,   // 247 syscall_247,
+    NotImplementSyscall,   // 248 syscall_248,
+    NotImplementSyscall,   // 249 syscall_249,
+    NotImplementSyscall,   // 250 syscall_250, //250
+    NotImplementSyscall,   // 251 syscall_251,
+    NotImplementSyscall,   // 252 syscall_252,
+    NotImplementSyscall,   // 253 syscall_253,
+    NotImplementSyscall,   // 254 syscall_254,
+    NotImplementSyscall,   // 255 syscall_255,
+    NotImplementSyscall,   // 256 syscall_256,
+    NotImplementSyscall,   // 257 syscall_257,
+    NotImplementSyscall,   // 258 syscall_258,
+    NotImplementSyscall,   // 259 syscall_259,
+    SysWait4,              // 260 sys_wait4, //260
+    SysPrlimit64,          // 261 sys_prlimit64,
+    SysNoSys,              // 262 sys_fanotify_init,
+    SysNoSys,              // 263 sys_fanotify_mark,
+    SysOpNotSupport,       // 264 sys_name_to_handle_at,
+    SysOpNotSupport,       // 265 sys_open_by_handle_at,
+    SysCapErr,             // 266 sys_clock_adjtime,
+    SysSyncFs,             // 267 sys_syncfs,
+    SysOpNotSupport,       // 268 sys_setns,
+    SysSendMMsg,           // 269 sys_sendmmsg,
+    SysNoSys,              // 270 sys_process_vm_readv, //270
+    SysNoSys,              // 271 sys_process_vm_writev,
+    SysCapErr,             // 272 sys_kcmp,
+    SysCapErr,             // 273 sys_finit_module,
+    SysNoSys,              // 274 sys_sched_setattr,
+    SysNoSys,              // 275 sys_sched_getattr,
+    SysNoSupport,          // 276 sys_renameat2,
+    NotImplementSyscall,   // 277 sys_seccomp,
+    SysGetRandom,          // 278 sys_getrandom,
+    SysMemfdCreate,        // 279 sys_memfd_create,
+    SysCapErr,             // 280 sys_bpf, //280
+    SysExecveat,           // 281 sys_execveat,
+    NotImplementSyscall,   // 282 sys_userfaultfd,
+    SysMembarrier,         // 283 sys_membarrier,
+    SysMlock2,             // 284 sys_mlock2,
+    SysNoSys,              // 285 sys_copy_file_range,
+    SysPreadv2,            // 286 sys_preadv2,
+    SysPWritev2,           // 287 sys_pwritev2,
+    NotImplementSyscall,   // 288 sys_pkey_mprotect,
+    NotImplementSyscall,   // 289 sys_pkey_alloc,
+    NotImplementSyscall,   // 290 sys_pkey_free,
+    SysStatx,              // 291 sys_statx,
+    NotImplementSyscall,  // 292
+    SysNoSys,              // 293 sys_rseq,
+    NotImplementSyscall,  // 294
+    NotImplementSyscall,  // 295
+    NotImplementSyscall,  // 296
+    NotImplementSyscall,  // 297
+    NotImplementSyscall,  // 298
+    NotImplementSyscall,  // 299
+    NotImplementSyscall,  // 300
+    NotImplementSyscall,  // 301
+    NotImplementSyscall,  // 302
+    NotImplementSyscall,  // 303
+    NotImplementSyscall,  // 304
+    NotImplementSyscall,  // 305
+    NotImplementSyscall,  // 306
+    NotImplementSyscall,  // 307
+    NotImplementSyscall,  // 308
+    NotImplementSyscall,  // 309
+    NotImplementSyscall,  // 310
+    NotImplementSyscall,  // 311
+    NotImplementSyscall,  // 312
+    NotImplementSyscall,  // 313
+    NotImplementSyscall,  // 314
+    NotImplementSyscall,  // 315
+    NotImplementSyscall,  // 316
+    NotImplementSyscall,  // 317
+    NotImplementSyscall,  // 318
+    NotImplementSyscall,  // 319
+    NotImplementSyscall,  // 320
+    NotImplementSyscall,  // 321
+    NotImplementSyscall,  // 322
+    NotImplementSyscall,  // 323
+    NotImplementSyscall,  // 324
+    NotImplementSyscall,  // 325
+    NotImplementSyscall,  // 326
+    NotImplementSyscall,  // 327
+    NotImplementSyscall,  // 328
+    NotImplementSyscall,  // 329
+    NotImplementSyscall,  // 330
+    NotImplementSyscall,  // 331
+    NotImplementSyscall,  // 332
+    NotImplementSyscall,  // 333
+    NotImplementSyscall,  // 334
+    NotImplementSyscall,  //	335
+    NotImplementSyscall,  //	336
+    NotImplementSyscall,  //	337
+    NotImplementSyscall,  //	338
+    NotImplementSyscall,  //	339
+    NotImplementSyscall,  //	340
+    NotImplementSyscall,  //	341
+    NotImplementSyscall,  //	342
+    NotImplementSyscall,  //	343
+    NotImplementSyscall,  //	344
+    NotImplementSyscall,  //	345
+    NotImplementSyscall,  //	346
+    NotImplementSyscall,  //	347
+    NotImplementSyscall,  //	348
+    NotImplementSyscall,  //	349
+    NotImplementSyscall,  //	350
+    NotImplementSyscall,  //	351
+    NotImplementSyscall,  //	352
+    NotImplementSyscall,  //	353
+    NotImplementSyscall,  //	354
+    NotImplementSyscall,  //	355
+    NotImplementSyscall,  //	356
+    NotImplementSyscall,  //	357
+    NotImplementSyscall,  //	358
+    NotImplementSyscall,  //	359
+    NotImplementSyscall,  //	360
+    NotImplementSyscall,  //	361
+    NotImplementSyscall,  //	362
+    NotImplementSyscall,  //	363
+    NotImplementSyscall,  //	364
+    NotImplementSyscall,  //	365
+    NotImplementSyscall,  //	366
+    NotImplementSyscall,  //	367
+    NotImplementSyscall,  //	368
+    NotImplementSyscall,  //	369
+    NotImplementSyscall,  //	370
+    NotImplementSyscall,  //	371
+    NotImplementSyscall,  //	372
+    NotImplementSyscall,  //	373
+    NotImplementSyscall,  //	374
+    NotImplementSyscall,  //	375
+    NotImplementSyscall,  //	376
+    NotImplementSyscall,  //	377
+    NotImplementSyscall,  //	378
+    NotImplementSyscall,  //	379
+    NotImplementSyscall,  //	380
+    NotImplementSyscall,  //	381
+    NotImplementSyscall,  //	382
+    NotImplementSyscall,  //	383
+    NotImplementSyscall,  //	384
+    NotImplementSyscall,  //	385
+    NotImplementSyscall,  //	386
+    NotImplementSyscall,  //	387
+    NotImplementSyscall,  //	388
+    NotImplementSyscall,  //	389
+    NotImplementSyscall,  //	390
+    NotImplementSyscall,  //	391
+    NotImplementSyscall,  //	392
+    NotImplementSyscall,  //	393
+    NotImplementSyscall,  //	394
+    NotImplementSyscall,  //	395
+    NotImplementSyscall,  //	396
+    NotImplementSyscall,  //	397
+    NotImplementSyscall,  //	398
+    NotImplementSyscall,  //	399
+    NotImplementSyscall,  //	400
+    NotImplementSyscall,  //	401
+    NotImplementSyscall,  //	402
+    NotImplementSyscall,  //	403
+    NotImplementSyscall,  //	404
+    NotImplementSyscall,  //	405
+    NotImplementSyscall,  //	406
+    NotImplementSyscall,  //	407
+    NotImplementSyscall,  //	408
+    NotImplementSyscall,  //	409
+    NotImplementSyscall,  //	410
+    NotImplementSyscall,  //	411
+    NotImplementSyscall,  //	412
+    NotImplementSyscall,  //	413
+    NotImplementSyscall,  //	414
+    NotImplementSyscall,  //	415
+    NotImplementSyscall,  //	416
+    NotImplementSyscall,  //	417
+    NotImplementSyscall,  //	418
+    NotImplementSyscall,  //	419
+    NotImplementSyscall,  //	420
+    NotImplementSyscall,  //	421
+    NotImplementSyscall,  //	422
+    NotImplementSyscall,  //	423
+    NotImplementSyscall,  //	424
+    NotImplementSyscall,  //	425
+    NotImplementSyscall,  //	426
+    NotImplementSyscall,  //	427
+    NotImplementSyscall,  //	428
+    NotImplementSyscall,  //	429
+    NotImplementSyscall,  //	430
+    NotImplementSyscall,  //	431
+    NotImplementSyscall,  //	432
+    NotImplementSyscall,  //	433
+    NotImplementSyscall,  //	434
+    NotImplementSyscall,  //	435
+    NotImplementSyscall,  //	436
+    NotImplementSyscall,  //	437
+    NotImplementSyscall,  //	438
+    SysNoSys,             //	439
+    NotImplementSyscall,  //	440
+    NotImplementSyscall,  //	441
+    NotImplementSyscall,  //	442
+    NotImplementSyscall,  //	443
+    NotImplementSyscall,  //	444
+    NotImplementSyscall,  //	445
+    NotImplementSyscall,  //	446
+    NotImplementSyscall,  //	447
+    NotImplementSyscall,  //	448
+    NotImplementSyscall,  //	449
+    NotImplementSyscall,  //	450
+    NotExisting,          // 451 unknow syscall
 ];
 
 pub fn NotImplementSyscall(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {

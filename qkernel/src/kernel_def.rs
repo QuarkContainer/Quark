@@ -50,6 +50,7 @@ use super::qlib::*;
 use super::syscalls::sys_file::*;
 use super::Kernel::HostSpace;
 
+
 use crate::GLOBAL_ALLOCATOR;
 
 impl OOMHandler for ListAllocator {
@@ -145,7 +146,7 @@ pub fn switch(from: TaskId, to: TaskId) {
     if !SHARESPACE.config.read().KernelPagetable {
         toCtx.SwitchPageTable();
     }
-    toCtx.SetFS();
+    toCtx.SetTLS();
 
     fromCtx.mm.VcpuLeave();
     toCtx.mm.VcpuEnter();
@@ -204,7 +205,7 @@ pub fn Invlpg(addr: u64) {
             tlbi vaae1is, {}
             dsb ish
             isb
-        ", in(reg) (addr >> PAGE_SHIFT));
+        ", in(reg) (addr >> MemoryDef::PAGE_SHIFT));
         };
     }
 }
@@ -230,7 +231,22 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
-    // TODO add HyperCall64
+    // Use MMIO to cause VM exit hence "hypercall". The data does not matter,
+    // addr of the MMIO identifies the Hypercall. x0 and x1 (w1) are used by the
+    // str instruction, the 4x 64-bit parameters are passed via x2,x3,x4,x5.
+    unsafe {
+        let data: u8 = 0;
+        let addr: u64 = MemoryDef::HYPERCALL_MMIO_BASE + (type_ as u64);
+
+        asm!("str w1, [x0]",
+             in("x0") addr,
+             in("w1") data,
+             in("x2") para1,
+             in("x3") para2,
+             in("x4") para3,
+             in("x5") para4,
+        )
+    }
 }
 
 impl CPULocal {
@@ -312,7 +328,11 @@ pub fn child_clone(userSp: u64) {
     //currTask.mm.VcpuEnter();
     CPULocal::Myself().SetMode(VcpuMode::User);
     currTask.mm.HandleTlbShootdown();
-    SyscallRet(kernelRsp)
+    debug!("entering child task: kernelSp/PtRegs @ {:x}", kernelRsp);
+    #[cfg(target_arch = "x86_64")]
+    SyscallRet(kernelRsp);
+    #[cfg(target_arch = "aarch64")]
+    IRet(kernelRsp);
 }
 
 extern "C" {
@@ -389,7 +409,7 @@ impl IOMgr {
 
 unsafe impl GlobalAlloc for GlobalVcpuAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        if !self.init.load(Ordering::Relaxed) {
+        if !self.init.load(Ordering::Acquire) {
             return GLOBAL_ALLOCATOR.alloc(layout);
         }
         return CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout);
@@ -431,7 +451,6 @@ pub fn ReapSwapIn() {
     HostSpace::SwapIn();
 }
 
-
 impl TsotSocketMgr {
     pub fn SendMsg(m: &TsotMessage) -> Result<()> {
         let res = HostSpace::TsotSendMsg(m as * const _ as u64);
@@ -457,4 +476,53 @@ impl DnsSvc {
     pub fn Init(&self) -> Result<()> {
         panic!("impossible");
     }
+}
+
+/// enable access to EL0 memory from EL1 return the previous state
+/// true : enabled, false : disabled
+#[cfg(target_arch = "aarch64")]
+#[inline]
+pub fn enable_access_user() -> bool {
+    #[cfg(target_feature = "pan")]
+    {
+        unsafe {
+            // PAN==1 means access NOT allowed
+            let allow = !pan();
+            pan_set(false);
+            return allow;
+        }
+    }
+    // if PAN is not the case, accessing user memory is always enabled for EL1
+    return true;
+}
+
+/// reset access to EL0 memory from EL1 return the previous state
+/// true : enable false : disable
+#[cfg(target_arch = "aarch64")]
+#[inline]
+pub fn set_access_user(allow: bool) {
+    #[cfg(target_feature = "pan")]
+    {
+        unsafe {
+            pan_set(!allow);
+        }
+    }
+}
+
+/// read raw opcode from userspace memory with pc;
+/// unsafe: MUST make sure the mem page is present.
+/// e.g. this exact user instruction has just triggered an exception
+#[cfg(target_arch = "aarch64")]
+pub unsafe fn read_user_opcode(pc: u64) -> Option<u32> {
+    // this read is failiable
+    // check pc alignment:
+    if pc & 0b11 != 0 {
+        return None;
+    }
+    let opcode: u32;
+    let ua = enable_access_user();
+    asm!("ldr {0:w}, [{1}]", out(reg) opcode, in(reg) pc);
+
+    set_access_user(ua);
+    return Some(opcode);
 }

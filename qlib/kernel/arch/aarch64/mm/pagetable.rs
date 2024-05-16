@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+#![allow(non_upper_case_globals)]
 use core::fmt;
 use core::ops::{Index, IndexMut, Add, AddAssign, Sub, SubAssign};
 
@@ -63,7 +63,7 @@ impl PageTableEntry {
     /// Returns the physical address mapped by this entry, might be zero.
     #[inline]
     pub fn addr(&self) -> PhysAddr {
-        PhysAddr::new(self.entry & 0x000f_ffff_ffff_f000)
+        PhysAddr::new(self.entry & 0x0000_ffff_ffff_f000)
     }
 
     /// Returns the physical frame mapped by this entry.
@@ -87,6 +87,7 @@ impl PageTableEntry {
     /// Map the entry to the specified physical address with the specified flags.
     #[inline]
     pub fn set_addr(&mut self, addr: PhysAddr, flags: PageTableFlags) {
+		// TODO the position of the bits
         assert!(addr.is_aligned(4096u64));
         self.entry = (addr.as_u64()) | flags.bits();
     }
@@ -99,9 +100,15 @@ impl PageTableEntry {
     //}
 
     /// Sets the flags of this entry.
+    /// TODO: Enforcing PAGE here is not an optimal fix.
     #[inline]
     pub fn set_flags(&mut self, flags: PageTableFlags) {
-        self.entry = self.addr().as_u64() | flags.bits();
+        self.entry = self.addr().as_u64() | flags.bits() | PageTableFlags::PAGE.bits();
+    }
+    /// Sets the flags of this entry but only sets permission bits.
+    #[inline]
+    pub fn set_flags_perms_only(&mut self, flags: PageTableFlags){
+        self.entry = (self.entry & !PageTableFlags::MProtectBits.bits()) | flags.bits()
     }
 }
 
@@ -117,22 +124,55 @@ impl fmt::Debug for PageTableEntry {
 bitflags! {
     /// Possible flags for a page table entry.
     pub struct PageTableFlags: u64 {
-        const VALID           = 1;
-        const TABLE           = 1 << 1;
-        const USER_ACCESSIBLE = 1 << 6;
-        const READ_ONLY       = 1 << 7;
-        const SHARED          = 3 << 8;
-        const ACCESSED        = 1 << 10;
-        const NON_GLOBAL      = 1 << 11;
-        const DBM             = 1 << 51;
-        const PXN             = 1 << 53;
-        const UXN             = 1 << 54;
-
-        const HUGE_PAGE       = 1 << 1;
         const ZERO            = 0;
         const PRESENT         = 1;
+        const VALID           = 1;
+        const TABLE           = 1 << 1;
+        const PAGE            = 1 << 1;      // 4k granule
+        // [11:2] Lower page/block attributes
+        // [4:2] Memory Attributes
+        // MAIR programming defined in qvisor/src/kvm_vcpu_aarch64.rs
+        // MEM_DEVICE and MEM_NORMAL are shorthand aliases
+        const MEM_DEVICE      = 1 << 2;
+        const MEM_NORMAL      = 4 << 2;
+        const MT_DEVICE_nGnRnE= 0 << 2;
+        const MT_DEVICE_nGnRE = 1 << 2;
+        const MT_DEVICE_GRE   = 2 << 2;
+        const MT_NORMAL_NC    = 3 << 2;
+        const MT_NORMAL       = 4 << 2;
+        const MT_NORMAL_WT    = 5 << 2;
+
+        const NS              = 1 << 5; // non secure
+        // [7:6] Access permissions (AP)
+        const USER_ACCESSIBLE = 1 << 6; // allow EL0 access
+        const READ_ONLY       = 1 << 7;
+        // [9:8] Shareability (SH)
+        const OUTER_SHAREABLE = 2 << 8;
+        const INNER_SHAREABLE = 3 << 8;
+        const ACCESSED        = 1 << 10;
+        const NON_GLOBAL      = 1 << 11;
+
+        // Upper page/block attributes
+        const DBM             = 1 << 51;
+        const CONTIGUOUS      = 1 << 52;
+        const PXN             = 1 << 53;
+        const UXN             = 1 << 54;
+        const DIRTY           = 1 << 55;
+
+        // Occupied bits, dedicated for SW usage.
+        const SWAPPED_OUT     = 1 << 56;
+        const TAKEN           = 1 << 57; //Another thread is using the PTE.
     }
 }
+
+impl PageTableFlags {
+    pub const MProtectBits:PageTableFlags = PageTableFlags::from_bits_truncate(
+        PageTableFlags::USER_ACCESSIBLE.bits() |
+        PageTableFlags::READ_ONLY.bits() |
+        PageTableFlags::PXN.bits() |
+        PageTableFlags::UXN.bits());
+}
+
 
 /// The number of entries in a page table.
 const ENTRY_COUNT: usize = 512;

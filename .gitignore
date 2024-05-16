@@ -9,3 +9,6 @@ test/go/*.go
 .idea/
 __pycache__/
 .env
+vdso/*.d
+vdso/*.o
+vdso/*.so

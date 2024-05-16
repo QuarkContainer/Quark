@@ -30,6 +30,36 @@ cfg_x86_64! {
    pub use x86_64::PhysAddr;
    pub use x86_64::VirtAddr;
 
+   //
+   // A swapt-out page has the bit-flag set.
+   //
+   fn is_pte_swapped(flags: PageTableFlags) -> bool {
+       flags.contains(PageTableFlags::BIT_9)
+   }
+
+   fn set_pte_swapped(flags: &mut PageTableFlags) {
+       flags.insert(PageTableFlags::BIT_9);
+   }
+
+   fn unset_pte_swapped(flags: &mut PageTableFlags) {
+       flags.remove(PageTableFlags::BIT_9);
+   }
+
+   //
+   // Bit flag is set if another thread is using the PTE.
+   //
+   fn is_pte_taken(flags: PageTableFlags) -> bool {
+       flags.contains(PageTableFlags::BIT_10)
+   }
+
+   fn set_pte_taken(flags: &mut PageTableFlags) {
+       flags.insert(PageTableFlags::BIT_10);
+   }
+
+   fn unset_pte_taken(flags: &mut PageTableFlags) {
+       flags.remove(PageTableFlags::BIT_10);
+   }
+
    #[inline]
    pub fn default_table_user() -> PageTableFlags {
        return PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE | PageTableFlags::WRITABLE;
@@ -37,21 +67,55 @@ cfg_x86_64! {
 }
 
 cfg_aarch64! {
-   pub use super::pagetable_aarch64::PageTableEntry;
-   pub use super::pagetable_aarch64::PageTableIndex;
-   pub use super::pagetable_aarch64::PageTable;
-   pub use super::pagetable_aarch64::PageTableFlags;
-   pub use super::pagetable_aarch64::PhysAddr;
-   pub use super::pagetable_aarch64::VirtAddr;
+   pub use super::kernel::arch::__arch::mm::pagetable::{PhysAddr, VirtAddr, PageTable,
+                                                         PageTableEntry, PageTableIndex,
+                                                         PageTableFlags};
+
+   //
+   // A swapt-out page has the bit-flag set.
+   //
+   fn is_pte_swapped(flags: PageTableFlags) -> bool {
+       flags.contains(PageTableFlags::SWAPPED_OUT)
+   }
+
+   fn set_pte_swapped(flags: &mut PageTableFlags) {
+       flags.insert(PageTableFlags::SWAPPED_OUT);
+   }
+
+   fn unset_pte_swapped(flags: &mut PageTableFlags) {
+       flags.remove(PageTableFlags::SWAPPED_OUT);
+   }
+
+   //
+   // Bit flag is set if another thread is using the PTE.
+   //
+   fn is_pte_taken(flags: PageTableFlags) -> bool {
+       flags.contains(PageTableFlags::TAKEN)
+   }
+
+   fn set_pte_taken(flags: &mut PageTableFlags) {
+       flags.insert(PageTableFlags::TAKEN);
+   }
+
+   fn unset_pte_taken(flags: &mut PageTableFlags) {
+       flags.remove(PageTableFlags::TAKEN);
+   }
 
    #[inline]
    pub fn default_table_user() -> PageTableFlags {
-       return PageTableFlags::VALID | PageTableFlags::TABLE | PageTableFlags::ACCESSED | PageTableFlags::USER_ACCESSIBLE;
+       return PageTableFlags::VALID | PageTableFlags::TABLE
+              | PageTableFlags::ACCESSED | PageTableFlags::USER_ACCESSIBLE;
+   }
+
+   pub fn default_table_kernel() -> PageTableFlags {
+    return PageTableFlags::VALID | PageTableFlags::TABLE
+           | PageTableFlags::ACCESSED;
    }
 }
 
 
-use super::super::asm::*;
+
+use super::kernel::asm::*;
 use super::addr::*;
 use super::common::{Allocator, Error, Result};
 use super::kernel::Kernel::HostSpace;
@@ -139,7 +203,7 @@ impl PageTables {
 
     #[cfg(target_arch = "aarch64")]
     pub fn Switch(table: u64) {
-        LoadUserTable(table)
+        LoadTranslationTable(table)
     }
 
     pub fn SetRoot(&self, root: u64) {
@@ -401,17 +465,14 @@ impl PageTables {
             pagePool.Ref(phyAddr.0).unwrap();
             if !pteEntry.is_unused() {
                 self.freeEntry(pteEntry, pagePool)?;
-
-                /*let addr = pteEntry.addr().as_u64();
-                let bit9 = pteEntry.flags() & PageTableFlags::BIT_9 == PageTableFlags::BIT_9;
-
-                if vaddr.0 != 0 && !bit9 {
-                    pagePool.Deref(addr).unwrap();
-                }*/
                 res = true;
             }
 
+            #[cfg(target_arch="x86_64")]
             pteEntry.set_addr(PhysAddr::new(phyAddr.0), flags);
+            #[cfg(target_arch="aarch64")]
+            pteEntry.set_addr(PhysAddr::new(phyAddr.0), flags | PageTableFlags::PAGE);
+
             Invlpg(vaddr.0);
         }
 
@@ -429,16 +490,6 @@ impl PageTables {
                 None => break,
                 Some(page) => {
                     PAGE_MGR.FreePage(page).unwrap();
-
-                    /*let layout = Layout::from_size_align(MemoryDef::PAGE_SIZE_4K as _, MemoryDef::PAGE_SIZE_4K as _);
-                    match layout {
-                        Err(_e) => {
-                            panic!("pagetable free unaligned page {:x}", page);
-                        },
-                        Ok(l) => unsafe {
-                            dealloc(page as *mut u8, l);
-                        },
-                    }*/
                 }
             }
         }
@@ -516,26 +567,6 @@ impl PageTables {
         if end.0 < start.0 {
             return Err(Error::AddressNotInRange);
         }
-
-        /*let mut addrs = Vec::new();
-
-        let mut offset = 0;
-        while start.0 + offset < end.0 {
-            let entry = self.VirtualToEntry(oldStart.0 + offset);
-            match entry {
-                Ok(oldentry) => {
-                    let phyAddr = oldentry.addr().as_u64();
-                    addrs.push(Some(phyAddr));
-                    pagePool.Ref(phyAddr).unwrap();
-                    self.Unmap(oldStart.0 + offset, oldStart.0 + offset + MemoryDef::PAGE_SIZE, pagePool)?;
-                }
-                Err(_) => {
-                    addrs.push(None);
-                }
-            }
-            offset += MemoryDef::PAGE_SIZE;
-        }*/
-
         // todo: handle overlap...
         let mut offset = 0;
         'a: while start.0 + offset < end.0 {
@@ -581,6 +612,12 @@ impl PageTables {
             panic!("start/end address not 1G aligned")
         }
 
+        #[cfg(target_arch = "aarch64")]
+        let hugepage_flags = flags & (!PageTableFlags::TABLE);
+
+        #[cfg(target_arch = "x86_64")]
+        let hugepage_flags = flags | PageTableFlags::HUGE_PAGE;
+
         let mut res = false;
 
         let mut curAddr = start;
@@ -611,7 +648,7 @@ impl PageTables {
 
                     pudEntry.set_addr(
                         PhysAddr::new(newphysAddr),
-                        flags | PageTableFlags::HUGE_PAGE,
+                        hugepage_flags,
                     );
                     curAddr = curAddr.AddLen(MemoryDef::HUGE_PAGE_SIZE_1G)?;
 
@@ -649,15 +686,6 @@ impl PageTables {
         if start.0 < MemoryDef::LOWER_TOP {
             if end.0 <= MemoryDef::LOWER_TOP {
                 return self.mapCanonical(start, end, physical, flags, pagePool, kernel);
-            } else if end.0 > MemoryDef::LOWER_TOP && end.0 <= MemoryDef::UPPER_BOTTOM {
-                return self.mapCanonical(
-                    start,
-                    Addr(MemoryDef::LOWER_TOP),
-                    physical,
-                    flags,
-                    pagePool,
-                    kernel,
-                );
             } else {
                 return self.mapCanonical(
                     start,
@@ -1209,7 +1237,53 @@ impl PageTables {
         pages: &mut BTreeSet<u64>,
         updatePageEntry: bool,
     ) -> Result<()> {
-        Ok(())
+        let end = start + len;
+
+        self.Traverse(
+            Addr(MemoryDef::PAGE_SIZE),
+            Addr(MemoryDef::PHY_LOWER_ADDR),
+            |entry: &mut PageTableEntry, _virtualAddr| {
+                let phyAddr = entry.addr().as_u64();
+                if start <= phyAddr && phyAddr < end {
+                    let mut flags = entry.flags();
+                    let needInsert = !is_pte_swapped(flags);
+                    if updatePageEntry && needInsert {
+                        //error!("SwapOutPages 1 {:x?}/{:x}/{:x}/{:x}/{:x}", self.root, phyAddr, _virtualAddr, start, end);
+                        flags &= !PageTableFlags::PRESENT;
+                        set_pte_swapped(&mut flags);
+                        entry.set_flags(flags);
+                    }
+
+                    if needInsert {
+                        pages.insert(phyAddr);
+                    }
+                }
+            },
+            false,
+        )?;
+
+        return self.Traverse(
+            Addr(MemoryDef::PHY_UPPER_ADDR),
+            Addr(MemoryDef::LOWER_TOP),
+            |entry, _virtualAddr| {
+                let phyAddr = entry.addr().as_u64();
+                if start <= phyAddr && phyAddr < end {
+                    let mut flags = entry.flags();
+                    let needInsert = !is_pte_swapped(flags);
+                    if updatePageEntry && needInsert {
+                        //error!("SwapOutPages 1 {:x?}/{:x}/{:x}/{:x}/{:x}", self.root, phyAddr, _virtualAddr, start, end);
+                        flags &= !PageTableFlags::PRESENT;
+                        set_pte_swapped(&mut flags);
+                        entry.set_flags(flags);
+                    }
+
+                    if needInsert {
+                        pages.insert(phyAddr);
+                    }
+                }
+            },
+            false,
+        );
     }
 
     // ret: >0: the swapped out page addr, 0: the page is missing
@@ -1254,14 +1328,6 @@ impl PageTables {
             if pteEntry.is_unused() {
                 return Ok(0);
             }
-
-            /*let mut flags = pteEntry.flags();
-            if flags & PageTableFlags::BIT_9 == PageTableFlags::BIT_9 {
-                flags |= PageTableFlags::PRESENT;
-                // flags bit9 which indicate the page is swapped out
-                flags &= !PageTableFlags::BIT_9;
-                pteEntry.set_flags(flags);
-            } */
 
             self.HandlingSwapInPage(vaddr.0, pteEntry);
 
@@ -1325,8 +1391,68 @@ impl PageTables {
         }
     }
 
+    //
+    // NOTE: Possible refactoring/reusing in respect to x86 seems possible.
+    //
     #[cfg(target_arch = "aarch64")]
-    pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {}
+    pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
+        let flags = pteEntry.flags();
+
+        // bit56 : whether the page is swapped-out
+        // bit57: whether there is thread is working on swapping the page
+        if is_pte_swapped(flags) {
+            let needSwapin = {
+                let _l = crate::GLOBAL_LOCK.lock();
+
+                let mut flags = pteEntry.flags();
+
+                // Has another thread swapped in the page?
+                if !is_pte_swapped(flags) {
+                    return;
+                }
+
+                // Is there another thread doing the swapping?
+                if is_pte_taken(flags) {
+                    // another thread is swapping in
+                    false
+                } else {
+                    set_pte_taken(&mut flags);
+                    true
+                }
+            };
+
+            if needSwapin {
+                info!("VM: vaddr:{:#x} in PTE:{:?} needs swapped.",
+                   vaddr, pteEntry);
+                let addr = pteEntry.addr().as_u64();
+                //
+                // NOTE: How can we detect if it succeeded or not?
+                //
+                let _ret = HostSpace::SwapInPage(addr);
+                debug!("VM: HS-SiP return:{}", _ret);
+                let mut flags = pteEntry.flags();
+                unset_pte_swapped(&mut flags);
+                unset_pte_taken(&mut flags);
+                pteEntry.set_flags(flags);
+                Invlpg(vaddr);
+                fence(Ordering::SeqCst);
+            } else {
+                info!("VM: vaddr:{:#x} in PTE:{:?} will wait for swapp.",
+                   vaddr, pteEntry);
+                loop {
+                    let flags = pteEntry.flags();
+
+                    // Wait for the other thread to finish swapping-in
+                    if !is_pte_swapped(flags) {
+                        info!("VM: vaddr:{:#x} in PTE:{:?} was swapped from others.",
+                   vaddr, pteEntry);
+                        return;
+                    }
+                    spin_loop();
+                }
+            }
+        }
+    }
 
     pub fn MProtect(
         &self,
@@ -1337,16 +1463,34 @@ impl PageTables {
     ) -> Result<()> {
         //info!("MProtoc: start={:x}, end={:x}, flag = {:?}", start.0, end.0, flags);
         defer!(self.EnableTlbShootdown());
-        return self.Traverse(
-            start,
-            end,
-            |entry, virtualAddr| {
-                self.HandlingSwapInPage(virtualAddr, entry);
-                entry.set_flags(flags);
-                Invlpg(virtualAddr);
-            },
-            failFast,
-        );
+        #[cfg(target_arch = "x86_64")]{
+            return self.Traverse(
+                start,
+                end,
+                |entry, virtualAddr| {
+                    self.HandlingSwapInPage(virtualAddr, entry);
+                    entry.set_flags(flags);
+                    Invlpg(virtualAddr);
+                },
+                failFast,
+            );
+
+        }
+        #[cfg(target_arch = "aarch64")]{
+            return self.Traverse(
+                start,
+                end,
+                |entry, virtualAddr| {
+                    if PageTableFlags::MProtectBits.contains(flags) {
+                        entry.set_flags_perms_only(flags);
+                    } else {
+                        entry.set_flags(flags);
+                    }
+                    Invlpg(virtualAddr);
+                },
+                failFast,
+            );
+        }
     }
 
     fn freeEntry(&self, entry: &mut PageTableEntry, pagePool: &Allocator) -> Result<bool> {
@@ -1423,19 +1567,14 @@ impl PageTables {
                             }
 
                             if !pteEntry.is_unused() {
-                                /*let bit9 = pteEntry.flags() & PageTableFlags::BIT_9 == PageTableFlags::BIT_9;
-
-                                if !bit9 {
-                                    res = true;
-                                    let currAddr = pteEntry.addr().as_u64();
-                                    pagePool.Deref(currAddr)?;
-                                    pteEntry.set_flags(PageTableFlags::PRESENT | PageTableFlags::BIT_9);
-                                }*/
                                 res = self.freeEntry(pteEntry, pagePool)?;
                             }
 
-                            //info!("set addr: vaddr is {:x}, paddr is {:x}, flags is {:b}", curAddr.0, phyAddr.0, flags.bits());
+                            #[cfg(target_arch="x86_64")]
                             pteEntry.set_addr(PhysAddr::new(newAddr), flags);
+                            #[cfg(target_arch="aarch64")]
+                            pteEntry.set_addr(PhysAddr::new(newAddr), flags | PageTableFlags::PAGE);
+
                             Invlpg(curAddr.0);
                             curAddr = curAddr.AddLen(MemoryDef::PAGE_SIZE_4K)?;
 

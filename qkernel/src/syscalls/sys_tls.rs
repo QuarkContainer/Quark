@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// NOTE: we don't have a aarch64 equivalent for this module
+#![allow(unused_imports)]
+
 use core::mem;
 
-use super::super::arch::x86_64::context::*;
+use super::super::arch::__arch::context::MAX_ADDR64;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
@@ -25,6 +28,7 @@ pub fn IsValidSegmentBase(addr: u64) -> bool {
     return addr < MAX_ADDR64;
 }
 
+#[cfg(target_arch="x86_64")]
 pub fn SysArchPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let code = args.arg0;
     let addr = args.arg1 as u64;
@@ -41,28 +45,23 @@ pub fn SysArchPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     match cmdCode {
         PrCtlEnum::ARCH_SET_GS => {
-            //WriteMsr(MSR::MSR_KERNEL_GS_BASE as u32, addr);
             SetGs(addr);
         }
         PrCtlEnum::ARCH_SET_FS => {
             if !IsValidSegmentBase(addr) {
                 return Err(Error::SysError(SysErr::EPERM));
             }
-            SetFs(addr);
-            task.context.fs = addr;
+            SetTLS(addr);
+            task.context.set_tls(addr);
             //info!("ARCH_SET_FS: the val is {:x}", unsafe {*(addr as * const u64)});
             //info!("after ARCH_SET_FS, the input value is {:x}, the get fs result is {:x}", addr, ReadMsr(MSR::MSR_FS_BASE as u32));
         }
         PrCtlEnum::ARCH_GET_FS => {
-            //*task.GetTypeMut::<u64>(addr)? = GetFs();
             task.CopyOutObj(&GetFs(), addr)?;
         }
         PrCtlEnum::ARCH_GET_GS => {
-            //*task.GetTypeMut::<u64>(addr)? = GetGs();
             task.CopyOutObj(&GetGs(), addr)?;
-            //unsafe {*(addr as *mut u64) = ReadMsr(MSR::MSR_KERNEL_GS_BASE as u32)}
         }
     }
-
     return Ok(0);
 }

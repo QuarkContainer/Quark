@@ -412,7 +412,6 @@ impl PageBlock {
     pub fn AllocPageBlock() -> Result<&'static mut Self> {
         let alloc = AlignedAllocator::New(BLOCK_SIZE as _, BLOCK_SIZE as _);
         let addr = alloc.Allocate()?;
-
         let ret = Self::FromAddr(addr);
         ret.Init();
         return Ok(ret);

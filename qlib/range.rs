@@ -19,6 +19,7 @@ use core::ops::Bound::*;
 
 use super::addr::*;
 use super::common::{Error, Result};
+use core::fmt;
 
 pub const MAX_RANGE: u64 = core::u64::MAX;
 
@@ -26,6 +27,13 @@ pub const MAX_RANGE: u64 = core::u64::MAX;
 pub struct Range {
     pub start: u64,
     pub len: u64,
+}
+
+impl fmt::LowerHex for Range {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Range_Start:{:#x} - Range_Length:{:#x}",
+               self.start, self.len)
+    }
 }
 
 impl Ord for Range {

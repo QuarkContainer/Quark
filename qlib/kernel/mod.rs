@@ -25,7 +25,7 @@ use super::control_msg::*;
 use super::pagetable::*;
 use super::singleton::*;
 
-use self::arch::x86_64::arch_x86::*;
+use self::arch::__arch::arch_def::ArchFPState;
 use self::boot::loader::*;
 use self::kernel::async_process::*;
 use self::memmgr::pma::*;
@@ -72,9 +72,21 @@ pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> =
     Singleton::<AlignedAllocator>::New();
 
 pub static EXIT_CODE: Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
+
+#[cfg(target_arch = "x86_64")]
 pub static VCPU_FREQ: AtomicI64 = AtomicI64::new(2_000_000_000); // default 2GHZ
+
+#[cfg(target_arch = "aarch64")]
+// CAUTIONS!!: for arm, the rdtsc counter is replaced with the system counter
+// (cntvct_el0), and vcpu frequency" with the system counter frequency (cntfreq)
+// Counter frequency is implementation defined, the cntfreq value is provided by
+// the EL2+ firmware, and is not necessarily related to the actual cpu or vcpu
+// frequency. Nevertheless, we are keeping the namings for convenience atm. Do
+// not mistake VCPU_FREQ for the actuall vcpu frequency.
+pub static VCPU_FREQ: AtomicI64 = AtomicI64::new(25_000_000); // default 25MHZ
+
 pub static ASYNC_PROCESS: AsyncProcess = AsyncProcess::New();
-pub static FP_STATE: X86fpstate = X86fpstate::Init();
+pub static FP_STATE: ArchFPState = ArchFPState::Init();
 pub static SUPPORT_XSAVE: AtomicBool = AtomicBool::new(false);
 pub static SUPPORT_XSAVEOPT: AtomicBool = AtomicBool::new(false);
 
@@ -176,7 +188,7 @@ impl Tsc {
     }
 
     pub fn Rdtsc(&self) -> i64 {
-        return Self::RawRdtsc() - self.offset.load(Ordering::Relaxed);
+        return Self::RawRdtsc() - self.offset.load(Ordering::SeqCst);
     }
 }
 

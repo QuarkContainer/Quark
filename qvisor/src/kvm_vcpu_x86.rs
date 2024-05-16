@@ -510,7 +510,7 @@ impl KVMVcpu {
                         qlib::HYPERCALL_VCPU_FREQ => {
                             let data = para1;
 
-                            let freq = self.vcpu.get_tsc_khz().unwrap() * 1000;
+                            let freq = self.get_frequency()?;
                             unsafe {
                                 let call = &mut *(data as *mut VcpuFeq);
                                 call.res = freq as i64;
@@ -804,5 +804,9 @@ impl KVMVcpu {
         });
         error!("vcpu {} stack: {}", self.id, frames);
         Ok(())
+    }
+
+    pub fn get_frequency(&self) -> Result<u64> {
+        Ok((self.vcpu.get_tsc_khz().map_err(|e| Error::SysError(e.errno()))? as u64) * 1000)
     }
 }

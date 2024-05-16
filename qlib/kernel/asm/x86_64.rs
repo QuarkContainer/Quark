@@ -245,7 +245,7 @@ pub fn IRet(kernelRsp: u64) -> ! {
 }
 
 #[inline]
-pub fn GetRsp() -> u64 {
+pub fn GetCurrentKernelSp() -> u64 {
     let rsp: u64;
     unsafe {
         asm!(

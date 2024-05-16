@@ -68,7 +68,7 @@ impl KernelELF {
     }
 
     pub fn LoadKernel(&mut self, fileName: &str) -> Result<u64> {
-        let f =
+        let f: File =
             File::open(fileName).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
         let mmap =
             unsafe { Mmap::map(&f).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))? };
@@ -78,7 +78,7 @@ impl KernelELF {
         let mut endAddr: Addr = Addr(0);
 
         let elfFile = ElfFile::new(&mmap).map_err(Error::ELFLoadError)?;
-
+        info!("elfFile header {:?}", elfFile.header);
         let entry = match &elfFile.header.pt2 {
             HeaderPt2::Header64(pt2) => pt2.entry_point,
             _ => return Err(Error::WrongELFFormat),
@@ -87,6 +87,7 @@ impl KernelELF {
         for p in elfFile.program_iter() {
             //todo : add more check
             if let Ph64(header) = p {
+                info!("program header: {:?}", header);
                 if header.get_type().map_err(Error::ELFLoadError)? == Type::Load {
                     let startMem = Addr(header.virtual_addr).RoundDown()?;
                     let endMem = Addr(header.virtual_addr)
@@ -106,7 +107,7 @@ impl KernelELF {
                     if endAddr.0 < endMem.0 {
                         endAddr = end;
                     }
-
+                    info!("start mem {:x}, len {:x}, offset {:x}", startMem.0, len, Addr(header.offset).RoundDown()?.0);
                     let mut option = &mut MapOption::New();
                     option = option
                         .Addr(startMem.0)
@@ -165,7 +166,7 @@ impl KernelELF {
         return Ok(entry);
     }
 
-    pub fn LoadVDSO(&mut self, fileName: &String) -> Result<()> {
+    pub fn LoadVDSO(&mut self, fileName: &str) -> Result<()> {
         let f =
             File::open(fileName).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
         let mmap =

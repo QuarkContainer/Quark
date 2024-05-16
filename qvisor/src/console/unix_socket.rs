@@ -107,7 +107,7 @@ impl UnixSocket {
             server.sun_path[i] = slice[i] as i8;
         }
         #[cfg(target_arch = "aarch64")]
-        server.sun_path.copy_from_slice(slice);
+        server.sun_path[0..slice.len()].copy_from_slice(slice);
 
         let sock = unsafe { socket(AF_UNIX, SOCK_STREAM, 0) };
 

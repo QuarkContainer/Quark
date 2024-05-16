@@ -16,18 +16,19 @@ use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use core::ptr;
+use core::sync::atomic::AtomicUsize;
 
 use super::super::super::super::kernel_def::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::task_mgr::*;
-use super::super::arch::x86_64::context::*;
+use super::super::arch::__arch::context::MAX_ADDR64;
+use super::super::arch::__arch::arch_def::Context;
 use super::super::kernel::ipc_namespace::*;
 use super::super::threadmgr::task_start::*;
 use super::super::threadmgr::thread::*;
 use super::super::SignalDef::*;
 use super::super::*;
-//use super::super::syscalls::sys_tls::*;
 use super::super::task::*;
 use super::task_block::*;
 use super::task_stop::*;
@@ -426,7 +427,7 @@ impl Task {
 
         let mut userSp = cStack;
         if opts.sharingOption.NewAddressSpace || cStack == 0 {
-            userSp = Self::Current().GetPtRegs().rsp;
+            userSp = Self::Current().GetPtRegs().get_stack_pointer();
         }
 
         info!("Clone opts is {:x?}", &opts);
@@ -450,7 +451,7 @@ impl Task {
         }
 
         if opts.SetTLS {
-            cTask.context.fs = tls;
+            cTask.context.set_tls(tls);
         }
 
         taskMgr::NewTask(TaskId::New(cTask.taskId));
@@ -527,6 +528,9 @@ impl Task {
                     sched: sched,
                     exiting: false,
                     perfcounters: None, //Some(THREAD_COUNTS.lock().NewCounters()),
+                    savefpsate: false,
+                    archfpstate:  Some(Default::default()),
+                    queueId: AtomicUsize::new(0),
                     guard: Guard::default(),
                 },
             );
@@ -659,18 +663,28 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
             to -= 8;
         }
 
-        toTask.context.SetReady(1);
-        toTask.context.fs = fromTask.context.fs;
-        toTask.context.rsp = toTask.GetPtRegs() as *const _ as u64 - 8;
-        toTask.context.rdi = userSp;
-        toTask.context.savefpsate = true;
-        toTask.context.X86fpstate = Some(Box::new(
-            fromTask.context.X86fpstate.as_ref().unwrap().Fork(),
+        toTask.SetReady(1);
+        toTask.context.set_tls(fromTask.context.get_tls());
+        toTask.context.set_sp(toTask.GetPtRegs() as *const _ as u64 - 8);
+        toTask.context.set_para(userSp);
+        toTask.savefpsate = true;
+        toTask.archfpstate = Some(Box::new(
+            fromTask.archfpstate.as_ref().unwrap().Fork(),
         ));
-        toPtRegs.rax = 0;
-        toPtRegs.rsp = userSp;
-
-        *(toTask.context.rsp as *mut u64) = child_clone as u64;
+        // 1. set sys_clone return value to 0 to indicate child.
+        // 2. set child pc (return addr of current call frame)
+        //      to child_clone function
+        #[cfg(target_arch = "x86_64")]
+        {
+            toPtRegs.rax = 0;
+			*(toTask.context.rsp as *mut u64) = child_clone as u64;
+        }
+        #[cfg(target_arch = "aarch64")]
+        {
+            toPtRegs.regs[0] = 0;
+            toTask.context.set_pc(child_clone as u64);
+        }
+        toPtRegs.set_stack_pointer(userSp);
     }
 }
 

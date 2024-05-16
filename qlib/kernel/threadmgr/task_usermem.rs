@@ -171,9 +171,7 @@ impl MemoryManager {
             self.HandleTlbShootdown();
             return self.CopyDataWithPf(task, from, vaddr, len, allowPartial);
         }
-
         let rl = self.MappingReadLock();
-
         return self.CopyDataOutLocked(task, &rl, from, vaddr, len, allowPartial);
     }
 

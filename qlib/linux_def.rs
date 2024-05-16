@@ -259,10 +259,21 @@ pub struct LibcSysinfo {
     //pub _f: [i8; 0],
 }
 
+#[cfg(target_arch = "x86_64")]
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct EpollEvent {
     pub Events: u32,
+    pub FD: i32,
+    pub Pad: i32,
+}
+
+#[cfg(target_arch = "aarch64")]
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct EpollEvent {
+    pub Events: u32,
+    pub _pad: i32,
     pub FD: i32,
     pub Pad: i32,
 }
@@ -2954,10 +2965,10 @@ impl MemoryDef {
     pub const HUGE_PAGE_SHIFT: u64 = 21;
     pub const HUGE_1GPAGE_SHIFT: u64 = 30;
 
-    pub const ONE_KB: u64 = 1 << 10; //0x100_000;
+    pub const ONE_KB: u64 = 1 << 10; //0x400;
     pub const ONE_MB: u64 = 1 << 20; //0x100_000;
     pub const ONE_GB: u64 = 1 << 30; //0x40_000_000;
-    pub const ONE_TB: u64 = 1 << 40; //0x1_000_000_000; //0x10_000_000_000;
+    pub const ONE_TB: u64 = 1 << 40; //0x10_000_000_000;
     pub const TWO_MB: u64 = 2 * Self::ONE_MB;
 
     //interrupt stack pages
@@ -2986,6 +2997,9 @@ impl MemoryDef {
     pub const NVIDIA_ADDR_SIZE: u64 = 2 * Self::ONE_GB;
 
     // memory layout
+    #[cfg(target_arch = "x86_64")]
+    pub const USER_UPPER_ADDR: u64 = Self::PHY_LOWER_ADDR;
+
     // PHY_LOWER_ADDR: qkernel image 512MB
     pub const QKERNEL_IMAGE_SIZE: u64 = 512 * Self::ONE_MB;
     // RDMA Local share memory
@@ -3022,6 +3036,18 @@ impl MemoryDef {
 
     pub const KERNEL_START_P2_ENTRY: usize = (Self::PHY_LOWER_ADDR / Self::ONE_GB) as usize; //256
     pub const KERNEL_END_P2_ENTRY: usize = (Self::PHY_UPPER_ADDR / Self::ONE_GB) as usize; //512
+                                                                                           //
+}
+
+#[cfg(target_arch = "aarch64")]
+impl MemoryDef {
+    pub const USER_UPPER_ADDR: u64 = Self::HYPERCALL_MMIO_BASE;
+    //
+    // Page not backed up by guest physical frame, access causes KVM_EXIT_MMIO.
+    //
+    pub const HYPERCALL_MMIO_BASE: u64 = Self::PHY_LOWER_ADDR
+                                         - Self::PAGE_SIZE;
+    pub const HYPERCALL_MMIO_SIZE: u64 = Self::PAGE_SIZE;
 }
 
 //mmap prot
@@ -3241,6 +3267,7 @@ pub fn ComparePage(from: u64, to: u64) -> bool {
     }
 }
 
+/// UNSAFE CODE! the caller must make sure the to and from address are 4k aligned.
 #[inline(always)]
 pub fn CopyPage(to: u64, from: u64) {
     unsafe {
@@ -3248,6 +3275,7 @@ pub fn CopyPage(to: u64, from: u64) {
     }
 }
 
+#[cfg(target_arch = "x86_64")]
 #[derive(Debug, Default, Copy, Clone)]
 #[repr(C)]
 pub struct LibcStat {
@@ -3269,6 +3297,31 @@ pub struct LibcStat {
     pub st_ctime: i64,
     pub st_ctime_nsec: i64,
     pub pad: [i64; 3],
+}
+
+#[cfg(target_arch = "aarch64")]
+#[derive(Debug, Default, Copy, Clone)]
+#[repr(C)]
+pub struct LibcStat {
+    pub st_dev: u64,
+    pub st_ino: u64,
+    pub st_mode: u32,
+    pub st_nlink: u32,
+    pub st_uid: u32,
+    pub st_gid: u32,
+    pub st_rdev: u64,
+    pub pad0: u64,
+    pub st_size: i64,
+    pub st_blksize: i32,
+    pub pad1: i32,
+    pub st_blocks: i64,
+    pub st_atime: i64,
+    pub st_atime_nsec: i64,
+    pub st_mtime: i64,
+    pub st_mtime_nsec: i64,
+    pub st_ctime: i64,
+    pub st_ctime_nsec: i64,
+    pub pad: [i32; 2],
 }
 
 impl LibcStat {

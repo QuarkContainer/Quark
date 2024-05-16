@@ -85,7 +85,6 @@ pub fn SysRtSigaction(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let mut newactptr: Option<SigAct> = None;
     if sigAction != 0 {
         let sigAction1 = task.CopyInObj::<SigAct>(sigAction)?;
-        //info!("signum is {} the signaction is {:?}, ", signum, sigAction1);
         newactptr = Some(sigAction1);
     }
 

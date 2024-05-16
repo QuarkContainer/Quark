@@ -82,7 +82,7 @@ impl GlobalVcpuAllocator {
     }
 
     pub fn Initializated(&self) {
-        self.init.store(true, Ordering::Relaxed)
+        self.init.store(true, Ordering::Release)
     }
 }
 
@@ -225,7 +225,6 @@ impl VcpuAllocator {
         } else {
             unsafe { ret = GLOBAL_ALLOCATOR.alloc(layout) as u64 };
         }
-
         return ret as *mut u8;
     }
 
@@ -255,11 +254,11 @@ pub struct HostAllocator {
 
 impl HostAllocator {
     pub fn Allocator(&self) -> &mut ListAllocator {
-        return unsafe { &mut *(self.listHeapAddr.load(Ordering::Relaxed) as *mut ListAllocator) };
+        return unsafe { &mut *(self.listHeapAddr.load(Ordering::SeqCst) as *mut ListAllocator) };
     }
 
     pub fn IOAllocator(&self) -> &mut ListAllocator {
-        return unsafe { &mut *(self.ioHeapAddr.load(Ordering::Relaxed) as *mut ListAllocator) };
+        return unsafe { &mut *(self.ioHeapAddr.load(Ordering::SeqCst) as *mut ListAllocator) };
     }
 
     pub fn IsHeapAddr(addr: u64) -> bool {

@@ -140,7 +140,7 @@ pub fn SysMprotect(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let accessType = AccessType(prot);
     let growDown = prot & MmapProt::PROT_GROWSDOWN != 0;
 
-    match task.mm.MProtect(addr, len, &accessType, growDown) {
+    match task.mm.MProtect(addr, len, &accessType, growDown, true) {
         Err(e) => return Err(e),
         _ => return Ok(0),
     }

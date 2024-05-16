@@ -17,18 +17,18 @@ release: $(kernel)
 debug: $(kernel_debug)
 
 $(kernel): kernel $(assembly_object_files)
-	@ld -n --gc-sections -T $(linker_script) -o $(kernel) \
+	@ld --gc-sections -T $(linker_script) -o $(kernel) \
 		$(assembly_object_files) $(qkernel)
 
 $(kernel_debug): kernel_debug $(assembly_object_files)
-	@ld -n --gc-sections -T $(linker_script) -o $(kernel_debug) \
+	@ld --gc-sections -T $(linker_script) -o $(kernel_debug) \
 		$(assembly_object_files) $(qkernel_debug)
 
 kernel:
-	CARGO_TARGET_DIR=../target cargo +nightly-2023-12-11-x86_64-unknown-linux-gnu xbuild --target $(arch)-qkernel.json --release
+	CARGO_TARGET_DIR=../target cargo +$(TOOLCHAIN) xbuild --target $(arch)-qkernel.json --release
 
 kernel_debug:
-	CARGO_TARGET_DIR=../target cargo +nightly-2023-12-11-x86_64-unknown-linux-gnu xbuild --target $(arch)-qkernel.json
+	CARGO_TARGET_DIR=../target cargo +$(TOOLCHAIN) xbuild --target $(arch)-qkernel.json
 
 ../build/arch/$(arch)/%.o: src/qlib/kernel/arch/$(arch)/%.s
 	@mkdir -p $(shell dirname $@)

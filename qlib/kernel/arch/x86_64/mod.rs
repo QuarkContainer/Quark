@@ -11,7 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#[path = "./arch_x86.rs"]
+pub mod arch_def;
 
-pub mod arch_x86;
 pub mod context;
 pub mod signal;
