@@ -18,7 +18,7 @@ pub struct Config {
     pub KernelMemSize: u64,
     pub LogType: LogType,
     pub LogLevel: LogLevel,
-    pub CudaMode: CudaMode,
+    pub CudaMemType: CudaMemType,
     pub UringIO: bool,
     pub UringFixedFile: bool,
     pub EnableAIO: bool,
@@ -66,7 +66,7 @@ impl Default for Config {
             KernelMemSize: 16, // GB
             LogType: LogType::Sync,
             LogLevel: LogLevel::Simple,
-            CudaMode: CudaMode::Native,
+            CudaMemType: CudaMemType::Default,
             UringIO: true,
             UringFixedFile: false,
             EnableAIO: false,
@@ -134,7 +134,8 @@ pub enum LogType {
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum CudaMode {
-    Native,
-    FastSwitch,
+pub enum CudaMemType {
+    Default,
+    UM, //Unified Memory
+    MemPool,
 }

@@ -1,5 +1,7 @@
 import numpy
 import os
+import time
+start = time.time()
 os.environ['CURL_CA_BUNDLE'] = ''
 os.environ['HF_DATASETS_OFFLINE'] = '1'
 os.environ['TRANSFORMERS_OFFLINE'] = '1'
@@ -11,7 +13,8 @@ os.environ['HF_HOME'] = '/cchen/model_weight'
 import torch
 torch.manual_seed(0)
 from transformers import LlamaForCausalLM, AutoTokenizer, FlaxLlamaForCausalLM
-
+start2 = time.time()
+print("import torch time: ", start2-start)
 model = LlamaForCausalLM.from_pretrained("/cchen/model_weight/llama7b", torch_dtype=torch.float16, local_files_only=True, low_cpu_mem_usage=True)
 # model = LlamaForCausalLM.from_pretrained("daryl149/llama-2-7b-chat-hf",torch_dtype=torch.bfloat16, cache_dir="/cchen/model_weight")
 model.to("cuda:0")
@@ -25,5 +28,6 @@ input_ids = tokenizer.encode(input_context, return_tensors="pt").to("cuda:0")
 # input_ids = tokenizer.encode(input_context, return_tensors="pt")
 output = model.generate(input_ids, max_length=50, temperature=0.7)
 output_text = tokenizer.decode(output[0], skip_special_tokens=True)
+end = time.time()
 print(output_text)
-
+print("e2e time: ", end-start2)

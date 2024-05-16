@@ -819,7 +819,7 @@ fn CudaMemcpyAsync(
     kind: CudaMemcpyKind,
     stream: u64,
 ) -> Result<i64> {
-    // error!("CudaMemcpyAsync: count:{}, kind{}", count, kind);
+    // error!("CudaMemcpyAsync: count:{:x}, kind{}, src:{:x}, dst:{:x}", count, kind, src, dst);
     match kind {
         CUDA_MEMCPY_HOST_TO_HOST => {
             error!("CudaMemcpy get unexpected kind CUDA_MEMCPY_HOST_TO_HOST");
