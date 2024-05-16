@@ -74,6 +74,7 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
             // if the sandbox has been paused, return
             return;
         }
+        
         GetKernel().Pause();
         GetKernel().ClearFsCache();
         HostSpace::SwapOut();

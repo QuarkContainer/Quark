@@ -130,7 +130,9 @@ impl KVMVcpu {
                 ret = super::VMSpace::NividiaDriverVersion(msg.ioctlParamsAddr) as u64;
             }
             Msg::NvidiaMMap(msg) => {
-                ret = super::VMSpace::NvidiaMMap(msg.addr, msg.len, msg.prot, msg.flags, msg.fd, msg.offset) as u64;
+                ret = super::VMSpace::NvidiaMMap(
+                    msg.addr, msg.len, msg.prot, msg.flags, msg.fd, msg.offset,
+                ) as u64;
             }
             Msg::HostUnixConnect(msg) => {
                 ret = super::VMSpace::HostUnixConnect(msg.type_, msg.addr, msg.len) as u64;
@@ -276,19 +278,27 @@ impl KVMVcpu {
                 ret = super::VMSpace::SwapInPage(msg.addr) as u64;
             }
             Msg::SwapOut(_msg) => {
-                // let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
                 //error!("qcall.rs swapout");
+                #[cfg(feature = "cuda")]
                 super::VMS.lock().SwapOutGPUPage();
-                
-                // SHARE_SPACE
-                //     .hiberMgr
-                //     .SwapOut(heapStart, heapEnd - heapStart)
-                //     .unwrap();
+
+                #[cfg(not(feature = "cuda"))]
+                {
+                    let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
+                    SHARE_SPACE
+                        .hiberMgr
+                        .SwapOut(heapStart, heapEnd - heapStart)
+                        .unwrap();
+                }
+
                 ret = 0;
             }
             Msg::SwapIn(_msg) => {
-                // SHARE_SPACE.hiberMgr.ReapSwapIn().unwrap();
+                #[cfg(not(feature = "cuda"))]
+                SHARE_SPACE.hiberMgr.ReapSwapIn().unwrap();
                 //error!("qcall.rs swapin");
+
+                #[cfg(feature = "cuda")]
                 super::VMS.lock().SwapInGPUPage();
                 ret = 0;
             }
