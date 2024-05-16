@@ -22,11 +22,13 @@ use std::sync::Arc;
 
 use crate::qlib::common::*;
 //use crate::qlib::linux_def::SysErr;
-use crate::QUARK_CONFIG;
 use crate::qlib::config::*;
 use crate::qlib::proxy::*;
 use crate::qlib::range::Range;
 use crate::xpu::cuda::*;
+use crate::xpu::cuda_api::*;
+use crate::xpu::cuda_mem_manager::*;
+use crate::{SwapOut, QUARK_CONFIG};
 
 use cuda11_cublasLt_sys::{
     cublasLtHandle_t, cublasLtMatmulAlgo_t, cublasLtMatmulDesc_t, cublasLtMatmulHeuristicResult_t,
@@ -43,329 +45,10 @@ use cuda_runtime_sys::{
 };
 use rcublas_sys::{cublasHandle_t, cudaMemLocation};
 
-#[link(name = "cuda")]
-extern "C" {
-    pub fn cuModuleLoadData(module: *mut CUmodule, image: *const c_void) -> CUresult;
-    pub fn cuModuleGetFunction(
-        hfunc: *mut CUfunction,
-        hmod: CUmodule,
-        name: *const c_char,
-    ) -> CUresult;
-    pub fn cuLaunchKernel(
-        f: CUfunction,
-        gridDimX: c_uint,
-        gridDimY: c_uint,
-        gridDimZ: c_uint,
-        blockDimX: c_uint,
-        blockDimY: c_uint,
-        blockDimZ: c_uint,
-        sharedMemBytes: c_uint,
-        hStream: CUstream,
-        kernelParams: *mut *mut c_void,
-        extra: *mut *mut c_void,
-    ) -> CUresult;
-    pub fn cuModuleGetGlobal_v2(
-        dptr: *mut CUdeviceptr,
-        bytes: *mut usize,
-        hmod: CUmodule,
-        name: *const c_char,
-    ) -> CUresult;
-    pub fn cuDevicePrimaryCtxGetState(
-        dev: CUdevice,
-        flags: *mut c_uint,
-        active: *mut c_int,
-    ) -> CUresult;
-    pub fn cuInit(Flags: c_uint) -> CUresult;
-
-    pub fn cuModuleGetLoadingMode(mode: *mut CumoduleLoadingModeEnum) -> u32;
-    pub fn cuCtxCreate(pctx: *mut CUcontext, flags: c_uint, dev: CUdevice) -> CUresult;
-    pub fn cuCtxPushCurrent(pctx: CUcontext) -> CUresult;
-    pub fn cuDevicePrimaryCtxRetain(pctx: *mut CUcontext, dev: CUdevice) -> CUresult;
-    pub fn cuFuncGetAttribute(pi: *mut c_int, attrib: CUfunction_attribute, hfunc: CUfunction) -> CUresult;
-    pub fn cuFuncSetAttribute(hfunc: CUfunction, attrib: u32, value: i32) -> CUresult;
-    pub fn cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
-        numBlocks: *mut c_int,
-        func: CUfunction,
-        blockSize: c_int,
-        dynamicSMemSize: usize,
-        flags: c_uint,
-    ) -> CUresult;
-    pub fn cuCtxGetCurrent(pctx: *mut CUcontext) -> CUresult;
-    pub fn cuModuleUnload(hmod: CUmodule) -> CUresult;
-}
-
-#[link(name = "cudart")]
-extern "C" {
-    pub fn cudaMalloc(devPtr: *mut *mut c_void, size: usize) -> cudaError_t;
-    pub fn cudaFree(devPtr: *mut c_void) -> cudaError_t;
-    pub fn cudaMemcpy(dst: u64, src: u64, count: u64, kind: u64) -> u32;
-    pub fn cudaGetDeviceCount(count: *mut c_int) -> cudaError_t;
-    pub fn cudaGetDevice(device: *mut c_int) -> cudaError_t;
-    pub fn cudaDeviceGetStreamPriorityRange(
-        leastPriority: *mut c_int,
-        greatestPriority: *mut c_int,
-    ) -> cudaError_t;
-    pub fn cudaStreamIsCapturing(
-        stream: cudaStream_t,
-        pCaptureStatus: *mut cudaStreamCaptureStatus,
-    ) -> cudaError_t;
-    pub fn cudaSetDevice(device: c_int) -> cudaError_t;
-    pub fn cudaDeviceSynchronize() -> cudaError_t;
-    pub fn cudaGetLastError() -> cudaError_t;
-    pub fn cudaGetDeviceProperties(prop: *mut cudaDeviceProp, device: c_int) -> cudaError_t;
-    pub fn cudaMemcpyAsync(dst: u64, src: u64, count: u64, kind: u64, stream: cudaStream_t) -> u32;
-    pub fn cudaHostAlloc(pHost: u64, size: usize, flags: u32) -> cudaError_t;
-    pub fn cudaHostRegister(ptr: u64, size: usize, flags: u32) -> cudaError_t;
-    pub fn cudaMallocManaged(devPtr: u64, size: usize, flags: u32) -> cudaError_t;
-    pub fn cudaMemAdvise_v2(
-        devPtr: u64,
-        count: usize,
-        advice: cudaMemoryAdvise,
-        location: cudaMemLocation,
-    ) -> cudaError_t;
-    pub fn cudaMemPrefetchAsync(
-        devPtr: u64,
-        count: usize,
-        dstDevice: i32,
-        stream: cudaStream_t,
-    ) -> cudaError_t;
-    pub fn cudaFreeHost(ptr: u64) -> cudaError_t;
-    pub fn cudaHostUnregister(ptr: u64) -> cudaError_t;
-
-    pub fn cudaChooseDevice(device: *mut c_int, prop: *const cudaDeviceProp) -> cudaError_t;
-    pub fn cudaDeviceGetAttribute(
-        value: *mut c_int,
-        attr: cudaDeviceAttr,
-        device: c_int,
-    ) -> cudaError_t;
-    pub fn cudaDeviceGetByPCIBusId(device: *mut c_int, pciBusId: *const c_char) -> cudaError_t;
-    pub fn cudaDeviceGetCacheConfig(pCacheConfig: *mut cudaFuncCache) -> cudaError_t;
-    pub fn cudaDeviceGetLimit(pValue: *mut usize, limit: cudaLimit) -> cudaError_t;
-    pub fn cudaDeviceGetP2PAttribute(
-        value: *mut c_int,
-        attr: cudaDeviceP2PAttr,
-        srcDevice: c_int,
-        dstDevice: c_int,
-    ) -> cudaError_t;
-    pub fn cudaDeviceGetPCIBusId(pciBusId: *mut c_char, len: c_int, device: c_int) -> cudaError_t;
-    pub fn cudaDeviceGetSharedMemConfig(pConfig: *mut cudaSharedMemConfig) -> cudaError_t;
-    pub fn cudaDeviceSetCacheConfig(cacheConfig: u32) -> cudaError_t;
-    pub fn cudaSetDeviceFlags(flags: c_uint) -> cudaError_t;
-    pub fn cudaDeviceReset() -> cudaError_t;
-
-    pub fn cudaStreamSynchronize(stream: cudaStream_t) -> cudaError_t;
-    pub fn cudaStreamCreate(pStream: *mut cudaStream_t) -> cudaError_t;
-    pub fn cudaStreamCreateWithFlags(pStream: *mut cudaStream_t, flags: c_uint) -> cudaError_t;
-    pub fn cudaStreamCreateWithPriority(
-        pStream: *mut cudaStream_t,
-        flags: c_uint,
-        priority: c_int,
-    ) -> cudaError_t;
-    pub fn cudaStreamDestroy(stream: cudaStream_t) -> cudaError_t;
-    pub fn cudaStreamGetFlags(hStream: cudaStream_t, flags: *mut c_uint) -> cudaError_t;
-    pub fn cudaStreamGetPriority(hStream: cudaStream_t, priority: *mut c_int) -> cudaError_t;
-    pub fn cudaStreamQuery(stream: cudaStream_t) -> cudaError_t;
-    pub fn cudaStreamWaitEvent(
-        stream: cudaStream_t,
-        event: cudaEvent_t,
-        flags: c_uint,
-    ) -> cudaError_t;
-    pub fn cudaThreadExchangeStreamCaptureMode(mode: *mut cudaStreamCaptureMode) -> cudaError_t;
-    pub fn cudaEventCreate(event: *mut cudaEvent_t) -> cudaError_t;
-    pub fn cudaEventCreateWithFlags(event: *mut cudaEvent_t, flags: c_uint) -> cudaError_t;
-    pub fn cudaEventDestroy(event: cudaEvent_t) -> cudaError_t;
-    pub fn cudaEventElapsedTime(ms: *mut f32, start: cudaEvent_t, end: cudaEvent_t) -> cudaError_t;
-    pub fn cudaEventQuery(event: cudaEvent_t) -> cudaError_t;
-    pub fn cudaEventRecord(event: cudaEvent_t, stream: cudaStream_t) -> cudaError_t;
-    pub fn cudaEventSynchronize(event: cudaEvent_t) -> cudaError_t;
-    pub fn cudaFuncGetAttributes(attr: *mut cudaFuncAttributes, func: *const c_void)
-        -> cudaError_t;
-    pub fn cudaFuncSetAttribute(
-        func: *const c_void,
-        attr: cudaFuncAttribute,
-        value: c_int,
-    ) -> cudaError_t;
-    pub fn cudaFuncSetCacheConfig(func: *const c_void, cacheConfig: cudaFuncCache) -> cudaError_t;
-    pub fn cudaFuncSetSharedMemConfig(
-        func: *const c_void,
-        config: cudaSharedMemConfig,
-    ) -> cudaError_t;
-
-    pub fn cudaGetErrorString(error: cudaError_t) -> *const c_char;
-    pub fn cudaGetErrorName(error: cudaError_t) -> *const c_char;
-    pub fn cudaPeekAtLastError() -> cudaError_t;
-    pub fn cudaDeviceSetLimit(limit: cudaLimit, value: usize) -> cudaError_t;
-    pub fn cudaDeviceSetSharedMemConfig(config: cudaSharedMemConfig) -> cudaError_t;
-    pub fn cudaGetDeviceFlags(flags: *mut c_uint) -> cudaError_t;
-    pub fn cudaSetValidDevices(device_arr: *mut c_int, len: c_int) -> cudaError_t;
-
-    pub fn cudaMemset(devPtr: *const c_void, value: c_int, count: usize) -> cudaError_t;
-    pub fn cudaMemsetAsync(
-        devPtr: *const c_void,
-        value: c_int,
-        count: usize,
-        stream: cudaStream_t,
-    ) -> cudaError_t;
-    pub fn cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
-        numBlocks: *mut c_int,
-        func: *const c_void,
-        blockSize: c_int,
-        dynamicSMemSize: usize,
-        flags: c_uint,
-    ) -> cudaError_t;
-}
-
-#[link(name = "nvidia-ml")]
-extern "C" {
-    pub fn nvmlInitWithFlags(flags: c_uint) -> u32;
-    pub fn nvmlDeviceGetCount_v2(deviceCount: *mut c_uint) -> u32;
-    pub fn nvmlInit() -> u32;
-    pub fn nvmlInit_v2() -> u32;
-    pub fn nvmlShutdown() -> u32;
-}
-#[link(name = "cublas")]
-extern "C" {
-    pub fn cublasCreate_v2(handle: *mut cublasHandle_t) -> u32;
-    pub fn cublasDestroy_v2(handle: cublasHandle_t) -> u32;
-    pub fn cublasSetStream_v2(handle: cublasHandle_t, streamId: cudaStream_t) -> u32;
-    pub fn cublasSetWorkspace_v2(
-        handle: cublasHandle_t,
-        workspace: *mut c_void,
-        workspaceSizeInBytes: usize,
-    ) -> u32;
-    pub fn cublasSetMathMode(handle: cublasHandle_t, mode: u32) -> u32;
-    pub fn cublasSgemmStridedBatched(
-        handle: cublasHandle_t,
-        transa: u32,
-        transb: u32,
-        m: c_int,
-        n: c_int,
-        k: c_int,
-        alpha: *const f32,
-        A: *const f32,
-        lda: c_int,
-        strideA: c_longlong,
-        B: *const f32,
-        ldb: c_int,
-        strideB: c_longlong,
-        beta: *const f32,
-        C: *mut f32,
-        ldc: c_int,
-        strideC: c_longlong,
-        batchCount: c_int,
-    ) -> u32;
-    pub fn cublasGetMathMode(handle: cublasHandle_t, mode: *mut u32) -> u32;
-    pub fn cublasSgemm_v2(
-        handle: cublasHandle_t,
-        transa: u32,
-        transb: u32,
-        m: c_int,
-        n: c_int,
-        k: c_int,
-        alpha: *const f32,
-        A: *const f32,
-        lda: c_int,
-        B: *const f32,
-        ldb: c_int,
-        beta: *const f32,
-        C: *mut f32,
-        ldc: c_int,
-    ) -> u32;
-    pub fn cublasGemmEx(
-        handle: cublasHandle_t,
-        transa: u32,
-        transb: u32,
-        m: c_int,
-        n: c_int,
-        k: c_int,
-        alpha: u64,
-        A: u64,
-        Atype: u32,
-        lda: c_int,
-        B: u64,
-        Btype: u32,
-        ldb: c_int,
-        beta: u64,
-        C: u64,
-        Ctype: u32,
-        ldc: c_int,
-        computeType: u32,
-        algo: u32
-    ) -> u32; 
-    pub fn cublasGemmStridedBatchedEx(
-        handle: cublasHandle_t,
-        transa: u32,
-        transb: u32,
-        m: i32,
-        n: i32,
-        k: i32,
-        alpha: u64,
-        A: u64,
-        Atype: u32,
-        lda: i32,
-        strideA: i64,
-        B: u64,
-        Btype: u32,
-        ldb: i32,
-        strideB: i64,
-        beta: u64,
-        C: u64,
-        Ctype: u32,
-        ldc: i32,
-        strideC: i64,
-        batchCount: i32,
-        computeType: u32,
-        algo: u32
-    ) -> u32; 
-}
-
-#[link(name = "cublasLt")]
-extern "C" {
-    pub fn cublasLtMatmul(
-        lightHandle: cublasLtHandle_t,
-        computeDesc: cublasLtMatmulDesc_t,
-        alpha: *const f64,
-        A: *const c_void,
-        Adesc: cublasLtMatrixLayout_t,
-        B: *const c_void,
-        Bdesc: cublasLtMatrixLayout_t,
-        beta: *const f64,
-        C: *const c_void,
-        Cdesc: cublasLtMatrixLayout_t,
-        D: *mut c_void,
-        Ddesc: cublasLtMatrixLayout_t,
-        algo: *const cublasLtMatmulAlgo_t,
-        workspace: *mut c_void,
-        workspaceSizeInBytes: usize,
-        stream: cudaStream_t,
-    ) -> u32;
-    pub fn cublasLtMatmulAlgoGetHeuristic(
-        lightHandle: cublasLtHandle_t,
-        operationDesc: cublasLtMatmulDesc_t,
-        Adesc: cublasLtMatrixLayout_t,
-        Bdesc: cublasLtMatrixLayout_t,
-        Cdesc: cublasLtMatrixLayout_t,
-        Ddesc: cublasLtMatrixLayout_t,
-        preference: cublasLtMatmulPreference_t,
-        requestedAlgoCount: c_int,
-        heuristicResultsArray: *mut cublasLtMatmulHeuristicResult_t,
-        returnAlgoCount: *mut c_int,
-    ) -> u32;
-}
-
-// fn enable_fast_switch() -> bool {
-//     match env::var("FAST_SWITCH") {
-//         Ok(s) => {
-//             error!("enable fast switch");
-//             s == "1"
-//         }
-//         _ => false
-//     }
-// }
-
 lazy_static! {
     static ref CUDA_HAS_INIT: AtomicUsize = AtomicUsize::new(0);
     static ref MEM_RECORDER: Mutex<Vec<(u64, usize)>> = Mutex::new(Vec::new());
+    static ref MEM_MANAGER: Mutex<MemoryManager> = Mutex::new(MemoryManager::new());
     // static ref OFFLOAD_TIMER: AtomicUsize = AtomicUsize::new(0);
     // pub static ref FAST_SWITCH_HASHSET: HashSet<u64> = HashSet::new();
     // pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
@@ -413,7 +96,7 @@ lazy_static! {
 }
 
 pub fn NvidiaProxy(
-    cmd: ProxyCommand,
+    cmd: &ProxyCommand,
     parameters: &ProxyParameters,
     containerId: &str,
 ) -> Result<i64> {
@@ -802,23 +485,7 @@ pub fn NvidiaProxy(
         }
         ProxyCommand::CudaMalloc => {
             // error!("nvidia.rs: cudaMalloc, mode{:?}", QUARK_CONFIG.lock().CudaMode);
-            if QUARK_CONFIG.lock().CudaMode == CudaMode::Native {
-                // error!("nvidia.rs: CudaMode::Native()");
-                let mut para1 = parameters.para1 as *mut c_void;
-
-                let ret = unsafe {
-                    cudaMalloc(
-                        &mut para1 as *mut _ as *mut *mut _ as *mut *mut c_void,
-                        parameters.para2 as usize,
-                    )
-                };
-                if ret as u32 != 0 {
-                    error!("nvidia.rs: error caused by cudaMalloc: {}", ret as u32);
-                }
-
-                unsafe { *(parameters.para1 as *mut u64) = para1 as u64 };
-                return Ok(ret as i64);
-            } else {
+            if QUARK_CONFIG.lock().CudaMemType == CudaMemType::UM {
                 // error!("nvidia.rs: CudaMode::fastswitch()");
                 let mut para1 = parameters.para1 as *mut c_void;
 
@@ -858,6 +525,31 @@ pub fn NvidiaProxy(
                 // }
                 unsafe { *(parameters.para1 as *mut u64) = para1 as u64 };
                 // error!("nvidia.rs: malloc ptr:{:x}, size:{:x}", para1 as u64, parameters.para2);
+                return Ok(ret as i64);
+
+                
+            } else if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
+                let (addr,ret) = MEM_MANAGER.lock().gpuManager.alloc(parameters.para2 as usize);
+                unsafe { *(parameters.para1 as *mut u64) = addr};
+                if ret != 0 {
+                    error!("mem pool failed to alloc");
+                }
+                return Ok(ret);
+            } else {
+                // error!("nvidia.rs: CudaMode::Default()");
+                let mut para1 = parameters.para1 as *mut c_void;
+
+                let ret = unsafe {
+                    cudaMalloc(
+                        &mut para1 as *mut _ as *mut *mut _ as *mut *mut c_void,
+                        parameters.para2 as usize,
+                    )
+                };
+                if ret as u32 != 0 {
+                    error!("nvidia.rs: error caused by cudaMalloc: {}", ret as u32);
+                }
+
+                unsafe { *(parameters.para1 as *mut u64) = para1 as u64 };
                 return Ok(ret as i64);
             }
         }
@@ -2330,22 +2022,27 @@ fn InitNvidia(containerId: &str, ptxlibPath: &str) {
 
 pub fn SwapOutMem() -> Result<i64> {
     error!("nvidia rs:SwapOutMem2"); 
-    let now = Instant::now();
-    let memRecorder = MEM_RECORDER.lock();
-    let mut iterator = memRecorder.iter();
-    let mut totalSize = 0;
-    while let Some(element) = iterator.next() {
-        let ret = unsafe { cudaMemPrefetchAsync(element.0, element.1, -1, 0 as cudaStream_t) }; // -1 means cudaCpuDeviceId
-        totalSize = totalSize + element.1;
-        error!("cudaMemPrefetchAsync to host, ptr: {:x}, count: {}", element.0, element.1);
-        
-        if ret as u32 != 0 {
-            error!("nvidia.rs: error caused by cudaMemPrefetchAsync to host: {}", ret as u32);
+    // let now = Instant::now();
+    // let mut totalSize = 0;
+    if QUARK_CONFIG.lock().CudaMemType == CudaMemType::UM {
+        let memRecorder = MEM_RECORDER.lock();
+        let mut iterator = memRecorder.iter();
+        while let Some(element) = iterator.next() {
+            let ret = unsafe { cudaMemPrefetchAsync(element.0, element.1, -1, 0 as cudaStream_t) }; // -1 means cudaCpuDeviceId
+            // totalSize = totalSize + element.1;
+            // error!("cudaMemPrefetchAsync to host, ptr: {:x}, count: {}", element.0, element.1);
+            
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaMemPrefetchAsync to host: {}", ret as u32);
+            }
         }
-    }
-    let ret2 = unsafe { cudaStreamSynchronize(0 as cudaStream_t) };
-    if ret2 as u32 != 0 {
-        error!("nvidia.rs: error caused by cudaMemPrefetchAsync to host: {}", ret2 as u32);
+        let ret2 = unsafe { cudaStreamSynchronize(0 as cudaStream_t) };
+        if ret2 as u32 != 0 {
+            error!("nvidia.rs: error caused by cudaMemPrefetchAsync to host: {}", ret2 as u32);
+        }
+    } else if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
+        MEM_MANAGER.lock().offloadGPUMem();
+        // totalSize = MEM_MANAGER.lock().gpuManager.currentTotalMem.clone() as usize;
     }
     // error!("total mem is: {}, SwapOutMem time{:?}", totalSize, now.elapsed());
     return Ok(0);
@@ -2353,24 +2050,28 @@ pub fn SwapOutMem() -> Result<i64> {
 
 pub fn SwapInMem() -> Result<i64> {
     error!("nvidia rs:SwapInMem2"); 
-    let now = Instant::now();
-    let memRecorder = MEM_RECORDER.lock();
-    error!("mem recorder size: {}", memRecorder.len());
-    let mut iterator = memRecorder.iter();
-    let mut totalSize = 0;
-    while let Some(element) = iterator.next() {
-        let ret = unsafe { cudaMemPrefetchAsync(element.0, element.1, 0, 0 as cudaStream_t) }; // for now, hard coded to device 0
-        totalSize = totalSize + element.1;
-        error!("cudaMemPrefetchAsync back to gpu, ptr: {:x}, count: {}", element.0, element.1);
-        if ret as u32 != 0 {
-            error!("nvidia.rs: error caused by cudaMemPrefetchAsync to gpu: {}", ret as u32);
+    // let now = Instant::now();
+    // let mut totalSize = 0;
+    if QUARK_CONFIG.lock().CudaMemType == CudaMemType::UM {
+        let memRecorder = MEM_RECORDER.lock();
+        let mut iterator = memRecorder.iter();
+        while let Some(element) = iterator.next() {
+            let ret = unsafe { cudaMemPrefetchAsync(element.0, element.1, 0, 0 as cudaStream_t) }; // for now, hard coded to device 0
+            // totalSize = totalSize + element.1;
+            // error!("cudaMemPrefetchAsync back to gpu, ptr: {:x}, count: {}", element.0, element.1);
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaMemPrefetchAsync to gpu: {}", ret as u32);
+            }
         }
+        let ret2 = unsafe { cudaStreamSynchronize(0 as cudaStream_t) };
+        if ret2 as u32 != 0 {
+            error!("nvidia.rs: error caused by cudaMemPrefetchAsync to gpu: {}", ret2 as u32);
+        }
+    } else if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
+        MEM_MANAGER.lock().restoreGPUMem();
+        // totalSize = MEM_MANAGER.lock().cpuManager.usedLen.clone() as usize;
     }
-    let ret2 = unsafe { cudaStreamSynchronize(0 as cudaStream_t) };
-    if ret2 as u32 != 0 {
-        error!("nvidia.rs: error caused by cudaMemPrefetchAsync to gpu: {}", ret2 as u32);
-    }
-    error!("total mem is: {},SwapInMem time:{:?}", totalSize, now.elapsed());
+    // error!("total mem is: {},SwapInMem time:{:?}", totalSize, now.elapsed());
     return Ok(0);
 }
 // pub struct NvidiaHandlersInner {
