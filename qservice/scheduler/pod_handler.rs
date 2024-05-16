@@ -248,10 +248,18 @@ impl PodHandler {
             na::node_agent_service_client::NodeAgentServiceClient::connect("http://127.0.0.1:8888")
                 .await?;
 
-        let mounts = vec![na::Mount {
-            host_path: "/home/brad/rust/Quark/test".to_owned(),
-            mount_path: "/test".to_owned(),
-        }];
+        // let mounts = vec![na::Mount {
+        //     host_path: "/home/brad/rust/Quark/test".to_owned(),
+        //     mount_path: "/test".to_owned(),
+        // }];
+
+        let mut mounts = Vec::new();
+        for m in &spec.mounts {
+            mounts.push(na::Mount {
+                host_path: m.hostpath.clone(),
+                mount_path: m.mountpath.clone(),
+            })
+        }
 
         let commands = spec.commands.clone();
         let mut envs = Vec::new();
