@@ -633,7 +633,7 @@ unsafe impl GlobalAlloc for ListAllocator {
             self.maxnum[class].fetch_sub(1, Ordering::Release);
             self.allocated.fetch_sub(size, Ordering::Release);
         }
-        self.free.fetch_sub(size, Ordering::Release);
+        self.free.fetch_add(size, Ordering::Release);
         self.bufSize.fetch_add(size, Ordering::Release);
         if class < self.bufs.len() {
             return self.bufs[class].lock().Dealloc(ptr, &self.heap);
