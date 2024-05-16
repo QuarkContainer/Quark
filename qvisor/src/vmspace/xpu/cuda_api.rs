@@ -7,11 +7,11 @@ use cuda11_cublasLt_sys::{
 };
 use cuda_driver_sys::{
     CUcontext, CUdevice, CUdeviceptr, CUfunction, CUfunction_attribute, CUmodule, CUresult,
-    CUstream, CUstream_st
+    CUstream
 };
 use cuda_runtime_sys::{
     cudaDeviceAttr, cudaDeviceP2PAttr, cudaDeviceProp, cudaError_t, cudaEvent_t, cudaFuncAttribute,
-    cudaFuncAttributes, cudaFuncCache, cudaLimit, cudaMemAttachGlobal, cudaMemoryAdvise,
+    cudaFuncAttributes, cudaFuncCache, cudaLimit, cudaMemoryAdvise,
     cudaSharedMemConfig, cudaStreamCaptureMode, cudaStreamCaptureStatus, cudaStream_t,
 };
 use rcublas_sys::{cublasHandle_t, cudaMemLocation};
