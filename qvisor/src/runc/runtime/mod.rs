@@ -19,3 +19,5 @@ pub mod sandbox_process;
 pub mod signal_handle;
 pub mod util;
 pub mod vm;
+#[cfg (feature = "cc")]
+pub mod vm_sev;

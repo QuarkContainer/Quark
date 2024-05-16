@@ -52,8 +52,12 @@ use super::super::super::{
     ThreadId, KERNEL_IO_THREAD, PMA_KEEPER, QUARK_CONFIG, ROOT_CONTAINER_ID, THREAD_ID, URING_MGR,
     VCPU, VMS,
 };
+#[cfg(feature = "cc")]
+use crate::qlib::cc::sev_snp::{check_amd, check_snp_support, set_cbit_mask};
 #[cfg(not(feature = "cc"))]
 use crate::qlib::kernel::IOURING;
+#[cfg(feature = "cc")]
+use crate::qlib::kernel::Kernel::{ENABLE_CC, IS_SEV_SNP};
 
 pub const SANDBOX_UID_NAME : &str = "io.kubernetes.cri.sandbox-uid";
 
@@ -285,6 +289,21 @@ impl VirtualMachine {
         let syncPrint = sharespace.config.read().SyncPrint();
         super::super::super::print::SetSyncPrint(syncPrint);
 
+    }
+
+    pub fn Init_vm(args: Args, enable_cc: bool) -> Result<Self> {
+        if enable_cc {
+            #[cfg(feature = "cc")]
+            if check_amd() && check_snp_support() {
+                ENABLE_CC.store(true, Ordering::Release);
+                IS_SEV_SNP.store(true, Ordering::Release);
+                set_cbit_mask();
+                return Self::InitSevSnp(args);
+            }
+            return Err(Error::InvalidInput);
+        } else {
+            return Self::Init(args);
+        }
     }
 
     #[cfg(not(feature = "cc"))]

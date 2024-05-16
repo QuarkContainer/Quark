@@ -86,6 +86,8 @@ pub mod unix_socket;
 pub mod nvproxy;
 pub mod tsot_msg;
 
+#[cfg (feature = "cc")]
+pub mod cc;
 #[cfg(target_arch = "aarch64")]
 mod pagetable_aarch64;
 
