@@ -23,5 +23,15 @@ LD_PRELOAD=/home/Quark/target/release/libcudaproxy.so python3 Quark/test/llama1b
 
 
 ## End-to-End run quark
-`docker pull chengchen666/cheng_torch:quark_llm`
-`sudo docker run -it --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -v /home/cc/workspace/Quark/test:/test -v /home/cc/workspace/model_weight:/model_weight chengchen666/cheng_torch:quark_llm bash`
+1. Pull docker image, which with torch and dependencies installed: `docker pull chengchen666/cheng_torch:quark_llm`
+2. If it's first time running test case, create dir in host, e.g. /home/cc/workspace/model_weight, and mount it into container (for the purpose of caching model weights). Change path according to your local environment. For me, I use following command.
+`sudo docker run -it --runtime=quark_d --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -v /home/cc/workspace/Quark:/Quark -v /home/cc/workspace/model_weight:/model_weight chengchen666/cheng_torch:quark_llm bash`
+3. export LD_LIBRARY_PATH="/Quark/target/release/:$LD_LIBRARY_PATH"
+4. LD_PRELOAD=/Quark/target/release/libcudaproxy.so python3 /Quark/test/llama1b.py
+
+5. After model-weights' files are downloaded into `/model_weight`, next time start quark container. Comment 
+`model = LlamaForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0", torch_dtype=torch.float16)`
+`tokenizer = AutoTokenizer.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")`
+and uncomment
+`#model = LlamaForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0", torch_dtype=torch.float16, cache_dir="/model_weight")`
+`#tokenizer = AutoTokenizer.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0", cache_dir="/model_weight")` and repeat step3 and step4 to run.
