@@ -174,7 +174,8 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64, error_code: Pag
         // NOTE: swap not enabled for aarch64 atm.
         // let addr = currTask.mm.pagetable.write().pt.SwapInPage(Addr(pageAddr)).unwrap();
         if error_code.contains(PFEC::TRANSLATION) {
-            let res = currTask.mm.InstallPageLocked(currTask, &vma, pageAddr, &range);
+            let needs_write = error_code.contains(PFEC::CAUSED_BY_WRITE);
+            let res = currTask.mm.InstallPageLocked(currTask, &vma, pageAddr, &range, needs_write);
             match res {
                 Err(Error::FileMapError) => {
                     error!("VM: failed to install page: FILE_MAP_ERROR.");
@@ -197,7 +198,7 @@ pub fn PageFaultHandler(ptRegs: &mut PtRegs, fault_address: u64, error_code: Pag
 
                 if !range.Contains(addr) {break;}
 
-                if let Err(_) = currTask.mm.InstallPageLocked(currTask, &vma, addr, &range) {
+                if let Err(_) = currTask.mm.InstallPageLocked(currTask, &vma, addr, &range, needs_write) {
                     break;
                 }
             }
