@@ -17,7 +17,6 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use spin::Mutex;
 
-use super::super::util::cstring::*;
 use crate::qlib::common::*;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::linux_def::{SysErr, PATH_MAX};
