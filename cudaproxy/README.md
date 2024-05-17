@@ -19,4 +19,9 @@ Locate the `libcudaproxy.so`, for example, if the dynamic library path is `/home
 then set up the environment variable:
 export LD_LIBRARY_PATH="/home/Quark/target/release/:$LD_LIBRARY_PATH"
 ### Preload the library when you run any cuda program
-LD_PRELOAD=/home/Quark/target/release/libcudaproxy.so python3 Quark/test/llama160m.py
+LD_PRELOAD=/home/Quark/target/release/libcudaproxy.so python3 Quark/test/llama1b.py
+
+
+## End-to-End run quark
+`docker pull chengchen666/cheng_torch:quark_llm`
+`sudo docker run -it --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -v /home/cc/workspace/Quark/test:/test -v /home/cc/workspace/model_weight:/model_weight chengchen666/cheng_torch:quark_llm bash`
