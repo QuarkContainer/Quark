@@ -619,7 +619,7 @@ pub fn NvidiaProxy(
             unsafe { copy_nonoverlapping(parameters.para2 as *const u8, fatbinData.as_mut_ptr(), fatbinSize); }
             MEM_MANAGER.lock().fatBinManager.fatBinVec.push(fatbinData);
             MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.push((moduleKey, module));
-            // also relates to function and vars................
+            MEM_MANAGER.lock().fatBinManager.fatBinFuncVec.push(Vec::new());
             // error!("insert module: {:x} -> {:x}", moduleKey, module);
             return Ok(ret as i64);
         }
@@ -667,12 +667,13 @@ pub fn NvidiaProxy(
             };
 
             let mut hfunc: u64 = 0;
+            let func_name = CString::new(deviceName).unwrap();
             let ret = unsafe {
                 // cuda_driver_sys::
                 cuModuleGetFunction(
                     &mut hfunc as *mut _ as u64 as *mut CUfunction,
                     *(&mut module as *mut _ as u64 as *mut CUmodule),
-                    CString::new(deviceName).unwrap().clone().as_ptr(),
+                    func_name.clone().as_ptr(),
                 )
             };
             if ret as u32 != 0 {
@@ -699,6 +700,10 @@ pub fn NvidiaProxy(
                     (*paramInfo).paramSizes[i] = kernelInfo.paramSizes[i];
                 }
             }
+
+            let index = MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.iter().position(|&r| r.0 == info.fatCubinHandle).unwrap();
+            MEM_MANAGER.lock().fatBinManager.fatBinFuncVec[index].push((info.hostFun, func_name));
+
             return Ok(ret as i64);
         }
         ProxyCommand::CudaRegisterVar => {
@@ -739,7 +744,9 @@ pub fn NvidiaProxy(
                 );
             }
 
-            GLOBALS.lock().insert(info.hostVar, devicePtr);
+            //GLOBALS.lock().insert(info.hostVar, devicePtr);
+            // TODO: cudaMemcpyToSymbol may need to store this info, no need for pytorch for now
+
             return Ok(ret as i64);
         }
         ProxyCommand::CudaLaunchKernel => {

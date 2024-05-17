@@ -1,10 +1,11 @@
 use crate::vmspace::{CUDA_MEMCPY_DEVICE_TO_HOST, CUDA_MEMCPY_HOST_TO_DEVICE};
-use crate::xpu::cuda::MODULES;
+use crate::xpu::cuda::{FUNCTIONS, MODULES};
 use crate::xpu::cuda_api::*;
+use std::ffi::CString;
 use std::os::raw::*;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, Ordering};
-use cuda_driver_sys::CUmodule;
+use cuda_driver_sys::{CUfunction, CUmodule};
 use cuda_runtime_sys::cudaStream_t;
 
 pub const ONE_TB: u64 = 1 << 40; //0x10_000_000_000;
@@ -57,7 +58,8 @@ pub struct MemoryManager {
 
 pub struct FatBinManager {
     pub fatBinVec: Vec<Vec<u8>>,
-    pub fatBinHandleVec: Vec<(u64, u64)>,
+    pub fatBinHandleVec: Vec<(u64, u64)>, // (moduleKey, module)
+    pub fatBinFuncVec: Vec<Vec<(u64, CString)>>, // (host_func, func_name)
 }
 
 pub struct CPUMemoryManager {
@@ -300,6 +302,7 @@ impl FatBinManager {
         Self {
             fatBinHandleVec: Vec::new(),
             fatBinVec: Vec::new(),
+            fatBinFuncVec: Vec::new(),
         }
     }
 
@@ -318,8 +321,6 @@ impl FatBinManager {
     }
 
     pub fn restoreFatbin(&mut self) {
-        error!("fatBinVec: {}", self.fatBinVec.len());
-        error!("fatBinHandleVec: {}", self.fatBinHandleVec.len());
         for idx in 0..self.fatBinHandleVec.len() {
             let mut module: u64 = 0;
             let ret = unsafe {
@@ -329,28 +330,33 @@ impl FatBinManager {
                 )
             };
             if ret as u32 != 0 {
-                error!(
-                    "cuda_mem_manager.rs: error caused by restoreFatbin(cuModuleLoadData): {}",
-                    ret as u32
-                );
+                error!("cuda_mem_manager.rs: error caused by restoreFatbin(cuModuleLoadData): {}", ret as u32);
             }
-            error!("change from {:x}",self.fatBinHandleVec[idx].1.clone());
             self.fatBinHandleVec[idx].1 = module.clone();
-            error!("change to {:x}",self.fatBinHandleVec[idx].1.clone());
 
             // update module
-            
             if let Some(old_module) = MODULES.lock().get_mut(&self.fatBinHandleVec[idx].0) {
-                *old_module = module;
+                *old_module = module.clone();
             }
-            // let old_module = match MODULES.lock().get_mut(&self.fatBinHandleVec[idx].0) {
-            //     Some(m) => m,
-            //     None => {
-            //         error!("cuda_mem_manager.rs: error caused by restoreFatbin");
-            //         &self.fatBinHandleVec[idx].0
-            //     }
-            // };
-            // *old_module = module;
+            
+            // update function
+            for elem in self.fatBinFuncVec[idx].iter() {
+                let mut hfunc: u64 = 0;
+                let func_name = &elem.1;
+                let ret = unsafe {
+                    cuModuleGetFunction(
+                        &mut hfunc as *mut _ as u64 as *mut CUfunction,
+                        module as CUmodule,
+                        func_name.clone().as_ptr(),
+                    )
+                };
+                if ret as u32 != 0 {
+                    error!("cuda_mem_manager.rs: error caused by restoreFatbin(cuModuleGetFunction): {}", ret as u32);
+                }
+                if let Some(old_func) = FUNCTIONS.lock().get_mut(&elem.0) {
+                    *old_func = hfunc;
+                }
+            }   
         }
     }
 }
