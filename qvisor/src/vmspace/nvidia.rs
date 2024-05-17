@@ -16,6 +16,7 @@ use spin::Mutex;
 //use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::os::raw::*;
+use std::ptr::copy_nonoverlapping;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 // use std::time::{Duration, Instant};
@@ -613,6 +614,12 @@ pub fn NvidiaProxy(
 
             // unsafe{ cudaDeviceSynchronize();}
             MODULES.lock().insert(moduleKey, module);
+            let fatbinSize: usize = parameters.para1 as usize;
+            let mut fatbinData = Vec::with_capacity(parameters.para1 as usize);
+            unsafe { copy_nonoverlapping(parameters.para2 as *const u8, fatbinData.as_mut_ptr(), fatbinSize); }
+            MEM_MANAGER.lock().fatBinManager.fatBinVec.push(fatbinData);
+            MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.push((moduleKey, module));
+            // also relates to function and vars................
             // error!("insert module: {:x} -> {:x}", moduleKey, module);
             return Ok(ret as i64);
         }
@@ -637,7 +644,7 @@ pub fn NvidiaProxy(
             }
 
             // delete the module
-            MODULES.lock().remove(&moduleKey);
+            //MODULES.lock().remove(&moduleKey);
             return Ok(ret as i64);
         }
         ProxyCommand::CudaRegisterFunction => {
@@ -2042,6 +2049,7 @@ pub fn SwapOutMem() -> Result<i64> {
         }
     } else if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
         MEM_MANAGER.lock().offloadGPUMem();
+        MEM_MANAGER.lock().offloadGPUFatbin();
         // totalSize = MEM_MANAGER.lock().gpuManager.currentTotalMem.clone() as usize;
     }
     // error!("total mem is: {}, SwapOutMem time{:?}", totalSize, now.elapsed());
@@ -2068,6 +2076,7 @@ pub fn SwapInMem() -> Result<i64> {
             error!("nvidia.rs: error caused by cudaMemPrefetchAsync to gpu: {}", ret2 as u32);
         }
     } else if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
+        MEM_MANAGER.lock().restoreGPUFatbin();
         MEM_MANAGER.lock().restoreGPUMem();
         // totalSize = MEM_MANAGER.lock().cpuManager.usedLen.clone() as usize;
     }

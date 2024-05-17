@@ -20,7 +20,7 @@ use spin::Mutex;
 use super::super::util::cstring::*;
 use crate::qlib::common::*;
 use crate::qlib::kernel::Kernel::HostSpace;
-use crate::qlib::linux_def::SysErr;
+use crate::qlib::linux_def::{SysErr, PATH_MAX};
 use crate::qlib::proxy::*;
 use crate::syscalls::syscalls::*;
 use crate::task::*;
@@ -112,7 +112,11 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ProxyCommand::CudaDeviceGetByPCIBusId => {
             let mut device: i32 = 0;
             parameters.para1 = &mut device as *mut _ as u64;
-            let PCIBusId = CString::ToString(task, parameters.para2)?;
+            let (PCIBusId, err) = task.CopyInString( parameters.para2, PATH_MAX);
+            match err {
+                Err(e) => return Err(e),
+                _ => (),
+            }
             parameters.para2 = &(PCIBusId.as_bytes()[0]) as *const _ as u64; // address
             parameters.para3 = PCIBusId.as_bytes().len() as u64; // length
 
@@ -160,7 +164,11 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
         }
         ProxyCommand::CudaDeviceGetPCIBusId => {
-            let mut pciBusIdAddress = CString::ToString(task, parameters.para1)?;
+            let (mut pciBusIdAddress, err) = task.CopyInString( parameters.para1, PATH_MAX);
+            match err {
+                Err(e) => return Err(e),
+                _ => (),
+            }
             parameters.para1 = &mut pciBusIdAddress as *mut String as u64;
 
             let ret = HostSpace::Proxy(cmd, parameters);
@@ -312,7 +320,11 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let data: Vec<u8> = task.CopyInVec(parameters.para2, parameters.para1 as usize)?;
             parameters.para2 = &data[0] as *const _ as u64;
 
-            let ptxlibPath = CString::ToString(task, parameters.para4)?;
+            let (ptxlibPath, err) = task.CopyInString( parameters.para4, PATH_MAX);
+            match err {
+                Err(e) => return Err(e),
+                _ => (),
+            }
             parameters.para4 = &(ptxlibPath.as_bytes()[0]) as *const _ as u64;
             parameters.para5 = ptxlibPath.as_bytes().len() as u64;
 
@@ -323,7 +335,11 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ProxyCommand::CudaRegisterFunction => {
             let mut functionInfo = task.CopyInObj::<RegisterFunctionInfo>(parameters.para1)?;
             // error!("CudaRegisterFunction data {:x?}, parameters {:x?}", functionInfo, parameters);
-            let deviceName = CString::ToString(task, functionInfo.deviceName)?;
+            let (deviceName, err) = task.CopyInString( functionInfo.deviceName, PATH_MAX);
+            match err {
+                Err(e) => return Err(e),
+                _ => (),
+            }
             functionInfo.deviceName = &(deviceName.as_bytes()[0]) as *const _ as u64;
             parameters.para1 = &functionInfo as *const _ as u64;
             parameters.para2 = deviceName.as_bytes().len() as u64;
@@ -348,10 +364,12 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
         }
         ProxyCommand::CudaRegisterVar => {
-            let mut data = task.CopyInObj::<RegisterVarInfo>(parameters.para1)?; // still take the addresss
-                                                                                 // error!("CudaRegisterVar data {:x?}, parameters {:x?}", data, parameters);
-            let deviceName = CString::ToString(task, data.deviceName)?;
-
+            let mut data = task.CopyInObj::<RegisterVarInfo>(parameters.para1)?;   // still take the addresss
+            let (deviceName, err) = task.CopyInString( data.deviceName, PATH_MAX);
+            match err {
+                Err(e) => return Err(e),
+                _ => (),
+            }
             // get the deviceName string and assign the address of first byte to the data struct field
             data.deviceName = &(deviceName.as_bytes()[0]) as *const _ as u64;
             parameters.para1 = &data as *const _ as u64; // address
@@ -569,7 +587,11 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
         }
         ProxyCommand::CuModuleGetFunction => {
-            let funcName = CString::ToString(task, parameters.para3)?;
+            let (funcName, err) = task.CopyInString( parameters.para3, PATH_MAX);
+            match err {
+                Err(e) => return Err(e),
+                _ => (),
+            }
             parameters.para3 = &(funcName.as_bytes()[0]) as *const _ as u64;
             parameters.para4 = funcName.as_bytes().len() as u64;
 
