@@ -66,10 +66,10 @@ cuda_release:: qvisor_cuda_release qkernel_release cuda_make
 cuda_debug:: qvisor_cuda_debug qkernel_debug cuda_make
 
 qvisor_cuda_release:
-	make -C ./qvisor cuda_release
+	make -C ./qvisor TOOLCHAIN=$(RUST_TOOLCHAIN) cuda_release
 
 qvisor_cuda_debug:
-	make -C ./qvisor cuda_debug
+	make -C ./qvisor TOOLCHAIN=$(RUST_TOOLCHAIN) cuda_debug
 
 install:
 #
