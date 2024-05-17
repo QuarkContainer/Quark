@@ -1,7 +1,10 @@
 use crate::vmspace::{CUDA_MEMCPY_DEVICE_TO_HOST, CUDA_MEMCPY_HOST_TO_DEVICE};
+use crate::xpu::cuda::MODULES;
 use crate::xpu::cuda_api::*;
+use std::os::raw::*;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, Ordering};
+use cuda_driver_sys::CUmodule;
 use cuda_runtime_sys::cudaStream_t;
 
 pub const ONE_TB: u64 = 1 << 40; //0x10_000_000_000;
@@ -49,6 +52,12 @@ pub struct CUmemAccessDesc {
 pub struct MemoryManager {
     pub gpuManager: GPUMemoryManager,
     pub cpuManager: CPUMemoryManager,
+    pub fatBinManager: FatBinManager,
+}
+
+pub struct FatBinManager {
+    pub fatBinVec: Vec<Vec<u8>>,
+    pub fatBinHandleVec: Vec<(u64, u64)>,
 }
 
 pub struct CPUMemoryManager {
@@ -78,13 +87,13 @@ impl GPUMemoryManager {
         let mut gran: usize = 0;
         let mut res = unsafe { cuMemGetAllocationGranularity(&mut gran as *mut _ as u64, &prop as *const _ as u64, 0x1) };
         if res as u32 != 0 {
-            error!("cuda_mem_pool.rs: error caused by cuMemGetAllocationGranularity: {}", res as u32);
+            error!("cuda_mem_manager.rs: error caused by cuMemGetAllocationGranularity: {}", res as u32);
         }
         let reserve_size = round_up(MAX_MEM_RESERVE_IN_BYTES as usize, gran);
         let mut dptr: u64 = 0;
         res = unsafe { cuMemAddressReserve(&mut dptr as *mut _ as u64, reserve_size, 0, VADDR_START_ADDR, 0) };
         if res as u32 != 0 {
-            error!("cuda_mem_pool.rs: error caused by cuMemAddressReserve: {}", res as u32);
+            error!("cuda_mem_manager.rs: error caused by cuMemAddressReserve: {}", res as u32);
         }
         // error!("reserved addr: {:x} to {:x} of size {:x}",dptr as u64, dptr as u64 + reserve_size as u64,reserve_size as u64);
         Self {
@@ -110,12 +119,12 @@ impl GPUMemoryManager {
         let mut handle = 0;
         let mut res = unsafe { cuMemCreate(&mut handle as *mut _ as u64, alloc_size, &prop as *const _ as u64, 0) };
         if res as u32 != 0 {
-            error!("cuda_mem_pool.rs: error caused by cuMemCreate: {}", res as u32);
+            error!("cuda_mem_manager.rs: error caused by cuMemCreate: {}", res as u32);
             return (0x0 ,res as i64);
         }
         res = unsafe { cuMemMap(return_addr as u64, alloc_size, 0, handle.clone(), 0) };
         if res as u32 != 0 {
-            error!("cuda_mem_pool.rs: error caused by cuMemMap: {}", res as u32);
+            error!("cuda_mem_manager.rs: error caused by cuMemMap: {}", res as u32);
             return (0x0, res as i64);
         }
 
@@ -124,7 +133,7 @@ impl GPUMemoryManager {
         accessDescriptors.flags = 0x3; //CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
         res = unsafe { cuMemSetAccess(return_addr as u64, alloc_size, &accessDescriptors as *const _ as u64,1) };
         if res as u32 != 0 {
-            error!("cuda_mem_pool.rs: error caused by cuMemSetAccess: {}", res as u32);
+            error!("cuda_mem_manager.rs: error caused by cuMemSetAccess: {}", res as u32);
             return (0x0, res as i64);
         } else {
             // error!("successfully alloc mem {:x} for ptr {:x}",alloc_size as u64, return_addr);
@@ -145,13 +154,13 @@ impl GPUMemoryManager {
             let mapSize = self.memLenVec[idx];
             let res = unsafe { cuMemUnmap(addr, mapSize as usize) };
             if res as u32 != 0 {
-                error!("cuda_mem_pool.rs: error caused by cuMemUnmap(offload): {}", res as u32)
+                error!("cuda_mem_manager.rs: error caused by cuMemUnmap(offload): {}", res as u32)
             }
         }
         for elem in &self.memHandleVec {
             let res = unsafe { cuMemRelease(elem.clone()) };
             if res as u32 != 0 {
-                error!("cuda_mem_pool.rs: error caused by cuMemRelease(offload): {}", res as u32)
+                error!("cuda_mem_manager.rs: error caused by cuMemRelease(offload): {}", res as u32)
             }
         }
     }
@@ -165,19 +174,19 @@ impl GPUMemoryManager {
             let mut handle = 0;
             let mut res = unsafe { cuMemCreate(&mut handle as *mut _ as u64, alloc_size, &prop as *const _ as u64, 0) };
             if res as u32 != 0 {
-                error!("cuda_mem_pool.rs: error caused by cuMemCreate(restore): {}", res as u32);
+                error!("cuda_mem_manager.rs: error caused by cuMemCreate(restore): {}", res as u32);
             }
             let addr = self.memAddrVec[idx];
             res = unsafe { cuMemMap(addr, alloc_size, 0, handle.clone(), 0) };
             if res as u32 != 0 {
-                error!("cuda_mem_pool.rs: error caused by cuMemMap(restore): {}", res as u32);
+                error!("cuda_mem_manager.rs: error caused by cuMemMap(restore): {}", res as u32);
             }
             let mut accessDescriptors = CUmemAccessDesc::default();
             accessDescriptors.location.type_ = 0x1; //CU_MEM_LOCATION_TYPE_DEVICE;
             accessDescriptors.flags = 0x3; //CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
             res = unsafe { cuMemSetAccess(addr, alloc_size, &accessDescriptors as *const _ as u64,1) };
             if res as u32 != 0 {
-                error!("cuda_mem_pool.rs: error caused by cuMemSetAccess(restore): {}", res as u32);
+                error!("cuda_mem_manager.rs: error caused by cuMemSetAccess(restore): {}", res as u32);
             }
             self.memHandleVec[idx] = handle;
         }
@@ -201,7 +210,7 @@ impl CPUMemoryManager {
         let mut hptr: u64 = 0;
         let res = unsafe { cudaHostAlloc(&mut hptr as *mut _ as u64, size, 0x0) };
         if res as u32 != 0 {
-            error!("cuda_mem_pool.rs: error caused by cudaHostAlloc: {}", res as u32);
+            error!("cuda_mem_manager.rs: error caused by cudaHostAlloc: {}", res as u32);
         } else {
             self.reservedStartAddr = hptr;
         }
@@ -211,7 +220,7 @@ impl CPUMemoryManager {
     pub fn free(&mut self, ptr: u64) -> u32 {
         let res = unsafe { cudaFreeHost(ptr) };
         if res as u32 != 0 {
-            error!("cuda_mem_pool.rs: error caused by cudaFreeHost: {}", res as u32);
+            error!("cuda_mem_manager.rs: error caused by cudaFreeHost: {}", res as u32);
         } else {
             self.reservedStartAddr = 0x0;
             self.usedLen = 0x0;
@@ -226,13 +235,14 @@ impl MemoryManager {
         Self {
             gpuManager: GPUMemoryManager::new(), 
             cpuManager: CPUMemoryManager::new(),
+            fatBinManager: FatBinManager::new(),
         }
     }
 
     pub fn offloadGPUMem(&mut self) {
         let res = self.cpuManager.alloc(self.gpuManager.currentTotalMem);
         if res != 0 {
-            error!("cuda_mem_pool.rs: failed to offload GPU Memory: {}", res as u32);
+            error!("cuda_mem_manager.rs: failed to offload GPU Memory: {}", res as u32);
         } else {
             for idx in 0..self.gpuManager.memAddrVec.len() {
                 let hptr = self.cpuManager.reservedStartAddr + self.cpuManager.usedLen;
@@ -240,7 +250,7 @@ impl MemoryManager {
                 let cpySize = self.gpuManager.memLenVec[idx];
                 let resCpy = unsafe { cudaMemcpyAsync(hptr, dptr, cpySize as u64, CUDA_MEMCPY_DEVICE_TO_HOST, 0 as cudaStream_t)};
                 if resCpy != 0 {
-                    error!("cuda_mem_pool.rs: error caused by cudaMemcpyAsync D2H: {}", resCpy as u32);
+                    error!("cuda_mem_manager.rs: error caused by cudaMemcpyAsync D2H: {}", resCpy as u32);
                 } else {
                     // error!("memcpy {:x}->{:x}, size {:x}", dptr.clone(), hptr.clone(), cpySize.clone());
                     self.cpuManager.memMappingTable.insert(
@@ -267,10 +277,80 @@ impl MemoryManager {
             // error!("memcpy {:x}->{:x}, size {:x}", hptr.clone(), dptr.clone(), cpySize.clone());
             let resCpy = unsafe { cudaMemcpyAsync(dptr, hptr, cpySize as u64, CUDA_MEMCPY_HOST_TO_DEVICE, 0 as cudaStream_t)};
             if resCpy != 0 {
-                error!("cuda_mem_pool.rs: error caused by cudaMemcpyAsync H2D: {}", resCpy as u32);
+                error!("cuda_mem_manager.rs: error caused by cudaMemcpyAsync H2D: {}", resCpy as u32);
             }
         }
         unsafe{ cudaStreamSynchronize(0 as cudaStream_t)};
         self.cpuManager.free(self.cpuManager.reservedStartAddr);
+    }
+
+    pub fn offloadGPUFatbin(&mut self) {
+        self.fatBinManager.unregisterFatbin();
+    }
+
+    pub fn restoreGPUFatbin(&mut self) {
+        self.fatBinManager.restoreFatbin();
+    }
+    
+}
+
+
+impl FatBinManager {
+    pub fn new() -> Self {
+        Self {
+            fatBinHandleVec: Vec::new(),
+            fatBinVec: Vec::new(),
+        }
+    }
+
+    pub fn unregisterFatbin(&mut self) {
+        for elem in &self.fatBinHandleVec {
+            let ret = unsafe { cuModuleUnload((*elem).1.clone()  as CUmodule) };
+            if ret as u32 != 0 {
+                error!(
+                    "cuda_mem_manager.rs: error caused by unregisterFatbin(cuModuleUnload): {}",
+                    ret as u32
+                );
+            } else {
+                error!("successfully unregister fatbin {}", (*elem).1.clone());
+            }
+        }
+    }
+
+    pub fn restoreFatbin(&mut self) {
+        error!("fatBinVec: {}", self.fatBinVec.len());
+        error!("fatBinHandleVec: {}", self.fatBinHandleVec.len());
+        for idx in 0..self.fatBinHandleVec.len() {
+            let mut module: u64 = 0;
+            let ret = unsafe {
+                cuModuleLoadData(
+                    &mut module as *mut _ as u64 as *mut CUmodule,
+                    self.fatBinVec[idx].as_ptr() as *const c_void,
+                )
+            };
+            if ret as u32 != 0 {
+                error!(
+                    "cuda_mem_manager.rs: error caused by restoreFatbin(cuModuleLoadData): {}",
+                    ret as u32
+                );
+            }
+            error!("change from {:x}",self.fatBinHandleVec[idx].1.clone());
+            self.fatBinHandleVec[idx].1 = module.clone();
+            error!("change to {:x}",self.fatBinHandleVec[idx].1.clone());
+
+            // update module
+            
+            if let Some(old_module) = MODULES.lock().get_mut(&self.fatBinHandleVec[idx].0) {
+                *old_module = module;
+            }
+            // let old_module = match MODULES.lock().get_mut(&self.fatBinHandleVec[idx].0) {
+            //     Some(m) => m,
+            //     None => {
+            //         error!("cuda_mem_manager.rs: error caused by restoreFatbin");
+            //         &self.fatBinHandleVec[idx].0
+            //     }
+            // };
+            // *old_module = module;
+        }
     }
 }
