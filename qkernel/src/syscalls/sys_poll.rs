@@ -16,6 +16,8 @@ use alloc::boxed::Box;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
 
+use crate::qlib::kernel::kernel::epoll::epoll::EventPoll;
+
 use super::super::fs::file::*;
 use super::super::kernel::timer::*;
 use super::super::kernel::waiter::*;
@@ -285,16 +287,22 @@ pub fn PollBlock(task: &Task, pfd: &mut [PollFd], timeout: i64) -> (Duration, Re
         return (timeout, Ok(n));
     }
 
-    for (f, (mask, _)) in waits.iter() {
-        f.EventRegister(task, &general, EventMaskFromLinux(*mask as u32));
-    }
-
-    defer!(for f in waits.keys() {
-        f.EventUnregister(task, &general);
-    });
-
     if timeout == 0 {
         return (timeout, Ok(n));
+    }
+
+    let ep = EventPoll::default();
+
+    for (f, (mask, _)) in waits.iter() {
+        match ep.AddEntry(task, f.clone(), 0, EventMaskFromLinux(*mask as u32), [0; 2]) {
+            Ok(()) => (),
+            Err(e) => return (timeout, Err(e)),
+        }
+    }
+
+    ep.EventRegister(task, &general, EVENT_READ);
+    defer! {
+        ep.EventUnregister(task, &general);
     }
 
     while n == 0 {
