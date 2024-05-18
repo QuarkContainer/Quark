@@ -257,6 +257,32 @@ pub fn GetCurrentKernelSp() -> u64 {
 }
 
 #[inline]
+pub fn GetCurrentKernelBp() -> u64 {
+    let rbp: u64;
+    unsafe {
+        asm!(
+            "mov rax, rbp",
+            out("rax") rbp
+        )
+    };
+    return rbp;
+}
+
+#[inline]
+pub fn GetCurrentKernelIp() -> u64 {
+    let rip: u64;
+    unsafe {
+        asm!(
+            "call 1f
+            1:
+            pop rax",
+            out("rax") rip
+        )
+    };
+    return rip;
+}
+
+#[inline]
 pub fn Clflush(addr: u64) {
     unsafe {
         asm!(

@@ -725,6 +725,16 @@ fn panic(info: &PanicInfo) -> ! {
         print!("panic occurred but can't get location information...");
     }
 
+    qlib::backtracer::trace(
+        GetCurrentKernelIp(),
+        GetCurrentKernelSp(),
+        GetCurrentKernelBp(),
+        &mut |frame| {
+            print!("ExceptionHandler frame is {:#x?}", frame);
+            true
+        },
+    );
+
     /*for i in 0..CPU_LOCAL.len() {
         error!("CPU  #{} is {:#x?}", i, CPU_LOCAL[i]);
     }*/
