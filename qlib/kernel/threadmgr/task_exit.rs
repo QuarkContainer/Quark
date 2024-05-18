@@ -18,6 +18,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use crate::qlib::kernel::PAGE_MGR;
+use crate::qlib::proxy::ProxyCommand;
 
 use super::super::super::auth::id::*;
 use super::super::super::common::*;
@@ -37,6 +38,20 @@ use super::task_stop::*;
 
 lazy_static! {
     pub static ref SYS_CALL_TIME: Vec<AtomicU64> = {
+        let mut tbl = Vec::with_capacity(500);
+        for _ in 0..500 {
+            tbl.push(AtomicU64::new(0));
+        }
+        tbl
+    };
+    pub static ref QUARK_SYSCALL_TIME: Vec<AtomicU64> = {
+        let mut tbl = Vec::with_capacity(10);
+        for _ in 0..10 {
+            tbl.push(AtomicU64::new(0));
+        }
+        tbl
+    };
+    pub static ref SYSPROXY_CALL_TIME: Vec<AtomicU64> = {
         let mut tbl = Vec::with_capacity(500);
         for _ in 0..500 {
             tbl.push(AtomicU64::new(0));
@@ -1040,8 +1055,8 @@ impl Thread {
             PAGE_MGR.Clear();
 
             if super::super::SHARESPACE.config.read().PerfDebug {
-                use crate::qlib::SysCallID;
                 use crate::qlib::kernel::Scale;
+                use crate::qlib::SysCallID;
 
                 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
                 struct PerfStruct {
@@ -1052,10 +1067,28 @@ impl Thread {
                 let mut perfVec = Vec::new();
 
                 for nr in 0..450 {
-                    let callId : SysCallID = unsafe { core::mem::transmute(nr as u64) };
+                    let callId: SysCallID = unsafe { core::mem::transmute(nr as u64) };
                     if SYS_CALL_TIME[nr].load(core::sync::atomic::Ordering::Relaxed) > 0 {
                         let perfStruct = PerfStruct {
-                            time: Scale(SYS_CALL_TIME[nr].load(core::sync::atomic::Ordering::Relaxed) as _) as u64,
+                            time: Scale(
+                                SYS_CALL_TIME[nr].load(core::sync::atomic::Ordering::Relaxed) as _,
+                            ) as u64,
+                            callId: callId,
+                        };
+
+                        perfVec.push(perfStruct);
+                    }
+                }
+
+                for i in 0..QUARK_SYSCALL_TIME.len() {
+                    let nr = i + 10001; //crate::qlib::syscalls::syscalls::EXTENSION_CALL_OFFSET;
+                    let callId: SysCallID = unsafe { core::mem::transmute(nr as u64) };
+                    if QUARK_SYSCALL_TIME[i].load(core::sync::atomic::Ordering::Relaxed) > 0 {
+                        let perfStruct = PerfStruct {
+                            time: Scale(
+                                QUARK_SYSCALL_TIME[i].load(core::sync::atomic::Ordering::Relaxed)
+                                    as _,
+                            ) as u64,
                             callId: callId,
                         };
 
@@ -1066,6 +1099,35 @@ impl Thread {
                 perfVec.sort();
 
                 error!("syscall time is {:#?}", &perfVec);
+
+                #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+                struct ProxyPerfStruct {
+                    time: u64,
+                    callId: ProxyCommand,
+                }
+
+                let mut total = 0;
+                let mut perfVec = Vec::new();
+                for i in 0..SYSPROXY_CALL_TIME.len() {
+                    if SYSPROXY_CALL_TIME[i].load(core::sync::atomic::Ordering::Relaxed) > 0 {
+                        let gap = Scale(
+                            SYSPROXY_CALL_TIME[i].load(core::sync::atomic::Ordering::Relaxed)
+                                as i64,
+                        ) as u64;
+                        let cmd: ProxyCommand = unsafe { core::mem::transmute(i as u64) };
+                        let perfStruct = ProxyPerfStruct {
+                            time: gap,
+                            callId: cmd,
+                        };
+
+                        total += gap;
+
+                        perfVec.push(perfStruct);
+                    }
+                }
+                perfVec.sort();
+
+                error!("sys_proxy timeis  {:#?}  total is {} ", &perfVec, total);
             }
 
             super::super::SHARESPACE.StoreShutdown();

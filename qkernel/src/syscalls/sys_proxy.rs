@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::sync::atomic::Ordering;
+
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -19,6 +21,7 @@ use spin::Mutex;
 
 use crate::qlib::common::*;
 use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::TSC;
 use crate::qlib::linux_def::{SysErr, PATH_MAX};
 use crate::qlib::proxy::*;
 use crate::syscalls::syscalls::*;
@@ -30,6 +33,14 @@ lazy_static! {
 
 pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let commandId = args.arg0 as u64;
+    let startTime = TSC.Rdtsc();
+
+    defer!(if crate::SHARESPACE.config.read().PerfDebug {
+        let gap = TSC.Rdtsc() - startTime;
+        crate::qlib::kernel::threadmgr::task_exit::SYSPROXY_CALL_TIME[commandId as usize]
+            .fetch_add(gap as u64, Ordering::SeqCst);
+    });
+
     let cmd: ProxyCommand = unsafe { core::mem::transmute(commandId as u64) };
     let mut parameters = ProxyParameters {
         para1: args.arg1,
@@ -111,7 +122,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ProxyCommand::CudaDeviceGetByPCIBusId => {
             let mut device: i32 = 0;
             parameters.para1 = &mut device as *mut _ as u64;
-            let (PCIBusId, err) = task.CopyInString( parameters.para2, PATH_MAX);
+            let (PCIBusId, err) = task.CopyInString(parameters.para2, PATH_MAX);
             match err {
                 Err(e) => return Err(e),
                 _ => (),
@@ -163,7 +174,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
         }
         ProxyCommand::CudaDeviceGetPCIBusId => {
-            let (mut pciBusIdAddress, err) = task.CopyInString( parameters.para1, PATH_MAX);
+            let (mut pciBusIdAddress, err) = task.CopyInString(parameters.para1, PATH_MAX);
             match err {
                 Err(e) => return Err(e),
                 _ => (),
@@ -319,7 +330,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let data: Vec<u8> = task.CopyInVec(parameters.para2, parameters.para1 as usize)?;
             parameters.para2 = &data[0] as *const _ as u64;
 
-            let (ptxlibPath, err) = task.CopyInString( parameters.para4, PATH_MAX);
+            let (ptxlibPath, err) = task.CopyInString(parameters.para4, PATH_MAX);
             match err {
                 Err(e) => return Err(e),
                 _ => (),
@@ -334,7 +345,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ProxyCommand::CudaRegisterFunction => {
             let mut functionInfo = task.CopyInObj::<RegisterFunctionInfo>(parameters.para1)?;
             // error!("CudaRegisterFunction data {:x?}, parameters {:x?}", functionInfo, parameters);
-            let (deviceName, err) = task.CopyInString( functionInfo.deviceName, PATH_MAX);
+            let (deviceName, err) = task.CopyInString(functionInfo.deviceName, PATH_MAX);
             match err {
                 Err(e) => return Err(e),
                 _ => (),
@@ -363,8 +374,8 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
         }
         ProxyCommand::CudaRegisterVar => {
-            let mut data = task.CopyInObj::<RegisterVarInfo>(parameters.para1)?;   // still take the addresss
-            let (deviceName, err) = task.CopyInString( data.deviceName, PATH_MAX);
+            let mut data = task.CopyInObj::<RegisterVarInfo>(parameters.para1)?; // still take the addresss
+            let (deviceName, err) = task.CopyInString(data.deviceName, PATH_MAX);
             match err {
                 Err(e) => return Err(e),
                 _ => (),
@@ -586,7 +597,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(ret);
         }
         ProxyCommand::CuModuleGetFunction => {
-            let (funcName, err) = task.CopyInString( parameters.para3, PATH_MAX);
+            let (funcName, err) = task.CopyInString(parameters.para3, PATH_MAX);
             match err {
                 Err(e) => return Err(e),
                 _ => (),
