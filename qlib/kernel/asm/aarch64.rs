@@ -161,6 +161,32 @@ pub fn GetCurrentKernelSp() -> u64 {
 }
 
 #[inline]
+pub fn GetCurrentKernelIp() -> u64 {
+    let ip: u64;
+    unsafe {
+        asm!("\
+            mov {1}, x30
+            bl 1f
+            1:
+            mov {0}, x30
+            mov x30, {1}
+            ",
+            out(reg) ip,
+            out(reg) _,);
+    }
+    ip
+}
+
+#[inline]
+pub fn GetCurrentKernelBp() -> u64 {
+    let fp: u64;
+    unsafe {
+        asm!("mov {}, x29", out(reg) fp);
+    }
+    fp
+}
+
+#[inline]
 pub fn GetCurrentUserSp() -> u64 {
     return sp_el0();
 }
