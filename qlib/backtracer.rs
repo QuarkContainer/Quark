@@ -45,6 +45,11 @@ pub fn trace_from(mut curframe: Frame, cb: &mut dyn FnMut(&Frame) -> bool) {
         let keep_going = cb(&ctxt);
 
         if keep_going {
+            #[cfg(target_arch="aarch64")]
+            if curframe.rbp & 0b111 != 0 {
+                // aarch64 mandates 8-byte aligned addr dereference
+                break;
+            }
             unsafe {
                 curframe.rip = *((curframe.rbp + 8) as *mut u64);
                 curframe.rsp = curframe.rbp;
