@@ -194,13 +194,12 @@ pub fn SingletonInit() {
     }
 }
 
-#[cfg(target_arch="x86_64")]
+#[cfg(target_arch = "x86_64")]
 extern "C" {
     pub fn syscall_entry();
 }
 
-
-#[cfg(target_arch="aarch64")]
+#[cfg(target_arch = "aarch64")]
 extern "C" {
     pub fn vector_table();
 }
@@ -312,12 +311,21 @@ pub extern "C" fn syscall_handler(
     currTask.AccountTaskEnter(SchedState::RunningApp);
     currTask.RestoreFp();
 
-    if debugLevel > DebugLevel::Error {
-        let gap = if self::SHARESPACE.config.read().PerfDebug {
-            let gap = TSC.Rdtsc() - startTime;
+    if self::SHARESPACE.config.read().PerfDebug {
+        let gap = TSC.Rdtsc() - startTime;
+        if nr < crate::qlib::kernel::threadmgr::task_exit::SYS_CALL_TIME.len() as u64 {
             crate::qlib::kernel::threadmgr::task_exit::SYS_CALL_TIME[nr as usize]
                 .fetch_add(gap as u64, Ordering::SeqCst);
-            gap
+        } else {
+            crate::qlib::kernel::threadmgr::task_exit::QUARK_SYSCALL_TIME
+                [nr as usize - EXTENSION_CALL_OFFSET]
+                .fetch_add(gap as u64, Ordering::SeqCst);
+        }
+    }
+
+    if debugLevel > DebugLevel::Error {
+        let gap = if self::SHARESPACE.config.read().PerfDebug {
+            TSC.Rdtsc() - startTime
         } else {
             0
         };
@@ -598,14 +606,15 @@ pub extern "C" fn rust_main(
     SHARESPACE.IncrVcpuSearching();
     taskMgr::AddNewCpu();
 
-    #[cfg(target_arch="x86_64")]{
+    #[cfg(target_arch = "x86_64")]
+    {
         RegisterSysCall(syscall_entry as u64);
     }
 
-    #[cfg(target_arch="aarch64")]{
+    #[cfg(target_arch = "aarch64")]
+    {
         RegisterExceptionTable(vector_table as u64);
     }
-
 
     //interrupts::init_idt();
     interrupt::init();
@@ -687,7 +696,10 @@ fn StartRootContainer(_para: *const u8) -> ! {
     //CreateTask(StartExecProcess, ptr::null());
     let currTask = Task::Current();
     currTask.AccountTaskEnter(SchedState::RunningApp);
-    debug!("enter user, entry: {:x}, userStackAddr: {:x}, kernelStackAddr: {:x}", entry, userStackAddr, kernelStackAddr);
+    debug!(
+        "enter user, entry: {:x}, userStackAddr: {:x}, kernelStackAddr: {:x}",
+        entry, userStackAddr, kernelStackAddr
+    );
     EnterUser(entry, userStackAddr, kernelStackAddr);
 }
 
