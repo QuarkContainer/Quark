@@ -169,6 +169,7 @@ pub const HYPERCALL_VCPU_PRINT: u16 = 22;
 pub const HYPERCALL_VCPU_WAIT: u16 = 23;
 pub const HYPERCALL_RELEASE_VCPU: u16 = 24;
 pub const HYPERCALL_SHARESPACE_INIT: u16 = 25;
+pub const HYPERCALL_TEST: u16 = 0x3f;
 
 pub const MAX_VCPU_COUNT: usize = 64;
 
