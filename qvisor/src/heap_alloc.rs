@@ -83,6 +83,54 @@ impl HostAllocator {
             ) as u64
         };
 
+        #[cfg(feature = "cc")]
+        {
+            let host_init_cpuid_addr = unsafe {
+                let flags = libc::MAP_SHARED | libc::MAP_ANON | libc::MAP_FIXED;
+                libc::mmap(
+                    MemoryDef::CPUID_PAGE as _,
+                    MemoryDef::PAGE_SIZE as usize,
+                    libc::PROT_READ | libc::PROT_WRITE,
+                    flags,
+                    -1,
+                    0,
+                ) as u64
+            };
+            if host_init_cpuid_addr == libc::MAP_FAILED as u64 {
+                panic!("mmap: failed to get mapped memory area for cpuid page");
+            }
+
+            let host_init_secret_addr = unsafe {
+                let flags = libc::MAP_SHARED | libc::MAP_ANON | libc::MAP_FIXED;
+                libc::mmap(
+                    MemoryDef::SECRET_PAGE as _,
+                    MemoryDef::PAGE_SIZE as usize,
+                    libc::PROT_READ | libc::PROT_WRITE,
+                    flags,
+                    -1,
+                    0,
+                ) as u64
+            };
+            if host_init_secret_addr == libc::MAP_FAILED as u64 {
+                panic!("mmap: failed to get mapped memory area for cpuid page");
+            }
+
+            let host_init_ghcb_addr = unsafe {
+                let flags = libc::MAP_SHARED | libc::MAP_ANON | libc::MAP_FIXED;
+                libc::mmap(
+                    MemoryDef::GHCB_OFFSET as _,
+                    MemoryDef::PAGE_SIZE_2M as usize,
+                    libc::PROT_READ | libc::PROT_WRITE,
+                    flags,
+                    -1,
+                    0,
+                ) as u64
+            };
+            if host_init_ghcb_addr == libc::MAP_FAILED as u64 {
+                panic!("mmap: failed to get mapped memory area for ghcb page");
+            }
+        }
+        
         if host_init_heap_addr == libc::MAP_FAILED as u64 {
             panic!("mmap: failed to get mapped memory area for heap");
         }
