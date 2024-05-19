@@ -136,6 +136,8 @@ pub struct VMSpace {
 
     pub rdmaSvcCliSock: i32,
     pub podId: [u8;64],
+    pub kvmfd: i32,
+    pub vmfd: i32,
 }
 
 
@@ -164,6 +166,8 @@ impl VMSpace {
             haveMembarrierPrivateExpedited: haveMembarrierPrivateExpedited,
             rdmaSvcCliSock: 0,
             podId: [0u8;64],
+            kvmfd: 0,
+            vmfd: 0,
         };
     }
 

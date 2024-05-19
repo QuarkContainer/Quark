@@ -266,13 +266,14 @@ impl KVMVcpu {
                 };
             }
         }
+        #[cfg(not(feature = "cc"))]
+        {
+            self.vcpu
+                .set_regs(&regs)
+                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
 
-        self.vcpu
-            .set_regs(&regs)
-            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-
-        self.SetXCR0()?;
-
+            self.SetXCR0()?;
+        }
         let mut lastVal: u32 = 0;
         let mut first = true;
 
