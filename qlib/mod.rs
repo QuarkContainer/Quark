@@ -33,6 +33,15 @@ macro_rules! cfg_aarch64 {
     }
 }
 
+macro_rules! cfg_cc {
+    ($($item:item)*) => {
+        $(
+            #[cfg (feature = "cc")]
+            $item
+        )*
+    }
+}
+
 //#[macro_use]
 //pub mod macros;
 pub mod addr;

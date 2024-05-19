@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(feature = "cc")]
+use crate::qlib::cc::sev_snp::snp_active;
+#[cfg(feature = "cc")]
+use crate::qlib::cc::sev_snp::C_BIT_MASK;
 use crate::qlib::mutex::*;
 use alloc::boxed::Box;
 use alloc::string::ToString;
@@ -852,6 +856,7 @@ impl Task {
         }
     }
 
+    #[cfg(not(feature = "cc"))]
     #[inline]
     pub fn SwitchPageTable(&self) {
         let root = self.mm.GetRoot();
@@ -863,6 +868,23 @@ impl Task {
             super::super::pagetable::PageTables::Switch(root);
         }
     }
+
+    #[cfg(feature = "cc")]
+    #[inline]
+    pub fn SwitchPageTable(&self) {
+        let mut root = self.mm.GetRoot();
+        let curr = super::asm::CurrentUserTable();
+        if snp_active() {
+            root |= C_BIT_MASK.load(Ordering::Acquire);
+        }
+        if curr != root {
+            CPULocal::Myself()
+                .tlbEpoch
+                .store(self.mm.TLBEpoch(), Ordering::Relaxed);
+            super::super::pagetable::PageTables::Switch(root);
+        }
+    }
+
 
     #[cfg(target_arch="x86_64")]
     pub fn SetKernelPageTable() {
