@@ -42,6 +42,8 @@ pub mod common;
 pub mod idallocator;
 pub mod linux_def;
 pub mod pagetable;
+#[cfg (feature = "cc")]
+pub mod pagetable_cc;
 pub mod range;
 //pub mod Process;
 pub mod auth;

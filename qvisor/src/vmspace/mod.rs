@@ -1916,6 +1916,21 @@ impl VMSpace {
             .MapWith1G(start, end, physical, flags, &mut self.allocator, true);
     }
 
+    #[cfg (feature = "cc")]
+    pub fn KernelMapHugeTableSevSnp(
+        &mut self,
+        start: Addr,
+        end: Addr,
+        physical: Addr,
+        flags: PageTableFlags,
+        c_bit: u64,
+    ) -> Result<bool> {
+        info!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
+        return self
+            .pageTables
+            .MapWith1GSevSnp(start, end, physical, flags, &mut self.allocator, c_bit, true);
+    }
+
     pub fn PrintStr(phAddr: u64) {
         unsafe {
             #[cfg(target_arch = "aarch64")]

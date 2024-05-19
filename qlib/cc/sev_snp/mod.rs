@@ -5,6 +5,12 @@ pub mod cpuid_page;
 /// The C-Bit mask indicating encrypted physical addresses
 pub static C_BIT_MASK: AtomicU64 = AtomicU64::new(0);
 
+/// Get the SEV C-Bit mask
+#[inline(always)]
+pub fn get_cbit_mask() -> u64 {
+    C_BIT_MASK.load(Ordering::Relaxed)
+}
+
 #[inline(always)]
 pub fn get_cbit() -> u64 {
     let ebx;
@@ -45,4 +51,10 @@ pub fn check_snp_support() -> bool {
         eax = ret.eax;
     }
     return (eax & (1 << 4)) != 0;
+}
+
+/// Test, if SEV-SNP is enabled
+#[inline(always)]
+pub fn snp_active() -> bool {
+    get_cbit_mask() > 0
 }
