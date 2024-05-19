@@ -23,6 +23,8 @@ use core::ops::Deref;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
+use self::util::ReadLinkAt;
+
 //use super::super::super::socket::unix::transport::unix::*;
 use super::super::super::auth::userns::*;
 use super::super::super::auth::*;
@@ -328,7 +330,33 @@ impl MountNs {
                     return Err(Error::SysError(SysErr::ELOOP));
                 }
 
-                let targetPath = inode.ReadLink(task)?;
+                let targetPath = match inode.GetIops() {
+                    // In ARM system, the ReadlinkAt doesn't work for a file with zero size pathname
+                    // For host file, we have to do the readlinkat from it parent node
+                    // int readlinkat(int dirfd, const char *pathname,char *buf, size_t bufsiz);
+                    Iops::HostInodeOp(_op) => {
+                        let parent = current.Parent().expect("hostinodeop has parent");
+                        let pinode = parent.Inode();
+                        let piops = pinode.GetIops();
+                        let path = match piops {
+                            Iops::HostDirOp(pop) => {
+                                let pfd = pop.lock().HostFd();
+                                let name = current.Name();
+                                let path: String = ReadLinkAt(pfd, &name.to_string())?;
+                                path
+                            }
+                            _ => {
+                                panic!(
+                                    "hostinodeop's parent is not hostdir {}",
+                                    parent.MyFullName()
+                                );
+                            }
+                        };
+                        path
+                    }
+                    _ => inode.ReadLink(task)?,
+                };
+
                 *remainingTraversals -= 1;
 
                 let wd = match &current.main.lock().Parent {

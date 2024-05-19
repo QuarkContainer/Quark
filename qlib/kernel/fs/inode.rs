@@ -151,7 +151,7 @@ pub enum IopsType {
     SimpleFileInode,
     ProxyDevice,
     NvFrontendDevice,
-    UvmDevice
+    UvmDevice,
 }
 
 #[enum_dispatch]
@@ -186,7 +186,7 @@ pub enum Iops {
     PipeIops(PipeIops),
     UnixSocketInodeOps(UnixSocketInodeOps),
     NvFrontendDevice(NvFrontendDevice),
-    UvmDevice(UvmDevice)
+    UvmDevice(UvmDevice),
 }
 
 impl Iops {
@@ -948,6 +948,23 @@ impl Inode {
         let op = self.lock().InodeOp.clone();
         let res = op.ReadLink(task, self);
         return res;
+    }
+
+    pub fn GetIops(&self) -> Iops {
+        let isOverlay = self.lock().Overlay.is_some();
+        let inode: Inode = if isOverlay {
+            let overlay = self.lock().Overlay.as_ref().unwrap().clone();
+            let overlay = overlay.read();
+            if overlay.upper.is_some() {
+                overlay.upper.as_ref().unwrap().clone()
+            } else {
+                overlay.lower.as_ref().unwrap().clone()
+            }
+        } else {
+            self.clone()
+        };
+
+        return inode.lock().InodeOp.clone();
     }
 
     pub fn GetLink(&self, task: &Task) -> Result<Dirent> {
