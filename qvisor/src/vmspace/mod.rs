@@ -453,7 +453,6 @@ impl VMSpace {
         return 0;
     }
 
-    #[cfg(target_arch="x86_64")]
     pub unsafe fn TryOpenHelper(dirfd: i32, name: u64, skiprw: bool) -> (i32, bool) {
         let flags = Flags::O_NOFOLLOW;
 
@@ -514,7 +513,6 @@ impl VMSpace {
         return (Self::GetRet(ret as i64) as i32, false);
     }
 
-    #[cfg(target_arch="x86_64")]
     pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64, skiprw: bool) -> i64 {
         //info!("TryOpenAt1: the filename is {}", Self::GetStr(name));
         let dirfd = if dirfd < 0 {
@@ -528,28 +526,28 @@ impl VMSpace {
 
         let tryOpenAt = unsafe { &mut *(addr as *mut TryOpenStruct) };
         let ret =
-            unsafe { 
+            unsafe {
                 libc::fstatat(
-                    dirfd, 
+                    dirfd,
                     name as *const c_char,
                     tryOpenAt.fstat as *const _ as u64 as *mut stat,
                     libc::AT_SYMLINK_NOFOLLOW
 
-                ) as i64 
+                ) as i64
             };
 
         if ret < 0 {
             return Self::GetRet(ret as i64);
         }
-        
-        let (fd, writeable) = unsafe { 
+
+        let (fd, writeable) = unsafe {
             Self::TryOpenHelper(
-                dirfd, 
-                name, 
+                dirfd,
+                name,
                 skiprw && tryOpenAt.fstat.IsRegularFile()
-            ) 
+            )
         };
-        
+
         //error!("TryOpenAt dirfd {}, name {} ret {}", dirfd, Self::GetStr(name), fd);
 
         if fd < 0 {
@@ -563,95 +561,6 @@ impl VMSpace {
             URING_MGR.lock().Addfd(hostfd).unwrap();
         }
 
-        return hostfd as i64;
-    }
-
-    // NOTE / FIXME / TODO
-    // the OpenAt optimization from #1029 is not working well with aarch64.
-    // disabling for now.
-    #[cfg(target_arch="aarch64")]
-    pub unsafe fn TryOpenHelper(dirfd: i32, name: u64) -> (i32, bool) {
-        let flags = Flags::O_NOFOLLOW;
-        let ret = libc::openat(
-            dirfd,
-            name as *const c_char,
-            (flags | Flags::O_RDWR) as i32,
-            0,
-        );
-        if ret > 0 {
-            return (ret, true);
-        }
-
-        let err = Self::GetRet(ret as i64) as i32;
-        if err == -SysErr::ENOENT {
-            return (-SysErr::ENOENT, false);
-        }
-
-        let ret = libc::openat(
-            dirfd,
-            name as *const c_char,
-            (flags | Flags::O_RDONLY) as i32,
-            0,
-        );
-        if ret > 0 {
-            return (ret, false);
-        }
-
-        let ret = libc::openat(
-            dirfd,
-            name as *const c_char,
-            (flags | Flags::O_WRONLY) as i32,
-            0,
-        );
-        if ret > 0 {
-            return (ret, true);
-        }
-
-        let ret = libc::openat(
-            dirfd,
-            name as *const c_char,
-            flags as i32 | Flags::O_PATH,
-            0,
-        );
-        if ret > 0 {
-            return (ret, false);
-        }
-
-        return (Self::GetRet(ret as i64) as i32, false);
-    }
-
-
-    #[cfg(target_arch="aarch64")]
-    pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64, _skiprw: bool) -> i64 {
-        let dirfd = if dirfd < 0 {
-            dirfd
-        } else {
-            match Self::GetOsfd(dirfd) {
-                Some(fd) => fd,
-                None => return -SysErr::EBADF as i64,
-            }
-        };
-
-        let tryOpenAt = unsafe { &mut *(addr as *mut TryOpenStruct) };
-        let (fd, writeable) = unsafe { Self::TryOpenHelper(dirfd, name) };
-
-        if fd < 0 {
-            return fd as i64;
-        }
-        let ret =
-            unsafe { libc::fstat(fd, tryOpenAt.fstat as *const _ as u64 as *mut stat) as i64 };
-        if ret < 0 {
-            unsafe {
-                libc::close(fd);
-            }
-            return Self::GetRet(ret as i64);
-        }
-        tryOpenAt.writeable = writeable;
-        let hostfd = GlobalIOMgr().AddFile(fd);
-
-        if tryOpenAt.fstat.IsRegularFile() {
-            URING_MGR.lock().Addfd(hostfd).unwrap();
-        }
         return hostfd as i64;
     }
 
