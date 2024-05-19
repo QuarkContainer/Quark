@@ -194,6 +194,35 @@ impl MemRegionMgr {
         return Ok(());
     }
 
+    #[cfg(target_arch = "aarch64")]
+    pub fn MapMMIOPage(&self) -> Result<()> {
+        let mut opts = addr::PageOpts::Zero();
+
+        opts.SetWrite().SetGlobal().SetPresent().SetAccessed();
+        opts.SetMMIOPage();
+        self.KernelMap(
+            addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+            addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE + MemoryDef::HYPERCALL_MMIO_SIZE),
+            addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
+            opts.Val(),
+        )?;
+
+        return Ok(());
+    }
+
+    pub fn KernelMap(
+        &mut self,
+        start: Addr,
+        end: Addr,
+        physical: Addr,
+        flags: PageTableFlags,
+    ) -> Result<bool> {
+        info!("KernelMap start is {:x}, end is {:x}", start.0, end.0);
+        return self
+            .pagetables
+            .Map(start, end, physical, flags, &mut self.allocator, true);
+    }
+
     pub fn KernelMapHugeTable(
         &self,
         start: Addr,
@@ -450,6 +479,9 @@ impl VirtualMachine {
             .lock()
             .SetRegion(MemoryDef::NVIDIA_START_ADDR, MemoryDef::NVIDIA_ADDR_SIZE)?;
 
+        #[cfg(target_arch = "aarch64")]
+        vm.memRegionMgr.lock().MapMMIOPage()?;
+
         let heapStartAddr = MemoryDef::HEAP_OFFSET;
 
         PMA_KEEPER.Init(MemoryDef::FILE_MAP_OFFSET, MemoryDef::FILE_MAP_SIZE);
@@ -466,20 +498,6 @@ impl VirtualMachine {
 
             vms.hostAddrTop =
                 MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
-
-            #[cfg(target_arch = "aarch64")]
-            {
-                let mut opts = addr::PageOpts::Zero();
-
-                opts.SetWrite().SetGlobal().SetPresent().SetAccessed();
-                opts.SetMMIOPage();
-                vms.KernelMap(
-                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
-                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE + MemoryDef::HYPERCALL_MMIO_SIZE),
-                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
-                    opts.Val(),
-                )?;
-            }
 
             vms.pivot = args.Pivot;
             vms.args = Some(args);
