@@ -17,12 +17,16 @@
 use core::mem::size_of;
 //use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+#[cfg(feature = "cc")]
+use std::os::fd::FromRawFd;
 use std::os::unix::io::AsRawFd;
 use std::sync::atomic::fence;
 //use std::sync::mpsc::Sender;
 
 use kvm_bindings::*;
 use kvm_ioctls::VcpuExit;
+#[cfg(feature = "cc")]
+use kvm_ioctls::{Kvm, Vmgexit};
 use libc::*;
 //use nix::sys::signal;
 
@@ -44,6 +48,8 @@ use super::qlib::*;
 use super::runc::runtime::vm::*;
 use super::syncmgr::*;
 use super::*;
+#[cfg(feature = "cc")]
+use crate::qlib::cc::sev_snp::ghcb::*;
 #[cfg(feature = "cc")]
 use crate::qlib::cc::sev_snp::C_BIT_MASK;
 #[cfg(feature = "cc")]
@@ -210,7 +216,17 @@ impl KVMVcpu {
         );
     }
 
-    pub fn run(&self, tgid: i32) -> Result<()> {
+    pub fn run(&self, tgid: i32, kvmfd: i32, vmfd: i32) -> Result<()> {
+        #[cfg(not(feature = "cc"))]
+        {
+            let _kvmfd = kvmfd;
+            let _vmfd = vmfd;
+        }
+        #[cfg(feature = "cc")]
+        let kvm = unsafe { Kvm::from_raw_fd(kvmfd) };
+        #[cfg(feature = "cc")]
+        let vm_fd = unsafe { kvm.create_vmfd_from_rawfd(vmfd).unwrap() };
+
         SetExitSignal();
         #[cfg(not(feature = "cc"))]
         self.setup_long_mode()?;
@@ -237,7 +253,7 @@ impl KVMVcpu {
                     //arg4
                     r8: self.autoStart as u64,
                     //arg5
-                    // r9:
+                    r9: VmType::SevSnp.to_u64(),
                     //rcx:
                     ..Default::default()
                 };
@@ -758,6 +774,96 @@ impl KVMVcpu {
                     //     self.vcpu
                     //         .set_sregs(&sregs)
                     //         .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                }
+                #[cfg(feature = "cc")]
+                VcpuExit::VMGExit(exit) => {
+                    info!("Vmgexit");
+                    const KVM_MEMORY_ATTRIBUTE_PRIVATE: u64 = 1 << 3;
+                    match exit {
+                        Vmgexit::PscMsr(gpa, op, ret) => {
+                            info!(
+                                "Vmgexit PscMsr,gpa {:x},op {:x}, ret {:x}",
+                                gpa, op, ret as u64
+                            );
+                            let shared_to_private = op == 1;
+                            let attr = if shared_to_private {
+                                KVM_MEMORY_ATTRIBUTE_PRIVATE
+                            } else {
+                                0
+                            };
+                            let memory_attributes = kvm_memory_attributes {
+                                address: gpa,
+                                size: MemoryDef::PAGE_SIZE,
+                                attributes: attr,
+                                flags: 0,
+                            };
+                            vm_fd
+                                .set_memory_attributes(&memory_attributes)
+                                .expect("Unable to convert memory to private");
+                            unsafe {
+                                *ret = 0;
+                            }
+                        }
+                        Vmgexit::Psc(_shared_gpa, ret) => {
+                            let mut entries_processed = 0u16;
+                            let mut gfn_base = 0u64;
+                            let mut gfn_count = 0i32;
+                            let mut range_to_private = false;
+                            let ghcb = unsafe {
+                                &mut *((MemoryDef::GHCB_OFFSET
+                                    + self.id as u64 * MemoryDef::PAGE_SIZE)
+                                    as *mut Ghcb)
+                            };
+                            let mut shared_buffer = ghcb.get_shared_buffer_clone();
+                            let desc =
+                                unsafe { &mut *(shared_buffer.as_mut_ptr() as *mut SnpPscDesc) };
+                            info!(
+                                "Vmgexit Psc ghcb,desc.entries[0]:{:#x?},desc.entries[252]:{:#x?}",
+                                desc.entries[0], desc.entries[252]
+                            );
+                            while next_contig_gpa_range(
+                                desc,
+                                &mut entries_processed,
+                                &mut gfn_base,
+                                &mut gfn_count,
+                                &mut range_to_private,
+                            ) {
+                                let attr = if range_to_private {
+                                    KVM_MEMORY_ATTRIBUTE_PRIVATE
+                                } else {
+                                    0
+                                };
+                                let memory_attributes = kvm_memory_attributes {
+                                    address: gfn_base * MemoryDef::PAGE_SIZE,
+                                    size: gfn_count as u64 * MemoryDef::PAGE_SIZE,
+                                    attributes: attr,
+                                    flags: 0,
+                                };
+                                match vm_fd.set_memory_attributes(&memory_attributes) {
+                                    Ok(_) => desc.cur_entry += entries_processed,
+                                    Err(_) => unsafe {
+                                        *ret = 0x100u64 << 32;
+                                        error!("error doing memory conversion");
+                                        break;
+                                    },
+                                }
+                                desc.cur_entry += entries_processed;
+                            }
+                            ghcb.set_shared_buffer(shared_buffer);
+                        }
+                        Vmgexit::ExtGuestReq(_data_gpa, _data_npages, _ret) => {
+                            error!("Vmgexit::ExtGuestReq not supported yet!");
+                        }
+                    }
+                }
+                VcpuExit::SystemEvent(event_type, flags) => {
+                    pub const KVM_SYSTEM_EVENT_SEV_TERM: u32 = 6;
+                    if event_type == KVM_SYSTEM_EVENT_SEV_TERM {
+                        info!("SEV SNP GHCB Termination, flags:0x{:x}", flags);
+                    }
+                    unsafe {
+                        libc::exit(0);
+                    }
                 }
                 r => {
                     let vcpu_sregs = self

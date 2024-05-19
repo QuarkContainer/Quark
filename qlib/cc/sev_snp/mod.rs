@@ -1,6 +1,8 @@
+use core::arch::asm;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 pub mod cpuid_page;
+pub mod ghcb;
 
 /// The C-Bit mask indicating encrypted physical addresses
 pub static C_BIT_MASK: AtomicU64 = AtomicU64::new(0);

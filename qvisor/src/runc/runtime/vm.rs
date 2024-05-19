@@ -651,6 +651,8 @@ impl VirtualMachine {
             autoStart = args.AutoStart;
             vms.pivot = args.Pivot;
             vms.args = Some(args);
+            vms.kvmfd = kvmfd;
+            vms.vmfd = vm_fd.as_raw_fd();
         }
 
         let entry_gpa = elf.LoadKernel(Self::KERNEL_IMAGE)?;
@@ -703,6 +705,8 @@ impl VirtualMachine {
         SetSigusr1Handler();
         let mut threads = Vec::new();
         let tgid = unsafe { libc::gettid() };
+        let kvmfd = VMS.read().kvmfd;
+        let vmfd = VMS.read().vmfd;
         threads.push(
             thread::Builder::new()
                 .name("0".to_string())
@@ -713,7 +717,7 @@ impl VirtualMachine {
                     VCPU.with(|f| {
                         *f.borrow_mut() = Some(cpu.clone());
                     });
-                    cpu.run(tgid).expect("vcpu run fail");
+                    cpu.run(tgid, kvmfd, vmfd).expect("vcpu run fail");
                     info!("cpu0 finish");
                 })
                 .unwrap(),
@@ -736,7 +740,7 @@ impl VirtualMachine {
                             *f.borrow_mut() = Some(cpu.clone());
                         });
                         info!("cpu#{} start", ThreadId());
-                        cpu.run(tgid).expect("vcpu run fail");
+                        cpu.run(tgid, kvmfd, vmfd).expect("vcpu run fail");
                         info!("cpu#{} finish", ThreadId());
                     })
                     .unwrap(),
