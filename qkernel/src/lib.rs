@@ -145,7 +145,7 @@ pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
 
 pub static  IS_GUEST: bool = true;
-pub  const ENABLE_EMULATION_CC: bool = true;
+pub  const ENABLE_EMULATION_CC: bool = false;
 
 
 lazy_static! {
