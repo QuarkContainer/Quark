@@ -67,9 +67,6 @@ use vcpu::CPU_LOCAL;
 
 use crate::qlib::kernel::GlobalIOMgr;
 
-#[cfg(feature = "cc")] 
-use crate::qlib::ShareSpace;
-
 use self::asm::*;
 use self::boot::controller::*;
 use self::boot::loader::*;
@@ -91,8 +88,6 @@ use self::qlib::kernel::memmgr;
 use self::qlib::kernel::perflog;
 use self::qlib::kernel::quring;
 use self::qlib::kernel::Kernel;
-#[cfg (feature = "cc")]
-use self::qlib::kernel::Kernel::ENABLE_CC;
 use self::qlib::kernel::*;
 use self::qlib::{ShareSpaceRef, SysCallID};
 use self::qlib::kernel::socket;
@@ -134,7 +129,12 @@ pub mod rdma_def;
 mod syscalls;
 
 cfg_cc! {
+    use crate::qlib::ShareSpace;
+    use self::qlib::cc::VmType;
+    use self::qlib::kernel::Kernel::{ENABLE_CC, IS_SEV_SNP};
+    use self::qlib::cc::sev_snp::{set_cbit_mask, pvalidate, PvalidateSize};
     use self::qlib::cc::sev_snp::ghcb::*;
+    use self::qlib::kernel::Kernel_cc::LOG_AVAILABLE;
 }
 
 #[global_allocator]
@@ -168,7 +168,7 @@ pub fn SingletonInit() {
         vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
         vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
         InitGs(0);
-
+        #[cfg(not(feature = "cc"))]
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentKernelTable()));
         FP_STATE.Reset();
         cfg_if::cfg_if! {
@@ -203,6 +203,7 @@ pub fn SingletonInit() {
 
         fs::file::InitSingleton();
         fs::filesystems::InitSingleton();
+        #[cfg(not(feature = "cc"))]
         interrupt::InitSingleton();
         kernel::futex::InitSingleton();
         kernel::semaphore::InitSingleton();
@@ -516,19 +517,46 @@ cfg_if::cfg_if! {
             vdsoParamAddr: u64,
             vcpuCnt: u64,
             autoStart: bool,
+            vm_type: u64
         ) {
 
             self::qlib::kernel::asm::fninit();
             if id == 0 {
-
+                let vm_type = VmType::from_u64(vm_type).unwrap_or_default();
+                match vm_type {
+                    VmType::SevSnp =>{
+                        ENABLE_CC.store(true, Ordering::Release);
+                        IS_SEV_SNP.store(true, Ordering::Release);
+                        //Log is available after ghcb is initialized
+                        LOG_AVAILABLE.store(false, Ordering::Release);
+                        for i in (MemoryDef::phy_lower_gpa()..MemoryDef::guest_host_shared_heap_end_gpa()).step_by(MemoryDef::PAGE_SIZE as usize) {
+                            let _ret = pvalidate(VirtAddr::new(i), PvalidateSize::Size4K, true);
+                        }
+                    },
+                    VmType::CCEmu =>{
+                        ENABLE_CC.store(true, Ordering::Release);
+                    }
+                    _ =>(),
+                }
 
                 GLOBAL_ALLOCATOR.InitPrivateAllocator(MemoryDef::guest_private_running_heap_offset_gpa());
-
+                unsafe {KERNEL_PAGETABLE.Init(PageTables::Init(CurrentKernelTable()&0xffff_ffff_ffff));}
                 
+                //set idt first here cpuid is interceptted in cc
+                unsafe{
+                    interrupt::InitSingleton();
+                }
+                interrupt::init();
     
-                //check msr to see if sev-snp enabled
-                ENABLE_CC.store(true,Ordering::Release);
-                // ghcb convert shared memory
+                match vm_type {
+                    VmType::SevSnp =>{
+                        set_cbit_mask();
+                        PAGE_MGR.SetValue(PAGE_MGR_HOLDER.Addr());
+                        // ghcb convert shared memory
+                        InitShareMemory();
+                    },
+                    _ =>(),
+                }
                 
                 GLOBAL_ALLOCATOR.InitSharedAllocator(MemoryDef::guest_host_shared_heap_offest_gpa());
 
@@ -549,7 +577,7 @@ cfg_if::cfg_if! {
 
 
                 SingletonInit();
-
+                LOG_AVAILABLE.store(true, Ordering::Release);
                 SetVCPCount(vcpuCnt as usize);
                 VCPU_ALLOCATOR.Print();
                 VCPU_ALLOCATOR.Initializated();
@@ -570,16 +598,24 @@ cfg_if::cfg_if! {
                 // release other vcpus
                 HyperCall64(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
             } else {
+                x86_64::instructions::tlb::flush_all();
+                interrupt::init();
                 InitGs(id);
+                if IS_SEV_SNP.load(Ordering::Acquire){
+                    InitGhcb(id as usize);
+                }
                 //PerfGoto(PerfType::Kernel);
             }
         
             SHARESPACE.IncrVcpuSearching();
             taskMgr::AddNewCpu();
             RegisterSysCall(syscall_entry as u64);
-        
-            //interrupts::init_idt();
-            interrupt::init();
+
+            //Different from normal vm, mxcsr will not be set by kvm, should set it mannualy
+            if IS_SEV_SNP.load(Ordering::Acquire){
+                let mxcsr_value = 0x1f80;
+                ldmxcsr(&mxcsr_value as *const _ as u64);
+            }
         
             /***************** can't run any qcall before this point ************************************/
         
