@@ -129,6 +129,9 @@ pub mod rdma_def;
 
 mod syscalls;
 
+cfg_cc! {
+    use self::qlib::cc::sev_snp::ghcb::*;
+}
 
 #[global_allocator]
 pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
@@ -472,6 +475,32 @@ fn InitLoader() {
     let mut process = Process::default();
     Kernel::HostSpace::LoadProcessKernel(&mut process as *mut _ as u64) as usize;
     LOADER.InitKernel(process).unwrap();
+}
+
+#[cfg(feature = "cc")]
+//Need to initialize PAGEMGR(pagepool for page allcator) and kernel page table in advance
+fn InitShareMemory() {
+    *GHCB[0].lock() = Some(GhcbHandle::default());
+    let ghcb_option: &mut Option<GhcbHandle<'_>> = &mut *GHCB[0].lock();
+    let ghcb = ghcb_option.as_mut().unwrap();
+    ghcb.init();
+    ghcb.set_memory_shared_2mb(
+        VirtAddr::new(MemoryDef::file_map_offset_gpa()),
+        MemoryDef::FILE_MAP_SIZE / MemoryDef::PAGE_SIZE_2M,
+    );
+    ghcb.set_memory_shared_2mb(
+        VirtAddr::new(MemoryDef::guest_host_shared_heap_offest_gpa()),
+        MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE / MemoryDef::PAGE_SIZE_2M,
+    );
+}
+
+#[cfg(feature = "cc")]
+//Need to initialize PAGEMGR(pagepool for page allcator) and kernel page table in advance
+fn InitGhcb(vcpuid: usize) {
+    *GHCB[vcpuid].lock() = Some(GhcbHandle::new(vcpuid as u64));
+    let ghcb_option: &mut Option<GhcbHandle<'_>> = &mut *GHCB[vcpuid].lock();
+    let ghcb = ghcb_option.as_mut().unwrap();
+    ghcb.init();
 }
 
 cfg_if::cfg_if! {
