@@ -3053,8 +3053,7 @@ impl MemoryDef {
     //
     // Page not backed up by guest physical frame, access causes KVM_EXIT_MMIO.
     //
-    pub const HYPERCALL_MMIO_BASE: u64 = Self::PHY_LOWER_ADDR
-                                         - Self::PAGE_SIZE;
+    pub const HYPERCALL_MMIO_BASE: u64 = Self::PHY_LOWER_ADDR - Self::PAGE_SIZE;
     pub const HYPERCALL_MMIO_SIZE: u64 = Self::PAGE_SIZE;
 }
 
