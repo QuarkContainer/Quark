@@ -33,6 +33,7 @@ use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
 use crate::qlib::proxy::*;
 use crate::GLOBAL_ALLOCATOR;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
+pub static LOG_AVAILABLE: AtomicBool = AtomicBool::new(true);
 
 extern "C" {
     pub fn rdtsc() -> i64;
@@ -1341,6 +1342,9 @@ impl HostSpace {
     }
 
     pub fn Panic_cc(str: &str) {
+        if !LOG_AVAILABLE.load(Ordering::Acquire){
+            return;
+        }
         //copy the &str to shared buffer
         let bytes = str.as_bytes();
         let len = bytes.len();
@@ -2014,6 +2018,9 @@ impl HostSpace {
     }
 
     pub fn SyncPrint_cc(level: DebugLevel, str: &str) {
+        if !LOG_AVAILABLE.load(Ordering::Acquire){
+            return;
+        }
         //copy the &str to shared buffer
         let bytes = str.as_bytes();
         let len: usize = bytes.len();

@@ -73,6 +73,10 @@ version = "0.3.8"
 default-features = false
 features = ["alloc"]
 
+[dependencies.yaxpeax-x86]
+version = "1.2.2"
+default-features = false
+
 [profile.dev]
 opt-level = 0
 
