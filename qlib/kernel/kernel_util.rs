@@ -35,6 +35,6 @@ pub fn RandU64() -> Result<u64> {
 
 pub fn RandU128() -> Result<(u64, u64)> {
     let res: [u64; 2] = [0; 2];
-    Random(&res[0] as *const _ as u64, 18, GRND_RANDOM)?;
+    Random(&res[0] as *const _ as u64, 16, GRND_RANDOM)?;
     return Ok((res[0], res[1]));
 }
