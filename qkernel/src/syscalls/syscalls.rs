@@ -259,8 +259,8 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysSetresgid,           // 119 sys_setresgid,
     SysGetresgid,           // 120 sys_getresgid,  //120
     SysGetpgid,             // 121 sys_getpgid,
-    NotImplementSyscall,    // 122 sys_setfsuid,
-    NotImplementSyscall,    // 123 sys_setfsgid,
+    SysNoSys,               // 122 sys_setfsuid,
+    SysNoSys,               // 123 sys_setfsgid,
     SysGetsid,              // 124 sys_getsid,
     SysCapget,              // 125 sys_capget,
     SysCapSet,              // 126 sys_capset,
@@ -750,8 +750,8 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysGetresuid,          // 148 sys_getresuid,
     SysSetresgid,          // 149 sys_setresgid,
     SysGetresgid,          // 150 sys_getresgid, //150
-    NotImplementSyscall,   // 151 sys_setfsuid,
-    NotImplementSyscall,   // 152 sys_setfsgid,
+    SysNoSys,              // 151 sys_setfsuid,
+    SysNoSys,              // 152 sys_setfsgid,
     SysTimes,              // 153 sys_times,
     SysSetpgid,            // 154 sys_setpgid,
     SysGetpgid,            // 155 sys_getpgid,
