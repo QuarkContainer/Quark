@@ -187,4 +187,8 @@ this, you need to manually apply
 [this patch](https://lists.sr.ht/~quark/QuarkContainer/patches/51839)
 
 ## Communications
-Slack: https://join.slack.com/t/quarksoftgroup/shared_invite/zt-oj7dgqet-6iUXmOnMbqHj4g_XAd_3Mg
+- use the [Quark mailing list](https://lists.sr.ht/~quark/QuarkContainer) by
+  simply sending emails to `~quark/QuarkContainer@lists.sr.ht`. To subscribe to
+  the list, send an empty email to `~quark/QuarkContainer+subscribe@lists.sr.ht`
+  To learn more about using mailinglist, see the [Mailing list etiquette](https://man.sr.ht/lists.sr.ht/etiquette.md).
+- there is also a [Slack channel](https://join.slack.com/t/quarksoftgroup/shared_invite/zt-oj7dgqet-6iUXmOnMbqHj4g_XAd_3Mg)
