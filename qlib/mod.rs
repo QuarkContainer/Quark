@@ -33,6 +33,15 @@ macro_rules! cfg_aarch64 {
     }
 }
 
+macro_rules! cfg_cc {
+    ($($item:item)*) => {
+        $(
+            #[cfg (feature = "cc")]
+            $item
+        )*
+    }
+}
+
 //#[macro_use]
 //pub mod macros;
 pub mod addr;
@@ -42,6 +51,8 @@ pub mod common;
 pub mod idallocator;
 pub mod linux_def;
 pub mod pagetable;
+#[cfg (feature = "cc")]
+pub mod pagetable_cc;
 pub mod range;
 //pub mod Process;
 pub mod auth;
@@ -86,6 +97,8 @@ pub mod unix_socket;
 pub mod nvproxy;
 pub mod tsot_msg;
 
+#[cfg (feature = "cc")]
+pub mod cc;
 #[cfg(target_arch = "aarch64")]
 mod pagetable_aarch64;
 
@@ -156,6 +169,7 @@ pub const HYPERCALL_VCPU_PRINT: u16 = 22;
 pub const HYPERCALL_VCPU_WAIT: u16 = 23;
 pub const HYPERCALL_RELEASE_VCPU: u16 = 24;
 pub const HYPERCALL_SHARESPACE_INIT: u16 = 25;
+pub const HYPERCALL_TEST: u16 = 0x3f;
 
 pub const MAX_VCPU_COUNT: usize = 64;
 

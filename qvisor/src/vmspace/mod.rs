@@ -136,6 +136,8 @@ pub struct VMSpace {
 
     pub rdmaSvcCliSock: i32,
     pub podId: [u8;64],
+    pub kvmfd: i32,
+    pub vmfd: i32,
 }
 
 
@@ -164,6 +166,8 @@ impl VMSpace {
             haveMembarrierPrivateExpedited: haveMembarrierPrivateExpedited,
             rdmaSvcCliSock: 0,
             podId: [0u8;64],
+            kvmfd: 0,
+            vmfd: 0,
         };
     }
 
@@ -1914,6 +1918,21 @@ impl VMSpace {
         return self
             .pageTables
             .MapWith1G(start, end, physical, flags, &mut self.allocator, true);
+    }
+
+    #[cfg (feature = "cc")]
+    pub fn KernelMapHugeTableSevSnp(
+        &mut self,
+        start: Addr,
+        end: Addr,
+        physical: Addr,
+        flags: PageTableFlags,
+        c_bit: u64,
+    ) -> Result<bool> {
+        info!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
+        return self
+            .pageTables
+            .MapWith1GSevSnp(start, end, physical, flags, &mut self.allocator, c_bit, true);
     }
 
     pub fn PrintStr(phAddr: u64) {

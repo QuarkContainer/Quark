@@ -17,12 +17,16 @@
 use core::mem::size_of;
 //use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+#[cfg(feature = "cc")]
+use std::os::fd::FromRawFd;
 use std::os::unix::io::AsRawFd;
 use std::sync::atomic::fence;
 //use std::sync::mpsc::Sender;
 
 use kvm_bindings::*;
 use kvm_ioctls::VcpuExit;
+#[cfg(feature = "cc")]
+use kvm_ioctls::{Kvm, Vmgexit};
 use libc::*;
 //use nix::sys::signal;
 
@@ -30,21 +34,29 @@ use crate::host_uring::HostSubmit;
 use crate::qlib::cpuid::XSAVEFeature::{XSAVEFeatureBNDCSR, XSAVEFeatureBNDREGS};
 use crate::qlib::kernel::asm::xgetbv;
 
-use super::*;
 use super::amd64_def::*;
-use super::qlib::*;
-use super::qlib::common::*;
-use super::qlib::GetTimeCall;
 use super::kvm_vcpu::KVMVcpuState;
 use super::kvm_vcpu::SetExitSignal;
+use super::qlib::common::*;
 use super::qlib::linux::time::Timespec;
 use super::qlib::linux_def::*;
 use super::qlib::perf_tunning::*;
-#[cfg (feature = "cc")]
+#[cfg(feature = "cc")]
 use super::qlib::qmsg::sharepara::*;
+use super::qlib::GetTimeCall;
+use super::qlib::*;
 use super::runc::runtime::vm::*;
 use super::syncmgr::*;
-#[cfg(feature = "cc")] 
+use super::*;
+#[cfg(feature = "cc")]
+use crate::qlib::cc::sev_snp::ghcb::*;
+#[cfg(feature = "cc")]
+use crate::qlib::cc::sev_snp::C_BIT_MASK;
+#[cfg(feature = "cc")]
+use crate::qlib::cc::VmType;
+#[cfg(feature = "cc")]
+use crate::qlib::kernel::Kernel::{ENABLE_CC, IS_SEV_SNP};
+#[cfg(feature = "cc")]
 use crate::qlib::kernel::PAGE_MGR;
 
 use crate::qlib::task_mgr::TaskId;
@@ -57,10 +69,14 @@ pub struct SignalMaskStruct {
     _pad: u32,
 }
 
-
 impl KVMVcpu {
     fn SetupGDT(&self, sregs: &mut kvm_sregs) {
-        let gdtTbl = unsafe { std::slice::from_raw_parts_mut(MemoryDef::gpa_to_hva(self.gdtAddrGpa) as *mut u64, 4096 / 8) };
+        let gdtTbl = unsafe {
+            std::slice::from_raw_parts_mut(
+                MemoryDef::gpa_to_hva(self.gdtAddrGpa) as *mut u64,
+                4096 / 8,
+            )
+        };
 
         let KernelCodeSegment = SegmentDescriptor::default().SetCode64(0, 0, 0);
         let KernelDataSegment = SegmentDescriptor::default().SetData(0, 0xffffffff, 0);
@@ -92,7 +108,8 @@ impl KVMVcpu {
                 as *const u64,
         );
 
-        let tssSegment = MemoryDef::gpa_to_hva(self.tssAddrGpa) as *mut x86_64::structures::tss::TaskStateSegment;
+        let tssSegment = MemoryDef::gpa_to_hva(self.tssAddrGpa)
+            as *mut x86_64::structures::tss::TaskStateSegment;
         unsafe {
             (*tssSegment).interrupt_stack_table[0] = stack_end_gpa;
             (*tssSegment).iomap_base = -1 as i16 as u16;
@@ -130,7 +147,8 @@ impl KVMVcpu {
                 | SEGMENT_DESCRIPTOR_EXECUTE,
         );
 
-        let hi = SegmentDescriptor::default().SetHi((MemoryDef::hva_to_gpa(tssBasehHva) >> 32) as u32);
+        let hi =
+            SegmentDescriptor::default().SetHi((MemoryDef::hva_to_gpa(tssBasehHva) >> 32) as u32);
 
         return (low.AsU64(), hi.AsU64(), tssLimit);
     }
@@ -144,6 +162,15 @@ impl KVMVcpu {
         //vcpu_sregs.cr0 = CR0_PE | CR0_MP | CR0_AM | CR0_ET | CR0_NE | CR0_WP | CR0_PG;
         vcpu_sregs.cr0 = CR0_PE | CR0_AM | CR0_ET | CR0_PG | CR0_NE; // | CR0_WP; // | CR0_MP | CR0_NE;
         vcpu_sregs.cr3 = VMS.read().pageTables.GetRoot();
+
+        #[cfg(feature = "cc")]
+        if ENABLE_CC.load(Ordering::Acquire) {
+            if IS_SEV_SNP.load(Ordering::Acquire) {
+                vcpu_sregs.cr3 =
+                    VMS.read().pageTables.GetRoot() | C_BIT_MASK.load(Ordering::Acquire);
+            }
+        }
+
         //vcpu_sregs.cr4 = CR4_PAE | CR4_OSFXSR | CR4_OSXMMEXCPT;
         vcpu_sregs.cr4 =
             CR4_PSE | CR4_PAE | CR4_PGE | CR4_OSFXSR | CR4_OSXMMEXCPT | CR4_FSGSBASE | CR4_OSXSAVE; // | CR4_UMIP ;// CR4_PSE | | CR4_SMEP | CR4_SMAP;
@@ -189,8 +216,19 @@ impl KVMVcpu {
         );
     }
 
-    pub fn run(&self, tgid: i32) ->   Result<()> {
+    pub fn run(&self, tgid: i32, kvmfd: i32, vmfd: i32) -> Result<()> {
+        #[cfg(not(feature = "cc"))]
+        {
+            let _kvmfd = kvmfd;
+            let _vmfd = vmfd;
+        }
+        #[cfg(feature = "cc")]
+        let kvm = unsafe { Kvm::from_raw_fd(kvmfd) };
+        #[cfg(feature = "cc")]
+        let vm_fd = unsafe { kvm.create_vmfd_from_rawfd(vmfd).unwrap() };
+
         SetExitSignal();
+        #[cfg(not(feature = "cc"))]
         self.setup_long_mode()?;
         let tid = unsafe { gettid() };
         self.threadid.store(tid as u64, Ordering::SeqCst);
@@ -215,7 +253,7 @@ impl KVMVcpu {
                     //arg4
                     r8: self.autoStart as u64,
                     //arg5
-                    // r9: 
+                    r9: VmType::SevSnp.to_u64(),
                     //rcx:
                     ..Default::default()
                 };
@@ -244,14 +282,14 @@ impl KVMVcpu {
                 };
             }
         }
+        #[cfg(not(feature = "cc"))]
+        {
+            self.vcpu
+                .set_regs(&regs)
+                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
 
-
-        self.vcpu
-            .set_regs(&regs)
-            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-
-        self.SetXCR0()?;
-
+            self.SetXCR0()?;
+        }
         let mut lastVal: u32 = 0;
         let mut first = true;
 
@@ -263,6 +301,7 @@ impl KVMVcpu {
             core_affinity::set_for_current(coreid);
         }
 
+        #[cfg(not(feature = "cc"))]
         self.SignalMask();
 
         info!(
@@ -361,7 +400,7 @@ impl KVMVcpu {
                             let para3 = regs.rdi;
                             let para4 = regs.r10;
                         }
-                    }                    
+                    }
                     //info!("HyperCall64 type:0x{:x}  para1:0x{:x} para2:0x{:x} para3:0x{:x} para4:0x{:x}\n",addr,para1,para2,para3,para4);
                     match addr {
                         qlib::HYPERCALL_IOWAIT => {
@@ -410,11 +449,11 @@ impl KVMVcpu {
                                 let mut vms = VMS.write();
 
                                 let spec = vms.args.as_mut().unwrap().Spec.Copy();
-                                vms.args.as_mut().unwrap().Spec =spec; 
+                                vms.args.as_mut().unwrap().Spec = spec;
                             }
 
                             let vms = VMS.read();
-                            let controlSock  = vms.controlSock;
+                            let controlSock = vms.controlSock;
                             let vcpuCount = vms.vcpuCount;
                             let rdmaSvcCliSock = vms.rdmaSvcCliSock;
                             let podId = vms.podId;
@@ -422,11 +461,11 @@ impl KVMVcpu {
                             drop(vms);
 
                             let shareSpaceAddr = para1 as *mut ShareSpace;
-                            let sharedSpace  = unsafe { &mut (*shareSpaceAddr) };
-                            
+                            let sharedSpace = unsafe { &mut (*shareSpaceAddr) };
+
                             // note: in CC mdoe, host can't access PAGE_MGR because it is on private memory
                             // in non-cc case,  host require PAGE_MGR to support hibernate mode
-                            // check pub fn SwapOut(&self, start: u64, len: u64) -> Result<()> 
+                            // check pub fn SwapOut(&self, start: u64, len: u64) -> Result<()>
                             PAGE_MGR.SetValue(para1);
 
                             debug!("VM EXIT HYPERCALL_SHARESPACE_INIT 1");
@@ -436,7 +475,7 @@ impl KVMVcpu {
                                 controlSock,
                                 rdmaSvcCliSock,
                                 podId,
-                                haveMembarrierGlobal
+                                haveMembarrierGlobal,
                             );
                             debug!("VM EXIT HYPERCALL_SHARESPACE_INIT finished");
                         }
@@ -632,6 +671,11 @@ impl KVMVcpu {
                             }
                         }
 
+                        qlib::HYPERCALL_TEST => {
+                            let a = data as *const _ as *const u16;
+                            info!("GHCB IO TEST data: {:x}", unsafe { *a });
+                        }
+                        
                         _ => info!("Unknow hyper call!!!!! address is {}", addr),
                     }
                 }
@@ -736,6 +780,96 @@ impl KVMVcpu {
                     //         .set_sregs(&sregs)
                     //         .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                 }
+                #[cfg(feature = "cc")]
+                VcpuExit::VMGExit(exit) => {
+                    info!("Vmgexit");
+                    const KVM_MEMORY_ATTRIBUTE_PRIVATE: u64 = 1 << 3;
+                    match exit {
+                        Vmgexit::PscMsr(gpa, op, ret) => {
+                            info!(
+                                "Vmgexit PscMsr,gpa {:x},op {:x}, ret {:x}",
+                                gpa, op, ret as u64
+                            );
+                            let shared_to_private = op == 1;
+                            let attr = if shared_to_private {
+                                KVM_MEMORY_ATTRIBUTE_PRIVATE
+                            } else {
+                                0
+                            };
+                            let memory_attributes = kvm_memory_attributes {
+                                address: gpa,
+                                size: MemoryDef::PAGE_SIZE,
+                                attributes: attr,
+                                flags: 0,
+                            };
+                            vm_fd
+                                .set_memory_attributes(&memory_attributes)
+                                .expect("Unable to convert memory to private");
+                            unsafe {
+                                *ret = 0;
+                            }
+                        }
+                        Vmgexit::Psc(_shared_gpa, ret) => {
+                            let mut entries_processed = 0u16;
+                            let mut gfn_base = 0u64;
+                            let mut gfn_count = 0i32;
+                            let mut range_to_private = false;
+                            let ghcb = unsafe {
+                                &mut *((MemoryDef::GHCB_OFFSET
+                                    + self.id as u64 * MemoryDef::PAGE_SIZE)
+                                    as *mut Ghcb)
+                            };
+                            let mut shared_buffer = ghcb.get_shared_buffer_clone();
+                            let desc =
+                                unsafe { &mut *(shared_buffer.as_mut_ptr() as *mut SnpPscDesc) };
+                            info!(
+                                "Vmgexit Psc ghcb,desc.entries[0]:{:#x?},desc.entries[252]:{:#x?}",
+                                desc.entries[0], desc.entries[252]
+                            );
+                            while next_contig_gpa_range(
+                                desc,
+                                &mut entries_processed,
+                                &mut gfn_base,
+                                &mut gfn_count,
+                                &mut range_to_private,
+                            ) {
+                                let attr = if range_to_private {
+                                    KVM_MEMORY_ATTRIBUTE_PRIVATE
+                                } else {
+                                    0
+                                };
+                                let memory_attributes = kvm_memory_attributes {
+                                    address: gfn_base * MemoryDef::PAGE_SIZE,
+                                    size: gfn_count as u64 * MemoryDef::PAGE_SIZE,
+                                    attributes: attr,
+                                    flags: 0,
+                                };
+                                match vm_fd.set_memory_attributes(&memory_attributes) {
+                                    Ok(_) => desc.cur_entry += entries_processed,
+                                    Err(_) => unsafe {
+                                        *ret = 0x100u64 << 32;
+                                        error!("error doing memory conversion");
+                                        break;
+                                    },
+                                }
+                                desc.cur_entry += entries_processed;
+                            }
+                            ghcb.set_shared_buffer(shared_buffer);
+                        }
+                        Vmgexit::ExtGuestReq(_data_gpa, _data_npages, _ret) => {
+                            error!("Vmgexit::ExtGuestReq not supported yet!");
+                        }
+                    }
+                }
+                VcpuExit::SystemEvent(event_type, flags) => {
+                    pub const KVM_SYSTEM_EVENT_SEV_TERM: u32 = 6;
+                    if event_type == KVM_SYSTEM_EVENT_SEV_TERM {
+                        info!("SEV SNP GHCB Termination, flags:0x{:x}", flags);
+                    }
+                    unsafe {
+                        libc::exit(0);
+                    }
+                }
                 r => {
                     let vcpu_sregs = self
                         .vcpu
@@ -811,5 +945,73 @@ impl KVMVcpu {
         });
         error!("vcpu {} stack: {}", self.id, frames);
         Ok(())
+    }
+
+    pub fn x86_init(&self) -> Result<()> {
+        self.setup_long_mode()?;
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "cc")] {
+                let regs: kvm_regs = kvm_regs {
+                    rflags: KERNEL_FLAGS_SET,
+                    rip: self.entry_gpa,
+                    rsp: self.topStackAddrGpa,
+                    rax: 0x11,
+                    rbx: 0xdd,
+                    //arg0
+                    rdi: self.privateHeapStartGpa, // self.pageAllocatorBaseAddr + self.,
+                    //arg1
+                    rsi: self.id as u64,
+                    //arg2
+                    rdx: VMS.read().vdsoAddrGpa,
+                    //arg3
+                    rcx: self.vcpuCnt as u64,
+                    //arg4
+                    r8: self.autoStart as u64,
+                    //arg5
+                    r9: { if IS_SEV_SNP.load(Ordering::Acquire) {
+                            VmType::SevSnp.to_u64()
+                        } else if ENABLE_CC.load(Ordering::Acquire){
+                            VmType::CCEmu.to_u64()
+                        } else{
+                            VmType::Normal.to_u64()
+                        }
+                    },
+                    //rcx:
+                    ..Default::default()
+                };
+            } else {
+                let regs: kvm_regs = kvm_regs {
+                    rflags: KERNEL_FLAGS_SET,
+                    rip: self.entry_gpa,
+                    rsp: self.topStackAddrGpa,
+                    rax: 0x11,
+                    rbx: 0xdd,
+                    //arg0
+                    rdi: self.heapStartAddr, // self.pageAllocatorBaseAddr + self.,
+                    //arg1
+                    rsi: self.shareSpaceAddr,
+                    //arg2
+                    rdx: self.id as u64,
+                    //arg3
+                    rcx: VMS.read().vdsoAddrGpa,
+                    //arg4
+                    r8: self.vcpuCnt as u64,
+                    //arg5
+                    r9: self.autoStart as u64,
+                    //rdx:
+                    //rcx:
+                    ..Default::default()
+                };
+            }
+        }
+
+        self.vcpu
+            .set_regs(&regs)
+            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+
+        self.SetXCR0()?;
+        self.SignalMask();
+        info!("vcpu{} x86_init finished", self.id);
+        return Ok(());
     }
 }

@@ -38,6 +38,10 @@ pub const FREE_THRESHOLD: usize = 30; // when free size less than 30%, need to f
 pub const BUFF_THRESHOLD: usize = 50; // when buff size takes more than 50% of free size, needs to free
 pub const FREE_BATCH: usize = 1024; // free 10 blocks each time.
 pub const ORDER: usize = 33; //1GB
+#[cfg(feature = "cc")]
+pub use crate::qlib::kernel::Kernel::ENABLE_CC;
+#[cfg(feature = "cc")]
+pub static MAXIMUM_PAGE_START: AtomicU64 = AtomicU64::new(MemoryDef::guest_private_init_heap_offset_gpa());
 
 //pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
@@ -371,29 +375,18 @@ impl HostAllocator {
     
     // should be called by host
     pub unsafe fn AllocGuestPrivatMem(&self, size: usize, align: usize) -> *mut u8 {
-        // use core::arch::asm;
-        // unsafe {
-        //     asm!(
-        //         "hlt",
-        //     )
-        // };  
         let layout = Layout::from_size_align(size, align)
             .expect("AllocGuestPrivatMem can't allocate memory");
- 
-
+        
             cfg_if::cfg_if! {
                 if #[cfg(feature = "cc")] {
-
                     let ptr = self.GuestPrivateAllocator().alloc(layout);
-                    // unsafe {
-                    //     asm!(
-                    //         "hlt",
-                    //     )
-                    // };  
+                    if ENABLE_CC.load(Ordering::Acquire) {
+                        let mut max = MAXIMUM_PAGE_START.load(Ordering::Acquire);
+                        max = max.max(ptr as u64 + size as u64 - MemoryDef::PAGE_SIZE_4K);
+                        MAXIMUM_PAGE_START.store(max, Ordering::Release);
+                    }
                     return ptr;
-
-                    
-
                 } else {
                     return alloc::alloc::alloc(layout);
                 }

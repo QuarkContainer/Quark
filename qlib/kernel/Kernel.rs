@@ -25,6 +25,8 @@ use crate::qlib::proxy::*;
 
 #[cfg (feature = "cc")]
 pub static ENABLE_CC: AtomicBool = AtomicBool::new(false);
+#[cfg (feature = "cc")]
+pub static IS_SEV_SNP: AtomicBool = AtomicBool::new(false);
 extern "C" {
     pub fn rdtsc() -> i64;
 }

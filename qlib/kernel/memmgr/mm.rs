@@ -1059,7 +1059,7 @@ impl MemoryManager {
                           self.MapPageReadLocked(pageAddr, page, exec);
                         }
 
-                        if !vma.private{
+                        if !vma.private && writeable{
                             iops.MapSharedPage(phyAddr, page);
                         }
                         super::super::PAGE_MGR.DerefPage(page);

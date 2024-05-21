@@ -118,7 +118,7 @@ pub fn AllocatorPrint(_class: usize) -> String {
 }
 
 pub static IS_GUEST: bool = false;
-pub const ENABLE_EMULATION_CC: bool = true;
+pub const ENABLE_EMULATION_CC: bool = false;
 
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 
