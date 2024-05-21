@@ -39,11 +39,12 @@ impl Frame {
 
 #[inline(always)]
 pub fn trace_from(mut curframe: Frame, cb: &mut dyn FnMut(&Frame) -> bool) {
+    let mut callstack = alloc::vec::Vec::new();
     for _ in 0..20 {
         let ctxt = curframe.clone();
 
         let keep_going = cb(&ctxt);
-
+        callstack.push(curframe.rip);
         if keep_going {
             #[cfg(target_arch="aarch64")]
             if curframe.rbp & 0b111 != 0 {
@@ -63,6 +64,17 @@ pub fn trace_from(mut curframe: Frame, cb: &mut dyn FnMut(&Frame) -> bool) {
             break;
         }
     }
+
+    let mut s = format!("please use following commandline print the callstack in folder <Quark-Source-Code-Path>/build/\n\n");
+    s += &format!("echo '\n");
+    for addr in callstack.iter() {
+        s += &format!("{:x}\n", addr);
+    }
+    s += &format!("'|addr2line -fpipe qkernel_d.bin | rustfilt \n");
+    
+    print!("{}", s);
+
+    
 }
 
 #[inline(always)]
