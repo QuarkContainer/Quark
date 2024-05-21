@@ -39,6 +39,9 @@ impl PageTables {
     pub fn SwitchTo_cc(&self) {
         if snp_active() {
             self.SwitchTo_snp();
+        } else {
+            let addr = self.GetRoot();
+            Self::Switch(addr);
         }
     }
     pub fn ForkRange_cc(
