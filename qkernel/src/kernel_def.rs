@@ -15,15 +15,15 @@
 
 use core::alloc::{GlobalAlloc, Layout};
 use core::arch::asm;
-use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use core::sync::atomic::{AtomicBool, AtomicU8};
 
 use crate::qlib::fileinfo::*;
 
+use self::kernel::dns::dns_svc::DnsSvc;
 use self::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
 use self::tsot_msg::TsotMessage;
-use self::kernel::dns::dns_svc::DnsSvc;
 use super::qlib::kernel::asm::*;
 use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 use super::qlib::kernel::taskMgr::*;
@@ -49,7 +49,6 @@ use super::qlib::ShareSpace;
 use super::qlib::*;
 use super::syscalls::sys_file::*;
 use super::Kernel::HostSpace;
-
 
 use crate::GLOBAL_ALLOCATOR;
 
@@ -357,16 +356,18 @@ impl BitmapAllocatorWrapper {
 
 impl HostAllocator {
     pub const fn New() -> Self {
+        const ARRAY_REPEAT_VALUE_U8: AtomicU8 = AtomicU8::new(0);
+        const ARRAY_REPEAT_VALUE_U64: AtomicU64 = AtomicU64::new(0);
         return Self {
-            listHeapAddr: AtomicU64::new(0),
-            ioHeapAddr: AtomicU64::new(0),
+            allocators: [ARRAY_REPEAT_VALUE_U64; ListAllocatorType::Last as usize],
             initialized: AtomicBool::new(true),
+            addrMap: [ARRAY_REPEAT_VALUE_U8; 1024],
         };
     }
 
     pub fn Init(&self, heapAddr: u64) {
-        self.listHeapAddr.store(heapAddr, Ordering::SeqCst);
-        self.ioHeapAddr.store(heapAddr + MemoryDef::HEAP_SIZE, Ordering::SeqCst)
+        self.SetAllocator(ListAllocatorType::Global, heapAddr);
+        self.SetAllocator(ListAllocatorType::IO, heapAddr + MemoryDef::HEAP_SIZE);
     }
 }
 
@@ -376,12 +377,10 @@ unsafe impl GlobalAlloc for HostAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        
         let addr = ptr as u64;
-        if !Self::IsIOBuf(addr) {
+        if !self.IsIOBuf(addr) {
             self.Allocator().dealloc(ptr, layout);
         } else {
-            //self.Allocator().dealloc(ptr, layout);
             self.IOAllocator().dealloc(ptr, layout);
         }
     }
@@ -416,7 +415,7 @@ unsafe impl GlobalAlloc for GlobalVcpuAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        if !HostAllocator::IsHeapAddr(ptr as u64) {
+        if !GLOBAL_ALLOCATOR.IsHeapAddr(ptr as u64) {
             return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
         }
 
@@ -453,9 +452,9 @@ pub fn ReapSwapIn() {
 
 impl TsotSocketMgr {
     pub fn SendMsg(m: &TsotMessage) -> Result<()> {
-        let res = HostSpace::TsotSendMsg(m as * const _ as u64);
+        let res = HostSpace::TsotSendMsg(m as *const _ as u64);
         if res == 0 {
-            return Ok(())
+            return Ok(());
         }
 
         return Err(Error::SysError(SysErr::EINVAL));
@@ -463,9 +462,9 @@ impl TsotSocketMgr {
 
     pub fn RecvMsg() -> Result<TsotMessage> {
         let mut m = TsotMessage::default();
-        let res = HostSpace::TsotRecvMsg(&mut m as * mut _ as u64);
+        let res = HostSpace::TsotRecvMsg(&mut m as *mut _ as u64);
         if res == 0 {
-            return Ok(m)
+            return Ok(m);
         }
 
         return Err(Error::SysError(SysErr::EINVAL));

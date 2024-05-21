@@ -19,6 +19,7 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::cmp::max;
 use core::mem::size_of;
 use core::ptr::NonNull;
+use core::sync::atomic::AtomicU8;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
 
@@ -28,6 +29,7 @@ use super::super::linux_def::*;
 use super::super::mutex::*;
 use super::super::pagetable::AlignedAllocator;
 use super::buddy_allocator::Heap;
+use crate::qlib::range::Range;
 use crate::qlib::vcpu_mgr::CPULocal;
 use crate::GLOBAL_ALLOCATOR;
 
@@ -74,11 +76,9 @@ impl GlobalVcpuAllocator {
     }
 
     pub fn Print(&self) {
-        error!(
-            "GlobalVcpuAllocator {}/{}",
-            VcpuId(),
-            unsafe { (*CPU_LOCAL[VcpuId()].allocator.get()).bufs.len()}
-        )
+        error!("GlobalVcpuAllocator {}/{}", VcpuId(), unsafe {
+            (*CPU_LOCAL[VcpuId()].allocator.get()).bufs.len()
+        })
     }
 
     pub fn Initializated(&self) {
@@ -245,28 +245,57 @@ impl VcpuAllocator {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct HostAllocator {
-    pub listHeapAddr: AtomicU64,
-    pub ioHeapAddr: AtomicU64,
+    pub allocators: [AtomicU64; ListAllocatorType::Last as usize],
     pub initialized: AtomicBool,
+    pub addrMap: [AtomicU8; 1024], // maximum 1024 Range, each Range has 1GB
 }
 
 impl HostAllocator {
+    pub fn AddrType(&self, addr: u64) -> ListAllocatorType {
+        let idx = self.RangeIdx(addr);
+        let typeId = self.addrMap[idx as usize].load(Ordering::Relaxed);
+        let type_: ListAllocatorType = unsafe { core::mem::transmute(typeId) };
+        return type_;
+    }
+
+    pub fn RangeIdx(&self, addr: u64) -> usize {
+        assert!(MemoryDef::PHY_LOWER_ADDR <= addr && addr < MemoryDef::PHY_UPPER_ADDR);
+        let idx = (addr - MemoryDef::PHY_LOWER_ADDR) / MemoryDef::HEAD_RANGE_SIZE;
+        return idx as usize;
+    }
+
+    pub fn AddRange(&self, range: &Range, type_: ListAllocatorType) {
+        assert!(range.Start() % MemoryDef::HEAD_RANGE_SIZE == 0);
+        assert!(range.Len() == MemoryDef::HEAD_RANGE_SIZE);
+        let idx = self.RangeIdx(range.Start());
+        self.addrMap[idx].store(type_ as u8, Ordering::SeqCst);
+    }
+
     pub fn Allocator(&self) -> &mut ListAllocator {
-        return unsafe { &mut *(self.listHeapAddr.load(Ordering::SeqCst) as *mut ListAllocator) };
+        return self.GetAllocator(ListAllocatorType::Global);
     }
 
     pub fn IOAllocator(&self) -> &mut ListAllocator {
-        return unsafe { &mut *(self.ioHeapAddr.load(Ordering::SeqCst) as *mut ListAllocator) };
+        return self.GetAllocator(ListAllocatorType::IO);
     }
 
-    pub fn IsHeapAddr(addr: u64) -> bool {
-        return addr < MemoryDef::HEAP_END;
+    pub fn IsHeapAddr(&self, addr: u64) -> bool {
+        return self.AddrType(addr) == ListAllocatorType::Global;
     }
 
-    pub fn IsIOBuf(addr: u64) -> bool {
-        return MemoryDef::HEAP_END <= addr && addr < MemoryDef::HEAP_END + MemoryDef::IO_HEAP_SIZE;
+    pub fn IsIOBuf(&self, addr: u64) -> bool {
+        return self.AddrType(addr) == ListAllocatorType::IO;
+    }
+
+    pub fn GetAllocator<'a>(&self, type_: ListAllocatorType) -> &'a mut ListAllocator {
+        let addr = self.allocators[type_ as usize].load(Ordering::Relaxed);
+        return unsafe { &mut *(addr as *mut ListAllocator) };
+    }
+
+    pub fn SetAllocator(&self, type_: ListAllocatorType, addr: u64) {
+        self.allocators[type_ as usize].store(addr, Ordering::SeqCst);
     }
 
     #[inline]
@@ -286,8 +315,24 @@ impl HostAllocator {
     }
 }
 
+#[repr(u8)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+pub enum ListAllocatorType {
+    None = 0,
+    Global,
+    IO,
+    Last,
+}
+
+impl Default for ListAllocatorType {
+    fn default() -> Self {
+        return Self::None;
+    }
+}
+
 #[derive(Debug)]
 pub struct ListAllocator {
+    pub type_: ListAllocatorType,
     pub bufs: [CachePadded<QMutex<FreeMemBlockMgr>>; CLASS_CNT],
     pub heap: QMutex<Heap<ORDER>>,
     pub total: AtomicUsize,
@@ -306,14 +351,8 @@ pub trait OOMHandler {
     fn handleError(&self, a: u64, b: u64) -> ();
 }
 
-impl Default for ListAllocator {
-    fn default() -> Self {
-        return Self::New(0, 0);
-    }
-}
-
 impl ListAllocator {
-    pub const fn New(heapStart: u64, heapEnd: u64) -> Self {
+    pub const fn New(type_: ListAllocatorType, heapStart: u64, heapEnd: u64) -> Self {
         let bufs: [CachePadded<QMutex<FreeMemBlockMgr>>; CLASS_CNT] = [
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 0))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 1))),
@@ -334,6 +373,7 @@ impl ListAllocator {
         ];
 
         return Self {
+            type_: type_,
             bufs: bufs,
             heap: QMutex::new(Heap::empty()),
             total: AtomicUsize::new(0),
@@ -633,6 +673,7 @@ unsafe impl GlobalAlloc for ListAllocator {
             self.maxnum[class].fetch_sub(1, Ordering::Release);
             self.allocated.fetch_sub(size, Ordering::Release);
         }
+
         self.free.fetch_add(size, Ordering::Release);
         self.bufSize.fetch_add(size, Ordering::Release);
         if class < self.bufs.len() {
@@ -647,9 +688,10 @@ unsafe impl GlobalAlloc for ListAllocator {
 
 /// FreeMemoryBlockMgr is used to manage heap memory block allocated by allocator
 #[repr(align(128))]
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct FreeMemBlockMgr {
     pub size: usize,
+    pub class: usize,
     pub count: usize,
     pub reserve: usize,
     pub list: MemList,
@@ -666,6 +708,7 @@ impl FreeMemBlockMgr {
     pub const fn New(reserve: usize, class: usize) -> Self {
         return Self {
             size: 1 << class,
+            class: class,
             reserve: reserve,
             count: 0,
             list: MemList::New(1 << class),

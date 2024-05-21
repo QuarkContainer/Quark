@@ -3001,6 +3001,8 @@ impl MemoryDef {
     pub const PAGE_SIZE_2M_MASK: u64 = !(Self::PAGE_SIZE_2M - 1);
     pub const BLOCK_SIZE: u64 = 64 * Self::ONE_GB;
 
+    pub const HEAD_RANGE_SIZE: u64 = Self::ONE_GB;
+
     pub const PHY_LOWER_ADDR: u64 = 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernel space
     pub const PHY_UPPER_ADDR: u64 = Self::PHY_LOWER_ADDR + 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernel space
 

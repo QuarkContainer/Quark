@@ -22,6 +22,7 @@ use super::super::*;
 use crate::kernel_def::HyperCall64;
 use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
 use crate::qlib::proxy::*;
+use crate::ListAllocatorType;
 
 extern "C" {
     pub fn rdtsc() -> i64;
@@ -716,6 +717,13 @@ impl HostSpace {
             msghdr: msghdr,
             flags: flags,
         });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
+    pub fn IncrHeapSize(type_: ListAllocatorType) -> i64 {
+        let mut msg = Msg::IncrHeapSize(IncrHeapSize { type_: type_ });
 
         let ret = Self::Call(&mut msg, false) as i64;
         return ret;

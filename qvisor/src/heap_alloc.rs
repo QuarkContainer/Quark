@@ -3,10 +3,13 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use libc;
+use std::sync::atomic::AtomicU8;
 
 use super::qlib::linux_def::MemoryDef;
 use super::qlib::mem::bitmap_allocator::*;
 use super::qlib::mem::list_allocator::*;
+use crate::qlib::common::*;
+use crate::qlib::range::Range;
 
 pub const ENABLE_HUGEPAGE: bool = false;
 
@@ -52,14 +55,26 @@ impl BitmapAllocatorWrapper {
 
 impl HostAllocator {
     pub const fn New() -> Self {
-        return Self {
-            listHeapAddr: AtomicU64::new(MemoryDef::HEAP_OFFSET),
-            ioHeapAddr: AtomicU64::new(MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE),
+        const ARRAY_REPEAT_VALUE_U8: AtomicU8 = AtomicU8::new(0);
+        const ARRAY_REPEAT_VALUE_U64: AtomicU64 = AtomicU64::new(0);
+        let a = Self {
+            allocators: [ARRAY_REPEAT_VALUE_U64; ListAllocatorType::Last as usize],
             initialized: AtomicBool::new(false),
+            addrMap: [ARRAY_REPEAT_VALUE_U8; 1024],
         };
+
+        return a;
+    }
+
+    pub fn IncreaseHeapSize(&self, type_: ListAllocatorType) -> Result<()> {
+        let allocator = self.GetAllocator(type_);
+        let range = allocator.IncreaseHeapSize()?;
+        self.AddRange(&range, type_);
+        return Ok(());
     }
 
     pub fn Init(&self) {
+        let heapStart = MemoryDef::HEAP_OFFSET; //self.listHeapAddr.load(Ordering::Relaxed);
         let heapSize = MemoryDef::HEAP_SIZE as usize + MemoryDef::IO_HEAP_SIZE as usize;
         let addr = unsafe {
             let mut flags = libc::MAP_SHARED | libc::MAP_ANON | libc::MAP_FIXED;
@@ -67,7 +82,7 @@ impl HostAllocator {
                 flags |= libc::MAP_HUGE_2MB;
             }
             libc::mmap(
-                self.listHeapAddr.load(Ordering::Relaxed) as _,
+                heapStart as _,
                 heapSize,
                 libc::PROT_READ | libc::PROT_WRITE,
                 flags,
@@ -81,23 +96,42 @@ impl HostAllocator {
         }
 
         assert!(
-            self.listHeapAddr.load(Ordering::Relaxed) == addr,
-            "listHeapAddr is {:x}, addr is {:x}",
-            self.listHeapAddr.load(Ordering::Relaxed),
+            heapStart == addr,
+            "heapstart is {:x}, addr is {:x}",
+            heapStart,
             addr
         );
 
-        let heapStart = self.listHeapAddr.load(Ordering::Relaxed);
+        self.SetAllocator(ListAllocatorType::Global, MemoryDef::HEAP_OFFSET);
+        self.SetAllocator(
+            ListAllocatorType::IO,
+            MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE,
+        );
+
         let heapEnd = heapStart + MemoryDef::HEAP_SIZE as u64;
-        *self.Allocator() = ListAllocator::New(heapStart as _, heapEnd);
+        *self.Allocator() = ListAllocator::New(ListAllocatorType::Global, heapStart as _, heapEnd);
 
         let ioHeapEnd = heapStart + MemoryDef::HEAP_SIZE as u64 + MemoryDef::IO_HEAP_SIZE;
-        *self.IOAllocator() = ListAllocator::New(heapEnd as _, ioHeapEnd);
+        *self.IOAllocator() = ListAllocator::New(ListAllocatorType::IO, heapEnd as _, ioHeapEnd);
 
         // reserve first 4KB gor the listAllocator
         let size = core::mem::size_of::<ListAllocator>();
-        self.Allocator().Add(MemoryDef::HEAP_OFFSET as usize + size, MemoryDef::HEAP_SIZE as usize - size);
-        self.IOAllocator().Add(MemoryDef::HEAP_END as usize + size, MemoryDef::IO_HEAP_SIZE as usize - size);
+        self.Allocator().Add(
+            MemoryDef::HEAP_OFFSET as usize + size,
+            MemoryDef::HEAP_SIZE as usize - size,
+        );
+        self.AddRange(
+            &Range::New(MemoryDef::HEAP_OFFSET, MemoryDef::HEAP_SIZE),
+            ListAllocatorType::Global,
+        );
+        self.IOAllocator().Add(
+            MemoryDef::HEAP_END as usize + size,
+            MemoryDef::IO_HEAP_SIZE as usize - size,
+        );
+        self.AddRange(
+            &Range::New(MemoryDef::HEAP_END, MemoryDef::IO_HEAP_SIZE),
+            ListAllocatorType::IO,
+        );
         self.initialized.store(true, Ordering::SeqCst);
     }
 
@@ -118,9 +152,8 @@ unsafe impl GlobalAlloc for HostAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        
         let addr = ptr as u64;
-        if !Self::IsIOBuf(addr) {
+        if !self.IsIOBuf(addr) {
             self.Allocator().dealloc(ptr, layout);
         } else {
             //self.Allocator().dealloc(ptr, layout);

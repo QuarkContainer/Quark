@@ -26,6 +26,7 @@ use lazy_static::lazy_static;
 use nix::sys::signal;
 
 use crate::qlib::addr::Addr;
+use crate::qlib::range::Range;
 use crate::qlib::MAX_VCPU_COUNT;
 use crate::tsot_agent::TSOT_AGENT;
 use crate::VIRTUAL_MACHINE;
@@ -113,6 +114,7 @@ pub struct MemRegionMgr {
 
 impl MemRegionMgr {
     pub const REGION_SIZE: u64 = 16 * MemoryDef::ONE_GB;
+    pub const RANGE_SIZE: u64 = MemoryDef::HEAD_RANGE_SIZE;
 
     pub fn New(vmfd: VmFd) -> Result<Self> {
         let allocator = HostPageAllocator::New();
@@ -144,19 +146,19 @@ impl MemRegionMgr {
 
         while addr < ret + Self::REGION_SIZE {
             self.ranges.push(addr);
-            addr += MemoryDef::ONE_GB;
+            addr += Self::RANGE_SIZE;
         }
 
         return Ok(ret);
     }
 
-    pub fn AllocRange(&mut self) -> Result<u64> {
+    pub fn AllocRange(&mut self) -> Result<Range> {
         match self.ranges.pop() {
-            Some(addr) => return Ok(addr),
+            Some(addr) => return Ok(Range::New(addr, Self::RANGE_SIZE)),
             None => {
                 self.AllocRegion()?;
                 let addr = self.ranges.pop().unwrap();
-                return Ok(addr);
+                return Ok(Range::New(addr, Self::RANGE_SIZE));
             }
         }
     }
