@@ -22,6 +22,7 @@ use super::super::*;
 use crate::kernel_def::HyperCall64;
 use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
 use crate::qlib::proxy::*;
+use crate::ListAllocatorType;
 
 extern "C" {
     pub fn rdtsc() -> i64;
@@ -345,10 +346,7 @@ impl HostSpace {
     }
 
     pub fn Proxy(cmd: ProxyCommand, parameters: ProxyParameters) -> i64 {
-        let mut msg = Msg::Proxy(Proxy {
-            cmd,
-            parameters
-        });
+        let mut msg = Msg::Proxy(Proxy { cmd, parameters });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
@@ -662,7 +660,7 @@ impl HostSpace {
         let mut msg = Msg::RemapGuestMemRanges(RemapGuestMemRanges {
             len: len,
             addr: addr,
-            count: count
+            count: count,
         });
 
         let ret = Self::Call(&mut msg, false) as i64;
@@ -681,7 +679,7 @@ impl HostSpace {
 
     pub fn NividiaDriverVersion(version: &RMAPIVersion) -> i64 {
         let mut msg = Msg::NividiaDriverVersion(NividiaDriverVersion {
-            ioctlParamsAddr: version as * const _ as u64
+            ioctlParamsAddr: version as *const _ as u64,
         });
 
         let ret = Self::Call(&mut msg, false) as i64;
@@ -695,7 +693,7 @@ impl HostSpace {
             prot: prot,
             flags: flags,
             fd: fd,
-            offset: offset
+            offset: offset,
         });
 
         let ret = Self::Call(&mut msg, false) as i64;
@@ -717,17 +715,22 @@ impl HostSpace {
         let mut msg = Msg::HostUnixRecvMsg(HostUnixRecvMsg {
             fd: fd,
             msghdr: msghdr,
-            flags: flags
+            flags: flags,
         });
 
         let ret = Self::Call(&mut msg, false) as i64;
         return ret;
     }
 
+    pub fn IncrHeapSize(type_: ListAllocatorType) -> i64 {
+        let mut msg = Msg::IncrHeapSize(IncrHeapSize { type_: type_ });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
     pub fn TsotRecvMsg(msgAddr: u64) -> i64 {
-        let mut msg = Msg::TsotRecvMsg(TsotRecvMsg {
-            msgAddr: msgAddr,
-        });
+        let mut msg = Msg::TsotRecvMsg(TsotRecvMsg { msgAddr: msgAddr });
 
         // TsotRecvMsg will be called in uring async process, must use HCall
         let ret = Self::HCall(&mut msg, false) as i64;
@@ -735,9 +738,7 @@ impl HostSpace {
     }
 
     pub fn TsotSendMsg(msgAddr: u64) -> i64 {
-        let mut msg = Msg::TsotSendMsg(TsotSendMsg {
-            msgAddr: msgAddr,
-        });
+        let mut msg = Msg::TsotSendMsg(TsotSendMsg { msgAddr: msgAddr });
 
         // TsotSendMsg might be called in uring async process, must use HCall
         let ret = Self::HCall(&mut msg, false) as i64;

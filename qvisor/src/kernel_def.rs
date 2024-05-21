@@ -6,16 +6,19 @@ use std::sync::mpsc::channel;
 use cache_padded::CachePadded;
 use libc::*;
 
+use crate::heap_alloc::ENABLE_HUGEPAGE;
 use crate::kernel_def::kernel::dns::dns_svc::DNS_SVC_ADDR;
 use crate::kernel_def::kernel::dns::dns_svc::DNS_SVC_PORT;
 use crate::kernel_def::kernel::socket::unix::transport::unix::SockType;
 use crate::kernel_def::kernel::tcpip::tcpip::SockAddrInet;
 use crate::kernel_def::kernel::IOURING;
 use crate::qlib::kernel::socket::hostinet::tsot_mgr::TsotSocketMgr;
+use crate::ListAllocator;
 use crate::SHARE_SPACE;
 use crate::VIRTUAL_MACHINE;
 
 use self::kernel::dns::dns_svc::DnsSvc;
+use self::range::Range;
 use self::tsot_agent::TSOT_AGENT;
 use self::tsot_msg::TsotMessage;
 
@@ -407,5 +410,42 @@ impl DnsSvc {
         IOURING.DNSRecvInit(sock, msgAddr);
 
         return Ok(());
+    }
+}
+
+impl ListAllocator {
+    pub fn IncreaseHeapSize(&self) -> Result<Range> {
+        let range = VIRTUAL_MACHINE
+            .get()
+            .unwrap()
+            .memRegionMgr
+            .lock()
+            .AllocRange()?;
+
+        Self::MMap(range.Start(), range.Len() as usize);
+
+        self.Add(range.Start() as usize, range.Len() as usize);
+        return Ok(range);
+    }
+
+    fn MMap(addr: u64, len: usize) {
+        let addr = unsafe {
+            let mut flags = libc::MAP_SHARED | libc::MAP_ANON | libc::MAP_FIXED;
+            if ENABLE_HUGEPAGE {
+                flags |= libc::MAP_HUGE_2MB;
+            }
+            libc::mmap(
+                addr as _,
+                len,
+                libc::PROT_READ | libc::PROT_WRITE,
+                flags,
+                -1,
+                0,
+            ) as u64
+        };
+
+        if addr == libc::MAP_FAILED as u64 {
+            panic!("ListAllocator: failed to get mapped memory area for heap");
+        }
     }
 }

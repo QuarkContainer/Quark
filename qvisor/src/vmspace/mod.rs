@@ -1448,6 +1448,13 @@ impl VMSpace {
         }
     }
 
+    pub fn IncreaseHeapSize(type_: ListAllocatorType) -> i64 {
+        GLOBAL_ALLOCATOR
+            .IncreaseHeapSize(type_)
+            .expect(&format!("OOM: IncreaseHeapSize fail for {:?}", type_));
+        return 0;
+    }
+
     pub fn TsotSendMsg(msgAddr: u64) -> i64 {
         let msg = unsafe { &*(msgAddr as *const TsotMessage) };
         match TSOT_AGENT.SendMsg(msg) {

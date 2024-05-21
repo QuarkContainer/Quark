@@ -15,6 +15,7 @@
 use crate::qlib::fileinfo::*;
 use crate::qlib::proxy::ProxyCommand;
 use crate::qlib::proxy::ProxyParameters;
+use crate::ListAllocatorType;
 
 use super::super::config::*;
 use super::super::kernel::util::cstring::*;
@@ -138,6 +139,12 @@ pub enum Msg {
     // TsotConnect(TsotConnect),
     TsotRecvMsg(TsotRecvMsg),
     TsotSendMsg(TsotSendMsg),
+    IncrHeapSize(IncrHeapSize),
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct IncrHeapSize {
+    pub type_: ListAllocatorType,
 }
 
 #[derive(Clone, Default, Debug)]

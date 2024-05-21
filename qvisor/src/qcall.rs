@@ -150,6 +150,9 @@ impl KVMVcpu {
             Msg::TsotRecvMsg(msg) => {
                 ret = super::VMSpace::TsotRecvMsg(msg.msgAddr) as u64;
             }
+            Msg::IncrHeapSize(msg) => {
+                ret = super::VMSpace::IncreaseHeapSize(msg.type_) as u64;
+            }
             Msg::TsotSendMsg(msg) => {
                 ret = super::VMSpace::TsotSendMsg(msg.msgAddr) as u64;
             }
