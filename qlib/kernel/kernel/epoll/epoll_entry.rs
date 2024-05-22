@@ -41,7 +41,7 @@ pub struct PollEntryInternal {
 
     pub id: u64,
     pub file: FileWeak,
-    pub userData: [i32; 2],
+    pub userData: u64,
     pub waiter: WaitEntryWeak,
     pub mask: EventMask,
     pub flags: EntryFlags,

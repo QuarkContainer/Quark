@@ -21,14 +21,6 @@ use super::super::qlib::linux_def::*;
 //use super::super::qlib::qmsg::input::*;
 //use super::super::SHARE_SPACE;
 
-#[repr(C)]
-#[repr(packed)]
-#[derive(Default, Copy, Clone, Debug)]
-pub struct EpollEvent {
-    pub Event: u32,
-    pub U64: u64,
-}
-
 pub struct HostFdNotifier {
     //main epoll fd
     pub epollfd: i32,
@@ -93,8 +85,8 @@ impl HostFdNotifier {
 
         if nfds > 0 {
             for e in &events[0..nfds as usize] {
-                let fd = e.U64 as i32;
-                let event = e.Event as EventMask;
+                let fd = e.Data as i32;
+                let event = e.Events as EventMask;
                 Self::FdNotify(fd, event);
             }
         }

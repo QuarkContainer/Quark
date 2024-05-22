@@ -294,7 +294,7 @@ pub fn PollBlock(task: &Task, pfd: &mut [PollFd], timeout: i64) -> (Duration, Re
     let ep = EventPoll::default();
 
     for (f, (mask, _)) in waits.iter() {
-        match ep.AddEntry(task, f.clone(), 0, EventMaskFromLinux(*mask as u32), [0; 2]) {
+        match ep.AddEntry(task, f.clone(), 0, EventMaskFromLinux(*mask as u32), 0) {
             Ok(()) => (),
             Err(e) => return (timeout, Err(e)),
         }

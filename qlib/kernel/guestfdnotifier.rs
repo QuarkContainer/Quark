@@ -35,14 +35,6 @@ pub fn Notify(fd: i32, mask: EventMask) {
     GlobalIOMgr().Notify(fd, mask);
 }
 
-#[repr(C)]
-#[repr(packed)]
-#[derive(Default, Copy, Clone, Debug)]
-pub struct EpollEvent {
-    pub Event: u32,
-    pub U64: u64,
-}
-
 impl IOMgr {
     pub fn VcpuWait(&self) -> u64 {
         let ret = HostSpace::VcpuWait();
@@ -62,8 +54,8 @@ impl IOMgr {
 
     pub fn ProcessEvents(&self, events: &[EpollEvent]) {
         for e in events {
-            let fd = e.U64 as i32;
-            let event = e.Event as EventMask;
+            let fd = e.Data as i32;
+            let event = e.Events as EventMask;
             self.Notify(fd, event)
         }
     }
