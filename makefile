@@ -22,7 +22,7 @@ ARCH := ${shell uname -m}
 RUST_TOOLCHAIN  = nightly-2023-12-11-$(ARCH)-unknown-linux-gnu
 
 
-.PHONY: all release debug clean install qvisor_release qvisor_debug cuda_make cuda_all
+.PHONY: all release debug clean install qvisor_release qvisor_debug cuda_make cuda_all cleanall
 
 all:: release debug
 
@@ -50,6 +50,12 @@ $(VDSO):
 clean:
 	rm -rf target build
 	make -C ./vdso clean
+
+cleanall: clean
+	make -C ./qservice clean
+	make -C ./qserverless clean
+	make -C ./rdma_cli clean
+	make -C ./rdma_srv clean
 
 docker:
 	sudo systemctl restart docker
