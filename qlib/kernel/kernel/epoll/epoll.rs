@@ -57,7 +57,7 @@ pub struct Event {
 
     // Data is an opaque 64-bit value provided by the caller when adding the
     // entry, and returned to the caller when the entry reports an event.
-    pub Data: [i32; 2],
+    pub Data: u64,
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -71,7 +71,7 @@ pub struct Event {
     _pad: i32,
     // Data is an opaque 64-bit value provided by the caller when adding the
     // entry, and returned to the caller when the entry reports an event.
-    pub Data: [i32; 2],
+    pub Data: u64,
 }
 
 // An entry is always in one of the following lists:
@@ -227,8 +227,8 @@ impl EventPoll {
             #[cfg(target_arch = "aarch64")]
             events.Push(Event {
                 Events: ready as u32,
-                Data: entry.lock().userData,
                 _pad: 0,
+                Data: entry.lock().userData,
             });
             #[cfg(target_arch = "x86_64")]
             events.Push(Event {
@@ -311,7 +311,7 @@ impl EventPoll {
         file: File,
         flags: EntryFlags,
         mask: EventMask,
-        data: [i32; 2],
+        data: u64,
     ) -> Result<()> {
         let id = file.UniqueId();
         let fops = file.FileOp.clone();
@@ -387,7 +387,7 @@ impl EventPoll {
         file: File,
         flags: EntryFlags,
         mask: EventMask,
-        data: [i32; 2],
+        data: u64,
     ) -> Result<()> {
         let id = file.UniqueId();
         let files = self.files.lock();

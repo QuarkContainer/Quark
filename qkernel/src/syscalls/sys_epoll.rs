@@ -49,7 +49,7 @@ pub fn AddEpoll(
     fd: i32,
     flags: EntryFlags,
     mask: EventMask,
-    userData: [i32; 2],
+    userData: u64
 ) -> Result<()> {
     // Get epoll from the file descriptor.
     let epollfile = task.GetFile(epfd)?;
@@ -83,7 +83,7 @@ pub fn UpdateEpoll(
     fd: i32,
     flags: EntryFlags,
     mask: EventMask,
-    userData: [i32; 2],
+    userData: u64
 ) -> Result<()> {
     // Get epoll from the file descriptor.
     let epollfile = task.GetFile(epfd)?;
@@ -219,7 +219,7 @@ pub fn SysEpollCtl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     // Capture the event state if needed.
     let mut flags = 0;
     let mut mask = 0;
-    let mut data: [i32; 2] = [0, 0];
+    let mut data: u64 = 0;
 
     if op != LibcConst::EPOLL_CTL_DEL as i32 {
         let e: EpollEvent = task.CopyInObj(eventAddr)?;
@@ -233,8 +233,7 @@ pub fn SysEpollCtl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
 
         mask = EventMaskFromLinux(e.Events);
-        data[0] = e.FD;
-        data[1] = e.Pad;
+        data = e.Data;
     }
 
     // Perform the requested operations.

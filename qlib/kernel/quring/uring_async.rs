@@ -1541,20 +1541,12 @@ impl PollHostEpollWait {
     }
 }
 
-#[repr(C)]
-#[repr(packed)]
-#[derive(Debug, Default, Copy, Clone)]
-pub struct EpollEvent1 {
-    pub Events: u32,
-    pub Data: u64,
-}
-
 #[derive(Clone, Debug, Copy)]
 pub struct AsyncEpollCtl {
     pub epollfd: i32,
     pub fd: i32,
     pub op: i32,
-    pub ev: EpollEvent1,
+    pub ev: EpollEvent,
 }
 
 impl AsyncOpsTrait for AsyncEpollCtl {
@@ -1571,10 +1563,7 @@ impl AsyncEpollCtl {
             epollfd: epollfd,
             fd: fd,
             op: op,
-            ev: EpollEvent1 {
-                Events: mask,
-                Data: fd as u64,
-            },
+            ev: EpollEvent::new(mask, fd as u64)
         };
     }
 }

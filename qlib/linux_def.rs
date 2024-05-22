@@ -264,8 +264,7 @@ pub struct LibcSysinfo {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct EpollEvent {
     pub Events: u32,
-    pub FD: i32,
-    pub Pad: i32,
+    pub Data: u64,
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -273,9 +272,19 @@ pub struct EpollEvent {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct EpollEvent {
     pub Events: u32,
-    pub _pad: i32,
-    pub FD: i32,
-    pub Pad: i32,
+    _pad: i32,
+    pub Data: u64,
+}
+
+impl EpollEvent {
+    #[cfg(target_arch = "x86_64")]
+    pub fn new(events: u32, data: u64) -> Self {
+        return Self {Events:events, Data:data}
+    }
+    #[cfg(target_arch = "aarch64")]
+    pub fn new(events: u32, data: u64) -> Self {
+        return Self {Events:events, _pad: 0, Data:data}
+    }
 }
 
 pub struct MRemapType {}
