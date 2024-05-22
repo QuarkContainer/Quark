@@ -96,11 +96,65 @@ lazy_static! {
 //     ]);
 }
 
+#[repr(C)]
+pub struct NvidiaRes {
+    pub res: u32,
+    pub lasterr: u32, 
+}
+
+impl NvidiaRes {
+    pub fn FromU64(v: u64) -> Self {
+        let res = (v >> 32) as u32;
+        let lasterr = v as u32;
+        return NvidiaRes {
+            res: res,
+            lasterr: lasterr
+        }
+    }
+
+    pub fn ToU64(&self) -> u64 {
+        return (self.res as u64) << 32 | (self.lasterr as u64)
+    }
+}
+
 pub fn NvidiaProxy(
     cmd: &ProxyCommand,
     parameters: &ProxyParameters,
     containerId: &str,
 ) -> Result<i64> {
+    let mut result: NvidiaRes = NvidiaRes {
+        res: 0,
+        lasterr: 0,
+    };
+    let ret: Result<u32> = Execute(cmd, parameters, containerId);
+    match ret {
+        Ok(v) => {
+            result.res = v;
+        }
+        Err(_) => unreachable!(),
+    }
+
+    match cmd {
+        ProxyCommand::CudaGetErrorName |
+        ProxyCommand::CudaGetErrorString |
+        ProxyCommand::CudaRegisterFatBinary |
+        ProxyCommand::CudaRegisterFunction |
+        ProxyCommand::CudaRegisterVar |
+        ProxyCommand::CudaUnregisterFatBinary => {
+            let err = unsafe { cudaGetLastError() };
+            result.lasterr = err as u32;
+            }
+        _ => (),
+    } 
+
+    return Ok(result.ToU64() as i64);
+}
+
+pub fn Execute(
+    cmd: &ProxyCommand,
+    parameters: &ProxyParameters,
+    containerId: &str,
+) -> Result<u32> {
     match cmd {
         ProxyCommand::None => {
             panic!("get impossible proxy command");
@@ -119,7 +173,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut i32) = device };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaDeviceGetAttribute => {
             // error!("nvidia.rs: cudaDeviceGetAttribute");
@@ -137,7 +191,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut i32) = value as i32 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaDeviceGetByPCIBusId => {
             // error!("nvidia.rs: cudaDeviceGetByPCIBusId");
@@ -157,7 +211,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut i32) = device as i32 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaDeviceGetCacheConfig => {
             // error!("nvidia.rs: cudaDeviceGetCacheConfig");
@@ -171,10 +225,8 @@ pub fn NvidiaProxy(
                 );
             }
 
-            unsafe {
-                *(parameters.para1 as *mut _) = cacheConfig as u32;
-            }
-            return Ok(ret as i64);
+            unsafe { *(parameters.para1 as *mut _) = cacheConfig as u32; }   
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaDeviceGetLimit => {
             //error!("nvidia.rs: cudaDeviceGetLimit");
@@ -191,7 +243,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut _) = limit };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaDeviceGetP2PAttribute => {
             //error!("nvidia.rs: cudaDeviceGetP2PAttribute");
@@ -215,7 +267,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut _) = value as i32 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaDeviceGetPCIBusId => {
             //error!("nvidia.rs: cudaDeviceGetPCIBusId");
@@ -238,7 +290,7 @@ pub fn NvidiaProxy(
             let pciBusString =
                 String::from_utf8(pciBusId.iter().map(|&c| c as u8).collect()).unwrap();
             unsafe { *(parameters.para1 as *mut String) = pciBusString.to_owned() };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaDeviceGetSharedMemConfig => {
             //error!("nvidia.rs: cudaDeviceGetSharedMemConfig");
@@ -254,7 +306,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut u32) = sharedMemConfig as u32 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaDeviceGetStreamPriorityRange => {
             //error!("nvidia.rs: cudaDeviceGetStreamPriorityRange");
@@ -275,7 +327,7 @@ pub fn NvidiaProxy(
                 *(parameters.para1 as *mut _) = leastPriority;
                 *(parameters.para2 as *mut _) = greatestPriority;
             }
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaDeviceSetCacheConfig => {
             //error!("nvidia.rs: cudaDeviceSetCacheConfig");
@@ -287,7 +339,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaDeviceSetLimit => {
             //error!("nvidia.rs: cudaDeviceSetLimit");
@@ -304,7 +356,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaDeviceSetSharedMemConfig => {
             //error!("nvidia.rs: CudaDeviceSetSharedMemConfig");
@@ -320,7 +372,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaSetDevice => {
             //error!("nvidia.rs: cudaSetDevice {}",parameters.para1 as i32);
@@ -329,7 +381,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by cudaSetDevice: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaSetDeviceFlags => {
             //error!("nvidia.rs: cudaSetDeviceFlags");
@@ -341,7 +393,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaSetValidDevices => {
             //error!("nvidia.rs: cudaSetValidDevices");
@@ -355,7 +407,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
 
         ProxyCommand::CudaDeviceReset => {
@@ -365,7 +417,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by cudaDeviceReset: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaDeviceSynchronize => {
             // error!("nvidia.rs: cudaDeviceSynchronize");
@@ -377,7 +429,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaGetDevice => {
             //error!("nvidia.rs: cudaGetDevice");
@@ -389,7 +441,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut i32) = device };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaGetDeviceCount => {
             //error!("nvidia.rs: cudaGetDeviceCount");
@@ -404,7 +456,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut i32) = deviceCount as i32 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaGetDeviceFlags => {
             //error!("nvidia.rs: cudaGetDeviceFlags");
@@ -418,7 +470,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaGetDeviceProperties => {
             //error!("nvidia.rs: cudaGetDeviceProperties");
@@ -434,7 +486,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut _) = deviceProp };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaGetErrorString => {
             //error!("nvidia.rs: cudaGetErrorString");
@@ -452,7 +504,7 @@ pub fn NvidiaProxy(
             let errorStr = cStr.to_str().expect("Invalid UTF-8 data");
             let errorString = errorStr.to_string();
             unsafe { *(parameters.para2 as *mut String) = errorString };
-            return Ok(0 as i64);
+            return Ok(0 as u32);
         }
         ProxyCommand::CudaGetErrorName => {
             //error!("nvidia.rs: cudaGetErrorName");
@@ -470,7 +522,7 @@ pub fn NvidiaProxy(
             let errorStr = cStr.to_str().expect("Invalid UTF-8 data");
             let errorString = errorStr.to_string();
             unsafe { *(parameters.para2 as *mut String) = errorString };
-            return Ok(0 as i64);
+            return Ok(0 as u32);
         }
         ProxyCommand::CudaPeekAtLastError => {
             //error!("nvidia.rs: cudaPeekAtLastError");
@@ -482,7 +534,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaMalloc => {
             // error!("nvidia.rs: cudaMalloc, mode{:?}", QUARK_CONFIG.lock().CudaMode);
@@ -526,7 +578,7 @@ pub fn NvidiaProxy(
                 // }
                 unsafe { *(parameters.para1 as *mut u64) = para1 as u64 };
                 // error!("nvidia.rs: malloc ptr:{:x}, size:{:x}", para1 as u64, parameters.para2);
-                return Ok(ret as i64);
+                return Ok(ret as u32);
 
                 
             } else if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
@@ -535,7 +587,7 @@ pub fn NvidiaProxy(
                 if ret != 0 {
                     error!("mem pool failed to alloc");
                 }
-                return Ok(ret);
+                return Ok(ret as u32);
             } else {
                 // error!("nvidia.rs: CudaMode::Default()");
                 let mut para1 = parameters.para1 as *mut c_void;
@@ -551,7 +603,7 @@ pub fn NvidiaProxy(
                 }
 
                 unsafe { *(parameters.para1 as *mut u64) = para1 as u64 };
-                return Ok(ret as i64);
+                return Ok(ret as u32);
             }
         }
         ProxyCommand::CudaFree => {
@@ -568,7 +620,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by cudaFree: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaMemcpy => {
             return CudaMemcpy(parameters);
@@ -621,7 +673,7 @@ pub fn NvidiaProxy(
             MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.push((moduleKey, module));
             MEM_MANAGER.lock().fatBinManager.fatBinFuncVec.push(Vec::new());
             // error!("insert module: {:x} -> {:x}", moduleKey, module);
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaUnregisterFatBinary => {
             //error!("nvidia.rs: CudaUnregisterFatBinary");
@@ -645,7 +697,7 @@ pub fn NvidiaProxy(
 
             // delete the module
             //MODULES.lock().remove(&moduleKey);
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaRegisterFunction => {
             //error!("nvidia.rs: cudaRegisterFunction");
@@ -704,7 +756,7 @@ pub fn NvidiaProxy(
             let index = MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.iter().position(|&r| r.0 == info.fatCubinHandle).unwrap();
             MEM_MANAGER.lock().fatBinManager.fatBinFuncVec[index].push((info.hostFun, func_name));
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaRegisterVar => {
             //error!("nvidia.rs: cudaRegisterFunction");
@@ -747,7 +799,7 @@ pub fn NvidiaProxy(
             //GLOBALS.lock().insert(info.hostVar, devicePtr);
             // TODO: cudaMemcpyToSymbol may need to store this info, no need for pytorch for now
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaLaunchKernel => {
             //error!("nvidia.rs: cudaLaunchKernel");
@@ -782,7 +834,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaStreamSynchronize => {
             //error!("nvidia.rs: cudaStreamSynchronize");
@@ -794,7 +846,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaStreamCreate => {
             //error!("nvidia.rs: cudaStreamCreate");
@@ -809,7 +861,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut u64) = s as u64 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
 
         ProxyCommand::CudaStreamCreateWithFlags => {
@@ -826,7 +878,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut u64) = stream as u64 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaStreamCreateWithPriority => {
             //error!("nvidia.rs: CudaStreamCreateWithPriority");
@@ -848,7 +900,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut u64) = stream as u64 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaStreamDestroy => {
             //error!("nvidia.rs: cudaStreamDestroy");
@@ -860,7 +912,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaStreamGetFlags => {
             //error!("nvidia.rs: CudaStreamGetFlags");
@@ -875,7 +927,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para2 as *mut u32) = flags };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaStreamGetPriority => {
             // error!("nvidia.rs: CudaStreamGetPriority");
@@ -891,7 +943,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para2 as *mut i32) = priority };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaStreamIsCapturing => {
             //error!("nvidia.rs: cudaStreamIsCapturing");
@@ -909,7 +961,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para2 as *mut _) = captureStatus as u32 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaStreamQuery => {
             //error!("nvidia.rs: cudaStreamQuery");
@@ -918,7 +970,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by cudaStreamQuery: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaStreamWaitEvent => {
             //error!("nvidia.rs: cudaStreamWaitEvent");
@@ -936,7 +988,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaThreadExchangeStreamCaptureMode => {
             //error!("nvidia.rs: cudaThreadExchangeStreamCaptureMode");
@@ -952,7 +1004,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut _) = mode as u32 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaEventCreate => {
             //error!("nvidia.rs: CudaEventCreate");
@@ -964,7 +1016,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut u64) = event as u64 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaEventCreateWithFlags => {
             //error!("nvidia.rs: CudaEventCreateWithFlags");
@@ -979,7 +1031,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut u64) = event as u64 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaEventDestroy => {
             //error!("nvidia.rs: CudaEventDestroy");
@@ -991,7 +1043,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaEventElapsedTime => {
             //error!("nvidia.rs: CudaEventElapsedTime");
@@ -1012,7 +1064,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut _) = time };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaEventQuery => {
             //error!("nvidia.rs: CudaEventQuery");
@@ -1021,7 +1073,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by cudaEventQuery: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaEventRecord => {
             //error!("nvidia.rs: CudaEventRecord");
@@ -1035,7 +1087,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by cudaEventRecord: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaEventSynchronize => {
             //error!("nvidia.rs: CudaEventSynchronize");
@@ -1047,7 +1099,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaFuncGetAttributes => {
             //error!("nvidia.rs: CudaFuncGetAttributes");
@@ -1073,7 +1125,7 @@ pub fn NvidiaProxy(
                     "nvidia.rs: error caused by cuFuncGetAttribute: {}",
                     ret as u32
                 );
-                return Ok(ret as i64);
+                return Ok(ret as u32);
             } else {
                 attr.sharedSizeBytes = tmpAttr as usize;
             }
@@ -1089,7 +1141,7 @@ pub fn NvidiaProxy(
                     "nvidia.rs: error caused by cuFuncGetAttribute: {}",
                     ret as u32
                 );
-                return Ok(ret as i64);
+                return Ok(ret as u32);
             } else {
                 attr.constSizeBytes = tmpAttr as usize;
             }
@@ -1105,7 +1157,7 @@ pub fn NvidiaProxy(
                     "nvidia.rs: error caused by cuFuncGetAttribute: {}",
                     ret as u32
                 );
-                return Ok(ret as i64);
+                return Ok(ret as u32);
             } else {
                 attr.localSizeBytes = tmpAttr as usize;
             }
@@ -1121,7 +1173,7 @@ pub fn NvidiaProxy(
                     "nvidia.rs: error caused by cuFuncGetAttribute: {}",
                     ret as u32
                 );
-                return Ok(ret as i64);
+                return Ok(ret as u32);
             } else {
                 attr.maxThreadsPerBlock = tmpAttr as i32;
             }
@@ -1137,7 +1189,7 @@ pub fn NvidiaProxy(
                     "nvidia.rs: error caused by cuFuncGetAttribute: {}",
                     ret as u32
                 );
-                return Ok(ret as i64);
+                return Ok(ret as u32);
             } else {
                 attr.numRegs = tmpAttr as i32;
             }
@@ -1153,7 +1205,7 @@ pub fn NvidiaProxy(
                     "nvidia.rs: error caused by cuFuncGetAttribute: {}",
                     ret as u32
                 );
-                return Ok(ret as i64);
+                return Ok(ret as u32);
             } else {
                 attr.ptxVersion = tmpAttr as i32;
             }
@@ -1169,7 +1221,7 @@ pub fn NvidiaProxy(
                     "nvidia.rs: error caused by cuFuncGetAttribute: {}",
                     ret as u32
                 );
-                return Ok(ret as i64);
+                return Ok(ret as u32);
             } else {
                 attr.binaryVersion = tmpAttr as i32;
             }
@@ -1185,7 +1237,7 @@ pub fn NvidiaProxy(
                     "nvidia.rs: error caused by cuFuncGetAttribute: {}",
                     ret as u32
                 );
-                return Ok(ret as i64);
+                return Ok(ret as u32);
             } else {
                 attr.cacheModeCA = tmpAttr as i32;
             }
@@ -1201,7 +1253,7 @@ pub fn NvidiaProxy(
                     "nvidia.rs: error caused by cuFuncGetAttribute: {}",
                     ret as u32
                 );
-                return Ok(ret as i64);
+                return Ok(ret as u32);
             } else {
                 attr.maxDynamicSharedSizeBytes = tmpAttr as i32;
             }
@@ -1217,13 +1269,13 @@ pub fn NvidiaProxy(
                     "nvidia.rs: error caused by cuFuncGetAttribute: {}",
                     ret as u32
                 );
-                return Ok(ret as i64);
+                return Ok(ret as u32);
             } else {
                 attr.preferredShmemCarveout = tmpAttr as i32;
             }
 
             unsafe { *(parameters.para1 as *mut cudaFuncAttributes) = attr };
-            return Ok(0 as i64);
+            return Ok(0 as u32);
         }
         ProxyCommand::CudaFuncSetAttribute => {
             //error!("nvidia.rs: CudaFuncSetAttribute");
@@ -1247,7 +1299,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaFuncSetCacheConfig => {
             //error!("nvidia.rs: CudaFuncSetCacheConfig");
@@ -1264,7 +1316,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaFuncSetSharedMemConfig => {
             //error!("nvidia.rs: CudaFuncSetSharedMemConfig");
@@ -1281,7 +1333,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaGetLastError => {
             //error!("nvidia.rs: cuModuleGetLoadingMode");
@@ -1293,7 +1345,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CuModuleGetLoadingMode => {
             //error!("nvidia.rs: cuModuleGetLoadingMode");
@@ -1308,7 +1360,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut _) = loadingMode as u32 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CuInit => {
             //error!("nvidia.rs: CuInit");
@@ -1317,7 +1369,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by cuInit: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CuDevicePrimaryCtxGetState => {
             //error!("nvidia.rs: cuDevicePrimaryCtxGetState");
@@ -1342,7 +1394,7 @@ pub fn NvidiaProxy(
                 *(parameters.para2 as *mut _) = flags;
                 *(parameters.para3 as *mut _) = active;
             };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::NvmlDeviceGetCountV2 => {
             //error!("nvidia.rs: nvmlDeviceGetCountV2");
@@ -1357,7 +1409,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut _) = deviceCount as u32 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::NvmlInitWithFlags => {
             //error!("nvidia.rs: nvmlInitWithFlags");
@@ -1369,7 +1421,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::NvmlInit => {
             //error!("nvidia.rs: NvmlInit");
@@ -1381,7 +1433,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::NvmlInitV2 => {
             //error!("nvidia.rs: NvmlInitV2");
@@ -1390,7 +1442,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by nvmlInit_v2: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::NvmlShutdown => {
             //error!("nvidia.rs: NvmlShutdown");
@@ -1399,7 +1451,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by nvmlShutdown: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CublasCreateV2 => {
             //error!("nvidia.rs: CublasCreateV2");
@@ -1412,7 +1464,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut u64) = handle as u64 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CublasDestroyV2 => {
             //error!("nvidia.rs: CublasDestroyV2");
@@ -1424,7 +1476,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CublasSetStreamV2 => {
             //error!("nvidia.rs: CublasSetStreamV2");
@@ -1441,7 +1493,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CublasSetWorkspaceV2 => {
             //error!("nvidia.rs: CublasSetWorkspaceV2");
@@ -1459,7 +1511,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CublasSetMathMode => {
             //error!("nvidia.rs: CublasSetMathMode");
@@ -1473,7 +1525,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CublasSgemmStridedBatched => {
             //error!("nvidia.rs: CublasSgemmStridedBatched");
@@ -1511,7 +1563,7 @@ pub fn NvidiaProxy(
                 );
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CublasLtMatmul => {
             //error!("nvidia.rs: CublasLtMatmul");
@@ -1543,7 +1595,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by cublasLtMatmul: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CublasLtMatmulAlgoGetHeuristic => {
             //error!("nvidia.rs: CublasLtMatmulAlgoGetHeuristic");
@@ -1585,7 +1637,7 @@ pub fn NvidiaProxy(
                         heuristicResultsArray[i as usize]
                 };
             }
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CublasGetMathMode => {
             //error!("nvidia.rs: CublasGetMathMode");
@@ -1600,7 +1652,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para2 as *mut u32) = mode as u32 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaMemset => {
             //error!("nvidia.rs: CudaMemset");
@@ -1615,7 +1667,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by cudaMemset: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaMemsetAsync => {
             //error!("nvidia.rs: cudaMemsetAsync");
@@ -1631,7 +1683,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by cudaMemsetAsync: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags => {
             //error!("nvidia.rs: CudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags");
@@ -1655,7 +1707,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut i32) = numBlocks as i32 };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CuCtxGetCurrent => {
             //error!("nvidia.rs: CuCtxGetCurrent");
@@ -1667,7 +1719,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut u64) = ctx };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CuModuleLoadData => {
             //error!("nvidia.rs: CuModuleLoadData");
@@ -1691,7 +1743,7 @@ pub fn NvidiaProxy(
             }
 
             unsafe { *(parameters.para1 as *mut u64) = module };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CuModuleGetFunction => {
             // error!("nvidia.rs: CuModuleGetFunction");
@@ -1735,7 +1787,7 @@ pub fn NvidiaProxy(
             }
 
             // FUNCTIONS.lock().insert(info.hostFun, hfunc);
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CuModuleUnload => {
             // error!("nvidia.rs: CuModuleUnload");
@@ -1744,7 +1796,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by cuModuleUnload: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CuLaunchKernel => {
             //error!("nvidia.rs: CuLaunchKernel");
@@ -1770,7 +1822,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by cuLaunchKernel: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CublasSgemmV2 => {
             //error!("nvidia.rs: CublasSgemm_v2");
@@ -1800,7 +1852,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by cublasSgemm_v2: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         } 
         ProxyCommand::CublasGemmEx => {
             //error!("nvidia.rs: CublasSgemm_v2");
@@ -1835,7 +1887,7 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by cublasGemmEx: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::CublasGemmStridedBatchedEx => {
             //error!("nvidia.rs: CublasSgemm_v2");
@@ -1874,14 +1926,14 @@ pub fn NvidiaProxy(
                 error!("nvidia.rs: error caused by cublasGemmStridedBatchedEx: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         } 
         //_ => todo!()
         
     }
 }
 
-pub fn CudaMemcpy(parameters: &ProxyParameters) -> Result<i64> {
+pub fn CudaMemcpy(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: cudaMemcpy");
     // let func: extern "C" fn(u64, u64, u64, u64) -> u32 = unsafe { std::mem::transmute(handle) };
     //error!("nvidia.rs: CudaMemcpy: count:{}, len:{}", parameters.para4 as usize, parameters.para3 as usize);
@@ -1902,7 +1954,7 @@ pub fn CudaMemcpy(parameters: &ProxyParameters) -> Result<i64> {
                 let ret = unsafe { cudaMemcpy(dst + offset, r.start, r.len, kind) };
                 if ret != 0 {
                     error!("nvidia.rs: error caused by cudaMemcpy: {}", ret as u32);
-                    return Ok(ret as i64);
+                    return Ok(ret as u32);
                 }
                 offset += r.len;
             }
@@ -1924,7 +1976,7 @@ pub fn CudaMemcpy(parameters: &ProxyParameters) -> Result<i64> {
                 let ret = unsafe { cudaMemcpy(r.start, src + offset, r.len, kind) };
                 if ret != 0 {
                     error!("nvidia.rs: error caused by cudaMemcpy: {}", ret as u32);
-                    return Ok(ret as i64);
+                    return Ok(ret as u32);
                 }
                 offset += r.len;
             }
@@ -1944,13 +1996,13 @@ pub fn CudaMemcpy(parameters: &ProxyParameters) -> Result<i64> {
                 error!("nvidia.rs: error caused by cudaMemcpy: {}", ret as u32);
             }
 
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         _ => todo!(),
     }
 }
 
-pub fn CudaMemcpyAsync(parameters: &ProxyParameters) -> Result<i64> {
+pub fn CudaMemcpyAsync(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: cudaMemcpyAsync");
     //error!("nvidia.rs: CudaMemcpy: count:{}, len:{}", parameters.para4 as usize, parameters.para3 as usize);
     let kind = parameters.para5;
@@ -1970,7 +2022,7 @@ pub fn CudaMemcpyAsync(parameters: &ProxyParameters) -> Result<i64> {
                 let ret = unsafe { cudaMemcpyAsync(dst + offset, r.start, r.len, kind, stream) };
                 if ret as u32 != 0 {
                     error!("nvidia.rs: error caused by CudaMemcpyAsync: {}", ret as u32);
-                    return Ok(ret as i64);
+                    return Ok(ret as u32);
                 }
                 offset += r.len;
             }
@@ -1994,7 +2046,7 @@ pub fn CudaMemcpyAsync(parameters: &ProxyParameters) -> Result<i64> {
 
                 if ret != 0 {
                     error!("nvidia.rs: error caused by CudaMemcpyAsync: {}", ret as u32);
-                    return Ok(ret as i64);
+                    return Ok(ret as u32);
                 }
                 offset += r.len;
             }
@@ -2012,7 +2064,7 @@ pub fn CudaMemcpyAsync(parameters: &ProxyParameters) -> Result<i64> {
             if ret != 0 {
                 error!("nvidia.rs: error caused by CudaMemcpyAsync: {}", ret as u32);
             }
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         _ => todo!(),
     }
