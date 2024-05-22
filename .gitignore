@@ -13,3 +13,4 @@ vdso/*.d
 vdso/*.o
 vdso/*.so
 *.iml
+tags
