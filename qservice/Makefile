@@ -1,6 +1,6 @@
 all: na ss cni gw sched
 
-na: 
+na:
 	cargo +nightly-2023-12-11-x86_64-unknown-linux-gnu build --bin na
 	sudo cp -f na_logging_config.yaml /etc/quark/
 
@@ -9,7 +9,7 @@ cni:
 	sudo cp -f cni_logging_config.yaml /etc/quark/
 	sudo cp -f target/debug/cni /opt/cni/bin/tsot
 
-gw:	
+gw:
 	cargo +nightly-2023-12-11-x86_64-unknown-linux-gnu build --bin gateway
 	sudo cp -f gateway_logging_config.yaml /etc/quark/
 

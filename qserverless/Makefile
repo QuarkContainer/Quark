@@ -9,7 +9,7 @@ fs:
 	cargo build --bin func_svc
 qctl:
 	cargo build --bin qctl
-deploy: fp 
+deploy: fp
 	mkdir -p ./target/fp
 	-rm ./target/fp/* -rf
 	cp ./target/debug/func_pod ./target/fp
@@ -24,7 +24,7 @@ deploy: fp
 	#docker pull localhost:5000/func_pod
 	crictl pull localhost:5000/func_pod
 	#docker run --network host -it --name fp --rm func_pod
-py: 
+py:
 	mkdir -p ./target/py
 	-rm ./target/py/* -rf
 	cp ./src/python/* ./target/py -r
@@ -41,3 +41,5 @@ test:
 	cargo run --bin test
 all: rf
 
+clean:
+	cargo clean
