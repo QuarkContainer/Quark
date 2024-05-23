@@ -68,7 +68,7 @@ impl HostAllocator {
 
     pub fn IncreaseHeapSize(&self, type_: ListAllocatorType) -> Result<()> {
         let allocator = self.GetAllocator(type_);
-        let range = allocator.IncreaseHeapSize()?;
+        let range = allocator.IncrHeapSize()?;
         self.AddRange(&range, type_);
         return Ok(());
     }

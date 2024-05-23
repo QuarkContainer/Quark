@@ -352,6 +352,8 @@ pub trait OOMHandler {
 }
 
 impl ListAllocator {
+    pub const INCR_THRESHOLD: usize = 128 * MemoryDef::ONE_MB as usize;
+
     pub const fn New(type_: ListAllocatorType, heapStart: u64, heapEnd: u64) -> Self {
         let bufs: [CachePadded<QMutex<FreeMemBlockMgr>>; CLASS_CNT] = [
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 0))),
@@ -605,6 +607,8 @@ unsafe impl GlobalAlloc for ListAllocator {
             self.allocated.fetch_add(size, Ordering::Release);
         }
 
+        let free = self.free.fetch_sub(size, Ordering::Release) - size;
+
         if 3 <= class && class < self.bufs.len() {
             let ret = self.bufs[class].lock().Alloc();
             if let Some(addr) = ret {
@@ -647,8 +651,17 @@ unsafe impl GlobalAlloc for ListAllocator {
             panic!("alloc next fail");
         }
 
-        // Subtract when ret != 0 to avoid overflow
-        self.free.fetch_sub(size, Ordering::Release);
+        if free < Self::INCR_THRESHOLD {
+            GLOBAL_ALLOCATOR
+                .IncreaseHeapSize(self.type_)
+                .expect("OOM: increase heap size fail");
+            // raw!(
+            //     0x111,
+            //     self.total.load(Ordering::Relaxed) as u64,
+            //     free as u64,
+            //     0 as u64
+            // );
+        }
 
         return ret as *mut u8;
     }
@@ -674,7 +687,16 @@ unsafe impl GlobalAlloc for ListAllocator {
             self.allocated.fetch_sub(size, Ordering::Release);
         }
 
-        self.free.fetch_add(size, Ordering::Release);
+        let _free = self.free.fetch_add(size, Ordering::Release);
+
+        // raw!(
+        //     0x113,
+        //     //self.total.load(Ordering::Relaxed) as u64,
+        //     size as u64,
+        //     free as u64,
+        //     ptr as u64
+        // );
+
         self.bufSize.fetch_add(size, Ordering::Release);
         if class < self.bufs.len() {
             return self.bufs[class].lock().Dealloc(ptr, &self.heap);

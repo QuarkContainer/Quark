@@ -414,7 +414,7 @@ impl DnsSvc {
 }
 
 impl ListAllocator {
-    pub fn IncreaseHeapSize(&self) -> Result<Range> {
+    pub fn IncrHeapSize(&self) -> Result<Range> {
         let range = VIRTUAL_MACHINE
             .get()
             .unwrap()
