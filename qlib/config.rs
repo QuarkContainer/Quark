@@ -45,6 +45,7 @@ pub struct Config {
     pub Realtime: bool,
     pub EnableIOBuf: bool,
     pub EnableTsot: bool,
+    pub CCMode: CCMode,
 }
 
 impl Config {
@@ -92,6 +93,7 @@ impl Default for Config {
             Realtime: false,
             EnableIOBuf: false,
             EnableTsot: false,
+            CCMode: CCMode::None,
         };
     }
 }
@@ -138,4 +140,11 @@ pub enum CudaMemType {
     Default,
     UM, //Unified Memory
     MemPool,
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum CCMode {
+    None,
+    Normal,
+    SevSnp
 }
