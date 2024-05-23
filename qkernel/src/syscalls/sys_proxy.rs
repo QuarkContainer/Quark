@@ -27,6 +27,8 @@ use crate::qlib::proxy::*;
 use crate::syscalls::syscalls::*;
 use crate::task::*;
 
+// use std::ptr::null_mut;
+
 lazy_static! {
     pub static ref PARAM_INFOS: Mutex<BTreeMap<u64, Arc<Vec<u16>>>> = Mutex::new(BTreeMap::new());
 }
@@ -89,10 +91,77 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         | ProxyCommand::CublasDestroyV2
         | ProxyCommand::CublasSetWorkspaceV2
         | ProxyCommand::CublasSetMathMode
-        | ProxyCommand::CublasSetStreamV2 => {
+        | ProxyCommand::CublasSetStreamV2 
+        | ProxyCommand::NcclCommDestroy
+        | ProxyCommand::NcclCommAbort => {
             let ret = HostSpace::Proxy(cmd, parameters);
 
             return Ok(ret);
+        }
+        ProxyCommand::NcclGetUniqueId => {
+            // error!("ncclGetUniqueId_sysproxy");
+            let mut ncclUniqueId_:ncclUniqueId = ncclUniqueId::default();
+            parameters.para1 = &mut ncclUniqueId_ as * mut _ as u64;
+            
+            let ret = HostSpace::Proxy(cmd, parameters);
+
+            if ret == 0 {
+                task.CopyOutObj(&ncclUniqueId_, args.arg1)?;
+            }
+            return Ok(ret);
+        }
+        ProxyCommand::NcclCommInitRank => {
+            error!("ncclCommInitRank_sysproxy");
+            // let mut ncclComm_t_:NcclCommT = null_mut();
+            let mut ncclComm_t_:u64 = 0;
+            parameters.para1 = &mut ncclComm_t_ as *mut _ as u64;
+
+            // let mut comm_id:ncclUniqueId = ncclUniqueId::default();
+            // comm_id.internal = task.CopyInVec(parameters.para3, 128)?;
+            let comm_id = task.CopyInObj::<ncclUniqueId>(parameters.para3)?;
+            // error!("page fault? {}", comm_id.internal[0]);
+            parameters.para3 = &comm_id as *const _ as u64;
+
+            let ret = HostSpace::Proxy(cmd, parameters);
+
+    
+
+            if ret == 0 {
+                task.CopyOutObj(&ncclComm_t_, args.arg1)?;
+            }
+
+            return Ok(ret);
+        }
+        ProxyCommand::NcclCommInitAll => {
+            error!("ncclCommInitAll_sysproxy");
+            let mut ncclComm_t_s:Vec<u64> = Vec::with_capacity(args.arg2 as usize);
+            unsafe {
+                ncclComm_t_s.set_len(args.arg2 as usize);
+            }
+            let devlist:Vec<i32>=task.CopyInVec(parameters.para3, args.arg2 as usize)?;
+
+
+            parameters.para1 = &mut ncclComm_t_s[0] as *mut _ as u64;
+            parameters.para3 = &devlist[0] as *const _ as u64;
+
+            let ret = HostSpace::Proxy(cmd, parameters);
+            if ret == 0 {
+                task.CopyOutSlice(&ncclComm_t_s, args.arg1 as u64, args.arg2 as usize)?;
+            }
+            return Ok(ret);
+
+        }
+
+        ProxyCommand::NcclGetErrorString => {
+            let mut errorString = String::from("");
+            parameters.para2 = &mut errorString as *mut String as u64;
+            let ret = HostSpace::Proxy(cmd, parameters);
+            // error!("ncclGetErrorString_sysproxy: {}", errorString);
+            if ret == 0 {
+                task.CopyOutString(args.arg2, errorString.len(), &errorString)?;
+            }
+            return Ok(ret);
+
         }
         ProxyCommand::CudaChooseDevice => {
             let mut device: i32 = 0;

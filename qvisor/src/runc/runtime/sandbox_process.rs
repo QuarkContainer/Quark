@@ -677,6 +677,8 @@ impl SandboxProcess {
             "/dev/nvidiactl".to_owned(),
             "/dev/nvidia-uvm-tools".to_owned(),
             "/dev/nvidia-uvm".to_owned(),
+            "/dev/urandom".to_owned(),
+            "/dev/shm".to_owned(),
         ];
 
         for idx in &nvidiaList {
