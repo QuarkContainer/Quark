@@ -220,6 +220,18 @@ pub fn Execute(
         ProxyCommand::None => {
             panic!("get impossible proxy command");
         }
+        ProxyCommand::NcclGetVersion => {
+            error!("nvidia.rs: ncclGetVersion");
+            let mut version: c_int = 0;
+            let ret = unsafe { ncclGetVersion(&mut version) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by ncclGetVersion: {}", ret as u32);
+            } else {
+                unsafe { *(parameters.para1 as *mut c_int)= version };
+            }
+            return Ok(ret as u32);
+
+        }
         ProxyCommand::NcclGetUniqueId => {
             error!("nvidia.rs: ncclGetUniqueId");
             let mut ncclUniqueId_ns: NcclUniqueId = NcclUniqueId::default();
@@ -330,6 +342,29 @@ pub fn Execute(
                 error!("nvidia.rs: error caused by ncclCommUserRank: {}", ret as u32);
             } else {
                 unsafe { *(parameters.para2 as *mut c_int) = rank };
+            }
+            return Ok(ret as u32);
+        }
+        ProxyCommand::NcclCommCuDevice => {
+            error!("nvidia.rs: ncclCommCuDevice");
+            let mut device: c_int = 0;
+            let ret = unsafe { ncclCommCuDevice(parameters.para1 as NcclCommT, &mut device) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by ncclCommCuDevice: {}", ret as u32);
+            } else {
+                unsafe { *(parameters.para2 as *mut c_int) = device };
+            }
+            return Ok(ret as u32);
+            
+        }
+        ProxyCommand::NcclCommGetAsyncError => {
+            error!("nvidia.rs: ncclCommGetAsyncError");
+            let mut result = NcclResultT::NcclSuccess;
+            let ret = unsafe { ncclCommGetAsyncError(parameters.para1 as NcclCommT, &mut result) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by ncclCommGetAsyncError: {}", ret as u32);
+            } else {
+                unsafe { *(parameters.para2 as *mut NcclResultT) = result };
             }
             return Ok(ret as u32);
         }

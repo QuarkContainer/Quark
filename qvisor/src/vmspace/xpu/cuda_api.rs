@@ -18,6 +18,7 @@ use rcublas_sys::{cublasHandle_t, cudaMemLocation};
 
 #[link(name = "nccl")]
 extern "C" {
+    pub fn ncclGetVersion(version: *mut ::std::os::raw::c_int) -> NcclResultT;
     pub fn ncclGetUniqueId(handle: *mut NcclUniqueId) -> NcclResultT;
     pub fn ncclCommInitRank(
         comm: *mut NcclCommT,
@@ -32,6 +33,7 @@ extern "C" {
         devs: *const c_int,
     ) -> NcclResultT;
     pub fn ncclCommAbort(comm: NcclCommT) -> NcclResultT;
+    pub fn ncclCommCuDevice(comm: NcclCommT, device: *mut ::std::os::raw::c_int) -> NcclResultT;
 
     pub fn ncclGetErrorString(
         error: u32,

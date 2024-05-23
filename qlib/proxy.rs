@@ -17,7 +17,10 @@ pub enum ProxyCommand {
     None = 0 as u64,
     ExitWorkerThread,
     //nccl
+    NcclGetVersion,
     NcclGetUniqueId,
+
+
     NcclCommInitRank,
     NcclCommInitRankConfig,
     NcclCommDestroy,
@@ -25,6 +28,9 @@ pub enum ProxyCommand {
     NcclCommAbort,
     NcclCommCount,
     NcclCommUserRank,
+    NcclCommCuDevice,
+    NcclCommGetAsyncError,
+
     NcclGetErrorString,
 
     NcclAllGather,

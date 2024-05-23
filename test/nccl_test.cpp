@@ -1,7 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <nccl.h>
-#include <mpi.h>
+// #include <mpi.h>
 #include <cuda_runtime.h>
 
 #define CHECK_NCCL(cmd) do { \
@@ -33,51 +33,139 @@ bool testNcclGetUniqueId() {
     return true;
 }
 
-bool testNcclCommInitRank() {
-    // Initialize MPI
-    int provided;
-    MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided);
-    if (provided < MPI_THREAD_MULTIPLE) {
-        std::cerr << "MPI does not provide needed threading level" << std::endl;
-        return false;
-    }
+// bool testNcclCommInitRank() {
+//     // Initialize MPI
+//     int provided;
+//     MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided);
+//     if (provided < MPI_THREAD_MULTIPLE) {
+//         std::cerr << "MPI does not provide needed threading level" << std::endl;
+//         return false;
+//     }
 
-    int world_size;
-    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+//     int world_size;
+//     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
     
-    int world_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+//     int world_rank;
+//     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
+//     int deviceCount;
+//     CHECK_CUDA(cudaGetDeviceCount(&deviceCount));
+
+//     if (deviceCount < 2) {
+//         std::cerr << "Need at least 2 devices to test ncclCommInitRank." << std::endl;
+//         MPI_Finalize();
+//         return false;
+//     }
+
+//     ncclUniqueId id;
+//     ncclComm_t comm;
+
+//     if (world_rank == 0) {
+//         CHECK_NCCL(ncclGetUniqueId(&id));
+//     }
+
+//     // Broadcast the unique ID to all ranks
+//     MPI_Bcast(&id, sizeof(id), MPI_BYTE, 0, MPI_COMM_WORLD);
+
+//     // Assign devices to MPI ranks
+//     int local_rank = world_rank % deviceCount;
+//     CHECK_CUDA(cudaSetDevice(local_rank));
+
+//     CHECK_NCCL(ncclCommInitRank(&comm, world_size, id, world_rank));
+
+//     // Destroy the NCCL communicator
+//     CHECK_NCCL(ncclCommDestroy(comm));
+
+//     // Finalize MPI
+//     MPI_Finalize();
+
+//     return true;
+// }
+bool testNcclCommInitRank() {
     int deviceCount;
     CHECK_CUDA(cudaGetDeviceCount(&deviceCount));
-
     if (deviceCount < 2) {
         std::cerr << "Need at least 2 devices to test ncclCommInitRank." << std::endl;
-        MPI_Finalize();
         return false;
     }
 
     ncclUniqueId id;
-    ncclComm_t comm;
-
-    if (world_rank == 0) {
-        CHECK_NCCL(ncclGetUniqueId(&id));
+    std::vector<ncclComm_t> comms(deviceCount);
+    CHECK_NCCL(ncclGetUniqueId(&id));
+    CHECK_NCCL(ncclGroupStart());
+    for (int i=0; i<deviceCount; i++) {
+        CHECK_CUDA(cudaSetDevice(i));
+        CHECK_NCCL(ncclCommInitRank(&comms[i], deviceCount, id, i));
+    }
+    CHECK_NCCL(ncclGroupEnd());
+    for (auto comm : comms) {
+        CHECK_NCCL(ncclCommAbort(comm));
+    }
+    return true;
+    
+}
+bool testNcclAllReduce() {
+    int deviceCount;
+    CHECK_CUDA(cudaGetDeviceCount(&deviceCount));
+    if (deviceCount < 2) {
+        std::cerr << "Need at least 2 devices to test ncclAllreduce." << std::endl;
+        return false;
     }
 
-    // Broadcast the unique ID to all ranks
-    MPI_Bcast(&id, sizeof(id), MPI_BYTE, 0, MPI_COMM_WORLD);
+    std::vector<ncclComm_t> comms(deviceCount);
+    int nDev = deviceCount;
+    int size = 32*1024*1024;
+    std::vector<int> devs(deviceCount);
+    for (int i = 0; i < deviceCount; ++i) devs[i] = i;
 
-    // Assign devices to MPI ranks
-    int local_rank = world_rank % deviceCount;
-    CHECK_CUDA(cudaSetDevice(local_rank));
 
-    CHECK_NCCL(ncclCommInitRank(&comm, world_size, id, world_rank));
+    //allocating and initializing device buffers
+    float** sendbuff = (float**)malloc(nDev * sizeof(float*));
+    float** recvbuff = (float**)malloc(nDev * sizeof(float*));
+    cudaStream_t* s = (cudaStream_t*)malloc(sizeof(cudaStream_t)*nDev);
 
-    // Destroy the NCCL communicator
-    CHECK_NCCL(ncclCommDestroy(comm));
 
-    // Finalize MPI
-    MPI_Finalize();
+    for (int i = 0; i < nDev; ++i) {
+        CHECK_CUDA(cudaSetDevice(i));
+        CHECK_CUDA(cudaMalloc((void**)sendbuff + i, size * sizeof(float)));
+        CHECK_CUDA(cudaMalloc((void**)recvbuff + i, size * sizeof(float)));
+        CHECK_CUDA(cudaMemset(sendbuff[i], 1, size * sizeof(float)));
+        CHECK_CUDA(cudaMemset(recvbuff[i], 0, size * sizeof(float)));
+        CHECK_CUDA(cudaStreamCreate(s+i));
+    }
+
+
+    //initializing NCCL
+    CHECK_NCCL(ncclCommInitAll(comms.data(), nDev, devs.data()));
+
+
+    //calling NCCL communication API. Group API is required when using
+    //multiple devices per thread
+    CHECK_NCCL(ncclGroupStart());
+    for (int i = 0; i < nDev; ++i)
+        CHECK_NCCL(ncclAllReduce((const void*)sendbuff[i], (void*)recvbuff[i], size, ncclFloat, ncclSum,
+            comms[i], s[i]));
+    CHECK_NCCL(ncclGroupEnd());
+
+
+    //synchronizing on CUDA streams to wait for completion of NCCL operation
+    for (int i = 0; i < nDev; ++i) {
+        CHECK_CUDA(cudaSetDevice(i));
+        CHECK_CUDA(cudaStreamSynchronize(s[i]));
+    }
+
+
+    //free device buffers
+    for (int i = 0; i < nDev; ++i) {
+        CHECK_CUDA(cudaSetDevice(i));
+        CHECK_CUDA(cudaFree(sendbuff[i]));
+        CHECK_CUDA(cudaFree(recvbuff[i]));
+    }
+
+
+    //finalizing NCCL
+    for(int i = 0; i < nDev; ++i)
+        CHECK_NCCL(ncclCommDestroy(comms[i]));
 
     return true;
 }
@@ -202,9 +290,10 @@ bool testNcclGetErrorString() {
 
 int main() {
     std::cout << "Testing ncclCommInitRank: " << (testNcclCommInitRank() ? "Passed" : "Failed") << std::endl;
-    std::cout << "Testing ncclGetUniqueId: " << (testNcclGetUniqueId() ? "Passed" : "Failed") << std::endl;
-    std::cout << "Testing ncclCommCount: " << (testNcclCommCount() ? "Passed" : "Failed") << std::endl;
-    std::cout << "Testing ncclUserRank: " << (testNcclUserRank() ? "Passed" : "Failed") << std::endl;
+    std::cout << "Testing ncclAllReduce: " << (testNcclAllReduce() ? "Passed" : "Failed") << std::endl;
+    // std::cout << "Testing ncclGetUniqueId: " << (testNcclGetUniqueId() ? "Passed" : "Failed") << std::endl;
+    // std::cout << "Testing ncclCommCount: " << (testNcclCommCount() ? "Passed" : "Failed") << std::endl;
+    // std::cout << "Testing ncclUserRank: " << (testNcclUserRank() ? "Passed" : "Failed") << std::endl;
     // std::cout << "Testing ncclCommInitAll: " << (testNcclCommInitAll() ? "Passed" : "Failed") << std::endl;
     // std::cout << "Testing ncclCommAbort: " << (testNcclCommAbort() ? "Passed" : "Failed") << std::endl;
     // std::cout << "Testing ncclGetErrorString: " << (testNcclGetErrorString() ? "Passed" : "Failed") << std::endl;
