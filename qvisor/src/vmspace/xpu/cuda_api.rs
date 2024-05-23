@@ -16,6 +16,86 @@ use cuda_runtime_sys::{
 };
 use rcublas_sys::{cublasHandle_t, cudaMemLocation};
 
+#[link(name = "nccl")]
+extern "C" {
+    pub fn ncclGetUniqueId(handle: *mut ncclUniqueId) -> NcclResultT;
+    pub fn ncclCommInitRank(
+        comm: *mut NcclCommT,
+        nRanks: ::std::os::raw::c_int,
+        commId: ncclUniqueId,
+        rank: ::std::os::raw::c_int,
+    ) -> NcclResultT;
+    pub fn ncclCommDestroy(comm: NcclCommT) -> NcclResultT;
+    pub fn ncclCommInitAll(
+        comms: *mut NcclCommT,
+        ndevs: c_int,
+        devs: *const c_int,
+    ) -> NcclResultT;
+    pub fn ncclCommAbort(comm: NcclCommT) -> NcclResultT;
+
+    pub fn ncclGetErrorString(
+        error: NcclResultT,
+    ) -> *const c_char;
+    pub fn ncclCommGetAsyncError(
+        comm: NcclCommT,
+        async_error: *mut NcclResultT,
+    ) -> NcclResultT;
+
+//     pub fn ncclCommCount(
+//         comm: NcclCommT,
+//         count: *mut c_int,
+//     ) -> NcclResultT;
+//     pub fn ncclCommUserRank(
+//         comm: NcclCommT,
+//         rank: *mut c_int,
+//     ) -> NcclResultT;
+
+//     pub fn ncclReduce(
+//         send_buff: *const c_void,
+//         recv_buff: *mut c_void,
+//         count: usize,
+//         dataType: NcclDataTypeT,
+//         reduceOp: NcclRedOpT,
+//         root: c_int,
+//         comm: NcclCommT,
+//         stream: cudaStream_t,
+//     ) -> NcclResultT;
+//     pub fn ncclBcast(
+//         buff: *mut c_void,
+//         count: usize,
+//         dataType: NcclDataTypeT,
+//         root: c_int,
+//         comm: NcclCommT,
+//         stream: cudaStream_t,
+//     ) -> NcclResultT;
+//     pub fn ncclReduceScatter(
+//         send_buff: *const c_void,
+//         recv_buff: *mut c_void,
+//         recv_count: usize,
+//         dataType: NcclDataTypeT,
+//         reduceOp: NcclRedOpT,
+//         comm: NcclCommT,
+//         stream: cudaStream_t,
+//     ) -> NcclResultT;
+//     pub fn ncclAllGather(
+//         send_buff: *const c_void,
+//         recv_buff: *mut c_void,
+//         send_count: usize,
+//         dataType: NcclDataTypeT,
+//         comm: NcclCommT,
+//         stream: cudaStream_t,
+//     ) -> NcclResultT;
+//     pub fn ncclSend(
+//         send_buff: *const c_void,
+//         count: usize,
+//         dataType: NcclDataTypeT,
+//         peer: c_int,
+//         comm: NcclCommT,
+//         stream: cudaStream_t,
+//     ) -> NcclResultT;
+//     pub fn ncclGroupStart() -> NcclResultT;
+//     pub fn ncclGroupEnd() -> NcclResultT;
+}
 
 #[link(name = "cuda")]
 extern "C" {

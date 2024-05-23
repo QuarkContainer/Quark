@@ -134,6 +134,205 @@ pub extern "C" fn dlclose(handle: *mut c_void) -> c_int{
     }
 }
 
+// ncclgetuniqueid
+#[no_mangle]
+pub extern "C" fn ncclGetUniqueId(ncclUniqueId_p: *mut ncclUniqueId) -> usize {
+    // println!("Hijacked ncclGetUniqueId");
+    return unsafe {
+        syscall2(SYS_PROXY, ProxyCommand::NcclGetUniqueId as usize, ncclUniqueId_p as *mut _ as usize)
+    };
+}
+// #nncccommitinitrank
+#[no_mangle]
+pub extern "C" fn ncclCommInitRank(
+    comm: *mut NcclCommT,
+    n: c_int,
+    comm_id: ncclUniqueId,
+    rank: c_int,
+) -> usize {
+    println!("Hijacked ncclCommInitRank");
+    return unsafe {
+        syscall5(
+            SYS_PROXY,
+            ProxyCommand::NcclCommInitRank as usize,
+            comm as *mut _ as usize,
+            n as usize,
+            &comm_id as *const _ as usize,
+            rank as usize,
+        )
+    };
+}
+#[no_mangle]
+pub extern "C" fn ncclCommInitAll(comms: *mut NcclCommT, n: c_int, devlist: *const c_int) -> usize {
+    println!("Hijacked ncclCommInitAll");
+    return unsafe {
+        syscall4(
+            SYS_PROXY,
+            ProxyCommand::NcclCommInitAll as usize,
+            comms as *mut _ as usize,
+            n as usize,
+            devlist as *const _ as usize,
+        )
+    };
+}
+
+#[no_mangle]
+pub extern "C" fn ncclCommDestroy(comm: *mut NcclCommT) -> usize {
+    println!("Hijacked ncclCommDestroy");
+    return unsafe {
+        syscall2(SYS_PROXY, ProxyCommand::NcclCommDestroy as usize, comm as *mut _ as usize)
+    };
+}
+#[no_mangle]
+pub extern "C" fn ncclCommAbort(comm: NcclCommT) -> usize {
+    // println!("Hijacked ncclCommAbort");
+    return unsafe {
+        syscall2(SYS_PROXY, ProxyCommand::NcclCommAbort as usize, comm as usize)
+    };
+
+}
+// use std::ffi::CStr;
+// implemenetation does not work
+#[no_mangle]
+pub extern "C" fn ncclGetErrorString(
+    error: NcclResultT,
+) -> *const c_char {
+    let errorString: *const c_char = std::ptr::null();
+    unsafe {
+        syscall3(SYS_PROXY, ProxyCommand::NcclGetErrorString as usize, error as usize, errorString as *mut c_char as usize)
+    };
+
+    if errorString.is_null() {
+        println!("Error: Error string is null");
+        return ptr::null(); // Return null pointer to indicate error
+    }
+    return errorString;
+    // Convert the C string pointer to a Rust CStr
+    // let c_str: &CStr = unsafe { CStr::from_ptr(errorString) };
+
+    // // Convert CStr to &str and handle potential UTF-8 errors
+    // match c_str.to_str() {
+    //     Ok(error_str) => {
+    //         // Print the error string
+    //         println!("CUDA Error: {}", error_str);
+    //         errorString
+    //     }
+    //     Err(e) => {
+    //         println!("Error: Failed to convert C string to UTF-8: {}", e);
+    //         ptr::null() // Return null pointer to indicate error
+    //     }
+    // }
+}
+
+// #[no_mangle]
+// pub extern "C" fn ncclCommGetAsyncError(
+//     comm: NcclCommT,
+//     async_error: *mut NcclResultT,
+// ) -> usize {
+//     return unsafe {
+//         syscall3(SYS_PROXY, ProxyCommand::NcclCommGetAsyncError as usize, comm as usize, async_error as usize)
+//     };
+// }
+
+// #[no_mangle]
+// pub extern "C" fn ncclCommCount(
+//     comm: NcclCommT,
+//     count: *mut c_int,
+// ) -> usize {
+//     return unsafe {
+//         syscall3(SYS_PROXY, ProxyCommand::NcclCommCount as usize, comm as usize, count as usize)
+//     };
+// }
+// #[no_mangle]
+// pub extern "C" fn ncclCommUserRank(
+//     comm: NcclCommT,
+//     rank: *mut c_int,
+// ) -> usize {
+//     return unsafe {
+//         syscall3(SYS_PROXY, ProxyCommand::NcclCommUserRank as usize, comm as usize, rank as usize)
+//     };
+// }
+
+// #[no_mangle]
+// pub extern "C" fn ncclReduce(
+//     send_buff: *const c_void,
+//     recv_buff: *mut c_void,
+//     count: usize,
+//     dataType: ncclDataType_t,
+//     reduceOp: ncclRedOp_t,
+//     root: c_int,
+//     comm: NcclCommT,
+//     stream: cudaStream_t,
+// ) -> usize {
+//     return unsafe {
+//         syscall9(SYS_PROXY, ProxyCommand::NcclReduce as usize, send_buff as usize, recv_buff as usize, count as usize, dataType as usize, reduceOp as usize, root as usize, comm as usize, stream as usize)
+//     };
+// }
+// #[no_mangle]
+// pub extern "C" fn ncclBcast(
+//     buff: *mut c_void,
+//     count: usize,
+//     dataType: ncclDataType_t,
+//     root: c_int,
+//     comm: NcclCommT,
+//     stream: cudaStream_t,
+// ) -> usize {
+//     return unsafe {
+//         syscall7(SYS_PROXY, ProxyCommand::NcclBcast as usize, buff as usize, count as usize, dataType as usize, root as usize, comm as usize, stream as usize)
+//     };
+// }
+// #[no_mangle]
+// pub extern "C" fn ncclReduceScatter(
+//     send_buff: *const c_void,
+//     recv_buff: *mut c_void,
+//     recv_count: usize,
+//     dataType: ncclDataType_t,
+//     reduceOp: ncclRedOp_t,
+//     comm: NcclCommT,
+//     stream: cudaStream_t,
+// ) -> usize {
+//     return unsafe {
+//         syscall8(SYS_PROXY, ProxyCommand::NcclReduceScatter as usize, send_buff as usize, recv_buff as usize, recv_count as usize, dataType as usize, reduceOp as usize, comm as usize, stream as usize)
+//     };
+// }
+// #[no_mangle]
+// pub extern "C" fn ncclAllGather(
+//     send_buff: *const c_void,
+//     recv_buff: *mut c_void,
+//     send_count: usize,
+//     dataType: ncclDataType_t,
+//     comm: NcclCommT,
+//     stream: cudaStream_t,
+// ) -> usize {
+//     return unsafe {
+//         syscall7(SYS_PROXY, ProxyCommand::NcclAllGather as usize, send_buff as usize, recv_buff as usize, send_count as usize, dataType as usize, comm as usize, stream as usize)
+//     };
+// }
+// #[no_mangle]
+// pub extern "C" fn ncclSend(
+//     send_buff: *const c_void,
+//     count: usize,
+//     dataType: ncclDataType_t,
+//     peer: c_int,
+//     comm: NcclCommT,
+//     stream: cudaStream_t,
+// ) -> usize {
+//     return unsafe {
+//         syscall7(SYS_PROXY, ProxyCommand::NcclSend as usize, send_buff as usize, count as usize, dataType as usize, peer as usize, comm as usize, stream as usize)
+//     };
+// }
+// #[no_mangle]
+// pub extern "C" fn ncclGroupStart() -> usize {
+//     return unsafe {
+//         syscall1(SYS_PROXY, ProxyCommand::NcclGroupStart as usize)
+//     };
+// }
+// #[no_mangle]
+// pub extern "C" fn ncclGroupEnd() -> usize {
+//     return unsafe {
+//         syscall1(SYS_PROXY, ProxyCommand::NcclGroupEnd as usize)
+//     };
+// }
 // device management
 #[no_mangle]
 pub extern "C" fn cudaChooseDevice(device: *mut c_int, prop: *const cudaDeviceProp) -> usize {
@@ -146,6 +345,7 @@ pub extern "C" fn cudaDeviceGetAttribute(value: *mut c_int, attr: cudaDeviceAttr
     //println!("Hijacked cudaDeviceGetAttribute");
     return cudaSyscall4(SYS_PROXY, ProxyCommand::CudaDeviceGetAttribute as usize, value as *mut _ as usize, attr as usize, device as usize);
 }
+
 
 #[no_mangle]
 pub extern "C" fn cudaDeviceGetByPCIBusId(device: *mut c_int, pciBusId: *const c_char) -> usize {

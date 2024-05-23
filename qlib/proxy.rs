@@ -15,6 +15,25 @@
 #[repr(u64)]
 pub enum ProxyCommand {
     None = 0 as u64,
+    //nccl
+    NcclGetUniqueId,
+    NcclCommInitRank,
+    NcclCommDestroy,
+    NcclCommInitAll,
+    NcclCommAbort,
+    NcclGetErrorString,
+    // NcclCommGetAsyncError,
+    // NcclCommCount,
+    // NcclCommUserRank,
+    // NcclReduce,
+    // NcclBcast,
+    // NcclReduceScatter,
+    // NcclAllGather,
+    // NcclSend,
+    // NcclGroupStart,
+    // NcclGroupEnd,
+
+
     //devcie management
     CudaChooseDevice,
     CudaDeviceGetAttribute,
@@ -116,6 +135,85 @@ pub enum ProxyCommand {
     CublasGemmStridedBatchedEx,
 }
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ncclComm {
+    // do we need the inside?
+    _unused: [u8; 0],
+}
+// impl Default for ncclComm {
+
+pub type NcclCommT = *mut ncclComm;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ncclUniqueId {
+    pub internal: [::core::ffi::c_char; 128usize]
+    // pub internal: [::std::os::raw::c_char; 128]
+}
+impl Default for ncclUniqueId {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
+
+#[repr(u32)]
+#[derive(Debug, Copy, Clone, Hash, PartialOrd, Ord, PartialEq, Eq)]
+pub enum NcclResultT {
+    NcclSuccess = 0,
+    NcclUnhandledCudaError = 1,
+    NcclSystemError = 2,
+    NcclInternalError = 3,
+    NcclInvalidArgument = 4,
+    NcclInvalidUsage = 5,
+    NcclRemoteError = 6,
+    NcclNumResults = 7,
+}
+#[repr(u32)]
+#[derive(Debug, Copy, Clone, Hash, PartialOrd, Ord, PartialEq, Eq)]
+pub enum NcclRedOpT {
+    NcclSum = 0,
+    NcclProd = 1,
+    NcclMax = 2,
+    NcclMin = 3,
+    NcclAvg = 4,
+    NcclNumOps = 5,
+    NcclMaxRedOp = 2147483647,
+}
+impl NcclDataTypeT {
+    pub const NCCL_CHAR: NcclDataTypeT = NcclDataTypeT::NcclInt8;
+}
+impl NcclDataTypeT {
+    pub const NCCL_INT: NcclDataTypeT = NcclDataTypeT::NcclInt32;
+}
+impl NcclDataTypeT {
+    pub const NCCL_HALF: NcclDataTypeT = NcclDataTypeT::NcclFloat16;
+}
+impl NcclDataTypeT {
+    pub const NCCL_FLOAT: NcclDataTypeT = NcclDataTypeT::NcclFloat32;
+}
+impl NcclDataTypeT {
+    pub const NCCL_DOUBLE: NcclDataTypeT = NcclDataTypeT::NcclFloat64;
+}
+#[repr(u32)]
+#[derive(Debug, Copy, Clone, Hash, PartialOrd, Ord, PartialEq, Eq)]
+pub enum NcclDataTypeT {
+    NcclInt8 = 0,
+    NcclUint8 = 1,
+    NcclInt32 = 2,
+    NcclUint32 = 3,
+    NcclInt64 = 4,
+    NcclUint64 = 5,
+    NcclFloat16 = 6,
+    NcclFloat32 = 7,
+    NcclFloat64 = 8,
+    NcclBfloat16 = 9,
+    NcclNumTypes = 10,
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]
 #[repr(u64)]
 pub enum XpuLibrary {
@@ -149,6 +247,8 @@ pub struct ProxyParameters {
     pub para6: u64,
     pub para7: u64,
 }
+
+
 
 // from https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html#group__CUDART__TYPES_1g18fa99055ee694244a270e4d5101e95b
 // cudaMemcpyHostToHost = 0
