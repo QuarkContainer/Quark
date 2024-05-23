@@ -525,3 +525,10 @@ pub unsafe fn read_user_opcode(pc: u64) -> Option<u32> {
     set_access_user(ua);
     return Some(opcode);
 }
+
+impl HostAllocator {
+    pub fn IncreaseHeapSize(&self, type_: ListAllocatorType) -> Result<()> {
+        HostSpace::IncrHeapSize(type_);
+        return Ok(());
+    }
+}

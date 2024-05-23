@@ -122,8 +122,8 @@ impl MemRegionMgr {
         return Ok(Self {
             vmfd: vmfd,
             nextSlotId: 0,
-            start: 0,
-            end: 0,
+            start: MemoryDef::KERNEL_MEM_END,
+            end: MemoryDef::PHY_UPPER_ADDR,
             ranges: Vec::with_capacity(16),
 
             allocator: allocator,

@@ -725,7 +725,7 @@ impl HostSpace {
     pub fn IncrHeapSize(type_: ListAllocatorType) -> i64 {
         let mut msg = Msg::IncrHeapSize(IncrHeapSize { type_: type_ });
 
-        let ret = Self::Call(&mut msg, false) as i64;
+        let ret = Self::HCall(&mut msg, false) as i64;
         return ret;
     }
 
