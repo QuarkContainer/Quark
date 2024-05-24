@@ -49,6 +49,7 @@ pub unsafe fn InitSingleton() {
 // format to avoid extra copying/allocation when writing events to userspace.
 #[cfg(target_arch = "x86_64")]
 #[derive(Default, Clone, Copy, Debug)]
+#[repr(packed)]
 #[repr(C)]
 pub struct Event {
     // Events is the event mask containing the set of events that have been
@@ -62,6 +63,7 @@ pub struct Event {
 
 #[cfg(target_arch = "aarch64")]
 #[derive(Default, Clone, Copy, Debug)]
+#[repr(packed)]
 #[repr(C)]
 pub struct Event {
     // Events is the event mask containing the set of events that have been

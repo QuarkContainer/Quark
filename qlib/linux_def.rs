@@ -260,6 +260,7 @@ pub struct LibcSysinfo {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[repr(packed)]
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct EpollEvent {
@@ -268,6 +269,7 @@ pub struct EpollEvent {
 }
 
 #[cfg(target_arch = "aarch64")]
+#[repr(packed)]
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct EpollEvent {
