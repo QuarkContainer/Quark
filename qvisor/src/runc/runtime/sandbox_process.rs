@@ -93,7 +93,6 @@ pub struct BootArgs {
     pub ptyfd: Option<i32>,
     pub action: RunAction,
     pub RLimits: Vec<LinuxRlimit>,
-    //pub pid: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -359,13 +358,6 @@ impl SandboxProcess {
                 continue;
             }
 
-            // // tsot needs to run in host network namespace
-            // if QUARK_CONFIG.lock().EnableTsot && space == LinuxNamespaceType::network as i32 {
-            //     info!("EnableNamespace disable network namespace");
-            //     Close(fd)?;
-            //     continue
-            // }
-
             SetNamespace(fd, space)?;
             Close(fd)?;
             if space == LinuxNamespaceType::user as i32 {
@@ -432,7 +424,6 @@ impl SandboxProcess {
             }
             let (flags, data) = parse_mount(m);
             if m.typ == "cgroup" {
-                //mount_cgroups(m, rootfs, flags, &data, &linux.mount_label, cpath)?;
                 // won't mount cgroup
                 continue;
             } else if m.destination == "/dev" {
@@ -446,7 +437,6 @@ impl SandboxProcess {
                 )?;
             } else {
                 MountFrom(m, &self.Rootfs, flags, &data, &linux.mount_label)?;
-                //continue;
             }
         }
 
@@ -457,9 +447,7 @@ impl SandboxProcess {
             panic!("chdir fail")
         }
 
-        //default_symlinks()?;
         create_devices(&linux.devices, false)?;
-        //ensure_ptmx()?;
 
         if Util::Chdir(olddir.as_path().to_str().unwrap()) == -1 {
             panic!("chdir fail")
@@ -566,13 +554,7 @@ impl SandboxProcess {
                 let client = UnixSocket::NewClient(consoleSocket)?;
                 client.SendFd(master.as_raw_fd())?
             }
-        } /*else {
-              if !detach {
-                  cmd.stdin(Stdio::piped());
-                  cmd.stdout(Stdio::piped());
-                  cmd.stderr(Stdio::piped());
-              }
-          }*/
+        }
 
         let child = cmd.spawn().expect("Boot command failed to start");
 

@@ -79,7 +79,7 @@ pub struct SignalMaskStruct {
 
 pub struct KVMVcpu {
     pub id: usize,
-    pub cordId: isize,
+    pub coreId: isize,
     pub threadid: AtomicU64,
     pub tgid: AtomicU64,
     pub state: AtomicU64,
@@ -163,7 +163,7 @@ impl KVMVcpu {
 
         return Ok(Self {
             id: id,
-            cordId: vcpuCoreId,
+            coreId: vcpuCoreId,
             threadid: AtomicU64::new(0),
             tgid: AtomicU64::new(0),
             state: AtomicU64::new(KVMVcpuState::HOST as u64),

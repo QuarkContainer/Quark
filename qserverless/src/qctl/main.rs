@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
         Ok(args) => args,
         Err(e) => {
             error!("the parse error is {:?}", e);
-            panic!("exitting...")
+            panic!("exiting...")
         }
     };
 

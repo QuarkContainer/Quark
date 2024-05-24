@@ -20,8 +20,6 @@
 #![allow(deref_nullptr)]
 #![allow(non_snake_case)]
 #![allow(bare_trait_objects)]
-//#![feature(const_raw_ptr_to_usize_cast)]
-//#![feature(const_fn)]
 #![feature(allocator_api)]
 #![feature(associated_type_bounds)]
 #![feature(maybe_uninit_uninit_array)]
@@ -63,15 +61,12 @@ use vcpu::CPU_LOCAL;
 
 use crate::qlib::kernel::GlobalIOMgr;
 
-//use self::qlib::buddyallocator::*;
 use self::asm::*;
 use self::boot::controller::*;
 use self::boot::loader::*;
 use self::kernel::timer::*;
 use self::kernel_def::*;
 use self::loader::vdso::*;
-//use linked_list_allocator::LockedHeap;
-//use buddy_system_allocator::LockedHeap;
 use self::qlib::common::*;
 use self::qlib::config::*;
 use self::qlib::control_msg::*;
@@ -89,7 +84,6 @@ use self::qlib::kernel::quring;
 use self::qlib::kernel::Kernel;
 use self::qlib::kernel::*;
 use self::qlib::{ShareSpaceRef, SysCallID};
-//use self::vcpu::*;
 use self::qlib::kernel::socket;
 use self::qlib::kernel::task;
 use self::qlib::kernel::taskMgr;
@@ -116,9 +110,6 @@ use self::threadmgr::task_sched::*;
 #[macro_use]
 mod print;
 
-//#[macro_use]
-//pub mod asm;
-//mod taskMgr;
 #[macro_use]
 mod qlib;
 #[macro_use]
@@ -131,7 +122,6 @@ mod syscalls;
 pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
-//pub static GLOBAL_ALLOCATOR: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
 
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
@@ -152,7 +142,6 @@ pub fn SingletonInit() {
         //init fp state with current fp state as it is brand new vcpu
         FP_STATE.Reset();
         SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
-        //SHARESPACE.SetvirtualizationHandlerAddr(virtualization_handler as u64);
         IOURING.SetValue(SHARESPACE.GetIOUringAddr());
 
         // the error! can run after this point
@@ -346,7 +335,6 @@ pub extern "C" fn syscall_handler(
     CPULocal::Myself().SetMode(VcpuMode::User);
     currTask.mm.HandleTlbShootdown();
     if !(pt.rip == pt.rcx && pt.r11 == pt.eflags) {
-        //error!("iret *****, pt is {:x?}", pt);
         IRet(kernelRsp)
     } else {
         SyscallRet(kernelRsp)
@@ -517,10 +505,10 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                 }
 
                 self::taskMgr::SwitchToNewTask();
-                //panic!("RunExitDone: can't reach here")
+                // !!!RunExitDone: should not reach here
             }
             TaskRunState::RunNoneReachAble => panic!("unreadhable TaskRunState::RunNoneReachAble"),
-            TaskRunState::RunSyscallRet => TaskRunState::RunSyscallRet, //panic!("unreadhable TaskRunState::RunSyscallRet"),
+            TaskRunState::RunSyscallRet => TaskRunState::RunSyscallRet,
         };
 
         if state == TaskRunState::RunSyscallRet {
@@ -616,20 +604,16 @@ pub extern "C" fn rust_main(
         RegisterExceptionTable(vector_table as u64);
     }
 
-    //interrupts::init_idt();
     interrupt::init();
 
     /***************** can't run any qcall before this point ************************************/
 
     if id == 0 {
-        //error!("start main: {}", ::AllocatorPrint(10));
-
-        //ALLOCATOR.Print();
         IOWait();
     };
 
     if id == 1 {
-        debug!("heap start is {:x}", heapStart);
+        debug!("heap starts at:{:#x}", heapStart);
         self::Init();
         if autoStart {
             CreateTask(StartRootContainer as u64, ptr::null(), false);
@@ -678,7 +662,7 @@ fn StartRootContainer(_para: *const u8) -> ! {
         match LOADER.LoadRootProcess(&mut processArgs) {
             Err(e) => {
                 error!(
-                    "load root process failure with error {:?}, shutting down...",
+                    "load root process failed with error:{:?}, shutting down...",
                     e
                 );
                 SHARESPACE.StoreShutdown();
@@ -693,7 +677,7 @@ fn StartRootContainer(_para: *const u8) -> ! {
     let currTask = Task::Current();
     currTask.AccountTaskEnter(SchedState::RunningApp);
     debug!(
-        "enter user, entry: {:x}, userStackAddr: {:x}, kernelStackAddr: {:x}",
+        "enter user, entry: {:#x}, userStackAddr: {:#x}, kernelStackAddr: {:#x}",
         entry, userStackAddr, kernelStackAddr
     );
     EnterUser(entry, userStackAddr, kernelStackAddr);
@@ -704,11 +688,6 @@ fn panic(info: &PanicInfo) -> ! {
     // bug https://github.com/QuarkContainer/Quark/issues/26.
     // todo: enable this after the issue is fixed
     //print!("get panic: {:?}", info);
-
-    /*backtracer::trace(|frame| {
-        print!("panic frame is {:#x?}", frame);
-        true
-    });*/
 
     print!("get panic : {:?}", info.message());
     if let Some(location) = info.location() {
@@ -731,16 +710,6 @@ fn panic(info: &PanicInfo) -> ! {
         },
     );
 
-    /*for i in 0..CPU_LOCAL.len() {
-        error!("CPU  #{} is {:#x?}", i, CPU_LOCAL[i]);
-    }*/
-
-    /*backtracer::trace(&mut |frame| {
-        print!("panic frame is {:#x?}", frame);
-        true
-    });*/
-
-    //self::Kernel::HostSpace::Panic(&format!("get panic: {:?}", info));
     self::Kernel::HostSpace::Panic("get panic ...");
     loop {}
 }
