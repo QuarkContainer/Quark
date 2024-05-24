@@ -68,15 +68,15 @@ qvisor_cuda_debug:
 	make -C ./qvisor cuda_debug
 
 install:
-	-sudo cp -f $(QKERNEL_RELEASE) $(QBIN_DIR)/
-	-sudo cp -f $(QUARK_RELEASE) $(QBIN_DIR)/quark
-	-sudo cp -f $(QUARK_RELEASE) $(QBIN_DIR)/containerd-shim-quark-v1
-	-sudo cp -f $(QKERNEL_DEBUG) $(QBIN_DIR)/
-	-sudo cp -f $(QUARK_DEBUG) $(QBIN_DIR)/quark_d
-	-sudo cp -f $(QUARK_DEBUG) $(QBIN_DIR)/containerd-shim-quarkd-v1
-	sudo cp -f $(VDSO) $(QBIN_DIR)/vdso.so
-	sudo mkdir -p $(QCONFIG_DIR)
-	sudo cp -f config.json $(QCONFIG_DIR)
+	-cp -f $(QKERNEL_RELEASE) $(QBIN_DIR)/
+	-cp -f $(QUARK_RELEASE) $(QBIN_DIR)/quark
+	-cp -f $(QUARK_RELEASE) $(QBIN_DIR)/containerd-shim-quark-v1
+	-cp -f $(QKERNEL_DEBUG) $(QBIN_DIR)/
+	-cp -f $(QUARK_DEBUG) $(QBIN_DIR)/quark_d
+	-cp -f $(QUARK_DEBUG) $(QBIN_DIR)/containerd-shim-quarkd-v1
+	cp -f $(VDSO) $(QBIN_DIR)/vdso.so
+	mkdir -p $(QCONFIG_DIR)
+	cp -f config.json $(QCONFIG_DIR)
 
 cuda_make:
 	make -C cudaproxy release
