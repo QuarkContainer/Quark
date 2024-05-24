@@ -21,6 +21,13 @@ export LD_LIBRARY_PATH="/home/Quark/target/release/:$LD_LIBRARY_PATH"
 ### Preload the library when you run any cuda program
 LD_PRELOAD=/home/Quark/target/release/libcudaproxy.so python3 Quark/test/llama1b.py
 
+## Build Image
+The way I build image on my machine is:
+1. `docker pull chengchen666/cheng_torch:quark_llm`
+2. start docker container `sudo docker run -it --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 chengchen666/cheng_torch:quark_llm bash`
+3. Install dependencies for container, e.g. if the container does not have python package of `ray`, and gives error like `No module named 'ray'`,then do `pip3 install ray`
+4. If docker can run you program, then save the container as image. `docker commit <container_id> <image>`
+5. `docker image ls` to check your image if its saved, then use quark to open your image, as below
 
 ## End-to-End run quark
 1. Pull docker image, which with torch and dependencies installed: `docker pull chengchen666/cheng_torch:quark_llm`
