@@ -19,17 +19,9 @@
 #![allow(non_camel_case_types)]
 #![allow(deprecated)]
 #![allow(dead_code)]
-//#![feature(asm)]
 #![recursion_limit = "256"]
 #![feature(unix_socket_ancillary_data)]
 #![allow(invalid_reference_casting)]
-/***
-warning: `extern` block uses type `rcublas_sys::cudaMemLocationType`, which is not FFI-safe
-  --> src/vmspace/nvidia.rs:70:92
-   |
-70 |     pub fn cudaMemAdvise_v2(devPtr: u64, count: usize, advice: cudaMemoryAdvise, location: cudaMemLocation) -> cudaError_t;
-   |                                                                                            ^^^^^^^^^^^^^^^ not FFI-safe
-***/
 #![allow(improper_ctypes_definitions)]
 #![allow(improper_ctypes)]
 
@@ -108,7 +100,6 @@ use self::vmspace::host_pma_keeper::*;
 use self::vmspace::hostfdnotifier::*;
 use self::vmspace::kernel_io_thread::*;
 use crate::qlib::linux_def::MemoryDef;
-//use crate::qlib::mem::bitmap_allocator::BitmapAllocatorWrapper;
 
 use self::vmspace::uringMgr::*;
 use crate::kvm_vcpu::KVMVcpu;
@@ -175,9 +166,7 @@ pub fn InitSingleton() {
     self::qlib::InitSingleton();
 }
 
-//pub static ALLOCATOR: HostAllocator = HostAllocator::New();
 #[global_allocator]
-//pub static GLOBAL_ALLOCATOR: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 fn main() {
@@ -198,14 +187,14 @@ fn main() {
 
     let shimMode = QUARK_CONFIG.lock().ShimMode;
     if shimMode == true && &cmd != "boot" {
-        error!("*********shim mode***************");
+        error!("***************shim mode***************");
         containerd_shim::run::<Service>("io.containerd.empty.v1", None)
     } else {
         let mut args = match Parse() {
             Ok(args) => args,
             Err(e) => {
                 error!("the parse error is {:?}", e);
-                panic!("exitting...")
+                panic!("exiting...")
             }
         };
         match Run(&mut args) {

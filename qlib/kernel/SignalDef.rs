@@ -215,7 +215,6 @@ pub struct SignalInfo {
     pub Code: i32,
     // Signal code
     pub _r: u32,
-
     pub fields: [u8; 128 - 16],
 }
 
@@ -459,7 +458,7 @@ pub struct SigContext {
 	pub sp: u64,
 	pub pc: u64,
 	pub pstate: u64,
-    pub oldmask: u64, /* should we do it here? */
+        pub oldmask: u64, /* should we do it here? */
 	/* 4K reserved for FP/SIMD state and future expansion */
 	pub __reserved: [u8; 4096],
 }

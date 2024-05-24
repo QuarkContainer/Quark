@@ -136,7 +136,6 @@ impl CounterSet {
 
 #[inline]
 pub fn switch(from: TaskId, to: TaskId) {
-    //Task::Current().PerfGoto(PerfType::Blocked);
     Task::Current().AccountTaskEnter(SchedState::Blocked);
 
     CPULocal::SetCurrentTask(to.Addr());
@@ -151,15 +150,10 @@ pub fn switch(from: TaskId, to: TaskId) {
     fromCtx.mm.VcpuLeave();
     toCtx.mm.VcpuEnter();
 
-    //fromCtx.Check();
-    //toCtx.Check();
-    //debug!("switch {:x}->{:x}", from.data, to.data);
-
     unsafe {
         context_swap(fromCtx.GetContext(), toCtx.GetContext(), 1, 0);
     }
 
-    //Task::Current().PerfGofrom(PerfType::Blocked);
     Task::Current().AccountTaskLeave(SchedState::Blocked);
 }
 
@@ -325,7 +319,6 @@ pub fn child_clone(userSp: u64) {
 
     let kernelRsp = pt as *const _ as u64;
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
-    //currTask.mm.VcpuEnter();
     CPULocal::Myself().SetMode(VcpuMode::User);
     currTask.mm.HandleTlbShootdown();
     debug!("entering child task: kernelSp/PtRegs @ {:x}", kernelRsp);
@@ -381,7 +374,6 @@ unsafe impl GlobalAlloc for HostAllocator {
         if !Self::IsIOBuf(addr) {
             self.Allocator().dealloc(ptr, layout);
         } else {
-            //self.Allocator().dealloc(ptr, layout);
             self.IOAllocator().dealloc(ptr, layout);
         }
     }
