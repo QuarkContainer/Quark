@@ -28,6 +28,7 @@ use super::qlib::kernel::asm::*;
 use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 use super::qlib::kernel::taskMgr::*;
 use super::qlib::kernel::threadmgr::task_sched::*;
+#[cfg(not(feature = "cc"))]
 use super::qlib::kernel::vcpu::*;
 use super::qlib::kernel::SHARESPACE;
 use super::qlib::kernel::TSC;
@@ -52,6 +53,9 @@ use super::Kernel::HostSpace;
 
 
 use crate::GLOBAL_ALLOCATOR;
+
+#[cfg(feature = "cc")]
+use crate::PRIVATE_VCPU_ALLOCATOR;
 
 impl OOMHandler for ListAllocator {
     fn handleError(&self, size: u64, alignment: u64) {
@@ -357,6 +361,17 @@ impl BitmapAllocatorWrapper {
 
 impl HostAllocator {
     pub const fn New() -> Self {
+        #[cfg(feature = "cc")]
+        return Self {
+            ioHeapAddr: AtomicU64::new(0),
+            guestPrivHeapAddr: AtomicU64::new(0),
+            hostInitHeapAddr: AtomicU64::new(0),
+            sharedHeapAddr: AtomicU64::new(0),
+            vmLaunched: AtomicBool::new(true),
+            initialized: AtomicBool::new(true),
+        };
+
+        #[cfg(not(feature = "cc"))]
         return Self {
             listHeapAddr: AtomicU64::new(0),
             ioHeapAddr: AtomicU64::new(0),
@@ -364,12 +379,34 @@ impl HostAllocator {
         };
     }
 
+    #[cfg(feature = "cc")]
+    pub fn InitPrivateAllocator(&self) {
+        self.guestPrivHeapAddr.store(MemoryDef::GUEST_PRIVATE_HEAP_OFFSET, Ordering::SeqCst);
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn InitSharedAllocator(&self) {
+        self.sharedHeapAddr.store(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET, Ordering::SeqCst);
+
+        let sharedHeapStart = self.sharedHeapAddr.load(Ordering::Relaxed);
+        let shaedHeapEnd = sharedHeapStart + MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as u64;
+        *self.GuestHostSharedAllocator() = ListAllocator::New(sharedHeapStart as _, shaedHeapEnd);
+
+
+        // reserve 4 pages for the listAllocator and share para page
+        let size = 4 * MemoryDef::PAGE_SIZE as usize;
+        self.GuestHostSharedAllocator().Add(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET as usize + size,
+            MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as usize - size);
+    }
+
+    #[cfg(not(feature = "cc"))]
     pub fn Init(&self, heapAddr: u64) {
         self.listHeapAddr.store(heapAddr, Ordering::SeqCst);
         self.ioHeapAddr.store(heapAddr + MemoryDef::HEAP_SIZE, Ordering::SeqCst)
     }
 }
 
+#[cfg(not(feature = "cc"))]
 unsafe impl GlobalAlloc for HostAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         return self.Allocator().alloc(layout);
@@ -382,6 +419,24 @@ unsafe impl GlobalAlloc for HostAllocator {
             self.Allocator().dealloc(ptr, layout);
         } else {
             //self.Allocator().dealloc(ptr, layout);
+            self.IOAllocator().dealloc(ptr, layout);
+        }
+    }
+}
+
+#[cfg(feature = "cc")]
+unsafe impl GlobalAlloc for HostAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        return self.GuestPrivateAllocator().alloc(layout);
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        let addr = ptr as u64;
+        if Self::IsGuestPrivateHeapAddr(addr) {
+            self.GuestPrivateAllocator().dealloc(ptr, layout);
+        } else if Self::IsSharedHeapAddr(addr) {
+            self.GuestHostSharedAllocator().dealloc(ptr, layout);
+        } else if Self::IsIOBuf(addr) {
             self.IOAllocator().dealloc(ptr, layout);
         }
     }
@@ -407,6 +462,7 @@ impl IOMgr {
     }
 }
 
+#[cfg(not(feature = "cc"))]
 unsafe impl GlobalAlloc for GlobalVcpuAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         if !self.init.load(Ordering::Acquire) {
@@ -426,6 +482,28 @@ unsafe impl GlobalAlloc for GlobalVcpuAllocator {
         return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout);
     }
 }
+
+#[cfg(feature = "cc")]
+unsafe impl GlobalAlloc for GlobalVcpuAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if !self.init.load(Ordering::Acquire) {
+            return GLOBAL_ALLOCATOR.alloc(layout);
+        }
+        return PRIVATE_VCPU_ALLOCATOR.AllocatorMut().alloc(layout);
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if !HostAllocator::IsHeapAddr(ptr as u64) {
+            return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
+        }
+
+        if !self.init.load(Ordering::Relaxed) {
+            return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
+        }
+        return PRIVATE_VCPU_ALLOCATOR.AllocatorMut().dealloc(ptr, layout);
+    }
+}
+
 
 impl UringAsyncMgr {
     pub fn FreeSlot(&self, id: usize) {

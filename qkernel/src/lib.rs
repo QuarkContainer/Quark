@@ -113,6 +113,11 @@ use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
 
+#[cfg(feature = "cc")]
+use self::qlib::mem::cc_allocator::*;
+#[cfg(feature = "cc")]
+use alloc::boxed::Box;
+
 #[macro_use]
 mod print;
 
@@ -133,8 +138,18 @@ pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 //pub static GLOBAL_ALLOCATOR: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
 
+#[cfg(feature = "cc")]
+pub static  IS_GUEST: bool = true;
+#[cfg(feature = "cc")]
+pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
+
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
+}
+
+#[cfg(feature = "cc")]
+lazy_static! {
+    pub static ref PRIVATE_VCPU_ALLOCATOR: Box<PrivateVcpuAllocators> = Box::new(PrivateVcpuAllocators::New());
 }
 
 pub fn AllocIOBuf(size: usize) -> *mut u8 {
@@ -573,7 +588,12 @@ pub extern "C" fn rust_main(
 ) {
     self::qlib::kernel::asm::fninit();
     if id == 0 {
+        #[cfg(not(feature = "cc"))]
         GLOBAL_ALLOCATOR.Init(heapStart);
+        #[cfg(feature = "cc")]
+        GLOBAL_ALLOCATOR.InitSharedAllocator();
+        #[cfg(feature = "cc")]
+        GLOBAL_ALLOCATOR.InitPrivateAllocator();
         SHARESPACE.SetValue(shareSpaceAddr);
         SingletonInit();
         debug!("init singleton finished");

@@ -3058,6 +3058,19 @@ impl MemoryDef {
     pub const HYPERCALL_MMIO_SIZE: u64 = Self::PAGE_SIZE;
 }
 
+#[cfg(feature = "cc")]
+impl MemoryDef {
+    pub const HOST_INIT_HEAP_OFFSET: u64 = Self::IO_HEAP_END;
+    pub const HOST_INIT_HEAP_SIZE: u64 = 1 * Self::ONE_GB;
+    pub const HOST_INIT_HEAP_END: u64 = Self::HOST_INIT_HEAP_OFFSET + Self::HOST_INIT_HEAP_SIZE;
+    pub const GUEST_PRIVATE_HEAP_OFFSET: u64 = Self::HEAP_OFFSET;
+    pub const GUEST_PRIVATE_HEAP_SIZE: u64 = 5 * Self::ONE_GB;
+    pub const GUEST_PRIVATE_HEAP_END: u64 = Self::GUEST_PRIVATE_HEAP_OFFSET + Self::GUEST_PRIVATE_HEAP_SIZE;
+    pub const GUEST_HOST_SHARED_HEAP_OFFSET: u64 = Self::GUEST_PRIVATE_HEAP_END;
+    pub const GUEST_HOST_SHARED_HEAP_SIZE: u64 = 5 * Self::ONE_GB;
+    pub const GUEST_HOST_SHARED_HEAP_END: u64 = Self::GUEST_HOST_SHARED_HEAP_OFFSET + Self::GUEST_HOST_SHARED_HEAP_SIZE;
+}
+
 //mmap prot
 pub struct MmapProt {}
 

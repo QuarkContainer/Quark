@@ -1631,12 +1631,29 @@ impl AlignedAllocator {
         };
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn Allocate(&self) -> Result<u64> {
         let layout = Layout::from_size_align(self.size, self.align);
         match layout {
             Err(_e) => Err(Error::UnallignedAddress(format!("Allocate {:?}", self))),
             Ok(l) => unsafe {
                 let addr = alloc(l);
+                Ok(addr as u64)
+            },
+        }
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn Allocate(&self) -> Result<u64> {
+        let layout = Layout::from_size_align(self.size, self.align);
+        match layout {
+            Err(_e) => Err(Error::UnallignedAddress(format!("Allocate {:?}", self))),
+            Ok(l) => unsafe {
+                let addr = if crate::IS_GUEST{
+                    alloc(l)
+                } else {
+                    crate::GLOBAL_ALLOCATOR.AllocGuestPrivatMem(self.size, self.align)
+                };
                 Ok(addr as u64)
             },
         }
