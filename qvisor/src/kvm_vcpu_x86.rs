@@ -406,6 +406,36 @@ impl KVMVcpu {
                         qlib::HYPERCALL_RELEASE_VCPU => {
                             SyncMgr::WakeShareSpaceReady();
                         }
+                        #[cfg(feature = "cc")]
+                        qlib::HYPERCALL_SHARESPACE_INIT => {
+                            GLOBAL_ALLOCATOR.vmLaunched.store(true, Ordering::SeqCst);
+                            let controlSock;
+                            let vcpuCount;
+                            let rdmaSvcCliSock;
+                            let podId;
+                            {
+                                let mut vms = VMS.lock();
+
+                                let spec = vms.args.as_mut().unwrap().Spec.Copy();
+                                vms.args.as_mut().unwrap().Spec =spec;
+                                controlSock  = vms.controlSock;
+                                vcpuCount = vms.vcpuCount;
+                                rdmaSvcCliSock = vms.rdmaSvcCliSock;
+                                podId = vms.podId;
+                            }
+
+                            let shareSpaceAddr = para1 as *mut ShareSpace;
+                            let sharedSpace  = unsafe { &mut (*shareSpaceAddr) };
+
+                            VirtualMachine::InitShareSpace_cc(
+                                sharedSpace,
+                                vcpuCount,
+                                controlSock,
+                                rdmaSvcCliSock,
+                                podId,
+                            );
+                            debug!("VM EXIT HYPERCALL_SHARESPACE_INIT finished");
+                        }
                         qlib::HYPERCALL_EXIT_VM => {
                             let exitCode = para1 as i32;
 

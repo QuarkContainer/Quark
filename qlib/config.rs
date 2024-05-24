@@ -146,5 +146,6 @@ pub enum CudaMemType {
 pub enum CCMode {
     None,
     Normal,
-    SevSnp
+    SevSnp,
+    Max
 }

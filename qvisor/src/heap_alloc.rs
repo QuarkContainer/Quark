@@ -232,6 +232,19 @@ impl HostAllocator {
         //return self.Allocator().Free();
         return false;
     }
+
+    #[cfg(feature = "cc")]
+    pub fn InitSharedAllocator(&self) {
+        let sharedHeapStart = self.sharedHeapAddr.load(Ordering::Relaxed);
+        let shaedHeapEnd = sharedHeapStart + MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as u64;
+        *self.GuestHostSharedAllocator() = ListAllocator::New(sharedHeapStart as _, shaedHeapEnd);
+
+
+        // reserve 4 pages for the listAllocator and share para page
+        let size = 4 * MemoryDef::PAGE_SIZE as usize;
+        self.GuestHostSharedAllocator().Add(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET as usize + size,
+            MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as usize - size);
+    }
 }
 
 #[cfg(not(feature = "cc"))]

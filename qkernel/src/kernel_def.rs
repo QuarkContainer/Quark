@@ -387,7 +387,10 @@ impl HostAllocator {
     #[cfg(feature = "cc")]
     pub fn InitSharedAllocator(&self) {
         self.sharedHeapAddr.store(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET, Ordering::SeqCst);
+    }
 
+    #[cfg(feature = "cc")]
+    pub fn InitSharedAllocator_cc(&self) {
         let sharedHeapStart = self.sharedHeapAddr.load(Ordering::Relaxed);
         let shaedHeapEnd = sharedHeapStart + MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as u64;
         *self.GuestHostSharedAllocator() = ListAllocator::New(sharedHeapStart as _, shaedHeapEnd);

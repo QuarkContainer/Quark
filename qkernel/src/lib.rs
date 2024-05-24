@@ -62,6 +62,8 @@ use taskMgr::{CreateTask, IOWait, WaitFn};
 use vcpu::CPU_LOCAL;
 
 use crate::qlib::kernel::GlobalIOMgr;
+#[cfg(feature = "cc")]
+use crate::qlib::ShareSpace;
 
 //use self::qlib::buddyallocator::*;
 use self::asm::*;
@@ -87,6 +89,8 @@ use self::qlib::kernel::memmgr;
 use self::qlib::kernel::perflog;
 use self::qlib::kernel::quring;
 use self::qlib::kernel::Kernel;
+#[cfg (feature = "cc")]
+use self::qlib::kernel::Kernel::ENABLE_CC;
 use self::qlib::kernel::*;
 use self::qlib::{ShareSpaceRef, SysCallID};
 //use self::vcpu::*;
@@ -588,15 +592,34 @@ pub extern "C" fn rust_main(
 ) {
     self::qlib::kernel::asm::fninit();
     if id == 0 {
+        //if in any cc machine, shareSpaceAddr is reused as CCMode
+        #[cfg(feature = "cc")]
+        {
+            GLOBAL_ALLOCATOR.InitPrivateAllocator();
+            GLOBAL_ALLOCATOR.InitSharedAllocator();
+            if shareSpaceAddr < (CCMode::Max as u64) {
+                ENABLE_CC.store(true, Ordering::Release);
+                GLOBAL_ALLOCATOR.InitSharedAllocator_cc();
+                let size = core::mem::size_of::<ShareSpace>();
+                let shared_space = unsafe {
+                    GLOBAL_ALLOCATOR.AllocSharedBuf(size, 2)
+                };
+                HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
+                SHARESPACE.SetValue(shared_space as u64);
+            } else {
+                SHARESPACE.SetValue(shareSpaceAddr);
+            }
+        }
         #[cfg(not(feature = "cc"))]
-        GLOBAL_ALLOCATOR.Init(heapStart);
-        #[cfg(feature = "cc")]
-        GLOBAL_ALLOCATOR.InitSharedAllocator();
-        #[cfg(feature = "cc")]
-        GLOBAL_ALLOCATOR.InitPrivateAllocator();
-        SHARESPACE.SetValue(shareSpaceAddr);
+        {
+            GLOBAL_ALLOCATOR.Init(heapStart);
+            SHARESPACE.SetValue(shareSpaceAddr);
+        }
         SingletonInit();
         debug!("init singleton finished");
+        SetVCPCount(vcpuCnt as usize);
+        #[cfg(feature = "cc")]
+        VCPU_ALLOCATOR.Print();
         VCPU_ALLOCATOR.Initializated();
         InitTsc();
         InitTimeKeeper(vdsoParamAddr);
@@ -612,7 +635,6 @@ pub extern "C" fn rust_main(
         debug!("init vsyscall finished");
         GlobalIOMgr().InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
         debug!("init host epoll fd finished");
-        SetVCPCount(vcpuCnt as usize);
         VDSO.Initialization(vdsoParamAddr);
         debug!("init vdso finished");
 
