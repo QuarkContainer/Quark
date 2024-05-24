@@ -166,13 +166,15 @@ impl VirtualMachine {
         );
     }
 
+    pub const QUARK_BIN_DIR: &'static str = match option_env!("QBIN_DIR") {
+        Some(s) => s,
+        None => "/usr/local/bin"
+    };
+    pub const VDSO_PATH: &'static str = concatcp!(VirtualMachine::QUARK_BIN_DIR, "/vdso.so");
     #[cfg(debug_assertions)]
-    pub const KERNEL_IMAGE: &'static str = "/usr/local/bin/qkernel_d.bin";
-
+    pub const KERNEL_IMAGE: &'static str = concatcp!(VirtualMachine::QUARK_BIN_DIR, "/qkernel_d.bin");
     #[cfg(not(debug_assertions))]
-    pub const KERNEL_IMAGE: &'static str = "/usr/local/bin/qkernel.bin";
-
-    pub const VDSO_PATH: &'static str = "/usr/local/bin/vdso.so";
+    pub const KERNEL_IMAGE: &'static str = concatcp!(VirtualMachine::QUARK_BIN_DIR, "/qkernel.bin");
 
     pub fn InitShareSpace(
         cpuCount: usize,
