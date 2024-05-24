@@ -140,11 +140,11 @@ pub fn NvidiaProxy(
         ProxyCommand::CudaRegisterFatBinary |
         ProxyCommand::CudaRegisterFunction |
         ProxyCommand::CudaRegisterVar |
-        ProxyCommand::CudaUnregisterFatBinary => {
+        ProxyCommand::CudaUnregisterFatBinary => (),
+        _ => {
             let err = unsafe { cudaGetLastError() };
             result.lasterr = err as u32;
-            }
-        _ => (),
+        }
     } 
 
     return Ok(result.ToU64() as i64);
@@ -375,7 +375,7 @@ pub fn Execute(
             return Ok(ret as u32);
         }
         ProxyCommand::CudaSetDevice => {
-            //error!("nvidia.rs: cudaSetDevice {}",parameters.para1 as i32);
+            // error!("nvidia.rs: cudaSetDevice {}",parameters.para1 as i32);
             let ret = unsafe { cudaSetDevice(parameters.para1 as i32) };
             if ret as u32 != 0 {
                 error!("nvidia.rs: error caused by cudaSetDevice: {}", ret as u32);
@@ -490,17 +490,11 @@ pub fn Execute(
         }
         ProxyCommand::CudaGetErrorString => {
             //error!("nvidia.rs: cudaGetErrorString");
-            let ret = unsafe {
-                cudaGetErrorString(*(&parameters.para1 as *const _ as u64 as *mut cudaError_t))
+            let ptr = unsafe {
+                cudaGetErrorString(parameters.para1 as u32)
             };
-            if ret as u32 != 0 {
-                error!(
-                    "nvidia.rs: error caused by cudaGetErrorString: {}",
-                    ret as u32
-                );
-            }
 
-            let cStr = unsafe { std::ffi::CStr::from_ptr(ret) };
+            let cStr = unsafe { std::ffi::CStr::from_ptr(ptr) };
             let errorStr = cStr.to_str().expect("Invalid UTF-8 data");
             let errorString = errorStr.to_string();
             unsafe { *(parameters.para2 as *mut String) = errorString };
@@ -508,17 +502,11 @@ pub fn Execute(
         }
         ProxyCommand::CudaGetErrorName => {
             //error!("nvidia.rs: cudaGetErrorName");
-            let ret = unsafe {
-                cudaGetErrorName(*(&parameters.para1 as *const _ as u64 as *mut cudaError_t))
+            let ptr = unsafe {
+                cudaGetErrorName(parameters.para1 as u32)
             };
-            if ret as u32 != 0 {
-                error!(
-                    "nvidia.rs: error caused by cudaGetErrorName: {}",
-                    ret as u32
-                );
-            }
 
-            let cStr = unsafe { std::ffi::CStr::from_ptr(ret) };
+            let cStr = unsafe { std::ffi::CStr::from_ptr(ptr) };
             let errorStr = cStr.to_str().expect("Invalid UTF-8 data");
             let errorString = errorStr.to_string();
             unsafe { *(parameters.para2 as *mut String) = errorString };
@@ -608,12 +596,14 @@ pub fn Execute(
         }
         ProxyCommand::CudaFree => {
             //error!("nvidia.rs: cudaFree");
-            let memRecorder = MEM_RECORDER.lock();
-            let index = memRecorder
-                .iter()
-                .position(|&r| r.0 == parameters.para1 as u64)
-                .unwrap();
-            MEM_RECORDER.lock().remove(index);
+            if QUARK_CONFIG.lock().CudaMemType == CudaMemType::UM {
+                let memRecorder = MEM_RECORDER.lock();
+                let index = memRecorder
+                    .iter()
+                    .position(|&r| r.0 == parameters.para1 as u64)
+                    .unwrap();
+                MEM_RECORDER.lock().remove(index);
+            }
 
             let ret = unsafe { cudaFree(parameters.para1 as *mut c_void) };
             if ret as u32 != 0 {
@@ -629,7 +619,7 @@ pub fn Execute(
             return CudaMemcpyAsync(parameters);
         }
         ProxyCommand::CudaRegisterFatBinary => {
-            //error!("nvidia.rs: cudaRegisterFatBinary");
+            // error!("nvidia.rs: cudaRegisterFatBinary");
             let bytes = unsafe {
                 std::slice::from_raw_parts(parameters.para4 as *const _, parameters.para5 as usize)
             };
@@ -657,6 +647,7 @@ pub fn Execute(
                     parameters.para2 as *const c_void,
                 )
             };
+            // TODO: try this https://developer.nvidia.com/blog/cuda-context-independent-module-loading/
             if ret as u32 != 0 {
                 error!(
                     "nvidia.rs: error caused by CudaRegisterFatBinary(cuModuleLoadData): {}",
