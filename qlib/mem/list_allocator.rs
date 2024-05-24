@@ -23,7 +23,10 @@ use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
 
 use super::super::super::kernel_def::VcpuId;
+#[cfg(not(feature = "cc"))]
 use super::super::kernel::vcpu::CPU_LOCAL;
+#[cfg(feature = "cc")]
+use crate::PRIVATE_VCPU_ALLOCATOR;
 use super::super::linux_def::*;
 use super::super::mutex::*;
 use super::super::pagetable::AlignedAllocator;
@@ -73,12 +76,18 @@ impl GlobalVcpuAllocator {
         };
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn Print(&self) {
-        error!(
-            "GlobalVcpuAllocator {}/{}",
-            VcpuId(),
-            unsafe { (*CPU_LOCAL[VcpuId()].allocator.get()).bufs.len()}
-        )
+        error!("GlobalVcpuAllocator {}/{}", VcpuId(), unsafe {
+            (*CPU_LOCAL[VcpuId()].allocator.get()).bufs.len()
+        })
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn Print(&self) {
+        error!("GlobalVcpuAllocator {}/{}", VcpuId(), unsafe {
+            (*PRIVATE_VCPU_ALLOCATOR.allocators[VcpuId()].get()).bufs.len()
+        })
     }
 
     pub fn Initializated(&self) {
@@ -245,7 +254,18 @@ impl VcpuAllocator {
     }
 }
 
+#[cfg(feature = "cc")]
 #[derive(Debug, Default)]
+pub struct HostAllocator {
+    pub ioHeapAddr: AtomicU64,
+    pub hostInitHeapAddr: AtomicU64,
+    pub guestPrivHeapAddr: AtomicU64,
+    pub sharedHeapAddr: AtomicU64,
+    pub vmLaunched: AtomicBool,
+    pub initialized: AtomicBool,
+}
+
+#[cfg(not(feature = "cc"))]
 pub struct HostAllocator {
     pub listHeapAddr: AtomicU64,
     pub ioHeapAddr: AtomicU64,
@@ -253,6 +273,7 @@ pub struct HostAllocator {
 }
 
 impl HostAllocator {
+    #[cfg(not(feature = "cc"))]
     pub fn Allocator(&self) -> &mut ListAllocator {
         return unsafe { &mut *(self.listHeapAddr.load(Ordering::SeqCst) as *mut ListAllocator) };
     }
@@ -269,6 +290,7 @@ impl HostAllocator {
         return MemoryDef::HEAP_END <= addr && addr < MemoryDef::HEAP_END + MemoryDef::IO_HEAP_SIZE;
     }
 
+    #[cfg(not(feature = "cc"))]
     #[inline]
     pub fn HeapRange(&self) -> (u64, u64) {
         let allocator = self.Allocator();
@@ -283,6 +305,31 @@ impl HostAllocator {
 
     unsafe fn DeallocIOBuf(&self, ptr: *mut u8, layout: Layout) {
         self.IOAllocator().dealloc(ptr, layout);
+    }
+
+    #[cfg(feature = "cc")]
+    // should be called by host
+    pub unsafe fn AllocGuestPrivatMem(&self, size: usize, align: usize) -> *mut u8 {
+        let layout = Layout::from_size_align(size, align)
+            .expect("AllocGuestPrivatMem can't allocate memory");
+        let ptr = self.GuestPrivateAllocator().alloc(layout);
+        return ptr;
+    }
+
+    #[cfg(feature = "cc")]
+    pub unsafe fn AllocSharedBuf(&self, size: usize, align: usize) -> *mut u8 {
+        let layout =
+            Layout::from_size_align(size, align).expect("AllocSharedBuf can't allocate memory");
+
+        return self.GuestHostSharedAllocator().alloc(layout);
+    }
+
+    #[cfg(feature = "cc")]
+    pub unsafe fn DeallocShareBuf(&self, ptr: *mut u8, size: usize, align: usize) {
+        let layout =
+            Layout::from_size_align(size, align).expect("DeallocShareBuf can't dealloc memory");
+
+        return self.GuestHostSharedAllocator().dealloc(ptr, layout);
     }
 }
 

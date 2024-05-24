@@ -51,6 +51,7 @@ impl BitmapAllocatorWrapper {
 }
 
 impl HostAllocator {
+    #[cfg(not(feature = "cc"))]
     pub const fn New() -> Self {
         return Self {
             listHeapAddr: AtomicU64::new(MemoryDef::HEAP_OFFSET),
@@ -58,7 +59,19 @@ impl HostAllocator {
             initialized: AtomicBool::new(false),
         };
     }
+    #[cfg(feature = "cc")]
+    pub const fn New() -> Self {
+        return Self {
+            ioHeapAddr: AtomicU64::new(MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE),
+            hostInitHeapAddr: AtomicU64::new(MemoryDef::HOST_INIT_HEAP_OFFSET),
+            guestPrivHeapAddr: AtomicU64::new(MemoryDef::GUEST_PRIVATE_HEAP_OFFSET),
+            sharedHeapAddr: AtomicU64::new(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET),
+            vmLaunched: AtomicBool::new(false),
+            initialized: AtomicBool::new(false),
+        };
+    }
 
+    #[cfg(not(feature = "cc"))]
     pub fn Init(&self) {
         let heapSize = MemoryDef::HEAP_SIZE as usize + MemoryDef::IO_HEAP_SIZE as usize;
         let addr = unsafe {
@@ -96,8 +109,122 @@ impl HostAllocator {
 
         // reserve first 4KB gor the listAllocator
         let size = core::mem::size_of::<ListAllocator>();
-        self.Allocator().Add(MemoryDef::HEAP_OFFSET as usize + size, MemoryDef::HEAP_SIZE as usize - size);
-        self.IOAllocator().Add(MemoryDef::HEAP_END as usize + size, MemoryDef::IO_HEAP_SIZE as usize - size);
+        self.Allocator().Add(
+            MemoryDef::HEAP_OFFSET as usize + size,
+            MemoryDef::HEAP_SIZE as usize - size,
+        );
+        self.IOAllocator().Add(
+            MemoryDef::HEAP_END as usize + size,
+            MemoryDef::IO_HEAP_SIZE as usize - size,
+        );
+        self.initialized.store(true, Ordering::SeqCst);
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn Init(&self) {
+        let guestPrivHeapAddr = unsafe {
+            let mut flags = libc::MAP_SHARED | libc::MAP_ANON | libc::MAP_FIXED;
+            if ENABLE_HUGEPAGE {
+                flags |= libc::MAP_HUGE_2MB;
+            }
+            libc::mmap(
+                self.guestPrivHeapAddr.load(Ordering::Relaxed) as _,
+                MemoryDef::GUEST_PRIVATE_HEAP_SIZE as usize,
+                libc::PROT_READ | libc::PROT_WRITE,
+                flags,
+                -1,
+                0,
+            ) as u64
+        };
+
+        if guestPrivHeapAddr == libc::MAP_FAILED as u64 {
+            panic!("mmap: failed to get mapped memory area for guest private heap");
+        }
+
+        assert!(
+            self.guestPrivHeapAddr.load(Ordering::Relaxed) == guestPrivHeapAddr,
+            "guestPrivHeapAddr expected address is {:x}, mmap address is {:x}",
+            self.guestPrivHeapAddr.load(Ordering::Relaxed),
+            guestPrivHeapAddr
+        );
+
+        let sharedHeapAddr = unsafe {
+            let mut flags = libc::MAP_SHARED | libc::MAP_ANON | libc::MAP_FIXED;
+            if ENABLE_HUGEPAGE {
+                flags |= libc::MAP_HUGE_2MB;
+            }
+            libc::mmap(
+                self.sharedHeapAddr.load(Ordering::Relaxed) as _,
+                (MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE + MemoryDef::IO_HEAP_SIZE) as usize,
+                libc::PROT_READ | libc::PROT_WRITE,
+                flags,
+                -1,
+                0,
+            ) as u64
+        };
+
+        if sharedHeapAddr == libc::MAP_FAILED as u64 {
+            panic!("mmap: failed to get mapped memory area for shared heap");
+        }
+
+        assert!(
+            self.sharedHeapAddr.load(Ordering::Relaxed) == sharedHeapAddr,
+            "sharedHeapAddr expected address is {:x}, mmap address is {:x}",
+            self.sharedHeapAddr.load(Ordering::Relaxed),
+            sharedHeapAddr
+        );
+
+        let hostInitHeapAddr = unsafe {
+            let mut flags = libc::MAP_SHARED | libc::MAP_ANON | libc::MAP_FIXED;
+            if ENABLE_HUGEPAGE {
+                flags |= libc::MAP_HUGE_2MB;
+            }
+            libc::mmap(
+                self.hostInitHeapAddr.load(Ordering::Relaxed) as _,
+                MemoryDef::HOST_INIT_HEAP_SIZE as usize,
+                libc::PROT_READ | libc::PROT_WRITE,
+                flags,
+                -1,
+                0,
+            ) as u64
+        };
+
+        if hostInitHeapAddr == libc::MAP_FAILED as u64 {
+            panic!("mmap: failed to get mapped memory area for shared heap");
+        }
+
+        assert!(
+            self.hostInitHeapAddr.load(Ordering::Relaxed) == hostInitHeapAddr,
+            "hostInitHeapAddr expected address is {:x}, mmap address is {:x}",
+            self.hostInitHeapAddr.load(Ordering::Relaxed),
+            hostInitHeapAddr
+        );
+
+        let guestPrivHeapStart = self.guestPrivHeapAddr.load(Ordering::Relaxed);
+        let guestPrivHeapEnd = guestPrivHeapStart + MemoryDef::GUEST_PRIVATE_HEAP_SIZE as u64;
+        *self.GuestPrivateAllocator() =
+            ListAllocator::New(guestPrivHeapStart as _, guestPrivHeapEnd);
+
+        let hostInitHeapStart = self.hostInitHeapAddr.load(Ordering::Relaxed);
+        let hostInitHeapEnd = hostInitHeapStart + MemoryDef::HOST_INIT_HEAP_SIZE as u64;
+        *self.HostInitAllocator() = ListAllocator::New(hostInitHeapStart as _, hostInitHeapEnd);
+        /*let ioHeapEnd = heapStart + MemoryDef::HEAP_SIZE as u64 + MemoryDef::IO_HEAP_SIZE;
+        *self.IOAllocator() = ListAllocator::New(heapEnd as _, ioHeapEnd);
+        self.IOAllocator().Add(
+            MemoryDef::HEAP_END as usize + size,
+            MemoryDef::IO_HEAP_SIZE as usize - size,
+        );*/
+        //reserve first 4KB gor the listAllocator
+        let size = core::mem::size_of::<ListAllocator>();
+        self.GuestPrivateAllocator().Add(
+            MemoryDef::GUEST_PRIVATE_HEAP_OFFSET as usize + size,
+            MemoryDef::GUEST_PRIVATE_HEAP_SIZE as usize - size,
+        );
+        self.HostInitAllocator().Add(
+            MemoryDef::HOST_INIT_HEAP_OFFSET as usize + size,
+            MemoryDef::HOST_INIT_HEAP_SIZE as usize - size,
+        );
+
         self.initialized.store(true, Ordering::SeqCst);
     }
 
@@ -107,6 +234,7 @@ impl HostAllocator {
     }
 }
 
+#[cfg(not(feature = "cc"))]
 unsafe impl GlobalAlloc for HostAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let initialized = self.initialized.load(Ordering::Relaxed);
@@ -118,12 +246,47 @@ unsafe impl GlobalAlloc for HostAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        
+
         let addr = ptr as u64;
         if !Self::IsIOBuf(addr) {
             self.Allocator().dealloc(ptr, layout);
         } else {
             //self.Allocator().dealloc(ptr, layout);
+            self.IOAllocator().dealloc(ptr, layout);
+        }
+    }
+}
+
+#[cfg(feature = "cc")]
+unsafe impl GlobalAlloc for HostAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let initialized = self.initialized.load(Ordering::Relaxed);
+        if !initialized {
+            self.Init();
+        }
+
+        let is_vm_init = self.vmLaunched.load(Ordering::Relaxed);
+        if !is_vm_init {
+            self.HostInitAllocator().alloc(layout)
+        } else {
+            self.GuestHostSharedAllocator().alloc(layout)
+        }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        let addr = ptr as u64;
+
+        let is_vm_init = self.vmLaunched.load(Ordering::Relaxed);
+        if !is_vm_init && Self::IsGuestPrivateHeapAddr(addr) {
+            self.GuestPrivateAllocator().dealloc(ptr, layout);
+            return
+        }
+
+        if Self::IsSharedHeapAddr(addr) {
+            self.GuestHostSharedAllocator().dealloc(ptr, layout);
+        } else if Self::IsInitHeapAddr(addr) {
+            self.HostInitAllocator().dealloc(ptr, layout);
+        } else if Self::IsIOBuf(addr) {
             self.IOAllocator().dealloc(ptr, layout);
         }
     }

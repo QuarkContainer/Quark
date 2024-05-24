@@ -16,6 +16,7 @@ use super::qlib::ShareSpace;
 use super::vmspace::VMSpace;
 use super::FD_NOTIFIER;
 use super::VMS;
+#[cfg(not(feature = "cc"))]
 use alloc::alloc::alloc;
 use core::alloc::Layout;
 use core::slice;
@@ -286,6 +287,7 @@ impl KVMVcpu {
     }
 }
 
+#[cfg(not(feature = "cc"))]
 pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64> {
     assert!(
         size % 8 == 0,
@@ -300,6 +302,33 @@ pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64>
         ))),
         Ok(l) => unsafe {
             let addr = alloc(l);
+            if zeroData {
+                let arr = slice::from_raw_parts_mut(addr as *mut u64, size / 8);
+                for i in 0..512 {
+                    arr[i] = 0
+                }
+            }
+
+            Ok(addr as u64)
+        },
+    }
+}
+
+#[cfg(feature = "cc")]
+pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64> {
+    assert!(
+        size % 8 == 0,
+        "AlignedAllocate get unaligned size {:x}",
+        size
+    );
+    let layout = Layout::from_size_align(size, align);
+    match layout {
+        Err(_e) => Err(Error::UnallignedAddress(format!(
+            "AlignedAllocate {:?}",
+            align
+        ))),
+        Ok(_) => unsafe {
+            let addr = crate::GLOBAL_ALLOCATOR.AllocGuestPrivatMem(size, align);
             if zeroData {
                 let arr = slice::from_raw_parts_mut(addr as *mut u64, size / 8);
                 for i in 0..512 {
