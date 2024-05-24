@@ -40,7 +40,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         crate::qlib::kernel::threadmgr::task_exit::SYSPROXY_CALL_TIME[commandId as usize]
             .fetch_add(gap as u64, Ordering::SeqCst);
     });
-
     let cmd: ProxyCommand = unsafe { core::mem::transmute(commandId as u64) };
     let mut parameters = ProxyParameters {
         para1: args.arg1,
@@ -277,7 +276,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let ret = HostSpace::Proxy(cmd, parameters);
 
             if ret == 0 {
-                task.CopyOutString(args.arg2, errorString.len(), &errorString)?;
+                task.CopyOutString(args.arg2, errorString.len() + 1, &errorString)?;
             }
             sys_ret = Ok(ret);
         }
@@ -288,7 +287,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let ret = HostSpace::Proxy(cmd, parameters);
 
             if ret == 0 {
-                task.CopyOutString(args.arg2, errorName.len(), &errorName)?;
+                task.CopyOutString(args.arg2, errorName.len() + 1, &errorName)?;
             }
             sys_ret = Ok(ret);
         }
