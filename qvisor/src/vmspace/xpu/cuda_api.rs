@@ -75,7 +75,10 @@ extern "C" {
     pub fn cuMemUnmap(ptr: u64, size: usize) -> CUresult;
     pub fn cuMemRelease(handle: u64) -> CUresult;
     pub fn cuMemAddressFree(ptr: u64, size: usize) -> CUresult;
-
+    pub fn cuDeviceGet(device: *mut CUdevice, ordinal: i32) -> CUresult;
+    pub fn cuCtxSetCurrent(ctx: u64) -> CUresult;
+    pub fn cuDevicePrimaryCtxReset(device: CUdevice) -> CUresult;
+    pub fn cuCtxGetApiVersion(ctx: CUcontext, version:*mut u32) -> CUresult;
 }
 
 #[link(name = "cudart")]
@@ -175,8 +178,8 @@ extern "C" {
         config: cudaSharedMemConfig,
     ) -> cudaError_t;
 
-    pub fn cudaGetErrorString(error: cudaError_t) -> *const c_char;
-    pub fn cudaGetErrorName(error: cudaError_t) -> *const c_char;
+    pub fn cudaGetErrorString(error: u32) -> *const c_char;
+    pub fn cudaGetErrorName(error: u32) -> *const c_char;
     pub fn cudaPeekAtLastError() -> cudaError_t;
     pub fn cudaDeviceSetLimit(limit: cudaLimit, value: usize) -> cudaError_t;
     pub fn cudaDeviceSetSharedMemConfig(config: cudaSharedMemConfig) -> cudaError_t;

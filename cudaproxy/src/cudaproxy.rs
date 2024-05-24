@@ -283,17 +283,23 @@ pub extern "C" fn cudaGetDeviceProperties_v2(prop: u64, device: c_int) -> usize 
 #[no_mangle]
 pub extern "C" fn cudaGetErrorString(error: cudaError_t) -> *const c_char {
     //println!("Hijacked cudaGetErrorString");
-    let errorString: *const c_char = std::ptr::null();
-    cudaSyscall3(SYS_PROXY,ProxyCommand::CudaGetErrorString as usize, error as usize, errorString as *mut c_char as usize);
-    return errorString;
+    let mut errorString:[i8; 128] = [1; 128];
+    cudaSyscall3(SYS_PROXY,ProxyCommand::CudaGetErrorString as usize, error as usize, &mut errorString as *mut _ as usize);
+    let cStr = unsafe { std::ffi::CStr::from_ptr(&errorString as *const c_char) };
+    let errorStr = cStr.to_str().expect("Invalid UTF-8 data");
+    let ptr = errorStr.to_string().as_ptr() as *const i8;
+    return ptr;
 }
 
 #[no_mangle]
 pub extern "C" fn cudaGetErrorName(error: cudaError_t) -> *const c_char{
      //println!("Hijacked cudaGetErrorName");
-    let errorName: *const c_char = std::ptr::null();
-    cudaSyscall3(SYS_PROXY,ProxyCommand::CudaGetErrorName as usize, error as usize, errorName as *mut c_char as usize);
-    return errorName;
+    let mut errorName:[i8; 128] = [1; 128];
+    cudaSyscall3(SYS_PROXY,ProxyCommand::CudaGetErrorName as usize, error as usize, &mut errorName as *mut _ as usize);
+    let cStr = unsafe { std::ffi::CStr::from_ptr(&errorName as *const c_char) };
+    let errorStr = cStr.to_str().expect("Invalid UTF-8 data");
+    let ptr = errorStr.to_string().as_ptr() as *const i8;
+    return ptr;
 }
 
 #[no_mangle]
