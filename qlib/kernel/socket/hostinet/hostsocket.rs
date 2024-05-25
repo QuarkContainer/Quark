@@ -307,6 +307,7 @@ impl FileOperations for HostSocketOperations {
         let hostfd = self.fd;
         match flags as u64 {
             LibcConst::SIOCGIFFLAGS
+            | LibcConst::SIOCGIFADDR
             | LibcConst::SIOCGIFBRDADDR
             | LibcConst::SIOCGIFDSTADDR
             | LibcConst::SIOCGIFHWADDR
