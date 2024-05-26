@@ -15,6 +15,8 @@ use std::ffi::CString;
 use std::mem::transmute;
 use std::os::raw::*;
 use std::ptr;
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32};
+use lazy_static::lazy_static;
 use libc::c_int;
 use libc::dlsym;
 use libelf::raw::*;
@@ -39,6 +41,12 @@ pub const SYS_PROXY: usize = 10003;
 pub static mut DLOPEN_ORIG: Option<unsafe extern "C" fn(*const libc::c_char, libc::c_int) -> *mut libc::c_void> = None;
 pub static mut DLCLOSE_ORIG: Option<unsafe extern "C" fn(*mut libc::c_void) -> libc::c_int> = None;
 pub static mut DL_HANDLE: *mut libc::c_void = ptr::null_mut();
+lazy_static! {
+    static ref IS_GETDEVICE_UPDATED: AtomicBool = AtomicBool::new(false);
+    static ref CURRENT_DEVICE: AtomicI32 = AtomicI32::new(0);
+    static ref LAST_ERROR: AtomicU32 = AtomicU32::new(0);
+}
+// thread_local!(static ERROR_CODE: AtomicU32 = AtomicU32::new(0));
 
 #[no_mangle]
 pub extern "C" fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void {
@@ -130,41 +138,31 @@ pub extern "C" fn dlclose(handle: *mut c_void) -> c_int{
 #[no_mangle]
 pub extern "C" fn cudaChooseDevice(device: *mut c_int, prop: *const cudaDeviceProp) -> usize {
     //println!("Hijacked cudaChooseDevice");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaChooseDevice as usize, device as *mut _ as usize, prop as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaChooseDevice as usize, device as *mut _ as usize, prop as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaDeviceGetAttribute(value: *mut c_int, attr: cudaDeviceAttr, device: c_int) -> usize {
     //println!("Hijacked cudaDeviceGetAttribute");
-    return unsafe {
-        syscall4(SYS_PROXY, ProxyCommand::CudaDeviceGetAttribute as usize, value as *mut _ as usize, attr as usize, device as usize)
-    };
+    return cudaSyscall4(SYS_PROXY, ProxyCommand::CudaDeviceGetAttribute as usize, value as *mut _ as usize, attr as usize, device as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaDeviceGetByPCIBusId(device: *mut c_int, pciBusId: *const c_char) -> usize {
     //println!("Hijacked cudaDeviceGetByPCIBusId");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetByPCIBusId as usize, device as *mut _ as usize, pciBusId as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetByPCIBusId as usize, device as *mut _ as usize, pciBusId as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaDeviceGetCacheConfig(pCacheConfig: *mut cudaFuncCache) -> usize {
     //println!("Hijacked cudaDeviceGetCacheConfig");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaDeviceGetCacheConfig as usize, pCacheConfig as *mut _ as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaDeviceGetCacheConfig as usize, pCacheConfig as *mut _ as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaDeviceGetLimit(pValue: *mut usize, limit: cudaLimit) -> usize {
     //println!("Hijacked cudaDeviceGetLimit");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetLimit as usize, pValue as *mut _ as usize, limit as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetLimit as usize, pValue as *mut _ as usize, limit as usize);
 }
 
 #[no_mangle]
@@ -175,175 +173,145 @@ pub extern "C" fn cudaDeviceGetP2PAttribute(
     dstDevice: c_int,
 ) -> usize {
     //println!("Hijacked cudaDeviceGetP2PAttribute");
-    return unsafe {
-        syscall5(SYS_PROXY,ProxyCommand::CudaDeviceGetP2PAttribute as usize, value as *mut _ as usize,
-            attr as usize, srcDevice as usize, dstDevice as usize)
-    };
+    return cudaSyscall5(SYS_PROXY,ProxyCommand::CudaDeviceGetP2PAttribute as usize, value as *mut _ as usize,
+            attr as usize, srcDevice as usize, dstDevice as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaDeviceGetPCIBusId(pciBusId: *mut c_char, len: c_int, device: c_int) -> usize {
     //println!("Hijacked cudaDeviceGetPCIBusId");
-    return unsafe {
-        syscall4(SYS_PROXY, ProxyCommand::CudaDeviceGetPCIBusId as usize, pciBusId as *const _ as usize, len as usize, device as usize)
-    };
+    return cudaSyscall4(SYS_PROXY, ProxyCommand::CudaDeviceGetPCIBusId as usize, pciBusId as *const _ as usize, len as usize, device as usize);
 }
 
 pub extern "C" fn cudaDeviceGetSharedMemConfig(pConfig: *mut cudaSharedMemConfig) -> usize {
     //println!("Hijacked cudaDeviceGetSharedMemConfig");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaDeviceGetSharedMemConfig as usize, pConfig as *mut _ as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaDeviceGetSharedMemConfig as usize, pConfig as *mut _ as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaDeviceGetStreamPriorityRange(leastPriority: *mut c_int, greatestPriority: *mut c_int) -> usize {
     //println!("Hijacked cudaDeviceGetStreamPriorityRange");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetStreamPriorityRange as usize,
-            leastPriority as *mut _ as usize, greatestPriority as *mut _ as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaDeviceGetStreamPriorityRange as usize,
+            leastPriority as *mut _ as usize, greatestPriority as *mut _ as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaDeviceReset() -> usize {
     //println!("Hijacked cudaDeviceReset()");
-    return unsafe {
-        syscall1(SYS_PROXY, ProxyCommand::CudaDeviceReset as usize)
-    };
+    return cudaSyscall1(SYS_PROXY, ProxyCommand::CudaDeviceReset as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaDeviceSetCacheConfig(cacheConfig: cudaFuncCache) -> usize {
     //println!("Hijacked cudaDeviceSetCacheConfig");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaDeviceSetCacheConfig as usize, cacheConfig as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaDeviceSetCacheConfig as usize, cacheConfig as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaDeviceSetLimit(limit: cudaLimit, value: u64) -> usize {
     //println!("Hijacked cudaDeviceSetLimit");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaDeviceSetLimit as usize, limit as usize, value as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaDeviceSetLimit as usize, limit as usize, value as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaDeviceSetSharedMemConfig(config: cudaSharedMemConfig) -> usize {
     //println!("Hijacked cudaDeviceSetLimit");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaDeviceSetSharedMemConfig as usize, config as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaDeviceSetSharedMemConfig as usize, config as usize);
 
 }
 
 #[no_mangle]
 pub extern "C" fn cudaSetDevice(device: c_int) -> usize {
     //println!("Hijacked1 cudaSetDevice");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaSetDevice as usize, device as usize)
-    };
+    let _ = cudaGetDeviceHelper(true);
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaSetDevice as usize, device as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaSetDeviceFlags(flags: c_uint) -> usize {
     //println!("Hijacked cudaSetDeviceFlags");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaSetDeviceFlags as usize, flags as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaSetDeviceFlags as usize, flags as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaSetValidDevices(device_arr: *mut c_int, len: c_int) -> usize{
     //println!("Hijacked cudaSetValidDevices");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaSetValidDevices as usize, device_arr as *mut _ as usize, len as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaSetValidDevices as usize, device_arr as *mut _ as usize, len as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaDeviceSynchronize() -> usize {
     //println!("Hijacked cudaDeviceSynchronize()");
-    return unsafe {
-        syscall1(SYS_PROXY, ProxyCommand::CudaDeviceSynchronize as usize)
-    };
+    return cudaSyscall1(SYS_PROXY, ProxyCommand::CudaDeviceSynchronize as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaGetDevice(device: *mut c_int) -> usize {
     //println!("Hijacked cudaGetDevice");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaGetDevice as usize, device as *mut _ as usize)
-    };
+    // return unsafe {
+    //     cudaSyscall2(SYS_PROXY, ProxyCommand::CudaGetDevice as usize, device as *mut _ as usize)
+    // };
+    let (devId, ret) = cudaGetDeviceHelper(false);
+    unsafe { *device = devId };
+    return ret;
 }
 
 #[no_mangle]
 pub extern "C" fn cudaGetDeviceCount(count: *mut c_int) -> usize {
     //println!("Hijacked cudaGetDeviceCount");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaGetDeviceCount as usize, count as *mut _ as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaGetDeviceCount as usize, count as *mut _ as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaGetDeviceFlags(flags: *mut c_uint) -> usize{
     //println!("Hijacked cudaGetDeviceFlags");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaGetDeviceFlags as usize, flags as *mut _ as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaGetDeviceFlags as usize, flags as *mut _ as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaGetDeviceProperties(prop: u64, device: c_int) -> usize {
     //println!("Hijacked cudaGetDeviceProperties");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaGetDeviceProperties as usize, prop as usize, device as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaGetDeviceProperties as usize, prop as usize, device as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaGetDeviceProperties_v2(prop: u64, device: c_int) -> usize {
     //println!("Hijacked cudaGetDeviceProperties_v2");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaGetDeviceProperties as usize, prop as usize, device as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaGetDeviceProperties as usize, prop as usize, device as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaGetErrorString(error: cudaError_t) -> *const c_char {
     //println!("Hijacked cudaGetErrorString");
-    let errorString: *const c_char = std::ptr::null();
-    unsafe {
-        syscall3(SYS_PROXY,ProxyCommand::CudaGetErrorString as usize, error as usize, errorString as *mut c_char as usize)
-    };
-    return errorString;
+    let mut errorString:[i8; 128] = [1; 128];
+    cudaSyscall3(SYS_PROXY,ProxyCommand::CudaGetErrorString as usize, error as usize, &mut errorString as *mut _ as usize);
+    let cStr = unsafe { std::ffi::CStr::from_ptr(&errorString as *const c_char) };
+    let errorStr = cStr.to_str().expect("Invalid UTF-8 data");
+    let ptr = errorStr.to_string().as_ptr() as *const i8;
+    return ptr;
 }
 
 #[no_mangle]
 pub extern "C" fn cudaGetErrorName(error: cudaError_t) -> *const c_char{
      //println!("Hijacked cudaGetErrorName");
-    let errorName: *const c_char = std::ptr::null();
-    unsafe {
-        syscall3(SYS_PROXY,ProxyCommand::CudaGetErrorName as usize, error as usize, errorName as *mut c_char as usize)
-    };
-    return errorName;
+    let mut errorName:[i8; 128] = [1; 128];
+    cudaSyscall3(SYS_PROXY,ProxyCommand::CudaGetErrorName as usize, error as usize, &mut errorName as *mut _ as usize);
+    let cStr = unsafe { std::ffi::CStr::from_ptr(&errorName as *const c_char) };
+    let errorStr = cStr.to_str().expect("Invalid UTF-8 data");
+    let ptr = errorStr.to_string().as_ptr() as *const i8;
+    return ptr;
 }
 
 #[no_mangle]
 pub extern "C" fn cudaGetLastError() -> usize {
     //println!("Hijacked cudaGetLastError");
-    return unsafe {
-        syscall1(SYS_PROXY, ProxyCommand::CudaGetLastError as usize) 
-    };
+    return LAST_ERROR.load(std::sync::atomic::Ordering::Relaxed) as usize;
 }
 
 #[no_mangle]
 pub extern "C" fn cudaPeekAtLastError() -> usize {
     //println!("Hijacked cudaPeekAtLastError");
-    return unsafe { 
-        syscall1(SYS_PROXY, ProxyCommand::CudaPeekAtLastError as usize) 
-    };
+    return cudaSyscall1(SYS_PROXY, ProxyCommand::CudaPeekAtLastError as usize);
 }
 
 // we assume all cuda libraries locate in /usr/local/cuda/compat, if its not the case, need modify this
@@ -372,19 +340,15 @@ pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) -> *mut *mut c_v
         panic!("CUDA register an atexit handler for fatbin cleanup, but is failed!");
     }
     // println!("param 4 is {:x}", &ptxlibPath as *const _ as usize);
-    unsafe {
-        syscall5(SYS_PROXY, ProxyCommand::CudaRegisterFatBinary as usize, len, fatCubin.text as *const _ as usize, 
+    cudaSyscall5(SYS_PROXY, ProxyCommand::CudaRegisterFatBinary as usize, len, fatCubin.text as *const _ as usize, 
             result as usize, &(ptxlibPath.as_bytes()[0]) as *const _ as usize);
-    }
     return result;
 }
 
 #[no_mangle]
 pub extern "C" fn __cudaUnregisterFatBinary(fatCubinHandle: u64) {
     //println!("Hijacked __cudaUnregisterFatBinary()");
-    unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaUnregisterFatBinary as usize, fatCubinHandle as usize);
-    }
+    cudaSyscall2(SYS_PROXY, ProxyCommand::CudaUnregisterFatBinary as usize, fatCubinHandle as usize);
 }
 
 #[no_mangle]
@@ -419,9 +383,7 @@ pub extern "C" fn __cudaRegisterFunction(
         gDim: gDim,
         wSize: wSize,
     };
-    unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaRegisterFunction as usize, &info as *const _ as usize);
-    }
+    cudaSyscall2(SYS_PROXY, ProxyCommand::CudaRegisterFunction as usize, &info as *const _ as usize);
 }
 
 #[no_mangle]
@@ -447,9 +409,7 @@ pub extern "C" fn __cudaRegisterVar(
         global: global,
     };
     // println!("RegisterVarInfo {:x?}", info);
-    unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaRegisterVar as usize, &info as *const _ as usize);
-    }
+    cudaSyscall2(SYS_PROXY, ProxyCommand::CudaRegisterVar as usize, &info as *const _ as usize);
 }
 
 #[no_mangle]
@@ -470,9 +430,7 @@ pub extern "C" fn cudaLaunchKernel(
         sharedMem: sharedMem,
         stream: stream,
     };
-    unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaLaunchKernel as usize, &info as *const _ as usize);
-    }
+    cudaSyscall2(SYS_PROXY, ProxyCommand::CudaLaunchKernel as usize, &info as *const _ as usize);
 }
 
 // #[no_mangle]
@@ -516,7 +474,7 @@ pub extern "C" fn cudaLaunchKernel(
 //     //println!("Hijacked cudaOccupancyMaxActiveBlocksPerMultiprocessor");
 //     panic!("TODO: cudaOccupancyMaxActiveBlocksPerMultiprocessor");
 //     // return unsafe {
-//     //   syscall5(SYS_PROXY, ProxyCommand::cudaOccupancyMaxActiveBlocksPerMultiprocessor as usize, 
+//     //   cudaSyscall5(SYS_PROXY, ProxyCommand::cudaOccupancyMaxActiveBlocksPerMultiprocessor as usize, 
 //     //     numBlocks as *mut _ as usize, func as usize, blockSize as usize, dynamicSMemSize as usize)
 //     // };
 // }
@@ -524,7 +482,7 @@ pub extern "C" fn cudaLaunchKernel(
 #[no_mangle]
 pub extern "C" fn cudaMalloc(dev_ptr: *mut *mut c_void, size: usize) -> usize {
     //println!("Hijacked cudaMalloc");
-    let ret = unsafe { syscall3(SYS_PROXY,ProxyCommand::CudaMalloc as usize, dev_ptr as *const _ as usize, size)};
+    let ret = cudaSyscall3(SYS_PROXY,ProxyCommand::CudaMalloc as usize, dev_ptr as *const _ as usize, size);
     //unsafe { println!("malloc ptr{:x}, size: {}", *(dev_ptr as *mut _ as *mut u64) as u64, size); }
     return ret;
 }
@@ -533,9 +491,7 @@ pub extern "C" fn cudaMalloc(dev_ptr: *mut *mut c_void, size: usize) -> usize {
 pub extern "C" fn cudaFree(dev_ptr: *mut c_void) -> usize {
     //println!("Hijacked cudaFree");
     // println!("cudaFree ptr: {:x}", dev_ptr as *mut _ as u64);
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaFree as usize, dev_ptr as *const _ as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaFree as usize, dev_ptr as *const _ as usize);
 }
 
 #[no_mangle]
@@ -552,9 +508,7 @@ pub extern "C" fn cudaMemcpy(
         }
         return 0;
     }
-    return unsafe {
-        syscall5(SYS_PROXY, ProxyCommand::CudaMemcpy as usize, dst as *const _ as usize, src as usize, count as usize, kind as usize)
-    };
+    return cudaSyscall5(SYS_PROXY, ProxyCommand::CudaMemcpy as usize, dst as *const _ as usize, src as usize, count as usize, kind as usize);
 }
 
 #[no_mangle]
@@ -573,70 +527,60 @@ pub extern "C" fn cudaMemcpyAsync(
         }
         return 0;
     }
-    return unsafe {
-        syscall6(SYS_PROXY, ProxyCommand::CudaMemcpyAsync as usize, dst as *const _ as usize,
-            src as usize, count as usize, kind as usize, stream as usize)
+    let info = cudaMemcpyAsyncInfo {
+        dst: dst as u64,
+        src: src as u64,
+        count: count,
+        kind: kind as u32,
+        stream: stream as u64,
     };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaMemcpyAsync as usize, &info as *const _ as usize);
 }
 
 // Stream Management API
 #[no_mangle]
 pub extern "C" fn cudaStreamSynchronize(stream: cudaStream_t) -> usize {
     //println!("Hijacked cudaStreamSynchronize");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaStreamSynchronize as usize, stream as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaStreamSynchronize as usize, stream as usize);
 }
 
 // create an asynchronous stream
 #[no_mangle]
 pub extern "C" fn cudaStreamCreate(pStream: *mut cudaStream_t) -> usize {
     //println!("Hijacked cudaStreamCreate, stream address: {:x}");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaStreamCreate as usize, pStream as *mut _ as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaStreamCreate as usize, pStream as *mut _ as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaStreamCreateWithFlags(pStream: *mut cudaStream_t, flags: c_uint) -> usize {
     //println!("Hijacked cudaStreamCreateWithFlags");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaStreamCreateWithFlags as usize, pStream as *const _ as usize, flags as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaStreamCreateWithFlags as usize, pStream as *const _ as usize, flags as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaStreamCreateWithPriority(pStream: *mut cudaStream_t, flags: c_uint, priority: c_int) -> usize {
     //println!("Hijacked cudaStreamCreateWithPriority");
-    return unsafe {
-        syscall4(SYS_PROXY, ProxyCommand::CudaStreamCreateWithPriority as usize, 
-            pStream as *const _ as usize, flags as usize, priority as usize)
-    };
+    return cudaSyscall4(SYS_PROXY, ProxyCommand::CudaStreamCreateWithPriority as usize, 
+            pStream as *const _ as usize, flags as usize, priority as usize);
 }
 
 // Destroys and cleans up an asynchronous stream.
 #[no_mangle]
 pub extern "C" fn cudaStreamDestroy(stream: cudaStream_t) -> usize {
     //println!("Hijacked cudaStreamDestroy");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaStreamDestroy as usize, stream as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaStreamDestroy as usize, stream as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaStreamGetFlags(hStream: cudaStream_t, flags: *mut c_uint) -> usize {
     //println!("Hijacked cudaStreamGetFlags");s
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaStreamGetFlags as usize, hStream as usize, flags as *mut _ as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaStreamGetFlags as usize, hStream as usize, flags as *mut _ as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaStreamGetPriority(hStream: cudaStream_t, priority: *mut c_int) -> usize{
     //println!("Hijacked cudaStreamGetPriority");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaStreamGetPriority as usize, hStream as usize, priority as *mut _ as usize)
-    }
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaStreamGetPriority as usize, hStream as usize, priority as *mut _ as usize);
 }
 
 #[no_mangle]
@@ -645,140 +589,106 @@ pub extern "C" fn cudaStreamIsCapturing(
     pCaptureStatus: *mut cudaStreamCaptureStatus,
 ) -> usize {
     //println!("Hijacked cudaStreamIsCapturing");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaStreamIsCapturing as usize, stream as usize, pCaptureStatus as *mut _ as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaStreamIsCapturing as usize, stream as usize, pCaptureStatus as *mut _ as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaStreamQuery(stream: cudaStream_t) -> usize {
     //println!( "Hijacked cudaStreamQuery");
-    return unsafe{
-        syscall2(SYS_PROXY, ProxyCommand::CudaStreamQuery as usize, stream as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaStreamQuery as usize, stream as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaStreamWaitEvent(stream: cudaStream_t, event: cudaEvent_t, flags: c_uint) -> usize {
     //println!("Hijacked cudaStreamWaitEvent()");
-    return unsafe{
-        syscall4(SYS_PROXY, ProxyCommand::CudaStreamWaitEvent as usize, stream as usize, event as usize, flags as usize)
-    };
+    return cudaSyscall4(SYS_PROXY, ProxyCommand::CudaStreamWaitEvent as usize, stream as usize, event as usize, flags as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaThreadExchangeStreamCaptureMode(mode: *mut cudaStreamCaptureMode) -> usize{
     //println!("Hijacked cudaThreadExchangeStreamCaptureMode");
-    return unsafe{
-       syscall2(SYS_PROXY, ProxyCommand::CudaThreadExchangeStreamCaptureMode as usize, mode as *mut _ as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaThreadExchangeStreamCaptureMode as usize, mode as *mut _ as usize);
 
 }
 
 #[no_mangle]
 pub extern "C" fn cudaEventCreate(event: *mut cudaEvent_t) -> usize{
     //println!("Hijacked cudaEventCreate()");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaEventCreate as usize, event as *mut _ as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaEventCreate as usize, event as *mut _ as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaEventCreateWithFlags(event: *mut cudaEvent_t, flags: c_uint) -> usize{
     //println!("Hijacked cudaEventCreateWithFlags()");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaEventCreateWithFlags as usize, event as *mut _ as usize, flags as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaEventCreateWithFlags as usize, event as *mut _ as usize, flags as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaEventDestroy(event: cudaEvent_t) -> usize{
     //println!("Hijacked cudaEventDestroy()");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaEventDestroy as usize, event as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaEventDestroy as usize, event as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaEventElapsedTime(ms: *mut c_float, start: cudaEvent_t, end: cudaEvent_t) -> usize{
     //println!("Hijacked cudaEventElapsedTime()");
-    return unsafe {
-        syscall4(SYS_PROXY, ProxyCommand::CudaEventElapsedTime as usize, ms as *mut _ as usize , start as usize, end as usize)
-    };
+    return cudaSyscall4(SYS_PROXY, ProxyCommand::CudaEventElapsedTime as usize, ms as *mut _ as usize , start as usize, end as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaEventQuery(event: cudaEvent_t) -> usize{
     //println!("Hijacked cudaEventQuery");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaEventQuery as usize, event as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaEventQuery as usize, event as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaEventRecord(event: cudaEvent_t, stream: cudaStream_t) -> usize{
     //println!("Hijacked cudaEventRecord()");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaEventRecord as usize, event as usize, stream as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaEventRecord as usize, event as usize, stream as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaEventSynchronize(event: cudaEvent_t) -> usize{
     //println!("Hijacked cudaEventSynchronize()");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CudaEventSynchronize as usize, event as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaEventSynchronize as usize, event as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaFuncGetAttributes(attr: *mut cudaFuncAttributes, func: u64) -> usize {
     //println!("Hijacked cudaFuncGetAttributes");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaFuncGetAttributes as usize, attr as *mut _ as usize, func as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaFuncGetAttributes as usize, attr as *mut _ as usize, func as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaFuncSetAttribute(func: u64, attr:cudaFuncAttribute, value: c_int) -> usize{
     //println!("Hijacked cudaFuncSetAttribute");
-    return unsafe {
-        syscall4(SYS_PROXY, ProxyCommand::CudaFuncSetAttribute as usize, func as usize, attr as usize, value as usize)
-    };
+    return cudaSyscall4(SYS_PROXY, ProxyCommand::CudaFuncSetAttribute as usize, func as usize, attr as usize, value as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaFuncSetCacheConfig(func: u64,cacheConfig: cudaFuncCache) -> usize{
     //println!("Hijacked cudaFuncSetCacheConfig");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaFuncSetCacheConfig as usize, func as usize, cacheConfig as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaFuncSetCacheConfig as usize, func as usize, cacheConfig as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaFuncSetSharedMemConfig(func: u64, config: cudaSharedMemConfig) -> usize{
     //println!("Hijacked cudaFuncSetSharedMemConfig");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CudaFuncSetCacheConfig as usize, func as usize, config as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaFuncSetCacheConfig as usize, func as usize, config as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cuModuleGetLoadingMode(
     mode: *mut CumoduleLoadingModeEnum
 ) -> usize {
-    println!("Hijacked cuModuleGetLoadingMode");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CuModuleGetLoadingMode as usize, mode as *const _ as usize)
-    };
+    //println!("Hijacked cuModuleGetLoadingMode");
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CuModuleGetLoadingMode as usize, mode as *const _ as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cuInit(flags: c_uint) -> usize {
     //println!("Hijacked cuInit");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CuInit as usize, flags as usize)
-    } ;
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CuInit as usize, flags as usize);
 }
 
 // #[no_mangle]
@@ -838,101 +748,77 @@ pub extern "C" fn cuDevicePrimaryCtxGetState(
     active: *mut c_int,
 ) -> usize {
     //println!("Hijacked cuDevicePrimaryCtxGetState");
-    return unsafe {
-        syscall4(SYS_PROXY, ProxyCommand::CuDevicePrimaryCtxGetState as usize, 
-            dev as usize, flags as *mut _ as usize, active as *mut _ as usize)
-    };
+    return cudaSyscall4(SYS_PROXY, ProxyCommand::CuDevicePrimaryCtxGetState as usize, 
+            dev as usize, flags as *mut _ as usize, active as *mut _ as usize);
 }
 
 //NVML
 #[no_mangle]
 pub extern "C" fn nvmlInitWithFlags(flags: u32) -> u32 {
     //println!("Hijacked nvmlInitWithFlags");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::NvmlInitWithFlags as usize, flags as usize)
-    } as u32;
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::NvmlInitWithFlags as usize, flags as usize) as u32;
 }
 
 #[no_mangle]
 pub extern "C" fn nvmlDeviceGetCount_v2(deviceCount: *mut c_uint) -> usize {
     //println!("Hijacked nvmlDeviceGetCount_v2()");
     // Workaround for pytorch expecting nvmlDeviceGetCount and cudaGetDeviceCount to be the same
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::NvmlDeviceGetCountV2 as usize, deviceCount as *mut _ as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::NvmlDeviceGetCountV2 as usize, deviceCount as *mut _ as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn nvmlInit() -> usize {
     //println!("Hijacked nvmlInit()");
-    return unsafe {
-        syscall1(SYS_PROXY, ProxyCommand::NvmlInit as usize)
-    };
+    return cudaSyscall1(SYS_PROXY, ProxyCommand::NvmlInit as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn nvmlInit_v2() -> usize {
     //println!("Hijacked nvmlDeviceGetCount_v2()");
-    return unsafe {
-        syscall1(SYS_PROXY, ProxyCommand::NvmlInitV2 as usize)
-    };
+    return cudaSyscall1(SYS_PROXY, ProxyCommand::NvmlInitV2 as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn nvmlShutdown() -> usize {
     //println!("Hijacked nvmlShutdown()");
-    return unsafe {
-        syscall1( SYS_PROXY, ProxyCommand::NvmlShutdown as usize)
-    };
+    return cudaSyscall1( SYS_PROXY, ProxyCommand::NvmlShutdown as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cublasCreate_v2(handle: *mut cublasHandle_t) -> usize{
     //println!("Hijacked cublasCreate_v2()");
-    return unsafe{
-        syscall2(SYS_PROXY, ProxyCommand::CublasCreateV2 as usize, handle as *mut _ as usize)
-    }
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CublasCreateV2 as usize, handle as *mut _ as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cublasDestroy_v2(handle: cublasHandle_t) -> usize{
     //println!("Hijacked cublasDestroy_v2");
-    return unsafe{
-        syscall2(SYS_PROXY, ProxyCommand::CublasDestroyV2 as usize, handle as usize)
-    }
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CublasDestroyV2 as usize, handle as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cublasSetStream_v2(handle: cublasHandle_t, streamId: cudaStream_t) -> usize{
     //println!("Hijacked cublasSetStream");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CublasSetStreamV2 as usize, handle as usize, streamId as usize)
-    }
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CublasSetStreamV2 as usize, handle as usize, streamId as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cublasSetWorkspace_v2(handle: cublasHandle_t, workspace: *mut c_void, workspaceSizeInByte: u64) -> usize{
     //println!("Hijacked cublasSetWorkspace_v2");
-    return unsafe {
-        syscall4(SYS_PROXY, ProxyCommand::CublasSetWorkspaceV2 as usize, handle as usize, 
-            workspace as *mut _ as usize, workspaceSizeInByte as usize)
-    }
+    return cudaSyscall4(SYS_PROXY, ProxyCommand::CublasSetWorkspaceV2 as usize, handle as usize, 
+            workspace as *mut _ as usize, workspaceSizeInByte as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cublasSetMathMode(handle: cublasHandle_t, mode: cublasMath_t) -> usize {
     //println!("Hijacked cublasSetMathMode");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CublasSetMathMode as usize, handle as usize, mode as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CublasSetMathMode as usize, handle as usize, mode as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cublasGetMathMode(handle: cublasHandle_t, mode: *mut cublasMath_t) -> usize {
     //println!("Hijacked cublasGetMathMode");
-    return unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::CublasGetMathMode as usize, handle as usize, mode as usize)
-    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CublasGetMathMode as usize, handle as usize, mode as usize);
 }
 
 #[no_mangle]
@@ -970,10 +856,8 @@ pub extern "C" fn cublasSgemm_v2(
             ldc: ldc,
         };
         //println!("SgemmStridedBatchedInfo {:x?}", info);
-        return unsafe {
-            syscall4(SYS_PROXY, ProxyCommand::CublasSgemmV2 as usize, &info as *const _ as usize, 
-                alpha as *const _ as usize, beta as *const _ as usize)
-        };
+        return cudaSyscall4(SYS_PROXY, ProxyCommand::CublasSgemmV2 as usize, &info as *const _ as usize, 
+                alpha as *const _ as usize, beta as *const _ as usize);
 }
 
 #[no_mangle]
@@ -1017,12 +901,10 @@ pub extern "C" fn cublasGemmEx(
             ldc: ldc as i32,
             computeType: computeType as u32,
             algo: algo as u32,
-    };
+        };
     //  println!("SgemmStridedBatchedInfo {:x?}", info);
-    return unsafe {
-        syscall4(SYS_PROXY,ProxyCommand::CublasGemmEx as usize,
-            &info as *const _ as usize, alpha as usize, beta as usize)
-    };
+    return cudaSyscall4(SYS_PROXY,ProxyCommand::CublasGemmEx as usize,
+            &info as *const _ as usize, alpha as usize, beta as usize);
 }
 
 #[no_mangle]
@@ -1074,11 +956,9 @@ pub extern "C" fn cublasGemmStridedBatchedEx(
             batchCount: batchCount,
             computeType: computeType as u32,
             algo: algo as u32,
-    };
-    return unsafe {
-        syscall4(SYS_PROXY,ProxyCommand::CublasGemmStridedBatchedEx as usize,
-            &info as *const _ as usize, alpha as usize, beta as usize)
-    };
+        };
+    return cudaSyscall4(SYS_PROXY,ProxyCommand::CublasGemmStridedBatchedEx as usize,
+            &info as *const _ as usize, alpha as usize, beta as usize);
 }
 
 // #[no_mangle]
@@ -1090,27 +970,28 @@ pub extern "C" fn cublasGemmStridedBatchedEx(
 #[no_mangle]
 pub extern "C" fn cudaMemset(devPtr: *const c_void, value: c_int, count: usize) -> usize {
     //println!("cudaMemset");
-    return unsafe {
-        syscall4(SYS_PROXY, ProxyCommand::CudaMemset as usize, devPtr as usize, value as usize, count as usize)
-    };
+    return cudaSyscall4(SYS_PROXY, ProxyCommand::CudaMemset as usize, devPtr as usize, value as usize, count as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaMemsetAsync(devPtr: *const c_void, value: c_int, count: usize, stream: cudaStream_t) -> usize {
     //println!("cudaMemsetAsync");
-    return unsafe {
-       syscall5(SYS_PROXY, ProxyCommand::CudaMemsetAsync as usize, devPtr as usize, value as usize, count as usize, stream as usize)
-   };
+    return cudaSyscall5(SYS_PROXY, ProxyCommand::CudaMemsetAsync as usize, devPtr as usize, value as usize, count as usize, stream as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(numBlocks: *mut c_int,
     func: *const c_void, blockSize: c_int, dynamicSMemSize: usize, flags: c_uint) -> usize {
     //println!("cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags");
-    return unsafe {
-       syscall6(SYS_PROXY, ProxyCommand::CudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags as usize,
-        numBlocks as usize, func as usize, blockSize as usize, dynamicSMemSize as usize, flags as usize)
-   };
+    let info = cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlagsInfo {
+        numBlocks: numBlocks as u64,
+        func: func as u64,
+        blockSize: blockSize as u32,
+        dynamicSMemSize: dynamicSMemSize,
+        flags: flags as u32,
+    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags as usize,
+        &info as *const _ as usize);
 }
 
 // Following function is a inline function
@@ -1125,9 +1006,7 @@ pub extern "C" fn cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(numBloc
 #[no_mangle]
 pub extern "C" fn cuCtxGetCurrent(pctx: *mut CUcontext) -> usize {
     //println!("cuCtxGetCurrent");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CuCtxGetCurrent as usize, pctx as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CuCtxGetCurrent as usize, pctx as usize);
 }
 
 #[no_mangle]
@@ -1148,25 +1027,19 @@ pub extern "C" fn cuModuleLoadData(module: *mut CUmodule, image: *const c_void )
         }
     }
     let image_len:u64 = unsafe { (*ehdr).e_shoff + (*ehdr).e_shnum as u64 * (*ehdr).e_shentsize as u64 };
-    return unsafe {
-        syscall4(SYS_PROXY, ProxyCommand::CuModuleLoadData as usize, module as usize, image as usize, image_len as usize)
-    };
+    return cudaSyscall4(SYS_PROXY, ProxyCommand::CuModuleLoadData as usize, module as usize, image as usize, image_len as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cuModuleGetFunction(hfunc: *mut CUfunction, hmod: CUmodule, name: *mut c_char ) -> usize {
     //println!("hijeck cuModuleGetFunction");
-    return unsafe {
-        syscall4(SYS_PROXY, ProxyCommand::CuModuleGetFunction as usize, hfunc as usize, hmod as usize, name as usize)
-    };
+    return cudaSyscall4(SYS_PROXY, ProxyCommand::CuModuleGetFunction as usize, hfunc as usize, hmod as usize, name as usize);
 }
 
 #[no_mangle]
 pub extern "C" fn cuModuleUnload(hmod: CUmodule) -> usize {
     //println!("hijeck cuModuleUnload");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::CuModuleUnload as usize, hmod as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::CuModuleUnload as usize, hmod as usize);
 }
 
 #[no_mangle]
@@ -1187,9 +1060,7 @@ pub extern "C" fn cuLaunchKernel(f: CUfunction, gridDimX: c_uint, gridDimY: c_ui
             kernelParams: kernelParams as u64, 
             extra: extra as u64
         };
-        return unsafe {
-            syscall2(SYS_PROXY, ProxyCommand::CuLaunchKernel as usize, &info as *const _ as usize)
-        };
+        return cudaSyscall2(SYS_PROXY, ProxyCommand::CuLaunchKernel as usize, &info as *const _ as usize);
 }
 
 #[no_mangle]
@@ -1233,12 +1104,10 @@ pub extern "C" fn cublasSgemmStridedBatched(
             ldc: ldc,
             strideC: strideC,
             batchCount: batchCount,
-    };
+        };
     //  println!("SgemmStridedBatchedInfo {:x?}", info);
-    return unsafe {
-        syscall4(SYS_PROXY,ProxyCommand::CublasSgemmStridedBatched as usize,
-            &info as *const _ as usize, alpha as *const _ as usize, beta as *const _ as usize)
-    };
+    return cudaSyscall4(SYS_PROXY,ProxyCommand::CublasSgemmStridedBatched as usize,
+            &info as *const _ as usize, alpha as *const _ as usize, beta as *const _ as usize);
 }
 
 #[no_mangle]
@@ -1259,7 +1128,7 @@ pub extern "C" fn cublasLtMatmul(
     workspace: *mut c_void,
     workspaceSizeInBytes: usize,
     stream: cudaStream_t,
-) -> usize{
+) -> usize {
     //println!("Hijacked cublasSgemmStridedBatched()");
     let info = CublasLtMatmulInfo {
         lightHandle:lightHandle as u64,
@@ -1280,10 +1149,8 @@ pub extern "C" fn cublasLtMatmul(
         stream: stream as u64,
     };
     //println!("CublasLtMatmulInfo {:x?}", info);
-    return unsafe {
-        syscall4(SYS_PROXY, ProxyCommand::CublasLtMatmul as usize,
-            &info as *const _ as usize, alpha as *const _ as usize, beta as *const _ as usize)
-    };
+    return cudaSyscall4(SYS_PROXY, ProxyCommand::CublasLtMatmul as usize,
+            &info as *const _ as usize, alpha as *const _ as usize, beta as *const _ as usize);
 }
 
 #[no_mangle]
@@ -1311,8 +1178,87 @@ pub extern "C" fn cublasLtMatmulAlgoGetHeuristic(
         requestedAlgoCount: requestedAlgoCount
     };
     //println!("CublasLtMatmulAlgoGetHeuristicInfo {:x?}", info);
-    return unsafe {
-        syscall4(SYS_PROXY,ProxyCommand::CublasLtMatmulAlgoGetHeuristic as usize,
-            &info as *const _ as usize, heuristicResultsArray as *mut _ as usize, returnAlgoCount as *mut _ as usize)
-    };
+    return cudaSyscall4(SYS_PROXY,ProxyCommand::CublasLtMatmulAlgoGetHeuristic as usize,
+            &info as *const _ as usize, heuristicResultsArray as *mut _ as usize, returnAlgoCount as *mut _ as usize);
+}
+
+fn cudaGetDeviceHelper(reset: bool) -> (c_int, usize) {
+    if reset {
+        IS_GETDEVICE_UPDATED.store(false, std::sync::atomic::Ordering::SeqCst); 
+        return (0, 0);
+    } else {
+        if IS_GETDEVICE_UPDATED.load(std::sync::atomic::Ordering::Relaxed) {
+            return (CURRENT_DEVICE.load(std::sync::atomic::Ordering::Relaxed), 0);
+        } else {
+            let mut device = 0;
+            let ret = cudaSyscall2(SYS_PROXY, ProxyCommand::CudaGetDevice as usize, &mut device as *mut _ as usize);
+            CURRENT_DEVICE.store(device, std::sync::atomic::Ordering::SeqCst);
+            IS_GETDEVICE_UPDATED.store(true, std::sync::atomic::Ordering::SeqCst); 
+            return (device, ret);
+        }
+    }
+}
+
+#[repr(C)]
+pub struct NvidiaRes {
+    pub res: u32,
+    pub lasterr: u32, 
+}
+
+impl NvidiaRes {
+    pub fn FromU64(v: u64) -> Self {
+        let res = (v >> 32) as u32;
+        let lasterr = v as u32;
+        return NvidiaRes {
+            res: res,
+            lasterr: lasterr
+        }
+    }
+
+    pub fn ToU64(&self) -> u64 {
+        return (self.res as u64) << 32 | (self.lasterr as u64)
+    }
+}
+
+#[inline(always)]
+fn updateLastError(ret: usize) -> usize {
+    let nvidiaRes = NvidiaRes::FromU64(ret as u64);
+    LAST_ERROR.store(nvidiaRes.lasterr, std::sync::atomic::Ordering::SeqCst);
+    nvidiaRes.res as usize
+}
+
+#[inline(always)]
+fn cudaSyscall1(n: usize, a1: usize) -> usize {
+    let ret = unsafe { syscall1(n, a1) };
+    updateLastError(ret)
+}
+
+#[inline(always)]
+fn cudaSyscall2(n: usize, a1: usize, a2: usize) -> usize {
+    let ret = unsafe { syscall2(n, a1, a2) };
+    updateLastError(ret)
+}
+
+#[inline(always)]
+fn cudaSyscall3(n: usize, a1: usize, a2: usize, a3: usize) -> usize {
+    let ret = unsafe { syscall3(n, a1, a2, a3) };
+    updateLastError(ret)
+}
+
+#[inline(always)]
+fn cudaSyscall4(n: usize, a1: usize, a2: usize, a3: usize, a4: usize) -> usize {
+    let ret = unsafe { syscall4(n, a1, a2, a3, a4) };
+    updateLastError(ret)
+}
+
+#[inline(always)]
+fn cudaSyscall5(n: usize, a1: usize, a2: usize, a3: usize, a4: usize, a5: usize) -> usize {
+    let ret = unsafe { syscall5(n, a1, a2, a3, a4, a5) };
+    updateLastError(ret)
+}
+
+#[inline(always)]
+fn cudaSyscall6(n: usize, a1: usize, a2: usize, a3: usize, a4: usize, a5: usize, a6: usize) -> usize {
+    let ret = unsafe { syscall6(n, a1, a2, a3, a4, a5, a6) };
+    updateLastError(ret)
 }
