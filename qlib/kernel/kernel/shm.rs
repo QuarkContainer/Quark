@@ -356,7 +356,7 @@ impl Shm {
         let mut attachCount = Arc::strong_count(&self.0) - 1; //sub the current reference;
         let me = self.lock();
         if !me.pendingDestruction {
-            attachCount -= 2; //one more shms, one for keytoshms
+            attachCount -= 1; 
         }
         return attachCount / 2; // one for mappable, one for mapping
     }
