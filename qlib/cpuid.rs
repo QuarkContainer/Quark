@@ -565,7 +565,7 @@ impl FeatureSet {
             46, 48
         );
         res += &format!("power management:\n");
-        res += &format!("");
+        res += &format!("\n");
         return res;
     }
 
