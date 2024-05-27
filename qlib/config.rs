@@ -45,6 +45,7 @@ pub struct Config {
     pub Realtime: bool,
     pub EnableIOBuf: bool,
     pub EnableTsot: bool,
+    pub NVVirtDriver: bool,
 }
 
 impl Config {
@@ -92,6 +93,7 @@ impl Default for Config {
             Realtime: false,
             EnableIOBuf: false,
             EnableTsot: false,
+            NVVirtDriver: false,
         };
     }
 }

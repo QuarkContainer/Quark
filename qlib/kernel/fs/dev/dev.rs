@@ -19,6 +19,8 @@ use crate::qlib::nvproxy::nvgpu::NV_CONTROL_DEVICE_MINOR;
 use crate::qlib::nvproxy::nvgpu::NV_MAJOR_DEVICE_NUMBER;
 use crate::qlib::nvproxy::nvproxy::NVProxy;
 use crate::qlib::nvproxy::uvmfd::UvmDevice;
+use crate::qlib::kernel::SHARESPACE;
+
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -179,7 +181,11 @@ fn NewFullDevice(iops: FullDevice, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
-fn NewNvidaFrontendDevice(iops: NvFrontendDevice, msrc: &Arc<QMutex<MountSource>>, minor: u32) -> Inode {
+fn NewNvidaFrontendDevice(
+    iops: NvFrontendDevice,
+    msrc: &Arc<QMutex<MountSource>>,
+    minor: u32,
+) -> Inode {
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
     let inodeId = DEV_DEVICE.lock().NextIno();
 
@@ -231,7 +237,6 @@ fn NewNvidaUvmDevice(iops: UvmDevice, msrc: &Arc<QMutex<MountSource>>) -> Inode 
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
-
 
 fn NewRandomDevice(iops: RandomDevice, msrc: &Arc<QMutex<MountSource>>, minor: u32) -> Inode {
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
@@ -381,33 +386,41 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         ),
     );
 
-    let nvp = NVProxy::default();
-    
-    contents.insert(
-        "nvidiactl".to_string(),
-        NewNvidaFrontendDevice(
-            NvFrontendDevice::New(task, &nvp, NV_CONTROL_DEVICE_MINOR, &ROOT_OWNER, &FileMode(0o0666)),
-            msrc,
-            NV_CONTROL_DEVICE_MINOR,
-        ),
-    );
+    if SHARESPACE.config.read().NVVirtDriver {
+        let nvp = NVProxy::default();
 
-    contents.insert(
-        "nvidia0".to_string(),
-        NewNvidaFrontendDevice(
-            NvFrontendDevice::New(task, &nvp, 0, &ROOT_OWNER, &FileMode(0o0666)),
-            msrc,
-            0,
-        ),
-    );
+        contents.insert(
+            "nvidiactl".to_string(),
+            NewNvidaFrontendDevice(
+                NvFrontendDevice::New(
+                    task,
+                    &nvp,
+                    NV_CONTROL_DEVICE_MINOR,
+                    &ROOT_OWNER,
+                    &FileMode(0o0666),
+                ),
+                msrc,
+                NV_CONTROL_DEVICE_MINOR,
+            ),
+        );
 
-    contents.insert(
-        "nvidia-uvm".to_string(),
-        NewNvidaUvmDevice(
-            UvmDevice::New(task, &nvp, &ROOT_OWNER, &FileMode(0o0666)),
-            msrc
-        ),
-    );
+        contents.insert(
+            "nvidia0".to_string(),
+            NewNvidaFrontendDevice(
+                NvFrontendDevice::New(task, &nvp, 0, &ROOT_OWNER, &FileMode(0o0666)),
+                msrc,
+                0,
+            ),
+        );
+
+        contents.insert(
+            "nvidia-uvm".to_string(),
+            NewNvidaUvmDevice(
+                UvmDevice::New(task, &nvp, &ROOT_OWNER, &FileMode(0o0666)),
+                msrc,
+            ),
+        );
+    }
 
     // A devpts is typically mounted at /dev/pts to provide
     // pseudoterminal support. Place an empty directory there for
