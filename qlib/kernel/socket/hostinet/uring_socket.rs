@@ -383,6 +383,9 @@ impl UringSocketOperations {
     pub fn SocketBuf(&self) -> SocketBuff {
         match self.SocketType() {
             UringSocketType::Uring(b) => return b,
+            UringSocketType::Loopback(ref loopback) => {
+                return loopback.sockBuff.clone();
+            }
             _ => panic!(
                 "UringSocketType::None has no SockBuff {:?}",
                 self.SocketType()
@@ -393,6 +396,7 @@ impl UringSocketOperations {
     pub fn SocketBufEnabled(&self) -> bool {
         match self.SocketType() {
             UringSocketType::Uring(_) => return true,
+            UringSocketType::Loopback(_) => return true,
             _ => false,
         }
     }
