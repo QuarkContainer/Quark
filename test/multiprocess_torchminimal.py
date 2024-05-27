@@ -1,16 +1,20 @@
-import torch
 import ray
 import math
 import time
+import torch
 
 # ray.init(num_gpus=1)
 ray.init()
 dtype = torch.float
 
 # @ray.remote(num_gpus=0.5)
+
+# @ray.remote(num_gpus=0.5)
 @ray.remote()
 def train_model(model_id):
     # Set GPU device
+    # import torch(registerFatbin)
+    #device = torch.device("cuda:0")
     device = torch.device("cpu")
 
     # Instantiate your PyTorch model
