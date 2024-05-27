@@ -22,9 +22,7 @@ use core::ops::Deref;
 use enum_dispatch::enum_dispatch;
 
 use crate::qlib::kernel::socket::hostinet::tsotsocket::TsotSocketOperations;
-use crate::qlib::nvproxy::frontendfd::NvFrontendFileOptions;
 use crate::qlib::mutex::*;
-use crate::qlib::nvproxy::uvmfd::UvmFileOptions;
 use super::super::super::auth::*;
 use super::super::super::common::*;
 use super::super::super::limits::*;
@@ -305,8 +303,6 @@ pub enum FileOpsType {
     SignalOperation,
     InotifyFileOperations,
     ProxyFileOperations,
-    NvFrontendFileOptions,
-    UvmFileOptions
 }
 
 #[derive(Clone)]
@@ -350,8 +346,6 @@ pub enum FileOps {
     TsotSocketOperations(TsotSocketOperations),
     UnixSocketOperations(UnixSocketOperations),
     RootProcFile(RootProcFile),
-    NvFrontendFileOptions(NvFrontendFileOptions),
-    UvmFileOptions(UvmFileOptions)
 }
 
 impl FileOps {
