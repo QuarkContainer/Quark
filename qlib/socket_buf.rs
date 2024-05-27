@@ -307,6 +307,12 @@ impl SocketBuffIntern {
         return (trigger, addr, size);
     }
 
+    pub fn ConsumeAll(&self) {
+        let mut w = self.writeBuf.lock();
+        let size = w.AvailableDataSize();
+        w.Consume(size);
+    }
+
     pub fn GetAvailableWriteBuf(&self) -> (u64, usize) {
         return self.writeBuf.lock().GetDataBuf();
     }
