@@ -31,8 +31,6 @@ use super::arch::*;
 use super::mm::*;
 use super::*;
 use crate::qlib::bytestream::*;
-use crate::qlib::nvproxy::frontendfd::NvFrontendFileOptions;
-use crate::qlib::nvproxy::uvmfd::UvmFileOptions;
 
 // map32Start/End are the bounds to which MAP_32BIT mappings are constrained,
 // and are equivalent to Linux's MAP32_BASE and MAP32_MAX respectively.
@@ -300,7 +298,7 @@ impl MemoryManager {
         if opts.Unmap {
             self.RemoveVMAsLocked(&ar)?;
         }
-        
+
         let mut mapping = self.mapping.lock();
         let gap = mapping.vmas.FindGap(ar.Start());
 
@@ -310,7 +308,7 @@ impl MemoryManager {
             opts.Offset,
             !opts.Private && opts.MaxPerms.Write(),
         )?;
-        
+
         let vma = VMA {
             mappable: opts.Mappable.clone(),
             offset: opts.Offset,
@@ -365,8 +363,6 @@ pub enum MMappable {
     HostIops(HostInodeOp),
     Shm(Shm),
     Socket(ByteStream),
-    NvFrontend(NvFrontendFileOptions),
-    Uvm(UvmFileOptions),
     AIOMappable,
     None,
 }
@@ -378,14 +374,6 @@ impl Default for MMappable {
 }
 
 impl MMappable {
-    pub fn FromNvFrontendFops(fops: NvFrontendFileOptions) -> Self {
-        return Self::NvFrontend(fops.clone());
-    }
-
-    pub fn FromUvmFops(fops: UvmFileOptions) -> Self {
-        return Self::Uvm(fops.clone());
-    }
-
     pub fn FromHostIops(iops: HostInodeOp) -> Self {
         return Self::HostIops(iops);
     }
@@ -395,11 +383,7 @@ impl MMappable {
     }
 
     pub fn DontFork(&self) -> bool {
-        match self {
-            Self::NvFrontend(_) => true,
-            Self::Uvm(_) => true,
-            _ => false,
-        }
+        return false;
     }
 
     pub fn HostIops(&self) -> Option<HostInodeOp> {
@@ -414,8 +398,6 @@ impl MMappable {
         match self {
             Self::HostIops(_) => true,
             Self::Shm(_) => true,
-            Self::NvFrontend(_) => true,
-            Self::Uvm(_) => true,
             _ => false,
         }
     }
@@ -464,12 +446,6 @@ impl MMappable {
             }
             Self::AIOMappable => {
                 return AIOMappable::RemoveMapping(ms, ar, offset, writable);
-            }
-            Self::NvFrontend(fops) => {
-                return fops.Unmap(ms, ar, offset);
-            }
-            Self::Uvm(fops) => {
-                return fops.Unmap(ms, ar, offset);
             }
             _ => return Ok(()),
         }

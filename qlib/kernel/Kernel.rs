@@ -20,7 +20,6 @@ use super::super::qmsg::*;
 use super::super::socket_buf::*;
 use super::super::*;
 use crate::kernel_def::HyperCall64;
-use crate::qlib::nvproxy::frontend_type::RMAPIVersion;
 use crate::qlib::proxy::*;
 
 extern "C" {
@@ -676,29 +675,6 @@ impl HostSpace {
         return ret;
     }
 
-    pub fn NividiaDriverVersion(version: &RMAPIVersion) -> i64 {
-        let mut msg = Msg::NividiaDriverVersion(NividiaDriverVersion {
-            ioctlParamsAddr: version as *const _ as u64,
-        });
-
-        let ret = Self::Call(&mut msg, false) as i64;
-        return ret;
-    }
-
-    pub fn NvidiaMMap(addr: u64, len: u64, prot: i32, flags: i32, fd: i32, offset: u64) -> i64 {
-        let mut msg = Msg::NvidiaMMap(NvidiaMMap {
-            addr: addr,
-            len: len,
-            prot: prot,
-            flags: flags,
-            fd: fd,
-            offset: offset,
-        });
-
-        let ret = Self::Call(&mut msg, false) as i64;
-        return ret;
-    }
-
     pub fn HostUnixConnect(type_: i32, addr: u64, len: usize) -> i64 {
         let mut msg = Msg::HostUnixConnect(HostUnixConnect {
             type_: type_,
@@ -916,18 +892,18 @@ impl HostSpace {
     }
 
     pub fn MMapFile(len: u64, fd: i32, offset: u64, prot: i32) -> i64 {
-        // assert!(
-        //     len % MemoryDef::PMD_SIZE == 0,
-        //     "offset is {:x}, len is {:x}",
-        //     offset,
-        //     len
-        // );
-        // assert!(
-        //     offset % MemoryDef::PMD_SIZE == 0,
-        //     "offset is {:x}, len is {:x}",
-        //     offset,
-        //     len
-        // );
+        assert!(
+            len % MemoryDef::PMD_SIZE == 0,
+            "offset is {:x}, len is {:x}",
+            offset,
+            len
+        );
+        assert!(
+            offset % MemoryDef::PMD_SIZE == 0,
+            "offset is {:x}, len is {:x}",
+            offset,
+            len
+        );
         let mut msg = Msg::MMapFile(MMapFile {
             len,
             fd,
@@ -941,18 +917,18 @@ impl HostSpace {
     }
 
     pub fn MUnmap(addr: u64, len: u64) {
-        // assert!(
-        //     addr % MemoryDef::PMD_SIZE == 0,
-        //     "addr is {:x}, len is {:x}",
-        //     addr,
-        //     len
-        // );
-        // assert!(
-        //     len % MemoryDef::PMD_SIZE == 0,
-        //     "addr is {:x}, len is {:x}",
-        //     addr,
-        //     len
-        // );
+        assert!(
+            addr % MemoryDef::PMD_SIZE == 0,
+            "addr is {:x}, len is {:x}",
+            addr,
+            len
+        );
+        assert!(
+            len % MemoryDef::PMD_SIZE == 0,
+            "addr is {:x}, len is {:x}",
+            addr,
+            len
+        );
         let mut msg = Msg::MUnmap(qmsg::qcall::MUnmap { addr, len });
 
         HostSpace::HCall(&mut msg, true);

@@ -3004,9 +3004,6 @@ impl MemoryDef {
     pub const PHY_LOWER_ADDR: u64 = 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernel space
     pub const PHY_UPPER_ADDR: u64 = Self::PHY_LOWER_ADDR + 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernel space
 
-    pub const NVIDIA_START_ADDR: u64 = 0x200000000;
-    pub const NVIDIA_ADDR_SIZE: u64 = 2 * Self::ONE_GB;
-
     // memory layout
     #[cfg(target_arch = "x86_64")]
     pub const USER_UPPER_ADDR: u64 = Self::PHY_LOWER_ADDR;

@@ -80,7 +80,6 @@ pub mod ringbuf;
 pub mod vcpu_mgr;
 
 pub mod hiber_mgr;
-pub mod nvproxy;
 pub mod proxy;
 pub mod rdma_svc_cli;
 pub mod rdmasocket;
@@ -1130,7 +1129,6 @@ pub enum SysCallID {
     syscall_449,
     syscall_450,
     // No Valid syscall number
-
     UnknowSyscall = 451,
 
     EXTENSION_MAX,
