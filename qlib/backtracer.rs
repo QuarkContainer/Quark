@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::MemoryDef;
+
 #[derive(Debug, Clone)]
 pub struct Frame {
     pub rbp: u64,
@@ -46,7 +48,7 @@ pub fn trace_from(mut curframe: Frame, cb: &mut dyn FnMut(&Frame) -> bool) {
         let keep_going = cb(&ctxt);
         callstack.push(curframe.rip);
         if keep_going {
-            #[cfg(target_arch="aarch64")]
+            #[cfg(target_arch = "aarch64")]
             if curframe.rbp & 0b111 != 0 {
                 // aarch64 mandates 8-byte aligned addr dereference
                 break;
@@ -56,7 +58,10 @@ pub fn trace_from(mut curframe: Frame, cb: &mut dyn FnMut(&Frame) -> bool) {
                 curframe.rsp = curframe.rbp;
                 curframe.rbp = *(curframe.rbp as *mut u64);
 
-                if curframe.rip == 0 || curframe.rbp <= 0xfff {
+                if curframe.rip == 0
+                    || curframe.rbp < MemoryDef::PHY_LOWER_ADDR
+                    || curframe.rbp > MemoryDef::PHY_UPPER_ADDR
+                {
                     break;
                 }
             }
@@ -71,10 +76,8 @@ pub fn trace_from(mut curframe: Frame, cb: &mut dyn FnMut(&Frame) -> bool) {
         s += &format!("{:x}\n", addr);
     }
     s += &format!("'|addr2line -fpipe qkernel_d.bin | rustfilt \n");
-    
-    print!("{}", s);
 
-    
+    print!("{}", s);
 }
 
 #[inline(always)]

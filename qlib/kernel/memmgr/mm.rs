@@ -1573,28 +1573,6 @@ impl MemoryManager {
                 }
                 return Ok(());
             }
-            MMappable::NvFrontend(iops) => {
-                self.AddRssLock(ar);
-                self.pagetable.write().pt.MapNvFrontendFile(
-                    task,
-                    ar.Start(),
-                    iops,
-                    &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()),
-                    &perms,
-                )?;
-                return Ok(());
-            }
-            MMappable::Uvm(iops) => {
-                self.AddRssLock(ar);
-                self.pagetable.write().pt.MapUvmFile(
-                    task,
-                    ar.Start(),
-                    iops,
-                    &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()),
-                    &perms,
-                )?;
-                return Ok(());
-            }
             MMappable::HostIops(iops) => iops.clone(),
             MMappable::Shm(shm) => shm.HostIops(),
             _ => {

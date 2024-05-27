@@ -127,8 +127,6 @@ pub enum Msg {
     Proxy(Proxy),
     RemapGuestMemRanges(RemapGuestMemRanges),
     UnmapGuestMemRange(UnmapGuestMemRange),
-    NividiaDriverVersion(NividiaDriverVersion),
-    NvidiaMMap(NvidiaMMap),
     HostUnixConnect(HostUnixConnect),
     HostUnixRecvMsg(HostUnixRecvMsg),
 
@@ -180,15 +178,6 @@ pub struct NividiaDriverVersion {
     pub ioctlParamsAddr: u64,
 }
 
-#[derive(Clone, Default, Debug)]
-pub struct NvidiaMMap {
-    pub addr: u64,
-    pub len: u64,
-    pub prot: i32,
-    pub flags: i32,
-    pub fd: i32,
-    pub offset: u64,
-}
 
 #[derive(Clone, Debug, Default)]
 pub struct HostUnixConnect {

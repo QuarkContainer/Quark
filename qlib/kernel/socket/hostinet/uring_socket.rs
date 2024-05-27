@@ -383,6 +383,9 @@ impl UringSocketOperations {
     pub fn SocketBuf(&self) -> SocketBuff {
         match self.SocketType() {
             UringSocketType::Uring(b) => return b,
+            UringSocketType::Loopback(ref loopback) => {
+                return loopback.sockBuff.clone();
+            }
             _ => panic!(
                 "UringSocketType::None has no SockBuff {:?}",
                 self.SocketType()
@@ -393,6 +396,7 @@ impl UringSocketOperations {
     pub fn SocketBufEnabled(&self) -> bool {
         match self.SocketType() {
             UringSocketType::Uring(_) => return true,
+            UringSocketType::Loopback(_) => return true,
             _ => false,
         }
     }
@@ -687,6 +691,7 @@ impl FileOperations for UringSocketOperations {
         let hostfd = self.fd;
         match flags as u64 {
             LibcConst::SIOCGIFFLAGS
+            | LibcConst::SIOCGIFADDR
             | LibcConst::SIOCGIFBRDADDR
             | LibcConst::SIOCGIFDSTADDR
             | LibcConst::SIOCGIFHWADDR
@@ -1141,7 +1146,7 @@ impl SockOperations for UringSocketOperations {
                     if opt.len() < 4 {
                         return Err(Error::SysError(SysErr::EINVAL));
                     }
-                    
+
                     if self.ConnErrno() != 0 {
                         let errno = self.ConnErrno();
                         self.SetConnErrno(0);
@@ -1303,12 +1308,12 @@ impl SockOperations for UringSocketOperations {
                     for i in 0..v.len() {
                         socketaddr[i] = v[i];
                     }
-    
+
                     return Ok(v.len() as i64);
                 }
-            }    
+            }
         }
-        
+
         let res = Kernel::HostSpace::GetPeerName(
             self.fd,
             &socketaddr[0] as *const _ as u64,

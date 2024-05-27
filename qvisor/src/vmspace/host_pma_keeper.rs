@@ -161,9 +161,9 @@ impl HostPMAKeeper {
             .Proto(prot)
             .FileOffset(offset)
             .FileId(osfd)
-            .Len(len)    
+            .Len(len)
             .MapFixed();
-        
+
         mo.MapShare();
         // mo.MapPrecommit();
 
@@ -188,29 +188,17 @@ impl HostPMAKeeper {
     }
 
     fn Allocate(&self, len: u64, alignment: u64) -> Result<u64> {
-        // if len != MemoryDef::PAGE_SIZE_2M {
-        //     error!("Allocate len is {:x} alignment {:x}", len, alignment);
-        // }
-
-        if len <= MemoryDef::PAGE_SIZE_2M {
-            assert!(
-                alignment <= MemoryDef::PAGE_SIZE_2M,
-                "Allocate fail .... {:x}/{:x}",
-                len,
-                alignment
-            );
-            let addr = match self.AllocHugePage() {
-                None => {
-                    error!("AllocHugePage fail...");
-                    panic!("AllocHugePage fail...");
-                }
-                Some(addr) => addr,
-            };
-            assert!(addr & (MemoryDef::PAGE_SIZE_2M - 1) == 0);
-            return Ok(addr);
-        }
-
-        return self.RangeAllocate(len, alignment);
+        assert!(len == MemoryDef::PAGE_SIZE_2M);
+        assert!(alignment == MemoryDef::PAGE_SIZE_2M);
+        let addr = match self.AllocHugePage() {
+            None => {
+                error!("AllocHugePage fail...");
+                panic!("AllocHugePage fail...");
+            }
+            Some(addr) => addr,
+        };
+        assert!(addr & (MemoryDef::PAGE_SIZE_2M - 1) == 0);
+        return Ok(addr);
     }
 
     pub fn RemoveSeg(&self, r: &Range) {
@@ -236,7 +224,12 @@ impl HostPMAKeeper {
     }
 
     pub fn Unmap(&self, r: &Range) -> Result<()> {
-        self.RemoveSeg(r);
+        //self.RemoveSeg(r);
+
+        assert!(r.Start() % MemoryDef::PAGE_SIZE_2M == 0);
+        assert!(r.Len() == MemoryDef::PAGE_SIZE_2M);
+
+        self.FreeHugePage(r.Start());
 
         let res = MapOption::MUnmap(r.Start(), r.Len());
         return res;

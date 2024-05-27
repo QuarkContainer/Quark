@@ -850,3 +850,23 @@ pub struct GemmStridedBatchedExInfo {
     pub computeType: u32,
     pub algo: u32
 }
+
+#[repr(C)]
+#[derive(Default,Debug, Copy, Clone)]
+pub struct cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlagsInfo {
+    pub numBlocks: u64,
+    pub func: u64,
+    pub blockSize: u32,
+    pub dynamicSMemSize: usize,
+    pub flags: u32,
+}
+
+#[repr(C)]
+#[derive(Default,Debug, Copy, Clone)]
+pub struct cudaMemcpyAsyncInfo {
+    pub dst: u64,
+    pub src: u64,
+    pub count: usize,
+    pub kind: u32,
+    pub stream: u64,
+}
