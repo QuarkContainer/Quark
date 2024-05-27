@@ -496,6 +496,13 @@ impl AsyncOpsTrait for AsyncSend {
             self.buf.SetErr(-result);
             self.queue
                 .Notify(EventMaskFromLinux((EVENT_ERR | READABLE_EVENT) as u32));
+
+            self.buf.ConsumeAll();
+
+            if self.buf.PendingWriteShutdown() {
+                self.queue.Notify(EVENT_PENDING_SHUTDOWN);
+            }
+
             return false;
             //return true;
         }
@@ -573,6 +580,13 @@ impl AsyncOpsTrait for TsotAsyncSend {
             self.buf.SetErr(-result);
             self.queue
                 .Notify(EventMaskFromLinux((EVENT_ERR | READABLE_EVENT) as u32));
+
+            self.buf.ConsumeAll();
+
+            if self.buf.PendingWriteShutdown() {
+                self.queue.Notify(EVENT_PENDING_SHUTDOWN);
+            }
+
             return false;
             //return true;
         }
@@ -648,6 +662,13 @@ impl AsyncOpsTrait for AsyncFiletWrite {
             self.buf.SetErr(-result);
             self.queue
                 .Notify(EventMaskFromLinux((EVENT_ERR | READABLE_EVENT) as u32));
+
+            self.buf.ConsumeAll();
+
+            if self.buf.PendingWriteShutdown() {
+                self.queue.Notify(EVENT_PENDING_SHUTDOWN);
+            }
+
             SHARESPACE.DecrPendingWrite();
             return false;
             //return true;
@@ -1563,7 +1584,7 @@ impl AsyncEpollCtl {
             epollfd: epollfd,
             fd: fd,
             op: op,
-            ev: EpollEvent::new(mask, fd as u64)
+            ev: EpollEvent::new(mask, fd as u64),
         };
     }
 }
