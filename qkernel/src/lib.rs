@@ -604,7 +604,7 @@ pub extern "C" fn rust_main(
                 let shared_space = unsafe {
                     GLOBAL_ALLOCATOR.AllocSharedBuf(size, 2)
                 };
-                HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
+                HyperCall64_init(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
                 SHARESPACE.SetValue(shared_space as u64);
             } else {
                 SHARESPACE.SetValue(shareSpaceAddr);

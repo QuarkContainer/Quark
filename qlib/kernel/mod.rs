@@ -33,6 +33,8 @@ use self::quring::*;
 use self::taskMgr::*;
 
 pub mod Kernel;
+#[cfg (feature = "cc")]
+pub mod Kernel_cc;
 pub mod SignalDef;
 pub mod arch;
 pub mod asm;

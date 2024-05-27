@@ -3060,6 +3060,7 @@ impl MemoryDef {
 
 #[cfg(feature = "cc")]
 impl MemoryDef {
+    pub const HYPERCALL_PARA_PAGE_OFFSET :u64 = MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET + MemoryDef::PAGE_SIZE*3;
     pub const HOST_INIT_HEAP_OFFSET: u64 = Self::IO_HEAP_END;
     pub const HOST_INIT_HEAP_SIZE: u64 = 1 * Self::ONE_GB;
     pub const HOST_INIT_HEAP_END: u64 = Self::HOST_INIT_HEAP_OFFSET + Self::HOST_INIT_HEAP_SIZE;

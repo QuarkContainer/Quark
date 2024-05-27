@@ -56,6 +56,14 @@ use crate::GLOBAL_ALLOCATOR;
 
 #[cfg(feature = "cc")]
 use crate::PRIVATE_VCPU_ALLOCATOR;
+#[cfg (feature = "cc")]
+use super::qlib::qmsg::sharepara::*;
+#[cfg (feature = "cc")]
+use Kernel::is_cc_enabled;
+#[cfg (feature = "cc")]
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+#[cfg (feature = "cc")]
+use alloc::boxed::Box;
 
 impl OOMHandler for ListAllocator {
     fn handleError(&self, size: u64, alignment: u64) {
@@ -215,6 +223,7 @@ pub fn Invlpg(addr: u64) {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[cfg(not(feature = "cc"))]
 #[inline(always)]
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     unsafe {
@@ -228,6 +237,69 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
             in("rcx") para2,
             in("rdi") para3,
             in("r10") para4
+        )
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[cfg(feature = "cc")]
+#[inline(always)]
+pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
+    if is_cc_enabled() {
+        let vcpuid = GetVcpuId();
+        let share_para_page = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
+        let share_para = unsafe { &mut (*share_para_page).SharePara[vcpuid] };
+        share_para.para1 = para1;
+        share_para.para2 = para2;
+        share_para.para3 = para3;
+        share_para.para4 = para4;
+
+        unsafe {
+            let data: u8 = 0;
+            asm!("
+            out dx, al
+            ",
+                in("dx") type_,
+                in("al") data,
+            )
+        }
+    } else {
+        unsafe {
+            let data: u8 = 0;
+            asm!("
+                out dx, al
+                ",
+                in("dx") type_,
+                in("al") data,
+                in("rsi") para1,
+                in("rcx") para2,
+                in("rdi") para3,
+                in("r10") para4
+            )
+        }
+    }
+}
+
+//VCPU 0 did not set gs as corresponding Vcpulocal address, thus use another function to use default position
+#[cfg(target_arch = "x86_64")]
+#[cfg (feature = "cc")]
+#[inline(always)]
+pub fn HyperCall64_init(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
+
+    let share_para_page  = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
+    let share_para =unsafe{&mut (*share_para_page).SharePara[0]};
+    share_para.para1 = para1;
+    share_para.para2 = para2;
+    share_para.para3 = para3;
+    share_para.para4 = para4;
+
+    unsafe {
+        let data: u8 = 0;
+        asm!("
+            out dx, al
+            ",
+            in("dx") type_,
+            in("al") data,
         )
     }
 }
@@ -278,12 +350,25 @@ pub fn NewSocket(fd: i32) -> i64 {
 }
 
 impl HostSpace {
+    #[cfg(not(feature = "cc"))]
     pub fn Close(fd: i32) -> i64 {
         let mut msg = Msg::Close(qcall::Close { fd });
-
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
+    #[cfg(feature = "cc")]
+    pub fn Close(fd: i32) -> i64 {
+        if is_cc_enabled() {
+            let mut msg = Box::new_in(Msg::Close(qcall::Close { fd }), GUEST_HOST_SHARED_ALLOCATOR);
+
+            return HostSpace::HCall(&mut msg, false) as i64;
+        } else {
+            let mut msg = Msg::Close(qcall::Close { fd });
+            return HostSpace::HCall(&mut msg, false) as i64;
+        }
+    }
+
+    #[cfg(not(feature = "cc"))]
     pub fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
         let current = Task::Current().GetTaskId();
 
@@ -302,6 +387,46 @@ impl HostSpace {
         return qMsg.ret;
     }
 
+    #[cfg(feature = "cc")]
+    pub fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
+        if is_cc_enabled() {
+            let current = Task::Current().GetTaskId();
+
+            let qMsg = Box::new_in(
+                QMsg {
+                    taskId: current,
+                    globalLock: true,
+                    ret: 0,
+                    msg: msg,
+                },
+                GUEST_HOST_SHARED_ALLOCATOR,
+            );
+
+            let addr = &*qMsg as *const _ as u64;
+            let om = Box::new_in(HostOutputMsg::QCall(addr), GUEST_HOST_SHARED_ALLOCATOR);
+            super::SHARESPACE.AQCall(&*om);
+            taskMgr::Wait();
+            return qMsg.ret;
+        } else {
+            let current = Task::Current().GetTaskId();
+
+            let qMsg = QMsg {
+                taskId: current,
+                globalLock: true,
+                ret: 0,
+                msg: msg,
+            };
+
+            let addr = &qMsg as *const _ as u64;
+            let om = HostOutputMsg::QCall(addr);
+
+            super::SHARESPACE.AQCall(&om);
+            taskMgr::Wait();
+            return qMsg.ret;
+        }
+    }
+
+    #[cfg(not(feature = "cc"))]
     pub fn HCall(msg: &mut Msg, lock: bool) -> u64 {
         let taskId = Task::Current().GetTaskId();
 
@@ -315,6 +440,37 @@ impl HostSpace {
         HyperCall64(HYPERCALL_HCALL, &mut event as *const _ as u64, 0, 0, 0);
 
         return event.ret;
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn HCall(msg: &mut Msg, lock: bool) -> u64 {
+        if is_cc_enabled() {
+            let taskId = Task::Current().GetTaskId();
+            let mut event = Box::new_in(
+                QMsg {
+                    taskId: taskId,
+                    globalLock: lock,
+                    ret: 0,
+                    msg: msg,
+                },
+                GUEST_HOST_SHARED_ALLOCATOR,
+            );
+
+            HyperCall64(HYPERCALL_HCALL, &mut *event as *const _ as u64, 0, 0, 0);
+            return event.ret;
+        } else {
+            let taskId = Task::Current().GetTaskId();
+
+            let mut event = QMsg {
+                taskId: taskId,
+                globalLock: lock,
+                ret: 0,
+                msg: msg,
+            };
+
+            HyperCall64(HYPERCALL_HCALL, &mut event as *const _ as u64, 0, 0, 0);
+            return event.ret;
+        }
     }
 }
 

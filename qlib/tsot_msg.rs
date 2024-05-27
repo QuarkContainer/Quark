@@ -29,7 +29,7 @@ pub enum ErrCode {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct TsotMessage {
     pub socket: i32,
     pub msg: TsotMsg,
