@@ -433,8 +433,14 @@ pub fn createAt(
     return Ok((ret, fstat));
 }
 
+#[cfg(not(feature = "cc"))]
 pub fn Ioctl(fd: i32, cmd: u64, argp: u64) -> i32 {
     return HostSpace::IoCtl(fd, cmd, argp) as i32;
+}
+
+#[cfg(feature = "cc")]
+pub fn Ioctl(fd: i32, cmd: u64, argp: u64, argplen: usize) -> i32 {
+    return HostSpace::IoCtl(fd, cmd, argp, argplen) as i32;
 }
 
 pub fn Fsync(fd: i32) -> i32 {
@@ -446,12 +452,17 @@ pub fn SetTimestamps(fd: i32, ts: &InterTimeSpec) -> Result<()> {
         return Ok(());
     }
 
+    #[cfg(not(feature = "cc"))]
     let mut sts: [Timespec; 2] = [Timespec::default(); 2];
-
+    #[cfg(feature = "cc")]
+    let mut sts = Box::new_in([Timespec::default(); 2], GUEST_HOST_SHARED_ALLOCATOR);
     sts[0] = TimespecFromTimestamp(ts.ATime, ts.ATimeOmit, ts.ATimeSetSystemTime);
     sts[1] = TimespecFromTimestamp(ts.MTime, ts.MTimeOmit, ts.MTimeSetSystemTime);
 
+    #[cfg(not(feature = "cc"))]
     let ret = HostSpace::Futimens(fd, &sts as *const _ as u64);
+    #[cfg(feature = "cc")]
+    let ret = HostSpace::Futimens(fd, &*sts as *const _ as u64);
 
     if ret < 0 {
         return Err(Error::SysError(-ret as i32));

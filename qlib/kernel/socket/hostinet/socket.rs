@@ -628,7 +628,10 @@ impl DummyHostSocket {
 // pass the ioctl to the shadow hostfd
 pub fn HostIoctlIFReq(task: &Task, hostfd: i32, request: u64, addr: u64) -> Result<()> {
     let mut ifr: IFReq = task.CopyInObj(addr)?;
+    #[cfg(not(feature = "cc"))]
     let res = HostSpace::IoCtl(hostfd, request, &mut ifr as *const _ as u64);
+    #[cfg(feature = "cc")]
+    let res = HostSpace::IoCtl(hostfd, request, &mut ifr as *const _ as u64,core::mem::size_of::<IFReq>());
     if res < 0 {
         return Err(Error::SysError(-res as i32));
     }
@@ -660,7 +663,10 @@ pub fn HostIoctlIFConf(task: &Task, hostfd: i32, request: u64, addr: u64) -> Res
         ifr.Ptr = buf.Ptr();
     }
 
+    #[cfg(not(feature = "cc"))]
     let res = HostSpace::IoCtl(hostfd, request, &mut ifr as *const _ as u64);
+    #[cfg(feature = "cc")]
+    let res = HostSpace::IoCtl(hostfd, request, &mut ifr as *const _ as u64, core::mem::size_of::<IFConf>());
     if res < 0 {
         return Err(Error::SysError(-res as i32));
     }
@@ -888,7 +894,10 @@ impl FileOperations for SocketOperations {
                     }
                 } else {
                     let tmp: i32 = 0;
+                    #[cfg(not(feature = "cc"))]
                     let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
+                    #[cfg(feature = "cc")]
+                    let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
                     if res < 0 {
                         return Err(Error::SysError(-res as i32));
                     }
@@ -898,7 +907,10 @@ impl FileOperations for SocketOperations {
             }
             _ => {
                 let tmp: i32 = 0;
+                #[cfg(not(feature = "cc"))]
                 let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
+                #[cfg(feature = "cc")]
+                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }
