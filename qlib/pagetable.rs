@@ -872,12 +872,6 @@ impl PageTables {
     pub fn GetAllPagetablePages(&self, pages: &mut BTreeSet<u64>) -> Result<()> {
         self.GetAllPagetablePagesWithRange(
             Addr(MemoryDef::PAGE_SIZE),
-            Addr(MemoryDef::NVIDIA_START_ADDR),
-            pages,
-        )?;
-
-        self.GetAllPagetablePagesWithRange(
-            Addr(MemoryDef::NVIDIA_START_ADDR + MemoryDef::NVIDIA_ADDR_SIZE),
             Addr(MemoryDef::PHY_LOWER_ADDR),
             pages,
         )?;
@@ -1156,29 +1150,6 @@ impl PageTables {
 
         self.Traverse(
             Addr(MemoryDef::PAGE_SIZE),
-            Addr(MemoryDef::NVIDIA_START_ADDR),
-            |entry: &mut PageTableEntry, _virtualAddr| {
-                let phyAddr = entry.addr().as_u64();
-                if start <= phyAddr && phyAddr < end {
-                    let mut flags = entry.flags();
-                    let needInsert = flags & PageTableFlags::BIT_9 != PageTableFlags::BIT_9;
-                    if updatePageEntry && needInsert {
-                        flags &= !PageTableFlags::PRESENT;
-                        // flags bit9 which indicate the page is swapped out
-                        flags |= PageTableFlags::BIT_9;
-                        entry.set_flags(flags);
-                    }
-
-                    if needInsert {
-                        pages.insert(phyAddr);
-                    }
-                }
-            },
-            false,
-        )?;
-
-        self.Traverse(
-            Addr(MemoryDef::NVIDIA_START_ADDR + MemoryDef::NVIDIA_ADDR_SIZE),
             Addr(MemoryDef::PHY_LOWER_ADDR),
             |entry: &mut PageTableEntry, _virtualAddr| {
                 let phyAddr = entry.addr().as_u64();
@@ -1186,7 +1157,6 @@ impl PageTables {
                     let mut flags = entry.flags();
                     let needInsert = flags & PageTableFlags::BIT_9 != PageTableFlags::BIT_9;
                     if updatePageEntry && needInsert {
-                        //error!("SwapOutPages 1 {:x?}/{:x}/{:x}/{:x}/{:x}", self.root, phyAddr, _virtualAddr, start, end);
                         flags &= !PageTableFlags::PRESENT;
                         // flags bit9 which indicate the page is swapped out
                         flags |= PageTableFlags::BIT_9;
