@@ -53,6 +53,9 @@ use super::*;
 use crate::qlib::kernel::{SHARESPACE, asm::*};
 use crate::qlib::vcpu_mgr::VcpuMode;
 
+#[cfg(feature = "cc")]
+use crate::qlib::kernel::Kernel::is_cc_enabled;
+
 pub struct MMMapping {
     pub vmas: AreaSet<VMA>,
 
@@ -1069,6 +1072,26 @@ impl MemoryManager {
                 let vmaOffset = pageAddr - range.Start();
                 let fileOffset = vmaOffset + vma.offset; // offset in the file
                 let phyAddr = iops.MapFilePage(task, fileOffset)?;
+                #[cfg(feature = "cc")]
+                if is_cc_enabled() {
+                    let writeable = vma.effectivePerms.Write();
+
+                    let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
+                    CopyPage(page, phyAddr);
+
+                    let ret;
+                    if writeable {
+                        ret = self.MapPageWriteLocked(pageAddr, page, exec);
+                    } else {
+                        ret = self.MapPageReadLocked(pageAddr, page, exec);
+                    }
+
+                    if !vma.private {
+                        iops.MapSharedPage(phyAddr, page, fileOffset, writeable);
+                    }
+                    super::super::PAGE_MGR.DerefPage(page);
+                    return ret;
+                }
                 //error!("fault 2.1, vma.mappable.is_some() is {}, vaddr is {:x}, paddr is {:x}",
                 //      vma.mappable.is_some(), pageAddr, phyAddr);
 
