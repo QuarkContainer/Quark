@@ -531,3 +531,11 @@ pub fn NewStaticProcInode(
 
     return NewProcInode(iops.into(), msrc, InodeType::SpecialFile, None);
 }
+
+pub fn NewStaticProcInodeWithString(
+    task: &Task,
+    msrc: &Arc<QMutex<MountSource>>,
+    contents: &str,
+) -> Inode {
+    return NewStaticProcInode(task, msrc, &Arc::new(contents.as_bytes().to_vec()));
+}
