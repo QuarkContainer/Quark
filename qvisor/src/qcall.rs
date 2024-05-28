@@ -279,7 +279,14 @@ impl KVMVcpu {
             Msg::SwapOut(_msg) => {
                 //error!("qcall.rs swapout");
                 #[cfg(feature = "cuda")]
-                super::VMS.lock().SwapOutGPUPage();
+                {
+                    super::VMS.lock().SwapOutGPUPage();
+                    let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
+                    SHARE_SPACE
+                        .hiberMgr
+                        .SwapOut(heapStart, heapEnd - heapStart)
+                        .unwrap();
+                }
 
                 #[cfg(not(feature = "cuda"))]
                 {
@@ -298,7 +305,11 @@ impl KVMVcpu {
                 //error!("qcall.rs swapin");
 
                 #[cfg(feature = "cuda")]
-                super::VMS.lock().SwapInGPUPage();
+                {
+                    SHARE_SPACE.hiberMgr.ReapSwapIn().unwrap();
+                    super::VMS.lock().SwapInGPUPage();
+                }
+
                 ret = 0;
             }
             Msg::Proxy(msg) => {
