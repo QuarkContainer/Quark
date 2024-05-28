@@ -43,9 +43,14 @@ pub fn SetSyncPrint(syncPrint: bool) {
     LOG.SetSyncPrint(syncPrint);
 }
 
-pub const LOG_FILE_DEFAULT: &str = "/var/log/quark/quark.log";
-pub const RAWLOG_FILE_DEFAULT: &str = "/var/log/quark/raw.log";
-pub const LOG_FILE_FORMAT: &str = "/var/log/quark/{}.log";
+
+pub const LOG_DIR: &str = match option_env!("QLOG_DIR") {
+    Some(s) => s,
+    None => "/var/log/quark"
+};
+pub const LOG_FILE_DEFAULT: &str = concatcp!(LOG_DIR, "/quark.log");
+pub const RAWLOG_FILE_DEFAULT: &str = concatcp!(LOG_DIR, "/raw.log");
+pub const LOG_FILE_FORMAT: &str = concatcp!(LOG_DIR, "/{}.log");
 pub const TIME_FORMAT: &str = "%H:%M:%S%.3f";
 
 pub const MEMORY_LEAK_LOG: bool = false;

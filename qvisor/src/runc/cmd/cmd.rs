@@ -76,7 +76,11 @@ impl CmdCmd {
 }
 
 impl Config {
-    pub const CONFIG_FILE: &'static str = "/etc/quark/config.json";
+    pub const CONFIG_DIR: &'static str = match option_env!("QCONFIG_DIR") {
+        Some(s) => s,
+        None => "/etc/quark"
+    };
+    pub const CONFIG_FILE: &'static str = concatcp!(Config::CONFIG_DIR, "/config.json");
 
     // if the config file exist, load file and return true; otherwise return false
     pub fn Load(&mut self) -> bool {

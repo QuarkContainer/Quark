@@ -61,6 +61,8 @@ extern crate regex;
 extern crate simplelog;
 extern crate spin;
 extern crate tabwriter;
+#[macro_use]
+extern crate const_format;
 
 #[macro_use]
 pub mod print;
@@ -168,8 +170,6 @@ lazy_static! {
         io_uring::IoUring::new(MemoryDef::QURING_SIZE as u32).expect("setup io_Uring fail")
     );
 }
-
-pub const LOG_FILE: &'static str = "/var/log/quark/quark.log";
 
 pub fn InitSingleton() {
     self::qlib::InitSingleton();

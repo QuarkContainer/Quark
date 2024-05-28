@@ -1,13 +1,14 @@
 #
-# OUTPUT PATHS
+# variables shared by all child make process
 #
-PREFIX          ?= /usr/local
-QBIN_DIR        ?= $(PREFIX)/bin
-QCONFIG_DIR     ?= /etc/quark
-QLOG_DIR        ?= /var/log/quark
-
+export PREFIX          ?= /usr/local
+export QBIN_DIR        ?= $(PREFIX)/bin
+export QCONFIG_DIR     ?= /etc/quark
+export QLOG_DIR        ?= /var/log/quark
+export ARCH            ?= ${shell uname -m}
+export RUST_TOOLCHAIN  = nightly-2023-12-11-$(ARCH)-unknown-linux-gnu
 #
-# BUILD PATHS
+# BUILD PATHS, used by this make process only
 #
 QKERNEL_BUILD   = build
 QTARGET_RELEASE = target/release
@@ -17,10 +18,6 @@ QKERNEL_RELEASE = $(QKERNEL_BUILD)/qkernel.bin
 QUARK_DEBUG     = $(QTARGET_DEBUG)/quark
 QUARK_RELEASE   = $(QTARGET_RELEASE)/quark
 VDSO            = vdso/vdso.so
-
-ARCH := ${shell uname -m}
-RUST_TOOLCHAIN  = nightly-2023-12-11-$(ARCH)-unknown-linux-gnu
-
 
 .PHONY: all release debug clean install qvisor_release qvisor_debug cuda_make cuda_all cleanall
 
@@ -33,16 +30,16 @@ release:: qvisor_release qkernel_release $(VDSO)
 debug:: qvisor_debug qkernel_debug $(VDSO)
 
 qvisor_release:
-	make -C ./qvisor TOOLCHAIN=$(RUST_TOOLCHAIN) release
+	make -C ./qvisor release
 
 qkernel_release:
-	make -C ./qkernel TOOLCHAIN=$(RUST_TOOLCHAIN) release
+	make -C ./qkernel release
 
 qvisor_debug:
-	make -C ./qvisor TOOLCHAIN=$(RUST_TOOLCHAIN) debug
+	make -C ./qvisor debug
 
 qkernel_debug:
-	make -C ./qkernel TOOLCHAIN=$(RUST_TOOLCHAIN) debug
+	make -C ./qkernel debug
 
 $(VDSO):
 	make -C ./vdso
@@ -65,21 +62,21 @@ cuda_release:: qvisor_cuda_release qkernel_release cuda_make
 cuda_debug:: qvisor_cuda_debug qkernel_debug cuda_make
 
 qvisor_cuda_release:
-	make -C ./qvisor TOOLCHAIN=$(RUST_TOOLCHAIN) cuda_release
+	make -C ./qvisor cuda_release
 
 qvisor_cuda_debug:
-	make -C ./qvisor TOOLCHAIN=$(RUST_TOOLCHAIN) cuda_debug
+	make -C ./qvisor cuda_debug
 
 install:
-	-sudo cp -f $(QKERNEL_RELEASE) $(QBIN_DIR)/
-	-sudo cp -f $(QUARK_RELEASE) $(QBIN_DIR)/quark
-	-sudo cp -f $(QUARK_RELEASE) $(QBIN_DIR)/containerd-shim-quark-v1
-	-sudo cp -f $(QKERNEL_DEBUG) $(QBIN_DIR)/
-	-sudo cp -f $(QUARK_DEBUG) $(QBIN_DIR)/quark_d
-	-sudo cp -f $(QUARK_DEBUG) $(QBIN_DIR)/containerd-shim-quarkd-v1
-	sudo cp -f $(VDSO) $(QBIN_DIR)/vdso.so
-	sudo mkdir -p $(QCONFIG_DIR)
-	sudo cp -f config.json $(QCONFIG_DIR)
+	-cp -f $(QKERNEL_RELEASE) $(QBIN_DIR)/
+	-cp -f $(QUARK_RELEASE) $(QBIN_DIR)/quark
+	-cp -f $(QUARK_RELEASE) $(QBIN_DIR)/containerd-shim-quark-v1
+	-cp -f $(QKERNEL_DEBUG) $(QBIN_DIR)/
+	-cp -f $(QUARK_DEBUG) $(QBIN_DIR)/quark_d
+	-cp -f $(QUARK_DEBUG) $(QBIN_DIR)/containerd-shim-quarkd-v1
+	cp -f $(VDSO) $(QBIN_DIR)/vdso.so
+	mkdir -p $(QCONFIG_DIR)
+	cp -f config.json $(QCONFIG_DIR)
 
 cuda_make:
 	make -C cudaproxy release
