@@ -38,7 +38,7 @@ pub fn NewPossible(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let v = NewPossibleSimpleFileInode(
         task,
         &ROOT_OWNER,
-        &FilePermissions::FromMode(FileMode(0o400)),
+        &FilePermissions::FromMode(FileMode(0o444)),
         FSMagic::PROC_SUPER_MAGIC,
     );
     return NewFile(v.into(), msrc);
@@ -61,7 +61,6 @@ impl PossibleData {
         let kernel = GetKernel();
         let maxCore = kernel.applicationCores - 1;
 
-        error!("PossibleData cores {}", maxCore);
         let ret = format!("0-{}\n", maxCore);
         return ret.as_bytes().to_vec();
     }
@@ -102,6 +101,10 @@ pub fn NewCpuTopo(task: &Task, msrc: &Arc<QMutex<MountSource>>, cpuId: usize) ->
     );
     m.insert(
         "cluster_cpus".to_string(),
+        NewStaticProcInodeWithString(task, msrc, &core_cpus),
+    );
+    m.insert(
+        "thread_siblings".to_string(),
         NewStaticProcInodeWithString(task, msrc, &core_cpus),
     );
 
@@ -172,6 +175,10 @@ pub fn NewCPU(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
 
         let mut cpuMap = BTreeMap::new();
         cpuMap.insert("topology".to_owned(), NewCpuTopo(task, msrc, i));
+        cpuMap.insert(
+            "online".to_string(),
+            NewStaticProcInodeWithString(task, msrc, &format!("1\n")),
+        );
 
         m.insert(name, NewDir(task, msrc, cpuMap));
     }
