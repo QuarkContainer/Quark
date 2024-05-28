@@ -49,12 +49,51 @@ extern "C" {
         flags: *mut c_uint,
         active: *mut c_int,
     ) -> CUresult;
+    pub fn cuCtxPopCurrent(
+        pctx: u64,
+    ) -> CUresult;
+    pub fn cuLibraryLoadData(
+        library: u64,
+        code: u64,
+        jitOptions: u64,
+        jitOptionsValues: u64,
+        numJitOptions: u32,
+        libraryOptions: u64,
+        libraryOptionValues: u64,
+        numLibraryOptions: u32,
+    ) -> CUresult;
+    pub fn cuLibraryGetGlobal(
+        dptr: u64,
+        bytes: u64,
+        library: u64,
+        name: *const c_char,
+    ) -> CUresult;
+    pub fn cuLibraryGetKernel(
+        pKernel: u64,
+        library: u64,
+        name: *const c_char,
+    ) -> CUresult;
+    pub fn cuKernelGetFunction(
+        pFunc: u64,
+        kernel: u64,
+    ) -> CUresult;
+    pub fn cuLibraryGetModule(
+        pMod: u64,
+        library: u64
+    ) -> CUresult;
+    pub fn cuLibraryGetUnifiedFunction(
+        fptr: u64,
+        library: u64,
+        symbol: *const c_char,
+    ) -> CUresult;
+    pub fn cuLibraryUnload(library: u64) -> CUresult;
     pub fn cuInit(Flags: c_uint) -> CUresult;
 
     pub fn cuModuleGetLoadingMode(mode: *mut CumoduleLoadingModeEnum) -> u32;
-    pub fn cuCtxCreate(pctx: *mut CUcontext, flags: c_uint, dev: CUdevice) -> CUresult;
+    pub fn cuCtxCreate(pctx: u64, flags: c_uint, dev: CUdevice) -> CUresult;
     pub fn cuCtxPushCurrent(pctx: CUcontext) -> CUresult;
-    pub fn cuDevicePrimaryCtxRetain(pctx: *mut CUcontext, dev: CUdevice) -> CUresult;
+    pub fn cuDevicePrimaryCtxRetain(pctx: u64, dev: i32) -> CUresult;
+    pub fn cuDevicePrimaryCtxSetFlags(dev: i32, flag: u32) -> CUresult;
     pub fn cuFuncGetAttribute(pi: *mut c_int, attrib: CUfunction_attribute, hfunc: CUfunction) -> CUresult;
     pub fn cuFuncSetAttribute(hfunc: CUfunction, attrib: u32, value: i32) -> CUresult;
     pub fn cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
@@ -65,7 +104,7 @@ extern "C" {
         flags: c_uint,
     ) -> CUresult;
 
-    pub fn cuCtxGetCurrent(pctx: *mut CUcontext) -> CUresult;
+    pub fn cuCtxGetCurrent(pctx: u64) -> CUresult;
     pub fn cuModuleUnload(hmod: CUmodule) -> CUresult;
     pub fn cuMemGetAllocationGranularity(granularity: u64, prop: u64, option: usize,) -> CUresult;
     pub fn cuMemAddressReserve(ptr: u64, size: usize, alignment: usize, addr: u64, flags: c_ulonglong) -> CUresult;
@@ -75,7 +114,7 @@ extern "C" {
     pub fn cuMemUnmap(ptr: u64, size: usize) -> CUresult;
     pub fn cuMemRelease(handle: u64) -> CUresult;
     pub fn cuMemAddressFree(ptr: u64, size: usize) -> CUresult;
-    pub fn cuDeviceGet(device: *mut CUdevice, ordinal: i32) -> CUresult;
+    pub fn cuDeviceGet(device: u64, ordinal: i32) -> CUresult;
     pub fn cuCtxSetCurrent(ctx: u64) -> CUresult;
     pub fn cuDevicePrimaryCtxReset(device: CUdevice) -> CUresult;
     pub fn cuCtxGetApiVersion(ctx: CUcontext, version:*mut u32) -> CUresult;
@@ -96,6 +135,7 @@ extern "C" {
         stream: cudaStream_t,
         pCaptureStatus: *mut cudaStreamCaptureStatus,
     ) -> cudaError_t;
+    pub fn cudaInitDevice(device: i32, deviceFlags: u32, flags: u32) -> cudaError_t;
     pub fn cudaSetDevice(device: c_int) -> cudaError_t;
     pub fn cudaDeviceSynchronize() -> cudaError_t;
     pub fn cudaGetLastError() -> cudaError_t;

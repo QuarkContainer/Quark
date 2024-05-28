@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include<unistd.h>
 
 #define N 100//000
 #define MAX_ERR 1e-6
@@ -111,7 +112,7 @@ void cuda_add() {
     }
     printf("out[0] = %f\n", out[0]);
     printf("PASSED\n");
-
+    sleep(5);
     // Deallocate device memory
     printf("Deallocating GPU memory\n");
  

@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::mutex::*;
+use crate::qlib::proxy::ProxyParameters;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::btree_set::BTreeSet;
 use alloc::string::String;
@@ -281,7 +283,26 @@ pub struct ThreadGroupInternal {
     pub timerMu: Arc<QMutex<()>>,
     // todo: handle tty
     //pub tty: Option<TTY>
+    pub cudaProcessCtx: CudaProcessCtx,
 }
+
+pub type CtxId = u64;
+#[derive(Default, Debug)]
+pub struct CudaProcessCtxInner {
+    pub ctxStack: Vec<CtxId>,
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct CudaProcessCtx(pub Arc<QMutex<CudaProcessCtxInner>>);
+
+impl Deref for CudaProcessCtx {
+    type Target =  Arc<QMutex<CudaProcessCtxInner>>;
+
+    fn deref(&self) -> & Arc<QMutex<CudaProcessCtxInner>> {
+        &self.0
+    }
+}
+
 
 #[derive(Default, Clone)]
 pub struct ThreadGroupWeak {
@@ -350,11 +371,15 @@ impl Drop for ThreadGroup {
 }
 
 impl ThreadGroup {
-        pub fn Downgrade(&self) -> ThreadGroupWeak {
+    pub fn Downgrade(&self) -> ThreadGroupWeak {
         return ThreadGroupWeak {
             uid: self.uid,
             data: Arc::downgrade(&self.data),
         };
+    }
+
+    pub fn GetCudaCtx(&self) -> CudaProcessCtx {
+        return self.lock().cudaProcessCtx.clone();
     }
 
     pub fn TimerMu(&self) -> Arc<QMutex<()>> {
@@ -594,6 +619,19 @@ impl ThreadGroup {
     pub fn release(&self) {
         // Timers must be destroyed without holding the TaskSet or signal mutexes
         // since timers send signals with Timer.mu locked.
+        // let para = ProxyParameters {
+        //     para1: 0,
+        //     para2: 0,
+        //     para3: 0,
+        //     para4: 0,
+        //     para5: 0,
+        //     para6: 0,
+        //     para7: 0,
+        //     cudaCtx: &self.lock().cudaProcessCtx as *const _ as u64,
+        // };
+        // HostSpace::Proxy(crate::qlib::proxy::ProxyCommand::ContextDestory, para);
+        // deinit function
+        error!("release self 1");
         let timer = self.lock().itimerRealTimer.clone();
         timer.Destroy();
         let mut its = Vec::new();
@@ -612,6 +650,7 @@ impl ThreadGroup {
         for it in its {
             it.DestroyTimer();
         }
+        error!("release self 2");
     }
 
     pub fn CreateSessoin(&self) -> Result<()> {

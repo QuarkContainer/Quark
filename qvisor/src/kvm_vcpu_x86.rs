@@ -575,10 +575,10 @@ impl KVMVcpu {
 
                             SHARE_SPACE.IncrHostProcessor();
 
-                            Self::GuestMsgProcess(&SHARE_SPACE);
+                            //Self::GuestMsgProcess(&SHARE_SPACE);
                             // last processor in host
                             if SHARE_SPACE.DecrHostProcessor() == 0 {
-                                Self::GuestMsgProcess(&SHARE_SPACE);
+                               // Self::GuestMsgProcess(&SHARE_SPACE);
                             }
                         }
 
@@ -738,12 +738,12 @@ impl KVMVcpu {
 
             {
                 sharespace.IncrHostProcessor();
-                Self::GuestMsgProcess(sharespace);
+                //Self::GuestMsgProcess(sharespace);
 
                 defer!({
                     // last processor in host
                     if sharespace.DecrHostProcessor() == 0 {
-                        Self::GuestMsgProcess(sharespace);
+                        //Self::GuestMsgProcess(sharespace);
                     }
                 });
             }

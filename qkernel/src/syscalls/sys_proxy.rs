@@ -20,6 +20,7 @@ use alloc::vec::Vec;
 use spin::Mutex;
 
 use crate::qlib::common::*;
+use crate::qlib::kernel::threadmgr::thread_group::CudaProcessCtx;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::TSC;
 use crate::qlib::linux_def::{SysErr, PATH_MAX};
@@ -29,6 +30,13 @@ use crate::task::*;
 
 lazy_static! {
     pub static ref PARAM_INFOS: Mutex<BTreeMap<u64, Arc<Vec<u16>>>> = Mutex::new(BTreeMap::new());
+}
+
+impl Drop for CudaProcessCtx{
+    fn drop(&mut self) {
+        error!("drop cuda ctx");
+        // func to remote ctx
+    }
 }
 
 pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -41,6 +49,11 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             .fetch_add(gap as u64, Ordering::SeqCst);
     });
     let cmd: ProxyCommand = unsafe { core::mem::transmute(commandId as u64) };
+    error!("cmd is {:?}", cmd);
+    let tg = task.Thread().ThreadGroup();
+    let cudaProcessCtx = task.Thread().ThreadGroup().GetCudaCtx();
+    //let pid = ctxStack.len;
+    let mut currCtx: u64 = 0;
     let mut parameters = ProxyParameters {
         para1: args.arg1,
         para2: args.arg2,
@@ -49,8 +62,17 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         para5: args.arg5,
         para6: 0,
         para7: 0,
+        cudaCtx: &mut currCtx as *mut _ as u64,
     };
-    let sys_ret ;
+    if cudaProcessCtx.lock().ctxStack.is_empty() {
+        let ret = HostSpace::Proxy(ProxyCommand::ContextInit, parameters);
+        error!("ctx created:{:x}", currCtx.clone());
+        cudaProcessCtx.lock().ctxStack.push(currCtx.clone());
+    } else {
+        currCtx = *cudaProcessCtx.lock().ctxStack.last().unwrap();
+    }
+    
+    let mut sys_ret = Ok(0) ;
     match cmd {
         ProxyCommand::None => {
             return Err(Error::SysError(SysErr::EINVAL));
@@ -780,6 +802,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             sys_ret = Ok(ret);
         } //_ => todo!()
+        _ => (),
     }
     return sys_ret;
 }

@@ -40,6 +40,7 @@ import sys
 
 dtype = torch.float
 device = torch.device("cuda:0")
+# device = torch.device("cpu")
 torch.manual_seed(0)
 
 # Create random input and output data

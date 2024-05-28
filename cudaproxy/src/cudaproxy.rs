@@ -329,7 +329,7 @@ pub fn findPtxJitCompilerLibrary(path: &mut String) -> std::io::Result<()> {
 
 #[no_mangle]
 pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) -> *mut *mut c_void {
-    //println!("Hijacked __cudaRegisterFatBinary");
+    println!("Hijacked __cudaRegisterFatBinary");
     let mut ptxlibPath: String = "".to_string();
     findPtxJitCompilerLibrary(&mut ptxlibPath).unwrap();
 
