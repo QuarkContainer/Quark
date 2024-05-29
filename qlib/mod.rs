@@ -88,6 +88,7 @@ pub mod unix_socket;
 
 use self::kernel::dns::dns_svc::DnsSvc;
 use self::mutex::*;
+#[cfg(not(feature = "cc"))]
 use alloc::collections::VecDeque;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -1188,14 +1189,20 @@ impl CompleteEntry {
 }
 
 pub struct UringQueue {
+    #[cfg(not(feature = "cc"))]
     pub submitq: QMutex<VecDeque<UringEntry>>,
+    #[cfg(feature = "cc")]
+    pub submitq: ArrayQueue<UringEntry>,
     pub completeq: ArrayQueue<CompleteEntry>,
 }
 
 impl Default for UringQueue {
     fn default() -> Self {
         return Self {
+            #[cfg(not(feature = "cc"))]
             submitq: Default::default(),
+            #[cfg(feature = "cc")]
+            submitq: ArrayQueue::new(MemoryDef::QURING_SIZE),
             completeq: ArrayQueue::new(MemoryDef::QURING_SIZE),
         };
     }

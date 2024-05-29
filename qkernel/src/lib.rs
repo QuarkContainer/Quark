@@ -157,6 +157,7 @@ lazy_static! {
 lazy_static! {
     pub static ref PRIVATE_VCPU_ALLOCATOR: Box<PrivateVcpuAllocators> = Box::new(PrivateVcpuAllocators::New());
     pub static ref PAGE_MGR_HOLDER: Box<PageMgr> = Box::new(PageMgr::default());
+    pub static ref IO_URING_HOLDER: Box<QUring> = Box::new(QUring::New(MemoryDef::QURING_SIZE));
 }
 
 pub fn AllocIOBuf(size: usize) -> *mut u8 {
@@ -175,18 +176,22 @@ pub fn SingletonInit() {
         FP_STATE.Reset();
         SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
         //SHARESPACE.SetvirtualizationHandlerAddr(virtualization_handler as u64);
-        IOURING.SetValue(SHARESPACE.GetIOUringAddr());
 
         // the error! can run after this point
         //error!("error message");
 
-        #[cfg(not(feature = "cc"))]
-        PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
+        #[cfg(not(feature = "cc"))]{
+            PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
+            IOURING.SetValue(SHARESPACE.GetIOUringAddr());
+        }
+
         #[cfg(feature = "cc")]
         if is_cc_enabled(){
             PAGE_MGR.SetValue(PAGE_MGR_HOLDER.Addr());
+            IOURING.SetValue(IO_URING_HOLDER.Addr());
         } else {
             PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
+            IOURING.SetValue(SHARESPACE.GetIOUringAddr());
         }
         LOADER.Init(Loader::default());
         KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
