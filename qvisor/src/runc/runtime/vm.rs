@@ -267,7 +267,9 @@ impl VirtualMachine {
         let cpuCount = cpuCount.max(2); // minimal 2 cpus
 
         VMS.lock().vcpuCount = cpuCount;
-        VMS.lock().RandomVcpuMapping();
+
+        // disable vcpu mapping as workaround
+        // VMS.lock().RandomVcpuMapping();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
         let controlSock = args.ControlSock;
 

@@ -437,7 +437,7 @@ impl CPULocal {
         self.data = 1;
     }
 
-    pub fn ProcessOnce(sharespace: &ShareSpace) -> usize {
+    pub fn ProcessOnce(_sharespace: &ShareSpace) -> usize {
         let mut count = 0;
 
         loop {
@@ -449,7 +449,7 @@ impl CPULocal {
         }
 
         count += IOURING.DrainCompletionQueue();
-        count += KVMVcpu::GuestMsgProcess(sharespace);
+        // count += KVMVcpu::GuestMsgProcess(sharespace);
         count += FD_NOTIFIER.HostEpollWait() as usize;
 
         return count;
