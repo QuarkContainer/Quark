@@ -58,6 +58,10 @@ use crate::qlib::kernel::kernel::waiter::Queue;
 use crate::qlib::kernel::socket::hostinet::loopbacksocket::*;
 use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFConf;
 use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFReq;
+#[cfg(feature = "cc")]
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+#[cfg(feature = "cc")]
+use crate::GuestHostSharedAllocator;
 
 pub fn newUringSocketFile(
     task: &Task,
@@ -179,8 +183,13 @@ pub struct UringSocketOperationsIntern {
     passInq: AtomicBool,
 }
 
+#[cfg(not(feature = "cc"))]
 #[derive(Clone)]
 pub struct UringSocketOperationsWeak(pub Weak<UringSocketOperationsIntern>);
+
+#[cfg(feature = "cc")]
+#[derive(Clone)]
+pub struct UringSocketOperationsWeak(pub Weak<UringSocketOperationsIntern, GuestHostSharedAllocator>);
 
 impl UringSocketOperationsWeak {
     pub fn Upgrade(&self) -> Option<UringSocketOperations> {
@@ -193,8 +202,13 @@ impl UringSocketOperationsWeak {
     }
 }
 
+#[cfg(not(feature = "cc"))]
 #[derive(Clone)]
 pub struct UringSocketOperations(Arc<UringSocketOperationsIntern>);
+
+#[cfg(feature = "cc")]
+#[derive(Clone)]
+pub struct UringSocketOperations(Arc<UringSocketOperationsIntern, GuestHostSharedAllocator>);
 
 impl Drop for UringSocketOperations {
     fn drop(&mut self) {
@@ -284,7 +298,11 @@ impl UringSocketOperations {
             passInq: AtomicBool::new(false),
         };
 
+        #[cfg(not(feature = "cc"))]
         let ret = Self(Arc::new(ret));
+        #[cfg(feature = "cc")]
+        let ret = Self(Arc::new_in(ret, GUEST_HOST_SHARED_ALLOCATOR));
+
         return Ok(ret);
     }
 
@@ -465,10 +483,20 @@ impl UringSocketOperations {
     }
 }
 
+#[cfg(not(feature = "cc"))]
 impl Deref for UringSocketOperations {
     type Target = Arc<UringSocketOperationsIntern>;
 
     fn deref(&self) -> &Arc<UringSocketOperationsIntern> {
+        &self.0
+    }
+}
+
+#[cfg(feature = "cc")]
+impl Deref for UringSocketOperations {
+    type Target = Arc<UringSocketOperationsIntern, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<UringSocketOperationsIntern, GuestHostSharedAllocator> {
         &self.0
     }
 }

@@ -197,13 +197,23 @@ impl SocketBufIovs {
     }
 }
 
+#[cfg(not(feature = "cc"))]
 pub enum RingeBufAllocator {
     HeapAllocator,
     //ShareAllocator {headTailAddr: u64, bufAddr: u64},
     ShareAllocator(u64, u64, u64, bool),
 }
 
+#[cfg(feature = "cc")]
+pub enum RingeBufAllocator {
+    GuestPrivateHeapAllocator,
+    GuestSharedHeapAllocator,
+    //ShareAllocator {headTailAddr: u64, bufAddr: u64},
+    ShareAllocator(u64, u64, u64, bool),
+}
+
 impl RingeBufAllocator {
+    #[cfg(not(feature = "cc"))]
     pub fn AllocHeadTail(&self) -> &'static [AtomicU32] {
         match self {
             Self::HeapAllocator => return HeapAllocator::AllocHeadTail(),
@@ -213,6 +223,7 @@ impl RingeBufAllocator {
         }
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn AllocWaitingRW(&self) -> &'static [AtomicBool] {
         match self {
             Self::HeapAllocator => return HeapAllocator::AllocWaitingRW(),
@@ -222,6 +233,7 @@ impl RingeBufAllocator {
         }
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn FreeHeadTail(&self, data: &'static [AtomicU32]) {
         match self {
             Self::HeapAllocator => return HeapAllocator::FreeHeadTail(data),
@@ -229,6 +241,7 @@ impl RingeBufAllocator {
         }
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn FreeWaitingRW(&self, data: &'static [AtomicBool]) {
         match self {
             Self::HeapAllocator => return HeapAllocator::FreeWaitingRW(data),
@@ -236,6 +249,7 @@ impl RingeBufAllocator {
         }
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn AlllocBuf(&self, pageCount: usize) -> u64 {
         match self {
             Self::HeapAllocator => return HeapAllocator::AlllocBuf(pageCount),
@@ -243,6 +257,7 @@ impl RingeBufAllocator {
         }
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn FreeBuf(&self, addr: u64, size: usize) {
         match self {
             Self::HeapAllocator => return HeapAllocator::FreeBuf(addr, size),
@@ -856,7 +871,10 @@ impl ByteStreamIntern {
             "Bytetream pagecount is not power of two: {}",
             pageCount
         );
+        #[cfg(not(feature = "cc"))]
         let allocator = RingeBufAllocator::HeapAllocator;
+        #[cfg(feature = "cc")]
+        let allocator = RingeBufAllocator::GuestSharedHeapAllocator;
         let buf = RingBuf::New(pageCount as usize, allocator);
 
         return Self {
