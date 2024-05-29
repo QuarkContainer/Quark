@@ -200,6 +200,7 @@ impl Deref for Kernel {
 impl Kernel {
     pub fn Init(args: InitKernelArgs) -> Self {
         let cpuTicker = Arc::new(KernelCPUClockTicker::New());
+        #[cfg(not(feature = "cc"))]
         let internal = KernelInternal {
             extMu: QMutex::new(()),
             featureSet: args.FeatureSet,
@@ -225,7 +226,36 @@ impl Kernel {
             lastProcessTime: QMutex::new(0),
             syslog: SysLog::default(),
         };
-
+        #[cfg(feature = "cc")]
+        let internal = KernelInternal {
+            extMu: QMutex::new(()),
+            featureSet: args.FeatureSet,
+            tasks: TaskSet::New(),
+            rootUserNamespace: args.RootUserNamespace,
+            rootUTSNamespace: args.RootUTSNamespace,
+            rootIPCNamespace: args.RootIPCNamespace,
+            applicationCores: if is_cc_enabled() {
+                args.ApplicationCores as usize - 2
+            } else {
+                args.ApplicationCores as usize - 1
+            },
+            mounts: QRwLock::new(BTreeMap::new()),
+            sockets: SocketStore::default(),
+            globalInit: QMutex::new(None),
+            cpuClock: AtomicU64::new(0),
+            staticInfo: QMutex::new(StaticInfo {
+                ApplicationCores: args.ApplicationCores,
+                useHostCores: false,
+                cpu: 0,
+            }),
+            //cpuClockTicker: Timer::New(&MONOTONIC_CLOCK, &cpuTicker),
+            cpuClockTicker: cpuTicker,
+            startTime: Task::RealTimeNow(),
+            started: AtomicBool::new(false),
+            platform: DefaultPlatform::default(),
+            lastProcessTime: QMutex::new(0),
+            syslog: SysLog::default(),
+        };
         //error!("hasXSAVEOPT is {}", internal.featureSet.lock().UseXsaveopt());
         //error!("hasXSAVE is {}", internal.featureSet.lock().UseXsave());
         //error!("hasFSGSBASE is {}", internal.featureSet.lock().HasFeature(Feature(X86Feature::X86FeatureFSGSBase as i32)));
