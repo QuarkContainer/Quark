@@ -129,6 +129,7 @@ pub enum Msg {
     UnmapGuestMemRange(UnmapGuestMemRange),
     HostUnixConnect(HostUnixConnect),
     HostUnixRecvMsg(HostUnixRecvMsg),
+    ReadContent(ReadContent),
 
     // TsotListen(TsotListen),
     // TsotAccept(TsotAccept),
@@ -136,6 +137,14 @@ pub enum Msg {
     // TsotConnect(TsotConnect),
     TsotRecvMsg(TsotRecvMsg),
     TsotSendMsg(TsotSendMsg),
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct ReadContent {
+    pub filenameAddr: u64,
+    pub filenameLen: usize,
+    pub addr: u64,
+    pub len: usize,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -177,7 +186,6 @@ pub struct TsotConnect {
 pub struct NividiaDriverVersion {
     pub ioctlParamsAddr: u64,
 }
-
 
 #[derive(Clone, Debug, Default)]
 pub struct HostUnixConnect {

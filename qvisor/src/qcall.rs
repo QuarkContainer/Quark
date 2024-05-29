@@ -426,6 +426,14 @@ impl KVMVcpu {
             Msg::HostMemoryBarrier(_) => {
                 VMSpace::HostMemoryBarrier();
             }
+            Msg::ReadContent(msg) => {
+                ret = super::VMSpace::ReadContent(
+                    msg.filenameAddr,
+                    msg.filenameLen,
+                    msg.addr,
+                    msg.len,
+                ) as u64;
+            }
         };
 
         return ret;
