@@ -18,6 +18,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use cache_padded::CachePadded;
 use core::cmp::PartialEq;
+use core::panic;
 use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
@@ -214,7 +215,10 @@ impl Default for TaskQueueIntern {
         return Self {
             workingTask: TaskId::New(0),
             workingTaskReady: false,
+            #[cfg(not(feature = "cc"))]
             queue: VecDeque::with_capacity(8),
+            #[cfg(feature = "cc")]
+            queue: VecDeque::with_capacity(512),
         };
     }
 }
@@ -298,7 +302,15 @@ impl TaskQueue {
                                 self.queueSize.fetch_sub(1, Ordering::Release);
                                 return Some(taskId);
                             }
-                            data.queue.push_back(taskId)
+                            #[cfg(not(feature = "cc"))]
+                            data.queue.push_back(taskId);
+                            #[cfg(feature = "cc")]
+                            if data.queue.len() == data.queue.capacity()
+                            {
+                                panic!("queue is full");
+                            } else {
+                                data.queue.push_back(taskId);
+                            }
                         }
                     }
                 }
@@ -318,7 +330,16 @@ impl TaskQueue {
             return false;
         }
 
+        #[cfg(not(feature = "cc"))]
         data.queue.push_back(task);
+        #[cfg(feature = "cc")]
+        if data.queue.len() == data.queue.capacity()
+        {
+            panic!("queue is full");
+        } else {
+            data.queue.push_back(task);
+        }
+
         self.queueSize.fetch_add(1, Ordering::Release);
         return true;
     }
