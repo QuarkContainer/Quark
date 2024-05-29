@@ -11,6 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#[cfg(feature = "cc")]
+use core::borrow::Borrow;
 
 use alloc::sync::Arc;
 
@@ -594,9 +596,23 @@ impl QUring {
     }
 
     pub fn UringPush(&self, entry: UringEntry) {
+        #[cfg(not(feature = "cc"))]
         {
             let mut s = SHARESPACE.uringQueue.submitq.lock();
             s.push_back(entry);
+        }
+
+        #[cfg(feature = "cc")]
+        {
+            let mut entry = entry;
+            loop {
+                let r = SHARESPACE.uringQueue.submitq.push(entry);
+                if r.is_ok() {
+                    break;
+                } else {
+                    entry = r.err().unwrap();
+                }
+            }
         }
 
         SHARESPACE.Submit().expect("QUringIntern::submit fail");
@@ -608,10 +624,19 @@ impl QUring {
     }
 
     pub fn AUringCallLinked(&self, entry1: UringEntry, entry2: UringEntry) {
+        #[cfg(not(feature = "cc"))]
         {
             let mut s = SHARESPACE.uringQueue.submitq.lock();
             s.push_back(entry1);
             s.push_back(entry2);
+        }
+
+        #[cfg(feature = "cc")]
+        {
+            let s = SHARESPACE.uringQueue.submitq.borrow();
+            if s.push(entry1).is_err() || s.push(entry2).is_err(){
+                panic!("submitq is full");
+            }
         }
 
         SHARESPACE.Submit().expect("QUringIntern::submit fail");
