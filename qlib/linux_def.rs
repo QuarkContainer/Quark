@@ -17,6 +17,10 @@ use alloc::vec::Vec;
 use core::sync::atomic::Ordering;
 
 use super::super::kernel_def::*;
+#[cfg(feature = "cc")]
+use crate::qlib::mem::cc_allocator::GuestHostSharedAllocator;
+#[cfg(feature = "cc")]
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 pub struct Xattr {}
 
@@ -2479,19 +2483,37 @@ pub struct IoVec {
     pub len: usize,
 }
 
+#[cfg(not(feature = "cc"))]
 #[derive(Debug)]
 pub struct DataBuff {
     pub buf: Vec<u8>,
+}
+
+#[cfg(feature = "cc")]
+#[derive(Debug)]
+pub struct DataBuff {
+    pub buf: Vec<u8, GuestHostSharedAllocator>,
 }
 
 use super::kernel::tcpip::tcpip::SockAddrInet;
 use super::mem::seq::BlockSeq;
 
 impl DataBuff {
+    #[cfg(not(feature = "cc"))]
     pub fn New(size: usize) -> Self {
         // allocate memory even size is zero. So that Ptr() can get valid address
         let count = if size > 0 { size } else { 1 };
         let mut buf = Vec::with_capacity(count);
+        buf.resize(size, 0);
+
+        return Self { buf: buf };
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn New(size: usize) -> Self {
+        // allocate memory even size is zero. So that Ptr() can get valid address
+        let count = if size > 0 { size } else { 1 };
+        let mut buf = Vec::with_capacity_in(count,GUEST_HOST_SHARED_ALLOCATOR);
         buf.resize(size, 0);
 
         return Self { buf: buf };
