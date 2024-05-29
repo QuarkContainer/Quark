@@ -693,8 +693,25 @@ pub extern "C" fn rust_main(
         }
         CreateTask(ControllerProcess as u64, ptr::null(), true);
     }
+    #[cfg(feature = "cc")]
+    if id == 2 {
+        if is_cc_enabled(){
+            IoHanlder();
+        }
+    }
 
     WaitFn();
+}
+
+#[cfg(feature = "cc")]
+fn IoHanlder() {
+    loop {
+        if Shutdown() {
+            break;
+        }
+
+        QUringTrigger();
+    }
 }
 
 fn StartExecProcess(fd: i32, process: Process) -> ! {
