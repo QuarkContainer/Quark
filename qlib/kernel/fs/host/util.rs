@@ -30,6 +30,10 @@ use super::super::super::task::*;
 use super::super::super::util::cstring::*;
 #[cfg(feature = "cc")]
 use super::super::super::util::sharedstring::*;
+#[cfg(feature = "cc")]
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+#[cfg(feature = "cc")]
+use Box;
 
 use super::super::super::super::path;
 use super::super::super::Kernel::HostSpace;
@@ -615,25 +619,47 @@ pub fn UnstableAttr(
 
         return Ok(s.UnstableAttr(mo));
     } else {
-        let mut s: Statx = Default::default();
         #[cfg(not(feature = "cc"))]
-        let str = CString::New("");
-        #[cfg(feature = "cc")]
-        let str =  SharedString::New("");
-        let ret = IOURING.Statx(
-            task,
-            hostfd,
-            str.Ptr(),
-            &mut s as *mut _ as u64,
-            ATType::AT_EMPTY_PATH,
-            StatxMask::STATX_BASIC_STATS,
-        );
+        {
+            let mut s: Statx = Default::default();
+            let str = CString::New("");
+            let ret = IOURING.Statx(
+                task,
+                hostfd,
+                str.Ptr(),
+                &mut s as *mut _ as u64,
+                ATType::AT_EMPTY_PATH,
+                StatxMask::STATX_BASIC_STATS,
+            );
 
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32));
+            if ret < 0 {
+                return Err(Error::SysError(-ret as i32));
+            }
+
+            return Ok(s.UnstableAttr(mo));
         }
 
-        return Ok(s.UnstableAttr(mo));
+
+        #[cfg(feature = "cc")]
+        {
+            let s = Box::new_in(Statx::default(), GUEST_HOST_SHARED_ALLOCATOR);
+            let addr = &*s as *const  _ as u64;
+            let str =  SharedString::New("");
+            let ret = IOURING.Statx(
+                task,
+                hostfd,
+                str.Ptr(),
+                addr,
+                ATType::AT_EMPTY_PATH,
+                StatxMask::STATX_BASIC_STATS,
+            );
+
+            if ret < 0 {
+                return Err(Error::SysError(-ret as i32));
+            }
+
+            return Ok(s.UnstableAttr(mo));
+        }
     }
 }
 
