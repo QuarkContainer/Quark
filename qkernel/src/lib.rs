@@ -90,7 +90,7 @@ use self::qlib::kernel::perflog;
 use self::qlib::kernel::quring;
 use self::qlib::kernel::Kernel;
 #[cfg (feature = "cc")]
-use self::qlib::kernel::Kernel::ENABLE_CC;
+use self::qlib::kernel::Kernel::{ENABLE_CC, is_cc_enabled};
 use self::qlib::kernel::*;
 use self::qlib::{ShareSpaceRef, SysCallID};
 //use self::vcpu::*;
@@ -121,6 +121,8 @@ use self::threadmgr::task_sched::*;
 use self::qlib::mem::cc_allocator::*;
 #[cfg(feature = "cc")]
 use alloc::boxed::Box;
+#[cfg(feature = "cc")]
+use memmgr::pma::PageMgr;
 
 #[macro_use]
 mod print;
@@ -154,6 +156,7 @@ lazy_static! {
 #[cfg(feature = "cc")]
 lazy_static! {
     pub static ref PRIVATE_VCPU_ALLOCATOR: Box<PrivateVcpuAllocators> = Box::new(PrivateVcpuAllocators::New());
+    pub static ref PAGE_MGR_HOLDER: Box<PageMgr> = Box::new(PageMgr::default());
 }
 
 pub fn AllocIOBuf(size: usize) -> *mut u8 {
@@ -177,7 +180,14 @@ pub fn SingletonInit() {
         // the error! can run after this point
         //error!("error message");
 
+        #[cfg(not(feature = "cc"))]
         PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
+        #[cfg(feature = "cc")]
+        if is_cc_enabled(){
+            PAGE_MGR.SetValue(PAGE_MGR_HOLDER.Addr());
+        } else {
+            PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
+        }
         LOADER.Init(Loader::default());
         KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
             MemoryDef::DEFAULT_STACK_SIZE as usize,
