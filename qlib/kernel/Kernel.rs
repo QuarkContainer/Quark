@@ -654,6 +654,18 @@ impl HostSpace {
         //return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn ReadContent(filenameAddr: u64, filenameLen: usize, addr: u64, len: usize) -> i64 {
+        let mut msg = Msg::ReadContent(ReadContent {
+            filenameAddr: filenameAddr,
+            filenameLen: filenameLen,
+            addr: addr,
+            len: len,
+        });
+
+        let ret = Self::Call(&mut msg, false) as i64;
+        return ret;
+    }
+
     pub fn RemapGuestMemRanges(len: u64, addr: u64, count: usize) -> i64 {
         let mut msg = Msg::RemapGuestMemRanges(RemapGuestMemRanges {
             len: len,

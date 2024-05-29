@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::fs::procfs::inode::NewStaticProcInodeWithHostFile;
 use crate::qlib::kernel::fs::procfs::inode::NewStaticProcInodeWithString;
 use crate::qlib::mutex::*;
 use alloc::borrow::ToOwned;
@@ -82,80 +83,87 @@ impl SimpleFileTrait for PossibleData {
 
 pub fn NewCpuTopo(task: &Task, msrc: &Arc<QMutex<MountSource>>, cpuId: usize) -> Inode {
     let mut m = BTreeMap::new();
-    let coreId = format!("{}\n", cpuId / 2 * 4);
+
+    let folderName = format!("/sys/devices/system/cpu/cpu{}/topology/", cpuId);
+
     m.insert(
         "core_id".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &coreId),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "core_id")).unwrap(),
     );
 
-    let cluster_id = format!("{}\n", cpuId / 2 * 8);
     m.insert(
         "cluster_id".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &cluster_id),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "cluster_id")).unwrap(),
     );
 
-    let core_cpus = format!("{:06x}\n", 0b11 << (cpuId / 2 * 2));
     m.insert(
         "core_cpus".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &core_cpus),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "core_cpus")).unwrap(),
     );
     m.insert(
         "cluster_cpus".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &core_cpus),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "cluster_cpus")).unwrap(),
     );
     m.insert(
         "thread_siblings".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &core_cpus),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "thread_siblings"))
+            .unwrap(),
     );
 
-    let cores = GetKernel().applicationCores;
-    let die_cpus = (1 << cores) - 1;
     m.insert(
         "die_cpus".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &format!("{:x}\n", die_cpus)),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "die_cpus")).unwrap(),
     );
     m.insert(
         "package_cpus".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &format!("{:x}\n", die_cpus)),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "package_cpus")).unwrap(),
     );
     m.insert(
         "core_siblings".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &format!("{:x}\n", die_cpus)),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "core_siblings"))
+            .unwrap(),
     );
 
     m.insert(
         "physical_package_id".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &format!("{}\n", 0)),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "physical_package_id"))
+            .unwrap(),
     );
     m.insert(
         "die_id".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &format!("{}\n", 0)),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "die_id")).unwrap(),
     );
 
     m.insert(
         "die_cpus_list".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &format!("0-{}\n", cores - 1)),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "die_cpus_list"))
+            .unwrap(),
     );
     m.insert(
         "package_cpus_list".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &format!("0-{}\n", cores - 1)),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "package_cpus_list"))
+            .unwrap(),
     );
     m.insert(
         "core_siblings_list".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &format!("0-{}\n", cores - 1)),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "core_siblings_list"))
+            .unwrap(),
     );
 
     m.insert(
         "thread_siblings_list".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &format!("0-{}\n", 1)),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "thread_siblings_list"))
+            .unwrap(),
     );
     m.insert(
         "cluster_cpus_list".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &format!("0-{}\n", 1)),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "cluster_cpus_list"))
+            .unwrap(),
     );
     m.insert(
         "core_cpus_list".to_string(),
-        NewStaticProcInodeWithString(task, msrc, &format!("0-{}\n", 1)),
+        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "core_cpus_list"))
+            .unwrap(),
     );
 
     return NewDir(task, msrc, m);
