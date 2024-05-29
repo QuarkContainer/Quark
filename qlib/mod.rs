@@ -47,6 +47,8 @@ pub mod range;
 pub mod auth;
 pub mod backtracer;
 pub mod bytestream;
+#[cfg(feature = "cc")]
+pub mod bytestream_cc;
 pub mod config;
 pub mod control_msg;
 pub mod cpuid;

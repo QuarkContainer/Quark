@@ -260,18 +260,32 @@ impl QUring {
         IOURING.AUCall(AsyncOps::PollHostEpollWait(op));
     }
 
+    #[allow(unused_variables)]
     pub fn TsotPollInit(&self, tsotSocket: i32) {
-        let op = TsotPoll::New(tsotSocket);
-        IOURING.AUCall(AsyncOps::TsotPoll(op));
+        #[cfg(not(feature = "cc"))]{
+            let op = TsotPoll::New(tsotSocket);
+            IOURING.AUCall(AsyncOps::TsotPoll(op));
+        }
+        #[cfg(feature = "cc")]
+        todo!();
     }
 
+    #[allow(unused_variables)]
     pub fn DNSRecvInit(&self, fd: i32, msgAddr: u64) {
-        let op = DNSRecv::New(fd, msgAddr);
-        IOURING.AUCall(AsyncOps::DNSRecv(op));
+        #[cfg(not(feature = "cc"))]{
+            let op = DNSRecv::New(fd, msgAddr);
+            IOURING.AUCall(AsyncOps::DNSRecv(op));
+        }
+        #[cfg(feature = "cc")]
+        todo!();
     }
 
+    #[allow(unused_variables)]
     pub fn SendDns(&self, op: DNSSend) {
+        #[cfg(not(feature = "cc"))]
         IOURING.AUCall(AsyncOps::DNSSend(op));
+        #[cfg(feature = "cc")]
+        todo!();
     }
 
     pub fn BufSockInit(fd: i32, queue: Queue, buf: SocketBuff, isSocket: bool) -> Result<()> {
@@ -321,6 +335,7 @@ impl QUring {
         return Ok(());
     }
 
+    #[allow(unused_variables)]
     pub fn TsotSocketProduce(
         task: &Task,
         fd: i32,
@@ -330,14 +345,18 @@ impl QUring {
         ops: &TsotSocketOperations,
         iovs: &mut SocketBufIovs,
     ) -> Result<()> {
-        let writeBuf = buf.Produce(task, count, iovs)?;
-        if let Some((addr, len)) = writeBuf {
-            let writeop = TsotAsyncSend::New(fd, queue, buf, addr, len, ops);
-
-            IOURING.AUCall(AsyncOps::TsotAsyncSend(writeop));
+        #[cfg(feature = "cc")]{
+            todo!();
         }
-
-        return Ok(());
+        #[cfg(not(feature = "cc"))]
+        {
+            let writeBuf = buf.Produce(task, count, iovs)?;
+            if let Some((addr, len)) = writeBuf {
+            let writeop = TsotAsyncSend::New(fd, queue, buf, addr, len, ops);
+                IOURING.AUCall(AsyncOps::TsotAsyncSend(writeop));
+            }
+            return Ok(());
+        }
     }
 
     pub fn SocketSend(
@@ -359,6 +378,7 @@ impl QUring {
         return Ok(count as i64);
     }
 
+    #[allow(unused_variables)]
     pub fn TsotSocketSend(
         task: &Task,
         fd: i32,
@@ -367,15 +387,22 @@ impl QUring {
         srcs: &[IoVec],
         ops: &TsotSocketOperations,
     ) -> Result<i64> {
-        let (count, writeBuf) = buf.Writev(task, srcs)?;
-
-        if let Some((addr, len)) = writeBuf {
-            let writeop = TsotAsyncSend::New(fd, queue, buf, addr, len, ops);
-
-            IOURING.AUCall(AsyncOps::TsotAsyncSend(writeop));
+        #[cfg(feature = "cc")]
+        {
+            todo!();
         }
+        #[cfg(not(feature = "cc"))]
+        {
+            let (count, writeBuf) = buf.Writev(task, srcs)?;
 
-        return Ok(count as i64);
+            if let Some((addr, len)) = writeBuf {
+                let writeop = TsotAsyncSend::New(fd, queue, buf, addr, len, ops);
+
+                IOURING.AUCall(AsyncOps::TsotAsyncSend(writeop));
+            }
+
+            return Ok(count as i64);
+        }
     }
 
     pub fn SocketConsume(

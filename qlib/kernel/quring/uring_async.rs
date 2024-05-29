@@ -45,6 +45,12 @@ use super::super::SHARESPACE;
 use super::uring_op::UringCall;
 use crate::qlib::kernel::kernel::kernel::GetKernel;
 use crate::qlib::kernel::tcpip::tcpip::SockAddrInet;
+#[cfg(feature = "cc")]
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+#[cfg(feature = "cc")]
+use crate::GuestHostSharedAllocator;
+#[cfg(feature = "cc")]
+use crate::qlib::kernel::Kernel::is_cc_enabled;
 
 pub enum UringOps {
     UringCall(UringCall),
@@ -409,12 +415,27 @@ pub struct AsyncBufWriteInner {
 }
 
 #[derive(Clone)]
+#[cfg(not(feature = "cc"))]
 pub struct AsyncBufWrite(Arc<AsyncBufWriteInner>);
 
+#[cfg(not(feature = "cc"))]
 impl Deref for AsyncBufWrite {
     type Target = Arc<AsyncBufWriteInner>;
 
     fn deref(&self) -> &Arc<AsyncBufWriteInner> {
+        &self.0
+    }
+}
+
+#[derive(Clone)]
+#[cfg(feature = "cc")]
+pub struct AsyncBufWrite(Arc<AsyncBufWriteInner, GuestHostSharedAllocator>);
+
+#[cfg(feature = "cc")]
+impl Deref for AsyncBufWrite {
+    type Target = Arc<AsyncBufWriteInner, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<AsyncBufWriteInner, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -442,7 +463,10 @@ impl AsyncBufWrite {
             lockGuard: QMutex::new(Some(lockGuard)),
         };
 
+        #[cfg(not(feature = "cc"))]
         return Self(Arc::new(inner));
+        #[cfg(feature = "cc")]
+        return Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR));
     }
 }
 
@@ -639,6 +663,7 @@ pub struct AsyncFiletWrite {
     pub buf: SocketBuff,
     pub addr: u64,
     pub len: usize,
+    #[cfg(not(feature = "cc"))]
     pub fops: Arc<FileOperations>,
 }
 
@@ -690,6 +715,7 @@ impl AsyncOpsTrait for AsyncFiletWrite {
     }
 }
 
+#[allow(unused_variables)]
 impl AsyncFiletWrite {
     pub fn New(
         fd: i32,
@@ -706,6 +732,7 @@ impl AsyncFiletWrite {
             buf,
             addr,
             len,
+            #[cfg(not(feature = "cc"))]
             fops,
         };
     }
@@ -731,7 +758,10 @@ pub struct AsyncAccept {
     pub fd: i32,
     pub queue: Queue,
     pub acceptQueue: AcceptQueue,
+    #[cfg(not(feature = "cc"))]
     pub addr: Arc<AcceptAddr>,
+    #[cfg(feature = "cc")]
+    pub addr: Arc<AcceptAddr, GuestHostSharedAllocator>,
 }
 
 impl AsyncOpsTrait for AsyncAccept {
@@ -746,19 +776,43 @@ impl AsyncOpsTrait for AsyncAccept {
         /**************************hibernate wakeu **************************/
         // so far the quark hibernate is wakeup by accept.
         // todo: find better to handle this
-        if SHARESPACE.reapFileAvaiable.load(Ordering::Relaxed) {
-            ReapSwapIn();
+        #[cfg(feature = "cc")]
+        {
+            if !is_cc_enabled() {
+                if SHARESPACE.reapFileAvaiable.load(Ordering::Relaxed) {
+                    ReapSwapIn();
+                }
+
+                if SHARESPACE.hibernatePause.load(Ordering::Relaxed) {
+                    GetKernel().Unpause();
+                    SHARESPACE.hibernatePause.store(false, Ordering::SeqCst);
+                }
+
+            }
         }
 
-        if SHARESPACE.hibernatePause.load(Ordering::Relaxed) {
-            GetKernel().Unpause();
-            SHARESPACE.hibernatePause.store(false, Ordering::SeqCst);
+        #[cfg(not(feature = "cc"))]
+        {
+            if SHARESPACE.reapFileAvaiable.load(Ordering::Relaxed) {
+                ReapSwapIn();
+            }
+
+            if SHARESPACE.hibernatePause.load(Ordering::Relaxed) {
+                GetKernel().Unpause();
+                SHARESPACE.hibernatePause.store(false, Ordering::SeqCst);
+            }
         }
 
         /**************************hibernate wakeu end **************************/
 
         NewSocket(result);
+        #[cfg(not(feature = "cc"))]
         let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::default()));
+        #[cfg(feature = "cc")]
+        let sockBuf = SocketBuff(Arc::new_in(
+            SocketBuffIntern::default(),
+            crate::GUEST_HOST_SHARED_ALLOCATOR,
+        ));
         let hasSpace = self.acceptQueue.EnqSocket(
             result,
             self.addr.addr.Dup(),
@@ -779,7 +833,10 @@ impl AsyncAccept {
             fd,
             queue,
             acceptQueue,
+            #[cfg(not(feature = "cc"))]
             addr: Arc::new(AcceptAddr::New()), //size of TcpSockAddr
+            #[cfg(feature = "cc")]
+            addr: Arc::new_in(AcceptAddr::New(), GUEST_HOST_SHARED_ALLOCATOR), //size of TcpSockAddr
         };
     }
 }
@@ -1015,13 +1072,28 @@ pub struct AIOWriteInner {
     pub eventfops: Option<EventOperations>,
 }
 
+#[cfg(not(feature = "cc"))]
 #[derive(Clone)]
 pub struct AIOWrite(Arc<AIOWriteInner>);
 
+#[cfg(not(feature = "cc"))]
 impl Deref for AIOWrite {
     type Target = Arc<AIOWriteInner>;
 
     fn deref(&self) -> &Arc<AIOWriteInner> {
+        &self.0
+    }
+}
+
+#[cfg(feature = "cc")]
+#[derive(Clone)]
+pub struct AIOWrite(Arc<AIOWriteInner, GuestHostSharedAllocator>);
+
+#[cfg(feature = "cc")]
+impl Deref for AIOWrite {
+    type Target = Arc<AIOWriteInner, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<AIOWriteInner, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -1061,8 +1133,16 @@ impl AIOWrite {
         eventfops: Option<EventOperations>,
     ) -> Result<Self> {
         let vec = task.CopyInVec(cb.buf, cb.bytes as usize)?;
+        #[cfg(not(feature = "cc"))]
         let buf = DataBuff { buf: vec };
-
+        #[cfg(feature = "cc")]
+        let mut shared_vec = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
+        #[cfg(feature = "cc")]
+        for item in vec {
+            shared_vec.push(item);
+        };
+        #[cfg(feature = "cc")]
+        let buf = DataBuff { buf: shared_vec };
         let inner = AIOWriteInner {
             fd: cb.fd as i32,
             buf: buf,
@@ -1073,7 +1153,10 @@ impl AIOWrite {
             eventfops: eventfops,
         };
 
+        #[cfg(not(feature = "cc"))]
         return Ok(Self(Arc::new(inner)));
+        #[cfg(feature = "cc")]
+        return Ok(Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR)));
     }
 
     pub fn NewWritev(
@@ -1098,14 +1181,20 @@ impl AIOWrite {
             eventfops: eventfops,
         };
 
+        #[cfg(not(feature = "cc"))]
         return Ok(Self(Arc::new(inner)));
+        #[cfg(feature = "cc")]
+        return Ok(Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR)));
     }
 }
 
 pub struct AIOReadInner {
     pub fd: i32,
     pub buf: DataBuff,
+    #[cfg(not(feature = "cc"))]
     pub iovs: Vec<IoVec>,
+    #[cfg(feature = "cc")]
+    pub iovs: Vec<IoVec, GuestHostSharedAllocator>,
     pub offset: i64,
     pub taskId: u64,
 
@@ -1115,13 +1204,28 @@ pub struct AIOReadInner {
     pub eventfops: Option<EventOperations>,
 }
 
+#[cfg(not(feature = "cc"))]
 #[derive(Clone)]
 pub struct AIORead(Arc<AIOReadInner>);
 
+#[cfg(not(feature = "cc"))]
 impl Deref for AIORead {
     type Target = Arc<AIOReadInner>;
 
     fn deref(&self) -> &Arc<AIOReadInner> {
+        &self.0
+    }
+}
+
+#[cfg(feature = "cc")]
+#[derive(Clone)]
+pub struct AIORead(Arc<AIOReadInner, GuestHostSharedAllocator>);
+
+#[cfg(feature = "cc")]
+impl Deref for AIORead {
+    type Target = Arc<AIOReadInner, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<AIOReadInner, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -1170,7 +1274,14 @@ impl AIORead {
     ) -> Result<Self> {
         let iov = IoVec::NewFromAddr(cb.buf, cb.bytes as usize);
 
+        #[cfg(not(feature = "cc"))]
         let iovs = vec![iov];
+
+        #[cfg(feature = "cc")]
+        let mut iovs = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
+        #[cfg(feature = "cc")]
+        iovs.push(iov);
+
         task.FixPermissionForIovs(&iovs, true)?;
         let buf = DataBuff::New(cb.bytes as usize);
 
@@ -1186,7 +1297,10 @@ impl AIORead {
             eventfops: eventfops,
         };
 
+        #[cfg(not(feature = "cc"))]
         return Ok(Self(Arc::new(inner)));
+        #[cfg(feature = "cc")]
+        return Ok(Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR)));
     }
 
     pub fn NewReadv(
@@ -1201,10 +1315,20 @@ impl AIORead {
         let size = IoVec::NumBytes(&iovs);
         let buf = DataBuff::New(size as usize);
 
+        #[cfg(feature = "cc")]
+        let mut iovs_s = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
+        #[cfg(feature = "cc")]
+        for a in iovs{
+            iovs_s.push(a)
+        }
+
         let inner = AIOReadInner {
             fd: cb.fd as i32,
             buf: buf,
+            #[cfg(not(feature = "cc"))]
             iovs: iovs,
+            #[cfg(feature = "cc")]
+            iovs: iovs_s,
             offset: cb.offset,
             taskId: task.taskId,
             cbAddr: cbAddr,
@@ -1213,7 +1337,11 @@ impl AIORead {
             eventfops: eventfops,
         };
 
+        #[cfg(not(feature = "cc"))]
         return Ok(Self(Arc::new(inner)));
+
+        #[cfg(feature = "cc")]
+        return Ok(Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR)));
     }
 }
 
@@ -1227,13 +1355,28 @@ pub struct AIOFsyncInner {
     pub eventfops: Option<EventOperations>,
 }
 
+#[cfg(not(feature = "cc"))]
 #[derive(Clone)]
 pub struct AIOFsync(Arc<AIOFsyncInner>);
 
+#[cfg(not(feature = "cc"))]
 impl Deref for AIOFsync {
     type Target = Arc<AIOFsyncInner>;
 
     fn deref(&self) -> &Arc<AIOFsyncInner> {
+        &self.0
+    }
+}
+
+#[cfg(feature = "cc")]
+#[derive(Clone)]
+pub struct AIOFsync(Arc<AIOFsyncInner, GuestHostSharedAllocator>);
+
+#[cfg(feature = "cc")]
+impl Deref for AIOFsync {
+    type Target = Arc<AIOFsyncInner, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<AIOFsyncInner, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -1282,7 +1425,10 @@ impl AIOFsync {
             eventfops: eventfops,
         };
 
+        #[cfg(not(feature = "cc"))]
         return Ok(Self(Arc::new(inner)));
+        #[cfg(feature = "cc")]
+        return Ok(Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR)));
     }
 }
 
@@ -1340,7 +1486,10 @@ impl UnblockBlockPollAdd {
 #[derive(Clone)]
 pub struct AsyncConnect {
     pub fd: i32,
+    #[cfg(not(feature = "cc"))]
     pub addr: Arc<TcpSockAddr>,
+    #[cfg(feature = "cc")]
+    pub addr: Arc<TcpSockAddr, GuestHostSharedAllocator>,
     pub len: u32,
     pub socket: UringSocketOperationsWeak,
 }
@@ -1392,7 +1541,10 @@ impl AsyncConnect {
         socket.SetConnErrno(-SysErr::EINPROGRESS);
         return Self {
             fd,
+            #[cfg(not(feature = "cc"))]
             addr: Arc::new(addr),
+            #[cfg(feature = "cc")]
+            addr: Arc::new_in(addr, GUEST_HOST_SHARED_ALLOCATOR),
             len: len as _,
             socket: socket.Downgrade(),
         };
