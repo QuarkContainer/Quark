@@ -160,45 +160,76 @@ pub fn Execute(
             panic!("get impossible proxy command");
         }
         ProxyCommand::NcclGetUniqueId => {
-            // error!("nvidia.rs: ncclGetUniqueId");
-            let mut ncclUniqueId_ns: ncclUniqueId = ncclUniqueId::default();
+            error!("nvidia.rs: ncclGetUniqueId");
+            let mut ncclUniqueId_ns: NcclUniqueId = NcclUniqueId::default();
             let ret = unsafe { ncclGetUniqueId(&mut ncclUniqueId_ns) };
             // error!("nvidia.rs: ncclGetUniqueId_after ncclGetUniqueId call");
 
             if ret as u32 != 0 {
                 error!("nvidia.rs: error caused by ncclGetUniqueId: {}", ret as u32);
+            } else {
+                unsafe { *(parameters.para1 as *mut _)= ncclUniqueId_ns };
             }
-            unsafe { *(parameters.para1 as *mut _)= ncclUniqueId_ns };
-            return Ok(ret as i64);  
+            return Ok(ret as u32);  
 
         }
         ProxyCommand::NcclCommInitRank => {
             error!("nvidia.rs: ncclCommInitRank");
             let mut ncclComm_t_: NcclCommT = null_mut();
-            let ncclUniqueId_ns = unsafe { *(parameters.para3 as *const ncclUniqueId) };
+            let ncclUniqueId_ns = unsafe { *(parameters.para3 as *const NcclUniqueId) };
             let ret = unsafe { ncclCommInitRank(&mut ncclComm_t_, parameters.para2 as i32, ncclUniqueId_ns, parameters.para4 as i32) };
 
             if ret as u32 != 0 {
                 error!("nvidia.rs: error caused by ncclCommInitRank: {}", ret as u32);
+            } else {
+                unsafe { *(parameters.para1 as *mut _)= ncclComm_t_ };
             }
-            unsafe { *(parameters.para1 as *mut _)= ncclComm_t_ };
-            return Ok(ret as i64);
+            return Ok(ret as u32);
+        }
+        ProxyCommand::NcclCommInitRankConfig => {
+            error!("nvidia.rs: ncclCommInitRankConfig");
+            let mut ncclComm_t_: NcclCommT = null_mut();
+            let ncclUniqueId_ns = unsafe { *(parameters.para3 as *const NcclUniqueId) };
+            // let config = unsafe { *(parameters.para5 as *const NcclConfig) };
+
+            let ret = unsafe { ncclCommInitRankConfig(&mut ncclComm_t_, parameters.para2 as i32, ncclUniqueId_ns, parameters.para4 as i32, parameters.para5 as *const NcclConfig) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by ncclCommInitRankConfig: {}", ret as u32);
+            } else {
+                unsafe { *(parameters.para1 as *mut _)= ncclComm_t_ };
+            }
+            return Ok(ret as u32);
+
         }
         ProxyCommand::NcclCommInitAll => {
             error!("nvidia.rs: ncclCommInitAll");
-            let mut ncclComm_t_s:Vec<NcclCommT> = Vec::with_capacity(parameters.para2 as usize);
-            unsafe {
-                ncclComm_t_s.set_len(parameters.para2 as usize);
-            }
-            let ret = unsafe { ncclCommInitAll(&mut ncclComm_t_s[0] as *mut NcclCommT, parameters.para2 as i32, parameters.para3 as *const c_int) };
-
+            // let mut ncclComm_t_s:Vec<NcclCommT> = Vec::with_capacity(parameters.para2 as usize);
+            // unsafe {
+            //     ncclComm_t_s.set_len(parameters.para2 as usize);
+            // }
+            let mut ncclComm_t_s: Vec<NcclCommT> = vec![null_mut(); parameters.para2 as usize];  
+            // error!("nvidia.rs: ncclCommInitAlbefrel  call");
+            // let ret = unsafe { ncclCommInitAll(&mut ncclComm_t_s[0] as *mut NcclCommT, parameters.para2 as i32, parameters.para3 as *const c_int) };
+            let ret = unsafe { ncclCommInitAll(ncclComm_t_s.as_mut_ptr(), parameters.para2 as i32, parameters.para3 as *const c_int) };
+            // error!("nvidia.rs: ncclCommInitAl after call");
+            // if ret as u32 != 0 {
+            //     error!("nvidia.rs: error caused by ncclCommInitAll: {}", ret as u32);
+            // }
+            // for i in 0..parameters.para2 as u64 {
+            //     unsafe { *((parameters.para1 + i) as *mut u8 as *mut NcclCommT)= ncclComm_t_s[i as usize] };
+            // }
             if ret as u32 != 0 {
                 error!("nvidia.rs: error caused by ncclCommInitAll: {}", ret as u32);
+            } else {
+                for i in 0..parameters.para2 as usize {
+                    unsafe {
+                        *(parameters.para1 as *mut NcclCommT).add(i) = ncclComm_t_s[i];
+                    }
+                }
+                // error!("nvidia.rs: ncclCommInitAll after nccl comm vec copy");
             }
-            for i in 0..parameters.para2 as u64 {
-                unsafe { *((parameters.para1 + i) as *mut NcclCommT)= ncclComm_t_s[i as usize] };
-            }
-            return Ok(ret as i64);
+            // error!("nvidia.rs: ncclCommInitAl after nccl comm vec copy");
+            return Ok(ret as u32);
 
         }
         ProxyCommand::NcclCommDestroy => {
@@ -207,7 +238,7 @@ pub fn Execute(
             if ret as u32 != 0 {
                 error!("nvidia.rs: error caused by ncclCommDestroy: {}", ret as u32);
             }
-            return Ok(ret as i64);
+            return Ok(ret as u32);
         }
         ProxyCommand::NcclCommAbort => {
             error!("nvidia.rs: ncclCommAbort");
@@ -215,35 +246,107 @@ pub fn Execute(
             if ret as u32 != 0 {
                 error!("nvidia.rs: error caused by ncclCommAbort: {}", ret as u32);
             }
-            return Ok(ret as i64);
+            return Ok(ret as u32);
+        }
+        ProxyCommand::NcclCommCount => {
+            error!("nvidia.rs: ncclCommCount");
+            let mut count: c_int = 0;
+            let ret = unsafe { ncclCommCount(parameters.para1 as NcclCommT, &mut count) };
+
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by ncclCommCount: {}", ret as u32);
+            } else {
+                unsafe { *(parameters.para2 as *mut c_int) = count };
+            }
+            return Ok(ret as u32);
+            
+        }
+        ProxyCommand::NcclCommUserRank => {
+            error!("nvidia.rs: ncclCommUserRank");
+            let mut rank: c_int = 0;
+            let ret = unsafe { ncclCommUserRank(parameters.para1 as NcclCommT, &mut rank) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by ncclCommUserRank: {}", ret as u32);
+            } else {
+                unsafe { *(parameters.para2 as *mut c_int) = rank };
+            }
+            return Ok(ret as u32);
+        }
+        ProxyCommand::NcclSend => {
+            error!("nvidia.rs: ncclSend");
+            let info = unsafe { *(parameters.para2 as *const u8 as *const NcclSendRecvInfo) };
+
+            let ret = unsafe { ncclSend(parameters.para1 as *const c_void, info.count as usize, info.datatype, info.peer, info.comm as NcclCommT, info.stream as cudaStream_t) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by ncclSend: {}", ret as u32);
+            }
+            return Ok(ret as u32);
+        }
+        ProxyCommand::NcclRecv => {
+            error!("nvidia.rs: ncclRecv");
+            let info = unsafe { *(parameters.para2 as *const u8 as *const NcclSendRecvInfo) };
+            let ret = unsafe { ncclRecv(parameters.para1 as *mut c_void, info.count as usize, info.datatype, info.peer, info.comm as NcclCommT, info.stream as cudaStream_t) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by ncclRecv: {}", ret as u32);
+            }
+            return Ok(ret as u32);
+        }
+        ProxyCommand::NcclGroupStart => {
+            error!("nvidia.rs: ncclGroupStart");
+            let ret = unsafe { ncclGroupStart() };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by ncclGroupStart: {}", ret as u32);
+            }
+            return Ok(ret as u32);
+        }
+        ProxyCommand::NcclGroupEnd => {
+            error!("nvidia.rs: ncclGroupEnd");
+            let ret = unsafe { ncclGroupEnd() };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by ncclGroupEnd: {}", ret as u32);
+            }
+            return Ok(ret as u32);
+        }
+        ProxyCommand::NcclAllGather => {
+            error!("nvidia.rs: ncclAllGather");
+            let info = unsafe { *(parameters.para3 as *const u8 as *const NcclAllGatherReduceInfo) };
+            let ret = unsafe { ncclAllGather(parameters.para1 as *const c_void, parameters.para2 as *mut c_void, info.count as usize, info.datatype, info.comm as NcclCommT, info.stream as cudaStream_t) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by ncclAllGather: {}", ret as u32);
+            }
+            return Ok(ret as u32);
+        }
+        ProxyCommand::NcclAllReduce => {
+            error!("nvidia.rs: ncclAllReduce");
+            let info = unsafe { *(parameters.para3 as *const u8 as *const NcclAllGatherReduceInfo) };
+            let ret = unsafe { ncclAllReduce(parameters.para1 as *const c_void, parameters.para2 as *mut c_void, info.count as usize, info.datatype, info.op, info.comm as NcclCommT, info.stream as cudaStream_t) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by ncclAllReduce: {}", ret as u32);
+            }
+            return Ok(ret as u32);
+        }
+        ProxyCommand::NcclReduceScatter => {
+            error!("nvidia.rs: ncclReduceScatter");
+            let info = unsafe { *(parameters.para3 as *const u8 as *const NcclAllGatherReduceInfo) };
+            let ret = unsafe { ncclReduceScatter(parameters.para1 as *const c_void, parameters.para2 as *mut c_void, info.count as usize, info.datatype, info.op, info.comm as NcclCommT, info.stream as cudaStream_t) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by ncclReduceScatter: {}", ret as u32);
+            }
+            return Ok(ret as u32);
         }
         ProxyCommand::NcclGetErrorString => {
             let ret = unsafe {
-                ncclGetErrorString(*(&parameters.para1 as *const _ as u64 as *mut NcclResultT))
+                ncclGetErrorString(parameters.para1 as u32)
             };
             
-            // error!("nvidia.rs: ncclGetErrorString:{}",unsafe{*(&parameters.para1 as *const _ as u64 as *mut NcclResultT) as u64});
-            // if ret as u32 != 0 {
-            //     error!(
-            //         "nvidia.rs: error caused by ncclGetErrorString: {}",
-            //         ret as u32
-            //     );
-            // }
             let c_str: &CStr = unsafe { std::ffi::CStr::from_ptr(ret) };
 
             // Convert CStr to &str and handle potential UTF-8 errors
             let error_str= c_str.to_str().expect("Invalid UTF-8 data");
 
             let error_string = error_str.to_string();
-
-    // Log the error string
-            // error!("nvidia.rs: errorString: {}", error_string);
-            // let cStr = unsafe { std::ffi::CStr::from_ptr(ret) };
-            // let errorStr = cStr.to_str().expect("Invalid UTF-8 data");
-            // let errorString = errorStr.to_string();
-            // error!(errorString);
             unsafe { *(parameters.para2 as *mut String) = error_string };
-            return Ok(0 as i64);
+            return Ok(0 as u32);
         }
         ProxyCommand::CudaChooseDevice => {
             // error!("nvidia.rs: cudaChooseDevice");

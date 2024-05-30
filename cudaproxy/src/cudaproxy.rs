@@ -17,6 +17,7 @@ use std::os::raw::*;
 use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32};
 use lazy_static::lazy_static;
+// use libc::{c_int, SK_MEMINFO_SNDBUF};
 use libc::c_int;
 use libc::dlsym;
 use libelf::raw::*;
@@ -136,94 +137,212 @@ pub extern "C" fn dlclose(handle: *mut c_void) -> c_int{
 
 // ncclgetuniqueid
 #[no_mangle]
-pub extern "C" fn ncclGetUniqueId(ncclUniqueId_p: *mut ncclUniqueId) -> usize {
-    // println!("Hijacked ncclGetUniqueId");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::NcclGetUniqueId as usize, ncclUniqueId_p as *mut _ as usize)
-    };
+pub extern "C" fn ncclGetUniqueId(ncclUniqueId_p: *mut NcclUniqueId) -> usize {
+    println!("Hijacked ncclGetUniqueId");
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::NcclGetUniqueId as usize, ncclUniqueId_p as *mut _ as usize, 0);
 }
 // #nncccommitinitrank
 #[no_mangle]
 pub extern "C" fn ncclCommInitRank(
     comm: *mut NcclCommT,
     n: c_int,
-    comm_id: ncclUniqueId,
+    comm_id: NcclUniqueId,
     rank: c_int,
 ) -> usize {
     println!("Hijacked ncclCommInitRank");
-    return unsafe {
-        syscall5(
-            SYS_PROXY,
-            ProxyCommand::NcclCommInitRank as usize,
-            comm as *mut _ as usize,
-            n as usize,
-            &comm_id as *const _ as usize,
-            rank as usize,
-        )
-    };
+    return cudaSyscall5(
+        SYS_PROXY,
+        ProxyCommand::NcclCommInitRank as usize,
+        comm as *mut _ as usize,
+        n as usize,
+        &comm_id as *const _ as usize,
+        rank as usize,
+    );
 }
 #[no_mangle]
 pub extern "C" fn ncclCommInitAll(comms: *mut NcclCommT, n: c_int, devlist: *const c_int) -> usize {
     println!("Hijacked ncclCommInitAll");
-    return unsafe {
-        syscall4(
-            SYS_PROXY,
-            ProxyCommand::NcclCommInitAll as usize,
-            comms as *mut _ as usize,
-            n as usize,
-            devlist as *const _ as usize,
-        )
-    };
+    return cudaSyscall4(
+        SYS_PROXY,
+        ProxyCommand::NcclCommInitAll as usize,
+        comms as *mut _ as usize,
+        n as usize,
+        devlist as *const _ as usize,
+    );
 }
 
 #[no_mangle]
 pub extern "C" fn ncclCommDestroy(comm: *mut NcclCommT) -> usize {
     println!("Hijacked ncclCommDestroy");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::NcclCommDestroy as usize, comm as *mut _ as usize)
-    };
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::NcclCommDestroy as usize, comm as *mut _ as usize);
 }
 #[no_mangle]
 pub extern "C" fn ncclCommAbort(comm: NcclCommT) -> usize {
-    // println!("Hijacked ncclCommAbort");
-    return unsafe {
-        syscall2(SYS_PROXY, ProxyCommand::NcclCommAbort as usize, comm as usize)
+    println!("Hijacked ncclCommAbort");
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::NcclCommAbort as usize, comm as usize);
+}
+
+#[no_mangle]
+pub extern "C" fn ncclCommInitRankConfig(
+    comm: *mut NcclCommT,
+    n: c_int,
+    comm_id: NcclUniqueId,
+    rank: c_int,
+    config: *const NcclConfig,
+) -> usize {
+    println!("Hijacked ncclCommInitRankConfig");
+    return cudaSyscall6(
+        SYS_PROXY,
+        ProxyCommand::NcclCommInitRankConfig as usize,
+        comm as *mut _ as usize,
+        n as usize,
+        &comm_id as *const _ as usize,
+        rank as usize,
+        config as *const _ as usize,
+    );
+}
+#[no_mangle]
+pub extern "C" fn ncclCommCount(comm: NcclCommT, count: *mut c_int) -> usize {
+    println!("Hijacked ncclCommCount");
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::NcclCommCount as usize, comm as usize, count as usize);
+}
+#[no_mangle]
+pub extern "C" fn ncclCommUserRank(comm: NcclCommT, rank: *mut c_int) -> usize {
+    println!("Hijacked ncclCommUserRank");
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::NcclCommUserRank as usize, comm as usize, rank as usize);
+}
+#[no_mangle]
+pub extern "C" fn ncclSend(sendbuff: *const c_void,
+    count: usize,
+    datatype: NcclDataTypeT,
+    peer: c_int,
+    comm: NcclCommT,
+    stream: cudaStream_t,) -> usize {
+    println!("Hijacked ncclSend");
+
+    let send_info = NcclSendRecvInfo {
+        count: count,
+        datatype: datatype,
+        peer: peer,
+        comm: comm as u64,
+        stream: stream as u64
+
     };
 
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::NcclSend as usize, sendbuff as usize, &send_info as *const _ as usize);
+    
 }
-// use std::ffi::CStr;
-// implemenetation does not work
+#[no_mangle]
+pub extern "C" fn ncclRecv(recvbuff: *mut c_void,
+    count: usize,
+    datatype: NcclDataTypeT,
+    peer: c_int,
+    comm: NcclCommT,
+    stream: cudaStream_t,) -> usize {
+    println!("Hijacked ncclRecv");
+    let recv_info = NcclSendRecvInfo {
+        count: count,
+        datatype: datatype,
+        peer: peer,
+        comm: comm as u64,
+        stream: stream as u64
+    };
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::NcclRecv as usize, recvbuff as usize, &recv_info as *const _ as usize);
+    }    
+#[no_mangle]
+pub extern "C" fn ncclGroupStart() -> usize {
+    println!("Hijacked ncclGroupStart");
+    return cudaSyscall1(SYS_PROXY, ProxyCommand::NcclGroupStart as usize);
+}
+#[no_mangle]
+pub extern "C" fn ncclGroupEnd() -> usize {
+    println!("Hijacked ncclGroupEnd");
+    return cudaSyscall1(SYS_PROXY, ProxyCommand::NcclGroupEnd as usize);
+}
+#[no_mangle]
+pub extern "C" fn NcclAllReduce(
+    sendbuff: *const c_void,
+    recvbuff: *mut c_void,
+    count: usize,
+    datatype: NcclDataTypeT,
+    op: NcclRedOpT,
+    comm: NcclCommT,
+    stream: cudaStream_t,
+)  -> usize {
+    println!("Hijacked NcclAllReduce");
+    let send_info: NcclAllGatherReduceInfo = NcclAllGatherReduceInfo {
+        count: count,
+        datatype: datatype,
+        op: op,
+        comm: comm as u64,
+        stream: stream as u64
+    };
+    return cudaSyscall4(SYS_PROXY, ProxyCommand::NcclAllReduce as usize, sendbuff as usize, recvbuff as usize, &send_info as *const _ as usize);
+}
+#[no_mangle]
+pub extern "C" fn ncclReduceScatter(
+    sendbuff: *const c_void,
+    recvbuff: *mut c_void,
+    recvcount: usize,
+    datatype: NcclDataTypeT,
+    op: NcclRedOpT,
+    comm: NcclCommT,
+    stream: cudaStream_t,
+)    -> usize {
+    println!("Hijacked ncclReduceScatter");
+    let send_info: NcclAllGatherReduceInfo = NcclAllGatherReduceInfo {
+        count: recvcount,
+        datatype: datatype,
+        op: op,
+        comm: comm as u64,
+        stream: stream as u64
+    };
+    return cudaSyscall4(SYS_PROXY, ProxyCommand::NcclReduceScatter as usize, sendbuff as usize, recvbuff as usize, &send_info as *const _ as usize);
+}
+#[no_mangle]
+pub extern "C" fn ncclAllGather(
+    sendbuff: *const c_void,
+    recvbuff: *mut c_void,
+    count: usize,
+    datatype: NcclDataTypeT,
+    comm: NcclCommT,
+    stream: cudaStream_t,
+)    -> usize {
+    println!("Hijacked ncclAllGather"); 
+    let send_info: NcclAllGatherReduceInfo = NcclAllGatherReduceInfo {
+        count: count,
+        datatype: datatype,
+        op: NcclRedOpT::NcclSum,
+        comm: comm as u64,
+        stream: stream as u64
+    };
+    return cudaSyscall4(SYS_PROXY, ProxyCommand::NcclAllGather as usize, sendbuff as usize, recvbuff as usize, &send_info as *const _ as usize);
+}
+
 #[no_mangle]
 pub extern "C" fn ncclGetErrorString(
     error: NcclResultT,
 ) -> *const c_char {
-    let errorString: *const c_char = std::ptr::null();
-    unsafe {
-        syscall3(SYS_PROXY, ProxyCommand::NcclGetErrorString as usize, error as usize, errorString as *mut c_char as usize)
+    let mut errorString:[i8; 128] = [1; 128];
+    cudaSyscall3(SYS_PROXY,ProxyCommand::NcclGetErrorString as usize, error as usize, &mut errorString as *mut _ as usize);
+    let cStr = unsafe { std::ffi::CStr::from_ptr(&errorString as *const c_char) };
+    // let errorStr = cStr.to_str().expect("Invalid UTF-8 data");
+    // let ptr = errorStr.to_string().as_ptr() as *const i8;
+    // return ptr;
+    let error_str = match cStr.to_str() {
+        Ok(s) => s,
+        Err(_) => "Invalid UTF-8 data",
     };
-
-    if errorString.is_null() {
-        println!("Error: Error string is null");
-        return ptr::null(); // Return null pointer to indicate error
-    }
-    return errorString;
-    // Convert the C string pointer to a Rust CStr
-    // let c_str: &CStr = unsafe { CStr::from_ptr(errorString) };
-
-    // // Convert CStr to &str and handle potential UTF-8 errors
-    // match c_str.to_str() {
-    //     Ok(error_str) => {
-    //         // Print the error string
-    //         println!("CUDA Error: {}", error_str);
-    //         errorString
-    //     }
-    //     Err(e) => {
-    //         println!("Error: Failed to convert C string to UTF-8: {}", e);
-    //         ptr::null() // Return null pointer to indicate error
-    //     }
+    let c_string = std::ffi::CString::new(error_str).unwrap();
+    let ptr = c_string.into_raw();
+    return ptr;
+    // if errorString.is_null() {
+    //     println!("Error: Error string is null");
+    //     return ptr::null(); // Return null pointer to indicate error
     // }
+    // return errorString;
+    
 }
-
 // #[no_mangle]
 // pub extern "C" fn ncclCommGetAsyncError(
 //     comm: NcclCommT,
@@ -321,18 +440,7 @@ pub extern "C" fn ncclGetErrorString(
 //         syscall7(SYS_PROXY, ProxyCommand::NcclSend as usize, send_buff as usize, count as usize, dataType as usize, peer as usize, comm as usize, stream as usize)
 //     };
 // }
-// #[no_mangle]
-// pub extern "C" fn ncclGroupStart() -> usize {
-//     return unsafe {
-//         syscall1(SYS_PROXY, ProxyCommand::NcclGroupStart as usize)
-//     };
-// }
-// #[no_mangle]
-// pub extern "C" fn ncclGroupEnd() -> usize {
-//     return unsafe {
-//         syscall1(SYS_PROXY, ProxyCommand::NcclGroupEnd as usize)
-//     };
-// }
+
 // device management
 #[no_mangle]
 pub extern "C" fn cudaChooseDevice(device: *mut c_int, prop: *const cudaDeviceProp) -> usize {
@@ -1367,7 +1475,7 @@ pub extern "C" fn cublasLtMatmulAlgoGetHeuristic(
     returnAlgoCount: *mut ::libc::c_int,
 ) -> usize {
     //println!("Hijacked cublasLtMatmulAlgoGetHeuristic");
-    let info = CublasLtMatmulAlgoGetHeuristicInfo {
+    let info: CublasLtMatmulAlgoGetHeuristicInfo = CublasLtMatmulAlgoGetHeuristicInfo {
         lightHandle: lightHandle as u64,
         operationDesc: operationDesc as u64,
         Adesc: Adesc as u64,

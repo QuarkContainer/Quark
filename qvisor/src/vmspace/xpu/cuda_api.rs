@@ -18,11 +18,11 @@ use rcublas_sys::{cublasHandle_t, cudaMemLocation};
 
 #[link(name = "nccl")]
 extern "C" {
-    pub fn ncclGetUniqueId(handle: *mut ncclUniqueId) -> NcclResultT;
+    pub fn ncclGetUniqueId(handle: *mut NcclUniqueId) -> NcclResultT;
     pub fn ncclCommInitRank(
         comm: *mut NcclCommT,
         nRanks: ::std::os::raw::c_int,
-        commId: ncclUniqueId,
+        commId: NcclUniqueId,
         rank: ::std::os::raw::c_int,
     ) -> NcclResultT;
     pub fn ncclCommDestroy(comm: NcclCommT) -> NcclResultT;
@@ -34,14 +34,29 @@ extern "C" {
     pub fn ncclCommAbort(comm: NcclCommT) -> NcclResultT;
 
     pub fn ncclGetErrorString(
-        error: NcclResultT,
+        error: u32,
     ) -> *const c_char;
     pub fn ncclCommGetAsyncError(
         comm: NcclCommT,
         async_error: *mut NcclResultT,
     ) -> NcclResultT;
-
-//     pub fn ncclCommCount(
+    pub fn ncclCommInitRankConfig(
+        comm: *mut NcclCommT,
+        n_rank: c_int,
+        ncclUniqueId_: NcclUniqueId,
+        rank: c_int,
+        ncclConfig_t: *const NcclConfig
+    ) -> NcclResultT;
+    pub fn ncclCommCount(comm: NcclCommT, count: *mut c_int) -> NcclResultT;
+    pub fn ncclCommUserRank(comm: NcclCommT, rank: *mut c_int) -> NcclResultT;
+    pub fn ncclSend(sendbuff: *const c_void, count: usize, datatype: NcclDataTypeT, peer: c_int, comm: NcclCommT, stream: cudaStream_t) -> NcclResultT;
+    pub fn ncclRecv(recvbuff: *mut c_void, count: usize, datatype: NcclDataTypeT, peer: c_int, comm: NcclCommT, stream: cudaStream_t) -> NcclResultT;
+    pub fn ncclGroupStart() -> NcclResultT;
+    pub fn ncclGroupEnd() -> NcclResultT;
+    pub fn ncclAllReduce(sendbuff: *const c_void, recvbuff: *mut c_void, count: usize, datatype: NcclDataTypeT, op: NcclRedOpT, comm: NcclCommT, stream: cudaStream_t) -> NcclResultT;
+    pub fn ncclAllGather(sendbuff: *const c_void, recvbuff: *mut c_void, count: usize, datatype: NcclDataTypeT, comm: NcclCommT, stream: cudaStream_t) -> NcclResultT;
+    pub fn ncclReduceScatter(sendbuff: *const c_void, recvbuff: *mut c_void, count: usize, datatype: NcclDataTypeT, op: NcclRedOpT, comm: NcclCommT, stream: cudaStream_t) -> NcclResultT;
+    //     pub fn ncclCommCount(
 //         comm: NcclCommT,
 //         count: *mut c_int,
 //     ) -> NcclResultT;
