@@ -705,6 +705,24 @@ impl SandboxProcess {
         return Ok(())
     }
 
+    pub fn MountSys(&self) -> Result<()> {
+        let m = Mount {
+            destination: "/sys".to_owned(),
+            typ: "bind".to_owned(),
+            source: "/sys".to_owned(),
+            options: Vec::new()
+        };
+
+        MountFrom(
+            &m,
+            &self.SandboxRootDir,
+            MsFlags::MS_BIND | MsFlags::MS_SHARED,
+            "",
+            "",
+        )?;
+
+        return Ok(())
+    }
 
     pub fn CopyFile(sandboxPath: &str, file: &str) -> Result<()> {
         let folder = Dir(file);
@@ -862,6 +880,8 @@ impl SandboxProcess {
             self.MountNvidiaFiles()?;
             self.MountNvidia()?;
         }
+
+        self.MountSys()?;
         
         self.EnableNamespace()?;
         let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);

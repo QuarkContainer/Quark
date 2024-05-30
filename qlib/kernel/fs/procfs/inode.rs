@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -530,4 +531,40 @@ pub fn NewStaticProcInode(
     })));
 
     return NewProcInode(iops.into(), msrc, InodeType::SpecialFile, None);
+}
+
+pub fn NewStaticProcInodeWithString(
+    task: &Task,
+    msrc: &Arc<QMutex<MountSource>>,
+    contents: &str,
+) -> Inode {
+    return NewStaticProcInode(task, msrc, &Arc::new(contents.as_bytes().to_vec()));
+}
+
+pub fn NewStaticProcInodeWithHostFile(
+    task: &Task,
+    msrc: &Arc<QMutex<MountSource>>,
+    filename: &str,
+) -> Result<Inode> {
+    let bufSize = 1024;
+    let mut content: Vec<u8> = Vec::with_capacity(bufSize);
+    content.resize(bufSize, 0);
+    let filenameSlice = filename.as_bytes();
+    let filenameAddr = &filenameSlice[0] as *const _ as u64;
+    let ret = HostSpace::ReadContent(
+        filenameAddr,
+        filename.len(),
+        &content[0] as *const _ as u64,
+        bufSize,
+    );
+
+    if ret < 0 {
+        return Err(Error::SysError(-ret as i32));
+    }
+
+    return Ok(NewStaticProcInode(
+        task,
+        msrc,
+        &Arc::new(content[0..ret as usize].to_vec()),
+    ));
 }
