@@ -260,7 +260,7 @@ pub extern "C" fn ncclGroupEnd() -> usize {
     return cudaSyscall1(SYS_PROXY, ProxyCommand::NcclGroupEnd as usize);
 }
 #[no_mangle]
-pub extern "C" fn NcclAllReduce(
+pub extern "C" fn ncclAllReduce(
     sendbuff: *const c_void,
     recvbuff: *mut c_void,
     count: usize,
