@@ -18,20 +18,22 @@ pub enum ProxyCommand {
     //nccl
     NcclGetUniqueId,
     NcclCommInitRank,
+    NcclCommInitRankConfig,
     NcclCommDestroy,
     NcclCommInitAll,
     NcclCommAbort,
+    NcclCommCount,
+    NcclCommUserRank,
     NcclGetErrorString,
-    // NcclCommGetAsyncError,
-    // NcclCommCount,
-    // NcclCommUserRank,
-    // NcclReduce,
-    // NcclBcast,
-    // NcclReduceScatter,
-    // NcclAllGather,
-    // NcclSend,
-    // NcclGroupStart,
-    // NcclGroupEnd,
+
+    NcclAllGather,
+    NcclAllReduce,
+    NcclReduceScatter,
+
+    NcclSend,
+    NcclRecv,
+    NcclGroupStart,
+    NcclGroupEnd,
 
 
     //devcie management
@@ -137,20 +139,20 @@ pub enum ProxyCommand {
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct ncclComm {
+pub struct NcclComm {
     // do we need the inside?
     _unused: [u8; 0],
 }
 // impl Default for ncclComm {
 
-pub type NcclCommT = *mut ncclComm;
+pub type NcclCommT = *mut NcclComm;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct ncclUniqueId {
+pub struct NcclUniqueId {
     pub internal: [::core::ffi::c_char; 128usize]
     // pub internal: [::std::os::raw::c_char; 128]
 }
-impl Default for ncclUniqueId {
+impl Default for NcclUniqueId {
     fn default() -> Self {
         let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
         unsafe {
@@ -212,6 +214,55 @@ pub enum NcclDataTypeT {
     NcclFloat64 = 8,
     NcclBfloat16 = 9,
     NcclNumTypes = 10,
+}
+
+// #[repr(C)]
+// #[derive(Debug, Default, Copy, Clone, Hash, PartialOrd, Ord, PartialEq, Eq)]
+// pub struct NcclConfig {
+//     pub size: usize,
+//     pub magic: ::core::ffi::c_uint,
+//     pub version: ::core::ffi::c_uint,
+//     pub blocking: ::core::ffi::c_int,
+// }
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Hash, PartialOrd, Ord, PartialEq, Eq)]
+pub struct NcclConfig {
+    pub size: usize,
+    pub magic: ::core::ffi::c_uint,
+    pub version: ::core::ffi::c_uint,
+    pub blocking: ::core::ffi::c_int,
+    pub cgaClusterSize: ::core::ffi::c_int,
+    pub minCTAs: ::core::ffi::c_int,
+    pub maxCTAs: ::core::ffi::c_int,
+    pub netName: *const ::core::ffi::c_char,
+    pub splitShare: ::core::ffi::c_int,
+}
+impl Default for NcclConfig {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct NcclSendRecvInfo {
+    pub count: usize,
+    pub datatype: NcclDataTypeT,
+    pub peer: core::ffi::c_int,
+    pub comm: u64,
+    pub stream: u64,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct NcclAllGatherReduceInfo {
+    pub count: usize,
+    pub datatype: NcclDataTypeT,
+    pub op: NcclRedOpT,
+    pub comm: u64,
+    pub stream: u64,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Ord, Eq)]
