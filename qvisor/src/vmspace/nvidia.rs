@@ -50,6 +50,7 @@ lazy_static! {
     static ref CUDA_HAS_INIT: AtomicUsize = AtomicUsize::new(0);
     static ref MEM_RECORDER: Mutex<Vec<(u64, usize)>> = Mutex::new(Vec::new());
     static ref MEM_MANAGER: Mutex<MemoryManager> = Mutex::new(MemoryManager::new());
+    static ref CURRENT_GPU_ID: Mutex<i32> = Mutex::new(0);
     // static ref OFFLOAD_TIMER: AtomicUsize = AtomicUsize::new(0);
     // pub static ref FAST_SWITCH_HASHSET: HashSet<u64> = HashSet::new();
     // pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
@@ -126,6 +127,15 @@ pub fn NvidiaProxy(
         res: 0,
         lasterr: 0,
     };
+    let targetGPUId = parameters.gpuId;
+    if *CURRENT_GPU_ID.lock() != targetGPUId {
+        let ret = unsafe { cudaSetDevice(targetGPUId) };
+        if ret as u32 != 0 {
+            error!("nvidia.rs: error caused by cudaSetDevice(device swtich): {}", ret as u32);
+        } else {
+            *CURRENT_GPU_ID.lock() = targetGPUId
+        }
+    }
     let ret: Result<u32> = Execute(cmd, parameters, containerId);
     match ret {
         Ok(v) => {

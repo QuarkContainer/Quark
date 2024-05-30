@@ -297,6 +297,7 @@ pub struct ProxyParameters {
     pub para5: u64,
     pub para6: u64,
     pub para7: u64,
+    pub gpuId: i32,
 }
 
 

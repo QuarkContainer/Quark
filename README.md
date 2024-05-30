@@ -120,6 +120,10 @@ make install
 ```
 
 ### Build with GPU module
+Some extra libraries for crate cuda11-cublasLt-sys v0.3.0:
+```sh
+sudo apt-get llvm
+```
 ```sh
 make cuda_all
 make install

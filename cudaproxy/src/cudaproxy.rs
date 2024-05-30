@@ -44,7 +44,7 @@ pub static mut DLCLOSE_ORIG: Option<unsafe extern "C" fn(*mut libc::c_void) -> l
 pub static mut DL_HANDLE: *mut libc::c_void = ptr::null_mut();
 lazy_static! {
     static ref IS_GETDEVICE_UPDATED: AtomicBool = AtomicBool::new(false);
-    static ref CURRENT_DEVICE: AtomicI32 = AtomicI32::new(0);
+    static ref CURRENT_GPU_ID: AtomicI32 = AtomicI32::new(0);
     static ref LAST_ERROR: AtomicU32 = AtomicU32::new(0);
 }
 // thread_local!(static ERROR_CODE: AtomicU32 = AtomicU32::new(0));
@@ -531,7 +531,7 @@ pub extern "C" fn cudaDeviceSetSharedMemConfig(config: cudaSharedMemConfig) -> u
 #[no_mangle]
 pub extern "C" fn cudaSetDevice(device: c_int) -> usize {
     //println!("Hijacked1 cudaSetDevice");
-    let _ = cudaGetDeviceHelper(true);
+    CURRENT_GPU_ID.store(device, std::sync::atomic::Ordering::SeqCst);
     return cudaSyscall2(SYS_PROXY, ProxyCommand::CudaSetDevice as usize, device as usize);
 }
 
@@ -559,9 +559,9 @@ pub extern "C" fn cudaGetDevice(device: *mut c_int) -> usize {
     // return unsafe {
     //     cudaSyscall2(SYS_PROXY, ProxyCommand::CudaGetDevice as usize, device as *mut _ as usize)
     // };
-    let (devId, ret) = cudaGetDeviceHelper(false);
+    let devId = CURRENT_GPU_ID.load(std::sync::atomic::Ordering::Relaxed);
     unsafe { *device = devId };
-    return ret;
+    return 0;
 }
 
 #[no_mangle]
@@ -1488,23 +1488,6 @@ pub extern "C" fn cublasLtMatmulAlgoGetHeuristic(
     //println!("CublasLtMatmulAlgoGetHeuristicInfo {:x?}", info);
     return cudaSyscall4(SYS_PROXY,ProxyCommand::CublasLtMatmulAlgoGetHeuristic as usize,
             &info as *const _ as usize, heuristicResultsArray as *mut _ as usize, returnAlgoCount as *mut _ as usize);
-}
-
-fn cudaGetDeviceHelper(reset: bool) -> (c_int, usize) {
-    if reset {
-        IS_GETDEVICE_UPDATED.store(false, std::sync::atomic::Ordering::SeqCst); 
-        return (0, 0);
-    } else {
-        if IS_GETDEVICE_UPDATED.load(std::sync::atomic::Ordering::Relaxed) {
-            return (CURRENT_DEVICE.load(std::sync::atomic::Ordering::Relaxed), 0);
-        } else {
-            let mut device = 0;
-            let ret = cudaSyscall2(SYS_PROXY, ProxyCommand::CudaGetDevice as usize, &mut device as *mut _ as usize);
-            CURRENT_DEVICE.store(device, std::sync::atomic::Ordering::SeqCst);
-            IS_GETDEVICE_UPDATED.store(true, std::sync::atomic::Ordering::SeqCst); 
-            return (device, ret);
-        }
-    }
 }
 
 #[repr(C)]
