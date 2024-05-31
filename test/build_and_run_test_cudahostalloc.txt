@@ -1,0 +1,4 @@
+#to build
+nvcc -cudart shared test_cudahostalloc.cpp -o test_cudahostalloc -lcuda -lnccl
+#to run argument 0 is the partition size and argument 1 is the total transfer size in MB.
+./test_cudahostalloc 1024 1024
