@@ -142,7 +142,7 @@ pub enum CudaMemType {
     MemPool,
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialOrd, Ord, Eq, PartialEq, Serialize, Deserialize)]
 pub enum CCMode {
     None,
     Normal,

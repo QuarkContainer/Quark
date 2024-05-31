@@ -21,7 +21,8 @@ use core::sync::atomic::fence;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-
+#[cfg(feature = "cc")]
+use crate::qlib::kernel::Kernel::is_cc_enabled;
 cfg_x86_64! {
    pub use x86_64::structures::paging::page_table::PageTableEntry;
    pub use x86_64::structures::paging::page_table::PageTableIndex;
@@ -1306,6 +1307,11 @@ impl PageTables {
 
     #[cfg(target_arch = "x86_64")]
     pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
+
+        #[cfg(feature = "cc")]
+        if is_cc_enabled(){
+            return;
+        }
         let flags = pteEntry.flags();
         // bit9 : whether the page is swapout
         // bit10: whether there is thread is working on swapin the page
