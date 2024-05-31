@@ -26,11 +26,25 @@ use core::sync::atomic::Ordering;
 
 use super::vcpu_mgr::*;
 
+#[cfg(feature = "cc")]
+use crate::IS_GUEST;
+#[cfg(feature = "cc")]
+use crate::qlib::kernel::task::{TaskWrapper, Task};
+
+#[cfg(not(feature = "cc"))]
 #[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub struct TaskId {
     pub data: u64,
 }
 
+#[cfg(feature = "cc")]
+#[derive(Debug, Copy, Clone, Default, PartialEq)]
+pub struct TaskId {
+    pub task_addr: u64,
+    pub task_wrapper_addr: u64,
+}
+
+#[cfg(not(feature = "cc"))]
 impl TaskId {
     #[inline]
     pub const fn New(addr: u64) -> Self {
@@ -45,6 +59,44 @@ impl TaskId {
     #[inline]
     pub fn Queue(&self) -> u64 {
         return self.GetTask().QueueId() as u64;
+    }
+}
+
+#[cfg(feature = "cc")]
+impl TaskId {
+    #[inline]
+    pub const fn New(task_addr: u64, task_wrapper_addr: u64) -> Self {
+        return Self {
+                    task_addr,
+                    task_wrapper_addr
+                };
+    }
+
+    #[inline]
+    pub fn PrivateTaskAddr(&self) -> u64 {
+        return self.task_addr;
+    }
+
+    #[inline]
+    pub fn SharedTaskAddr(&self) -> u64 {
+        return self.task_wrapper_addr;
+    }
+
+    #[inline]
+    pub fn GetPrivateTask(&self) -> &'static mut Task {
+        assert!(IS_GUEST == true, "GetPrivateTask is called from host");
+
+        return unsafe { &mut *(self.PrivateTaskAddr() as *mut Task) };
+    }
+
+    #[inline]
+    pub fn GetSharedTask(&self) -> &'static mut TaskWrapper {
+        return unsafe { &mut *(self.SharedTaskAddr() as *mut TaskWrapper) };
+    }
+
+    #[inline]
+    pub fn Queue(&self) -> u64 {
+        return self.GetSharedTask().queueId.load(Ordering::Relaxed) as u64;
     }
 }
 
@@ -213,7 +265,10 @@ pub struct TaskQueueIntern {
 impl Default for TaskQueueIntern {
     fn default() -> Self {
         return Self {
+            #[cfg(not(feature = "cc"))]
             workingTask: TaskId::New(0),
+            #[cfg(feature = "cc")]
+            workingTask: TaskId::New(0, 0),
             workingTaskReady: false,
             #[cfg(not(feature = "cc"))]
             queue: VecDeque::with_capacity(8),
@@ -267,7 +322,13 @@ impl TaskQueue {
             data.workingTaskReady = false;
             return Some(data.workingTask);
         } else {
-            data.workingTask = TaskId::New(0);
+            #[cfg(not(feature = "cc"))]{
+                data.workingTask = TaskId::New(0);
+            }
+
+            #[cfg(feature = "cc")]{
+                data.workingTask = TaskId::New(0, 0);
+            }
             return None;
         }
     }
@@ -298,18 +359,25 @@ impl TaskQueue {
                     match data.queue.pop_front() {
                         None => panic!("TaskQueue none task"),
                         Some(taskId) => {
-                            if taskId.GetTask().Ready() != 0 {
-                                self.queueSize.fetch_sub(1, Ordering::Release);
-                                return Some(taskId);
-                            }
                             #[cfg(not(feature = "cc"))]
-                            data.queue.push_back(taskId);
-                            #[cfg(feature = "cc")]
-                            if data.queue.len() == data.queue.capacity()
                             {
-                                panic!("queue is full");
-                            } else {
+                                if taskId.GetTask().Ready() != 0 {
+                                    self.queueSize.fetch_sub(1, Ordering::Release);
+                                    return Some(taskId);
+                                }
                                 data.queue.push_back(taskId);
+                            }
+                            #[cfg(feature = "cc")]
+                            {
+                                if taskId.GetSharedTask().Ready() != 0 {
+                                    self.queueSize.fetch_sub(1, Ordering::Release);
+                                    return Some(taskId);
+                                }
+                                if data.queue.len() == data.queue.capacity() {
+                                    panic!("queue is full");
+                                } else {
+                                    data.queue.push_back(taskId);
+                                }
                             }
                         }
                     }

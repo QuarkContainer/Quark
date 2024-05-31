@@ -147,6 +147,7 @@ impl CounterSet {
 }
 
 #[inline]
+#[cfg(not(feature = "cc"))]
 pub fn switch(from: TaskId, to: TaskId) {
     Task::Current().AccountTaskEnter(SchedState::Blocked);
 
@@ -166,6 +167,35 @@ pub fn switch(from: TaskId, to: TaskId) {
         context_swap(fromCtx.GetContext(), toCtx.GetContext());
     }
 
+    Task::Current().AccountTaskLeave(SchedState::Blocked);
+}
+
+#[inline]
+#[cfg(feature = "cc")]
+pub fn switch(from: TaskId, to: TaskId) {
+    Task::Current().AccountTaskEnter(SchedState::Blocked);
+
+    CPULocal::SetCurrentTask(to.PrivateTaskAddr(), to.SharedTaskAddr());
+    let fromCtx = from.GetPrivateTask();
+    let toCtx = to.GetPrivateTask();
+
+    if !SHARESPACE.config.read().KernelPagetable {
+        toCtx.SwitchPageTable();
+    }
+    toCtx.SetTLS();
+
+    fromCtx.mm.VcpuLeave();
+    toCtx.mm.VcpuEnter();
+
+    assert!(from.task_wrapper_addr > 0, "switch from.task_wrapper_addr > 0");
+    assert!(to.task_wrapper_addr > 0, "switch to.task_wrapper_addr > 0");
+
+    unsafe {
+        // rdi, rsi, rdx, rcx, r8, r9
+        context_swap_cc(fromCtx.GetContext(), toCtx.GetContext(), from.task_wrapper_addr, to.task_wrapper_addr);
+    }
+
+    //Task::Current().PerfGofrom(PerfType::Blocked);
     Task::Current().AccountTaskLeave(SchedState::Blocked);
 }
 
@@ -384,7 +414,7 @@ impl HostSpace {
     #[cfg(feature = "cc")]
     pub fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
         if is_cc_enabled() {
-            let current = Task::Current().GetTaskId();
+            let current = Task::Current().GetPrivateTaskId();
 
             let qMsg = Box::new_in(
                 QMsg {
@@ -402,7 +432,7 @@ impl HostSpace {
             taskMgr::Wait();
             return qMsg.ret;
         } else {
-            let current = Task::Current().GetTaskId();
+            let current = Task::Current().GetPrivateTaskId();
 
             let qMsg = QMsg {
                 taskId: current,
@@ -439,7 +469,7 @@ impl HostSpace {
     #[cfg(feature = "cc")]
     pub fn HCall(msg: &mut Msg, lock: bool) -> u64 {
         if is_cc_enabled() {
-            let taskId = Task::Current().GetTaskId();
+            let taskId = Task::Current().GetPrivateTaskId();
             let mut event = Box::new_in(
                 QMsg {
                     taskId: taskId,
@@ -453,7 +483,7 @@ impl HostSpace {
             HyperCall64(HYPERCALL_HCALL, &mut *event as *const _ as u64, 0, 0, 0);
             return event.ret;
         } else {
-            let taskId = Task::Current().GetTaskId();
+            let taskId = Task::Current().GetPrivateTaskId();
 
             let mut event = QMsg {
                 taskId: taskId,

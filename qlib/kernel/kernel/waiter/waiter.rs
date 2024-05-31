@@ -42,7 +42,10 @@ impl Default for WaiterInternal {
             mask: 0,
             idCnt: 0,
             state: WaitState::default(),
+            #[cfg(not(feature = "cc"))]
             taskId: TaskId::New(0),
+            #[cfg(feature = "cc")]
+            taskId: TaskId::New(0, 0),
         };
     }
 }
@@ -59,9 +62,20 @@ impl Deref for Waiter {
 }
 
 impl Waiter {
+    #[cfg(not(feature = "cc"))]
     pub fn New(taskId: u64) -> Self {
         let internal = WaiterInternal {
             taskId: TaskId::New(taskId),
+            ..Default::default()
+        };
+
+        return Self(Arc::new(QMutex::new(internal)));
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn New(taskId: TaskId) -> Self {
+        let internal = WaiterInternal {
+            taskId: taskId,
             ..Default::default()
         };
 
