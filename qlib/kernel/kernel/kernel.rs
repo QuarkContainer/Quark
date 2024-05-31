@@ -58,6 +58,10 @@ use super::timer::timekeeper::*;
 use super::timer::timer::*;
 use super::timer::*;
 use super::uts_namespace::*;
+#[cfg(feature = "cc")]
+use crate::GUEST_KERNEL;
+#[cfg(feature = "cc")]
+use crate::qlib::kernel::Kernel::is_cc_enabled;
 
 pub static ASYNC_PROCESS_TIMER: Singleton<Timer> = Singleton::<Timer>::New();
 
@@ -65,12 +69,26 @@ static CLOCK_TICK_MS: i64 = CLOCK_TICK / MILLISECOND;
 
 #[inline]
 pub fn GetKernel() -> Kernel {
+    #[cfg(not(feature = "cc"))]
     return SHARESPACE.kernel.lock().clone().unwrap();
+    #[cfg(feature = "cc")]
+    if is_cc_enabled(){
+        return GUEST_KERNEL.lock().clone().unwrap();
+    } else {
+        return SHARESPACE.kernel.lock().clone().unwrap();
+    }
 }
 
 #[inline]
 pub fn GetKernelOption() -> Option<Kernel> {
+    #[cfg(not(feature = "cc"))]
     return SHARESPACE.kernel.lock().clone();
+    #[cfg(feature = "cc")]
+    if is_cc_enabled(){
+        return GUEST_KERNEL.lock().clone();
+    } else {
+        return SHARESPACE.kernel.lock().clone();
+    }
 }
 
 #[derive(Default)]
