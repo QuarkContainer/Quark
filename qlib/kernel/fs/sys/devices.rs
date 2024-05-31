@@ -86,85 +86,38 @@ pub fn NewCpuTopo(task: &Task, msrc: &Arc<QMutex<MountSource>>, cpuId: usize) ->
 
     let folderName = format!("/sys/devices/system/cpu/cpu{}/topology/", cpuId);
 
-    m.insert(
-        "core_id".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "core_id")).unwrap(),
-    );
+    let names = vec![
+        "core_id",
+        "cluster_id",
+        "core_cpus",
+        "cluster_cpus",
+        "thread_siblings",
+        "die_cpus",
+        "package_cpus",
+        "core_siblings",
+        "physical_package_id",
+        "die_id",
+        "die_cpus_list",
+        "package_cpus_list",
+        "core_siblings_list",
+        "thread_siblings_list",
+        "cluster_cpus_list",
+        "core_cpus_list",
+    ];
 
-    m.insert(
-        "cluster_id".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "cluster_id")).unwrap(),
-    );
-
-    m.insert(
-        "core_cpus".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "core_cpus")).unwrap(),
-    );
-    m.insert(
-        "cluster_cpus".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "cluster_cpus")).unwrap(),
-    );
-    m.insert(
-        "thread_siblings".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "thread_siblings"))
-            .unwrap(),
-    );
-
-    m.insert(
-        "die_cpus".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "die_cpus")).unwrap(),
-    );
-    m.insert(
-        "package_cpus".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "package_cpus")).unwrap(),
-    );
-    m.insert(
-        "core_siblings".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "core_siblings"))
-            .unwrap(),
-    );
-
-    m.insert(
-        "physical_package_id".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "physical_package_id"))
-            .unwrap(),
-    );
-    m.insert(
-        "die_id".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "die_id")).unwrap(),
-    );
-
-    m.insert(
-        "die_cpus_list".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "die_cpus_list"))
-            .unwrap(),
-    );
-    m.insert(
-        "package_cpus_list".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "package_cpus_list"))
-            .unwrap(),
-    );
-    m.insert(
-        "core_siblings_list".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "core_siblings_list"))
-            .unwrap(),
-    );
-
-    m.insert(
-        "thread_siblings_list".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "thread_siblings_list"))
-            .unwrap(),
-    );
-    m.insert(
-        "cluster_cpus_list".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "cluster_cpus_list"))
-            .unwrap(),
-    );
-    m.insert(
-        "core_cpus_list".to_string(),
-        NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + "core_cpus_list"))
-            .unwrap(),
-    );
+    for name in names {
+        match NewStaticProcInodeWithHostFile(task, msrc, &(folderName.clone() + name)) {
+            Ok(inode) => {
+                m.insert(name.to_string(), inode);
+            }
+            Err(_e) => {
+                debug!(
+                    "NewCpuTopo can't open {}",
+                    folderName.clone() + "die_cpus_list"
+                )
+            }
+        }
+    }
 
     return NewDir(task, msrc, m);
 }
