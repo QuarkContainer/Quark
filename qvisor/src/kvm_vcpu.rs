@@ -1,5 +1,6 @@
 use crate::host_uring::HostSubmit;
 
+use super::qlib::qmsg::*;
 use super::qcall::AQHostCall;
 use super::qlib::buddyallocator::ZeroPage;
 use super::qlib::common::Allocator;
@@ -202,13 +203,19 @@ impl KVMVcpu {
                         } else {
                             None
                         };
-                        qmsg.ret = Self::qCall(qmsg2); 
-                    }
-
-                    if currTaskId.Addr() != 0 {
-                        sharespace
-                            .scheduler
-                            .ScheduleQ(currTaskId, currTaskId.Queue(), true)
+                        match qmsg.msg {
+                            Msg::Proxy(msg) => {
+                                Self::qCall(qmsg2); 
+                            }
+                            _ => {
+                                qmsg.ret = Self::qCall(qmsg2); 
+                                if currTaskId.Addr() != 0 {
+                                    sharespace
+                                        .scheduler
+                                        .ScheduleQ(currTaskId, currTaskId.Queue(), true)
+                                }
+                            }
+                        }
                     }
                 }
                 Some(msg) => {

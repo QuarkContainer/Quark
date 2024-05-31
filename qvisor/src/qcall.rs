@@ -302,6 +302,7 @@ impl KVMVcpu {
                 ret = 0;
             }
             Msg::Proxy(msg) => {
+                error!("cmd in proxy is {:?}", msg.cmd);
                 // let start = Instant::now();
                 ret = super::VMS.lock().Proxy(&qmsg) as u64;
                 // let duration = start.elapsed();
