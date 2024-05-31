@@ -494,9 +494,33 @@ impl QUring {
         //error!("uring process:xxx");
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn UCall(&self, task: &Task, msg: UringOp) -> i64 {
         let call = UringCall {
             taskId: task.GetTaskId(),
+            ret: 0,
+            msg: msg,
+        };
+
+        {
+            self.UringCall(&call);
+        }
+
+        Wait();
+
+        return call.ret as i64;
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn UCall(&self, task: &Task, msg: UringOp) -> i64 {
+
+        let taskID = task.GetPrivateTaskId();
+
+        assert!(taskID.task_addr != 0);
+        assert!(taskID.task_wrapper_addr != 0);
+
+        let call = UringCall {
+            taskId: taskID,
             ret: 0,
             msg: msg,
         };

@@ -31,6 +31,8 @@ use super::KERNEL_STACK_ALLOCATOR;
 use super::SHARESPACE;
 use super::TSC;
 use crate::qlib::qcall::*;
+#[cfg(feature = "cc")]
+use crate::{GLOBAL_ALLOCATOR, IS_GUEST};
 
 static ACTIVE_TASK: AtomicU32 = AtomicU32::new(0);
 
@@ -42,10 +44,18 @@ pub fn DecrActiveTask() -> u32 {
     return ACTIVE_TASK.fetch_sub(1, Ordering::SeqCst);
 }
 
+#[cfg(not(feature = "cc"))]
 pub fn AddNewCpu() {
     let mainTaskId = TaskStore::CreateFromThread();
     CPULocal::SetWaitTask(mainTaskId.Addr());
     CPULocal::SetCurrentTask(mainTaskId.Addr());
+}
+
+#[cfg(feature = "cc")]
+pub fn AddNewCpu() {
+    let mainTaskId = TaskStore::CreateFromThread();
+    CPULocal::SetWaitTask(mainTaskId.PrivateTaskAddr(), mainTaskId.SharedTaskAddr());
+    CPULocal::SetCurrentTask(mainTaskId.PrivateTaskAddr(), mainTaskId.SharedTaskAddr());
 }
 
 pub fn CreateTask(runFnAddr: u64, para: *const u8, kernel: bool) {
@@ -56,6 +66,8 @@ pub fn CreateTask(runFnAddr: u64, para: *const u8, kernel: bool) {
 extern "C" {
     pub fn context_swap(_fromCxt: u64, _toCtx: u64, _one: u64, _zero: u64);
     pub fn context_swap_to(_fromCxt: u64, _toCtx: u64, _one: u64, _zero: u64);
+    #[cfg(feature = "cc")]
+    pub fn context_swap_cc(_fromCxt: u64, _toCtx: u64, _fromTaskWrapper: u64, _toTaskWrapper: u64);
 }
 
 pub const IO_WAIT_CYCLES: i64 = 20_000_000;
@@ -90,6 +102,7 @@ pub fn IOWait() {
     }
 }
 
+#[cfg(not(feature = "cc"))]
 pub fn WaitFn() -> ! {
     let mut task = TaskId::default();
     loop {
@@ -135,6 +148,73 @@ pub fn WaitFn() -> ! {
 
                     KERNEL_STACK_ALLOCATOR.Free(pendingFreeStack).unwrap();
                     CPULocal::SetPendingFreeStack(0);
+                }
+
+                if Shutdown() {
+                    //error!("shutdown: {}", super::AllocatorPrint(10));
+                    super::Kernel::HostSpace::ExitVM(super::EXIT_CODE.load(QOrdering::SEQ_CST));
+                }
+
+                // todo: free heap cache
+                //while super::ALLOCATOR.Free() {}
+            }
+        }
+    }
+}
+
+#[cfg(feature = "cc")]
+pub fn WaitFn() -> ! {
+    let mut task = TaskId::default();
+    loop {
+        let next = if task.PrivateTaskAddr() == 0 {
+            SHARESPACE.scheduler.GetNext()
+        } else {
+            let tmp = task;
+            task = TaskId::default();
+            Some(tmp)
+        };
+
+        match next {
+            None => {
+                SHARESPACE.scheduler.IncreaseHaltVcpuCnt();
+                defer!(SHARESPACE.scheduler.DecreaseHaltVcpuCnt());
+                //debug!("vcpu sleep");
+                loop{
+                    task = HostSpace::VcpuWait();
+                    ProcessInputMsgs();
+                    if task.PrivateTaskAddr() != 0{
+                        break;
+                    }
+                }
+
+                //debug!("vcpu wakeup");
+            }
+
+            Some(newTask) => {
+                let (t, t_wp) = CPULocal::CurrentTask();
+                let current = TaskId::New(t, t_wp);
+                CPULocal::Myself().SwitchToRunning();
+                Task::Current().SaveFp();
+                switch(current, newTask);
+
+                let (pendingFreeStack, pendingFreeStackWrapper) = CPULocal::PendingFreeStack();
+                if pendingFreeStack != 0 {
+                    //(*PAGE_ALLOCATOR).Free(pendingFreeStack, DEFAULT_STACK_PAGES).unwrap();
+                    let task = TaskId::New(pendingFreeStack, pendingFreeStackWrapper).GetPrivateTask();
+                    //free X86fpstate
+                    task.archfpstate.take();
+
+                    KERNEL_STACK_ALLOCATOR.Free(pendingFreeStack).unwrap();
+
+
+                    let tw_size  = core::mem::size_of::<TaskWrapper>();
+                    let layout = core::alloc::Layout::from_size_align(tw_size, 2).
+                                                expect("WaitFn layout for TaskWrapper failed");
+                    unsafe {
+                        GLOBAL_ALLOCATOR.DeallocShareBuf(pendingFreeStackWrapper as *mut u8, layout.size(), layout.align());
+                    };
+
+                    CPULocal::SetPendingFreeStack(0, 0);
                 }
 
                 if Shutdown() {
@@ -204,6 +284,7 @@ pub fn ProcessOne() -> bool {
     return QUringProcessOne();
 }
 
+#[cfg(not(feature = "cc"))]
 pub fn Wait() {
     CPULocal::Myself().ToSearch(&SHARESPACE);
     let start = TSC.Rdtsc();
@@ -256,11 +337,85 @@ pub fn Wait() {
     }
 }
 
+#[cfg(feature = "cc")]
+pub fn Wait() {
+
+    assert!(IS_GUEST == true,  "pub fn Wait() is called by host");
+
+    CPULocal::Myself().ToSearch(&SHARESPACE);
+    let start = TSC.Rdtsc();
+
+    let vcpuId = CPULocal::CpuId() as usize;
+    let mut next = SHARESPACE.scheduler.GetNext();
+    loop {
+        if let Some(newTask) = next {
+
+            let (c_t, c_twrp) = CPULocal::CurrentTask();
+            let current = TaskId::New(c_t, c_twrp);
+            //let vcpuId = newTask.GetTask().queueId;
+            //assert!(CPULocal::CpuId()==vcpuId, "cpu {}, target cpu {}", CPULocal::CpuId(), vcpuId);
+
+            CPULocal::Myself().SwitchToRunning();
+            if current.PrivateTaskAddr() != newTask.PrivateTaskAddr() {
+                Task::Current().SaveFp();
+                switch(current, newTask);
+            }
+
+            // the context is still current, no switch needed.
+            break;
+        }
+
+        //super::ALLOCATOR.Free();
+
+        let currentTime = TSC.Rdtsc();
+        if currentTime - start >= WAIT_CYCLES {
+            let (c_t, c_twrp) = CPULocal::CurrentTask();
+            let (w_t, w_twrp) = CPULocal::WaitTask();
+
+            let current = TaskId::New(c_t, c_twrp);
+            let waitTask = TaskId::New(w_t, w_twrp);
+            let oldTask = SHARESPACE.scheduler.queue[vcpuId].ResetWorkingTask();
+
+            match oldTask {
+                None => {
+                    Task::Current().SaveFp();
+                    switch(current, waitTask);
+                    break;
+                }
+                Some(t) => next = Some(t),
+            }
+        } else {
+            if PollAsyncMsg() == 0 {
+                #[cfg(target_arch = "x86_64")]
+                unsafe {
+                    asm!("pause");
+                }
+            }
+
+            next = SHARESPACE.scheduler.GetNext();
+        }
+    }
+}
+
+#[cfg(not(feature = "cc"))]
 pub fn SwitchToNewTask() -> ! {
     CPULocal::Myself().ToSearch(&SHARESPACE);
 
     let current = Task::TaskId();
     let waitTask = TaskId::New(CPULocal::WaitTask());
+    switch(current, waitTask);
+    panic!("SwitchToNewTask end impossible");
+}
+
+#[cfg(feature = "cc")]
+pub fn SwitchToNewTask() -> ! {
+    CPULocal::Myself().ToSearch(&SHARESPACE);
+
+    let current = Task::Current().GetPrivateTaskId();
+
+    let (wait_t, wait_tp) = CPULocal::WaitTask();
+    let waitTask = TaskId::New(wait_t, wait_tp);
+
     switch(current, waitTask);
     panic!("SwitchToNewTask end impossible");
 }
@@ -311,7 +466,10 @@ impl Scheduler {
                 //error!("stealing ... {:x?}", t);
                 let task = match self.queue[vcpuId].SwapWoringTask(t) {
                     None => {
+                        #[cfg(not(feature = "cc"))]
                         t.GetTask().SetQueueId(vcpuId);
+                        #[cfg(feature = "cc")]
+                        t.GetSharedTask().SetQueueId(vcpuId);
                         t
                     }
                     Some(task) => {
@@ -338,7 +496,10 @@ impl Scheduler {
     }
 
     pub fn Schedule(&self, taskId: TaskId, cpuAff: bool) {
+        #[cfg(not(feature = "cc"))]
         let vcpuId = taskId.GetTask().QueueId();
+        #[cfg(feature = "cc")]
+        let vcpuId = taskId.GetSharedTask().QueueId();
         //assert!(CPULocal::CpuId()==vcpuId, "cpu {}, target cpu {}", CPULocal::CpuId(), vcpuId);
         self.ScheduleQ(taskId, vcpuId as _, cpuAff);
     }
@@ -353,7 +514,21 @@ pub fn Yield() {
     if SHARESPACE.scheduler.GlobalReadyTaskCnt() == 0 {
         return;
     }
+    #[cfg(not(feature = "cc"))]
     SHARESPACE.scheduler.Schedule(Task::TaskId(), false);
+    #[cfg(feature = "cc")]
+    {
+        assert!(IS_GUEST == true);
+
+        let private_task_id = Task::PrivateTaskID();
+        let task = unsafe { &*(private_task_id as *const Task) };
+        let task_wp_id = task.taskWrapperId;
+
+        let taskID = TaskId::New(private_task_id, task_wp_id);
+
+        SHARESPACE.scheduler.Schedule(taskID, false);
+    }
+
     Wait();
 }
 

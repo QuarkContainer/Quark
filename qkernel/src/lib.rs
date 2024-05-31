@@ -538,7 +538,10 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
 
                     let mm = thread.lock().memoryMgr.clone();
                     thread.lock().memoryMgr = currTask.mm.clone();
+                    #[cfg(not(feature = "cc"))]
                     CPULocal::SetPendingFreeStack(currTask.taskId);
+                    #[cfg (feature = "cc")]
+                    CPULocal::SetPendingFreeStack(currTask.taskId, currTask.taskWrapperId);
 
                     /*if !SHARESPACE.config.read().KernelPagetable {
                         KERNEL_PAGETABLE.SwitchTo();

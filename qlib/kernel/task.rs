@@ -58,6 +58,13 @@ use super::kernel::fs_context::*;
 use super::super::SysCallID;
 use super::asm::*;
 
+#[cfg(feature = "cc")]
+use core::sync::atomic::AtomicU64;
+#[cfg(feature = "cc")]
+use crate::{GLOBAL_ALLOCATOR, IS_GUEST};
+#[cfg(feature = "cc")]
+use Kernel::is_cc_enabled;
+
 const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
 pub const DEFAULT_STACK_PAGES: u64 = DEFAULT_STACK_SIZE as u64 / (4 * 1024);
 pub const DEFAULT_STACK_MAST: u64 = !(DEFAULT_STACK_SIZE as u64 - 1);
@@ -99,16 +106,23 @@ impl TaskStore {
 
     pub fn CreateTask(runFnAddr: u64, para: *const u8, kernel: bool) -> TaskId {
         let t = Task::Create(runFnAddr as u64, para, kernel);
+        #[cfg(not(feature = "cc"))]
         return TaskId::New(t.taskId);
+        #[cfg(feature = "cc")]
+        return TaskId::New(t.taskId, t.taskWrapperId);
     }
 
     pub fn CreateFromThread() -> TaskId {
         let t = Task::CreateFromThread();
 
+        #[cfg(not(feature = "cc"))]
         return TaskId::New(t.taskId);
+        #[cfg(feature = "cc")]
+        return TaskId::New(t.taskId, t.taskWrapperId);
     }
 }
 
+#[cfg(not(feature = "cc"))]
 impl TaskId {
     #[inline]
     pub fn GetTask(&self) -> &'static mut Task {
@@ -167,10 +181,51 @@ impl Drop for Task {
     }
 }
 
+#[cfg(feature = "cc")]
+// task wrapper on shared memory
+#[repr(C)]
+pub struct TaskWrapper {
+    pub ready: AtomicU64,  // 0x0
+    // job queue id
+    pub queueId: AtomicUsize,
+    pub taskAddr: u64,
+}
+
+#[cfg(feature = "cc")]
+impl TaskWrapper {
+    pub fn New(task_addr: u64) -> Self {
+        return Self {
+            ready: AtomicU64::new(1),
+            queueId: AtomicUsize::new(0),
+            taskAddr: task_addr,
+        };
+    }
+
+    pub fn Ready(&self) -> u64 {
+        return self.ready.load(Ordering::Acquire);
+    }
+
+    pub fn SetReady(&self, val: u64) {
+        return self.ready.store(val, Ordering::SeqCst);
+    }
+
+    pub fn QueueId(&self) -> usize {
+        return self.queueId.load(Ordering::Acquire);
+    }
+
+    pub fn SetQueueId(&self, queueId: usize) {
+        return self.queueId.store(queueId, Ordering::Release);
+    }
+}
+
 #[repr(C)]
 pub struct Task {
     pub context: Context,
+    // address of Task struct
     pub taskId: u64,
+    // address of TaskWrapper struct
+    #[cfg(feature = "cc")]
+    pub taskWrapperId: u64,
     pub mm: MemoryManager,
     pub tidInfo: TidInfo,
     pub isWaitThread: bool,
@@ -197,6 +252,7 @@ pub struct Task {
     pub perfcounters: Option<Arc<Counters>>,
     pub savefpsate: bool,
     pub archfpstate: Option<Box<ArchFPState>>,
+    #[cfg(not(feature = "cc"))]
     // job queue id
     pub queueId: AtomicUsize,
     pub guard: Guard,
@@ -223,6 +279,11 @@ impl Task {
 
     pub fn IPCNamespace(&self) -> IPCNamespace {
         return self.ipcns.clone();
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn GetSharedTask(&self) -> &'static mut TaskWrapper {
+        return unsafe { &mut *(self.taskWrapperId as *mut TaskWrapper) };
     }
 
     //clean object on stack
@@ -261,10 +322,12 @@ impl Task {
         }
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn QueueId(&self) -> usize {
         return self.queueId.load(Ordering::Acquire);
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn SetQueueId(&self, queueId: usize) {
         return self.queueId.store(queueId, Ordering::Release);
     }
@@ -283,6 +346,10 @@ impl Task {
     }
 
     pub fn DummyTask() -> Self {
+        #[cfg(feature = "cc")]
+        if is_cc_enabled(){
+            assert!(IS_GUEST == true, "DummyTask should only be called from guest");
+        }
         let creds = Credentials::default();
         let userns = creds.lock().UserNamespace.clone();
 
@@ -298,6 +365,8 @@ impl Task {
         let ret = Task {
             context: Context::New(),
             taskId: 0,
+            #[cfg(feature = "cc")]
+            taskWrapperId: 0,
             //mm: MemoryMgr::default(),
             mm: mm,
             tidInfo: Default::default(),
@@ -322,6 +391,7 @@ impl Task {
             perfcounters: None,
             savefpsate: false,
             archfpstate:  Some(Default::default()),
+            #[cfg(not(feature = "cc"))]
             queueId: AtomicUsize::new(0),
             guard: Guard::default(),
         };
@@ -330,8 +400,17 @@ impl Task {
     }
 
     pub fn AccountTaskEnter(&self, state: SchedState) {
+        #[cfg(not(feature = "cc"))]
         if self.taskId == CPULocal::WaitTask() || self.exiting == true {
             return;
+        }
+
+        #[cfg(feature = "cc")]
+        {
+            let (w_task_id, _) = CPULocal::WaitTask();
+            if self.taskId == w_task_id || self.exiting == true {
+                return;
+            }
         }
 
         let now = TSC.Rdtsc();
@@ -356,6 +435,15 @@ impl Task {
 
     pub fn AccountTaskLeave(&self, state: SchedState) {
         //print!("AccountTaskLeave current task is {:x}, state is {:?}", self.taskId, state);
+        #[cfg(feature = "cc")]
+        {
+            let (w_task_id, _) = CPULocal::WaitTask();
+            if self.taskId == w_task_id || self.exiting == true {
+                return;
+            }
+        }
+
+        #[cfg(not(feature = "cc"))]
         if self.taskId == CPULocal::WaitTask() || self.exiting == true {
             return;
         }
@@ -535,15 +623,24 @@ impl Task {
         }
     }
 
+    #[cfg(not(feature = "cc"))]
     #[inline(always)]
     pub fn TaskId() -> TaskId {
         let rsp = GetCurrentKernelSp();
         return TaskId::New(rsp & DEFAULT_STACK_MAST);
     }
 
+    #[cfg(not(feature = "cc"))]
     #[inline(always)]
     pub fn GetPtr(&self) -> &'static mut Task {
         return unsafe { &mut *(self.taskId as *mut Task) };
+    }
+
+    #[cfg(feature = "cc")]
+    #[inline(always)]
+    pub fn PrivateTaskID() -> u64 {
+        let rsp = GetCurrentKernelSp();
+        return rsp & DEFAULT_STACK_MAST;
     }
 
     #[inline(always)]
@@ -657,10 +754,17 @@ impl Task {
         }
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn GetTaskId(&self) -> TaskId {
         return TaskId::New(self.taskId);
     }
 
+    #[cfg(feature = "cc")]
+    pub fn GetPrivateTaskId(&self) -> TaskId {
+        return TaskId::New(self.taskId, self.taskWrapperId);
+    }
+
+    #[cfg(not(feature = "cc"))]
     pub fn Create(runFnAddr: u64, para: *const u8, kernel: bool) -> &'static mut Self {
         //let s_ptr = pa.Alloc(DEFAULT_STACK_PAGES).unwrap() as *mut u8;
         let s_ptr = KERNEL_STACK_ALLOCATOR.Allocate().unwrap() as *mut u8;
@@ -718,6 +822,94 @@ impl Task {
                     savefpsate: false,
                     archfpstate:  Some(Default::default()),
                     queueId: AtomicUsize::new(0),
+                    guard: Guard::default(),
+                },
+            );
+
+            //let new = &mut *taskPtr;
+            //new.PerfGoto(PerfType::Blocked);
+            //new.PerfGoto(PerfType::Kernel);
+            return &mut (*taskPtr);
+        }
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn Create(runFnAddr: u64, para: *const u8, kernel: bool) -> &'static mut Self {
+        //let s_ptr = pa.Alloc(DEFAULT_STACK_PAGES).unwrap() as *mut u8;
+        let s_ptr = KERNEL_STACK_ALLOCATOR.Allocate().unwrap() as *mut u8;
+
+        let size = DEFAULT_STACK_SIZE;
+
+        let mut ctx = Context::New();
+
+        unsafe {
+            //ptr::write(s_ptr.offset((size - 24) as isize) as *mut u64, guard as u64);
+            ptr::write(s_ptr.offset((size - 32) as isize) as *mut u64, runFnAddr);
+            ctx.set_sp(s_ptr.offset((size - 32) as isize) as u64);
+            ctx.set_para(para as u64);
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        ctx.set_pc(runFnAddr);
+
+        let ioUsage = DUMMY_TASK.read().ioUsage.clone();
+        let perfcounters = Some(THREAD_COUNTS.lock().NewCounters());
+        let futexMgr = FUTEX_MGR.Fork();
+        let mm = MemoryManager::Init(kernel);
+        let creds = Credentials::default();
+        let userns = creds.lock().UserNamespace.clone();
+        let utsns = UTSNamespace::New("".to_string(), "".to_string(), userns.clone());
+        let ipcns = IPCNamespace::New(&userns);
+
+
+        let tw_size  = core::mem::size_of::<TaskWrapper>();
+        let tw_ptr = unsafe {
+            GLOBAL_ALLOCATOR.AllocSharedBuf(tw_size, 2)
+        };
+
+        let t_wp = TaskWrapper::New(s_ptr as u64);
+        let t_wp_ptr = tw_ptr as *mut TaskWrapper;
+        unsafe {
+            ptr::write(
+                t_wp_ptr,
+                t_wp
+            );
+        }
+
+        let blocker = Blocker::New(TaskId::New(s_ptr as u64, tw_ptr as u64));
+
+        //put Task on the task as Linux
+        let taskPtr = s_ptr as *mut Task;
+        unsafe {
+            ptr::write(
+                taskPtr,
+                Task {
+                    context: ctx,
+                    taskId: s_ptr as u64,
+                    taskWrapperId: tw_ptr as u64,
+                    mm: mm,
+                    tidInfo: Default::default(),
+                    isWaitThread: false,
+                    signalStack: Default::default(),
+                    mountNS: MountNs::default(),
+                    creds: creds.clone(),
+                    utsns: utsns,
+                    ipcns: ipcns,
+
+                    fsContext: FSContext::default(),
+
+                    fdTbl: FDTable::default(),
+                    blocker: blocker,
+                    thread: None,
+                    haveSyscallReturn: false,
+                    syscallRestartBlock: None,
+                    futexMgr: futexMgr,
+                    ioUsage: ioUsage,
+                    sched: TaskSchedInfo::default(),
+                    exiting: false,
+                    perfcounters: perfcounters,
+                    savefpsate: false,
+                    archfpstate:  Some(Default::default()),
                     guard: Guard::default(),
                 },
             );
@@ -787,6 +979,7 @@ impl Task {
         }
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn CreateFromThread() -> &'static mut Self {
         let baseStackAddr = Self::TaskId().Addr();
         let taskPtr = baseStackAddr as *mut Task;
@@ -824,6 +1017,69 @@ impl Task {
                     savefpsate: false,
                     archfpstate:  Some(Default::default()),
                     queueId: AtomicUsize::new(0),
+                    guard: Guard::default(),
+                },
+            );
+
+            return &mut (*taskPtr);
+        }
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn CreateFromThread() -> &'static mut Self {
+        let baseStackAddr = Self::PrivateTaskID();
+        let taskPtr = baseStackAddr as *mut Task;
+
+        let tw_size  = core::mem::size_of::<TaskWrapper>();
+        let tw_ptr = unsafe {
+            GLOBAL_ALLOCATOR.AllocSharedBuf(tw_size, 2)
+        };
+
+        let t_wp = TaskWrapper::New(taskPtr as u64);
+        let t_wp_ptr = tw_ptr as *mut TaskWrapper;
+        unsafe {
+            ptr::write(
+                t_wp_ptr,
+                t_wp
+            );
+        }
+
+
+        let blocker = Blocker::New(TaskId::New(baseStackAddr, tw_ptr as u64));
+
+        unsafe {
+            let creds = Credentials::default();
+            let userns = creds.lock().UserNamespace.clone();
+            let dummyTask = DUMMY_TASK.read();
+            ptr::write(
+                taskPtr,
+                Task {
+                    context: Context::New(),
+                    taskId: baseStackAddr,
+                    taskWrapperId: tw_ptr as u64,
+                    mm: dummyTask.mm.clone(),
+                    tidInfo: Default::default(),
+                    isWaitThread: true,
+                    signalStack: Default::default(),
+                    mountNS: MountNs::default(),
+                    creds: creds.clone(),
+                    utsns: UTSNamespace::New("".to_string(), "".to_string(), userns.clone()),
+                    ipcns: IPCNamespace::New(&userns),
+
+                    fsContext: FSContext::default(),
+
+                    fdTbl: FDTable::default(),
+                    blocker: blocker,
+                    thread: None,
+                    haveSyscallReturn: false,
+                    syscallRestartBlock: None,
+                    futexMgr: FUTEX_MGR.clone(),
+                    ioUsage: dummyTask.ioUsage.clone(),
+                    sched: TaskSchedInfo::default(),
+                    exiting: false,
+                    perfcounters: None,
+                    savefpsate: false,
+                    archfpstate:  Some(Default::default()),
                     guard: Guard::default(),
                 },
             );
@@ -944,10 +1200,12 @@ impl Task {
         return ret;
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn Ready(&self) -> u64 {
         return self.context.get_ready();
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn SetReady(&self, val: u64) {
         return self.context.set_ready(val);
     }

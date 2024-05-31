@@ -53,6 +53,8 @@ use super::syncmgr::*;
 use super::qlib::qmsg::sharepara::*;
 #[cfg(feature = "cc")]
 use qlib::kernel::Kernel::is_cc_enabled;
+#[cfg(feature = "cc")]
+use crate::qlib::task_mgr::TaskId;
 
 #[repr(C)]
 pub struct SignalMaskStruct {
@@ -648,6 +650,11 @@ impl KVMVcpu {
 
                             let ret = SHARE_SPACE.scheduler.WaitVcpu(&SHARE_SPACE, self.id, true);
                             match ret {
+                                #[cfg(feature = "cc")]
+                                Ok(taskId) => unsafe {
+                                    *(retAddr as *mut TaskId) = taskId;
+                                },
+                                #[cfg(not(feature = "cc"))]
                                 Ok(taskId) => unsafe {
                                     *(retAddr as *mut u64) = taskId as u64;
                                 },
@@ -790,6 +797,7 @@ impl KVMVcpu {
         Ok(())
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn VcpuWait(&self) -> i64 {
         let sharespace = &SHARE_SPACE;
         loop {
