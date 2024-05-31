@@ -18,6 +18,8 @@ use core::ptr;
 use core::sync::atomic;
 
 use crate::qlib::kernel::kernel::kernel::GetKernel;
+#[cfg(feature = "cc")]
+use crate::qlib::kernel::Kernel::is_cc_enabled;
 use crate::qlib::kernel::Kernel::HostSpace;
 //use crate::qlib::mem::list_allocator::*;
 use super::super::super::super::kernel_def::{
@@ -69,39 +71,82 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
         return;
     }*/
 
-    if signalArgs.Signo == SIGSTOP.0 || signalArgs.Signo == SIGUSR2.0 {
-        if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
-            // if the sandbox has been paused, return
-            return;
-        }
-        
-        GetKernel().Pause();
-        GetKernel().ClearFsCache();
-        HostSpace::SwapOut();
-        SHARESPACE
-            .hibernatePause
-            .store(true, atomic::Ordering::SeqCst);
-        return;
+    #[cfg(not(feature = "cc"))]{
+        if signalArgs.Signo == SIGSTOP.0 || signalArgs.Signo == SIGUSR2.0 {
+            if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
+                // if the sandbox has been paused, return
+                return;
+            }
 
-        /*for vcpu in CPU_LOCAL.iter() {
-            vcpu.AllocatorMut().Clear();
-        }*/
-    }
-
-    if signalArgs.Signo == SIGCONT.0
-        || signalArgs.Signo == SIGKILL.0
-        || signalArgs.Signo == SIGINT.0
-    {
-        if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
+            GetKernel().Pause();
+            GetKernel().ClearFsCache();
+            HostSpace::SwapOut();
             SHARESPACE
                 .hibernatePause
-                .store(false, atomic::Ordering::SeqCst);
-            HostSpace::SwapIn();
-            GetKernel().Unpause();
+                .store(true, atomic::Ordering::SeqCst);
+            return;
+
+            /*for vcpu in CPU_LOCAL.iter() {
+                vcpu.AllocatorMut().Clear();
+            }*/
         }
 
-        if signalArgs.Signo == SIGCONT.0 {
-            return;
+        if signalArgs.Signo == SIGCONT.0
+            || signalArgs.Signo == SIGKILL.0
+            || signalArgs.Signo == SIGINT.0
+        {
+            if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
+                SHARESPACE
+                    .hibernatePause
+                    .store(false, atomic::Ordering::SeqCst);
+                HostSpace::SwapIn();
+                GetKernel().Unpause();
+            }
+
+            if signalArgs.Signo == SIGCONT.0 {
+                return;
+            }
+        }
+    }
+
+    #[cfg(feature = "cc")]
+    {
+        if !is_cc_enabled(){
+            if signalArgs.Signo == SIGSTOP.0 || signalArgs.Signo == SIGUSR2.0 {
+                if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
+                    // if the sandbox has been paused, return
+                    return;
+                }
+
+                GetKernel().Pause();
+                GetKernel().ClearFsCache();
+                HostSpace::SwapOut();
+                SHARESPACE
+                    .hibernatePause
+                    .store(true, atomic::Ordering::SeqCst);
+                return;
+
+                /*for vcpu in CPU_LOCAL.iter() {
+                    vcpu.AllocatorMut().Clear();
+                }*/
+            }
+
+            if signalArgs.Signo == SIGCONT.0
+                || signalArgs.Signo == SIGKILL.0
+                || signalArgs.Signo == SIGINT.0
+            {
+                if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
+                    SHARESPACE
+                        .hibernatePause
+                        .store(false, atomic::Ordering::SeqCst);
+                    HostSpace::SwapIn();
+                    GetKernel().Unpause();
+                }
+
+                if signalArgs.Signo == SIGCONT.0 {
+                    return;
+                }
+            }
         }
     }
 
