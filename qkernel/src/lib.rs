@@ -158,6 +158,7 @@ lazy_static! {
     pub static ref PRIVATE_VCPU_ALLOCATOR: Box<PrivateVcpuAllocators> = Box::new(PrivateVcpuAllocators::New());
     pub static ref PAGE_MGR_HOLDER: Box<PageMgr> = Box::new(PageMgr::default());
     pub static ref IO_URING_HOLDER: Box<QUring> = Box::new(QUring::New(MemoryDef::QURING_SIZE));
+    pub static ref GUEST_KERNEL: Mutex<Option<kernel::kernel::Kernel>> = Mutex::new(None);
 }
 
 pub fn AllocIOBuf(size: usize) -> *mut u8 {

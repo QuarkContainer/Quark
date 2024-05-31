@@ -117,6 +117,8 @@ use vmspace::*;
 
 #[cfg(feature = "cc")]
 use crate::qlib::mem::cc_allocator::*;
+#[cfg(feature = "cc")]
+use crate::qlib::kernel::kernel::kernel::Kernel;
 
 pub fn AllocatorPrint(_class: usize) -> String {
     return "".to_string();
@@ -180,6 +182,7 @@ lazy_static! {
 lazy_static! {
     //will not be used in host, just place holder here
     pub static ref PRIVATE_VCPU_ALLOCATOR: Box<PrivateVcpuAllocators> = Box::new(PrivateVcpuAllocators::New());
+    pub static ref GUEST_KERNEL: Mutex<Option<Kernel>> = Mutex::new(None);
 }
 
 pub const LOG_FILE: &'static str = "/var/log/quark/quark.log";
