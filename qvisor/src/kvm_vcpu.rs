@@ -193,6 +193,7 @@ impl KVMVcpu {
                     count += 1;
                     let eventAddr = addr as *mut QMsg; // as &mut qlib::Event;
                     let qmsg = unsafe { &mut (*eventAddr) };
+                    let qmsg2 = unsafe { &mut (*eventAddr) }; //workaround reference
                     let currTaskId = qmsg.taskId;
 
                     {
@@ -201,8 +202,7 @@ impl KVMVcpu {
                         } else {
                             None
                         };
-
-                        qmsg.ret = Self::qCall(qmsg.msg);
+                        qmsg.ret = Self::qCall(qmsg2); 
                     }
 
                     if currTaskId.Addr() != 0 {

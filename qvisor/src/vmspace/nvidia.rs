@@ -11,14 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use serde::ser::Impossible;
 //use core::ops::Deref;
 use spin::Mutex;
+use core::ops::Deref;
+use std::collections::HashMap;
 //use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::os::raw::*;
 use std::ptr::{copy_nonoverlapping,null_mut};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
+use std::thread;
+use crate::qlib::qmsg::*;
+use crate::qlib::ShareSpace;
 // use std::time::{Duration, Instant};
 
 use crate::qlib::common::*;
@@ -26,6 +32,7 @@ use crate::qlib::common::*;
 use crate::qlib::config::*;
 use crate::qlib::proxy::*;
 use crate::qlib::range::Range;
+use crate::runc::container::nvidia;
 use crate::xpu::cuda::*;
 use crate::xpu::cuda_api::*;
 use crate::xpu::cuda_mem_manager::*;
@@ -46,11 +53,14 @@ use cuda_runtime_sys::{
 };
 use rcublas_sys::{cublasHandle_t};
 
+use super::kernel::SHARESPACE;
+
 lazy_static! {
     static ref CUDA_HAS_INIT: AtomicUsize = AtomicUsize::new(0);
     static ref MEM_RECORDER: Mutex<Vec<(u64, usize)>> = Mutex::new(Vec::new());
     static ref MEM_MANAGER: Mutex<MemoryManager> = Mutex::new(MemoryManager::new());
     static ref CURRENT_GPU_ID: Mutex<i32> = Mutex::new(0);
+    static ref WORKER_MAP: Mutex<HashMap<u64, NvidiaWorker>> = Mutex::new(HashMap::new()); //pid - worker tid
     // static ref OFFLOAD_TIMER: AtomicUsize = AtomicUsize::new(0);
     // pub static ref FAST_SWITCH_HASHSET: HashSet<u64> = HashSet::new();
     // pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
@@ -97,6 +107,34 @@ lazy_static! {
 //     ]);
 }
 
+#[derive(Debug, Clone)]
+pub struct NvidiaWorker(Arc<Mutex<NvidiaWorkerInner>>);
+
+impl Deref for NvidiaWorker {
+    type Target = Arc<Mutex<NvidiaWorkerInner>>;
+
+    fn deref(&self) -> &Arc<Mutex<NvidiaWorkerInner>> {
+        &self.0
+    }
+}
+
+#[derive(Debug)]
+pub struct NvidiaWorkerInner {
+    internMsgTx: mpsc::Sender<u64>, //&'static QMsg<'a>
+    internMsgRx: mpsc::Receiver<u64>,
+}
+impl NvidiaWorker {
+    pub fn New() -> Self {
+        let (tx, rx) = mpsc::channel();
+        let inner = NvidiaWorkerInner {
+            internMsgTx: tx,
+            internMsgRx: rx,
+        };
+        // spawn here?
+
+        return Self(Arc::new(Mutex::new(inner)));
+    }
+}
 #[repr(C)]
 pub struct NvidiaRes {
     pub res: u32,
@@ -119,44 +157,84 @@ impl NvidiaRes {
 }
 
 pub fn NvidiaProxy(
-    cmd: &ProxyCommand,
-    parameters: &ProxyParameters,
+    qmsg: &QMsg,
     containerId: &str,
 ) -> Result<i64> {
+    match WORKER_MAP.lock().get(&qmsg.taskId.data) {
+        Some(nvidiaWorker) => {
+            let worker = nvidiaWorker.lock(); 
+            worker.internMsgTx.send(qmsg as *const _ as u64).unwrap();
+        }
+        None => {
+            let newWorker = NvidiaWorker::New();
+            WORKER_MAP.lock().insert(qmsg.taskId.data, newWorker.clone());
+            let containerId2 = containerId.to_owned();
+            let handle = thread::spawn(move || {
+                loop {
+                    let msg = newWorker.lock().internMsgRx.recv().unwrap() as *mut QMsg;
+                    let msg2 = unsafe { &mut (*msg) };
+                    let ret = NvidiaProxyExecute(msg2, &containerId2);
+                    match ret {
+                        Ok(res) => {
+                            let currTaskId = msg2.taskId;
+                            SHARESPACE
+                            .scheduler
+                            .ScheduleQ(currTaskId, currTaskId.Queue(), true)
+                        }
+                        Err(e) => {
+                            // no error
+                            error!("nvidia proxy get error {:?}", e);
+                        }
+                    }
+                }
+            });
+        }
+    }
+    return Ok(0);
+}
+pub fn NvidiaProxyExecute(
+    qmsg: &QMsg,
+    containerId: &str,
+) -> Result<i64> {
+    error!("in nvidiaproxy");
     let mut result: NvidiaRes = NvidiaRes {
         res: 0,
         lasterr: 0,
     };
-    let targetGPUId = parameters.gpuId;
-    if *CURRENT_GPU_ID.lock() != targetGPUId {
-        let ret = unsafe { cudaSetDevice(targetGPUId) };
-        if ret as u32 != 0 {
-            error!("nvidia.rs: error caused by cudaSetDevice(device swtich): {}", ret as u32);
-        } else {
-            *CURRENT_GPU_ID.lock() = targetGPUId
-        }
-    }
-    let ret: Result<u32> = Execute(cmd, parameters, containerId);
-    match ret {
-        Ok(v) => {
-            result.res = v;
-        }
-        Err(_) => unreachable!(),
-    }
+    // let targetGPUId = parameters.gpuId;
+    // if *CURRENT_GPU_ID.lock() != targetGPUId {
+    //     let ret = unsafe { cudaSetDevice(targetGPUId) };
+    //     if ret as u32 != 0 {
+    //         error!("nvidia.rs: error caused by cudaSetDevice(device swtich): {}", ret as u32);
+    //     } else {
+    //         *CURRENT_GPU_ID.lock() = targetGPUId
+    //     }
+    // }
+    match qmsg.msg {
+        Msg::Proxy(msg) => {
+            let ret: Result<u32> = Execute(&msg.cmd, &msg.parameters, containerId);
+            match ret {
+                Ok(v) => {
+                    result.res = v;
+                }
+                Err(_) => unreachable!(),
+            }
 
-    match cmd {
-        ProxyCommand::CudaGetErrorName |
-        ProxyCommand::CudaGetErrorString |
-        ProxyCommand::CudaRegisterFatBinary |
-        ProxyCommand::CudaRegisterFunction |
-        ProxyCommand::CudaRegisterVar |
-        ProxyCommand::CudaUnregisterFatBinary => (),
-        _ => {
-            let err = unsafe { cudaGetLastError() };
-            result.lasterr = err as u32;
+            match &msg.cmd {
+                ProxyCommand::CudaGetErrorName |
+                ProxyCommand::CudaGetErrorString |
+                ProxyCommand::CudaRegisterFatBinary |
+                ProxyCommand::CudaRegisterFunction |
+                ProxyCommand::CudaRegisterVar |
+                ProxyCommand::CudaUnregisterFatBinary => (),
+                _ => {
+                    let err = unsafe { cudaGetLastError() };
+                    result.lasterr = err as u32;
+                }
+            } 
         }
-    } 
-
+        _ => unreachable!(),
+    }
     return Ok(result.ToU64() as i64);
 }
 

@@ -562,6 +562,7 @@ impl KVMVcpu {
 
                             let eventAddr = addr as *mut QMsg; // as &mut qlib::Event;
                             let qmsg = unsafe { &mut (*eventAddr) };
+                            let qmsg2 = unsafe { &mut (*eventAddr) }; //workaround reference
 
                             {
                                 let _l = if qmsg.globalLock {
@@ -570,7 +571,7 @@ impl KVMVcpu {
                                     None
                                 };
 
-                                qmsg.ret = Self::qCall(qmsg.msg);
+                                qmsg.ret = Self::qCall(qmsg2);
                             }
 
                             SHARE_SPACE.IncrHostProcessor();

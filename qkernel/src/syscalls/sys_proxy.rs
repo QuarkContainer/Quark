@@ -44,7 +44,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             .fetch_add(gap as u64, Ordering::SeqCst);
     });
     let cmd: ProxyCommand = unsafe { core::mem::transmute(commandId as u64) };
-    let tg = task.Thread().ThreadGroup();
     let cudaProcessCtx = task.Thread().ThreadGroup().GetCudaCtx();
     let mut currDev: i32 = 0;
     let mut parameters = ProxyParameters {
