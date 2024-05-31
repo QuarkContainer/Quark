@@ -213,14 +213,14 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
         ProxyCommand::NcclAllReduce => {
             error!("ncclAllReduce_sysproxy");
-            let sendinfo = task.CopyInObj::<NcclAllGatherReduceInfo>(parameters.para2)?;
+            let sendinfo = task.CopyInObj::<NcclAllGatherReduceInfo>(parameters.para3)?;
             parameters.para3 = &sendinfo as *const _ as u64;
             let ret = HostSpace::Proxy(cmd, parameters);
             sys_ret = Ok(ret);
         }
         ProxyCommand::NcclAllGather => {
             error!("ncclAllGather_sysproxy");
-            let sendinfo = task.CopyInObj::<NcclAllGatherReduceInfo>(parameters.para2)?;
+            let sendinfo = task.CopyInObj::<NcclAllGatherReduceInfo>(parameters.para3)?;
             parameters.para3 = &sendinfo as *const _ as u64;
             let ret = HostSpace::Proxy(cmd, parameters);
             sys_ret = Ok(ret);
@@ -228,7 +228,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
         ProxyCommand::NcclReduceScatter => {
             error!("ncclReduceScatter_sysproxy");
-            let sendinfo = task.CopyInObj::<NcclAllGatherReduceInfo>(parameters.para2)?;
+            let sendinfo = task.CopyInObj::<NcclAllGatherReduceInfo>(parameters.para3)?;
             parameters.para3 = &sendinfo as *const _ as u64;
             let ret = HostSpace::Proxy(cmd, parameters);
             sys_ret = Ok(ret);
