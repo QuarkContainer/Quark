@@ -174,13 +174,13 @@ pub fn SingletonInit() {
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentUserTable()));
         //init fp state with current fp state as it is brand new vcpu
         FP_STATE.Reset();
-        SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
         //SHARESPACE.SetvirtualizationHandlerAddr(virtualization_handler as u64);
 
         // the error! can run after this point
         //error!("error message");
 
         #[cfg(not(feature = "cc"))]{
+            SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
             PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
             IOURING.SetValue(SHARESPACE.GetIOUringAddr());
         }
@@ -190,6 +190,7 @@ pub fn SingletonInit() {
             PAGE_MGR.SetValue(PAGE_MGR_HOLDER.Addr());
             IOURING.SetValue(IO_URING_HOLDER.Addr());
         } else {
+            SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
             PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
             IOURING.SetValue(SHARESPACE.GetIOUringAddr());
         }
