@@ -25,6 +25,9 @@ use crate::qlib::kernel::IOURING;
 use crate::qlib::rdmasocket::*;
 use crate::qlib::*;
 
+#[cfg(feature = "cc")]
+use super::mem::cc_allocator::GuestHostSharedAllocator;
+
 #[derive(Clone)]
 pub enum SockInfo {
     File,                             // it is not socket
@@ -188,9 +191,26 @@ impl fmt::Debug for FdWaitIntern {
     }
 }
 
+#[cfg(not(feature = "cc"))]
 #[derive(Default, Clone, Debug)]
 pub struct FdWaitInfo(Arc<QMutex<FdWaitIntern>>);
 
+#[cfg(feature = "cc")]
+#[derive(Clone, Debug)]
+pub struct FdWaitInfo(Arc<QMutex<FdWaitIntern>, GuestHostSharedAllocator>);
+
+#[cfg(feature = "cc")]
+impl Default for FdWaitInfo {
+    fn default() -> Self {
+        return FdWaitInfo(Arc::new_in(
+            QMutex::new(FdWaitIntern::default()),
+            crate::GUEST_HOST_SHARED_ALLOCATOR,
+        ));
+    }
+}
+
+
+#[cfg(not(feature = "cc"))]
 impl Deref for FdWaitInfo {
     type Target = Arc<QMutex<FdWaitIntern>>;
 
@@ -199,11 +219,31 @@ impl Deref for FdWaitInfo {
     }
 }
 
+#[cfg(feature = "cc")]
+impl Deref for FdWaitInfo {
+    type Target = Arc<QMutex<FdWaitIntern>, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<QMutex<FdWaitIntern>, GuestHostSharedAllocator> {
+        &self.0
+    }
+}
+
 impl FdWaitInfo {
+    #[cfg(not(feature = "cc"))]
     pub fn New(queue: Queue, mask: EventMask) -> Self {
         let intern = FdWaitIntern { queue, mask };
 
         return Self(Arc::new(QMutex::new(intern)));
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn New(queue: Queue, mask: EventMask) -> Self {
+        let intern = FdWaitIntern { queue, mask };
+
+        return Self(Arc::new_in(
+            QMutex::new(intern),
+            crate::GUEST_HOST_SHARED_ALLOCATOR,
+        ));
     }
 
     pub fn UpdateFDAsync(&self, fd: i32, epollfd: i32) -> Result<()> {

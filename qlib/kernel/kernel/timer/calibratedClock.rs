@@ -28,6 +28,11 @@ use super::parameters::*;
 use super::sampler::*;
 use super::*;
 
+#[cfg(feature = "cc")]
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+#[cfg(feature = "cc")]
+use crate::qlib::mem::cc_allocator::GuestHostSharedAllocator;
+
 pub static FALLBACK_METRIC: Singleton<Arc<U64Metric>> = Singleton::<Arc<U64Metric>>::New();
 pub unsafe fn InitSingleton() {
     FALLBACK_METRIC.Init(NewU64Metric(
@@ -100,13 +105,28 @@ impl CalibratedClockInternal {
     }
 }
 
+#[cfg(not(feature = "cc"))]
 #[derive(Clone)]
 pub struct CalibratedClock(Arc<QRwLock<CalibratedClockInternal>>);
 
+#[cfg(feature = "cc")]
+#[derive(Clone)]
+pub struct CalibratedClock(Arc<QRwLock<CalibratedClockInternal>, GuestHostSharedAllocator>);
+
+#[cfg(not(feature = "cc"))]
 impl Deref for CalibratedClock {
     type Target = Arc<QRwLock<CalibratedClockInternal>>;
 
     fn deref(&self) -> &Arc<QRwLock<CalibratedClockInternal>> {
+        &self.0
+    }
+}
+
+#[cfg(feature = "cc")]
+impl Deref for CalibratedClock {
+    type Target = Arc<QRwLock<CalibratedClockInternal>, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<QRwLock<CalibratedClockInternal>, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -119,7 +139,13 @@ impl CalibratedClock {
             params: Parameters::default(),
             errorNS: 0,
         };
+        #[cfg(not(feature = "cc"))]
         return Self(Arc::new(QRwLock::new(internal)));
+        #[cfg(feature = "cc")]
+        return Self(Arc::new_in(
+            QRwLock::new(internal),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
     }
 
     // reset forces the clock to restart the calibration process, logging the

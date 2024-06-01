@@ -24,6 +24,7 @@
 #![feature(unix_socket_ancillary_data)]
 #![allow(invalid_reference_casting)]
 #![feature(allocator_api)]
+#![feature(btreemap_alloc)]
 /***
 warning: `extern` block uses type `rcublas_sys::cudaMemLocationType`, which is not FFI-safe
   --> src/vmspace/nvidia.rs:70:92
