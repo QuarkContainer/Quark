@@ -35,6 +35,11 @@ use super::timekeeper::*;
 use super::timer_store::*;
 use super::*;
 
+#[cfg(feature = "cc")]
+use crate::qlib::mem::cc_allocator::GuestHostSharedAllocator;
+#[cfg(feature = "cc")]
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+
 // ClockEventSet occurs when a Clock undergoes a discontinuous change.
 pub const CLOCK_EVENT_SET: EventMask = 1 << 0;
 
@@ -46,7 +51,10 @@ pub const TIMER_TICK_EVENTS: EventMask = CLOCK_EVENT_SET | CLOCK_EVENT_RATE_INCR
 
 #[derive(Clone)]
 pub enum Clock {
+    #[cfg(not(feature = "cc"))]
     TimeKeeperClock(Arc<TimeKeeperClock>),
+    #[cfg(feature = "cc")]
+    TimeKeeperClock(Arc<TimeKeeperClock,GuestHostSharedAllocator>),
     TaskClock(TaskClock),
     ThreadGroupClock(ThreadGroupClock),
     Dummy,
@@ -387,7 +395,11 @@ impl TimerInternal {
     }
 }
 
+#[cfg(not(feature = "cc"))]
 pub struct TimerWeak(Weak<QMutex<TimerInternal>>);
+
+#[cfg(feature = "cc")]
+pub struct TimerWeak(Weak<QMutex<TimerInternal>, GuestHostSharedAllocator>);
 
 impl TimerWeak {
     pub fn Upgrade(&self) -> Option<Timer> {
@@ -400,13 +412,38 @@ impl TimerWeak {
     }
 }
 
+#[cfg(not(feature = "cc"))]
 #[derive(Clone, Default)]
 pub struct Timer(Arc<QMutex<TimerInternal>>);
 
+#[cfg(not(feature = "cc"))]
 impl Deref for Timer {
     type Target = Arc<QMutex<TimerInternal>>;
 
     fn deref(&self) -> &Arc<QMutex<TimerInternal>> {
+        &self.0
+    }
+}
+
+#[cfg(feature = "cc")]
+#[derive(Clone)]
+pub struct Timer(Arc<QMutex<TimerInternal>, GuestHostSharedAllocator>);
+
+#[cfg(feature = "cc")]
+impl Default for Timer {
+    fn default() -> Self {
+        return Timer(Arc::new_in(
+            QMutex::new(TimerInternal::default()),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
+    }
+}
+
+#[cfg(feature = "cc")]
+impl Deref for Timer {
+    type Target = Arc<QMutex<TimerInternal>, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<QMutex<TimerInternal>, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -423,7 +460,13 @@ impl Drop for Timer {
 
 impl Timer {
     pub fn Dummy() -> Self {
+        #[cfg(not(feature = "cc"))]
         let ret = Self(Arc::new(QMutex::new(TimerInternal::Dummy())));
+        #[cfg(feature = "cc")]
+        let ret = Self(Arc::new_in(
+            QMutex::new(TimerInternal::Dummy()),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
         return ret;
     }
 
@@ -462,7 +505,13 @@ impl Timer {
             Expire: 0,
         };
 
+        #[cfg(not(feature = "cc"))]
         let mut res = Self(Arc::new(QMutex::new(internal)));
+        #[cfg(feature = "cc")]
+        let mut res = Self(Arc::new_in(
+            QMutex::new(internal),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
         res.Init();
         return res;
     }
@@ -480,7 +529,13 @@ impl Timer {
             Expire: 0,
         };
 
+        #[cfg(not(feature = "cc"))]
         let mut res = Self(Arc::new(QMutex::new(internal)));
+        #[cfg(feature = "cc")]
+        let mut res = Self(Arc::new_in(
+            QMutex::new(internal),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
         res.Init();
 
         let now = clock.Now();
@@ -506,7 +561,13 @@ impl Timer {
             Expire: 0,
         };
 
+        #[cfg(not(feature = "cc"))]
         let mut res = Self(Arc::new(QMutex::new(internal)));
+        #[cfg(feature = "cc")]
+        let mut res = Self(Arc::new_in(
+            QMutex::new(internal),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
         res.Init();
 
         let now = clock.Now();

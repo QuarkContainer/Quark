@@ -27,6 +27,7 @@
 #![allow(deprecated)]
 #![recursion_limit = "256"]
 #![allow(invalid_reference_casting)]
+#![feature(btreemap_alloc)]
 
 #[macro_use]
 extern crate alloc;

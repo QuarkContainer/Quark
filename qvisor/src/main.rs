@@ -23,6 +23,7 @@
 #![feature(unix_socket_ancillary_data)]
 #![allow(invalid_reference_casting)]
 #![feature(allocator_api)]
+#![feature(btreemap_alloc)]
 #![allow(improper_ctypes_definitions)]
 #![allow(improper_ctypes)]
 
