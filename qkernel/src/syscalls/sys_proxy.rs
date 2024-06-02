@@ -836,6 +836,8 @@ pub fn CudaHostAlloc(task: &Task, mut parameters: ProxyParameters) -> Result<i64
         return Ok(ret);
     }
 
+    iovs.resize(cnt, IoVec::default());
+
     let inner = CudaHostMappableInner {
         hostAddr: hostAddr,
         iovs: iovs,
