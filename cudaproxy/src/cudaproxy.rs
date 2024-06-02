@@ -623,6 +623,31 @@ pub extern "C" fn cudaLaunchKernel(
 // }
 
 #[no_mangle]
+pub extern "C" fn cudaHostAlloc(dev_ptr: *mut *mut c_void, size: usize, flags: u32) -> usize {
+    //println!("Hijacked cudaMalloc");
+    let ret = cudaSyscall4(
+        SYS_PROXY,
+        ProxyCommand::CudaHostAlloc as usize,
+        dev_ptr as *const _ as usize,
+        size,
+        flags as usize,
+    );
+    //unsafe { println!("cudaHostAlloc ptr{:x}, size: {}, flags {:x}", *(dev_ptr as *mut _ as *mut u64) as u64, size, flags); }
+    return ret;
+}
+
+#[no_mangle]
+pub extern "C" fn cudaFreeHost(dev_ptr: *mut c_void) -> usize {
+    //println!("Hijacked cudaFreeHost");
+    // println!("cudaFreeHost ptr: {:x}", dev_ptr as *mut _ as u64);
+    return cudaSyscall2(
+        SYS_PROXY,
+        ProxyCommand::CudaFreeHost as usize,
+        dev_ptr as *const _ as usize,
+    );
+}
+
+#[no_mangle]
 pub extern "C" fn cudaMalloc(dev_ptr: *mut *mut c_void, size: usize) -> usize {
     //println!("Hijacked cudaMalloc");
     let ret = cudaSyscall3(
@@ -1626,6 +1651,7 @@ fn cudaGetDeviceHelper(reset: bool) -> (c_int, usize) {
     }
 }
 
+#[derive(Debug)]
 #[repr(C)]
 pub struct NvidiaRes {
     pub res: u32,
@@ -1651,6 +1677,7 @@ impl NvidiaRes {
 fn updateLastError(ret: usize) -> usize {
     let nvidiaRes = NvidiaRes::FromU64(ret as u64);
     LAST_ERROR.store(nvidiaRes.lasterr, std::sync::atomic::Ordering::SeqCst);
+    // println!("updateLastError nvidiaRes is {:?}", &nvidiaRes);
     nvidiaRes.res as usize
 }
 

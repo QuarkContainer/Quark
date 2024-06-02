@@ -17,6 +17,7 @@ use spin::Mutex;
 use std::ffi::CString;
 use std::os::raw::*;
 use std::ptr::copy_nonoverlapping;
+use std::slice;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 // use std::time::{Duration, Instant};
@@ -29,7 +30,7 @@ use crate::qlib::range::Range;
 use crate::xpu::cuda::*;
 use crate::xpu::cuda_api::*;
 use crate::xpu::cuda_mem_manager::*;
-use crate::QUARK_CONFIG;
+use crate::{PMA_KEEPER, QUARK_CONFIG};
 
 use cuda11_cublasLt_sys::{
     cublasLtHandle_t, cublasLtMatmulAlgo_t, cublasLtMatmulDesc_t, cublasLtMatmulHeuristicResult_t,
@@ -40,11 +41,13 @@ use cuda_driver_sys::{
     CUstream_st,
 };
 use cuda_runtime_sys::{
-    cudaDeviceAttr, cudaDeviceP2PAttr, cudaDeviceProp, cudaError_t, cudaEvent_t,
-    cudaFuncAttributes, cudaFuncCache, cudaLimit, cudaMemAttachGlobal, cudaStream_t,
-    cudaSharedMemConfig, cudaStreamCaptureMode, cudaStreamCaptureStatus,
+    cudaDeviceAttr, cudaDeviceP2PAttr, cudaDeviceProp, cudaEvent_t, cudaFuncAttributes,
+    cudaFuncCache, cudaLimit, cudaMemAttachGlobal, cudaSharedMemConfig, cudaStreamCaptureMode,
+    cudaStreamCaptureStatus, cudaStream_t,
 };
-use rcublas_sys::{cublasHandle_t};
+use rcublas_sys::cublasHandle_t;
+
+use super::{IoVec, MemoryDef};
 
 lazy_static! {
     static ref CUDA_HAS_INIT: AtomicUsize = AtomicUsize::new(0);
@@ -99,7 +102,7 @@ lazy_static! {
 #[repr(C)]
 pub struct NvidiaRes {
     pub res: u32,
-    pub lasterr: u32, 
+    pub lasterr: u32,
 }
 
 impl NvidiaRes {
@@ -108,12 +111,12 @@ impl NvidiaRes {
         let lasterr = v as u32;
         return NvidiaRes {
             res: res,
-            lasterr: lasterr
-        }
+            lasterr: lasterr,
+        };
     }
 
     pub fn ToU64(&self) -> u64 {
-        return (self.res as u64) << 32 | (self.lasterr as u64)
+        return (self.res as u64) << 32 | (self.lasterr as u64);
     }
 }
 
@@ -122,10 +125,7 @@ pub fn NvidiaProxy(
     parameters: &ProxyParameters,
     containerId: &str,
 ) -> Result<i64> {
-    let mut result: NvidiaRes = NvidiaRes {
-        res: 0,
-        lasterr: 0,
-    };
+    let mut result: NvidiaRes = NvidiaRes { res: 0, lasterr: 0 };
     let ret: Result<u32> = Execute(cmd, parameters, containerId);
     match ret {
         Ok(v) => {
@@ -135,26 +135,22 @@ pub fn NvidiaProxy(
     }
 
     match cmd {
-        ProxyCommand::CudaGetErrorName |
-        ProxyCommand::CudaGetErrorString |
-        ProxyCommand::CudaRegisterFatBinary |
-        ProxyCommand::CudaRegisterFunction |
-        ProxyCommand::CudaRegisterVar |
-        ProxyCommand::CudaUnregisterFatBinary => (),
+        ProxyCommand::CudaGetErrorName
+        | ProxyCommand::CudaGetErrorString
+        | ProxyCommand::CudaRegisterFatBinary
+        | ProxyCommand::CudaRegisterFunction
+        | ProxyCommand::CudaRegisterVar
+        | ProxyCommand::CudaUnregisterFatBinary => (),
         _ => {
             let err = unsafe { cudaGetLastError() };
             result.lasterr = err as u32;
         }
-    } 
+    }
 
     return Ok(result.ToU64() as i64);
 }
 
-pub fn Execute(
-    cmd: &ProxyCommand,
-    parameters: &ProxyParameters,
-    containerId: &str,
-) -> Result<u32> {
+pub fn Execute(cmd: &ProxyCommand, parameters: &ProxyParameters, containerId: &str) -> Result<u32> {
     match cmd {
         ProxyCommand::None => {
             panic!("get impossible proxy command");
@@ -225,7 +221,9 @@ pub fn Execute(
                 );
             }
 
-            unsafe { *(parameters.para1 as *mut _) = cacheConfig as u32; }   
+            unsafe {
+                *(parameters.para1 as *mut _) = cacheConfig as u32;
+            }
             return Ok(ret as u32);
         }
         ProxyCommand::CudaDeviceGetLimit => {
@@ -490,9 +488,7 @@ pub fn Execute(
         }
         ProxyCommand::CudaGetErrorString => {
             //error!("nvidia.rs: cudaGetErrorString");
-            let ptr = unsafe {
-                cudaGetErrorString(parameters.para1 as u32)
-            };
+            let ptr = unsafe { cudaGetErrorString(parameters.para1 as u32) };
 
             let cStr = unsafe { std::ffi::CStr::from_ptr(ptr) };
             let errorStr = cStr.to_str().expect("Invalid UTF-8 data");
@@ -502,9 +498,7 @@ pub fn Execute(
         }
         ProxyCommand::CudaGetErrorName => {
             //error!("nvidia.rs: cudaGetErrorName");
-            let ptr = unsafe {
-                cudaGetErrorName(parameters.para1 as u32)
-            };
+            let ptr = unsafe { cudaGetErrorName(parameters.para1 as u32) };
 
             let cStr = unsafe { std::ffi::CStr::from_ptr(ptr) };
             let errorStr = cStr.to_str().expect("Invalid UTF-8 data");
@@ -567,22 +561,23 @@ pub fn Execute(
                 unsafe { *(parameters.para1 as *mut u64) = para1 as u64 };
                 // error!("nvidia.rs: malloc ptr:{:x}, size:{:x}", para1 as u64, parameters.para2);
                 return Ok(ret as u32);
-
-                
             } else if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
-                let (addr,ret) = MEM_MANAGER.lock().gpuManager.alloc(parameters.para2 as usize);
-                unsafe { *(parameters.para1 as *mut u64) = addr};
+                let (addr, ret) = MEM_MANAGER
+                    .lock()
+                    .gpuManager
+                    .alloc(parameters.para2 as usize);
+                unsafe { *(parameters.para1 as *mut u64) = addr };
                 if ret != 0 {
                     error!("mem pool failed to alloc");
                 }
                 return Ok(ret as u32);
             } else {
                 // error!("nvidia.rs: CudaMode::Default()");
-                let mut para1 = parameters.para1 as *mut c_void;
+                let mut addr: u64 = 0;
 
                 let ret = unsafe {
                     cudaMalloc(
-                        &mut para1 as *mut _ as *mut *mut _ as *mut *mut c_void,
+                        &mut addr as *mut _ as u64 as *mut *mut libc::c_void,
                         parameters.para2 as usize,
                     )
                 };
@@ -590,12 +585,12 @@ pub fn Execute(
                     error!("nvidia.rs: error caused by cudaMalloc: {}", ret as u32);
                 }
 
-                unsafe { *(parameters.para1 as *mut u64) = para1 as u64 };
+                unsafe { *(parameters.para1 as *mut u64) = addr };
                 return Ok(ret as u32);
             }
         }
         ProxyCommand::CudaFree => {
-            //error!("nvidia.rs: cudaFree");
+            // error!("nvidia.rs: cudaFree addr is {:x?}", parameters.para1);
             if QUARK_CONFIG.lock().CudaMemType == CudaMemType::UM {
                 let memRecorder = MEM_RECORDER.lock();
                 let index = memRecorder
@@ -607,7 +602,15 @@ pub fn Execute(
 
             let ret = unsafe { cudaFree(parameters.para1 as *mut c_void) };
             if ret as u32 != 0 {
-                error!("nvidia.rs: error caused by cudaFree: {}", ret as u32);
+                let ptr = unsafe { cudaGetErrorString(1) };
+
+                let cStr = unsafe { std::ffi::CStr::from_ptr(ptr) };
+                let errorStr = cStr.to_str().expect("Invalid UTF-8 data");
+                let errorString = errorStr.to_string();
+                error!(
+                    "nvidia.rs: error caused by cudaFree: {} errorstring {}",
+                    ret as u32, errorString
+                );
             }
 
             return Ok(ret as u32);
@@ -659,10 +662,24 @@ pub fn Execute(
             MODULES.lock().insert(moduleKey, module);
             let fatbinSize: usize = parameters.para1 as usize;
             let mut fatbinData = Vec::with_capacity(parameters.para1 as usize);
-            unsafe { copy_nonoverlapping(parameters.para2 as *const u8, fatbinData.as_mut_ptr(), fatbinSize); }
+            unsafe {
+                copy_nonoverlapping(
+                    parameters.para2 as *const u8,
+                    fatbinData.as_mut_ptr(),
+                    fatbinSize,
+                );
+            }
             MEM_MANAGER.lock().fatBinManager.fatBinVec.push(fatbinData);
-            MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.push((moduleKey, module));
-            MEM_MANAGER.lock().fatBinManager.fatBinFuncVec.push(Vec::new());
+            MEM_MANAGER
+                .lock()
+                .fatBinManager
+                .fatBinHandleVec
+                .push((moduleKey, module));
+            MEM_MANAGER
+                .lock()
+                .fatBinManager
+                .fatBinFuncVec
+                .push(Vec::new());
             // error!("insert module: {:x} -> {:x}", moduleKey, module);
             return Ok(ret as u32);
         }
@@ -744,7 +761,13 @@ pub fn Execute(
                 }
             }
 
-            let index = MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.iter().position(|&r| r.0 == info.fatCubinHandle).unwrap();
+            let index = MEM_MANAGER
+                .lock()
+                .fatBinManager
+                .fatBinHandleVec
+                .iter()
+                .position(|&r| r.0 == info.fatCubinHandle)
+                .unwrap();
             MEM_MANAGER.lock().fatBinManager.fatBinFuncVec[index].push((info.hostFun, func_name));
 
             return Ok(ret as u32);
@@ -1272,9 +1295,7 @@ pub fn Execute(
             //error!("nvidia.rs: CudaFuncSetAttribute");
             let dev_func = match FUNCTIONS.lock().get(&parameters.para1) {
                 Some(func) => func.clone(),
-                None => {
-                    0
-                }
+                None => 0,
             };
             let ret = unsafe {
                 cuFuncSetAttribute(
@@ -1844,7 +1865,7 @@ pub fn Execute(
             }
 
             return Ok(ret as u32);
-        } 
+        }
         ProxyCommand::CublasGemmEx => {
             //error!("nvidia.rs: CublasSgemm_v2");
             let info = unsafe { *(parameters.para1 as *const u8 as *const GemmExInfo) };
@@ -1871,7 +1892,7 @@ pub fn Execute(
                     info.Ctype,
                     info.ldc,
                     info.computeType,
-                    info.algo
+                    info.algo,
                 )
             };
             if ret as u32 != 0 {
@@ -1882,7 +1903,8 @@ pub fn Execute(
         }
         ProxyCommand::CublasGemmStridedBatchedEx => {
             //error!("nvidia.rs: CublasSgemm_v2");
-            let info = unsafe { *(parameters.para1 as *const u8 as *const GemmStridedBatchedExInfo) };
+            let info =
+                unsafe { *(parameters.para1 as *const u8 as *const GemmStridedBatchedExInfo) };
             let alpha = unsafe { *(parameters.para2 as *const f32) };
             let beta = unsafe { *(parameters.para3 as *const f32) };
 
@@ -1910,18 +1932,137 @@ pub fn Execute(
                     info.strideC,
                     info.batchCount,
                     info.computeType,
-                    info.algo
+                    info.algo,
                 )
             };
             if ret as u32 != 0 {
-                error!("nvidia.rs: error caused by cublasGemmStridedBatchedEx: {}", ret as u32);
+                error!(
+                    "nvidia.rs: error caused by cublasGemmStridedBatchedEx: {}",
+                    ret as u32
+                );
             }
 
             return Ok(ret as u32);
-        } 
-        //_ => todo!()
-        
+        } //_ => todo!()
+        ProxyCommand::CudaHostAlloc => {
+            return CudaHostAlloc(parameters);
+        }
+        ProxyCommand::CudaFreeHost => match CudeFreeHost(parameters) {
+            Err(e) => {
+                error!("CudeFreeHost fail with error {:?}", e);
+                return Ok(2);
+            }
+            Ok(n) => return Ok(n),
+        },
     }
+}
+
+pub fn CudaHostAlloc(parameters: &ProxyParameters) -> Result<u32> {
+    let size = parameters.para2 as usize;
+    let flags = parameters.para3 as u32;
+    let arrAddr = parameters.para4;
+    let cnt = unsafe { &mut *(parameters.para5 as *mut usize) };
+    let hostAddr = unsafe { &mut *(parameters.para6 as *mut u64) };
+
+    let mut addr: u64 = 0;
+
+    let ret = unsafe { cudaHostAlloc(&mut addr as *mut _ as u64, size, flags) };
+    if ret != 0 {
+        error!("nvidia.rs: error caused by CudaHostAlloc: {}", ret as u32);
+        return Ok(ret as u32);
+    }
+
+    assert!(addr % MemoryDef::PAGE_SIZE_2M == 0);
+    *hostAddr = addr;
+
+    let iovs = unsafe { slice::from_raw_parts_mut(arrAddr as *mut IoVec, *cnt) };
+    let hugePageCnt =
+        ((size as u64 + MemoryDef::PAGE_SIZE_2M - 1) / MemoryDef::PAGE_SIZE_2M) as usize;
+    let mut pages = Vec::new();
+    for _i in 0..hugePageCnt {
+        let pageAddr = PMA_KEEPER
+            .AllocHugePage()
+            .expect("CudaHostAlloc can't alloc huge page");
+        pages.push(pageAddr);
+    }
+    pages.sort();
+
+    let mut iov = IoVec::NewFromAddr(pages[0], MemoryDef::PAGE_SIZE_2M as usize);
+    let mut idx = 0;
+    for i in 1..hugePageCnt {
+        if pages[i] == iov.End() {
+            iov.len += MemoryDef::PAGE_SIZE_2M as usize;
+        } else {
+            iovs[idx] = iov;
+            idx += 1;
+            iov = IoVec::NewFromAddr(pages[i], MemoryDef::PAGE_SIZE_2M as usize);
+        }
+    }
+
+    iovs[idx] = iov;
+
+    // in case the size < 2MB
+    let left = size % MemoryDef::PAGE_SIZE_2M as usize;
+    if left != 0 {
+        let gap = MemoryDef::PAGE_SIZE_2M as usize - left;
+        iovs[idx].len -= gap;
+    }
+
+    *cnt = idx + 1;
+
+    let remapFlags = libc::MREMAP_MAYMOVE | libc::MREMAP_FIXED | libc::MREMAP_DONTUNMAP;
+    // let remapFlags = libc::MREMAP_FIXED;
+    let mut offset = 0;
+    for i in 0..*cnt {
+        let iov = iovs[i];
+        let ret = unsafe {
+            libc::mremap(
+                (addr + offset) as _,
+                iov.Len() as _,
+                iov.Len() as _,
+                remapFlags,
+                iov.Start() as u64,
+            )
+        } as i64;
+
+        if ret == -1 {
+            return Err(Error::SystemErr(-errno::errno().0));
+        }
+
+        offset += iov.Len() as u64;
+    }
+
+    return Ok(0);
+}
+
+pub fn CudeFreeHost(parameters: &ProxyParameters) -> Result<u32> {
+    let hostAddr = parameters.para2;
+    let arrAddr = parameters.para3;
+    let cnt = parameters.para4 as usize;
+
+    let iovs = unsafe { slice::from_raw_parts(arrAddr as *const IoVec, cnt) };
+    for iov in iovs {
+        let mut addr = iov.Start();
+        let len = iov.Len();
+        let ret = unsafe { libc::munmap(addr as _, len) };
+
+        if ret == -1 {
+            return Err(Error::SystemErr(-errno::errno().0));
+        }
+
+        while addr < iov.End() {
+            PMA_KEEPER.FreeHugePage(addr);
+            addr += MemoryDef::PAGE_SIZE_2M;
+        }
+    }
+
+    let ret = unsafe { cudaFreeHost(hostAddr) };
+    if ret != 0 {
+        error!("nvidia.rs: error caused by CudeFreeHost: {}", ret as u32);
+        return Ok(ret as u32);
+    }
+
+    return Ok(0);
 }
 
 pub fn CudaMemcpy(parameters: &ProxyParameters) -> Result<u32> {
@@ -1940,6 +2081,7 @@ pub fn CudaMemcpy(parameters: &ProxyParameters) -> Result<u32> {
 
             let ranges = unsafe { std::slice::from_raw_parts(ptr, len) };
             let mut offset = 0;
+
             for r in ranges {
                 // let ret = func(dst + offset, r.start, r.len, kind);
                 let ret = unsafe { cudaMemcpy(dst + offset, r.start, r.len, kind) };
@@ -1961,6 +2103,7 @@ pub fn CudaMemcpy(parameters: &ProxyParameters) -> Result<u32> {
             let count = parameters.para4;
 
             let ranges = unsafe { std::slice::from_raw_parts(ptr, len) };
+
             let mut offset = 0;
             for r in ranges {
                 // let ret = func(r.start, src + offset, r.len, kind);
@@ -2078,7 +2221,7 @@ fn InitNvidia(containerId: &str, ptxlibPath: &str) {
 }
 
 pub fn SwapOutMem() -> Result<i64> {
-    error!("nvidia rs:SwapOutMem2"); 
+    error!("nvidia rs:SwapOutMem2");
     // let now = Instant::now();
     // let mut totalSize = 0;
     if QUARK_CONFIG.lock().CudaMemType == CudaMemType::UM {
@@ -2086,16 +2229,22 @@ pub fn SwapOutMem() -> Result<i64> {
         let mut iterator = memRecorder.iter();
         while let Some(element) = iterator.next() {
             let ret = unsafe { cudaMemPrefetchAsync(element.0, element.1, -1, 0 as cudaStream_t) }; // -1 means cudaCpuDeviceId
-            // totalSize = totalSize + element.1;
-            // error!("cudaMemPrefetchAsync to host, ptr: {:x}, count: {}", element.0, element.1);
-            
+                                                                                                    // totalSize = totalSize + element.1;
+                                                                                                    // error!("cudaMemPrefetchAsync to host, ptr: {:x}, count: {}", element.0, element.1);
+
             if ret as u32 != 0 {
-                error!("nvidia.rs: error caused by cudaMemPrefetchAsync to host: {}", ret as u32);
+                error!(
+                    "nvidia.rs: error caused by cudaMemPrefetchAsync to host: {}",
+                    ret as u32
+                );
             }
         }
         let ret2 = unsafe { cudaStreamSynchronize(0 as cudaStream_t) };
         if ret2 as u32 != 0 {
-            error!("nvidia.rs: error caused by cudaMemPrefetchAsync to host: {}", ret2 as u32);
+            error!(
+                "nvidia.rs: error caused by cudaMemPrefetchAsync to host: {}",
+                ret2 as u32
+            );
         }
     } else if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
         MEM_MANAGER.lock().offloadGPUMem();
@@ -2107,7 +2256,7 @@ pub fn SwapOutMem() -> Result<i64> {
 }
 
 pub fn SwapInMem() -> Result<i64> {
-    error!("nvidia rs:SwapInMem2"); 
+    error!("nvidia rs:SwapInMem2");
     // let now = Instant::now();
     // let mut totalSize = 0;
     if QUARK_CONFIG.lock().CudaMemType == CudaMemType::UM {
@@ -2115,15 +2264,21 @@ pub fn SwapInMem() -> Result<i64> {
         let mut iterator = memRecorder.iter();
         while let Some(element) = iterator.next() {
             let ret = unsafe { cudaMemPrefetchAsync(element.0, element.1, 0, 0 as cudaStream_t) }; // for now, hard coded to device 0
-            // totalSize = totalSize + element.1;
-            // error!("cudaMemPrefetchAsync back to gpu, ptr: {:x}, count: {}", element.0, element.1);
+                                                                                                   // totalSize = totalSize + element.1;
+                                                                                                   // error!("cudaMemPrefetchAsync back to gpu, ptr: {:x}, count: {}", element.0, element.1);
             if ret as u32 != 0 {
-                error!("nvidia.rs: error caused by cudaMemPrefetchAsync to gpu: {}", ret as u32);
+                error!(
+                    "nvidia.rs: error caused by cudaMemPrefetchAsync to gpu: {}",
+                    ret as u32
+                );
             }
         }
         let ret2 = unsafe { cudaStreamSynchronize(0 as cudaStream_t) };
         if ret2 as u32 != 0 {
-            error!("nvidia.rs: error caused by cudaMemPrefetchAsync to gpu: {}", ret2 as u32);
+            error!(
+                "nvidia.rs: error caused by cudaMemPrefetchAsync to gpu: {}",
+                ret2 as u32
+            );
         }
     } else if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
         MEM_MANAGER.lock().restoreGPUFatbin();

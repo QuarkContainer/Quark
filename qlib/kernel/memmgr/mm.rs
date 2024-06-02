@@ -50,7 +50,7 @@ use super::metadata::*;
 use super::syscalls::*;
 use super::vma::*;
 use super::*;
-use crate::qlib::kernel::{SHARESPACE, asm::*};
+use crate::qlib::kernel::{asm::*, SHARESPACE};
 use crate::qlib::vcpu_mgr::VcpuMode;
 
 pub struct MMMapping {
@@ -233,22 +233,21 @@ impl MemoryManager {
         let gap = vmas.FindGap(MemoryDef::PHY_LOWER_ADDR);
         // kernel memory
         let kernel_range_start;
-		#[cfg(target_arch="x86_64")]{
-			kernel_range_start = MemoryDef::PHY_LOWER_ADDR;
-		}
+        #[cfg(target_arch = "x86_64")]
+        {
+            kernel_range_start = MemoryDef::PHY_LOWER_ADDR;
+        }
 
-		#[cfg(target_arch="aarch64")]{
-			kernel_range_start = MemoryDef::HYPERCALL_MMIO_BASE;
-		}
+        #[cfg(target_arch = "aarch64")]
+        {
+            kernel_range_start = MemoryDef::HYPERCALL_MMIO_BASE;
+        }
 
         let kernel_range_length = MemoryDef::PHY_UPPER_ADDR - kernel_range_start;
 
         vmas.Insert(
             &gap,
-            &Range::New(
-                kernel_range_start,
-                kernel_range_length,
-            ),
+            &Range::New(kernel_range_start, kernel_range_length),
             vma.clone(),
         );
 
@@ -422,7 +421,11 @@ impl MemoryManager {
         let (mut vseg, vgap) = mapping.vmas.Find(0);
         if vgap.Ok() {
             vseg = vgap.NextSeg();
-            debug!("VM: Start clean VMAs - KEY.0 ->\nvseg:{:?}\nvgap:{:?}", vseg.Value(), vgap.Range());
+            debug!(
+                "VM: Start clean VMAs - KEY.0 ->\nvseg:{:?}\nvgap:{:?}",
+                vseg.Value(),
+                vgap.Range()
+            );
         } else {
             debug!("VM: No VMAs to cleanup.");
         }
@@ -1396,7 +1399,7 @@ impl MemoryManager {
         let mut addr = Addr(vAddr).RoundDown()?.0;
         let mut needTLBShootdown = false;
 
-        let mut vma = VMA::default();
+        let mut vma: VMA = VMA::default();
         let mut range = Range::default();
         let mut vec = Vec::new();
 
@@ -1575,6 +1578,22 @@ impl MemoryManager {
             }
             MMappable::HostIops(iops) => iops.clone(),
             MMappable::Shm(shm) => shm.HostIops(),
+            MMappable::CudaHost(hm) => {
+                let mut addr = ar.Start();
+                for iov in &hm.iovs {
+                    self.pagetable.write().pt.MapHost(
+                        task,
+                        addr,
+                        iov,
+                        &AccessType::AnyAccess(),
+                        true,
+                    )?;
+                    addr += iov.Len() as u64;
+                }
+                self.AddRssLock(ar);
+
+                return Ok(());
+            }
             _ => {
                 return Err(Error::SysError(SysErr::EINVAL));
             }
