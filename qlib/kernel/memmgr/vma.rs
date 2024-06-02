@@ -15,7 +15,9 @@
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::fmt;
+use core::ops::Deref;
 
 use super::super::super::addr::*;
 use super::super::super::common::*;
@@ -358,8 +360,32 @@ impl MemoryManager {
     }
 }
 
+#[derive(Debug)]
+pub struct CudaHostMappableInner {
+    pub hostAddr: u64,
+    pub iovs: Vec<IoVec>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CudaHostMappable(pub Arc<CudaHostMappableInner>);
+
+impl Deref for CudaHostMappable {
+    type Target = Arc<CudaHostMappableInner>;
+
+    fn deref(&self) -> &Arc<CudaHostMappableInner> {
+        &self.0
+    }
+}
+
+impl PartialEq for CudaHostMappable {
+    fn eq(&self, other: &Self) -> bool {
+        return Arc::ptr_eq(&self.0, &other.0);
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub enum MMappable {
+    CudaHost(CudaHostMappable),
     HostIops(HostInodeOp),
     Shm(Shm),
     Socket(ByteStream),
@@ -387,6 +413,13 @@ impl MMappable {
         //     _ => false,
         // }
         return false;
+    }
+
+    pub fn CudaHostMappable(&self) -> Option<CudaHostMappable> {
+        match self {
+            Self::CudaHost(hm) => Some(hm.clone()),
+            _ => None,
+        }
     }
 
     pub fn HostIops(&self) -> Option<HostInodeOp> {

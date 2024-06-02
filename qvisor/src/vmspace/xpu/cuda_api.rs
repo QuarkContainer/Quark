@@ -1,5 +1,5 @@
-use std::os::raw::*;
 use crate::qlib::proxy::*;
+use std::os::raw::*;
 
 use cuda11_cublasLt_sys::{
     cublasLtHandle_t, cublasLtMatmulAlgo_t, cublasLtMatmulDesc_t, cublasLtMatmulHeuristicResult_t,
@@ -7,12 +7,12 @@ use cuda11_cublasLt_sys::{
 };
 use cuda_driver_sys::{
     CUcontext, CUdevice, CUdeviceptr, CUfunction, CUfunction_attribute, CUmodule, CUresult,
-    CUstream
+    CUstream,
 };
 use cuda_runtime_sys::{
     cudaDeviceAttr, cudaDeviceP2PAttr, cudaDeviceProp, cudaError_t, cudaEvent_t, cudaFuncAttribute,
-    cudaFuncAttributes, cudaFuncCache, cudaLimit, cudaMemoryAdvise,
-    cudaSharedMemConfig, cudaStreamCaptureMode, cudaStreamCaptureStatus, cudaStream_t,
+    cudaFuncAttributes, cudaFuncCache, cudaLimit, cudaMemoryAdvise, cudaSharedMemConfig,
+    cudaStreamCaptureMode, cudaStreamCaptureStatus, cudaStream_t,
 };
 use rcublas_sys::{cublasHandle_t, cudaMemLocation};
 
@@ -152,7 +152,11 @@ extern "C" {
     pub fn cuCtxCreate(pctx: *mut CUcontext, flags: c_uint, dev: CUdevice) -> CUresult;
     pub fn cuCtxPushCurrent(pctx: CUcontext) -> CUresult;
     pub fn cuDevicePrimaryCtxRetain(pctx: *mut CUcontext, dev: CUdevice) -> CUresult;
-    pub fn cuFuncGetAttribute(pi: *mut c_int, attrib: CUfunction_attribute, hfunc: CUfunction) -> CUresult;
+    pub fn cuFuncGetAttribute(
+        pi: *mut c_int,
+        attrib: CUfunction_attribute,
+        hfunc: CUfunction,
+    ) -> CUresult;
     pub fn cuFuncSetAttribute(hfunc: CUfunction, attrib: u32, value: i32) -> CUresult;
     pub fn cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
         numBlocks: *mut c_int,
@@ -164,10 +168,22 @@ extern "C" {
 
     pub fn cuCtxGetCurrent(pctx: *mut CUcontext) -> CUresult;
     pub fn cuModuleUnload(hmod: CUmodule) -> CUresult;
-    pub fn cuMemGetAllocationGranularity(granularity: u64, prop: u64, option: usize,) -> CUresult;
-    pub fn cuMemAddressReserve(ptr: u64, size: usize, alignment: usize, addr: u64, flags: c_ulonglong) -> CUresult;
+    pub fn cuMemGetAllocationGranularity(granularity: u64, prop: u64, option: usize) -> CUresult;
+    pub fn cuMemAddressReserve(
+        ptr: u64,
+        size: usize,
+        alignment: usize,
+        addr: u64,
+        flags: c_ulonglong,
+    ) -> CUresult;
     pub fn cuMemCreate(handle: u64, size: usize, prop: u64, flags: c_ulonglong) -> CUresult;
-    pub fn cuMemMap(ptr: u64, size: usize, offset: usize, handle: u64,flags: c_ulonglong) -> CUresult;
+    pub fn cuMemMap(
+        ptr: u64,
+        size: usize,
+        offset: usize,
+        handle: u64,
+        flags: c_ulonglong,
+    ) -> CUresult;
     pub fn cuMemSetAccess(ptr: u64, size: usize, desc: u64, count: usize) -> CUresult;
     pub fn cuMemUnmap(ptr: u64, size: usize) -> CUresult;
     pub fn cuMemRelease(handle: u64) -> CUresult;
@@ -175,7 +191,7 @@ extern "C" {
     pub fn cuDeviceGet(device: *mut CUdevice, ordinal: i32) -> CUresult;
     pub fn cuCtxSetCurrent(ctx: u64) -> CUresult;
     pub fn cuDevicePrimaryCtxReset(device: CUdevice) -> CUresult;
-    pub fn cuCtxGetApiVersion(ctx: CUcontext, version:*mut u32) -> CUresult;
+    pub fn cuCtxGetApiVersion(ctx: CUcontext, version: *mut u32) -> CUresult;
 }
 
 #[link(name = "cudart")]
@@ -198,7 +214,7 @@ extern "C" {
     pub fn cudaGetLastError() -> cudaError_t;
     pub fn cudaGetDeviceProperties(prop: *mut cudaDeviceProp, device: c_int) -> cudaError_t;
     pub fn cudaMemcpyAsync(dst: u64, src: u64, count: u64, kind: u64, stream: cudaStream_t) -> u32;
-    pub fn cudaHostAlloc(pHost: u64, size: usize, flags: u32) -> cudaError_t;
+    pub fn cudaHostAlloc(pHost: u64, size: usize, flags: u32) -> u32;
     pub fn cudaHostRegister(ptr: u64, size: usize, flags: u32) -> cudaError_t;
     pub fn cudaMallocManaged(devPtr: u64, size: usize, flags: u32) -> cudaError_t;
     pub fn cudaMemAdvise_v2(
@@ -213,7 +229,7 @@ extern "C" {
         dstDevice: i32,
         stream: cudaStream_t,
     ) -> cudaError_t;
-    pub fn cudaFreeHost(ptr: u64) -> cudaError_t;
+    pub fn cudaFreeHost(ptr: u64) -> u32;
     pub fn cudaHostUnregister(ptr: u64) -> cudaError_t;
 
     pub fn cudaChooseDevice(device: *mut c_int, prop: *const cudaDeviceProp) -> cudaError_t;
@@ -374,8 +390,8 @@ extern "C" {
         Ctype: u32,
         ldc: c_int,
         computeType: u32,
-        algo: u32
-    ) -> u32; 
+        algo: u32,
+    ) -> u32;
     pub fn cublasGemmStridedBatchedEx(
         handle: cublasHandle_t,
         transa: u32,
@@ -399,8 +415,8 @@ extern "C" {
         strideC: i64,
         batchCount: i32,
         computeType: u32,
-        algo: u32
-    ) -> u32; 
+        algo: u32,
+    ) -> u32;
 }
 
 #[link(name = "cublasLt")]

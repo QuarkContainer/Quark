@@ -83,8 +83,36 @@ impl ContainerFactory {
         for m in rootfs_vec {
             let mount_type = m.field_type.as_str().none_if(|&x| x.is_empty());
             let source = m.source.as_str().none_if(|&x| x.is_empty());
-            mount_rootfs(mount_type, source, &m.options.to_vec(), rootfs)
-                .map_err(|e| Error::Common(format!("ttrpc error is {:?}", e)))?;
+
+            let (chdir, options) = if true
+                || (mount_type == Some("overlay") && options_size(&m.options) >= 4096 - 512)
+            {
+                LowerdirCompactor::new(&m.options).compact()
+            } else {
+                (None, m.options.to_vec())
+            };
+
+            error!(
+                "mount_rootfs type is {:?} source is {:?}\n target is {:?} options is {:#?} len is {}",
+                mount_type, &source, rootfs, &options, options_size(&m.options)
+            );
+
+            if let Some(workdir) = chdir {
+                let currDir = std::env::current_dir().unwrap();
+                std::env::set_current_dir(Path::new(&workdir)).unwrap_or_else(|_| {
+                    panic!("ContainerFactory::Create fail when change workdir");
+                });
+                mount_rootfs(mount_type, source, &options, rootfs)
+                    .map_err(|e| Error::Common(format!("ttrpc error is {:?}", e)))?;
+
+                std::env::set_current_dir(currDir).unwrap_or_else(|_| {
+                    panic!("ContainerFactory::Create fail when change back workdir");
+                });
+            } else {
+                mount_rootfs(mount_type, source, &options, rootfs)
+                    .map_err(|e| Error::Common(format!("ttrpc error is {:?}", e)))?;
+            }
+
         }
 
         let root = Path::new(opts.root.as_str()).join(ns);
@@ -140,6 +168,119 @@ impl ContainerFactory {
         Ok(container)
     }
 }
+
+/******************************copy from crate rust-extension **************************************************** */
+
+// need to upgrade the crate when fix the dependency error
+
+fn options_size(options: &[String]) -> usize {
+    options.iter().fold(0, |sum, x| sum + x.len())
+}
+
+const OVERLAY_LOWERDIR_PREFIX: &str = "lowerdir=";
+
+fn longest_common_prefix(dirs: &[String]) -> &str {
+    if dirs.is_empty() {
+        return "";
+    }
+
+    let first_dir = &dirs[0];
+
+    for (i, byte) in first_dir.as_bytes().iter().enumerate() {
+        for dir in dirs {
+            if dir.as_bytes().get(i) != Some(byte) {
+                let mut end = i;
+                // guaranteed not to underflow since is_char_boundary(0) is always true
+                while !first_dir.is_char_boundary(end) {
+                    end -= 1;
+                }
+
+                return &first_dir[0..end];
+            }
+        }
+    }
+
+    first_dir
+}
+
+// NOTE: the snapshot id is based on digits.
+// in order to avoid to get snapshots/x, should be back to parent dir.
+// however, there is assumption that the common dir is ${root}/io.containerd.v1.overlayfs/snapshots.
+fn trim_flawed_dir(s: &str) -> String {
+    s[0..s.rfind('/').unwrap_or(0) + 1].to_owned()
+}
+
+#[derive(Default)]
+struct LowerdirCompactor {
+    options: Vec<String>,
+    lowerdirs: Option<Vec<String>>,
+    lowerdir_prefix: Option<String>,
+}
+
+impl LowerdirCompactor {
+    fn new(options: &[String]) -> Self {
+        Self {
+            options: options.to_vec(),
+            ..Self::default()
+        }
+    }
+
+    fn lowerdirs(&mut self) -> &mut Self {
+        self.lowerdirs = Some(
+            self.options
+                .iter()
+                .filter(|x| x.starts_with(OVERLAY_LOWERDIR_PREFIX))
+                .map(|x| x.strip_prefix(OVERLAY_LOWERDIR_PREFIX).unwrap_or(x))
+                .flat_map(|x| x.split(':'))
+                .map(str::to_string)
+                .collect(),
+        );
+        self
+    }
+
+    fn lowerdir_prefix(&mut self) -> &mut Self {
+        self.lowerdir_prefix = self
+            .lowerdirs
+            .as_ref()
+            .filter(|x| x.len() > 1)
+            .map(|x| longest_common_prefix(x))
+            .map(trim_flawed_dir)
+            .filter(|x| !x.is_empty() && x != "/");
+        self
+    }
+
+    fn compact(&mut self) -> (Option<String>, Vec<String>) {
+        self.lowerdirs().lowerdir_prefix();
+        if let Some(chdir) = &self.lowerdir_prefix {
+            let lowerdir_str = self
+                .lowerdirs
+                .as_ref()
+                .unwrap_or(&Vec::new())
+                .iter()
+                .map(|x| x.strip_prefix(chdir).unwrap_or(x))
+                .collect::<Vec<&str>>()
+                .join(":");
+            let replace = |x: &str| -> String {
+                if x.starts_with(OVERLAY_LOWERDIR_PREFIX) {
+                    format!("{}{}", OVERLAY_LOWERDIR_PREFIX, lowerdir_str)
+                } else {
+                    x.to_string()
+                }
+            };
+            (
+                self.lowerdir_prefix.clone(),
+                self.options
+                    .iter()
+                    .map(|x| replace(x))
+                    .collect::<Vec<String>>(),
+            )
+        } else {
+            (None, self.options.to_vec())
+        }
+    }
+}
+
+/****************************** end copy from crate rust-extension **************************************************** */
 
 pub struct CommonContainer {
     pub id: String,

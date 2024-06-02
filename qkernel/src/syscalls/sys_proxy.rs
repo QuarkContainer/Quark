@@ -15,15 +15,21 @@ use core::sync::atomic::Ordering;
 
 use alloc::collections::BTreeMap;
 use alloc::string::String;
+use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use spin::Mutex;
 
+use crate::qlib::addr::AccessType;
 use crate::qlib::common::*;
 use crate::qlib::kernel::threadmgr::thread_group::CudaProcessCtx;
+use crate::qlib::kernel::fs::host::hostinodeop::MMappable;
+use crate::qlib::kernel::memmgr::vma::{CudaHostMappable, CudaHostMappableInner};
+use crate::qlib::kernel::memmgr::MLockMode;
+use crate::qlib::kernel::memmgr::MMapOpts;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::TSC;
-use crate::qlib::linux_def::{SysErr, PATH_MAX};
+use crate::qlib::linux_def::{IoVec, MemoryDef, SysErr, PATH_MAX};
 use crate::qlib::proxy::*;
 use crate::syscalls::syscalls::*;
 use crate::task::*;
@@ -63,7 +69,8 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         para6: 0,
         para7: 0,
     };
-    let sys_ret ;
+
+    let sys_ret;
     match cmd {
         ProxyCommand::None => {
             return Err(Error::SysError(SysErr::EINVAL));
@@ -749,7 +756,10 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             sys_ret = Ok(ret);
         }
         ProxyCommand::CudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags => {
-            let info = task.CopyInObj::<cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlagsInfo>(parameters.para1)?;
+            let info = task
+                .CopyInObj::<cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlagsInfo>(
+                    parameters.para1,
+                )?;
             let mut numBlocks: i32 = 0;
             parameters.para1 = &mut numBlocks as *mut _ as u64;
             parameters.para2 = info.func;
@@ -980,11 +990,134 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             sys_ret = Ok(ret);
         } //_ => todo!()
+        ProxyCommand::CudaHostAlloc => {
+            match CudaHostAlloc(task, parameters) {
+                Ok(n) => return Ok(n),
+                Err(e) => {
+                    error!("CudaHostAlloc fail with error {:?}", e);
+
+                    // todo: find right failure code
+                    return Ok(2);
+                }
+            }
+        }
+        ProxyCommand::CudaFreeHost => {
+            match CudeFreeHost(task, parameters) {
+                Ok(n) => return Ok(n),
+                Err(e) => {
+                    error!("CudeFreeHost fail with error {:?}", e);
+
+                    // todo: find right failure code
+                    return Ok(2);
+                }
+            }
+        }
         _ => {
             sys_ret = Ok(0);
         }
     }
+
     return sys_ret;
+}
+
+pub fn CudaHostAlloc(task: &Task, mut parameters: ProxyParameters) -> Result<i64> {
+    let size = parameters.para2 as usize;
+    assert!(size > 0);
+    let mut cnt = ((size as u64 + MemoryDef::PAGE_SIZE_2M - 1) / MemoryDef::PAGE_SIZE_2M) as usize;
+    let mut iovs: Vec<IoVec> = Vec::new();
+    iovs.resize(cnt, IoVec::NewFromAddr(0, 0));
+
+    let arrAddr = &mut iovs[0] as *mut _ as u64;
+    parameters.para4 = arrAddr;
+    parameters.para5 = &mut cnt as *mut _ as u64;
+
+    let mut hostAddr: u64 = 0;
+    parameters.para6 = &mut hostAddr as *mut _ as u64;
+
+    let ret = HostSpace::Proxy(ProxyCommand::CudaHostAlloc, parameters);
+    if ret != 0 {
+        return Ok(ret);
+    }
+
+    iovs.resize(cnt, IoVec::default());
+
+    let inner = CudaHostMappableInner {
+        hostAddr: hostAddr,
+        iovs: iovs,
+    };
+
+    let hostm = CudaHostMappable(Arc::new(inner));
+    let mappable = MMappable::CudaHost(hostm);
+
+    let mut opts = MMapOpts {
+        Length: size as u64,
+        Addr: 0,
+        Offset: 0,
+        Fixed: false,
+        Unmap: false,
+        Map32Bit: false,
+        Private: false,
+        VDSO: false,
+        Perms: AccessType::AnyAccess(),
+        MaxPerms: AccessType::AnyAccess(),
+        GrowsDown: false,
+        Precommit: true,
+        MLockMode: MLockMode::default(),
+        Kernel: false,
+        Mapping: None,
+        Mappable: mappable,
+        Hint: "".to_string(),
+    };
+
+    let addr = match task.mm.MMap(task, &mut opts) {
+        Ok(addr) => addr,
+        Err(e) => {
+            error!("cudahostalloc fail with error {:?}", e);
+            todo!("cudahostalloc fail");
+        }
+    };
+
+    task.CopyOutObj(&addr, parameters.para1)?;
+    task.mm.TlbShootdown();
+    return Ok(0);
+}
+
+pub fn CudeFreeHost(task: &Task, mut parameters: ProxyParameters) -> Result<i64> {
+    let vaddr = parameters.para1;
+    let _rl = task.mm.MappingReadLock();
+    match task.mm.GetVmaAndRangeLocked(vaddr) {
+        None => return Ok(2),
+        Some((v, r)) => {
+            if r.Start() != vaddr {
+                // the cudafreehost must be same as VMA start address
+                return Ok(2);
+            }
+
+            let hm = match v.mappable {
+                MMappable::CudaHost(hm) => hm,
+                _ => {
+                    return Ok(2);
+                }
+            };
+
+            parameters.para2 = hm.hostAddr;
+            parameters.para3 = &hm.iovs[0] as *const _ as u64;
+            parameters.para4 = hm.iovs.len() as u64;
+            let ret = HostSpace::Proxy(ProxyCommand::CudaFreeHost, parameters);
+            if ret != 0 {
+                return Ok(ret);
+            }
+
+            match task.mm.RemoveVMAsLocked(&r) {
+                Err(_e) => return Ok(2),
+                Ok(_) => (),
+            }
+
+            task.mm.TlbShootdown();
+
+            return Ok(0);
+        }
+    }
 }
 
 pub fn CudaMemcpy(
@@ -1002,7 +1135,23 @@ pub fn CudaMemcpy(
         }
         CUDA_MEMCPY_HOST_TO_DEVICE => {
             // src is the virtual addr
-            let prs = task.V2P(src, count, false, false)?;
+            let prs = match task.mm.GetVmaAndRangeLocked(src) {
+                None => {
+                    return Ok(1);
+                }
+                Some((v, r)) => match v.mappable {
+                    MMappable::CudaHost(hm) => {
+                        if r.Start() <= src && src + count <= r.End() {
+                            let mut prs = Vec::new();
+                            prs.push(IoVec::NewFromAddr(hm.hostAddr, count as usize));
+                            prs
+                        } else {
+                            return Ok(1);
+                        }
+                    }
+                    _ => task.V2P(src, count, false, false)?,
+                },
+            };
 
             let parameters = ProxyParameters {
                 para1: dst,
@@ -1019,7 +1168,25 @@ pub fn CudaMemcpy(
         }
         CUDA_MEMCPY_DEVICE_TO_HOST => {
             // dst is the virtual addr
-            let prs = task.V2P(dst, count, true, false)?;
+            let prs = match task.mm.GetVmaAndRangeLocked(dst) {
+                None => {
+                    return Ok(1);
+                }
+                Some((v, r)) => match v.mappable {
+                    MMappable::CudaHost(hm) => {
+                        if r.Start() <= dst && dst + count <= r.End() {
+                            let mut prs = Vec::new();
+                            prs.push(IoVec::NewFromAddr(hm.hostAddr, count as usize));
+                            prs
+                        } else {
+                            return Ok(1);
+                        }
+                    }
+                    _ => task.V2P(dst, count, true, false)?,
+                },
+            };
+
+            //let prs = task.V2P(dst, count, true, false)?;
 
             let parameters = ProxyParameters {
                 para1: &prs[0] as *const _ as u64,
@@ -1068,7 +1235,23 @@ fn CudaMemcpyAsync(
         }
         CUDA_MEMCPY_HOST_TO_DEVICE => {
             // src is the virtual addr(src is host memory ), address and # of bytes
-            let prs = task.V2P(src, count, false, false)?;
+            let prs = match task.mm.GetVmaAndRangeLocked(src) {
+                None => {
+                    return Ok(1);
+                }
+                Some((v, r)) => match v.mappable {
+                    MMappable::CudaHost(hm) => {
+                        if r.Start() <= src && src + count <= r.End() {
+                            let mut prs = Vec::new();
+                            prs.push(IoVec::NewFromAddr(hm.hostAddr, count as usize));
+                            prs
+                        } else {
+                            return Ok(1);
+                        }
+                    }
+                    _ => task.V2P(src, count, false, false)?,
+                },
+            };
 
             let parameters = ProxyParameters {
                 para1: dst,
@@ -1086,8 +1269,24 @@ fn CudaMemcpyAsync(
         }
         CUDA_MEMCPY_DEVICE_TO_HOST => {
             // dst is the virtual addr(host memory)
-            let prs = task.V2P(dst, count, true, false)?;
-
+            let prs = match task.mm.GetVmaAndRangeLocked(dst) {
+                None => {
+                    return Ok(1);
+                }
+                Some((v, r)) => match v.mappable {
+                    MMappable::CudaHost(hm) => {
+                        if r.Start() <= dst && dst + count <= r.End() {
+                            let mut prs = Vec::new();
+                            prs.push(IoVec::NewFromAddr(hm.hostAddr, count as usize));
+                            prs
+                        } else {
+                            return Ok(1);
+                        }
+                    }
+                    _ => task.V2P(dst, count, true, false)?,
+                },
+            };
+            
             let parameters = ProxyParameters {
                 para1: &prs[0] as *const _ as u64,
                 para2: prs.len() as u64,
