@@ -179,6 +179,7 @@ pub fn NvidiaProxy(
             let handle = thread::spawn(move || {
                 error!("start thread");
                 let mut msg2 = unsafe {&mut *(qmsgPtr as *mut QMsg) };
+                InitNvidia(&containerId2, msg2); // init per thread
                 loop {
                     error!("loop executing!");
                     if newWorker.lock().counter.fetch_add(1, Ordering::SeqCst) != 0 {
@@ -911,15 +912,6 @@ pub fn Execute(
         }
         ProxyCommand::CudaRegisterFatBinary => {
             // error!("nvidia.rs: cudaRegisterFatBinary");
-            let bytes = unsafe {
-                std::slice::from_raw_parts(parameters.para4 as *const _, parameters.para5 as usize)
-            };
-            let ptxlibPath = std::str::from_utf8(bytes).unwrap();
-            // todo: use mutex instead of atomic?
-            if CUDA_HAS_INIT.fetch_add(1, Ordering::SeqCst) == 0 {
-                //compare_and_swap
-                InitNvidia(containerId, ptxlibPath);
-            }
 
             let fatElfHeader = unsafe { &*(parameters.para2 as *const u8 as *const FatElfHeader) };
             // error!("fatElfHeader magic is :{:x}, version is :{:x}, header size is :{:x}, size is :{:x}", fatElfHeader.magic, fatElfHeader.version, fatElfHeader.header_size, fatElfHeader.size);
@@ -951,9 +943,9 @@ pub fn Execute(
             let fatbinSize: usize = parameters.para1 as usize;
             let mut fatbinData = Vec::with_capacity(parameters.para1 as usize);
             unsafe { copy_nonoverlapping(parameters.para2 as *const u8, fatbinData.as_mut_ptr(), fatbinSize); }
-            MEM_MANAGER.lock().fatBinManager.fatBinVec.push(fatbinData);
-            MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.push((moduleKey, module));
-            MEM_MANAGER.lock().fatBinManager.fatBinFuncVec.push(Vec::new());
+            //MEM_MANAGER.lock().fatBinManager.fatBinVec.push(fatbinData);
+            //MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.push((moduleKey, module));
+            //MEM_MANAGER.lock().fatBinManager.fatBinFuncVec.push(Vec::new());
             // error!("insert module: {:x} -> {:x}", moduleKey, module);
             return Ok(ret as u32);
         }
@@ -1035,8 +1027,8 @@ pub fn Execute(
                 }
             }
 
-            let index = MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.iter().position(|&r| r.0 == info.fatCubinHandle).unwrap();
-            MEM_MANAGER.lock().fatBinManager.fatBinFuncVec[index].push((info.hostFun, func_name));
+            //let index = MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.iter().position(|&r| r.0 == info.fatCubinHandle).unwrap();
+            //MEM_MANAGER.lock().fatBinManager.fatBinFuncVec[index].push((info.hostFun, func_name));
 
             return Ok(ret as u32);
         }
@@ -2352,20 +2344,26 @@ pub fn CudaMemcpyAsync(parameters: &ProxyParameters) -> Result<u32> {
     }
 }
 
-fn InitNvidia(containerId: &str, ptxlibPath: &str) {
+fn InitNvidia(containerId: &str, qmsg: &QMsg) {
     // cuModuleLoadData requires libnvidia-ptxjitcompiler.so, and nvidia image will mount some host libraries into container,
     // the lib we want to use is locate in /usr/local/cuda/compat/, host version libraries will cause error.
-    error!("Init nvidia");
-    let ptxlibPathStr = format!("/{}{}", containerId, ptxlibPath);
-    let ptxlibPath = CString::new(ptxlibPathStr).unwrap();
-    let _handle = unsafe { libc::dlopen(ptxlibPath.as_ptr() as *const i8, libc::RTLD_LAZY) };
-
-    let initResult1 = unsafe { cudaSetDevice(0) as u32 };
-    let initResult2 = unsafe { cudaDeviceSynchronize() as u32 };
-
-    if initResult1 | initResult2 != 0 {
-        error!("cuda runtime init error");
-    }
+    if let Msg::Proxy(msg) = qmsg.msg {
+        error!("Init nvidia");
+        let bytes = unsafe {
+            std::slice::from_raw_parts(msg.parameters.para4 as *const _, msg.parameters.para5 as usize)
+        };
+        let ptxlibPath = std::str::from_utf8(bytes).unwrap();
+        let ptxlibPathStr = format!("/{}{}", containerId, ptxlibPath);
+        let ptxlibPath = CString::new(ptxlibPathStr).unwrap();
+        let _handle = unsafe { libc::dlopen(ptxlibPath.as_ptr() as *const i8, libc::RTLD_LAZY) };
+    
+        let initResult1 = unsafe { cudaSetDevice(0) as u32 };
+        let initResult2 = unsafe { cudaDeviceSynchronize() as u32 };
+    
+        if initResult1 | initResult2 != 0 {
+            error!("cuda runtime init error");
+        }
+    } // else is impossible
 }
 
 pub fn SwapOutMem() -> Result<i64> {
