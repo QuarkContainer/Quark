@@ -303,9 +303,8 @@ pub struct ProxyParameters {
     pub para5: u64,
     pub para6: u64,
     pub para7: u64,
+    pub gpuId: i32,
 }
-
-
 
 // from https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html#group__CUDART__TYPES_1g18fa99055ee694244a270e4d5101e95b
 // cudaMemcpyHostToHost = 0

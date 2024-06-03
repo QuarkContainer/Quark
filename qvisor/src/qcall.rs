@@ -54,10 +54,10 @@ pub enum QcallRet {
 
 impl KVMVcpu {
     //return : true(push the result back), false(block wait)
-    pub fn qCall(msg: &'static Msg) -> u64 {
+    pub fn qCall(qmsg: &'static QMsg) -> u64 {
         let mut ret = 0;
 
-        match msg {
+        match qmsg.msg {
             Msg::LoadProcessKernel(msg) => {
                 ret = super::VMS.lock().LoadProcessKernel(msg.processAddr) as u64;
             }
@@ -302,8 +302,9 @@ impl KVMVcpu {
                 ret = 0;
             }
             Msg::Proxy(msg) => {
+                error!("cmd in proxy is {:?}", msg.cmd);
                 // let start = Instant::now();
-                ret = super::VMS.lock().Proxy(&msg.cmd, &msg.parameters) as u64;
+                ret = super::VMS.lock().Proxy(&qmsg) as u64;
                 // let duration = start.elapsed();
                 // COUNTER.lock().unwrap().entry(msg.cmd.clone()).and_modify(|time| *time += duration).or_insert(duration);
                 // if msg.cmd.clone() == ProxyCommand::CudaUnregisterFatBinary {

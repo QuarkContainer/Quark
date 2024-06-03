@@ -20,12 +20,15 @@ use alloc::vec::Vec;
 use spin::Mutex;
 
 use crate::qlib::common::*;
+use crate::qlib::kernel::threadmgr::thread_group::CudaProcessCtx;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::TSC;
 use crate::qlib::linux_def::{SysErr, PATH_MAX};
 use crate::qlib::proxy::*;
 use crate::syscalls::syscalls::*;
 use crate::task::*;
+
+// use std::ptr::null_mut;
 
 // use std::ptr::null_mut;
 
@@ -43,6 +46,8 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             .fetch_add(gap as u64, Ordering::SeqCst);
     });
     let cmd: ProxyCommand = unsafe { core::mem::transmute(commandId as u64) };
+    let cudaProcessCtx = task.Thread().ThreadGroup().GetCudaCtx();
+    let mut currDev: i32 = 0;
     let mut parameters = ProxyParameters {
         para1: args.arg1,
         para2: args.arg2,
@@ -51,14 +56,14 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         para5: args.arg5,
         para6: 0,
         para7: 0,
+        gpuId: cudaProcessCtx.lock().gpuId,
     };
     let sys_ret ;
     match cmd {
         ProxyCommand::None => {
             return Err(Error::SysError(SysErr::EINVAL));
         }
-        ProxyCommand::CudaSetDevice
-        | ProxyCommand::CudaDeviceReset
+        ProxyCommand::CudaDeviceReset
         | ProxyCommand::CudaDeviceSetLimit
         | ProxyCommand::CudaDeviceSetCacheConfig
         | ProxyCommand::CudaDeviceSetSharedMemConfig
@@ -97,6 +102,12 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         | ProxyCommand::NcclGroupEnd => {
             let ret = HostSpace::Proxy(cmd, parameters);
 
+            sys_ret = Ok(ret);
+        }
+        ProxyCommand::CudaSetDevice => {
+            // cudaProcessCtx.lock().gpuId = parameters.para1 as i32;
+            // parameters.gpuId = parameters.para1 as i32;
+            let ret = HostSpace::Proxy(cmd, parameters); // not sure if its necessary
             sys_ret = Ok(ret);
         }
         ProxyCommand::NcclGetVersion => {

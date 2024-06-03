@@ -11,14 +11,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use serde::ser::Impossible;
 //use core::ops::Deref;
 use spin::Mutex;
+use core::ops::Deref;
+use std::collections::HashMap;
 //use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::os::raw::*;
 use std::ptr::{copy_nonoverlapping,null_mut};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
+use std::thread;
+use crate::qlib::qmsg::*;
+use crate::qlib::ShareSpace;
 // use std::time::{Duration, Instant};
 
 use crate::qlib::common::*;
@@ -26,6 +32,7 @@ use crate::qlib::common::*;
 use crate::qlib::config::*;
 use crate::qlib::proxy::*;
 use crate::qlib::range::Range;
+use crate::runc::container::nvidia;
 use crate::xpu::cuda::*;
 use crate::xpu::cuda_api::*;
 use crate::xpu::cuda_mem_manager::*;
@@ -46,10 +53,14 @@ use cuda_runtime_sys::{
 };
 use rcublas_sys::{cublasHandle_t};
 
+use super::kernel::SHARESPACE;
+
 lazy_static! {
     static ref CUDA_HAS_INIT: AtomicUsize = AtomicUsize::new(0);
     static ref MEM_RECORDER: Mutex<Vec<(u64, usize)>> = Mutex::new(Vec::new());
     static ref MEM_MANAGER: Mutex<MemoryManager> = Mutex::new(MemoryManager::new());
+    static ref CURRENT_GPU_ID: Mutex<i32> = Mutex::new(0);
+    static ref WORKER_MAP: Mutex<HashMap<u64, mpsc::Sender<u64>>> = Mutex::new(HashMap::new()); //pid - worker tid
     // static ref OFFLOAD_TIMER: AtomicUsize = AtomicUsize::new(0);
     // pub static ref FAST_SWITCH_HASHSET: HashSet<u64> = HashSet::new();
     // pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
@@ -118,35 +129,91 @@ impl NvidiaRes {
 }
 
 pub fn NvidiaProxy(
-    cmd: &ProxyCommand,
-    parameters: &ProxyParameters,
+    qmsg: &QMsg,
     containerId: &str,
 ) -> Result<i64> {
+    let mut workerMap = WORKER_MAP.lock();
+    match workerMap.get(&qmsg.taskId.data) {
+        Some(tx) => {
+            tx.send(qmsg as *const _ as u64).unwrap();
+        }
+        None => {
+            let (tx, rx) = mpsc::channel();
+            workerMap.insert(qmsg.taskId.data, tx.clone());
+            let containerId2 = containerId.to_owned();
+            let qmsgPtr = qmsg as *const _ as u64;
+            tx.send(qmsgPtr).unwrap();
+            let handle = thread::spawn(move || {
+                // error!("start thread");
+                let mut msg2 = unsafe {&mut *(qmsgPtr as *mut QMsg) };
+                InitNvidia(&containerId2, msg2); // init per thread
+                loop {
+                    let tmpMsg = rx.recv().unwrap() as *mut QMsg;
+                    msg2 = unsafe { &mut (*tmpMsg) };
+                    let ret = NvidiaProxyExecute(msg2, &containerId2);
+                    match ret {
+                        Ok(res) => {
+                            let currTaskId = msg2.taskId;
+                            SHARESPACE
+                            .scheduler
+                            .ScheduleQ(currTaskId, currTaskId.Queue(), true)
+                        }
+                        Err(e) => {
+                            // no error
+                            error!("nvidia proxy get error {:?}", e);
+                        }
+                    }
+                }
+            });
+        }
+    }
+    //error!("proxy return");
+    return Ok(0);
+}
+pub fn NvidiaProxyExecute(
+    qmsg: &QMsg,
+    containerId: &str,
+) -> Result<i64> {
+    //error!("in NvidiaProxyExecute");
     let mut result: NvidiaRes = NvidiaRes {
         res: 0,
         lasterr: 0,
     };
-    let ret: Result<u32> = Execute(cmd, parameters, containerId);
-    match ret {
-        Ok(v) => {
-            result.res = v;
+    // let targetGPUId = parameters.gpuId;
+    // if *CURRENT_GPU_ID.lock() != targetGPUId {
+    //     let ret = unsafe { cudaSetDevice(targetGPUId) };
+    //     if ret as u32 != 0 {
+    //         error!("nvidia.rs: error caused by cudaSetDevice(device swtich): {}", ret as u32);
+    //     } else {
+    //         *CURRENT_GPU_ID.lock() = targetGPUId
+    //     }
+    // }
+    match qmsg.msg {
+        Msg::Proxy(msg) => {
+            //error!("execute cmd: {:?}", msg.cmd.clone());
+            let ret: Result<u32> = Execute(&msg.cmd, &msg.parameters, containerId);
+            match ret {
+                Ok(v) => {
+                    result.res = v;
+                }
+                Err(_) => unreachable!(),
+            }
+
+            match &msg.cmd {
+                ProxyCommand::CudaGetErrorName |
+                ProxyCommand::CudaGetErrorString |
+                ProxyCommand::CudaRegisterFatBinary |
+                ProxyCommand::CudaRegisterFunction |
+                ProxyCommand::CudaRegisterVar |
+                ProxyCommand::CudaUnregisterFatBinary => (),
+                _ => {
+                    let err = unsafe { cudaGetLastError() };
+                    result.lasterr = err as u32;
+                }
+            } 
         }
-        Err(_) => unreachable!(),
+        _ => unreachable!(),
     }
-
-    match cmd {
-        ProxyCommand::CudaGetErrorName |
-        ProxyCommand::CudaGetErrorString |
-        ProxyCommand::CudaRegisterFatBinary |
-        ProxyCommand::CudaRegisterFunction |
-        ProxyCommand::CudaRegisterVar |
-        ProxyCommand::CudaUnregisterFatBinary => (),
-        _ => {
-            let err = unsafe { cudaGetLastError() };
-            result.lasterr = err as u32;
-        }
-    } 
-
     return Ok(result.ToU64() as i64);
 }
 
@@ -844,15 +911,6 @@ pub fn Execute(
         }
         ProxyCommand::CudaRegisterFatBinary => {
             // error!("nvidia.rs: cudaRegisterFatBinary");
-            let bytes = unsafe {
-                std::slice::from_raw_parts(parameters.para4 as *const _, parameters.para5 as usize)
-            };
-            let ptxlibPath = std::str::from_utf8(bytes).unwrap();
-            // todo: use mutex instead of atomic?
-            if CUDA_HAS_INIT.fetch_add(1, Ordering::SeqCst) == 0 {
-                //compare_and_swap
-                InitNvidia(containerId, ptxlibPath);
-            }
 
             let fatElfHeader = unsafe { &*(parameters.para2 as *const u8 as *const FatElfHeader) };
             // error!("fatElfHeader magic is :{:x}, version is :{:x}, header size is :{:x}, size is :{:x}", fatElfHeader.magic, fatElfHeader.version, fatElfHeader.header_size, fatElfHeader.size);
@@ -884,9 +942,9 @@ pub fn Execute(
             let fatbinSize: usize = parameters.para1 as usize;
             let mut fatbinData = Vec::with_capacity(parameters.para1 as usize);
             unsafe { copy_nonoverlapping(parameters.para2 as *const u8, fatbinData.as_mut_ptr(), fatbinSize); }
-            MEM_MANAGER.lock().fatBinManager.fatBinVec.push(fatbinData);
-            MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.push((moduleKey, module));
-            MEM_MANAGER.lock().fatBinManager.fatBinFuncVec.push(Vec::new());
+            //MEM_MANAGER.lock().fatBinManager.fatBinVec.push(fatbinData);
+            //MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.push((moduleKey, module));
+            //MEM_MANAGER.lock().fatBinManager.fatBinFuncVec.push(Vec::new());
             // error!("insert module: {:x} -> {:x}", moduleKey, module);
             return Ok(ret as u32);
         }
@@ -968,8 +1026,8 @@ pub fn Execute(
                 }
             }
 
-            let index = MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.iter().position(|&r| r.0 == info.fatCubinHandle).unwrap();
-            MEM_MANAGER.lock().fatBinManager.fatBinFuncVec[index].push((info.hostFun, func_name));
+            //let index = MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.iter().position(|&r| r.0 == info.fatCubinHandle).unwrap();
+            //MEM_MANAGER.lock().fatBinManager.fatBinFuncVec[index].push((info.hostFun, func_name));
 
             return Ok(ret as u32);
         }
@@ -2285,20 +2343,27 @@ pub fn CudaMemcpyAsync(parameters: &ProxyParameters) -> Result<u32> {
     }
 }
 
-fn InitNvidia(containerId: &str, ptxlibPath: &str) {
+fn InitNvidia(containerId: &str, qmsg: &QMsg) {
     // cuModuleLoadData requires libnvidia-ptxjitcompiler.so, and nvidia image will mount some host libraries into container,
     // the lib we want to use is locate in /usr/local/cuda/compat/, host version libraries will cause error.
-    error!("Init nvidia");
-    let ptxlibPathStr = format!("/{}{}", containerId, ptxlibPath);
-    let ptxlibPath = CString::new(ptxlibPathStr).unwrap();
-    let _handle = unsafe { libc::dlopen(ptxlibPath.as_ptr() as *const i8, libc::RTLD_LAZY) };
-
-    let initResult1 = unsafe { cudaSetDevice(0) as u32 };
-    let initResult2 = unsafe { cudaDeviceSynchronize() as u32 };
-
-    if initResult1 | initResult2 != 0 {
-        error!("cuda runtime init error");
-    }
+    if let Msg::Proxy(msg) = qmsg.msg {
+        error!("Init nvidia");
+        // let bytes = unsafe {
+        //     std::slice::from_raw_parts(msg.parameters.para4 as *const _, msg.parameters.para5 as usize)
+        // };
+        // let ptxlibPath = "/usr/local/cuda-12.1/compat/libnvidia-ptxjitcompiler.so.530.30.02";
+        // // let ptxlibPath = std::str::from_utf8(bytes).unwrap();
+        // let ptxlibPathStr = format!("/{}{}", containerId, ptxlibPath);
+        // let ptxlibPath = CString::new(ptxlibPathStr).unwrap();
+        // let _handle = unsafe { libc::dlopen(ptxlibPath.as_ptr() as *const i8, libc::RTLD_LAZY) };
+    
+        let initResult1 = unsafe { cudaSetDevice(0) as u32 };
+        let initResult2 = unsafe { cudaDeviceSynchronize() as u32 };
+    
+        if initResult1 | initResult2 != 0 {
+            error!("cuda runtime init error");
+        }
+    } // else is impossible
 }
 
 pub fn SwapOutMem() -> Result<i64> {

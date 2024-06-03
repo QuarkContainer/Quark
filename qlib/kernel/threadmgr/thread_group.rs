@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::mutex::*;
+use crate::qlib::proxy::ProxyParameters;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::btree_set::BTreeSet;
 use alloc::string::String;
@@ -281,6 +283,23 @@ pub struct ThreadGroupInternal {
     pub timerMu: Arc<QMutex<()>>,
     // todo: handle tty
     //pub tty: Option<TTY>
+    pub cudaProcessCtx: CudaProcessCtx,
+}
+
+#[derive(Default, Debug)]
+pub struct CudaProcessCtxInner {
+    pub gpuId: i32,
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct CudaProcessCtx(pub Arc<QMutex<CudaProcessCtxInner>>);
+
+impl Deref for CudaProcessCtx {
+    type Target =  Arc<QMutex<CudaProcessCtxInner>>;
+
+    fn deref(&self) -> & Arc<QMutex<CudaProcessCtxInner>> {
+        &self.0
+    }
 }
 
 #[derive(Default, Clone)]
@@ -355,6 +374,10 @@ impl ThreadGroup {
             uid: self.uid,
             data: Arc::downgrade(&self.data),
         };
+    }
+
+    pub fn GetCudaCtx(&self) -> CudaProcessCtx {
+        return self.lock().cudaProcessCtx.clone();
     }
 
     pub fn TimerMu(&self) -> Arc<QMutex<()>> {
