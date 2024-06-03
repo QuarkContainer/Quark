@@ -39,6 +39,24 @@ pub struct VdsoInternal {
     pub vdsoAddr: u64,
     pub vdsoLen: usize,
     pub phdrs: Vec<ProgramHeader64>,
+    pub vdso_symbols: Option<VdsoArchSymbols>,
+}
+
+struct VdsoSymbol {
+    name:&'static str,
+    page_offset: Option<u64>,
+}
+
+/// Bookkeep the exported symbols for x86_64.
+#[cfg(target_arch = "x86_64")]
+#[derive(Default)]
+pub struct VdsoArchSymbols {
+}
+
+/// Bookkeep exported symbols for aarch64.
+#[cfg(target_arch = "aarch64")]
+pub struct VdsoArchSymbols {
+    symbols:[VdsoSymbol; Self::TOTAL_SYMBOLS],
 }
 
 impl VdsoInternal {
