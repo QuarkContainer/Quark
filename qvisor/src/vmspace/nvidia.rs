@@ -107,36 +107,6 @@ lazy_static! {
 //     ]);
 }
 
-#[derive(Debug, Clone)]
-pub struct NvidiaWorker(Arc<Mutex<NvidiaWorkerInner>>);
-
-impl Deref for NvidiaWorker {
-    type Target = Arc<Mutex<NvidiaWorkerInner>>;
-
-    fn deref(&self) -> &Arc<Mutex<NvidiaWorkerInner>> {
-        &self.0
-    }
-}
-
-#[derive(Debug)]
-pub struct NvidiaWorkerInner {
-    internMsgTx: mpsc::Sender<u64>, //&'static QMsg<'a>
-    internMsgRx: mpsc::Receiver<u64>,
-    counter: AtomicUsize,
-}
-impl NvidiaWorker {
-    pub fn New() -> Self {
-        let (tx, rx) = mpsc::channel();
-        let inner = NvidiaWorkerInner {
-            internMsgTx: tx,
-            internMsgRx: rx,
-            counter: AtomicUsize::new(0),
-        };
-        // spawn here?
-
-        return Self(Arc::new(Mutex::new(inner)));
-    }
-}
 #[repr(C)]
 pub struct NvidiaRes {
     pub res: u32,
@@ -162,30 +132,24 @@ pub fn NvidiaProxy(
     qmsg: &QMsg,
     containerId: &str,
 ) -> Result<i64> {
-    error!("in nvidia proxy");
     let mut workerMap = WORKER_MAP.lock();
     match workerMap.get(&qmsg.taskId.data) {
         Some(tx) => {
             tx.send(qmsg as *const _ as u64).unwrap();
         }
         None => {
-            error!("not find");
-            let newWorker = NvidiaWorker::New();
-            let netWorker2 = newWorker.clone();
-            let tx = netWorker2.lock().internMsgTx.clone();
-            workerMap.insert(qmsg.taskId.data, tx);
+            let (tx, rx) = mpsc::channel();
+            workerMap.insert(qmsg.taskId.data, tx.clone());
             let containerId2 = containerId.to_owned();
             let qmsgPtr = qmsg as *const _ as u64;
+            tx.send(qmsgPtr).unwrap();
             let handle = thread::spawn(move || {
-                error!("start thread");
+                // error!("start thread");
                 let mut msg2 = unsafe {&mut *(qmsgPtr as *mut QMsg) };
                 InitNvidia(&containerId2, msg2); // init per thread
                 loop {
-                    error!("loop executing!");
-                    if newWorker.lock().counter.fetch_add(1, Ordering::SeqCst) != 0 {
-                        let tmpMsg = newWorker.lock().internMsgRx.recv().unwrap() as *mut QMsg;
-                        msg2 = unsafe { &mut (*tmpMsg) };
-                    }
+                    let tmpMsg = rx.recv().unwrap() as *mut QMsg;
+                    msg2 = unsafe { &mut (*tmpMsg) };
                     let ret = NvidiaProxyExecute(msg2, &containerId2);
                     match ret {
                         Ok(res) => {
@@ -226,7 +190,7 @@ pub fn NvidiaProxyExecute(
     // }
     match qmsg.msg {
         Msg::Proxy(msg) => {
-            error!("execute cmd: {:?}", msg.cmd.clone());
+            //error!("execute cmd: {:?}", msg.cmd.clone());
             let ret: Result<u32> = Execute(&msg.cmd, &msg.parameters, containerId);
             match ret {
                 Ok(v) => {
