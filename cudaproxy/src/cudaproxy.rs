@@ -18,7 +18,7 @@ use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32};
 use lazy_static::lazy_static;
 // use libc::{c_int, SK_MEMINFO_SNDBUF};
-use libc::c_int;
+use libc::{c_int, EI_VERSION};
 use libc::dlsym;
 use libelf::raw::*;
 
@@ -134,7 +134,11 @@ pub extern "C" fn dlclose(handle: *mut c_void) -> c_int{
         return unsafe{ DLCLOSE_ORIG.unwrap()(handle) };
     }
 }
-
+#[no_mangle]
+pub extern "C" fn ncclGetVersion(version: *mut c_int) -> usize {
+    println!("Hijacked ncclGetVersion");
+    return cudaSyscall2(SYS_PROXY, ProxyCommand::NcclGetVersion as usize, version as *mut _ as usize);
+}
 // ncclgetuniqueid
 #[no_mangle]
 pub extern "C" fn ncclGetUniqueId(ncclUniqueId_p: *mut NcclUniqueId) -> usize {
@@ -210,6 +214,17 @@ pub extern "C" fn ncclCommCount(comm: NcclCommT, count: *mut c_int) -> usize {
 pub extern "C" fn ncclCommUserRank(comm: NcclCommT, rank: *mut c_int) -> usize {
     println!("Hijacked ncclCommUserRank");
     return cudaSyscall3(SYS_PROXY, ProxyCommand::NcclCommUserRank as usize, comm as usize, rank as usize);
+}
+#[no_mangle]
+pub extern "C" fn ncclCommCuDevice(comm: NcclCommT, device: *mut c_int) -> usize {
+    println!("Hijacked ncclCommCuDevice");
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::NcclCommCuDevice as usize, comm as usize, device as usize);
+}
+#[no_mangle]
+pub extern "C" fn ncclCommGetAsyncError(comm: NcclCommT, NcclResultT_p: *mut NcclResultT) -> usize {
+    println!("Hijacked ncclCommGetAsyncError");
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::NcclCommGetAsyncError as usize, comm as usize, NcclResultT_p as usize);
+    
 }
 #[no_mangle]
 pub extern "C" fn ncclSend(sendbuff: *const c_void,

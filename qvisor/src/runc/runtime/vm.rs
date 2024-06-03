@@ -355,7 +355,7 @@ impl VirtualMachine {
 
             vms.KernelMapHugeTable(
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR),
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
+                addr::Addr(MemoryDef::PHY_LOWER_ADDR + (kernelMemRegionSize + 8) * MemoryDef::ONE_GB),
                 addr::Addr(MemoryDef::PHY_LOWER_ADDR),
                 opts.Val(),
             )?;

@@ -99,6 +99,19 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             sys_ret = Ok(ret);
         }
+        ProxyCommand::NcclGetVersion => {
+            error!("ncclGetVersion_sysproxy");
+            let mut version:u64 = 0;
+            parameters.para1 = &mut version as *mut _ as u64;
+            
+            let ret = HostSpace::Proxy(cmd, parameters);
+
+            if ret == 0 {
+                task.CopyOutObj(&version, args.arg1)?;
+            }
+            sys_ret = Ok(ret);
+            
+        }
         ProxyCommand::NcclGetUniqueId => {
             error!("ncclGetUniqueId_sysproxy");
             let mut ncclUniqueId_:NcclUniqueId = NcclUniqueId::default();
@@ -193,6 +206,28 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
             sys_ret = Ok(ret);
         }
+        ProxyCommand::NcclCommCuDevice => {
+            error!("ncclCommCuDevice_sysproxy");
+            let mut device:u32 = 0;
+            parameters.para2 = &mut device as *mut _ as u64;
+            let ret = HostSpace::Proxy(cmd, parameters);
+            if ret == 0 {
+                task.CopyOutObj(&device, args.arg2)?;
+            }
+            sys_ret = Ok(ret);
+        }
+
+        ProxyCommand::NcclCommGetAsyncError => {
+            error!("ncclCommGetAsyncError_sysproxy");
+            let mut result = NcclResultT::NcclSuccess;
+            parameters.para2 = &mut result as *mut _ as u64;
+            let ret = HostSpace::Proxy(cmd, parameters);
+            if ret == 0 {
+                task.CopyOutObj(&result, args.arg2)?;
+            }
+            sys_ret = Ok(ret);
+        }
+
 
         ProxyCommand::NcclSend=> {
             error!("ncclSend_sysproxy");
