@@ -410,10 +410,6 @@ impl UContext {
     }
 }
 
-// HACK. TODO Refactor this as soon as we have proper VDSO perser.
-#[cfg(target_arch = "aarch64")]
-pub const VDSO_OFFSET_SIGRETURN: u64 = 0x1120;
-
 // https://elixir.bootlin.com/linux/latest/source/arch/x86/include/uapi/asm/sigcontext.h#L284
 #[cfg(target_arch = "x86_64")]
 #[repr(C)]

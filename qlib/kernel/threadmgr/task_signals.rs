@@ -30,6 +30,8 @@ use super::super::SignalDef::*;
 use super::task_exit::*;
 use super::task_stop::*;
 use super::task_syscall::*;
+#[cfg(target_arch = "aarch64")]
+use crate::qlib::kernel::loader::vdso::VDSO;
 
 #[derive(Copy, Clone, Default)]
 #[repr(C)]
@@ -1324,7 +1326,8 @@ impl Task {
         } else {
             let vdsoAddr = Task::Current().mm.GetUserVDSOBase();
             assert!(vdsoAddr != 0);
-            regs.regs[30] = vdsoAddr + VDSO_OFFSET_SIGRETURN;
+            regs.regs[30] = vdsoAddr + VDSO.get_symbol_page_offset("__kernel_rt_sigreturn")
+                                           .expect("aarch64: __kernel_rt_sigreturn not set.");
         }
         return Ok(());
     }

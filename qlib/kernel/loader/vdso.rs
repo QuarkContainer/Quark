@@ -21,6 +21,7 @@ pub use xmas_elf::header::HeaderPt2;
 use xmas_elf::program::ProgramHeader::Ph64;
 use xmas_elf::program::ProgramHeader64;
 use xmas_elf::program::Type;
+#[cfg(target_arch = "aarch64")]
 use xmas_elf::symbol_table::Entry;
 use xmas_elf::symbol_table::Entry64;
 use xmas_elf::sections::SectionData::SymbolTable64;
@@ -58,11 +59,11 @@ pub struct VdsoArchSymbols {
 
 #[cfg(target_arch = "x86_64")]
 impl VdsoArchSymbols {
-    pub fn set_symbols_page_offset(&mut self, elf_file: &ElfFile, symbol_table: &[Entry64]) {
+    pub fn set_symbols_page_offset(&mut self, _elf_file: &ElfFile, _symbol_table: &[Entry64]) {
         todo!();
     }
 
-    pub fn get_symbol_page_offset(&self, name: &str) -> Option<u64> {
+    pub fn get_symbol_page_offset(&self, _name: &str) -> Option<u64> {
        todo!();
        None
     }
