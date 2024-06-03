@@ -36,7 +36,8 @@ use super::qlib::common::Error;
 use super::qlib::common::Result;
 
 use super::memmgr::{MapOption, MappedRegion};
-
+#[cfg(feature = "cc")]
+use crate::qlib::kernel::Kernel::IDENTICAL_MAPPING;
 pub struct KernelELF {
     pub startAddr: Addr,
     pub endAddr: Addr,
@@ -89,19 +90,27 @@ impl KernelELF {
             if let Ph64(header) = p {
                 info!("program header: {:?}", header);
                 if header.get_type().map_err(Error::ELFLoadError)? == Type::Load {
-                    let startMem = Addr(header.virtual_addr).RoundDown()?;
-                    let endMem = Addr(header.virtual_addr)
+                    #[cfg(feature = "cc")]
+                    let header_host_virtual_addr = if IDENTICAL_MAPPING.load(std::sync::atomic::Ordering::Acquire) {
+                        header.virtual_addr
+                    } else {
+                        header.virtual_addr + crate::MemoryDef::UNIDENTICAL_MAPPING_OFFSET
+                    };
+                    #[cfg(not(feature = "cc"))]
+                    let header_host_virtual_addr = header.virtual_addr;
+                    let startMem = Addr(header_host_virtual_addr).RoundDown()?;
+                    let endMem = Addr(header_host_virtual_addr)
                         .AddLen(header.file_size)?
                         .RoundUp()?;
                     let pageOffset =
-                        Addr(header.virtual_addr).0 - Addr(header.virtual_addr).RoundDown()?.0;
+                        Addr(header_host_virtual_addr).0 - Addr(header_host_virtual_addr).RoundDown()?.0;
                     let len = Addr(header.file_size).RoundUp()?.0;
 
                     if startMem.0 < startAddr.0 {
                         startAddr = startMem;
                     }
 
-                    let end = Addr(header.virtual_addr)
+                    let end = Addr(header_host_virtual_addr)
                         .AddLen(header.mem_size)?
                         .RoundUp()?;
                     if endAddr.0 < endMem.0 {
@@ -123,7 +132,7 @@ impl KernelELF {
                     assert!(mr.ptr == startMem.0 + pageOffset);
                     self.mrs.push(mr);
 
-                    let adjust = header.virtual_addr - startMem.0;
+                    let adjust = header_host_virtual_addr - startMem.0;
 
                     if adjust + header.file_size < endMem.0 - startMem.0 {
                         let cnt = (endMem.0 - startMem.0 - (adjust + header.file_size)) as usize;
@@ -140,7 +149,7 @@ impl KernelELF {
                     }
 
                     if header.mem_size > header.file_size {
-                        let bssEnd = Addr(header.virtual_addr + header.mem_size).RoundUp()?;
+                        let bssEnd = Addr(header_host_virtual_addr + header.mem_size).RoundUp()?;
                         if bssEnd.0 != endMem.0 {
                             let mut option = &mut MapOption::New();
                             option = option

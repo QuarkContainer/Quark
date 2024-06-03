@@ -64,6 +64,8 @@ use Kernel::is_cc_enabled;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
 #[cfg (feature = "cc")]
 use alloc::boxed::Box;
+#[cfg (feature = "cc")]
+use crate::qlib::config::CCMode;
 
 impl OOMHandler for ListAllocator {
     fn handleError(&self, size: u64, alignment: u64) {
@@ -566,9 +568,32 @@ impl HostAllocator {
     }
 
     #[cfg(feature = "cc")]
-    pub fn InitPrivateAllocator(&self) {
-        self.guestPrivHeapAddr.store(MemoryDef::GUEST_PRIVATE_HEAP_OFFSET, Ordering::SeqCst);
+    pub fn InitPrivateAllocator(&self, mode: CCMode) {
+        match mode {
+            CCMode::NormalEmu => {
+                crate::qlib::kernel::Kernel::IDENTICAL_MAPPING.store(false, Ordering::SeqCst);
+                self.guestPrivHeapAddr.store(
+                    MemoryDef::GUEST_PRIVATE_RUNNING_HEAP_OFFSET,
+                    Ordering::SeqCst,
+                );
+                *self.GuestPrivateAllocator() = ListAllocator::New(
+                    MemoryDef::GUEST_PRIVATE_RUNNING_HEAP_OFFSET,
+                    MemoryDef::GUEST_PRIVATE_RUNNING_HEAP_OFFSET
+                        + MemoryDef::GUEST_PRIVATE_RUNNING_HEAP_SIZE,
+                );
+                let size = core::mem::size_of::<ListAllocator>();
+                self.GuestPrivateAllocator().Add(
+                    MemoryDef::GUEST_PRIVATE_RUNNING_HEAP_OFFSET as usize + size,
+                    MemoryDef::GUEST_PRIVATE_RUNNING_HEAP_SIZE as usize - size,
+                );
+            }
+            _ => {
+                self.guestPrivHeapAddr
+                    .store(MemoryDef::GUEST_PRIVATE_HEAP_OFFSET, Ordering::SeqCst);
+            }
+        }
     }
+
 
     #[cfg(feature = "cc")]
     pub fn InitSharedAllocator(&self) {
@@ -621,7 +646,7 @@ unsafe impl GlobalAlloc for HostAllocator {
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         let addr = ptr as u64;
-        if Self::IsGuestPrivateHeapAddr(addr) {
+        if self.IsGuestPrivateHeapAddr(addr) {
             self.GuestPrivateAllocator().dealloc(ptr, layout);
         } else if Self::IsSharedHeapAddr(addr) {
             self.GuestHostSharedAllocator().dealloc(ptr, layout);

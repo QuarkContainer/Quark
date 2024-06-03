@@ -24,7 +24,7 @@ use lazy_static::lazy_static;
 use nix::sys::signal;
 
 #[cfg (feature = "cc")]
-use crate::qlib::kernel::Kernel::ENABLE_CC;
+use crate::qlib::kernel::Kernel::{ENABLE_CC, IDENTICAL_MAPPING};
 use crate::qlib::MAX_VCPU_COUNT;
 use crate::tsot_agent::TSOT_AGENT;
 //use crate::vmspace::hibernate::HiberMgr;
@@ -299,7 +299,13 @@ impl VirtualMachine {
             #[cfg(feature = "cc")]
             CCMode::Normal => {
                 ENABLE_CC.store(true,Ordering::Release);
-                return Self::InitNormalCC(args);
+                return Self::InitNormalCC(args, CCMode::Normal);
+            }
+            #[cfg(feature = "cc")]
+            CCMode::NormalEmu => {
+                ENABLE_CC.store(true,Ordering::Release);
+                IDENTICAL_MAPPING.store(false,Ordering::Release);
+                return Self::InitNormalCC(args, CCMode::NormalEmu);
             }
             _ => panic!("CCMode not compiled!"),
         }
@@ -307,6 +313,8 @@ impl VirtualMachine {
 
     pub fn Init(args: Args) -> Result<Self> {
         PerfGoto(PerfType::Other);
+        #[cfg(feature = "cc")]
+        crate::GLOBAL_ALLOCATOR.InitPrivateAllocator();
 
         *ROOT_CONTAINER_ID.lock() = args.ID.clone();
         if QUARK_CONFIG.lock().PerSandboxLog {
@@ -531,9 +539,9 @@ impl VirtualMachine {
     }
 
     #[cfg(feature = "cc")]
-    pub fn InitNormalCC(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
+    pub fn InitNormalCC(args: Args /*args: &Args, kvmfd: i32*/, mode: CCMode) -> Result<Self> {
         PerfGoto(PerfType::Other);
-
+        crate::GLOBAL_ALLOCATOR.InitPrivateAllocator();
         *ROOT_CONTAINER_ID.lock() = args.ID.clone();
         if QUARK_CONFIG.lock().PerSandboxLog {
             let sandboxName = match args.Spec.annotations.get("io.kubernetes.cri.sandbox-name") {
@@ -607,25 +615,44 @@ impl VirtualMachine {
             panic!("KVM_CAP_IMMEDIATE_EXIT not supported");
         }
 
+        let identical = IDENTICAL_MAPPING.load(Ordering::Acquire);
         let mut elf = KernelELF::New()?;
 
         let guest_private_data_size = MemoryDef::FILE_MAP_OFFSET - MemoryDef::PHY_LOWER_ADDR;
         // Private Region
-        Self::SetMemRegion(
-            1,
-            &vm_fd,
-            MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::PHY_LOWER_ADDR,
-            guest_private_data_size,
-        )?;
+        if identical {
+            Self::SetMemRegion(
+                1,
+                &vm_fd,
+                MemoryDef::PHY_LOWER_ADDR,
+                MemoryDef::PHY_LOWER_ADDR,
+                guest_private_data_size,
+            )?;
 
-        Self::SetMemRegion(
-            2,
-            &vm_fd,
-            MemoryDef::GUEST_PRIVATE_HEAP_OFFSET,
-            MemoryDef::GUEST_PRIVATE_HEAP_OFFSET,
-            MemoryDef::GUEST_PRIVATE_HEAP_SIZE,
-        )?;
+            Self::SetMemRegion(
+                2,
+                &vm_fd,
+                MemoryDef::GUEST_PRIVATE_HEAP_OFFSET,
+                MemoryDef::GUEST_PRIVATE_HEAP_OFFSET,
+                MemoryDef::GUEST_PRIVATE_HEAP_SIZE,
+            )?;
+        } else {
+            Self::SetMemRegion(
+                1,
+                &vm_fd,
+                MemoryDef::PHY_LOWER_ADDR,
+                MemoryDef::PHY_LOWER_ADDR + MemoryDef::UNIDENTICAL_MAPPING_OFFSET,
+                guest_private_data_size,
+            )?;
+
+            Self::SetMemRegion(
+                2,
+                &vm_fd,
+                MemoryDef::GUEST_PRIVATE_HEAP_OFFSET,
+                MemoryDef::GUEST_PRIVATE_HEAP_OFFSET + MemoryDef::UNIDENTICAL_MAPPING_OFFSET,
+                MemoryDef::GUEST_PRIVATE_HEAP_SIZE,
+            )?;
+        }
 
         // Shared Region
         Self::SetMemRegion(
@@ -675,7 +702,11 @@ impl VirtualMachine {
 
         let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
         elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
-        VMS.lock().vdsoAddr = elf.vdsoStart;
+        if identical {
+            VMS.lock().vdsoAddr = elf.vdsoStart;
+        } else {
+            VMS.lock().vdsoAddr = elf.vdsoStart - MemoryDef::UNIDENTICAL_MAPPING_OFFSET;
+        }
 
 
         {
@@ -696,7 +727,7 @@ impl VirtualMachine {
                 &vm_fd,
                 entry,
                 heapStartAddr,
-                CCMode::Normal as u64,
+                mode as u64,
                 autoStart,
             )?);
 

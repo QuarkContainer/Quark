@@ -52,7 +52,7 @@ use super::syncmgr::*;
 #[cfg(feature = "cc")]
 use super::qlib::qmsg::sharepara::*;
 #[cfg(feature = "cc")]
-use qlib::kernel::Kernel::is_cc_enabled;
+use qlib::kernel::Kernel::{is_cc_enabled, IDENTICAL_MAPPING};
 #[cfg(feature = "cc")]
 use crate::qlib::task_mgr::TaskId;
 
@@ -101,7 +101,20 @@ impl RefMgr for HostPageAllocator {
 
 impl KVMVcpu {
     fn SetupGDT(&self, sregs: &mut kvm_sregs) {
+        #[cfg(not(feature = "cc"))]
         let gdtTbl = unsafe { std::slice::from_raw_parts_mut(self.gdtAddr as *mut u64, 4096 / 8) };
+
+        #[cfg(feature = "cc")]
+        let gdtTbl = if IDENTICAL_MAPPING.load(Ordering::Acquire) {
+            unsafe { std::slice::from_raw_parts_mut(self.gdtAddr as *mut u64, 4096 / 8) }
+        } else {
+            unsafe {
+                std::slice::from_raw_parts_mut(
+                    (self.gdtAddr + MemoryDef::UNIDENTICAL_MAPPING_OFFSET) as *mut u64,
+                    4096 / 8,
+                )
+            }
+        };
 
         let KernelCodeSegment = SegmentDescriptor::default().SetCode64(0, 0, 0);
         let KernelDataSegment = SegmentDescriptor::default().SetData(0, 0xffffffff, 0);
@@ -133,7 +146,15 @@ impl KVMVcpu {
                 as *const u64,
         );
 
+        #[cfg(not(feature = "cc"))]
         let tssSegment = self.tssAddr as *mut x86_64::structures::tss::TaskStateSegment;
+        #[cfg(feature = "cc")]
+        let tssSegment = if IDENTICAL_MAPPING.load(Ordering::Acquire) {
+            self.tssAddr as *mut x86_64::structures::tss::TaskStateSegment
+        } else {
+            (self.tssAddr + MemoryDef::UNIDENTICAL_MAPPING_OFFSET)
+                as *mut x86_64::structures::tss::TaskStateSegment
+        };
         unsafe {
             (*tssSegment).interrupt_stack_table[0] = stack_end;
             (*tssSegment).iomap_base = -1 as i16 as u16;
@@ -159,8 +180,30 @@ impl KVMVcpu {
         return (addr, size as u16);
     }
 
+    #[cfg(not(feature = "cc"))]
     fn TSStoDescriptor(tss: &x86_64::structures::tss::TaskStateSegment) -> (u64, u64, u16) {
         let (tssBase, tssLimit) = Self::TSS(tss);
+        let low = SegmentDescriptor::default().Set(
+            tssBase as u32,
+            tssLimit as u32,
+            0,
+            SEGMENT_DESCRIPTOR_PRESENT
+                | SEGMENT_DESCRIPTOR_ACCESS
+                | SEGMENT_DESCRIPTOR_WRITE
+                | SEGMENT_DESCRIPTOR_EXECUTE,
+        );
+
+        let hi = SegmentDescriptor::default().SetHi((tssBase >> 32) as u32);
+
+        return (low.AsU64(), hi.AsU64(), tssLimit);
+    }
+
+    #[cfg(feature = "cc")]
+    fn TSStoDescriptor(tss: &x86_64::structures::tss::TaskStateSegment) -> (u64, u64, u16) {
+        let (mut tssBase, tssLimit) = Self::TSS(tss);
+        if !IDENTICAL_MAPPING.load(Ordering::Acquire) {
+            tssBase -= MemoryDef::UNIDENTICAL_MAPPING_OFFSET;
+        }
         let low = SegmentDescriptor::default().Set(
             tssBase as u32,
             tssLimit as u32,

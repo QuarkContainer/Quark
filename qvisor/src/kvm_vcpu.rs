@@ -29,6 +29,8 @@ use std::sync::atomic::{fence, Ordering};
 use std::sync::mpsc::Sender;
 #[cfg(feature = "cc")]
 use crate::qlib::task_mgr::TaskId;
+#[cfg(feature = "cc")]
+use crate::qlib::kernel::Kernel::IDENTICAL_MAPPING;
 
 pub struct HostPageAllocator {
     pub allocator: AlignedAllocator,
@@ -338,14 +340,16 @@ pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64>
             align
         ))),
         Ok(_) => unsafe {
-            let addr = crate::GLOBAL_ALLOCATOR.AllocGuestPrivatMem(size, align);
+            let mut addr = crate::GLOBAL_ALLOCATOR.AllocGuestPrivatMem(size, align);
             if zeroData {
                 let arr = slice::from_raw_parts_mut(addr as *mut u64, size / 8);
                 for i in 0..512 {
                     arr[i] = 0
                 }
             }
-
+            if !IDENTICAL_MAPPING.load(Ordering::Acquire) {
+                addr = (addr as u64 - MemoryDef::UNIDENTICAL_MAPPING_OFFSET) as _;
+            }
             Ok(addr as u64)
         },
     }
