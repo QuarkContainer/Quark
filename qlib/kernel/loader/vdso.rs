@@ -53,6 +53,18 @@ struct VdsoSymbol {
 pub struct VdsoArchSymbols {
 }
 
+#[cfg(target_arch = "x86_64")]
+impl VdsoArchSymbols {
+    pub fn set_symbols_page_offset(&mut self, elf_file: &ElfFile, symbol_table: &[Entry64]) {
+        todo!();
+    }
+
+    pub fn get_symbol_page_offset(&self, name: &str) -> Option<u64> {
+       todo!();
+       None
+    }
+}
+
 /// Bookkeep exported symbols for aarch64.
 #[cfg(target_arch = "aarch64")]
 pub struct VdsoArchSymbols {
