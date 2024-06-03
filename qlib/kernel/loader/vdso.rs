@@ -179,6 +179,16 @@ impl VdsoInternal {
             panic!("aarch64-VDSO .symtab section not present.");
         }
     }
+
+    pub fn get_symbol_page_offset(&self, name: &str) -> Option<u64> {
+        if self.vdso_symbols.is_some() {
+            return self.vdso_symbols
+                .as_ref()
+                .unwrap()
+                .get_symbol_page_offset(&name);
+        }
+        None
+    }
 }
 
 #[derive(Clone, Default)]
@@ -201,5 +211,10 @@ impl Vdso {
 
     pub fn VDSOAddr(&self) -> u64 {
         return self.read().vdsoAddr;
+    }
+
+    pub fn get_symbol_page_offset(&self, name: &str) -> Option<u64> {
+        self.read()
+            .get_symbol_page_offset(&name)
     }
 }
