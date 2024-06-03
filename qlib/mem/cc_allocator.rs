@@ -42,23 +42,29 @@ impl PrivateVcpuAllocators {
 impl HostAllocator {
     pub fn HostInitAllocator(&self) -> &mut ListAllocator {
         return unsafe {
-            &mut *(self.hostInitHeapAddr.load(Ordering::SeqCst) as *mut ListAllocator)
+            &mut *(self.hostInitHeapAddr.load(Ordering::Relaxed) as *mut ListAllocator)
         };
     }
 
     pub fn GuestPrivateAllocator(&self) -> &mut ListAllocator {
         return unsafe {
-            &mut *(self.guestPrivHeapAddr.load(Ordering::SeqCst) as *mut ListAllocator)
+            &mut *(self.guestPrivHeapAddr.load(Ordering::Relaxed) as *mut ListAllocator)
         };
     }
 
     pub fn GuestHostSharedAllocator(&self) -> &mut ListAllocator {
-        return unsafe { &mut *(self.sharedHeapAddr.load(Ordering::SeqCst) as *mut ListAllocator) };
+        return unsafe { &mut *(self.sharedHeapAddr.load(Ordering::Relaxed) as *mut ListAllocator) };
     }
 
-    pub fn IsGuestPrivateHeapAddr(addr: u64) -> bool {
-        return addr < MemoryDef::GUEST_PRIVATE_HEAP_END
-            && addr >= MemoryDef::GUEST_PRIVATE_HEAP_OFFSET;
+    pub fn IsGuestPrivateHeapAddr(&self, addr: u64) -> bool {
+        let heapStart = self.guestPrivHeapAddr.load(Ordering::Relaxed);
+        let heapSize = if crate::qlib::kernel::Kernel::IDENTICAL_MAPPING.load(Ordering::Acquire) {
+            MemoryDef::GUEST_PRIVATE_HEAP_SIZE
+        } else {
+            MemoryDef::GUEST_PRIVATE_RUNNING_HEAP_SIZE
+        };
+        let heapEnd = heapStart + heapSize;
+        return addr < heapEnd && addr >= heapStart;
     }
 
     pub fn IsInitHeapAddr(addr: u64) -> bool {
@@ -74,6 +80,14 @@ impl HostAllocator {
     pub fn HeapRange(&self) -> (u64, u64) {
         let allocator = self.GuestPrivateAllocator();
         return (allocator.heapStart, allocator.heapEnd);
+    }
+
+    #[inline]
+    pub fn HeapRangeAll(&self) -> (u64, u64) {
+        return (
+            MemoryDef::HEAP_OFFSET,
+            MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE,
+        );
     }
 }
 
