@@ -34,6 +34,14 @@ lazy_static! {
     pub static ref PARAM_INFOS: Mutex<BTreeMap<u64, Arc<Vec<u16>>>> = Mutex::new(BTreeMap::new());
 }
 
+impl Drop for CudaProcessCtx {
+    fn drop(&mut self) {
+        if self.lock().enableGPU && Arc::strong_count(&self) == 1 {
+            let mut parameters = ProxyParameters::default();
+            let ret = HostSpace::Proxy(ProxyCommand::ExitWorkerThread, parameters); // not sure if its necessary
+        }
+    }
+}
 pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let commandId = args.arg0 as u64;
     let startTime = TSC.Rdtsc();
@@ -44,8 +52,8 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             .fetch_add(gap as u64, Ordering::SeqCst);
     });
     let cmd: ProxyCommand = unsafe { core::mem::transmute(commandId as u64) };
-    let cudaProcessCtx = task.Thread().ThreadGroup().GetCudaCtx();
-    let mut currDev: i32 = 0;
+    let mut cudaProcessCtx = task.Thread().ThreadGroup().GetCudaCtx();
+    cudaProcessCtx.lock().enableGPU = true;
     let mut parameters = ProxyParameters {
         para1: args.arg1,
         para2: args.arg2,
@@ -54,7 +62,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         para5: args.arg5,
         para6: 0,
         para7: 0,
-        gpuId: cudaProcessCtx.lock().gpuId,
     };
     let sys_ret ;
     match cmd {
@@ -103,9 +110,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             sys_ret = Ok(ret);
         }
         ProxyCommand::CudaSetDevice => {
-            cudaProcessCtx.lock().gpuId = parameters.para1 as i32;
-            parameters.gpuId = parameters.para1 as i32;
-            let ret = HostSpace::Proxy(cmd, parameters); // not sure if its necessary
+            let ret = HostSpace::Proxy(cmd, parameters);
             sys_ret = Ok(ret);
         }
         ProxyCommand::NcclGetUniqueId => {
@@ -940,6 +945,9 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             sys_ret = Ok(ret);
         } //_ => todo!()
+        _ => {
+            sys_ret = Ok(0);
+        }
     }
     return sys_ret;
 }

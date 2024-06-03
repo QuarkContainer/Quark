@@ -56,13 +56,10 @@ use rcublas_sys::{cublasHandle_t};
 use super::kernel::SHARESPACE;
 
 lazy_static! {
-    static ref CUDA_HAS_INIT: AtomicUsize = AtomicUsize::new(0);
     static ref MEM_RECORDER: Mutex<Vec<(u64, usize)>> = Mutex::new(Vec::new());
     static ref MEM_MANAGER: Mutex<MemoryManager> = Mutex::new(MemoryManager::new());
-    static ref CURRENT_GPU_ID: Mutex<i32> = Mutex::new(0);
     static ref WORKER_MAP: Mutex<HashMap<u64, mpsc::Sender<u64>>> = Mutex::new(HashMap::new()); //pid - worker tid
     // static ref OFFLOAD_TIMER: AtomicUsize = AtomicUsize::new(0);
-    // pub static ref FAST_SWITCH_HASHSET: HashSet<u64> = HashSet::new();
     // pub static ref NVIDIA_HANDLERS: NvidiaHandlers = NvidiaHandlers::New();
     // pub static ref FUNC_MAP: BTreeMap<ProxyCommand, (XpuLibrary, &'static str)> = BTreeMap::from([
     //     (ProxyCommand::CudaChooseDevice,(XpuLibrary::CudaRuntime, "cudaChooseDevice")),
@@ -150,17 +147,23 @@ pub fn NvidiaProxy(
                 loop {
                     let tmpMsg = rx.recv().unwrap() as *mut QMsg;
                     msg2 = unsafe { &mut (*tmpMsg) };
-                    let ret = NvidiaProxyExecute(msg2, &containerId2);
-                    match ret {
-                        Ok(res) => {
-                            let currTaskId = msg2.taskId;
-                            SHARESPACE
-                            .scheduler
-                            .ScheduleQ(currTaskId, currTaskId.Queue(), true)
-                        }
-                        Err(e) => {
-                            // no error
-                            error!("nvidia proxy get error {:?}", e);
+                    if let Msg::Proxy(msg) = &msg2.msg {
+                        if msg.cmd == ProxyCommand::ExitWorkerThread {
+                            break;
+                        } else {
+                            let ret = NvidiaProxyExecute(msg2, &containerId2);
+                            match ret {
+                                Ok(res) => {
+                                    let currTaskId = msg2.taskId;
+                                    SHARESPACE
+                                    .scheduler
+                                    .ScheduleQ(currTaskId, currTaskId.Queue(), true)
+                                }
+                                Err(e) => {
+                                    // no error
+                                    error!("nvidia proxy get error {:?}", e);
+                                }
+                            }
                         }
                     }
                 }
@@ -179,15 +182,6 @@ pub fn NvidiaProxyExecute(
         res: 0,
         lasterr: 0,
     };
-    // let targetGPUId = parameters.gpuId;
-    // if *CURRENT_GPU_ID.lock() != targetGPUId {
-    //     let ret = unsafe { cudaSetDevice(targetGPUId) };
-    //     if ret as u32 != 0 {
-    //         error!("nvidia.rs: error caused by cudaSetDevice(device swtich): {}", ret as u32);
-    //     } else {
-    //         *CURRENT_GPU_ID.lock() = targetGPUId
-    //     }
-    // }
     match qmsg.msg {
         Msg::Proxy(msg) => {
             //error!("execute cmd: {:?}", msg.cmd.clone());
@@ -2166,6 +2160,7 @@ pub fn Execute(
 
             return Ok(ret as u32);
         } 
+        _ => { return Ok(0); },
         //_ => todo!()
         
     }
@@ -2312,15 +2307,16 @@ fn InitNvidia(containerId: &str, qmsg: &QMsg) {
     // cuModuleLoadData requires libnvidia-ptxjitcompiler.so, and nvidia image will mount some host libraries into container,
     // the lib we want to use is locate in /usr/local/cuda/compat/, host version libraries will cause error.
     if let Msg::Proxy(msg) = qmsg.msg {
-        error!("Init nvidia");
-        let bytes = unsafe {
-            std::slice::from_raw_parts(msg.parameters.para4 as *const _, msg.parameters.para5 as usize)
-        };
-        let ptxlibPath = std::str::from_utf8(bytes).unwrap();
-        let ptxlibPathStr = format!("/{}{}", containerId, ptxlibPath);
-        let ptxlibPath = CString::new(ptxlibPathStr).unwrap();
-        let _handle = unsafe { libc::dlopen(ptxlibPath.as_ptr() as *const i8, libc::RTLD_LAZY) };
-    
+        // { // looks like CUDA 12 doesn't need this anymore, comment out for now. TODO: test too see if lower cuda version needs
+        //     error!("Init nvidia");
+        //     let bytes = unsafe {
+        //         std::slice::from_raw_parts(msg.parameters.para4 as *const _, msg.parameters.para5 as usize)
+        //     };
+        //     let ptxlibPath = std::str::from_utf8(bytes).unwrap();
+        //     let ptxlibPathStr = format!("/{}{}", containerId, ptxlibPath);
+        //     let ptxlibPath = CString::new(ptxlibPathStr).unwrap();
+        //     let _handle = unsafe { libc::dlopen(ptxlibPath.as_ptr() as *const i8, libc::RTLD_LAZY) };
+        // }
         let initResult1 = unsafe { cudaSetDevice(0) as u32 };
         let initResult2 = unsafe { cudaDeviceSynchronize() as u32 };
     

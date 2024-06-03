@@ -288,7 +288,7 @@ pub struct ThreadGroupInternal {
 
 #[derive(Default, Debug)]
 pub struct CudaProcessCtxInner {
-    pub gpuId: i32,
+    pub enableGPU: bool,
 }
 
 #[derive(Default, Debug, Clone)]
