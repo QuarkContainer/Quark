@@ -159,7 +159,25 @@ impl VdsoInternal {
             }
         }
 
+        #[cfg(target_arch = "aarch64")]
+        self.load_symbols(&elfFile);
+
         return Ok(());
+    }
+
+    /// Load symbol table section
+    fn load_symbols(&mut self, elf_file: &ElfFile) {
+        if let Some(symtab_section) = elf_file.find_section_by_name(".symtab") {
+            if let Ok(SymbolTable64(symbols)) = symtab_section.get_data(&elf_file) {
+                let mut _vdso_symbols: VdsoArchSymbols = Default::default();
+                _vdso_symbols.set_symbols_page_offset(&elf_file, symbols);
+                self.vdso_symbols = Some(_vdso_symbols);
+            } else if cfg!(target_arch = "aarch64") {
+                panic!("aarch64-VDSO .symtab has not valid data.");
+            }
+        } else if cfg!(target_arch = "aarch64") {
+            panic!("aarch64-VDSO .symtab section not present.");
+        }
     }
 }
 
