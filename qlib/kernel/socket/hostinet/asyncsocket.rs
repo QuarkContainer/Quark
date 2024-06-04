@@ -97,9 +97,15 @@ impl SockState {
     }
 
     fn ConnectType(&self) -> Self {
+        #[cfg(not(feature = "cc"))]
         let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(
             MemoryDef::DEFAULT_BUF_PAGE_COUNT,
         )));
+        #[cfg(feature = "cc")]
+        let socketBuf = SocketBuff(Arc::new_in(
+            SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT),
+            crate::GUEST_HOST_SHARED_ALLOCATOR,
+        ));
         return Self::TCPData(socketBuf);
     }
 }

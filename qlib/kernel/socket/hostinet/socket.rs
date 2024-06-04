@@ -179,14 +179,26 @@ impl SocketBufType {
 
     fn ConnectType(&self) -> Self {
         if SHARESPACE.config.read().EnableRDMA {
+            #[cfg(not(feature = "cc"))]
             let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(
                 MemoryDef::DEFAULT_BUF_PAGE_COUNT,
             )));
+            #[cfg(feature = "cc")]
+            let socketBuf = SocketBuff(Arc::new_in(
+                SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT),
+                crate::GUEST_HOST_SHARED_ALLOCATOR,
+            ));
             return Self::RDMA(socketBuf);
         } else if SHARESPACE.config.read().UringIO {
+            #[cfg(not(feature = "cc"))]
             let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(
                 MemoryDef::DEFAULT_BUF_PAGE_COUNT,
             )));
+            #[cfg(feature = "cc")]
+            let socketBuf = SocketBuff(Arc::new_in(
+                SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT),
+                crate::GUEST_HOST_SHARED_ALLOCATOR,
+            ));
             return Self::Uring(socketBuf);
         } else {
             return Self::TCPNormalData;

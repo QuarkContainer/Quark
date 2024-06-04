@@ -443,9 +443,15 @@ impl TTYFileOps {
             session: None,
             fgProcessgroup: None,
             fd: fd,
+            #[cfg(not(feature = "cc"))]
             buf: SocketBuff(Arc::new(SocketBuffIntern::Init(
                 MemoryDef::DEFAULT_BUF_PAGE_COUNT,
             ))),
+            #[cfg(feature = "cc")]
+            buf: SocketBuff(Arc::new_in(
+                SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT),
+                crate::GUEST_HOST_SHARED_ALLOCATOR,
+            )),
             queue: queue,
         };
 

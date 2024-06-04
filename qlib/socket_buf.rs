@@ -29,10 +29,16 @@ use super::mutex::*;
 use crate::qlib::kernel::kernel::waiter::Queue;
 use crate::qlib::kernel::socket::hostinet::loopbacksocket::LoopbackSocket;
 use crate::qlib::kernel::Kernel::HostSpace;
+#[cfg(feature = "cc")]
+use crate::GuestHostSharedAllocator;
+#[cfg(feature = "cc")]
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
+#[cfg(not(feature = "cc"))]
 #[derive(Clone, Default)]
 pub struct SocketBuffWeak(pub Weak<SocketBuffIntern>);
 
+#[cfg(not(feature = "cc"))]
 impl SocketBuffWeak {
     pub fn Upgrade(&self) -> Option<SocketBuff> {
         let f = match self.0.upgrade() {
@@ -44,14 +50,59 @@ impl SocketBuffWeak {
     }
 }
 
+#[cfg(feature = "cc")]
+#[derive(Clone)]
+pub struct SocketBuffWeak(pub Weak<SocketBuffIntern, GuestHostSharedAllocator>);
+
+#[cfg(feature = "cc")]
+impl Default for SocketBuffWeak{
+    fn default() -> Self {
+        SocketBuff::default().Downgrade()
+    }
+}
+
+#[cfg(feature = "cc")]
+impl SocketBuffWeak {
+    pub fn Upgrade(&self) -> Option<SocketBuff> {
+        let f = match self.0.upgrade() {
+            None => return None,
+            Some(f) => f,
+        };
+
+        return Some(SocketBuff(f));
+    }
+}
+
+#[cfg(not(feature = "cc"))]
 #[derive(Clone, Default)]
 pub struct SocketBuff(pub Arc<SocketBuffIntern>);
 
+#[cfg(not(feature = "cc"))]
 impl Deref for SocketBuff {
     type Target = Arc<SocketBuffIntern>;
 
     fn deref(&self) -> &Arc<SocketBuffIntern> {
         &self.0
+    }
+}
+
+#[cfg(feature = "cc")]
+#[derive(Clone)]
+pub struct SocketBuff(pub Arc<SocketBuffIntern, GuestHostSharedAllocator>);
+
+#[cfg(feature = "cc")]
+impl Deref for SocketBuff {
+    type Target = Arc<SocketBuffIntern, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<SocketBuffIntern, GuestHostSharedAllocator> {
+        &self.0
+    }
+}
+
+#[cfg(feature = "cc")]
+impl Default for SocketBuff {
+    fn default() -> Self {
+        Self(Arc::new_in(SocketBuffIntern::default(), GUEST_HOST_SHARED_ALLOCATOR))
     }
 }
 
@@ -68,9 +119,16 @@ impl fmt::Debug for SocketBuff {
 }
 
 impl SocketBuff {
+    #[cfg(not(feature = "cc"))]
     pub fn New(readbuf: ByteStream, writebuf: ByteStream) -> Self {
         let inner = SocketBuffIntern::New(readbuf, writebuf);
         return Self(Arc::new(inner));
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn New(readbuf: ByteStream, writebuf: ByteStream) -> Self {
+        let inner = SocketBuffIntern::New(readbuf, writebuf);
+        return Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR));
     }
 
     pub fn Downgrade(&self) -> SocketBuffWeak {
@@ -348,13 +406,28 @@ pub struct AcceptItem {
     pub queue: Queue,
 }
 
+#[cfg(not(feature = "cc"))]
 #[derive(Clone, Debug)]
 pub struct AcceptQueue(Arc<QMutex<AcceptQueueIntern>>);
 
+#[cfg(feature = "cc")]
+#[derive(Clone, Debug)]
+pub struct AcceptQueue(Arc<QMutex<AcceptQueueIntern>, GuestHostSharedAllocator>);
+
+#[cfg(not(feature = "cc"))]
 impl Deref for AcceptQueue {
     type Target = Arc<QMutex<AcceptQueueIntern>>;
 
     fn deref(&self) -> &Arc<QMutex<AcceptQueueIntern>> {
+        &self.0
+    }
+}
+
+#[cfg(feature = "cc")]
+impl Deref for AcceptQueue {
+    type Target = Arc<QMutex<AcceptQueueIntern>, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<QMutex<AcceptQueueIntern>, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -369,7 +442,10 @@ impl AcceptQueue {
             queue: queue,
         };
 
+        #[cfg(not(feature = "cc"))]
         return Self(Arc::new(QMutex::new(inner)));
+        #[cfg(feature = "cc")]
+        return Self(Arc::new_in(QMutex::new(inner), GUEST_HOST_SHARED_ALLOCATOR));
     }
 
     pub fn EnqSocket(

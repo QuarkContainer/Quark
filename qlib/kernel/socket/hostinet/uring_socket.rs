@@ -416,9 +416,15 @@ impl UringSocketOperations {
     }
 
     pub fn PostConnect(&self) {
+        #[cfg(not(feature = "cc"))]
         let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(
             MemoryDef::DEFAULT_BUF_PAGE_COUNT,
         )));
+        #[cfg(feature = "cc")]
+        let socketBuf = SocketBuff(Arc::new_in(
+            SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT),
+            crate::GUEST_HOST_SHARED_ALLOCATOR,
+        ));
         *self.socketType.lock() = UringSocketType::Uring(socketBuf.clone());
         QUring::BufSockInit(self.fd, self.queue.clone(), socketBuf, true).unwrap();
     }
