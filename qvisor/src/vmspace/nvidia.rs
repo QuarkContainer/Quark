@@ -165,14 +165,12 @@ pub fn NvidiaProxy(
             });
         }
     }
-    error!("proxy return");
     return Ok(0);
 }
 pub fn NvidiaProxyExecute(
     qmsg: &QMsg,
     containerId: &str,
 ) -> Result<i64> {
-    error!("in NvidiaProxyExecute");
     let mut result: NvidiaRes = NvidiaRes {
         res: 0,
         lasterr: 0,
