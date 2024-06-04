@@ -1837,7 +1837,6 @@ impl VMSpace {
     }
 
     pub fn Proxy(&self, _qmsg: &QMsg) -> i64 {
-        error!("in proxy");
         #[cfg(feature = "cuda")]
         match NvidiaProxy(_qmsg, &self.args.as_ref().unwrap().ID) {
             Ok(v) => return v,
