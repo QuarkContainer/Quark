@@ -301,7 +301,7 @@ impl KVMVcpu {
                 super::VMS.lock().SwapInGPUPage();
                 ret = 0;
             }
-            Msg::Proxy(msg) => {
+            Msg::Proxy(_msg) => {
                 // let start = Instant::now();
                 ret = super::VMS.lock().Proxy(&qmsg) as u64;
                 // let duration = start.elapsed();

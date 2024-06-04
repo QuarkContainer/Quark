@@ -15,6 +15,7 @@ use spin::Mutex;
 use std::collections::HashMap;
 //use std::collections::BTreeMap;
 use std::ffi::CString;
+use std::ffi::CStr;
 use std::os::raw::*;
 use std::ptr::{copy_nonoverlapping,null_mut};
 use std::slice;
@@ -32,7 +33,7 @@ use crate::qlib::range::Range;
 use crate::xpu::cuda::*;
 use crate::xpu::cuda_api::*;
 use crate::xpu::cuda_mem_manager::*;
-use crate::QUARK_CONFIG;
+use crate::{PMA_KEEPER, QUARK_CONFIG};
 
 use cuda11_cublasLt_sys::{
     cublasLtHandle_t, cublasLtMatmulAlgo_t, cublasLtMatmulDesc_t, cublasLtMatmulHeuristicResult_t,
