@@ -204,7 +204,7 @@ impl KVMVcpu {
                             None
                         };
                         match qmsg.msg {
-                            Msg::Proxy(msg) => {
+                            Msg::Proxy(_msg) => {
                                 Self::qCall(qmsg2); 
                             }
                             _ => {

@@ -1,4 +1,5 @@
-use crate::vmspace::{CUDA_MEMCPY_DEVICE_TO_HOST, CUDA_MEMCPY_HOST_TO_DEVICE};
+use crate::qlib::proxy::*;
+// use crate::vmspace::{CUDA_MEMCPY_DEVICE_TO_HOST, CUDA_MEMCPY_HOST_TO_DEVICE};
 use crate::xpu::cuda::{FUNCTIONS, MODULES};
 use crate::xpu::cuda_api::*;
 use std::ffi::CString;

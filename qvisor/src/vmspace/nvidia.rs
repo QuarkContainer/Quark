@@ -11,20 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use serde::ser::Impossible;
-//use core::ops::Deref;
 use spin::Mutex;
-use core::ops::Deref;
 use std::collections::HashMap;
 //use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::os::raw::*;
 use std::ptr::{copy_nonoverlapping,null_mut};
-use std::sync::atomic::{AtomicUsize, Ordering};
+// use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
 use std::thread;
 use crate::qlib::qmsg::*;
-use crate::qlib::ShareSpace;
 // use std::time::{Duration, Instant};
 
 use crate::qlib::common::*;
@@ -32,7 +28,6 @@ use crate::qlib::common::*;
 use crate::qlib::config::*;
 use crate::qlib::proxy::*;
 use crate::qlib::range::Range;
-use crate::runc::container::nvidia;
 use crate::xpu::cuda::*;
 use crate::xpu::cuda_api::*;
 use crate::xpu::cuda_mem_manager::*;
@@ -47,7 +42,7 @@ use cuda_driver_sys::{
     CUstream_st,
 };
 use cuda_runtime_sys::{
-    cudaDeviceAttr, cudaDeviceP2PAttr, cudaDeviceProp, cudaError_t, cudaEvent_t,
+    cudaDeviceAttr, cudaDeviceP2PAttr, cudaDeviceProp, cudaEvent_t,
     cudaFuncAttributes, cudaFuncCache, cudaLimit, cudaMemAttachGlobal, cudaStream_t,
     cudaSharedMemConfig, cudaStreamCaptureMode, cudaStreamCaptureStatus,
 };
@@ -140,7 +135,7 @@ pub fn NvidiaProxy(
             let containerId2 = containerId.to_owned();
             let qmsgPtr = qmsg as *const _ as u64;
             tx.send(qmsgPtr).unwrap();
-            let handle = thread::spawn(move || {
+            let _handle = thread::spawn(move || {
                 // error!("start thread");
                 let mut msg2 = unsafe {&mut *(qmsgPtr as *mut QMsg) };
                 InitNvidia(&containerId2, msg2); // init per thread
@@ -153,7 +148,7 @@ pub fn NvidiaProxy(
                         } else {
                             let ret = NvidiaProxyExecute(msg2, &containerId2);
                             match ret {
-                                Ok(res) => {
+                                Ok(_res) => {
                                     let currTaskId = msg2.taskId;
                                     SHARESPACE
                                     .scheduler
@@ -214,7 +209,7 @@ pub fn NvidiaProxyExecute(
 pub fn Execute(
     cmd: &ProxyCommand,
     parameters: &ProxyParameters,
-    containerId: &str,
+    _containerId: &str,
 ) -> Result<u32> {
     match cmd {
         ProxyCommand::None => {
@@ -2338,10 +2333,10 @@ pub fn CudaMemcpyAsync(parameters: &ProxyParameters) -> Result<u32> {
     }
 }
 
-fn InitNvidia(containerId: &str, qmsg: &QMsg) {
+fn InitNvidia(_containerId: &str, _qmsg: &QMsg) {
     // cuModuleLoadData requires libnvidia-ptxjitcompiler.so, and nvidia image will mount some host libraries into container,
     // the lib we want to use is locate in /usr/local/cuda/compat/, host version libraries will cause error.
-    if let Msg::Proxy(msg) = qmsg.msg {
+    // if let Msg::Proxy(msg) = qmsg.msg {
         // { // looks like CUDA 12 doesn't need this anymore, comment out for now. TODO: test too see if lower cuda version needs
         //     error!("Init nvidia");
         //     let bytes = unsafe {
@@ -2358,7 +2353,7 @@ fn InitNvidia(containerId: &str, qmsg: &QMsg) {
         if initResult1 | initResult2 != 0 {
             error!("cuda runtime init error");
         }
-    } // else is impossible
+    // } // else is impossible
 }
 
 pub fn SwapOutMem() -> Result<i64> {

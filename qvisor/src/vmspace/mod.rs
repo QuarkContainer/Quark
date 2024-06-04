@@ -47,7 +47,6 @@ use crate::qlib::cstring::CString;
 use crate::qlib::fileinfo::*;
 use crate::qlib::kernel::socket::control::Parse;
 use crate::qlib::kernel::socket::control::*;
-use crate::qlib::proxy::*;
 use crate::qlib::range::Range;
 use crate::vmspace::kernel::GlobalIOMgr;
 use crate::vmspace::kernel::GlobalRDMASvcCli;

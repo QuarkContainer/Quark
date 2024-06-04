@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::mutex::*;
-use crate::qlib::proxy::ProxyParameters;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::btree_set::BTreeSet;
 use alloc::string::String;

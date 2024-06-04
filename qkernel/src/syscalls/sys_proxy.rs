@@ -37,8 +37,8 @@ lazy_static! {
 impl Drop for CudaProcessCtx {
     fn drop(&mut self) {
         if self.lock().enableGPU && Arc::strong_count(&self) == 1 {
-            let mut parameters = ProxyParameters::default();
-            let ret = HostSpace::Proxy(ProxyCommand::ExitWorkerThread, parameters); // not sure if its necessary
+            let parameters = ProxyParameters::default();
+            HostSpace::Proxy(ProxyCommand::ExitWorkerThread, parameters); // not sure if its necessary
         }
     }
 }
@@ -52,7 +52,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             .fetch_add(gap as u64, Ordering::SeqCst);
     });
     let cmd: ProxyCommand = unsafe { core::mem::transmute(commandId as u64) };
-    let mut cudaProcessCtx = task.Thread().ThreadGroup().GetCudaCtx();
+    let cudaProcessCtx = task.Thread().ThreadGroup().GetCudaCtx();
     cudaProcessCtx.lock().enableGPU = true;
     let mut parameters = ProxyParameters {
         para1: args.arg1,
