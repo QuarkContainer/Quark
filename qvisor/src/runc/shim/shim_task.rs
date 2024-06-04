@@ -237,8 +237,15 @@ impl Task for ShimTask {
         let ns = self.namespace.as_str();
         let id = req.id.as_str();
 
-        let container = ContainerFactory::Create(ns, &req)
-            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        let container = match ContainerFactory::Create(ns, &req) {
+            Err(e) => {
+                error!("ShimTask::create fail with error {:#?}", &e);
+                Err(e)
+            }
+            Ok(c) => Ok(c),
+        }
+        .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+
         let mut resp = CreateTaskResponse::new();
         let pid = container.pid() as u32;
         resp.pid = pid;
@@ -275,7 +282,7 @@ impl Task for ShimTask {
                 ..Default::default()
             },
         );
-        info!("Create request for {} returns pid {}", id, resp.pid);
+        info!("shim: Create response for {} returns pid {}", id, resp.pid);
         return Ok(resp);
     }
 
@@ -312,7 +319,7 @@ impl Task for ShimTask {
                 },
             );
         };
-        info!("Start request for {:?} returns pid {}", req, resp.get_pid());
+        info!("shim: Start response for {:?} returns {:?}", req, resp);
         Ok(resp)
     }
 
@@ -399,13 +406,13 @@ impl Task for ShimTask {
                 req.all,
             )
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
-        info!("Kill request for {:?} returns successfully", req);
+        info!("shim: Kill request for {:?} returns successfully", req);
         Ok(Empty::new())
     }
 
     fn exec(&self, _ctx: &TtrpcContext, req: ExecProcessRequest) -> TtrpcResult<Empty> {
         info!(
-            "Exec request for id: {} exec_id: {}",
+            "shim: Exec request for id: {} exec_id: {}",
             req.get_id(),
             req.get_exec_id()
         );
@@ -447,6 +454,7 @@ impl Task for ShimTask {
                 req.width,
             )
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        debug!("shim: Resize pty Done");
         Ok(Empty::new())
     }
 
@@ -468,6 +476,7 @@ impl Task for ShimTask {
         container
             .update(&resources)
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        debug!("shim: Update request done");
         Ok(Empty::new())
     }
 
@@ -486,7 +495,7 @@ impl Task for ShimTask {
             resp.exit_status = state.exit_status;
             resp.exited_at = state.exited_at;
             info!(
-                "Wait request 111 for {:?} status {:?} returns {:?}",
+                "shim: Wait response 111 for {:?} status {:?} returns {:?}",
                 req, &state.status, &resp
             );
             return Ok(resp);
@@ -515,7 +524,7 @@ impl Task for ShimTask {
             ts.nanos = ea.nanosecond() as i32;
         }
         resp.exited_at = SingularPtrField::some(ts);
-        //error!("shim: Wait response 2222 for {:?} returns {:?}", req, &resp);
+        error!("shim: Wait response 2222 for {:?} returns {:?}", req, &resp);
         Ok(resp)
     }
 
@@ -559,7 +568,7 @@ impl Task for ShimTask {
     }
 
     fn connect(&self, _ctx: &TtrpcContext, req: ConnectRequest) -> TtrpcResult<ConnectResponse> {
-        info!("Connect request for {:?}", req);
+        info!("shim: Connect request for {:?}", req);
         let containers = self.containers.lock().unwrap();
         let container = containers.get(req.get_id()).ok_or_else(|| {
             TtrpcError::Other(format!("can not find container by id {}", req.get_id()))
@@ -569,6 +578,7 @@ impl Task for ShimTask {
             task_pid: container.pid() as u32,
             ..Default::default()
         };
+        info!("shim: Connect responese finish {:?}", &resp);
         Ok(resp)
     }
 }
