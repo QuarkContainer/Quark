@@ -24,7 +24,6 @@ use super::super::qlib::common::*;
 use super::super::qlib::control_msg::*;
 use super::super::qlib::cstring::*;
 use super::super::qlib::linux_def::*;
-use super::super::URING_MGR;
 use super::ucall::*;
 
 #[derive(Debug)]
@@ -37,8 +36,6 @@ impl USocket {
         if self.socket == -1 {
             return;
         }
-
-        URING_MGR.lock().Removefd(self.socket).unwrap();
 
         unsafe {
             close(self.socket);
