@@ -344,16 +344,13 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             sys_ret = Ok(ret);
         }
         ProxyCommand::CudaDeviceGetCacheConfig => {
-            let mut CacheConfig: u32;
-            unsafe {
-                CacheConfig = *(parameters.para1 as *mut _);
-            }
-            parameters.para1 = &mut CacheConfig as *mut _ as u64;
+            let mut cacheConfig: u32 = 0;
+            parameters.para1 = &mut cacheConfig as *mut _ as u64;
 
             let ret = HostSpace::Proxy(cmd, parameters);
 
             if ret == 0 {
-                task.CopyOutObj(&CacheConfig, args.arg1 as u64)?;
+                task.CopyOutObj(&cacheConfig, args.arg1 as u64)?;
             }
             sys_ret = Ok(ret);
         }
@@ -396,7 +393,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
         ProxyCommand::CudaDeviceGetSharedMemConfig => {
             error!("CudaDeviceGetSharedMemConfig");
-            let mut sharedMemConfig: u32 = unsafe { *(parameters.para1 as *mut u32) };
+            let mut sharedMemConfig: u32 = 0;
             parameters.para1 = &mut sharedMemConfig as *mut _ as u64;
 
             let ret = HostSpace::Proxy(cmd, parameters);

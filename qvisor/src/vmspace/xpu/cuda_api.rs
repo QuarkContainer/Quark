@@ -185,7 +185,7 @@ extern "C" {
         device: c_int,
     ) -> cudaError_t;
     pub fn cudaDeviceGetByPCIBusId(device: *mut c_int, pciBusId: *const c_char) -> cudaError_t;
-    pub fn cudaDeviceGetCacheConfig(pCacheConfig: *mut cudaFuncCache) -> cudaError_t;
+    pub fn cudaDeviceGetCacheConfig(pCacheConfig: u64) -> cudaError_t;
     pub fn cudaDeviceGetLimit(pValue: *mut usize, limit: cudaLimit) -> cudaError_t;
     pub fn cudaDeviceGetP2PAttribute(
         value: *mut c_int,
@@ -194,7 +194,7 @@ extern "C" {
         dstDevice: c_int,
     ) -> cudaError_t;
     pub fn cudaDeviceGetPCIBusId(pciBusId: *mut c_char, len: c_int, device: c_int) -> cudaError_t;
-    pub fn cudaDeviceGetSharedMemConfig(pConfig: *mut cudaSharedMemConfig) -> cudaError_t;
+    pub fn cudaDeviceGetSharedMemConfig(pConfig: u64) -> cudaError_t;
     pub fn cudaDeviceSetCacheConfig(cacheConfig: u32) -> cudaError_t;
     pub fn cudaSetDeviceFlags(flags: c_uint) -> cudaError_t;
     pub fn cudaDeviceReset() -> cudaError_t;
@@ -240,8 +240,8 @@ extern "C" {
     pub fn cudaGetErrorString(error: u32) -> *const c_char;
     pub fn cudaGetErrorName(error: u32) -> *const c_char;
     pub fn cudaPeekAtLastError() -> cudaError_t;
-    pub fn cudaDeviceSetLimit(limit: cudaLimit, value: usize) -> cudaError_t;
-    pub fn cudaDeviceSetSharedMemConfig(config: cudaSharedMemConfig) -> cudaError_t;
+    pub fn cudaDeviceSetLimit(limit: usize, value: usize) -> cudaError_t;
+    pub fn cudaDeviceSetSharedMemConfig(config: u64) -> cudaError_t;
     pub fn cudaGetDeviceFlags(flags: *mut c_uint) -> cudaError_t;
     pub fn cudaSetValidDevices(device_arr: *mut c_int, len: c_int) -> cudaError_t;
 
@@ -363,6 +363,7 @@ extern "C" {
         computeType: u32,
         algo: u32,
     ) -> u32;
+    pub fn cublasGetStream(handle: cublasHandle_t, streamId: *mut cudaStream_t) -> u32;
 }
 
 #[link(name = "cublasLt")]

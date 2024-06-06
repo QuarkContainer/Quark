@@ -89,9 +89,10 @@ pub fn CudaDeviceGetByPCIBusId(parameters: &ProxyParameters) -> Result<u32> {
 }
 
 pub fn CudaDeviceGetCacheConfig(parameters: &ProxyParameters) -> Result<u32> {
-    let mut cacheConfig: cudaFuncCache = unsafe { *(parameters.para1 as *mut _) };
+    let mut cacheConfig: u32 = 0;
 
-    let ret = unsafe { cudaDeviceGetCacheConfig(&mut cacheConfig) };
+    let ret = unsafe { cudaDeviceGetCacheConfig(&mut cacheConfig as *mut _ as u64) };
+
     if ret as u32 != 0 {
         error!(
             "nvidia.rs: error caused by cudaDeviceGetCacheConfig: {}",
@@ -100,7 +101,7 @@ pub fn CudaDeviceGetCacheConfig(parameters: &ProxyParameters) -> Result<u32> {
     }
 
     unsafe {
-        *(parameters.para1 as *mut _) = cacheConfig as u32;
+        *(parameters.para1 as *mut u32) = cacheConfig;
     }
     Ok(ret as u32)
 }
@@ -170,10 +171,9 @@ pub fn CudaDeviceGetPCIBusId(parameters: &ProxyParameters) -> Result<u32> {
 }
 
 pub fn CudaDeviceGetSharedMemConfig(parameters: &ProxyParameters) -> Result<u32> {
-    let mut sharedMemConfig: cudaSharedMemConfig =
-        unsafe { *(parameters.para1 as *mut cudaSharedMemConfig) };
+    let mut sharedMemConfig: u32 = 0;
 
-    let ret = unsafe { cudaDeviceGetSharedMemConfig(&mut sharedMemConfig) };
+    let ret = unsafe { cudaDeviceGetSharedMemConfig(&mut sharedMemConfig as *mut _ as u64) };
     if ret as u32 != 0 {
         error!(
             "nvidia.rs: error caused by cudaDeviceGetSharedMemConfig: {}",
@@ -218,7 +218,7 @@ pub fn CudaDeviceSetCacheConfig(parameters: &ProxyParameters) -> Result<u32> {
 pub fn CudaDeviceSetLimit(parameters: &ProxyParameters) -> Result<u32> {
     let ret = unsafe {
         cudaDeviceSetLimit(
-            *(&parameters.para1 as *const _ as u64 as *mut cudaLimit),
+            parameters.para1 as usize,
             parameters.para2 as usize,
         )
     };
@@ -234,7 +234,7 @@ pub fn CudaDeviceSetLimit(parameters: &ProxyParameters) -> Result<u32> {
 pub fn CudaDeviceSetSharedMemConfig(parameters: &ProxyParameters) -> Result<u32> {
     let ret = unsafe {
         cudaDeviceSetSharedMemConfig(
-            *(&parameters.para1 as *const _ as u64 as *mut cudaSharedMemConfig),
+            parameters.para1,
         )
     };
     if ret as u32 != 0 {
