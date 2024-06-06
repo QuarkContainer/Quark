@@ -263,9 +263,9 @@ impl KVMVcpu {
         let mut lastVal: u32 = 0;
         let mut first = true;
 
-        if self.cordId > 0 {
+        if self.coreId > 0 {
             let coreid = core_affinity::CoreId {
-                id: self.cordId as usize,
+                id: self.coreId as usize,
             };
             // print cpu id
             core_affinity::set_for_current(coreid);

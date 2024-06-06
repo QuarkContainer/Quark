@@ -194,16 +194,9 @@ impl VirtualMachine {
 
         let sharespace = SHARE_SPACE.Ptr();
         let logfd = super::super::super::print::LOG.Logfd();
-        
-        URING_MGR.lock().Addfd(logfd).unwrap();
 
         KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
 
-        URING_MGR
-            .lock()
-            .Addfd(sharespace.HostHostEpollfd())
-            .unwrap();
-        URING_MGR.lock().Addfd(controlSock).unwrap();
         IOURING.SetValue(sharespace.GetIOUringAddr());
 
         unsafe {

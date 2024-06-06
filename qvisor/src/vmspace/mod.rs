@@ -258,8 +258,6 @@ impl VMSpace {
         for i in 0..process.Stdiofds.len() {
             let osfd = unsafe { dup(i as i32) as i32 };
 
-            URING_MGR.lock().Addfd(osfd).unwrap();
-
             if osfd < 0 {
                 return osfd as i64;
             }
@@ -554,10 +552,6 @@ impl VMSpace {
         tryOpenAt.writeable = writeable;
         let hostfd = GlobalIOMgr().AddFile(fd);
 
-        if tryOpenAt.fstat.IsRegularFile() {
-            URING_MGR.lock().Addfd(hostfd).unwrap();
-        }
-
         return hostfd as i64;
     }
 
@@ -581,10 +575,6 @@ impl VMSpace {
         }
 
         let hostfd = GlobalIOMgr().AddFile(fd);
-
-        if tryOpenAt.fstat.IsRegularFile() {
-            URING_MGR.lock().Addfd(hostfd).unwrap();
-        }
 
         return Self::GetRet(fd as i64);
     }
@@ -697,8 +687,6 @@ impl VMSpace {
 
             let hostfd = GlobalIOMgr().AddFile(osfd);
 
-            URING_MGR.lock().Addfd(osfd).unwrap();
-
             return hostfd;
         }
     }
@@ -706,7 +694,6 @@ impl VMSpace {
     pub fn Close(fd: i32) -> i64 {
         let info = GlobalIOMgr().RemoveFd(fd);
 
-        URING_MGR.lock().Removefd(fd).unwrap();
         let res = if info.is_some() {
             let fdInfo = info.unwrap();
             let fdInfoLock = fdInfo.lock();
@@ -858,7 +845,6 @@ impl VMSpace {
 
     pub fn NewSocket(fd: i32) -> i64 {
         GlobalIOMgr().AddSocket(fd);
-        URING_MGR.lock().Addfd(fd).unwrap();
         return 0;
     }
 
@@ -1283,7 +1269,6 @@ impl VMSpace {
     
                         if true || stat.IsRegularFile() {
                             let hostfd = GlobalIOMgr().AddFile(fd);
-                            URING_MGR.lock().Addfd(hostfd).unwrap();
                             fds.push(hostfd);
                         } else {
                             error!("HostUnixRecvMsg get unsupport fd with state {:x?}", &stat);
@@ -1357,7 +1342,6 @@ impl VMSpace {
         }
 
         let hostfd = GlobalIOMgr().AddSocket(fd);
-        URING_MGR.lock().Addfd(fd).unwrap();
         return Self::GetRet(hostfd as i64);
     }
 
@@ -1403,7 +1387,6 @@ impl VMSpace {
         }
 
         let hostfd = GlobalIOMgr().AddSocket(fd);
-        URING_MGR.lock().Addfd(fd).unwrap();
         return Self::GetRet(hostfd as i64);
     }
 

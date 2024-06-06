@@ -45,7 +45,7 @@ Application request with following steps.
    Share memory queue. There is a dedicated QCall handing thread waiting in Host
    Space to process QCall request. Based on that, VCPU thread's high cost
    Guest/Host switch is avoid. For the host IO data operation, such as socket
-   read/write, Qkernel will call the Host Kernel direclty with IO-Uring, which
+   read/write, Qkernel will call the Host Kernel directly with IO-Uring, which
    could bypass QVisor to achieve better performance. (Note: IO-Uring won't
    handle IO control operation, such as Open, for security purpose)
 
@@ -57,7 +57,7 @@ with RDMA connection, i.e. TSoR. TSoR is a container network provider in K8S
 cluster and the existing TCP based container application can transfer data
 through RDMA without ANY modification. As TSoR offloads the TCP/IP protocol
 stack workload to RDMA NIC. It can achieve higher throughput, low latency with
-less cpu footprint. The [TSOR test result](doc/TSoR.xlsx) is the Redis benchmark
+less CPU footprint. The [TSOR test result](doc/TSoR.xlsx) is the Redis benchmark
 test result with comparison between Quark + TSoR and RunC + Flannel. TSoR
 shows 5 times throughput improvement over Flannel. The TSoR architecture is as
 below. The introduction is [here](doc/TSoR.pptx)
@@ -66,42 +66,47 @@ below. The introduction is [here](doc/TSoR.pptx)
 
 ## System Requirement
 1. OS: Linux Kernel > 5.8.0
-2. Processor: X86-64/Amd64 (Quark only support 64 bit architecture)
+2. Processor: X86-64/Amd64 or aarch64 (see notes below).
 3. Docker: > 17.09.0
 4. Enable virtualization technology in BIOS (Usually in Security tab of BIOS)
 
+Quark primarily supports X86-64. aarch64 support is preliminary and under active
+development. Other architecture will be available in the future.
+
 ## Installing from source
 
-### Requirement 
-Quark builds on X86-64 only. Other architecture will be available in the future.
+### Dependencies and rust toolchain
 
 Quark is developed with Rust language. The build needs to install Rust nightly.
 Please use current known good version
-`nightly-2023-12-11-x86_64-unknown-linux-gnu`
+`nightly-2023-12-11-x86_64-unknown-linux-gnu` (replace `x86_64` with `aarch64`
+for the aarch64 build)
 
 ```sh
 rustup toolchain install nightly-2023-12-11-x86_64-unknown-linux-gnu
 rustup default nightly-2023-12-11-x86_64-unknown-linux-gnu
 ```
 
-And Installing lcap library
+Add the rust-src component to the current toolchain:
+```sh
+rustup component add rust-src
+```
+
+And install "cargo-xbuild" for qkernel cross compilation
+```sh
+cargo install cargo-xbuild
+```
+
+Install libcap library
 ```sh
 sudo apt-get install libcap-dev
 ```
+
 Also, some extra libraries for compiling RDMA module:
 ```sh
 sudo apt-get install build-essential cmake gcc libudev-dev libnl-3-dev \
 libnl-route-3-dev ninja-build pkg-config valgrind python3-dev cython3 \
 python3-docutils pandoc libclang-dev
-```
-And also add the rust-src component to the current toolchain:
-```sh
-rustup component add rust-src
-```
-
-And also install "cargo-xbuild" as below.
-```sh
-cargo install cargo-xbuild
 ```
 
 And also some extra libraries for compiling GPU module:  
@@ -111,7 +116,7 @@ get ability for compiling GPU module.)
 sudo apt-get install libelf-dev nvidia-driver-535
 ```
 
-### Build
+### Build Quark
 ```sh
 git clone git@github.com:QuarkContainer/Quark.git
 cd Quark
@@ -119,13 +124,13 @@ make
 make install
 ```
 
-### Build with GPU module
+#### Build with GPU module
 ```sh
 make cuda_all
 make install
 ```
 
-### Install / Setup / Configuration
+#### Install / Setup / Configuration
 1. Install binary: Quark has 2 binaries: "quark" and "qkernel.bin". Both of them
    was copied to /usr/local/bin/ folder when running `make install`. "quark"
    contains QVisor code and it also implement the OCI interface.
@@ -142,9 +147,9 @@ make install
     sudo systemctl restart docker
     ```
 
-### Helloworld: 
+#### Hello world: 
 
-The helloworld docker sample application can be executed as below:
+The hello-world docker sample application can be executed as below:
 ```sh
 sudo systemctl restart docker
 sudo systemctl restart docker.service
@@ -169,7 +174,8 @@ Trace,
 ```
     
 When log is enabled, e.g. Debug. After run a docker image with Quark Container,
-the logs will be generated in the /var/log/quark/quark.log.
+the logs will be generated in the /var/log/quark/quark.log. See the
+[wiki](https://github.com/QuarkContainer/Quark/wiki) for further debugging tips.
 
 ## k8s set up and use TCP over RDMA
 Please refer to [this link](doc/k8s_setup.md) to set up k8s using quark
