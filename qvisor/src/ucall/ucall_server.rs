@@ -71,7 +71,6 @@ pub fn ExecProcessHandler(execArgs: &mut ExecArgs, fds: &[i32]) -> Result<Contro
         //VMSpace::UnblockFd(osfd);
 
         let hostfd = GlobalIOMgr().AddFile(osfd);
-        URING_MGR.lock().Addfd(osfd).unwrap();
         process.Stdiofds[i] = hostfd;
     }
 
