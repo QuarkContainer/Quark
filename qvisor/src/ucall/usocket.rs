@@ -38,8 +38,6 @@ impl USocket {
             return;
         }
 
-        URING_MGR.lock().Removefd(self.socket).unwrap();
-
         unsafe {
             close(self.socket);
         }
