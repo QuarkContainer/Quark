@@ -4,3 +4,13 @@ pub mod cuda;
 pub mod cuda_api;
 #[cfg(feature = "cuda")]
 pub mod cuda_mem_manager;
+#[cfg(feature = "cuda")]
+pub mod nvidia_cuda_calls;
+#[cfg(feature = "cuda")]
+pub mod nvidia_nccl_calls;
+#[cfg(feature = "cuda")]
+pub mod nvidia_cu_calls;
+#[cfg(feature = "cuda")]
+pub mod nvidia_cublas_calls;
+#[cfg(feature = "cuda")]
+pub mod nvidia_nvml_calls;

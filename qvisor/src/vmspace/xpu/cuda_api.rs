@@ -58,60 +58,6 @@ extern "C" {
     pub fn ncclAllReduce(sendbuff: *const c_void, recvbuff: *mut c_void, count: usize, datatype: NcclDataTypeT, op: NcclRedOpT, comm: NcclCommT, stream: cudaStream_t) -> NcclResultT;
     pub fn ncclAllGather(sendbuff: *const c_void, recvbuff: *mut c_void, count: usize, datatype: NcclDataTypeT, comm: NcclCommT, stream: cudaStream_t) -> NcclResultT;
     pub fn ncclReduceScatter(sendbuff: *const c_void, recvbuff: *mut c_void, count: usize, datatype: NcclDataTypeT, op: NcclRedOpT, comm: NcclCommT, stream: cudaStream_t) -> NcclResultT;
-    //     pub fn ncclCommCount(
-//         comm: NcclCommT,
-//         count: *mut c_int,
-//     ) -> NcclResultT;
-//     pub fn ncclCommUserRank(
-//         comm: NcclCommT,
-//         rank: *mut c_int,
-//     ) -> NcclResultT;
-
-//     pub fn ncclReduce(
-//         send_buff: *const c_void,
-//         recv_buff: *mut c_void,
-//         count: usize,
-//         dataType: NcclDataTypeT,
-//         reduceOp: NcclRedOpT,
-//         root: c_int,
-//         comm: NcclCommT,
-//         stream: cudaStream_t,
-//     ) -> NcclResultT;
-//     pub fn ncclBcast(
-//         buff: *mut c_void,
-//         count: usize,
-//         dataType: NcclDataTypeT,
-//         root: c_int,
-//         comm: NcclCommT,
-//         stream: cudaStream_t,
-//     ) -> NcclResultT;
-//     pub fn ncclReduceScatter(
-//         send_buff: *const c_void,
-//         recv_buff: *mut c_void,
-//         recv_count: usize,
-//         dataType: NcclDataTypeT,
-//         reduceOp: NcclRedOpT,
-//         comm: NcclCommT,
-//         stream: cudaStream_t,
-//     ) -> NcclResultT;
-//     pub fn ncclAllGather(
-//         send_buff: *const c_void,
-//         recv_buff: *mut c_void,
-//         send_count: usize,
-//         dataType: NcclDataTypeT,
-//         comm: NcclCommT,
-//         stream: cudaStream_t,
-//     ) -> NcclResultT;
-//     pub fn ncclSend(
-//         send_buff: *const c_void,
-//         count: usize,
-//         dataType: NcclDataTypeT,
-//         peer: c_int,
-//         comm: NcclCommT,
-//         stream: cudaStream_t,
-//     ) -> NcclResultT;
-//     pub fn ncclGroupStart() -> NcclResultT;
-//     pub fn ncclGroupEnd() -> NcclResultT;
 }
 
 #[link(name = "cuda")]
