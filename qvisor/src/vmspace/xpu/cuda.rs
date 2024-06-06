@@ -28,6 +28,8 @@ lazy_static! {
     pub static ref MODULES:Mutex<BTreeMap<CUmoduleKey, CUmoduleAddr>> = Mutex::new(BTreeMap::new());
     pub static ref FUNCTIONS:Mutex<BTreeMap<CUhostFunction, CUfunctionAddr>> = Mutex::new(BTreeMap::new());
     //pub static ref GLOBALS:Mutex<BTreeMap<u64, CUdeviceAddr>> = Mutex::new(BTreeMap::new());
+    pub static ref STREAMS: Mutex<BTreeMap<UserSpaceStream, RealStream>> = Mutex::new(BTreeMap::new());
+    pub static ref BLASHANDLE: Mutex<BTreeMap<UserSpaceBlasHandle, RealBlasHandle>> = Mutex::new(BTreeMap::new());
 }
 
 pub type HandlerAddr = u64;
@@ -36,6 +38,10 @@ pub type CUmoduleAddr = u64;
 pub type CUhostFunction = u64;
 pub type CUfunctionAddr = u64;
 pub type CUdeviceAddr = u64;
+pub type UserSpaceStream = u64;
+pub type RealStream = u64;
+pub type UserSpaceBlasHandle = u64;
+pub type RealBlasHandle = u64;
 
 #[repr(C)]
 #[derive(Default, Debug)]
