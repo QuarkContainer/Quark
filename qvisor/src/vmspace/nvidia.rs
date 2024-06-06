@@ -43,6 +43,7 @@ use cuda_runtime_sys::{
     cudaDeviceAttr, cudaDeviceP2PAttr, cudaDeviceProp, cudaError_t, cudaEvent_t,
     cudaFuncAttributes, cudaFuncCache, cudaLimit, cudaMemAttachGlobal, cudaStream_t,
     cudaSharedMemConfig, cudaStreamCaptureMode, cudaStreamCaptureStatus,
+    cudaMemGetInfo
 };
 use rcublas_sys::{cublasHandle_t};
 
@@ -1674,6 +1675,24 @@ pub fn Execute(
                 error!("nvidia.rs: error caused by cudaMemsetAsync: {}", ret as u32);
             }
 
+            return Ok(ret as u32);
+        }
+        ProxyCommand::CudaMemGetInfo => {
+            error!("nvidia.rs: CudaMemGetInfo");
+            let mut free: usize = 0;
+            let mut total: usize = 0;
+
+            let ret = unsafe { cudaMemGetInfo(&mut free, &mut total) };
+            if ret as u32 != 0 {
+                error!("nvidia.rs: error caused by cudaMemGetInfo: {}", ret as u32);
+            }
+
+            error!("nvidia.rs: free:{}, total:{}", free, total);
+
+            unsafe {
+                *(parameters.para1 as *mut usize) = free;
+                *(parameters.para2 as *mut usize) = total;
+            };
             return Ok(ret as u32);
         }
         ProxyCommand::CudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags => {

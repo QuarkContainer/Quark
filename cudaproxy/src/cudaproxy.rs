@@ -980,6 +980,20 @@ pub extern "C" fn cudaMemsetAsync(devPtr: *const c_void, value: c_int, count: us
 }
 
 #[no_mangle]
+pub extern "C" fn cudaMemGetInfo(free: *mut usize, total: *mut usize) -> usize {
+    println!("Hijacked cudaMemGetInfo");
+    unsafe {
+    let retval : usize = syscall3(
+        SYS_PROXY, 
+        ProxyCommand::CudaMemGetInfo as usize, 
+        free as *mut _ as usize,
+        total as *mut _ as usize);
+    println!("cudaMemGetInfo free: {}, total: {}", *free, *total);
+    return retval;
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(numBlocks: *mut c_int,
     func: *const c_void, blockSize: c_int, dynamicSMemSize: usize, flags: c_uint) -> usize {
     //println!("cudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags");
