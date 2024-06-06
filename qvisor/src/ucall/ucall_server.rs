@@ -20,7 +20,6 @@ use super::super::qlib::linux_def::*;
 use super::super::qlib::loader;
 use super::super::runc::container::container::*;
 use super::super::vmspace::*;
-use super::super::URING_MGR;
 use super::ucall::*;
 use super::usocket::*;
 
@@ -71,7 +70,6 @@ pub fn ExecProcessHandler(execArgs: &mut ExecArgs, fds: &[i32]) -> Result<Contro
         //VMSpace::UnblockFd(osfd);
 
         let hostfd = GlobalIOMgr().AddFile(osfd);
-        URING_MGR.lock().Addfd(osfd).unwrap();
         process.Stdiofds[i] = hostfd;
     }
 

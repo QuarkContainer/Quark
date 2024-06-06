@@ -220,7 +220,6 @@ impl FdInfo {
         }
 
         let hostfd = GlobalIOMgr().AddSocket(newfd);
-        URING_MGR.lock().Addfd(newfd).unwrap();
         return SysRet(hostfd as i64);
     }
 
