@@ -1,6 +1,6 @@
 use crate::qlib::proxy::*;
 // use crate::vmspace::{CUDA_MEMCPY_DEVICE_TO_HOST, CUDA_MEMCPY_HOST_TO_DEVICE};
-use crate::xpu::cuda::{FUNCTIONS, MODULES};
+use crate::xpu::cuda::{FUNCTIONS, MODULES, MODULES_FUNCTIONS_MAP};
 use crate::xpu::cuda_api::*;
 use std::ffi::CString;
 use std::os::raw::*;
@@ -369,7 +369,7 @@ impl MemoryManager {
         self.fatBinManager.restoreFatbin();
     }
     
-    pub fn offloadGPUContext(&mut self) {
+    pub fn checkpointGPUContext(&mut self) {
         //need new ctx manager, cannot reuse
         self.ctxManager.checkpointCtx();
 
@@ -566,6 +566,8 @@ impl CtxManager {
     }
 
     pub fn getFuncStatus(&mut self) {
+        error!("FUNCTIONS is {:?}", FUNCTIONS.lock());
+        error!("FUNCTIONS MAP is {:?}", MODULES_FUNCTIONS_MAP.lock());
         for (_, func) in FUNCTIONS.lock().iter() {
             let mut maxDynamicSharedSizeBytes: i32 = 0;
             let mut preferedSharedMemoryCarveout:i32 = 0;

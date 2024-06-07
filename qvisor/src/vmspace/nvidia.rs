@@ -390,9 +390,9 @@ pub fn SwapOutMem() -> Result<i64> {
             );
         }
     } else if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
+        MEM_MANAGER.lock().checkpointGPUContext();
         MEM_MANAGER.lock().offloadGPUMem();
         MEM_MANAGER.lock().offloadGPUFatbin();
-        MEM_MANAGER.lock().offloadGPUContext();
         // totalSize = MEM_MANAGER.lock().gpuManager.currentTotalMem.clone() as usize;
     }
     // error!("total mem is: {}, SwapOutMem time{:?}", totalSize, now.elapsed());
