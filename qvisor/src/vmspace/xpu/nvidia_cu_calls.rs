@@ -153,6 +153,10 @@ pub fn CuModuleUnload(parameters: &ProxyParameters) -> Result<u32> {
 pub fn CuLaunchKernel(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CuLaunchKernel");
     let info = unsafe { &*(parameters.para1 as *const u8 as *const CuLaunchKernelInfo) };
+    let stream = match STREAMS.lock().get(&info.hStream) {
+        Some(s)=> s.clone(),
+        None => 0,
+    };
 
     let ret: CUresult = unsafe {
         // cuda_driver_sys::
@@ -165,7 +169,7 @@ pub fn CuLaunchKernel(parameters: &ProxyParameters) -> Result<u32> {
             info.blockDimY,
             info.blockDimZ,
             info.sharedMemBytes as u32,
-            info.hStream as *mut CUstream_st,
+            stream as *mut CUstream_st,
             info.kernelParams as *mut *mut ::std::os::raw::c_void,
             0 as *mut *mut ::std::os::raw::c_void,
         )
