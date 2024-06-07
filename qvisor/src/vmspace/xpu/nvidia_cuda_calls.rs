@@ -663,6 +663,10 @@ pub fn CudaLaunchKernel(parameters: &ProxyParameters) -> Result<u32> {
             0
         }
     };
+    let stream = match STREAMS.lock().get(&info.stream) {
+        Some(s)=> s.clone(),
+        None => 0,
+    };
 
     let ret: CUresult = unsafe {
         cuLaunchKernel(
@@ -674,7 +678,7 @@ pub fn CudaLaunchKernel(parameters: &ProxyParameters) -> Result<u32> {
             info.blockDim.y,
             info.blockDim.z,
             info.sharedMem as u32,
-            info.stream as *mut CUstream_st,
+            stream as *mut CUstream_st,
             info.args as *mut *mut c_void,
             0 as *mut *mut c_void,
         )
@@ -690,7 +694,11 @@ pub fn CudaLaunchKernel(parameters: &ProxyParameters) -> Result<u32> {
 }
 pub fn CudaStreamSynchronize(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: cudaStreamSynchronize");
-    let ret = unsafe { cudaStreamSynchronize(parameters.para1 as cudaStream_t) };
+    let stream = match STREAMS.lock().get(&parameters.para1) {
+        Some(s)=> s.clone(),
+        None => 0,
+    };
+    let ret = unsafe { cudaStreamSynchronize(stream as cudaStream_t) };
     if ret as u32 != 0 {
         error!(
             "nvidia.rs: error caused by cudaStreamSynchronize: {}",
@@ -702,9 +710,9 @@ pub fn CudaStreamSynchronize(parameters: &ProxyParameters) -> Result<u32> {
 }
 pub fn CudaStreamCreate(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: cudaStreamCreate");
-    let mut s: cudaStream_t = unsafe { *(parameters.para1 as *mut u64) as cudaStream_t };
+    let mut stream: u64 = 0;
 
-    let ret = unsafe { cudaStreamCreate(&mut s) };
+    let ret = unsafe { cudaStreamCreate(&mut stream as *mut _ as u64) };
     if ret as u32 != 0 {
         error!(
             "nvidia.rs: error caused by cudaStreamCreate: {}",
@@ -712,16 +720,16 @@ pub fn CudaStreamCreate(parameters: &ProxyParameters) -> Result<u32> {
         );
     }
 
-    unsafe { *(parameters.para1 as *mut u64) = s as u64 };
+    unsafe { *(parameters.para1 as *mut u64) = stream as u64 };
+    STREAMS.lock().insert(stream, stream);
     return Ok(ret as u32);
 }
 
 pub fn CudaStreamCreateWithFlags(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: cudaStreamCreateWithFlags");
-    let mut stream: cudaStream_t =
-        unsafe { *(parameters.para1 as *mut u64) as cudaStream_t };
+    let mut stream: u64 = 0;
 
-    let ret = unsafe { cudaStreamCreateWithFlags(&mut stream, parameters.para2 as u32) };
+    let ret = unsafe { cudaStreamCreateWithFlags(&mut stream as *mut _ as u64, parameters.para2 as u32) };
     if ret as u32 != 0 {
         error!(
             "nvidia.rs: error caused by cudaStreamCreateWithFlags: {}",
@@ -730,16 +738,16 @@ pub fn CudaStreamCreateWithFlags(parameters: &ProxyParameters) -> Result<u32> {
     }
 
     unsafe { *(parameters.para1 as *mut u64) = stream as u64 };
+    STREAMS.lock().insert(stream, stream);
     return Ok(ret as u32);
 }
 pub fn CudaStreamCreateWithPriority(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CudaStreamCreateWithPriority");
-    let mut stream: cudaStream_t =
-        unsafe { *(parameters.para1 as *mut u64) as cudaStream_t };
+    let mut stream: u64 = 0;
 
     let ret = unsafe {
         cudaStreamCreateWithPriority(
-            &mut stream,
+            &mut stream as *mut _ as u64,
             parameters.para2 as u32,
             parameters.para3 as i32,
         )
@@ -752,6 +760,7 @@ pub fn CudaStreamCreateWithPriority(parameters: &ProxyParameters) -> Result<u32>
     }
 
     unsafe { *(parameters.para1 as *mut u64) = stream as u64 };
+    STREAMS.lock().insert(stream, stream);
     return Ok(ret as u32);
 }
 pub fn CudaStreamDestroy(parameters: &ProxyParameters) -> Result<u32> {
@@ -764,13 +773,18 @@ pub fn CudaStreamDestroy(parameters: &ProxyParameters) -> Result<u32> {
         );
     }
 
+    STREAMS.lock().remove(&(parameters.para1 as u64));
     return Ok(ret as u32);
 }
 pub fn CudaStreamGetFlags(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CudaStreamGetFlags");
+    let stream = match STREAMS.lock().get(&parameters.para1) {
+        Some(s)=> s.clone(),
+        None => 0,
+    };
     let mut flags: u32 = 0;
 
-    let ret = unsafe { cudaStreamGetFlags(parameters.para1 as u64, &mut flags) };
+    let ret = unsafe { cudaStreamGetFlags(stream, &mut flags) };
     if ret as u32 != 0 {
         error!(
             "nvidia.rs: error caused by cudaStreamGetFlags: {}",
@@ -783,10 +797,14 @@ pub fn CudaStreamGetFlags(parameters: &ProxyParameters) -> Result<u32> {
 }
 pub fn CudaStreamGetPriority(parameters: &ProxyParameters) -> Result<u32> {
     // error!("nvidia.rs: CudaStreamGetPriority");
+    let stream = match STREAMS.lock().get(&parameters.para1) {
+        Some(s)=> s.clone(),
+        None => 0,
+    };
     let mut priority: i32 = 0;
 
     let ret =
-        unsafe { cudaStreamGetPriority(parameters.para1 as u64, &mut priority) };
+        unsafe { cudaStreamGetPriority(stream, &mut priority) };
     if ret as u32 != 0 {
         error!(
             "nvidia.rs: error caused by cudaStreamGetPriority: {}",
@@ -799,11 +817,15 @@ pub fn CudaStreamGetPriority(parameters: &ProxyParameters) -> Result<u32> {
 }
 pub fn CudaStreamIsCapturing(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: cudaStreamIsCapturing");
+    let stream = match STREAMS.lock().get(&parameters.para1) {
+        Some(s)=> s.clone(),
+        None => 0,
+    };
     let mut captureStatus: cudaStreamCaptureStatus =
         unsafe { *(parameters.para2 as *mut _) };
 
     let ret = unsafe {
-        cudaStreamIsCapturing(parameters.para1 as cudaStream_t, &mut captureStatus)
+        cudaStreamIsCapturing(stream as cudaStream_t, &mut captureStatus)
     };
     if ret as u32 != 0 {
         error!(
@@ -817,7 +839,11 @@ pub fn CudaStreamIsCapturing(parameters: &ProxyParameters) -> Result<u32> {
 }
 pub fn CudaStreamQuery(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: cudaStreamQuery");
-    let ret = unsafe { cudaStreamQuery(parameters.para1 as cudaStream_t) };
+    let stream = match STREAMS.lock().get(&parameters.para1) {
+        Some(s)=> s.clone(),
+        None => 0,
+    };
+    let ret = unsafe { cudaStreamQuery(stream as cudaStream_t) };
     if ret as u32 != 0 {
         error!("nvidia.rs: error caused by cudaStreamQuery: {}", ret as u32);
     }
@@ -826,9 +852,13 @@ pub fn CudaStreamQuery(parameters: &ProxyParameters) -> Result<u32> {
 }
 pub fn CudaStreamWaitEvent(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: cudaStreamWaitEvent");
+    let stream = match STREAMS.lock().get(&parameters.para1) {
+        Some(s)=> s.clone(),
+        None => 0,
+    };
     let ret = unsafe {
         cudaStreamWaitEvent(
-            parameters.para1 as cudaStream_t,
+            stream as cudaStream_t,
             parameters.para2 as cudaEvent_t,
             parameters.para3 as c_uint,
         )
@@ -1153,9 +1183,13 @@ pub fn CudaFuncSetAttribute(parameters: &ProxyParameters) -> Result<u32> {
 }
 pub fn CudaFuncSetCacheConfig(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CudaFuncSetCacheConfig");
+    let dev_func = match FUNCTIONS.lock().get(&parameters.para1) {
+        Some(func) => func.clone(),
+        None => 0,
+    };
     let ret = unsafe {
         cudaFuncSetCacheConfig(
-            parameters.para1 as *const c_void,
+            dev_func as u64,
             *(&parameters.para2 as *const _ as *const cudaFuncCache),
         )
     };
@@ -1170,9 +1204,13 @@ pub fn CudaFuncSetCacheConfig(parameters: &ProxyParameters) -> Result<u32> {
 }
 pub fn CudaFuncSetSharedMemConfig(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CudaFuncSetSharedMemConfig");
+    let dev_func = match FUNCTIONS.lock().get(&parameters.para1) {
+        Some(func) => func.clone(),
+        None => 0,
+    };
     let ret = unsafe {
         cudaFuncSetSharedMemConfig(
-            parameters.para1 as *const c_void,
+            dev_func,
             *(&parameters.para2 as *const _ as *const cudaSharedMemConfig),
         )
     };
@@ -1215,12 +1253,16 @@ pub fn CudaMemset(parameters: &ProxyParameters) -> Result<u32> {
 }
 pub fn CudaMemsetAsync(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: cudaMemsetAsync");
+    let stream = match STREAMS.lock().get(&parameters.para4) {
+        Some(s)=> s.clone(),
+        None => 0,
+    };
     let ret = unsafe {
         cudaMemsetAsync(
             parameters.para1 as *const c_void,
             parameters.para2 as c_int,
             parameters.para3 as usize,
-            parameters.para4 as cudaStream_t,
+            stream as cudaStream_t,
         )
     };
     if ret as u32 != 0 {
@@ -1412,7 +1454,10 @@ pub fn CudaMemcpyAsync(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: cudaMemcpyAsync");
     //error!("nvidia.rs: CudaMemcpy: count:{}, len:{}", parameters.para4 as usize, parameters.para3 as usize);
     let kind = parameters.para5;
-    let stream = parameters.para6 as cudaStream_t;
+    let stream = match STREAMS.lock().get(&parameters.para6) {
+        Some(s)=> s.clone(),
+        None => 0,
+    };
     match kind {
         CUDA_MEMCPY_HOST_TO_HOST => todo!(),
         CUDA_MEMCPY_HOST_TO_DEVICE => {

@@ -324,7 +324,7 @@ impl MemoryManager {
                 let hptr = self.cpuManager.reservedStartAddr + self.cpuManager.usedLen;
                 let dptr = self.gpuManager.memAddrVec[idx];
                 let cpySize = self.gpuManager.memLenVec[idx];
-                let resCpy = unsafe { cudaMemcpyAsync(hptr, dptr, cpySize as u64, CUDA_MEMCPY_DEVICE_TO_HOST, 0 as cudaStream_t)};
+                let resCpy = unsafe { cudaMemcpyAsync(hptr, dptr, cpySize as u64, CUDA_MEMCPY_DEVICE_TO_HOST, 0)};
                 if resCpy != 0 {
                     error!("cuda_mem_manager.rs: error caused by cudaMemcpyAsync D2H: {}", resCpy as u32);
                 } else {
@@ -351,7 +351,7 @@ impl MemoryManager {
             };
             
             // error!("memcpy {:x}->{:x}, size {:x}", hptr.clone(), dptr.clone(), cpySize.clone());
-            let resCpy = unsafe { cudaMemcpyAsync(dptr, hptr, cpySize as u64, CUDA_MEMCPY_HOST_TO_DEVICE, 0 as cudaStream_t)};
+            let resCpy = unsafe { cudaMemcpyAsync(dptr, hptr, cpySize as u64, CUDA_MEMCPY_HOST_TO_DEVICE, 0)};
             if resCpy != 0 {
                 error!("cuda_mem_manager.rs: error caused by cudaMemcpyAsync H2D: {}", resCpy as u32);
             }
@@ -643,14 +643,14 @@ impl CtxManager {
             let mut stream: u64 = 0;
             match self.streamStatus[i].streamType {
                 StreamType::None => {
-                    let ret = unsafe { cudaStreamCreate(&mut stream as *mut _ as *mut cudaStream_t) };
+                    let ret = unsafe { cudaStreamCreate(&mut stream as *mut _ as u64) };
                     if ret as u32 != 0 {
                         error!("cuda_mem_manager.rs: error caused by restoreStreamStatus(cudaStreamCreate): {}", ret as u32);
                     }
                 },
                 StreamType::Flag => {
                     let ret = unsafe { 
-                        cudaStreamCreateWithFlags(&mut stream as *mut _ as *mut cudaStream_t, self.streamStatus[i].flag)
+                        cudaStreamCreateWithFlags(&mut stream as *mut _ as u64, self.streamStatus[i].flag)
                     };
                     if ret as u32 != 0 {
                         error!("cuda_mem_manager.rs: error caused by restoreStreamStatus(cudaStreamCreateWithFlags): {}", ret as u32);
@@ -658,7 +658,7 @@ impl CtxManager {
                 },
                 StreamType::Priority => {
                     let ret = unsafe { 
-                        cudaStreamCreateWithPriority(&mut stream as *mut _ as *mut cudaStream_t, self.streamStatus[i].flag, self.streamStatus[i].priority)
+                        cudaStreamCreateWithPriority(&mut stream as *mut _ as u64, self.streamStatus[i].flag, self.streamStatus[i].priority)
                     };
                     if ret as u32 != 0 {
                         error!("cuda_mem_manager.rs: error caused by restoreStreamStatus(cudaStreamCreateWithPriority): {}", ret as u32);

@@ -159,7 +159,7 @@ extern "C" {
     pub fn cudaDeviceSynchronize() -> cudaError_t;
     pub fn cudaGetLastError() -> cudaError_t;
     pub fn cudaGetDeviceProperties(prop: *mut cudaDeviceProp, device: c_int) -> cudaError_t;
-    pub fn cudaMemcpyAsync(dst: u64, src: u64, count: u64, kind: u64, stream: cudaStream_t) -> u32;
+    pub fn cudaMemcpyAsync(dst: u64, src: u64, count: u64, kind: u64, stream: u64) -> u32;
     pub fn cudaHostAlloc(pHost: u64, size: usize, flags: u32) -> u32;
     pub fn cudaHostRegister(ptr: u64, size: usize, flags: u32) -> cudaError_t;
     pub fn cudaMallocManaged(devPtr: u64, size: usize, flags: u32) -> cudaError_t;
@@ -200,10 +200,10 @@ extern "C" {
     pub fn cudaDeviceReset() -> cudaError_t;
 
     pub fn cudaStreamSynchronize(stream: cudaStream_t) -> cudaError_t;
-    pub fn cudaStreamCreate(pStream: *mut cudaStream_t) -> cudaError_t;
-    pub fn cudaStreamCreateWithFlags(pStream: *mut cudaStream_t, flags: c_uint) -> cudaError_t;
+    pub fn cudaStreamCreate(pStream: u64) -> cudaError_t;
+    pub fn cudaStreamCreateWithFlags(pStream: u64, flags: c_uint) -> cudaError_t;
     pub fn cudaStreamCreateWithPriority(
-        pStream: *mut cudaStream_t,
+        pStream: u64,
         flags: c_uint,
         priority: c_int,
     ) -> cudaError_t;
@@ -231,9 +231,9 @@ extern "C" {
         attr: cudaFuncAttribute,
         value: c_int,
     ) -> cudaError_t;
-    pub fn cudaFuncSetCacheConfig(func: *const c_void, cacheConfig: cudaFuncCache) -> cudaError_t;
+    pub fn cudaFuncSetCacheConfig(func: u64, cacheConfig: cudaFuncCache) -> cudaError_t;
     pub fn cudaFuncSetSharedMemConfig(
-        func: *const c_void,
+        func: u64,
         config: cudaSharedMemConfig,
     ) -> cudaError_t;
 

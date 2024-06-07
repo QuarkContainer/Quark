@@ -11,6 +11,8 @@ use cuda11_cublasLt_sys::{
 use cuda_runtime_sys::cudaStream_t;
 use rcublas_sys::cublasHandle_t;
 
+use super::cuda::BLASHANDLE;
+
 pub fn CublasCreateV2(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasCreateV2");
     let mut handle: u64 = 0;
@@ -21,11 +23,16 @@ pub fn CublasCreateV2(parameters: &ProxyParameters) -> Result<u32> {
     }
 
     unsafe { *(parameters.para1 as *mut u64) = handle };
+    BLASHANDLE.lock().insert(handle, handle);
     return Ok(ret as u32);
 }
 pub fn CublasDestroyV2(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasDestroyV2");
-    let ret = unsafe { cublasDestroy_v2(parameters.para1 as cublasHandle_t) };
+    let handle = match BLASHANDLE.lock().get(&parameters.para1) {
+        Some(handle)=> handle.clone(),
+        None => 0,
+    };
+    let ret = unsafe { cublasDestroy_v2(handle as cublasHandle_t) };
     if ret as u32 != 0 {
         error!(
             "nvidia.rs: error caused by cublasDestroy_v2: {}",
@@ -33,14 +40,23 @@ pub fn CublasDestroyV2(parameters: &ProxyParameters) -> Result<u32> {
         );
     }
 
+    BLASHANDLE.lock().remove(&parameters.para1);
     return Ok(ret as u32);
 }
 pub fn CublasSetStreamV2(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasSetStreamV2");
+    let stream = match STREAMS.lock().get(&parameters.para2) {
+        Some(s)=> s.clone(),
+        None => 0,
+    };
+    let handle = match BLASHANDLE.lock().get(&parameters.para1) {
+        Some(handle)=> handle.clone(),
+        None => 0,
+    };
     let ret = unsafe {
         cublasSetStream_v2(
-            parameters.para1 as cublasHandle_t,
-            parameters.para2 as u64,
+            handle as cublasHandle_t,
+            stream,
         )
     };
     if ret as u32 != 0 {
@@ -54,9 +70,13 @@ pub fn CublasSetStreamV2(parameters: &ProxyParameters) -> Result<u32> {
 }
 pub fn CublasSetWorkspaceV2(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasSetWorkspaceV2");
+    let handle = match BLASHANDLE.lock().get(&parameters.para1) {
+        Some(handle)=> handle.clone(),
+        None => 0,
+    };
     let ret = unsafe {
         cublasSetWorkspace_v2(
-            parameters.para1 as cublasHandle_t,
+            handle as cublasHandle_t,
             parameters.para2 as u64,
             parameters.para3 as usize,
         )
@@ -72,8 +92,12 @@ pub fn CublasSetWorkspaceV2(parameters: &ProxyParameters) -> Result<u32> {
 }
 pub fn CublasSetMathMode(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasSetMathMode");
+    let handle = match BLASHANDLE.lock().get(&parameters.para1) {
+        Some(handle)=> handle.clone(),
+        None => 0,
+    };
     let ret = unsafe {
-        cublasSetMathMode(parameters.para1 as cublasHandle_t, parameters.para2 as u32)
+        cublasSetMathMode(handle as cublasHandle_t, parameters.para2 as u32)
     };
     if ret as u32 != 0 {
         error!(
@@ -88,12 +112,16 @@ pub fn CublasSgemmStridedBatched(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasSgemmStridedBatched");
     let info =
         unsafe { *(parameters.para1 as *const u8 as *const SgemmStridedBatchedInfo) };
+    let handle = match BLASHANDLE.lock().get(&info.handle) {
+        Some(handle)=> handle.clone(),
+        None => 0,
+    };
     let alpha = unsafe { *(parameters.para2 as *const f32) };
     let beta = unsafe { *(parameters.para3 as *const f32) };
 
     let ret = unsafe {
         cublasSgemmStridedBatched(
-            info.handle as cublasHandle_t,
+            handle as cublasHandle_t,
             info.transa,
             info.transb,
             info.m,
@@ -126,11 +154,15 @@ pub fn CublasLtMatmul(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasLtMatmul");
     let info = unsafe { *(parameters.para1 as *const u8 as *const CublasLtMatmulInfo) };
 
+    let handle = match BLASHANDLE.lock().get(&info.lightHandle) {
+        Some(handle)=> handle.clone(),
+        None => 0,
+    };
     let alpha = unsafe { *(parameters.para2 as *const f64) };
     let beta = unsafe { *(parameters.para3 as *const f64) };
     let ret = unsafe {
         cublasLtMatmul(
-            info.lightHandle as cublasLtHandle_t,
+            handle as cublasLtHandle_t,
             info.computeDesc as cublasLtMatmulDesc_t,
             &alpha,
             info.A,
@@ -159,6 +191,10 @@ pub fn CublasLtMatmulAlgoGetHeuristic(parameters: &ProxyParameters) -> Result<u3
     let info = unsafe {
         *(parameters.para1 as *const u8 as *const CublasLtMatmulAlgoGetHeuristicInfo)
     };
+    let handle = match BLASHANDLE.lock().get(&info.lightHandle) {
+        Some(handle)=> handle.clone(),
+        None => 0,
+    };
     let mut heuristicResultsArray: Vec<cublasLtMatmulHeuristicResult_t> =
         Vec::with_capacity(info.requestedAlgoCount as usize);
     unsafe {
@@ -168,7 +204,7 @@ pub fn CublasLtMatmulAlgoGetHeuristic(parameters: &ProxyParameters) -> Result<u3
 
     let ret = unsafe {
         cublasLtMatmulAlgoGetHeuristic(
-            info.lightHandle as cublasLtHandle_t,
+            handle as cublasLtHandle_t,
             info.operationDesc as cublasLtMatmulDesc_t,
             info.Adesc as cublasLtMatrixLayout_t,
             info.Bdesc as cublasLtMatrixLayout_t,
@@ -199,8 +235,12 @@ pub fn CublasLtMatmulAlgoGetHeuristic(parameters: &ProxyParameters) -> Result<u3
 pub fn CublasGetMathMode(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasGetMathMode");
     let mut mode: u32 = 0;
+    let handle = match BLASHANDLE.lock().get(&parameters.para1) {
+        Some(handle)=> handle.clone(),
+        None => 0,
+    };
 
-    let ret = unsafe { cublasGetMathMode(parameters.para1 as u64, &mut mode) };
+    let ret = unsafe { cublasGetMathMode(handle as u64, &mut mode) };
     if ret as u32 != 0 {
         error!(
             "nvidia.rs: error caused by cublasGetMathMode: {}",
@@ -215,12 +255,17 @@ pub fn CublasGetMathMode(parameters: &ProxyParameters) -> Result<u32> {
 pub fn CublasSgemmV2(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasSgemm_v2");
     let info = unsafe { *(parameters.para1 as *const u8 as *const CublasSgemmV2Info) };
+    let handle = match BLASHANDLE.lock().get(&info.handle) {
+        Some(handle)=> handle.clone(),
+        None => 0,
+    };
+
     let alpha = unsafe { *(parameters.para2 as *const f32) };
     let beta = unsafe { *(parameters.para3 as *const f32) };
 
     let ret = unsafe {
         cublasSgemm_v2(
-            info.handle as cublasHandle_t,
+            handle as cublasHandle_t,
             info.transa,
             info.transb,
             info.m,
@@ -244,13 +289,17 @@ pub fn CublasSgemmV2(parameters: &ProxyParameters) -> Result<u32> {
 }
 pub fn CublasGemmEx(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasSgemm_v2");
+    let handle = match BLASHANDLE.lock().get(&info.handle) {
+        Some(handle)=> handle.clone(),
+        None => 0,
+    };
     let info = unsafe { *(parameters.para1 as *const u8 as *const GemmExInfo) };
     let alpha = unsafe { *(parameters.para2 as *const f32) };
     let beta = unsafe { *(parameters.para3 as *const f32) };
 
     let ret = unsafe {
         cublasGemmEx(
-            info.handle as cublasHandle_t,
+            handle as cublasHandle_t,
             info.transa,
             info.transb,
             info.m,
@@ -281,12 +330,16 @@ pub fn CublasGemmStridedBatchedEx(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasSgemm_v2");
     let info =
         unsafe { *(parameters.para1 as *const u8 as *const GemmStridedBatchedExInfo) };
+    let handle = match BLASHANDLE.lock().get(&info.handle) {
+        Some(handle)=> handle.clone(),
+        None => 0,
+    };
     let alpha = unsafe { *(parameters.para2 as *const f32) };
     let beta = unsafe { *(parameters.para3 as *const f32) };
 
     let ret = unsafe {
         cublasGemmStridedBatchedEx(
-            info.handle as cublasHandle_t,
+            handle as cublasHandle_t,
             info.transa,
             info.transb,
             info.m,
