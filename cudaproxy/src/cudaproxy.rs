@@ -802,19 +802,19 @@ pub extern "C" fn cudaLaunchKernel(
 //     // };
 // }
 
-#[no_mangle]
-pub extern "C" fn cudaHostAlloc(dev_ptr: *mut *mut c_void, size: usize, flags: u32) -> usize {
-    //println!("Hijacked cudaMalloc");
-    let ret = cudaSyscall4(
-        SYS_PROXY,
-        ProxyCommand::CudaHostAlloc as usize,
-        dev_ptr as *const _ as usize,
-        size,
-        flags as usize,
-    );
-    //unsafe { println!("cudaHostAlloc ptr{:x}, size: {}, flags {:x}", *(dev_ptr as *mut _ as *mut u64) as u64, size, flags); }
-    return ret;
-}
+// #[no_mangle]
+// pub extern "C" fn cudaHostAlloc(dev_ptr: *mut *mut c_void, size: usize, flags: u32) -> usize {
+//     //println!("Hijacked cudaMalloc");
+//     let ret = cudaSyscall4(
+//         SYS_PROXY,
+//         ProxyCommand::CudaHostAlloc as usize,
+//         dev_ptr as *const _ as usize,
+//         size,
+//         flags as usize,
+//     );
+//     //unsafe { println!("cudaHostAlloc ptr{:x}, size: {}, flags {:x}", *(dev_ptr as *mut _ as *mut u64) as u64, size, flags); }
+//     return ret;
+// }
 
 #[no_mangle]
 pub extern "C" fn cudaFreeHost(dev_ptr: *mut c_void) -> usize {

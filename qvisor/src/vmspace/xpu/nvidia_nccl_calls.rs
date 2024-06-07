@@ -155,7 +155,7 @@ pub fn NcclSend(parameters: &ProxyParameters) -> Result<u32> {
     let info = unsafe { *(parameters.para2 as *const u8 as *const NcclSendRecvInfo) };
     let stream = match STREAMS.lock().get(&info.stream) {
         Some(s)=> s.clone(),
-        None => 0,
+        None => panic!(),
     };
     let ret = unsafe { ncclSend(parameters.para1 as *const c_void, info.count as usize, info.datatype, info.peer, info.comm as NcclCommT, stream as cudaStream_t) };
     if ret as u32 != 0 {
@@ -168,7 +168,7 @@ pub fn NcclRecv(parameters: &ProxyParameters) -> Result<u32> {
     let info = unsafe { *(parameters.para2 as *const u8 as *const NcclSendRecvInfo) };
     let stream = match STREAMS.lock().get(&info.stream) {
         Some(s)=> s.clone(),
-        None => 0,
+        None => panic!(),
     };
     let ret = unsafe { ncclRecv(parameters.para1 as *mut c_void, info.count as usize, info.datatype, info.peer, info.comm as NcclCommT, stream as cudaStream_t) };
     if ret as u32 != 0 {
@@ -197,7 +197,7 @@ pub fn NcclAllGather(parameters: &ProxyParameters) -> Result<u32> {
     let info = unsafe { *(parameters.para3 as *const u8 as *const NcclAllGatherReduceInfo) };
     let stream = match STREAMS.lock().get(&info.stream) {
         Some(s)=> s.clone(),
-        None => 0,
+        None => panic!(),
     };
     let ret = unsafe { ncclAllGather(parameters.para1 as *const c_void, parameters.para2 as *mut c_void, info.count as usize, info.datatype, info.comm as NcclCommT, stream as cudaStream_t) };
     if ret as u32 != 0 {
@@ -210,7 +210,7 @@ pub fn NcclAllReduce(parameters: &ProxyParameters) -> Result<u32> {
     let info = unsafe { *(parameters.para3 as *const u8 as *const NcclAllGatherReduceInfo) };
     let stream = match STREAMS.lock().get(&info.stream) {
         Some(s)=> s.clone(),
-        None => 0,
+        None => panic!(),
     };
     let ret = unsafe { ncclAllReduce(parameters.para1 as *const c_void, parameters.para2 as *mut c_void, info.count as usize, info.datatype, info.op, info.comm as NcclCommT, stream as cudaStream_t) };
     if ret as u32 != 0 {
@@ -223,7 +223,7 @@ pub fn NcclReduceScatter(parameters: &ProxyParameters) -> Result<u32> {
     let info = unsafe { *(parameters.para3 as *const u8 as *const NcclAllGatherReduceInfo) };
     let stream = match STREAMS.lock().get(&info.stream) {
         Some(s)=> s.clone(),
-        None => 0,
+        None => panic!(),
     };
     let ret = unsafe { ncclReduceScatter(parameters.para1 as *const c_void, parameters.para2 as *mut c_void, info.count as usize, info.datatype, info.op, info.comm as NcclCommT, stream as cudaStream_t) };
     if ret as u32 != 0 {

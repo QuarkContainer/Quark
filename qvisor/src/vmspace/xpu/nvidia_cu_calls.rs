@@ -125,7 +125,7 @@ pub fn CuModuleGetFunction(parameters: &ProxyParameters) -> Result<u32> {
     let kernelInfo = match KERNEL_INFOS.lock().get(&funcName.to_string()) {
         Some(kernelInformations) => kernelInformations.clone(),
         None => {
-            //error!("No kernel infos found with this funcName : {}",funcName);
+            error!("No kernel infos found with this funcName : {}",funcName);
             Arc::new(KernelInfo::default())
         }
     };
@@ -155,7 +155,7 @@ pub fn CuLaunchKernel(parameters: &ProxyParameters) -> Result<u32> {
     let info = unsafe { &*(parameters.para1 as *const u8 as *const CuLaunchKernelInfo) };
     let stream = match STREAMS.lock().get(&info.hStream) {
         Some(s)=> s.clone(),
-        None => 0,
+        None => panic!(),
     };
 
     let ret: CUresult = unsafe {

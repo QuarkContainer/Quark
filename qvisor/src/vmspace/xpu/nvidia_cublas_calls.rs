@@ -23,15 +23,15 @@ pub fn CublasCreateV2(parameters: &ProxyParameters) -> Result<u32> {
         error!("nvidia.rs: error caused by cublasCreate_v2: {}", ret as u32);
     }
 
-    unsafe { *(parameters.para1 as *mut u64) = handle };
-    BLASHANDLE.lock().insert(handle, handle);
+    unsafe { *(parameters.para1 as *mut u64) = handle.clone() };
+    BLASHANDLE.lock().insert(handle.clone(), handle.clone());
     return Ok(ret as u32);
 }
 pub fn CublasDestroyV2(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasDestroyV2");
     let handle = match BLASHANDLE.lock().get(&parameters.para1) {
         Some(handle)=> handle.clone(),
-        None => 0,
+        None => panic!(),
     };
     let ret = unsafe { cublasDestroy_v2(handle as cublasHandle_t) };
     if ret as u32 != 0 {
@@ -48,11 +48,11 @@ pub fn CublasSetStreamV2(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasSetStreamV2");
     let stream = match STREAMS.lock().get(&parameters.para2) {
         Some(s)=> s.clone(),
-        None => 0,
+        None => panic!(),
     };
     let handle = match BLASHANDLE.lock().get(&parameters.para1) {
         Some(handle)=> handle.clone(),
-        None => 0,
+        None => panic!(),
     };
     let ret = unsafe {
         cublasSetStream_v2(
@@ -73,7 +73,7 @@ pub fn CublasSetWorkspaceV2(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasSetWorkspaceV2");
     let handle = match BLASHANDLE.lock().get(&parameters.para1) {
         Some(handle)=> handle.clone(),
-        None => 0,
+        None => panic!(),
     };
     let ret = unsafe {
         cublasSetWorkspace_v2(
@@ -95,7 +95,7 @@ pub fn CublasSetMathMode(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasSetMathMode");
     let handle = match BLASHANDLE.lock().get(&parameters.para1) {
         Some(handle)=> handle.clone(),
-        None => 0,
+        None => panic!(),
     };
     let ret = unsafe {
         cublasSetMathMode(handle as cublasHandle_t, parameters.para2 as u32)
@@ -194,7 +194,7 @@ pub fn CublasLtMatmulAlgoGetHeuristic(parameters: &ProxyParameters) -> Result<u3
     };
     let handle = match BLASHANDLE.lock().get(&info.lightHandle) {
         Some(handle)=> handle.clone(),
-        None => 0,
+        None => panic!(),
     };
     let mut heuristicResultsArray: Vec<cublasLtMatmulHeuristicResult_t> =
         Vec::with_capacity(info.requestedAlgoCount as usize);
@@ -238,7 +238,7 @@ pub fn CublasGetMathMode(parameters: &ProxyParameters) -> Result<u32> {
     let mut mode: u32 = 0;
     let handle = match BLASHANDLE.lock().get(&parameters.para1) {
         Some(handle)=> handle.clone(),
-        None => 0,
+        None => panic!(),
     };
 
     let ret = unsafe { cublasGetMathMode(handle as u64, &mut mode) };
@@ -258,7 +258,7 @@ pub fn CublasSgemmV2(parameters: &ProxyParameters) -> Result<u32> {
     let info = unsafe { *(parameters.para1 as *const u8 as *const CublasSgemmV2Info) };
     let handle = match BLASHANDLE.lock().get(&info.handle) {
         Some(handle)=> handle.clone(),
-        None => 0,
+        None => panic!(),
     };
 
     let alpha = unsafe { *(parameters.para2 as *const f32) };
@@ -293,7 +293,7 @@ pub fn CublasGemmEx(parameters: &ProxyParameters) -> Result<u32> {
     let info = unsafe { *(parameters.para1 as *const u8 as *const GemmExInfo) };
     let handle = match BLASHANDLE.lock().get(&info.handle) {
         Some(handle)=> handle.clone(),
-        None => 0,
+        None => panic!(),
     };
     let alpha = unsafe { *(parameters.para2 as *const f32) };
     let beta = unsafe { *(parameters.para3 as *const f32) };
@@ -333,7 +333,7 @@ pub fn CublasGemmStridedBatchedEx(parameters: &ProxyParameters) -> Result<u32> {
         unsafe { *(parameters.para1 as *const u8 as *const GemmStridedBatchedExInfo) };
     let handle = match BLASHANDLE.lock().get(&info.handle) {
         Some(handle)=> handle.clone(),
-        None => 0,
+        None => panic!(),
     };
     let alpha = unsafe { *(parameters.para2 as *const f32) };
     let beta = unsafe { *(parameters.para3 as *const f32) };
