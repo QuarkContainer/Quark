@@ -14,10 +14,13 @@ pub const ONE_GB: u64 = 1 << 30; //0x40_000_000;
 pub const VADDR_START_ADDR: u64 = 7 * ONE_TB;
 pub const MAX_MEM_RESERVE_IN_BYTES: u64 = 256 * ONE_GB;
 
+use rcublas_sys::cublasHandle_t;
 pub use u32 as CUmemLocationType;
 pub use u32 as CUmemAllocationHandleType;
 pub use u32 as CUmemAllocationType;
 pub use u32 as CUmemAccess_flags;
+
+use super::cuda::{BLASHANDLE, STREAMS};
 
 
 #[repr(C)]
@@ -79,13 +82,18 @@ pub struct DeviceStatus {
     deviceFlags: u32,
 }
 
-#[derive(Debug, Default)]
-#[repr(u64)]
+#[repr(u32)]
+#[derive(Debug)]
 pub enum StreamType {
     None,
     Priority,
     Flag,
 }
+
+impl Default for StreamType {
+    fn default() -> Self { StreamType::None }
+}
+
 #[derive(Debug, Default)]
 pub struct StreamStatus {
     streamType: StreamType,
@@ -364,7 +372,7 @@ impl MemoryManager {
         //need new ctx manager, cannot reuse
         self.ctxManager = CtxManager::new();
         self.ctxManager.checkpointCtx();
-        cuDevicePrimaryCtxRelease(0); // should release or no?
+        //cuDevicePrimaryCtxRelease(0); // should release or no?
     }
 
     pub fn restoreGPUContext(&mut self) {
@@ -487,15 +495,15 @@ impl CtxManager {
     }  
 
     pub fn getStreamStatus(&mut self) {
-        for (key, value) in STREAMS.lock().iter() {
+        for (_, value) in STREAMS.lock().iter() {
             let mut flag: u32 = 0;
-            let ret = unsafe { cudaStreamGetFlags(value as cudaStream_t, &mut flags) };
+            let ret = unsafe { cudaStreamGetFlags((*value).clone(), &mut flag) };
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cudaStreamGetFlags): {}", ret as u32);
             }
 
             let mut priority: i32 = 0;
-            let ret = unsafe { cudaStreamGetPriority (value as cudaStream_t, &mut priority) };
+            let ret = unsafe { cudaStreamGetPriority ((*value).clone(), &mut priority) };
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cudaStreamGetPriority): {}", ret as u32);
             }
@@ -516,15 +524,15 @@ impl CtxManager {
     }
 
     pub fn getBlasStatus(&mut self) {
-        for (key, value) in BLASHANDLE.lock().iter() {
+        for (_, value) in BLASHANDLE.lock().iter() {
             let mut mode: u32 = 0;
-            let ret = unsafe { cublasGetMathMode(value, &mut mode) };
+            let ret = unsafe { cublasGetMathMode((*value).clone(), &mut mode) };
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cublasGetMathMode): {}", ret as u32);
             }
 
             let mut stream: u64 = 0;
-            let ret = unsafe { cublasGetStream(value, &mut stream) };
+            let ret = unsafe { cublasGetStream((*value).clone(), &mut stream) };
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cublasGetStream): {}", ret as u32);
             }
@@ -536,14 +544,14 @@ impl CtxManager {
                 },
                 None => {
                     error!("impossible handle");
-                    panic();
+                    panic!();
                 },
             }
         }
     }
 
     pub fn getFuncStatus(&mut self) {
-        for (key, func) in FUNCTIONS.lock().iter() {
+        for (_, func) in FUNCTIONS.lock().iter() {
             let mut maxDynamicSharedSizeBytes: i32 = 0;
             let mut preferedSharedMemoryCarveout:i32 = 0;
             let mut requiredClusterWidth: i32 = 0;
@@ -551,37 +559,37 @@ impl CtxManager {
             let mut requiredClusterDepth: i32 = 0;
             let mut nonPortableClusterSizeAllowed: i32 = 0;
             let mut clusterSchedulingPolicyPreference: i32 = 0;
-            let ret = unsafe { cuFuncGetAttribute(&mut maxDynamicSharedSizeBytes, 8,func) }; //CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES  
+            let ret = unsafe { cuFuncGetAttribute(&mut maxDynamicSharedSizeBytes, 8,func.clone()) }; //CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES  
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cuFuncGetAttribute): {}", ret as u32);
             }
 
-            let ret = unsafe { cuFuncGetAttribute(&mut preferedSharedMemoryCarveout, 9,func) }; //CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT 
+            let ret = unsafe { cuFuncGetAttribute(&mut preferedSharedMemoryCarveout, 9,func.clone()) }; //CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT 
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cuFuncGetAttribute): {}", ret as u32);
             }
 
-            let ret = unsafe { cuFuncGetAttribute(&mut requiredClusterWidth, 11,func) }; //CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_WIDTH  
+            let ret = unsafe { cuFuncGetAttribute(&mut requiredClusterWidth, 11,func.clone()) }; //CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_WIDTH  
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cuFuncGetAttribute): {}", ret as u32);
             }
 
-            let ret = unsafe { cuFuncGetAttribute(&mut requiredClusterHeight, 12,func) }; //CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_HEIGHT   
+            let ret = unsafe { cuFuncGetAttribute(&mut requiredClusterHeight, 12,func.clone()) }; //CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_HEIGHT   
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cuFuncGetAttribute): {}", ret as u32);
             }
 
-            let ret = unsafe { cuFuncGetAttribute(&mut requiredClusterDepth, 13,func) }; //CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_DEPTH 
+            let ret = unsafe { cuFuncGetAttribute(&mut requiredClusterDepth, 13,func.clone()) }; //CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_DEPTH 
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cuFuncGetAttribute): {}", ret as u32);
             }
 
-            let ret = unsafe { cuFuncGetAttribute(&mut requiredClusterDepth, 14,func) }; //CU_FUNC_ATTRIBUTE_NON_PORTABLE_CLUSTER_SIZE_ALLOWED  
+            let ret = unsafe { cuFuncGetAttribute(&mut nonPortableClusterSizeAllowed, 14,func.clone()) }; //CU_FUNC_ATTRIBUTE_NON_PORTABLE_CLUSTER_SIZE_ALLOWED  
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cuFuncGetAttribute): {}", ret as u32);
             }
 
-            let ret = unsafe { cuFuncGetAttribute(&mut requiredClusterDepth, 15,func) }; //CU_FUNC_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE   
+            let ret = unsafe { cuFuncGetAttribute(&mut clusterSchedulingPolicyPreference, 15,func.clone()) }; //CU_FUNC_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE   
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cuFuncGetAttribute): {}", ret as u32);
             }
@@ -594,7 +602,7 @@ impl CtxManager {
                 nonPortableClusterSizeAllowed: nonPortableClusterSizeAllowed,
                 clusterSchedulingPolicyPreference: clusterSchedulingPolicyPreference,
             };
-            self.funcStatus.push(FuncStatus);
+            self.funcStatus.push(status);
         }
     }
     
@@ -631,24 +639,26 @@ impl CtxManager {
     pub fn restoreStreamStatus(&mut self) {
         let mut i = 0;
         error!("stream status : {:?}", self.streamStatus[0]);
-        for (key, value) in STREAMS.lock().iter_mut() {
+        for (_, value) in STREAMS.lock().iter_mut() {
             let mut stream: u64 = 0;
             match self.streamStatus[i].streamType {
                 StreamType::None => {
-                    let ret = unsafe { cudaStreamCreate(&mut stream) };
+                    let ret = unsafe { cudaStreamCreate(&mut stream as *mut _ as *mut cudaStream_t) };
                     if ret as u32 != 0 {
                         error!("cuda_mem_manager.rs: error caused by restoreStreamStatus(cudaStreamCreate): {}", ret as u32);
                     }
                 },
                 StreamType::Flag => {
-                    let ret = unsafe { cudaStreamCreateWithFlags(&mut stream, self.streamStatus[i].flag) };
+                    let ret = unsafe { 
+                        cudaStreamCreateWithFlags(&mut stream as *mut _ as *mut cudaStream_t, self.streamStatus[i].flag)
+                    };
                     if ret as u32 != 0 {
                         error!("cuda_mem_manager.rs: error caused by restoreStreamStatus(cudaStreamCreateWithFlags): {}", ret as u32);
                     }
                 },
                 StreamType::Priority => {
                     let ret = unsafe { 
-                        cudaStreamCreateWithPriority(&mut stream, self.streamStatus[i].flag, self.streamStatus[i].priority)
+                        cudaStreamCreateWithPriority(&mut stream as *mut _ as *mut cudaStream_t, self.streamStatus[i].flag, self.streamStatus[i].priority)
                     };
                     if ret as u32 != 0 {
                         error!("cuda_mem_manager.rs: error caused by restoreStreamStatus(cudaStreamCreateWithPriority): {}", ret as u32);
@@ -661,7 +671,7 @@ impl CtxManager {
     }
 
     pub fn restoreCublasStatus(&mut self) {
-        for (key, value) in BLASHANDLE.lock().iter_mut() {
+        for (_, value) in BLASHANDLE.lock().iter_mut() {
             match self.cublasStatus.get(value) {
                 Some(status) => {
                     let mut handle = 0;
@@ -670,17 +680,17 @@ impl CtxManager {
                         error!("cuda_mem_manager.rs: error caused by restoreCublasStatus(cublasCreate_v2): {}", ret as u32);
                     }
 
-                    let ret = unsafe { cublasSetMathMode(handle.clone(), status.mathMode.clone()) };
+                    let ret = unsafe { cublasSetMathMode(handle.clone() as cublasHandle_t, status.mathMode.clone()) };
                     if ret as u32 != 0 {
                         error!("cuda_mem_manager.rs: error caused by restoreCublasStatus(cublasSetMathMode): {}", ret as u32);
                     }
 
-                    let ret = unsafe { cublasSetStream_v2(handle.clone(), status.stream.clone()) };
+                    let ret = unsafe { cublasSetStream_v2(handle.clone() as cublasHandle_t, status.stream.clone()) };
                     if ret as u32 != 0 {
                         error!("cuda_mem_manager.rs: error caused by restoreCtx(cublasGetStream): {}", ret as u32);
                     }
 
-                    let ret = unsafe { cublasSetWorkspace_v2(handle.clone(), status.workspacePtr, status.workspaceSize) };
+                    let ret = unsafe { cublasSetWorkspace_v2(handle.clone() as cublasHandle_t, status.workspacePtr, status.workspaceSize) };
                     if ret as u32 != 0 {
                         error!("cuda_mem_manager.rs: error caused by restoreCtx(cublasGetStream): {}", ret as u32);
                     }
@@ -689,7 +699,7 @@ impl CtxManager {
                 },
                 None => {
                     error!("impossible handle");
-                    panic();
+                    panic!();
                 },
             }
         }
@@ -697,38 +707,38 @@ impl CtxManager {
 
     pub fn restoreFuncStatus(&mut self) {
         let mut i= 0;
-        for (key, func) in FUNCTIONS.lock().iter() {
-            let ret = unsafe { cuFuncSetAttribute(func, 8,self.funcStatus[i].maxDynamicSharedSizeBytes) }; //CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES  
+        for (_, func) in FUNCTIONS.lock().iter_mut() {
+            let ret = unsafe { cuFuncSetAttribute(func.clone(), 8,self.funcStatus[i].maxDynamicSharedSizeBytes) }; //CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES  
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cuFuncGetAttribute): {}", ret as u32);
             }
 
-            let ret = unsafe { cuFuncSetAttribute(func, 9,self.funcStatus[i].preferedSharedMemoryCarveout) }; //CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT 
+            let ret = unsafe { cuFuncSetAttribute(func.clone(), 9,self.funcStatus[i].preferedSharedMemoryCarveout) }; //CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT 
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cuFuncGetAttribute): {}", ret as u32);
             }
 
-            let ret = unsafe { cuFuncSetAttribute(func, 11,self.funcStatus[i].requiredClusterWidth) }; //CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_WIDTH  
+            let ret = unsafe { cuFuncSetAttribute(func.clone(), 11,self.funcStatus[i].requiredClusterWidth) }; //CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_WIDTH  
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cuFuncGetAttribute): {}", ret as u32);
             }
 
-            let ret = unsafe { cuFuncSetAttribute(func, 12,self.funcStatus[i].requiredClusterHeight) }; //CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_HEIGHT   
+            let ret = unsafe { cuFuncSetAttribute(func.clone(), 12,self.funcStatus[i].requiredClusterHeight) }; //CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_HEIGHT   
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cuFuncGetAttribute): {}", ret as u32);
             }
 
-            let ret = unsafe { cuFuncSetAttribute(func, 13,self.funcStatus[i].requiredClusterDepth) }; //CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_DEPTH 
+            let ret = unsafe { cuFuncSetAttribute(func.clone(), 13,self.funcStatus[i].requiredClusterDepth) }; //CU_FUNC_ATTRIBUTE_REQUIRED_CLUSTER_DEPTH 
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cuFuncGetAttribute): {}", ret as u32);
             }
 
-            let ret = unsafe { cuFuncSetAttribute(func, 14,self.funcStatus[i].nonPortableClusterSizeAllowed) }; //CU_FUNC_ATTRIBUTE_NON_PORTABLE_CLUSTER_SIZE_ALLOWED  
+            let ret = unsafe { cuFuncSetAttribute(func.clone(), 14,self.funcStatus[i].nonPortableClusterSizeAllowed) }; //CU_FUNC_ATTRIBUTE_NON_PORTABLE_CLUSTER_SIZE_ALLOWED  
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cuFuncGetAttribute): {}", ret as u32);
             }
 
-            let ret = unsafe { cuFuncSetAttribute(func, 15,self.funcStatus[i].clusterSchedulingPolicyPreference) }; //CU_FUNC_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE   
+            let ret = unsafe { cuFuncSetAttribute(func.clone(), 15,self.funcStatus[i].clusterSchedulingPolicyPreference) }; //CU_FUNC_ATTRIBUTE_CLUSTER_SCHEDULING_POLICY_PREFERENCE   
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cuFuncGetAttribute): {}", ret as u32);
             }
