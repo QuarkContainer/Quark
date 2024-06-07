@@ -392,6 +392,7 @@ pub fn SwapOutMem() -> Result<i64> {
     } else if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
         MEM_MANAGER.lock().offloadGPUMem();
         MEM_MANAGER.lock().offloadGPUFatbin();
+        MEM_MANAGER.lock().offloadGPUContext();
         // totalSize = MEM_MANAGER.lock().gpuManager.currentTotalMem.clone() as usize;
     }
     // error!("total mem is: {}, SwapOutMem time{:?}", totalSize, now.elapsed());
@@ -424,8 +425,10 @@ pub fn SwapInMem() -> Result<i64> {
             );
         }
     } else if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
+        MEM_MANAGER.lock().restoreGPUBasicContext();
         MEM_MANAGER.lock().restoreGPUFatbin();
         MEM_MANAGER.lock().restoreGPUMem();
+        MEM_MANAGER.lock().restoreGPUFullContext();
         // totalSize = MEM_MANAGER.lock().cpuManager.usedLen.clone() as usize;
     }
     // error!("total mem is: {},SwapInMem time:{:?}", totalSize, now.elapsed());

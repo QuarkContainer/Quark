@@ -1,5 +1,6 @@
 use crate::qlib::common::*;
 use crate::qlib::proxy::*;
+use crate::qlib::config::*;
 use crate::xpu::cuda_api::*;
 use std::os::raw::*;
 
@@ -13,6 +14,8 @@ use rcublas_sys::cublasHandle_t;
 
 use super::cuda::BLASHANDLE;
 use super::cuda::STREAMS;
+use crate::nvidia::{MEM_MANAGER};
+use crate::{QUARK_CONFIG};
 
 pub fn CublasCreateV2(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasCreateV2");
@@ -89,6 +92,19 @@ pub fn CublasSetWorkspaceV2(parameters: &ProxyParameters) -> Result<u32> {
         );
     }
 
+    if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
+        match MEM_MANAGER
+            .lock()
+            .ctxManager
+            .cublasStatus
+            .get_mut(&handle) {
+                Some(status) => {
+                    (*status).workspacePtr = parameters.para2.clone();
+                    (*status).workspaceSize = parameters.para3.clone() as usize;
+                },
+                None => panic!(),
+            }
+    }
     return Ok(ret as u32);
 }
 pub fn CublasSetMathMode(parameters: &ProxyParameters) -> Result<u32> {
