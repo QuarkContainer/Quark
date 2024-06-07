@@ -106,8 +106,8 @@ pub struct StreamStatus {
 #[derive(Debug, Default)]
 pub struct CublasStatus {
     mathMode: u32,
-    workspacePtr: u64,
-    workspaceSize: usize,
+    pub workspacePtr: u64,
+    pub workspaceSize: usize,
     stream: u64,
 }
 
@@ -122,6 +122,7 @@ pub struct FuncStatus {
     pub clusterSchedulingPolicyPreference: i32,
 }
 
+#[derive(Debug)]
 pub struct CtxManager {
     pub deviceStatus: DeviceStatus,
     pub streamStatus: Vec<StreamStatus>,
@@ -370,13 +371,27 @@ impl MemoryManager {
     
     pub fn offloadGPUContext(&mut self) {
         //need new ctx manager, cannot reuse
-        self.ctxManager = CtxManager::new();
         self.ctxManager.checkpointCtx();
-        //cuDevicePrimaryCtxRelease(0); // should release or no?
+
+        //release for now
+        let mut dev: i32 = 0;
+        let res = unsafe { cuDeviceGet(&mut dev, self.ctxManager.deviceStatus.currentDev) };
+        if res as u32 != 0 {
+            error!("cuda_mem_manager.rs: error caused by offloadGPUContext(cuDeviceGet): {}", res as u32);
+        }
+        let res = unsafe { cuDevicePrimaryCtxRelease(dev) }; 
+        if res as u32 != 0 {
+            error!("cuda_mem_manager.rs: error caused by offloadGPUContext(cuDevicePrimaryCtxRelease): {}", res as u32);
+        }
     }
 
-    pub fn restoreGPUContext(&mut self) {
-        self.ctxManager.restoreCtx();
+    pub fn restoreGPUBasicContext(&mut self) {
+        self.ctxManager.restoreBasicCtx();
+        
+    }
+    pub fn restoreGPUFullContext(&mut self) {
+        self.ctxManager.restoreFullCtx();
+        self.ctxManager = CtxManager::new();
     }
 }
 
@@ -532,7 +547,7 @@ impl CtxManager {
             }
 
             let mut stream: u64 = 0;
-            let ret = unsafe { cublasGetStream((*value).clone(), &mut stream) };
+            let ret = unsafe { cublasGetStream_v2((*value).clone(), &mut stream) };
             if ret as u32 != 0 {
                 error!("cuda_mem_manager.rs: error caused by restoreCtx(cublasGetStream): {}", ret as u32);
             }
@@ -606,14 +621,16 @@ impl CtxManager {
         }
     }
     
-    pub fn restoreCtx(&mut self) {
+    pub fn restoreBasicCtx(&mut self) {
         // cudaSetDevice
         self.restoreDeviceStatus();
+    }
+
+    pub fn restoreFullCtx(&mut self) {
         self.restoreStreamStatus();
         self.restoreCublasStatus();
         self.restoreFuncStatus()
     }
-
     pub fn restoreDeviceStatus(&mut self) {
         let ret = unsafe { cudaSetDevice(self.deviceStatus.currentDev) };
         if ret as u32 != 0 {

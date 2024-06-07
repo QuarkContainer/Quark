@@ -138,6 +138,7 @@ extern "C" {
     pub fn cuCtxSetCurrent(ctx: u64) -> CUresult;
     pub fn cuDevicePrimaryCtxReset(device: CUdevice) -> CUresult;
     pub fn cuCtxGetApiVersion(ctx: CUcontext, version: *mut u32) -> CUresult;
+    pub fn cuDevicePrimaryCtxRelease(dev: CUdevice) -> CUresult;
 }
 
 #[link(name = "cudart")]
@@ -364,7 +365,7 @@ extern "C" {
         computeType: u32,
         algo: u32,
     ) -> u32;
-    pub fn cublasGetStream(handle: u64, streamId: *mut u64) -> u32;
+    pub fn cublasGetStream_v2(handle: u64, streamId: *mut u64) -> u32;
 }
 
 #[link(name = "cublasLt")]
