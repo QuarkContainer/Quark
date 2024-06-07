@@ -12,6 +12,7 @@ use cuda_runtime_sys::cudaStream_t;
 use rcublas_sys::cublasHandle_t;
 
 use super::cuda::BLASHANDLE;
+use super::cuda::STREAMS;
 
 pub fn CublasCreateV2(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasCreateV2");
@@ -289,11 +290,11 @@ pub fn CublasSgemmV2(parameters: &ProxyParameters) -> Result<u32> {
 }
 pub fn CublasGemmEx(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasSgemm_v2");
+    let info = unsafe { *(parameters.para1 as *const u8 as *const GemmExInfo) };
     let handle = match BLASHANDLE.lock().get(&info.handle) {
         Some(handle)=> handle.clone(),
         None => 0,
     };
-    let info = unsafe { *(parameters.para1 as *const u8 as *const GemmExInfo) };
     let alpha = unsafe { *(parameters.para2 as *const f32) };
     let beta = unsafe { *(parameters.para3 as *const f32) };
 
