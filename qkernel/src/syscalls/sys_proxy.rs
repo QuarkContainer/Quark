@@ -920,7 +920,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
 
         ProxyCommand::CublasCreateV2 => {
-            let mut handle: u64 = unsafe { *(parameters.para1 as *mut _) };
+            let mut handle: u64 = 0;
             parameters.para1 = &mut handle as *mut _ as u64;
 
             let ret = HostSpace::Proxy(cmd, parameters);

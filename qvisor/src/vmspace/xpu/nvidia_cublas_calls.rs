@@ -13,15 +13,14 @@ use rcublas_sys::cublasHandle_t;
 
 pub fn CublasCreateV2(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasCreateV2");
-    let mut handle: cublasHandle_t =
-        unsafe { *(parameters.para1 as *mut u64) as cublasHandle_t };
+    let mut handle: u64 = 0;
 
     let ret = unsafe { cublasCreate_v2(&mut handle) };
     if ret as u32 != 0 {
         error!("nvidia.rs: error caused by cublasCreate_v2: {}", ret as u32);
     }
 
-    unsafe { *(parameters.para1 as *mut u64) = handle as u64 };
+    unsafe { *(parameters.para1 as *mut u64) = handle };
     return Ok(ret as u32);
 }
 pub fn CublasDestroyV2(parameters: &ProxyParameters) -> Result<u32> {
@@ -41,7 +40,7 @@ pub fn CublasSetStreamV2(parameters: &ProxyParameters) -> Result<u32> {
     let ret = unsafe {
         cublasSetStream_v2(
             parameters.para1 as cublasHandle_t,
-            parameters.para2 as cudaStream_t,
+            parameters.para2 as u64,
         )
     };
     if ret as u32 != 0 {
@@ -58,7 +57,7 @@ pub fn CublasSetWorkspaceV2(parameters: &ProxyParameters) -> Result<u32> {
     let ret = unsafe {
         cublasSetWorkspace_v2(
             parameters.para1 as cublasHandle_t,
-            parameters.para2 as *mut c_void,
+            parameters.para2 as u64,
             parameters.para3 as usize,
         )
     };
@@ -201,7 +200,7 @@ pub fn CublasGetMathMode(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CublasGetMathMode");
     let mut mode: u32 = 0;
 
-    let ret = unsafe { cublasGetMathMode(parameters.para1 as cublasHandle_t, &mut mode) };
+    let ret = unsafe { cublasGetMathMode(parameters.para1 as u64, &mut mode) };
     if ret as u32 != 0 {
         error!(
             "nvidia.rs: error caused by cublasGetMathMode: {}",

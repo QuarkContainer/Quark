@@ -100,10 +100,10 @@ extern "C" {
     pub fn cuDevicePrimaryCtxRetain(pctx: *mut CUcontext, dev: CUdevice) -> CUresult;
     pub fn cuFuncGetAttribute(
         pi: *mut c_int,
-        attrib: CUfunction_attribute,
-        hfunc: CUfunction,
+        attrib: u32,
+        hfunc: u64,
     ) -> CUresult;
-    pub fn cuFuncSetAttribute(hfunc: CUfunction, attrib: u32, value: i32) -> CUresult;
+    pub fn cuFuncSetAttribute(hfunc: u64, attrib: u32, value: i32) -> CUresult;
     pub fn cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
         numBlocks: *mut c_int,
         func: CUfunction,
@@ -209,8 +209,8 @@ extern "C" {
         priority: c_int,
     ) -> cudaError_t;
     pub fn cudaStreamDestroy(stream: cudaStream_t) -> cudaError_t;
-    pub fn cudaStreamGetFlags(hStream: cudaStream_t, flags: *mut c_uint) -> cudaError_t;
-    pub fn cudaStreamGetPriority(hStream: cudaStream_t, priority: *mut c_int) -> cudaError_t;
+    pub fn cudaStreamGetFlags(hStream: u64, flags: *mut c_uint) -> cudaError_t;
+    pub fn cudaStreamGetPriority(hStream: u64, priority: *mut c_int) -> cudaError_t;
     pub fn cudaStreamQuery(stream: cudaStream_t) -> cudaError_t;
     pub fn cudaStreamWaitEvent(
         stream: cudaStream_t,
@@ -272,12 +272,12 @@ extern "C" {
 }
 #[link(name = "cublas")]
 extern "C" {
-    pub fn cublasCreate_v2(handle: *mut cublasHandle_t) -> u32;
+    pub fn cublasCreate_v2(handle: *mut u64) -> u32;
     pub fn cublasDestroy_v2(handle: cublasHandle_t) -> u32;
-    pub fn cublasSetStream_v2(handle: cublasHandle_t, streamId: cudaStream_t) -> u32;
+    pub fn cublasSetStream_v2(handle: cublasHandle_t, streamId: u64) -> u32;
     pub fn cublasSetWorkspace_v2(
         handle: cublasHandle_t,
-        workspace: *mut c_void,
+        workspace: u64,
         workspaceSizeInBytes: usize,
     ) -> u32;
     pub fn cublasSetMathMode(handle: cublasHandle_t, mode: u32) -> u32;
@@ -301,7 +301,7 @@ extern "C" {
         strideC: c_longlong,
         batchCount: c_int,
     ) -> u32;
-    pub fn cublasGetMathMode(handle: cublasHandle_t, mode: *mut u32) -> u32;
+    pub fn cublasGetMathMode(handle: u64, mode: *mut u32) -> u32;
     pub fn cublasSgemm_v2(
         handle: cublasHandle_t,
         transa: u32,
@@ -364,7 +364,7 @@ extern "C" {
         computeType: u32,
         algo: u32,
     ) -> u32;
-    pub fn cublasGetStream(handle: cublasHandle_t, streamId: *mut cudaStream_t) -> u32;
+    pub fn cublasGetStream(handle: u64, streamId: *mut u64) -> u32;
 }
 
 #[link(name = "cublasLt")]

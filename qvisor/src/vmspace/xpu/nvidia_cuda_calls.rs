@@ -788,7 +788,7 @@ pub fn CudaStreamGetFlags(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: CudaStreamGetFlags");
     let mut flags: u32 = 0;
 
-    let ret = unsafe { cudaStreamGetFlags(parameters.para1 as cudaStream_t, &mut flags) };
+    let ret = unsafe { cudaStreamGetFlags(parameters.para1 as u64, &mut flags) };
     if ret as u32 != 0 {
         error!(
             "nvidia.rs: error caused by cudaStreamGetFlags: {}",
@@ -804,7 +804,7 @@ pub fn CudaStreamGetPriority(parameters: &ProxyParameters) -> Result<u32> {
     let mut priority: i32 = 0;
 
     let ret =
-        unsafe { cudaStreamGetPriority(parameters.para1 as cudaStream_t, &mut priority) };
+        unsafe { cudaStreamGetPriority(parameters.para1 as u64, &mut priority) };
     if ret as u32 != 0 {
         error!(
             "nvidia.rs: error caused by cudaStreamGetPriority: {}",
@@ -986,8 +986,8 @@ pub fn CudaFuncGetAttributes(parameters: &ProxyParameters) -> Result<u32> {
     let mut ret = unsafe {
         cuFuncGetAttribute(
             &mut tmpAttr,
-            CUfunction_attribute::CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES,
-            dev_func as CUfunction,
+            CUfunction_attribute::CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES as u32,
+            dev_func,
         )
     };
     if ret as i32 != 0 {
@@ -1002,8 +1002,8 @@ pub fn CudaFuncGetAttributes(parameters: &ProxyParameters) -> Result<u32> {
     ret = unsafe {
         cuFuncGetAttribute(
             &mut tmpAttr,
-            CUfunction_attribute::CU_FUNC_ATTRIBUTE_CONST_SIZE_BYTES,
-            dev_func as CUfunction,
+            CUfunction_attribute::CU_FUNC_ATTRIBUTE_CONST_SIZE_BYTES as u32,
+            dev_func,
         )
     };
     if ret as i32 != 0 {
@@ -1018,8 +1018,8 @@ pub fn CudaFuncGetAttributes(parameters: &ProxyParameters) -> Result<u32> {
     ret = unsafe {
         cuFuncGetAttribute(
             &mut tmpAttr,
-            CUfunction_attribute::CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES,
-            dev_func as CUfunction,
+            CUfunction_attribute::CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES as u32,
+            dev_func,
         )
     };
     if ret as i32 != 0 {
@@ -1034,8 +1034,8 @@ pub fn CudaFuncGetAttributes(parameters: &ProxyParameters) -> Result<u32> {
     ret = unsafe {
         cuFuncGetAttribute(
             &mut tmpAttr,
-            CUfunction_attribute::CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK,
-            dev_func as CUfunction,
+            CUfunction_attribute::CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK as u32,
+            dev_func,
         )
     };
     if ret as i32 != 0 {
@@ -1050,8 +1050,8 @@ pub fn CudaFuncGetAttributes(parameters: &ProxyParameters) -> Result<u32> {
     ret = unsafe {
         cuFuncGetAttribute(
             &mut tmpAttr,
-            CUfunction_attribute::CU_FUNC_ATTRIBUTE_NUM_REGS,
-            dev_func as CUfunction,
+            CUfunction_attribute::CU_FUNC_ATTRIBUTE_NUM_REGS as u32,
+            dev_func,
         )
     };
     if ret as i32 != 0 {
@@ -1066,8 +1066,8 @@ pub fn CudaFuncGetAttributes(parameters: &ProxyParameters) -> Result<u32> {
     ret = unsafe {
         cuFuncGetAttribute(
             &mut tmpAttr,
-            CUfunction_attribute::CU_FUNC_ATTRIBUTE_PTX_VERSION,
-            dev_func as CUfunction,
+            CUfunction_attribute::CU_FUNC_ATTRIBUTE_PTX_VERSION as u32,
+            dev_func,
         )
     };
     if ret as i32 != 0 {
@@ -1082,8 +1082,8 @@ pub fn CudaFuncGetAttributes(parameters: &ProxyParameters) -> Result<u32> {
     ret = unsafe {
         cuFuncGetAttribute(
             &mut tmpAttr,
-            CUfunction_attribute::CU_FUNC_ATTRIBUTE_BINARY_VERSION,
-            dev_func as CUfunction,
+            CUfunction_attribute::CU_FUNC_ATTRIBUTE_BINARY_VERSION as u32,
+            dev_func,
         )
     };
     if ret as i32 != 0 {
@@ -1098,8 +1098,8 @@ pub fn CudaFuncGetAttributes(parameters: &ProxyParameters) -> Result<u32> {
     ret = unsafe {
         cuFuncGetAttribute(
             &mut tmpAttr,
-            CUfunction_attribute::CU_FUNC_ATTRIBUTE_CACHE_MODE_CA,
-            dev_func as CUfunction,
+            CUfunction_attribute::CU_FUNC_ATTRIBUTE_CACHE_MODE_CA as u32,
+            dev_func,
         )
     };
     if ret as i32 != 0 {
@@ -1114,8 +1114,8 @@ pub fn CudaFuncGetAttributes(parameters: &ProxyParameters) -> Result<u32> {
     ret = unsafe {
         cuFuncGetAttribute(
             &mut tmpAttr,
-            CUfunction_attribute::CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES,
-            dev_func as CUfunction,
+            CUfunction_attribute::CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES as u32,
+            dev_func,
         )
     };
     if ret as i32 != 0 {
@@ -1130,8 +1130,8 @@ pub fn CudaFuncGetAttributes(parameters: &ProxyParameters) -> Result<u32> {
     ret = unsafe {
         cuFuncGetAttribute(
             &mut tmpAttr,
-            CUfunction_attribute::CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT,
-            dev_func as CUfunction,
+            CUfunction_attribute::CU_FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT as u32,
+            dev_func,
         )
     };
     if ret as i32 != 0 {
@@ -1155,7 +1155,7 @@ pub fn CudaFuncSetAttribute(parameters: &ProxyParameters) -> Result<u32> {
     };
     let ret = unsafe {
         cuFuncSetAttribute(
-            dev_func as CUfunction,
+            dev_func as u64,
             parameters.para2 as u32,
             parameters.para3 as i32,
         )
