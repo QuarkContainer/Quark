@@ -7,6 +7,8 @@ use cuda_runtime_sys::cudaStream_t;
 use crate::qlib::proxy::ProxyParameters;
 use crate::qlib::common::Result;
 
+use super::cuda::STREAMS;
+
 pub fn NcclGetVersion(parameters: &ProxyParameters) -> Result<u32> {
     // error!("nvidia.rs: ncclGetVersion");
     let mut version: c_int = 0;
