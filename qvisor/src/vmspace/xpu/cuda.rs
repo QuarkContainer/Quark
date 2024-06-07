@@ -27,6 +27,7 @@ lazy_static! {
     pub static ref KERNEL_INFOS:Mutex<BTreeMap<String, Arc<KernelInfo>>> = Mutex::new(BTreeMap::new());
     pub static ref MODULES:Mutex<BTreeMap<CUmoduleKey, CUmoduleAddr>> = Mutex::new(BTreeMap::new());
     pub static ref FUNCTIONS:Mutex<BTreeMap<CUhostFunction, CUfunctionAddr>> = Mutex::new(BTreeMap::new());
+    pub static ref MODULES_FUNCTIONS_MAP:Mutex<BTreeMap<CUhostFunction, Vec<CUfunctionAddr>>> = Mutex::new(BTreeMap::new()); // dev_module -> dev_func
     //pub static ref GLOBALS:Mutex<BTreeMap<u64, CUdeviceAddr>> = Mutex::new(BTreeMap::new());
     pub static ref STREAMS: Mutex<BTreeMap<UserSpaceStream, RealStream>> = Mutex::new(BTreeMap::from([(0, 0)])); //default stream
     pub static ref BLASHANDLE: Mutex<BTreeMap<UserSpaceBlasHandle, RealBlasHandle>> = Mutex::new(BTreeMap::new());

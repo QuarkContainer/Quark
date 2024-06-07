@@ -535,13 +535,16 @@ pub fn CudaRegisterFatBinary(parameters: &ProxyParameters) -> Result<u32> {
     }
 
     // unsafe{ cudaDeviceSynchronize();}
-    MODULES.lock().insert(moduleKey, module);
+    MODULES.lock().insert(moduleKey.clone(), module.clone());
     let fatbinSize: usize = parameters.para1 as usize;
     let mut fatbinData = Vec::with_capacity(parameters.para1 as usize);
     unsafe { copy_nonoverlapping(parameters.para2 as *const u8, fatbinData.as_mut_ptr(), fatbinSize); }
-    //MEM_MANAGER.lock().fatBinManager.fatBinVec.push(fatbinData);
-    //MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.push((moduleKey, module));
-    //MEM_MANAGER.lock().fatBinManager.fatBinFuncVec.push(Vec::new());
+    
+    if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
+        MEM_MANAGER.lock().fatBinManager.fatBinVec.push(fatbinData);
+        MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.push((moduleKey, module));
+        MEM_MANAGER.lock().fatBinManager.fatBinFuncVec.push(Vec::new());
+    }
     // error!("insert module: {:x} -> {:x}", moduleKey, module);
     return Ok(ret as u32);
 }
@@ -565,7 +568,22 @@ pub fn CudaUnregisterFatBinary(parameters: &ProxyParameters) -> Result<u32> {
     }
 
     // delete the module
-    //MODULES.lock().remove(&moduleKey);
+    MODULES.lock().remove(&moduleKey);
+    let mut functions = FUNCTIONS.lock();
+    match MODULES_FUNCTIONS_MAP.lock().get(&moduleKey) {
+        Some(vector) => {
+            for elem in vector.iter() {
+                functions.remove(elem);
+            }
+        },
+        None => (), // it's okay if there's no module 
+    }
+    MODULES_FUNCTIONS_MAP.lock().remove(&moduleKey);
+    let fatbinManager = &mut MEM_MANAGER.lock().fatBinManager;
+    let index = fatbinManager.fatBinHandleVec.iter().position(|&m| m.0 == moduleKey.clone()).unwrap();
+    fatbinManager.fatBinFuncVec.remove(index);
+    fatbinManager.fatBinHandleVec.remove(index);
+    fatbinManager.fatBinVec.remove(index);
     return Ok(ret as u32);
         
 }
@@ -605,8 +623,17 @@ pub fn CudaRegisterFunction(parameters: &ProxyParameters) -> Result<u32> {
         );
     }
 
-    //unsafe{ cudaDeviceSynchronize(); }
-    FUNCTIONS.lock().insert(info.hostFun, hfunc);
+    FUNCTIONS.lock().insert(info.hostFun, hfunc.clone());
+    let mut map = MODULES_FUNCTIONS_MAP.lock();
+    match map.get_mut(&info.fatCubinHandle) {
+        Some(v) => {
+            v.push(info.hostFun.clone());
+        },
+        None => {
+            map.insert(info.fatCubinHandle.clone(), vec![info.hostFun.clone()]);
+            error!("insert module is {:x}", module.clone());
+        },
+    }
 
     let kernelInfo = match KERNEL_INFOS.lock().get(&deviceName.to_string()) {
         Some(kernelInformations) => kernelInformations.clone(),
@@ -623,8 +650,10 @@ pub fn CudaRegisterFunction(parameters: &ProxyParameters) -> Result<u32> {
         }
     }
 
-    //let index = MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.iter().position(|&r| r.0 == info.fatCubinHandle).unwrap();
-    //MEM_MANAGER.lock().fatBinManager.fatBinFuncVec[index].push((info.hostFun, func_name));
+    if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
+        let index = MEM_MANAGER.lock().fatBinManager.fatBinHandleVec.iter().position(|&r| r.0 == info.fatCubinHandle).unwrap();
+        MEM_MANAGER.lock().fatBinManager.fatBinFuncVec[index].push((info.hostFun, func_name));
+    }
 
     return Ok(ret as u32);
 }
@@ -835,8 +864,6 @@ pub fn CudaStreamGetPriority(parameters: &ProxyParameters) -> Result<u32> {
 }
 pub fn CudaStreamIsCapturing(parameters: &ProxyParameters) -> Result<u32> {
     //error!("nvidia.rs: cudaStreamIsCapturing");
-    error!("stream is {:?}", parameters.para1);
-    error!("stream dict {:?}", STREAMS.lock());
     let stream = match STREAMS.lock().get(&parameters.para1) {
         Some(s)=> s.clone(),
         None => panic!(),
