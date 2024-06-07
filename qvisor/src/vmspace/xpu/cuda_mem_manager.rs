@@ -372,7 +372,9 @@ impl MemoryManager {
     pub fn checkpointGPUContext(&mut self) {
         //need new ctx manager, cannot reuse
         self.ctxManager.checkpointCtx();
+    }
 
+    pub fn offloadGPUContext(&mut self) {
         //release for now
         let mut dev: i32 = 0;
         let res = unsafe { cuDeviceGet(&mut dev, self.ctxManager.deviceStatus.currentDev) };

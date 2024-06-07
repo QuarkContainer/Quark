@@ -579,11 +579,14 @@ pub fn CudaUnregisterFatBinary(parameters: &ProxyParameters) -> Result<u32> {
         None => (), // it's okay if there's no module 
     }
     MODULES_FUNCTIONS_MAP.lock().remove(&moduleKey);
-    let fatbinManager = &mut MEM_MANAGER.lock().fatBinManager;
-    let index = fatbinManager.fatBinHandleVec.iter().position(|&m| m.0 == moduleKey.clone()).unwrap();
-    fatbinManager.fatBinFuncVec.remove(index);
-    fatbinManager.fatBinHandleVec.remove(index);
-    fatbinManager.fatBinVec.remove(index);
+    
+    if QUARK_CONFIG.lock().CudaMemType == CudaMemType::MemPool {
+        let fatbinManager = &mut MEM_MANAGER.lock().fatBinManager;
+        let index = fatbinManager.fatBinHandleVec.iter().position(|&m| m.0 == moduleKey.clone()).unwrap();
+        fatbinManager.fatBinFuncVec.remove(index);
+        fatbinManager.fatBinHandleVec.remove(index);
+        fatbinManager.fatBinVec.remove(index);
+    }
     return Ok(ret as u32);
         
 }
