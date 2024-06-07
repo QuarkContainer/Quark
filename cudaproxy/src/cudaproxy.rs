@@ -135,6 +135,12 @@ pub extern "C" fn dlclose(handle: *mut c_void) -> c_int{
     }
 }
 #[no_mangle]
+pub extern "C" fn cudaMemGetInfo(free: *mut usize, total: *mut usize) -> usize {
+    println!("Hijacked cudaMemGetInfo");
+    return cudaSyscall3(SYS_PROXY, ProxyCommand::CudaMemGetInfo as usize, free as *mut _ as usize, total as *mut _ as usize);
+}
+
+#[no_mangle]
 pub extern "C" fn ncclGetVersion(version: *mut c_int) -> usize {
     println!("Hijacked ncclGetVersion");
     return cudaSyscall2(SYS_PROXY, ProxyCommand::NcclGetVersion as usize, version as *mut _ as usize);

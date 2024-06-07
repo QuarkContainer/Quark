@@ -390,6 +390,24 @@ pub fn CudaPeekAtLastError() -> Result<u32> {
 
     return Ok(ret as u32);
 }
+pub fn CudaMemGetInfo(parameters: &ProxyParameters) -> Result<u32> {
+    // error!("nvidia.rs: CudaMemGetInfo");
+    let mut free: usize = 0;
+    let mut total: usize = 0;
+
+    let ret = unsafe { cudaMemGetInfo(&mut free, &mut total) };
+    if ret as u32 != 0 {
+        error!("nvidia.rs: error caused by cudaMemGetInfo: {}", ret as u32);
+    }
+
+    // error!("nvidia.rs: free:{}, total:{}", free, total);
+
+    unsafe {
+        *(parameters.para1 as *mut usize) = free;
+        *(parameters.para2 as *mut usize) = total;
+    };
+    return Ok(ret as u32);
+}
 pub fn CudaMalloc(parameters: &ProxyParameters) -> Result<u32> {
     // error!("nvidia.rs: cudaMalloc, mode{:?}", QUARK_CONFIG.lock().CudaMode);
     if QUARK_CONFIG.lock().CudaMemType == CudaMemType::UM {

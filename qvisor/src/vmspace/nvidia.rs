@@ -269,6 +269,7 @@ pub fn Execute(
         ProxyCommand::CudaPeekAtLastError => return CudaPeekAtLastError(),
         ProxyCommand::CudaMalloc => return CudaMalloc(parameters),
         ProxyCommand::CudaFree => return CudaFree(parameters),
+        ProxyCommand::CudaMemGetInfo => return CudaMemGetInfo(parameters),
         ProxyCommand::CudaMemcpy => return CudaMemcpy(parameters),
         ProxyCommand::CudaMemcpyAsync => return CudaMemcpyAsync(parameters),
         ProxyCommand::CudaRegisterFatBinary => return CudaRegisterFatBinary(parameters),

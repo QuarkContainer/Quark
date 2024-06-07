@@ -498,6 +498,21 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
             sys_ret = Ok(ret);
         }
+        ProxyCommand::CudaMemGetInfo => {
+            let mut free: u64 = 0;
+            let mut total: u64 = 0;
+            parameters.para1 = &mut free as *mut _ as u64;
+            parameters.para2 = &mut total as *mut _ as u64;
+
+            let ret = HostSpace::Proxy(cmd, parameters);
+
+            if ret == 0 {
+                task.CopyOutObj(&free, args.arg1 as u64)?;
+                task.CopyOutObj(&total, args.arg2 as u64)?;
+            }
+            // error!("sys_proxy: CudaMemGetInfo free: {}, total: {}", free, total);
+            sys_ret = Ok(ret);
+        }
         ProxyCommand::CudaMalloc => {
             let mut addr: u64 = 0;
             parameters.para1 = &mut addr as *mut _ as u64;

@@ -142,6 +142,7 @@ extern "C" {
 
 #[link(name = "cudart")]
 extern "C" {
+    pub fn cudaMemGetInfo(free: *mut usize, total: *mut usize) -> cudaError_t;
     pub fn cudaMalloc(devPtr: *mut *mut c_void, size: usize) -> cudaError_t;
     pub fn cudaFree(devPtr: *mut c_void) -> cudaError_t;
     pub fn cudaMemcpy(dst: u64, src: u64, count: u64, kind: u64) -> u32;
