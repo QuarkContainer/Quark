@@ -88,4 +88,8 @@ for t in range(3):
         os.kill(int(sys.argv[1]), signal.SIGUSR2)
 
 print(f'Result: y = {a.item()} + {b.item()} x + {c.item()} x^2 + {d.item()} x^3')
+print("a: ", a)
+print("b: ", b)
+print("c: ", c)
+print("d: ", d)
 
