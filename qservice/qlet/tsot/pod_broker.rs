@@ -358,7 +358,7 @@ impl PodBroker {
     }
 
     pub fn ProcessRead(&self) -> Result<()> {
-        let mut readBuf: [u8; BUFF_SIZE * 2] = [0; BUFF_SIZE * 2];
+        let mut readBuf: [u8; BUFF_SIZE * 1] = [0; BUFF_SIZE * 1];
         let readbufAddr = &readBuf[0] as *const _ as u64;
         let raw_fd: RawFd = self.stream.as_raw_fd();
 

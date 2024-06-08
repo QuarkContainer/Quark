@@ -19,6 +19,8 @@ use std::string::String;
 
 use libc::*;
 
+use crate::QUARK_CONFIG;
+
 use super::qlib::SysCallID;
 use super::vmspace::syscall::*;
 
@@ -170,7 +172,11 @@ impl MountNs {
             panic!("chdir fail for rootfs {}", &self.rootfs)
         }
 
-        let errno = Util::PivotRoot(".", ".");
+        if Util::Mkdir("./old", 0o555) < 0 {
+            panic!("makedir fail for rootfs {}", &self.rootfs)
+        }
+
+        let errno = Util::PivotRoot(".", "./old");
         if errno != 0 {
             panic!("pivot fail with errno = {}", errno)
         }
@@ -180,8 +186,14 @@ impl MountNs {
         }
 
         // https://man.archlinux.org/man/pivot_root.2.en#pivot_root(&quot;.&quot;,_&quot;.&quot;)
-        if Util::Umount2("/", MNT_DETACH) < 0 {
-            panic!("UMount2 fail")
+
+        // for cuda environment and shim model
+        // we need to run nvidia-container-cli when sub-container startup in host root environment
+        if !QUARK_CONFIG.lock().ShimMode {
+            #[cfg(not(feature = "cuda"))]
+            if Util::Umount2("/", MNT_DETACH) < 0 {
+                panic!("UMount2 fail")
+            }
         }
     }
 

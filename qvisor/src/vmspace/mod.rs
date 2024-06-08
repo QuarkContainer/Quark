@@ -34,9 +34,11 @@ use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
 use lazy_static::lazy_static;
 use libc::*;
+use namespace::Util;
 use serde_json;
 use std::env::temp_dir;
 use std::fs;
+
 use std::marker::Send;
 use std::os::unix::io::IntoRawFd;
 use std::slice;
@@ -48,6 +50,9 @@ use crate::qlib::fileinfo::*;
 use crate::qlib::kernel::socket::control::Parse;
 use crate::qlib::kernel::socket::control::*;
 use crate::qlib::range::Range;
+
+#[cfg(feature = "cuda")]
+use crate::runc::container::container::NVProxySetupInUserns;
 use crate::vmspace::kernel::GlobalIOMgr;
 use crate::vmspace::kernel::GlobalRDMASvcCli;
 
@@ -180,7 +185,7 @@ impl VMSpace {
     }
 
     pub fn PivotRoot(&self, rootfs: &str) {
-        let mns = MountNs::New(rootfs.to_string());
+        let mns: MountNs = MountNs::New(rootfs.to_string());
         mns.PivotRoot();
     }
 
@@ -536,8 +541,6 @@ impl VMSpace {
 
         let (fd, writeable) =
             unsafe { Self::TryOpenHelper(dirfd, name, skiprw && tryOpenAt.fstat.IsRegularFile()) };
-
-        //error!("TryOpenAt dirfd {}, name {} ret {}", dirfd, Self::GetStr(name), fd);
 
         if fd < 0 {
             return fd as i64;
@@ -1336,6 +1339,92 @@ impl VMSpace {
                 return -1;
             }
         }
+    }
+
+    pub fn InitSubContainer(cidAddr: u64, len: usize) -> i64 {
+        #[cfg(feature = "cuda")]
+        {
+            let slice = unsafe { slice::from_raw_parts(cidAddr as *const u8, len) };
+            let cid = match String::from_utf8(slice.to_vec()) {
+                Err(_) => {
+                    error!(
+                        "InitSubContainer fail as cid name  {:?} is valid as utf8",
+                        slice
+                    );
+                    return -2;
+                }
+                Ok(s) => s,
+            };
+
+            let rootcid = ROOT_CONTAINER_ID.lock().clone();
+            let workdir = format!("/var/lib/quark/{}", rootcid);
+
+            // revert to host root
+            Util::Chdir("/old");
+            Util::PivotRoot(".", ".");
+
+            if Util::Chdir("/") < 0 {
+                panic!("chdir fail")
+            }
+            Util::Umount2("/", MNT_DETACH);
+
+            let filename = format!("/var/lib/quark/{}/{}", rootcid, &cid);
+
+            match NVProxySetupInUserns(&filename) {
+                Err(e) => {
+                    error!("InitSubContainer fail with error {:?}", e);
+                    return -2;
+                }
+                Ok(()) => (),
+            }
+
+            // change back to sandbox root
+            Util::Chdir(&workdir);
+            Util::PivotRoot(".", ".");
+
+            if Util::Chdir("/") < 0 {
+                panic!("chdir fail")
+            }
+        }
+
+        Util::Umount2("/", MNT_DETACH);
+
+        {
+            use std::fs::File;
+            use std::io::Read;
+            let slice = unsafe { slice::from_raw_parts(cidAddr as *const u8, len) };
+            let cid = match String::from_utf8(slice.to_vec()) {
+                Err(_) => {
+                    error!(
+                        "InitSubContainer fail as cid name  {:?} is valid as utf8",
+                        slice
+                    );
+                    return -2;
+                }
+                Ok(s) => s,
+            };
+            error!("start222 to read nvidia_smi {}", &cid);
+            let filename = format!("/{}/usr/bin/nvidia-smi", &cid);
+            error!("star2222 to read nvidia_smi {}", &filename);
+            match File::open(&filename) {
+                Err(_) => (),
+                Ok(mut f) => {
+                    //let mut f = File::open(&filename).expect("no file found");
+                    let metadata = fs::metadata(&filename).expect("unable to read metadata");
+
+                    let mut buf: [u8; 4] = [0; 4];
+                    let ret = f.read_exact(&mut buf);
+                    error!(
+                        "read file {} with result {:?} file len {}",
+                        &filename,
+                        ret,
+                        metadata.len()
+                    );
+                }
+            }
+        }
+
+        return 0;
     }
 
     pub fn Socket(domain: i32, type_: i32, protocol: i32) -> i64 {

@@ -122,7 +122,6 @@ impl ConnectionSvc {
 
             let res = listener.accept().await;
 
-            error!("ConnectionSvc 1 get connection ...");
             match res {
                 Err(_) => continue,
                 Ok((stream, _peerAddr)) => {
@@ -151,10 +150,8 @@ impl TcpSvcConnection {
     }
 
     pub async fn ProcessConnectionInner(&self) -> Result<()> {
-        error!("TcpSvcConnection ProcessConnectionInner 1");
         let connReq = self.ReadConnReq().await?;
 
-        error!("TcpSvcConnection ProcessConnectionInner 2 {:?}", &connReq);
         let namespace = connReq.GetNamespace()?;
         let socket = self.stream.as_raw_fd();
 

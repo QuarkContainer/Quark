@@ -137,6 +137,14 @@ pub enum Msg {
     // TsotConnect(TsotConnect),
     TsotRecvMsg(TsotRecvMsg),
     TsotSendMsg(TsotSendMsg),
+
+    InitSubContainer(InitSubContainer),
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct InitSubContainer {
+    pub cidAddr: u64,
+    pub len: usize,
 }
 
 #[derive(Clone, Default, Debug)]
