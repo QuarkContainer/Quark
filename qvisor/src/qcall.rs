@@ -145,6 +145,9 @@ impl KVMVcpu {
             Msg::TsotSendMsg(msg) => {
                 ret = super::VMSpace::TsotSendMsg(msg.msgAddr) as u64;
             }
+            Msg::InitSubContainer(msg) => {
+                ret = super::VMSpace::InitSubContainer(msg.cidAddr, msg.len) as u64;
+            }
             Msg::OpenDevFile(msg) => {
                 ret = super::VMSpace::OpenDevFile(msg.dirfd, msg.name, msg.flags) as u64;
             }

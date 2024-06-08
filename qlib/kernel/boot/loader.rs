@@ -20,6 +20,7 @@ use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::ops::Deref;
 
+use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::mutex::*;
 
 use super::super::super::auth;
@@ -307,6 +308,7 @@ impl Loader {
         } else {
             [-1, -1, -1]
         };
+
         let task = Task::Current();
         let execId = ExecID { cid: cid, pid: 0 };
 
@@ -331,6 +333,10 @@ impl Loader {
         let mut lockedLoader = self.Lock(task)?;
         let kernel = lockedLoader.kernel.clone();
         let cid = processSpec.ID.clone();
+
+        let cidSlice = cid.as_bytes();
+        HostSpace::InitSubContainer(&cidSlice[0] as *const _ as u64, cidSlice.len());
+
         let execId = ExecID { cid: cid, pid: 0 };
         let process = match lockedLoader.processes.get_mut(&execId) {
             None => {

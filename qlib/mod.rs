@@ -1129,7 +1129,6 @@ pub enum SysCallID {
     syscall_449,
     syscall_450,
     // No Valid syscall number
-
     UnknowSyscall = 451,
 
     EXTENSION_MAX,
@@ -1393,7 +1392,6 @@ impl ShareSpace {
 
     #[inline]
     pub fn AQHostInputPush(&self, item: &HostInputMsg) {
-        error!("AQHostInputPush 1 {:?}", &item);
         loop {
             if self.QInput.IsFull() {
                 continue;
@@ -1403,9 +1401,7 @@ impl ShareSpace {
             break;
         }
 
-        error!("AQHostInputPush 2");
         self.scheduler.WakeOne();
-        error!("AQHostInputPush 3");
     }
 
     #[inline]

@@ -54,11 +54,11 @@ async fn main() -> Result<()> {
     let schedulerSvcFuture = RunSchedulerSvc();
 
     tokio::select! {
-        _ = podhandlerFuture => {
-            error!("podhandler finish");
+        res = podhandlerFuture => {
+            error!("podhandler finish {:?}", res);
         }
-        _ = schedulerSvcFuture => {
-            error!("schedulersvc finish");
+        res  = schedulerSvcFuture => {
+            error!("schedulersvc finish {:?}", res);
         }
     }
 
