@@ -1255,6 +1255,9 @@ pub fn NVProxyHostSetup() -> Result<()> {
     let cli = cliPath.into_os_string().into_string().unwrap();
 
     if !Path::new("/dev/nvidiactl").exists() {
+        // sometimes the proble with failure
+        // failed to execute process /sbin/modprobe with error Os { code: 10, kind: Uncategorized, message: "No child processes" } for nvidia-uvm
+        // retry doesn't resolve the issue, need to RCA this
         let output = std::process::Command::new(&cli)
             .arg("--load-kmods info")
             .output()
@@ -1277,16 +1280,32 @@ pub fn NVProxyHostSetup() -> Result<()> {
 // nvproxyLoadKernelModules loads NVIDIA-related kernel modules with modprobe.
 pub fn NVProxyLoadKernelModules() -> Result<()> {
     for m in ["nvidia", "nvidia-uvm"] {
-        let output = std::process::Command::new("/sbin/modprobe")
-            .arg(m)
-            .output()
-            .expect("failed to execute process /sbin/modprobe");
+        // sometimes the proble with failure
+        // failed to execute process /sbin/modprobe with error Os { code: 10, kind: Uncategorized, message: "No child processes" } for nvidia-uvm
+        // retry doesn't resolve the issue, need to RCA this
+        let output = match std::process::Command::new("/sbin/modprobe").arg(m).output() {
+            Err(e) => {
+                error!(
+                    " failed to execute process /sbin/modprobe with error {:?} for {}",
+                    &e, m
+                );
+                return Err(Error::Common(format!(
+                    "failed to execute process /sbin/modprobe with error {:?} for {}",
+                    &e, m
+                )));
+            }
+            Ok(o) => o,
+        };
 
         if !output.status.success() {
-            warn!(
+            error!(
                 "modprobe {} failed, \nstdout: {:?}\nstderr: {:?}",
                 m, &output.stdout, &output.stderr
             );
+            return Err(Error::Common(format!(
+                "modprobe {} failed, \nstdout: {:?}\nstderr: {:?}",
+                m, &output.stdout, &output.stderr
+            )));
         }
     }
 
