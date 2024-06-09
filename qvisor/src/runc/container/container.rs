@@ -463,10 +463,11 @@ impl Container {
 
         let _unlockRoot = maybeLockRootContainer(bundleDir, &spec, &conf.RootDir)?;
 
-        let nvidiaDeviceList = NvidiaDeviceList(&spec)?;
-        if &nvidiaDeviceList != "" {
-            NVProxyHostSetup()?;
-        }
+        // looks like we don't need to do modprobe the "nvidia", "nvidia-uvm" modules
+        // let nvidiaDeviceList = NvidiaDeviceList(&spec)?;
+        // if &nvidiaDeviceList != "" {
+        //     NVProxyHostSetup()?;
+        // }
 
         // Lock the container metadata file to prevent concurrent creations of
         // containers with the same id.
@@ -665,13 +666,14 @@ impl Container {
         //debug!("container spec is {:?}", &spec);
         ValidateID(id)?;
 
-        #[cfg(feature = "cuda")]
-        {
-            let nvidiaDeviceList = NvidiaDeviceList(&spec)?;
-            if &nvidiaDeviceList != "" {
-                NVProxyHostSetup()?;
-            }
-        }
+        // looks like we don't need to do modprobe the "nvidia", "nvidia-uvm" modules
+        // #[cfg(feature = "cuda")]
+        // {
+        //     let nvidiaDeviceList = NvidiaDeviceList(&spec)?;
+        //     if &nvidiaDeviceList != "" {
+        //         NVProxyHostSetup()?;
+        //     }
+        // }
 
         let _unlockRoot = if !crate::QUARK_CONFIG.lock().Sandboxed {
             Some(maybeLockRootContainer(bundleDir, &spec, &conf.RootDir)?)
@@ -1250,8 +1252,8 @@ pub fn NVProxyHostSetup() -> Result<()> {
         Some(p) => p,
     };
 
-    // nvidia-container-cli --load-kmods seems to be a noop; load kernel modules ourselves.
     NVProxyLoadKernelModules()?;
+
     let cli = cliPath.into_os_string().into_string().unwrap();
 
     if !Path::new("/dev/nvidiactl").exists() {
@@ -1261,7 +1263,7 @@ pub fn NVProxyHostSetup() -> Result<()> {
         let output = std::process::Command::new(&cli)
             .arg("--load-kmods info")
             .output()
-            .expect("failed to execute process /sbin/modprobe");
+            .expect("failed to execute process nvidia-container-cli");
 
         if !output.status.success() {
             let stdout = String::from_utf8(output.stdout).unwrap();
