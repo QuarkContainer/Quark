@@ -26,8 +26,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use fs2::FileExt;
 use regex::Regex;
 
-use crate::runc::container::nvidia::NvidiaDeviceList;
-
 use super::hook::*;
 use super::status::*;
 //use super::super::super::qlib::util::*;
