@@ -1,6 +1,16 @@
 # Quark Container
 To enable cuda in Quark, firstly, we need to build cudaproxy dir, and enable cuda features in cuda source code
 
+## Install NCCL
+```
+wget https://developer.download.nvidia.com/compute/cuda/repos/<distro>/<architecture>/cuda-keyring_1.0-1_all.deb
+E.g. wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-keyring_1.0-1_all.deb
+
+sudo dpkg -i cuda-keyring_1.0-1_all.deb
+sudo apt update
+
+sudo apt install libnccl2 libnccl-dev
+```
 ## Build
 In Quark's directory, execute
 `make cuda_all
