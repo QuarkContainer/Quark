@@ -644,15 +644,17 @@ pub extern "C" fn cudaPeekAtLastError() -> usize {
 }
 
 // we assume all cuda libraries locate in /usr/local/cuda/compat, if its not the case, need modify this
-pub fn findPtxJitCompilerLibrary(path: &mut String) -> std::io::Result<()> {
-    let libPath = "/usr/local/cuda/compat/libnvidia-ptxjitcompiler.so.1";
-    if std::path::Path::new(&libPath).exists() {
-        let res = std::fs::canonicalize(libPath)?;
-        path.push_str(res.into_os_string().to_str().unwrap());
-    } else {
-        let res = std::fs::canonicalize("/usr/local/cuda/compat/lib.real/libnvidia-ptxjitcompiler.so.1")?;
-        path.push_str(res.into_os_string().to_str().unwrap());
-    }
+pub fn findPtxJitCompilerLibrary(_path: &mut String) -> std::io::Result<()> {
+    // println!("loading");
+    let _libPath = "/usr/local/cuda/compat/libnvidia-ptxjitcompiler.so.1";
+    // if std::path::Path::new(&libPath).exists() {
+    //     let res = std::fs::canonicalize(libPath)?;
+    //     path.push_str(res.into_os_string().to_str().unwrap());
+    // } else {
+    //     let res = std::fs::canonicalize("/usr/local/cuda/compat/lib.real/libnvidia-ptxjitcompiler.so.1")?;
+    //     path.push_str(res.into_os_string().to_str().unwrap());
+    // }
+    // println!("loaded");
     Ok(())
 }
 
@@ -670,7 +672,7 @@ pub extern "C" fn __cudaRegisterFatBinary(fatCubin: &FatHeader) -> *mut *mut c_v
     }
     // println!("param 4 is {:x}", &ptxlibPath as *const _ as usize);
     cudaSyscall5(SYS_PROXY, ProxyCommand::CudaRegisterFatBinary as usize, len, fatCubin.text as *const _ as usize, 
-            result as usize, &(ptxlibPath.as_bytes()[0]) as *const _ as usize);
+            result as usize, 0 as usize);
     return result;
 }
 
@@ -1592,7 +1594,9 @@ fn cudaSyscall4(n: usize, a1: usize, a2: usize, a3: usize, a4: usize) -> usize {
 
 #[inline(always)]
 fn cudaSyscall5(n: usize, a1: usize, a2: usize, a3: usize, a4: usize, a5: usize) -> usize {
+    // println!();
     let ret = unsafe { syscall5(n, a1, a2, a3, a4, a5) };
+    // print();
     updateLastError(ret)
 }
 

@@ -552,13 +552,13 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let data: Vec<u8> = task.CopyInVec(parameters.para2, parameters.para1 as usize)?;
             parameters.para2 = &data[0] as *const _ as u64;
 
-            let (ptxlibPath, err) = task.CopyInString(parameters.para4, PATH_MAX);
-            match err {
-                Err(e) => return Err(e),
-                _ => (),
-            }
-            parameters.para4 = &(ptxlibPath.as_bytes()[0]) as *const _ as u64;
-            parameters.para5 = ptxlibPath.as_bytes().len() as u64;
+            // let (ptxlibPath, err) = task.CopyInString(parameters.para4, PATH_MAX);
+            // match err {
+            //     Err(e) => return Err(e),
+            //     _ => (),
+            // }
+            // parameters.para4 = &(ptxlibPath.as_bytes()[0]) as *const _ as u64;
+            // parameters.para5 = ptxlibPath.as_bytes().len() as u64;
 
             let ret = HostSpace::Proxy(cmd, parameters);
 
