@@ -5,9 +5,11 @@ use crate::xpu::cuda_api::*;
 use std::ffi::CString;
 use std::os::raw::*;
 use std::collections::BTreeMap;
+use std::ptr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use cuda_driver_sys::{CUfunction, CUmodule};
 use cuda_runtime_sys::cudaStream_t;
+use libc::{mlock, mmap, munlock, munmap, PROT_READ, PROT_WRITE, MAP_PRIVATE, MAP_ANONYMOUS, MAP_FAILED};
 
 pub const ONE_TB: u64 = 1 << 40; //0x10_000_000_000;
 pub const ONE_GB: u64 = 1 << 30; //0x40_000_000;
@@ -138,12 +140,14 @@ pub struct FatBinManager {
 
 pub struct CPUMemoryManager {
     pub reservedStartAddr: u64,
+    pub reservedSize: usize,
     pub usedLen: u64,
     pub memMappingTable: BTreeMap<u64, u64>, //gpuAddr - hostAddr
 }
 
 pub struct GPUMemoryManager {
     pub granularity: usize,
+    pub reservedSize: usize,
     pub reservedStartAddr: u64,
     pub nextAvailableAddr: u64,
     pub memAddrVec: Vec<u64>,
@@ -174,6 +178,7 @@ impl GPUMemoryManager {
         // error!("reserved addr: {:x} to {:x} of size {:x}",dptr as u64, dptr as u64 + reserve_size as u64,reserve_size as u64);
         Self {
             granularity: gran,
+            reservedSize: reserve_size,
             reservedStartAddr: dptr,
             nextAvailableAddr: dptr,
             memAddrVec: Vec::new(),
@@ -239,8 +244,20 @@ impl GPUMemoryManager {
                 error!("cuda_mem_manager.rs: error caused by cuMemRelease(offload): {}", res as u32)
             }
         }
+        let res = unsafe { cuMemAddressFree(self.reservedStartAddr, self.reservedSize) };
+        if res as u32 != 0 {
+            error!("cuda_mem_manager.rs: error caused by cuMemAddressFree: {}", res as u32);
+        } 
     }
     pub fn restore(&mut self) {
+        let mut dptr: u64 = 0;
+        let res = unsafe { cuMemAddressReserve(&mut dptr as *mut _ as u64, self.reservedSize, 0, self.reservedStartAddr, 0) };
+        if res as u32 != 0 {
+            error!("cuda_mem_manager.rs: error caused by cuMemAddressReserve: {}", res as u32);
+        }
+        if dptr != self.reservedStartAddr {
+            error!("cuda_mem_manager.rs: failed to restore because of memory addr mismatch");
+        }
         for idx in 0..self.memAddrVec.len() {
             let mut prop = CUmemAllocationProp::default();
             prop.type_ = 0x1; //CU_MEM_ALLOCATION_TYPE_PINNED;
@@ -277,32 +294,45 @@ impl CPUMemoryManager {
     pub fn new() -> Self {
         Self{
             reservedStartAddr: 0x0,
+            reservedSize: 0,
             usedLen: 0x0,
             memMappingTable: BTreeMap::new(),
         }
     }
 
-    pub fn alloc(&mut self, size: usize) -> u32 {
-        let mut hptr: u64 = 0;
-        let res = unsafe { cudaHostAlloc(&mut hptr as *mut _ as u64, size, 0x0) };
-        if res as u32 != 0 {
-            error!("cuda_mem_manager.rs: error caused by cudaHostAlloc: {}", res as u32);
+    pub fn alloc(&mut self, size: usize) -> i32 { // cannot use cudaHostAlloc because cuda context will be destoried
+        //let mut hptr: u64 = 0;
+        // let res = unsafe { cudaHostAlloc(&mut hptr as *mut _ as u64, size, 0x0) };
+        // if res as u32 != 0 {
+        //     error!("cuda_mem_manager.rs: error caused by cudaHostAlloc: {}", res as u32);
+        let hostData = unsafe { mmap(ptr::null_mut(), size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0)};
+        let ret: i32 = unsafe { mlock(hostData, size)};
+        if hostData == MAP_FAILED || ret == -1 {
+            error!("cuda_mem_manager.rs: Failed to allocate memory with mmap or mlock");
+            return -1;
         } else {
-            self.reservedStartAddr = hptr;
+            self.reservedStartAddr = hostData as *mut _ as u64;
+            self.reservedSize = size;
+            return 0;
         }
-        return res as u32;
     }
 
-    pub fn free(&mut self, ptr: u64) -> u32 {
-        let res = unsafe { cudaFreeHost(ptr) };
-        if res as u32 != 0 {
-            error!("cuda_mem_manager.rs: error caused by cudaFreeHost: {}", res as u32);
+    pub fn free(&mut self, ptr: u64) -> i32 {
+        // let res = unsafe { cudaFreeHost(ptr) };
+        // if res as u32 != 0 {
+        //     error!("cuda_mem_manager.rs: error caused by cudaFreeHost: {}", res as u32);
+        let ret0 = unsafe { munlock(ptr as *const c_void, self.reservedSize)};
+        let ret1 = unsafe { munmap(ptr as *mut c_void, self.reservedSize)};
+        if ret0 != 0 || ret1 != 0 {
+            error!("cuda_mem_manager.rs: Failed to free memory with munmap or munlock");
+            return -1;
         } else {
             self.reservedStartAddr = 0x0;
+            self.reservedSize = 0;
             self.usedLen = 0x0;
             self.memMappingTable = BTreeMap::new();
+            return 0;
         }
-        return res as u32;
     }
 }
 
