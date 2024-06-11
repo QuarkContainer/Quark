@@ -28,13 +28,43 @@ use super::timer::Clock;
 use super::timer::*;
 use super::*;
 
+#[cfg(feature = "cc")]
+use crate::GuestHostSharedAllocator;
+#[cfg(feature = "cc")]
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+
+#[cfg(not(feature = "cc"))]
 #[derive(Clone, Default)]
 pub struct TimeKeeper(Arc<QRwLock<TimeKeeperInternal>>);
 
+#[cfg(feature = "cc")]
+#[derive(Clone)]
+pub struct TimeKeeper(Arc<QRwLock<TimeKeeperInternal>, GuestHostSharedAllocator>);
+
+#[cfg(feature = "cc")]
+impl Default for TimeKeeper {
+    fn default() -> Self {
+        return TimeKeeper(Arc::new_in(
+            QRwLock::new(TimeKeeperInternal::default()),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
+    }
+}
+
+#[cfg(not(feature = "cc"))]
 impl Deref for TimeKeeper {
     type Target = Arc<QRwLock<TimeKeeperInternal>>;
 
     fn deref(&self) -> &Arc<QRwLock<TimeKeeperInternal>> {
+        &self.0
+    }
+}
+
+#[cfg(feature = "cc")]
+impl Deref for TimeKeeper {
+    type Target = Arc<QRwLock<TimeKeeperInternal>, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<QRwLock<TimeKeeperInternal>, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -67,7 +97,10 @@ impl TimeKeeper {
             c: clockId,
         };
 
+        #[cfg(not(feature = "cc"))]
         return Clock::TimeKeeperClock(Arc::new(c));
+        #[cfg(feature = "cc")]
+        return Clock::TimeKeeperClock(Arc::new_in(c,GUEST_HOST_SHARED_ALLOCATOR));
     }
 
     pub fn Update(&self) {

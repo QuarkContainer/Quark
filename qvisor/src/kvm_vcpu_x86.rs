@@ -49,6 +49,12 @@ use super::qlib::perf_tunning::*;
 //use super::qlib::vcpu_mgr::*;
 use super::runc::runtime::vm::*;
 use super::syncmgr::*;
+#[cfg(feature = "cc")]
+use super::qlib::qmsg::sharepara::*;
+#[cfg(feature = "cc")]
+use qlib::kernel::Kernel::{is_cc_enabled, IDENTICAL_MAPPING};
+#[cfg(feature = "cc")]
+use crate::qlib::task_mgr::TaskId;
 
 #[repr(C)]
 pub struct SignalMaskStruct {
@@ -95,7 +101,20 @@ impl RefMgr for HostPageAllocator {
 
 impl KVMVcpu {
     fn SetupGDT(&self, sregs: &mut kvm_sregs) {
+        #[cfg(not(feature = "cc"))]
         let gdtTbl = unsafe { std::slice::from_raw_parts_mut(self.gdtAddr as *mut u64, 4096 / 8) };
+
+        #[cfg(feature = "cc")]
+        let gdtTbl = if IDENTICAL_MAPPING.load(Ordering::Acquire) {
+            unsafe { std::slice::from_raw_parts_mut(self.gdtAddr as *mut u64, 4096 / 8) }
+        } else {
+            unsafe {
+                std::slice::from_raw_parts_mut(
+                    (self.gdtAddr + MemoryDef::UNIDENTICAL_MAPPING_OFFSET) as *mut u64,
+                    4096 / 8,
+                )
+            }
+        };
 
         let KernelCodeSegment = SegmentDescriptor::default().SetCode64(0, 0, 0);
         let KernelDataSegment = SegmentDescriptor::default().SetData(0, 0xffffffff, 0);
@@ -127,7 +146,15 @@ impl KVMVcpu {
                 as *const u64,
         );
 
+        #[cfg(not(feature = "cc"))]
         let tssSegment = self.tssAddr as *mut x86_64::structures::tss::TaskStateSegment;
+        #[cfg(feature = "cc")]
+        let tssSegment = if IDENTICAL_MAPPING.load(Ordering::Acquire) {
+            self.tssAddr as *mut x86_64::structures::tss::TaskStateSegment
+        } else {
+            (self.tssAddr + MemoryDef::UNIDENTICAL_MAPPING_OFFSET)
+                as *mut x86_64::structures::tss::TaskStateSegment
+        };
         unsafe {
             (*tssSegment).interrupt_stack_table[0] = stack_end;
             (*tssSegment).iomap_base = -1 as i16 as u16;
@@ -153,8 +180,30 @@ impl KVMVcpu {
         return (addr, size as u16);
     }
 
+    #[cfg(not(feature = "cc"))]
     fn TSStoDescriptor(tss: &x86_64::structures::tss::TaskStateSegment) -> (u64, u64, u16) {
         let (tssBase, tssLimit) = Self::TSS(tss);
+        let low = SegmentDescriptor::default().Set(
+            tssBase as u32,
+            tssLimit as u32,
+            0,
+            SEGMENT_DESCRIPTOR_PRESENT
+                | SEGMENT_DESCRIPTOR_ACCESS
+                | SEGMENT_DESCRIPTOR_WRITE
+                | SEGMENT_DESCRIPTOR_EXECUTE,
+        );
+
+        let hi = SegmentDescriptor::default().SetHi((tssBase >> 32) as u32);
+
+        return (low.AsU64(), hi.AsU64(), tssLimit);
+    }
+
+    #[cfg(feature = "cc")]
+    fn TSStoDescriptor(tss: &x86_64::structures::tss::TaskStateSegment) -> (u64, u64, u16) {
+        let (mut tssBase, tssLimit) = Self::TSS(tss);
+        if !IDENTICAL_MAPPING.load(Ordering::Acquire) {
+            tssBase -= MemoryDef::UNIDENTICAL_MAPPING_OFFSET;
+        }
         let low = SegmentDescriptor::default().Set(
             tssBase as u32,
             tssLimit as u32,
@@ -358,14 +407,41 @@ impl KVMVcpu {
                         panic!("Get VcpuExit::IoOut from guest user space, Abort, vcpu_sregs is {:#x?}", vcpu_sregs)
                     }
 
-                    let regs = self
-                        .vcpu
-                        .get_regs()
-                        .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                    let para1 = regs.rsi;
-                    let para2 = regs.rcx;
-                    let para3 = regs.rdi;
-                    let para4 = regs.r10;
+                    let para1;
+                    let para2;
+                    let para3;
+                    let para4;
+
+                    #[cfg(feature = "cc")]{
+                        if is_cc_enabled(){
+                            let share_para_page  = unsafe{* (MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *const ShareParaPage)};
+                            let share_para = share_para_page.SharePara[self.id];
+                            para1 = share_para.para1;
+                            para2 = share_para.para2;
+                            para3 = share_para.para3;
+                            para4 = share_para.para4;
+                        } else {
+                            let regs = self
+                                .vcpu
+                                .get_regs()
+                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            para1 = regs.rsi;
+                            para2 = regs.rcx;
+                            para3 = regs.rdi;
+                            para4 = regs.r10;
+                        }
+                    }
+
+                    #[cfg (not(feature = "cc"))]{
+                        let regs = self
+                                .vcpu
+                                .get_regs()
+                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            para1 = regs.rsi;
+                            para2 = regs.rcx;
+                            para3 = regs.rdi;
+                            para4 = regs.r10;
+                    }
 
                     match addr {
                         qlib::HYPERCALL_IOWAIT => {
@@ -405,6 +481,36 @@ impl KVMVcpu {
                         }
                         qlib::HYPERCALL_RELEASE_VCPU => {
                             SyncMgr::WakeShareSpaceReady();
+                        }
+                        #[cfg(feature = "cc")]
+                        qlib::HYPERCALL_SHARESPACE_INIT => {
+                            GLOBAL_ALLOCATOR.vmLaunched.store(true, Ordering::SeqCst);
+                            let controlSock;
+                            let vcpuCount;
+                            let rdmaSvcCliSock;
+                            let podId;
+                            {
+                                let mut vms = VMS.lock();
+
+                                let spec = vms.args.as_mut().unwrap().Spec.Copy();
+                                vms.args.as_mut().unwrap().Spec =spec;
+                                controlSock  = vms.controlSock;
+                                vcpuCount = vms.vcpuCount;
+                                rdmaSvcCliSock = vms.rdmaSvcCliSock;
+                                podId = vms.podId;
+                            }
+
+                            let shareSpaceAddr = para1 as *mut ShareSpace;
+                            let sharedSpace  = unsafe { &mut (*shareSpaceAddr) };
+
+                            VirtualMachine::InitShareSpace_cc(
+                                sharedSpace,
+                                vcpuCount,
+                                controlSock,
+                                rdmaSvcCliSock,
+                                podId,
+                            );
+                            debug!("VM EXIT HYPERCALL_SHARESPACE_INIT finished");
                         }
                         qlib::HYPERCALL_EXIT_VM => {
                             let exitCode = para1 as i32;
@@ -587,6 +693,11 @@ impl KVMVcpu {
 
                             let ret = SHARE_SPACE.scheduler.WaitVcpu(&SHARE_SPACE, self.id, true);
                             match ret {
+                                #[cfg(feature = "cc")]
+                                Ok(taskId) => unsafe {
+                                    *(retAddr as *mut TaskId) = taskId;
+                                },
+                                #[cfg(not(feature = "cc"))]
                                 Ok(taskId) => unsafe {
                                     *(retAddr as *mut u64) = taskId as u64;
                                 },
@@ -729,6 +840,7 @@ impl KVMVcpu {
         Ok(())
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn VcpuWait(&self) -> i64 {
         let sharespace = &SHARE_SPACE;
         loop {

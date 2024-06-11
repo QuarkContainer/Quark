@@ -200,8 +200,8 @@ impl SandboxProcess {
         if taskSockFd > 0 {
             args.Pivot = false;
         }
-
-        let exitStatus = match VirtualMachine::Init(args) {
+        let cc_mode = QUARK_CONFIG.lock().CCMode;
+        let exitStatus = match VirtualMachine::Init_vm(args, cc_mode) {
             Ok(mut vm) => {
                 if taskSockFd > 0 {
                     if self.pivot {

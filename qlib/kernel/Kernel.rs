@@ -13,14 +13,32 @@
 // limitations under the License.
 
 use super::super::common::*;
+#[cfg(not(feature = "cc"))]
 use super::super::config::*;
+#[cfg(not(feature = "cc"))]
 use super::super::linux_def::*;
+#[cfg(not(feature = "cc"))]
 use super::super::qmsg;
+#[cfg(not(feature = "cc"))]
 use super::super::qmsg::*;
+#[cfg(not(feature = "cc"))]
 use super::super::socket_buf::*;
 use super::super::*;
+#[cfg(not(feature = "cc"))]
 use crate::kernel_def::HyperCall64;
+#[cfg(not(feature = "cc"))]
 use crate::qlib::proxy::*;
+
+#[cfg (feature = "cc")]
+pub static ENABLE_CC: AtomicBool = AtomicBool::new(false);
+#[cfg (feature = "cc")]
+pub static IDENTICAL_MAPPING: AtomicBool = AtomicBool::new(true);
+
+#[inline(always)]
+#[cfg (feature = "cc")]
+pub fn is_cc_enabled() -> bool {
+    return ENABLE_CC.load(Ordering::Acquire);
+}
 
 extern "C" {
     pub fn rdtsc() -> i64;
@@ -28,6 +46,7 @@ extern "C" {
 
 pub struct HostSpace {}
 
+#[cfg(not(feature = "cc"))]
 impl HostSpace {
     pub fn WakeupVcpu(vcpuId: u64) {
         HyperCall64(HYPERCALL_WAKEUP_VCPU, vcpuId, 0, 0, 0);

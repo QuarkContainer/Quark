@@ -31,6 +31,10 @@ use super::super::super::memmgr::*;
 use super::super::super::task::*;
 use super::super::waiter::*;
 
+#[cfg(feature = "cc")]
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+#[cfg(feature = "cc")]
+use crate::GuestHostSharedAllocator;
 pub struct AIOMapping {}
 
 impl Mapping for AIOMapping {
@@ -300,7 +304,7 @@ pub struct IOEvent {
 }
 
 pub const IOEVENT_SIZE: u64 = 32; // sizeof(IOEvent)
-
+#[cfg(not(feature = "cc"))]
 #[derive(Default)]
 pub struct AIOContextIntern {
     // results is the set of completed requests.
@@ -317,15 +321,66 @@ pub struct AIOContextIntern {
 
     pub queue: Queue,
 }
+#[cfg(feature = "cc")]
+pub struct AIOContextIntern {
+    // results is the set of completed requests.
+    pub results: VecDeque<IOEvent, GuestHostSharedAllocator>,
 
+    // maxOutstanding is the maximum number of outstanding entries; this value
+    // is immutable.
+    pub maxOutstanding: usize,
+
+    pub outstanding: usize,
+
+    // dead is set when the context is destroyed.
+    pub dead: bool,
+
+    pub queue: Queue,
+}
+
+#[cfg(not(feature = "cc"))]
 #[derive(Default, Clone)]
 pub struct AIOContext(Arc<QMutex<AIOContextIntern>>);
-
+#[cfg(not(feature = "cc"))]
 impl Deref for AIOContext {
     type Target = Arc<QMutex<AIOContextIntern>>;
 
     fn deref(&self) -> &Arc<QMutex<AIOContextIntern>> {
         &self.0
+    }
+}
+
+#[cfg(feature = "cc")]
+#[derive(Clone)]
+pub struct AIOContext(Arc<QMutex<AIOContextIntern>, GuestHostSharedAllocator>);
+
+#[cfg(feature = "cc")]
+impl Deref for AIOContext {
+    type Target = Arc<QMutex<AIOContextIntern>, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<QMutex<AIOContextIntern>, GuestHostSharedAllocator> {
+        &self.0
+    }
+}
+
+#[cfg(feature = "cc")]
+impl Default for AIOContext {
+    fn default() -> Self {
+       return Self (
+        Arc::new_in(QMutex::<AIOContextIntern>::default(), GUEST_HOST_SHARED_ALLOCATOR))
+    }
+}
+
+#[cfg(feature = "cc")]
+impl Default for AIOContextIntern {
+    fn default() -> Self {
+       return Self {
+        results: VecDeque::new_in(GUEST_HOST_SHARED_ALLOCATOR),
+        maxOutstanding: 0,
+        outstanding: 0,
+        dead:false,
+        queue: Queue::default()
+       }
     }
 }
 
@@ -365,7 +420,10 @@ impl AIOContext {
             ..Default::default()
         };
 
+        #[cfg(not(feature = "cc"))]
         return Self(Arc::new(QMutex::new(intern)));
+        #[cfg(feature = "cc")]
+        return Self(Arc::new_in(QMutex::new(intern), GUEST_HOST_SHARED_ALLOCATOR));
     }
 
     // destroy marks the context dead.

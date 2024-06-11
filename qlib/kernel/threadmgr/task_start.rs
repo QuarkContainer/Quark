@@ -31,6 +31,9 @@ use super::thread_group::*;
 pub struct TaskConfig {
     pub TaskId: u64,
 
+    #[cfg(feature = "cc")]
+    pub TaskWrapperId: u64,
+
     // Kernel is the owning Kernel.
     pub Kernel: Kernel,
 

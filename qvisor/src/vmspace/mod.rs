@@ -132,6 +132,9 @@ pub struct VMSpace {
     pub vcpus: Vec<Arc<KVMVcpu>>,
     pub haveMembarrierGlobal: bool,
     pub haveMembarrierPrivateExpedited: bool,
+
+    pub rdmaSvcCliSock: i32,
+    pub podId: [u8;64],
 }
 
 unsafe impl Sync for VMSpace {}
@@ -159,6 +162,8 @@ impl VMSpace {
             vcpus: Vec::new(),
             haveMembarrierGlobal: haveMembarrierGlobal,
             haveMembarrierPrivateExpedited: haveMembarrierPrivateExpedited,
+            rdmaSvcCliSock: 0,
+            podId: [0u8;64],
         };
     }
 
