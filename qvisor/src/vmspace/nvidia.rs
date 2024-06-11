@@ -21,9 +21,9 @@ use std::collections::HashMap;
 // use std::slice;
 // use std::sync::atomic::{AtomicUsize, Ordering};
 // use std::sync::{mpsc, Arc};
+use crate::qlib::qmsg::*;
 use std::sync::mpsc;
 use std::thread;
-use crate::qlib::qmsg::*;
 // use std::time::{Duration, Instant};
 use crate::qlib::common::*;
 //use crate::qlib::linux_def::SysErr;
@@ -33,17 +33,13 @@ use crate::qlib::proxy::*;
 // use crate::xpu::cuda::*;
 use crate::xpu::cuda_api::*;
 use crate::xpu::cuda_mem_manager::*;
-use crate::{QUARK_CONFIG};
+use crate::QUARK_CONFIG;
 
-use crate::xpu::nvidia_nccl_calls::*;
-use crate::xpu::nvidia_cuda_calls::*;
 use crate::xpu::nvidia_cu_calls::*;
 use crate::xpu::nvidia_cublas_calls::*;
+use crate::xpu::nvidia_cuda_calls::*;
+use crate::xpu::nvidia_nccl_calls::*;
 use crate::xpu::nvidia_nvml_calls::*;
-
-
-
-
 
 // use cuda11_cublasLt_sys::{
 //     cublasLtHandle_t, cublasLtMatmulAlgo_t, cublasLtMatmulDesc_t, cublasLtMatmulHeuristicResult_t,
@@ -59,7 +55,6 @@ use cuda_runtime_sys::cudaStream_t;
 // use super::{IoVec, MemoryDef};
 
 use super::kernel::SHARESPACE;
-
 
 lazy_static! {
     pub static ref MEM_RECORDER: Mutex<Vec<(u64, usize)>> = Mutex::new(Vec::new());
@@ -130,40 +125,53 @@ impl NvidiaRes {
     }
 }
 
-pub fn NvidiaProxy(
-    qmsg: &QMsg,
-    containerId: &str,
-) -> Result<i64> {
+pub fn NvidiaProxy(qmsg: &QMsg, containerId: &str) -> Result<i64> {
     let mut workerMap = WORKER_MAP.lock();
-    match workerMap.get(&qmsg.taskId.data) {
+
+    let ctxId = if let Msg::Proxy(proxy) = &qmsg.msg {
+        proxy.parameters.ctxId
+    } else {
+        unreachable!("get non sys_proxy request in NvidiaProxy")
+    };
+
+    error!(
+        "NvidiaProxy ctxid is {:x?} keys is {:x?}",
+        ctxId,
+        workerMap.keys()
+    );
+
+    match workerMap.get(&ctxId) {
         Some(tx) => {
             tx.send(qmsg as *const _ as u64).unwrap();
         }
         None => {
             let (tx, rx) = mpsc::channel();
-            workerMap.insert(qmsg.taskId.data, tx.clone());
+            workerMap.insert(ctxId, tx.clone());
             let containerId2 = containerId.to_owned();
             let qmsgPtr = qmsg as *const _ as u64;
             tx.send(qmsgPtr).unwrap();
             let _handle = thread::spawn(move || {
-                // error!("start thread");
-                let mut msg2 = unsafe {&mut *(qmsgPtr as *mut QMsg) };
+                let mut msg2 = unsafe { &mut *(qmsgPtr as *mut QMsg) };
                 InitNvidia(&containerId2, msg2); // init per thread
                 loop {
                     let tmpMsg = rx.recv().unwrap() as *mut QMsg;
                     msg2 = unsafe { &mut (*tmpMsg) };
                     if let Msg::Proxy(msg) = &msg2.msg {
+                        let currTaskId = msg2.taskId;
                         if msg.cmd == ProxyCommand::ExitWorkerThread {
+                            SHARESPACE
+                                .scheduler
+                                .ScheduleQ(currTaskId, currTaskId.Queue(), true);
+                            WORKER_MAP.lock().remove(&ctxId);
                             break;
                         } else {
                             let ret = NvidiaProxyExecute(msg2, &containerId2);
                             match ret {
-                                Ok(_res) => {
-                                    let currTaskId = msg2.taskId;
-                                    SHARESPACE
-                                    .scheduler
-                                    .ScheduleQ(currTaskId, currTaskId.Queue(), true)
-                                }
+                                Ok(_res) => SHARESPACE.scheduler.ScheduleQ(
+                                    currTaskId,
+                                    currTaskId.Queue(),
+                                    true,
+                                ),
                                 Err(e) => {
                                     // no error
                                     error!("nvidia proxy get error {:?}", e);
@@ -177,14 +185,8 @@ pub fn NvidiaProxy(
     }
     return Ok(0);
 }
-pub fn NvidiaProxyExecute(
-    qmsg: &QMsg,
-    containerId: &str,
-) -> Result<i64> {
-    let mut result: NvidiaRes = NvidiaRes {
-        res: 0,
-        lasterr: 0,
-    };
+pub fn NvidiaProxyExecute(qmsg: &QMsg, containerId: &str) -> Result<i64> {
+    let mut result: NvidiaRes = NvidiaRes { res: 0, lasterr: 0 };
     match qmsg.msg {
         Msg::Proxy(msg) => {
             //error!("execute cmd: {:?}", msg.cmd.clone());
@@ -197,17 +199,17 @@ pub fn NvidiaProxyExecute(
             }
 
             match &msg.cmd {
-                ProxyCommand::CudaGetErrorName |
-                ProxyCommand::CudaGetErrorString |
-                ProxyCommand::CudaRegisterFatBinary |
-                ProxyCommand::CudaRegisterFunction |
-                ProxyCommand::CudaRegisterVar |
-                ProxyCommand::CudaUnregisterFatBinary => (),
+                ProxyCommand::CudaGetErrorName
+                | ProxyCommand::CudaGetErrorString
+                | ProxyCommand::CudaRegisterFatBinary
+                | ProxyCommand::CudaRegisterFunction
+                | ProxyCommand::CudaRegisterVar
+                | ProxyCommand::CudaUnregisterFatBinary => (),
                 _ => {
                     let err = unsafe { cudaGetLastError() };
                     result.lasterr = err as u32;
                 }
-            } 
+            }
         }
         _ => unreachable!(),
     }
@@ -250,11 +252,17 @@ pub fn Execute(
         ProxyCommand::CudaDeviceGetLimit => return CudaDeviceGetLimit(parameters),
         ProxyCommand::CudaDeviceGetP2PAttribute => return CudaDeviceGetP2PAttribute(parameters),
         ProxyCommand::CudaDeviceGetPCIBusId => return CudaDeviceGetPCIBusId(parameters),
-        ProxyCommand::CudaDeviceGetSharedMemConfig => return CudaDeviceGetSharedMemConfig(parameters),
-        ProxyCommand::CudaDeviceGetStreamPriorityRange => return CudaDeviceGetStreamPriorityRange(parameters),
+        ProxyCommand::CudaDeviceGetSharedMemConfig => {
+            return CudaDeviceGetSharedMemConfig(parameters)
+        }
+        ProxyCommand::CudaDeviceGetStreamPriorityRange => {
+            return CudaDeviceGetStreamPriorityRange(parameters)
+        }
         ProxyCommand::CudaDeviceSetCacheConfig => return CudaDeviceSetCacheConfig(parameters),
         ProxyCommand::CudaDeviceSetLimit => return CudaDeviceSetLimit(parameters),
-        ProxyCommand::CudaDeviceSetSharedMemConfig => return CudaDeviceSetSharedMemConfig(parameters),
+        ProxyCommand::CudaDeviceSetSharedMemConfig => {
+            return CudaDeviceSetSharedMemConfig(parameters)
+        }
         ProxyCommand::CudaSetDevice => return CudaSetDevice(parameters),
         ProxyCommand::CudaSetDeviceFlags => return CudaSetDeviceFlags(parameters),
         ProxyCommand::CudaSetValidDevices => return CudaSetValidDevices(parameters),
@@ -279,14 +287,18 @@ pub fn Execute(
         ProxyCommand::CudaStreamSynchronize => return CudaStreamSynchronize(parameters),
         ProxyCommand::CudaStreamCreate => return CudaStreamCreate(parameters),
         ProxyCommand::CudaStreamCreateWithFlags => return CudaStreamCreateWithFlags(parameters),
-        ProxyCommand::CudaStreamCreateWithPriority => return CudaStreamCreateWithPriority(parameters),
+        ProxyCommand::CudaStreamCreateWithPriority => {
+            return CudaStreamCreateWithPriority(parameters)
+        }
         ProxyCommand::CudaStreamDestroy => return CudaStreamDestroy(parameters),
         ProxyCommand::CudaStreamGetFlags => return CudaStreamGetFlags(parameters),
         ProxyCommand::CudaStreamGetPriority => return CudaStreamGetPriority(parameters),
         ProxyCommand::CudaStreamIsCapturing => return CudaStreamIsCapturing(parameters),
         ProxyCommand::CudaStreamQuery => return CudaStreamQuery(parameters),
         ProxyCommand::CudaStreamWaitEvent => return CudaStreamWaitEvent(parameters),
-        ProxyCommand::CudaThreadExchangeStreamCaptureMode => return CudaThreadExchangeStreamCaptureMode(parameters),
+        ProxyCommand::CudaThreadExchangeStreamCaptureMode => {
+            return CudaThreadExchangeStreamCaptureMode(parameters)
+        }
         ProxyCommand::CudaEventCreate => return CudaEventCreate(parameters),
         ProxyCommand::CudaEventCreateWithFlags => return CudaEventCreateWithFlags(parameters),
         ProxyCommand::CudaEventDestroy => return CudaEventDestroy(parameters),
@@ -308,8 +320,10 @@ pub fn Execute(
                 return Ok(2);
             }
             Ok(n) => return Ok(n),
+        },
+        ProxyCommand::CudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags => {
+            return CudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(parameters)
         }
-        ProxyCommand::CudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags => return CudaOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(parameters),
         ProxyCommand::CuModuleGetLoadingMode => return CuModuleGetLoadingMode(parameters),
         ProxyCommand::CuInit => return CuInit(parameters),
         ProxyCommand::CuDevicePrimaryCtxGetState => return CuDevicePrimaryCtxGetState(parameters),
@@ -325,7 +339,9 @@ pub fn Execute(
         ProxyCommand::CublasSetMathMode => return CublasSetMathMode(parameters),
         ProxyCommand::CublasSgemmStridedBatched => return CublasSgemmStridedBatched(parameters),
         ProxyCommand::CublasLtMatmul => return CublasLtMatmul(parameters),
-        ProxyCommand::CublasLtMatmulAlgoGetHeuristic => return CublasLtMatmulAlgoGetHeuristic(parameters),
+        ProxyCommand::CublasLtMatmulAlgoGetHeuristic => {
+            return CublasLtMatmulAlgoGetHeuristic(parameters)
+        }
         ProxyCommand::CublasGetMathMode => return CublasGetMathMode(parameters),
         ProxyCommand::CuCtxGetCurrent => return CuCtxGetCurrent(parameters),
         ProxyCommand::CuModuleLoadData => return CuModuleLoadData(parameters),
@@ -335,32 +351,33 @@ pub fn Execute(
         ProxyCommand::CublasSgemmV2 => return CublasSgemmV2(parameters),
         ProxyCommand::CublasGemmEx => return CublasGemmEx(parameters),
         ProxyCommand::CublasGemmStridedBatchedEx => return CublasGemmStridedBatchedEx(parameters),
-        _ => { return Ok(0); },
+        _ => {
+            return Ok(0);
+        }
     }
 }
-
 
 fn InitNvidia(_containerId: &str, _qmsg: &QMsg) {
     error!("Init nvidia");
     // cuModuleLoadData requires libnvidia-ptxjitcompiler.so, and nvidia image will mount some host libraries into container,
     // the lib we want to use is locate in /usr/local/cuda/compat/, host version libraries will cause error.
     // if let Msg::Proxy(msg) = qmsg.msg {
-        // { // looks like CUDA 12 doesn't need this anymore, comment out for now. TODO: test too see if lower cuda version needs
-        //     error!("Init nvidia");
-        //     let bytes = unsafe {
-        //         std::slice::from_raw_parts(msg.parameters.para4 as *const _, msg.parameters.para5 as usize)
-        //     };
-        //     let ptxlibPath = std::str::from_utf8(bytes).unwrap();
-        //     let ptxlibPathStr = format!("/{}{}", containerId, ptxlibPath);
-        //     let ptxlibPath = CString::new(ptxlibPathStr).unwrap();
-        //     let _handle = unsafe { libc::dlopen(ptxlibPath.as_ptr() as *const i8, libc::RTLD_LAZY) };
-        // }
-        let initResult1 = unsafe { cudaSetDevice(0) as u32 };
-        let initResult2 = unsafe { cudaDeviceSynchronize() as u32 };
-    
-        if initResult1 | initResult2 != 0 {
-            error!("cuda runtime init error");
-        }
+    // { // looks like CUDA 12 doesn't need this anymore, comment out for now. TODO: test too see if lower cuda version needs
+    //     error!("Init nvidia");
+    //     let bytes = unsafe {
+    //         std::slice::from_raw_parts(msg.parameters.para4 as *const _, msg.parameters.para5 as usize)
+    //     };
+    //     let ptxlibPath = std::str::from_utf8(bytes).unwrap();
+    //     let ptxlibPathStr = format!("/{}{}", containerId, ptxlibPath);
+    //     let ptxlibPath = CString::new(ptxlibPathStr).unwrap();
+    //     let _handle = unsafe { libc::dlopen(ptxlibPath.as_ptr() as *const i8, libc::RTLD_LAZY) };
+    // }
+    let initResult1 = unsafe { cudaSetDevice(0) as u32 };
+    let initResult2 = unsafe { cudaDeviceSynchronize() as u32 };
+
+    if initResult1 | initResult2 != 0 {
+        error!("cuda runtime init error");
+    }
     // } // else is impossible
 }
 pub fn SwapOutMem() -> Result<i64> {

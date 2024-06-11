@@ -20,7 +20,6 @@ pub enum ProxyCommand {
     NcclGetVersion,
     NcclGetUniqueId,
 
-
     NcclCommInitRank,
     NcclCommInitRankConfig,
     NcclCommDestroy,
@@ -41,7 +40,6 @@ pub enum ProxyCommand {
     NcclRecv,
     NcclGroupStart,
     NcclGroupEnd,
-
 
     //devcie management
     CudaChooseDevice,
@@ -157,8 +155,7 @@ pub type NcclCommT = *mut NcclComm;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct NcclUniqueId {
-    pub internal: [::core::ffi::c_char; 128usize]
-    // pub internal: [::std::os::raw::c_char; 128]
+    pub internal: [::core::ffi::c_char; 128usize], // pub internal: [::std::os::raw::c_char; 128]
 }
 impl Default for NcclUniqueId {
     fn default() -> Self {
@@ -298,6 +295,7 @@ impl Default for ProxyCommand {
 #[derive(Copy, Clone, Default, Debug)]
 #[repr(C)]
 pub struct ProxyParameters {
+    pub ctxId: u64,
     pub para1: u64,
     pub para2: u64,
     pub para3: u64,
@@ -306,8 +304,6 @@ pub struct ProxyParameters {
     pub para6: u64,
     pub para7: u64,
 }
-
-
 
 // from https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html#group__CUDART__TYPES_1g18fa99055ee694244a270e4d5101e95b
 // cudaMemcpyHostToHost = 0

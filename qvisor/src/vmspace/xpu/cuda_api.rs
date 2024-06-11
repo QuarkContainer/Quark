@@ -5,10 +5,7 @@ use cuda11_cublasLt_sys::{
     cublasLtHandle_t, cublasLtMatmulAlgo_t, cublasLtMatmulDesc_t, cublasLtMatmulHeuristicResult_t,
     cublasLtMatmulPreference_t, cublasLtMatrixLayout_t,
 };
-use cuda_driver_sys::{
-    CUcontext, CUdevice, CUdeviceptr, CUfunction, CUfunction_attribute, CUmodule, CUresult,
-    CUstream,
-};
+use cuda_driver_sys::{CUcontext, CUdevice, CUdeviceptr, CUfunction, CUmodule, CUresult, CUstream};
 use cuda_runtime_sys::{
     cudaDeviceAttr, cudaDeviceP2PAttr, cudaDeviceProp, cudaError_t, cudaEvent_t, cudaFuncAttribute,
     cudaFuncAttributes, cudaFuncCache, cudaLimit, cudaMemoryAdvise, cudaSharedMemConfig,
@@ -27,37 +24,65 @@ extern "C" {
         rank: ::std::os::raw::c_int,
     ) -> NcclResultT;
     pub fn ncclCommDestroy(comm: NcclCommT) -> NcclResultT;
-    pub fn ncclCommInitAll(
-        comms: *mut NcclCommT,
-        ndevs: c_int,
-        devs: *const c_int,
-    ) -> NcclResultT;
+    pub fn ncclCommInitAll(comms: *mut NcclCommT, ndevs: c_int, devs: *const c_int) -> NcclResultT;
     pub fn ncclCommAbort(comm: NcclCommT) -> NcclResultT;
     pub fn ncclCommCuDevice(comm: NcclCommT, device: *mut ::std::os::raw::c_int) -> NcclResultT;
 
-    pub fn ncclGetErrorString(
-        error: u32,
-    ) -> *const c_char;
-    pub fn ncclCommGetAsyncError(
-        comm: NcclCommT,
-        async_error: *mut NcclResultT,
-    ) -> NcclResultT;
+    pub fn ncclGetErrorString(error: u32) -> *const c_char;
+    pub fn ncclCommGetAsyncError(comm: NcclCommT, async_error: *mut NcclResultT) -> NcclResultT;
     pub fn ncclCommInitRankConfig(
         comm: *mut NcclCommT,
         n_rank: c_int,
         ncclUniqueId_: NcclUniqueId,
         rank: c_int,
-        ncclConfig_t: *const NcclConfig
+        ncclConfig_t: *const NcclConfig,
     ) -> NcclResultT;
     pub fn ncclCommCount(comm: NcclCommT, count: *mut c_int) -> NcclResultT;
     pub fn ncclCommUserRank(comm: NcclCommT, rank: *mut c_int) -> NcclResultT;
-    pub fn ncclSend(sendbuff: *const c_void, count: usize, datatype: NcclDataTypeT, peer: c_int, comm: NcclCommT, stream: cudaStream_t) -> NcclResultT;
-    pub fn ncclRecv(recvbuff: *mut c_void, count: usize, datatype: NcclDataTypeT, peer: c_int, comm: NcclCommT, stream: cudaStream_t) -> NcclResultT;
+    pub fn ncclSend(
+        sendbuff: *const c_void,
+        count: usize,
+        datatype: NcclDataTypeT,
+        peer: c_int,
+        comm: NcclCommT,
+        stream: cudaStream_t,
+    ) -> NcclResultT;
+    pub fn ncclRecv(
+        recvbuff: *mut c_void,
+        count: usize,
+        datatype: NcclDataTypeT,
+        peer: c_int,
+        comm: NcclCommT,
+        stream: cudaStream_t,
+    ) -> NcclResultT;
     pub fn ncclGroupStart() -> NcclResultT;
     pub fn ncclGroupEnd() -> NcclResultT;
-    pub fn ncclAllReduce(sendbuff: *const c_void, recvbuff: *mut c_void, count: usize, datatype: NcclDataTypeT, op: NcclRedOpT, comm: NcclCommT, stream: cudaStream_t) -> NcclResultT;
-    pub fn ncclAllGather(sendbuff: *const c_void, recvbuff: *mut c_void, count: usize, datatype: NcclDataTypeT, comm: NcclCommT, stream: cudaStream_t) -> NcclResultT;
-    pub fn ncclReduceScatter(sendbuff: *const c_void, recvbuff: *mut c_void, count: usize, datatype: NcclDataTypeT, op: NcclRedOpT, comm: NcclCommT, stream: cudaStream_t) -> NcclResultT;
+    pub fn ncclAllReduce(
+        sendbuff: *const c_void,
+        recvbuff: *mut c_void,
+        count: usize,
+        datatype: NcclDataTypeT,
+        op: NcclRedOpT,
+        comm: NcclCommT,
+        stream: cudaStream_t,
+    ) -> NcclResultT;
+    pub fn ncclAllGather(
+        sendbuff: *const c_void,
+        recvbuff: *mut c_void,
+        count: usize,
+        datatype: NcclDataTypeT,
+        comm: NcclCommT,
+        stream: cudaStream_t,
+    ) -> NcclResultT;
+    pub fn ncclReduceScatter(
+        sendbuff: *const c_void,
+        recvbuff: *mut c_void,
+        count: usize,
+        datatype: NcclDataTypeT,
+        op: NcclRedOpT,
+        comm: NcclCommT,
+        stream: cudaStream_t,
+    ) -> NcclResultT;
 }
 
 #[link(name = "cuda")]
@@ -98,11 +123,7 @@ extern "C" {
     pub fn cuCtxCreate(pctx: *mut CUcontext, flags: c_uint, dev: CUdevice) -> CUresult;
     pub fn cuCtxPushCurrent(pctx: CUcontext) -> CUresult;
     pub fn cuDevicePrimaryCtxRetain(pctx: *mut CUcontext, dev: CUdevice) -> CUresult;
-    pub fn cuFuncGetAttribute(
-        pi: *mut c_int,
-        attrib: u32,
-        hfunc: u64,
-    ) -> CUresult;
+    pub fn cuFuncGetAttribute(pi: *mut c_int, attrib: u32, hfunc: u64) -> CUresult;
     pub fn cuFuncSetAttribute(hfunc: u64, attrib: u32, value: i32) -> CUresult;
     pub fn cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
         numBlocks: *mut c_int,
@@ -233,10 +254,7 @@ extern "C" {
         value: c_int,
     ) -> cudaError_t;
     pub fn cudaFuncSetCacheConfig(func: u64, cacheConfig: cudaFuncCache) -> cudaError_t;
-    pub fn cudaFuncSetSharedMemConfig(
-        func: u64,
-        config: cudaSharedMemConfig,
-    ) -> cudaError_t;
+    pub fn cudaFuncSetSharedMemConfig(func: u64, config: cudaSharedMemConfig) -> cudaError_t;
 
     pub fn cudaGetErrorString(error: u32) -> *const c_char;
     pub fn cudaGetErrorName(error: u32) -> *const c_char;

@@ -22,11 +22,11 @@ use spin::Mutex;
 
 use crate::qlib::addr::AccessType;
 use crate::qlib::common::*;
-use crate::qlib::kernel::threadmgr::thread_group::CudaProcessCtx;
 use crate::qlib::kernel::fs::host::hostinodeop::MMappable;
 use crate::qlib::kernel::memmgr::vma::{CudaHostMappable, CudaHostMappableInner};
 use crate::qlib::kernel::memmgr::MLockMode;
 use crate::qlib::kernel::memmgr::MMapOpts;
+use crate::qlib::kernel::threadmgr::thread_group::CudaProcessCtx;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::TSC;
 use crate::qlib::linux_def::{IoVec, MemoryDef, SysErr, PATH_MAX};
@@ -42,8 +42,11 @@ lazy_static! {
 
 impl Drop for CudaProcessCtx {
     fn drop(&mut self) {
-        if self.lock().enableGPU && Arc::strong_count(&self) == 1 {
-            let parameters = ProxyParameters::default();
+        if self.enableGPU.load(Ordering::Relaxed) && Arc::strong_count(&self) == 1 {
+            let parameters = ProxyParameters {
+                ctxId: self.ctxId,
+                ..Default::default()
+            };
             HostSpace::Proxy(ProxyCommand::ExitWorkerThread, parameters); // not sure if its necessary
         }
     }
@@ -58,9 +61,11 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             .fetch_add(gap as u64, Ordering::SeqCst);
     });
     let cmd: ProxyCommand = unsafe { core::mem::transmute(commandId as u64) };
+    error!("sysproxy cmd is {:?}", &cmd);
     let cudaProcessCtx = task.Thread().ThreadGroup().GetCudaCtx();
-    cudaProcessCtx.lock().enableGPU = true;
+    cudaProcessCtx.enableGPU.store(true, Ordering::SeqCst);
     let mut parameters = ProxyParameters {
+        ctxId: cudaProcessCtx.ctxId,
         para1: args.arg1,
         para2: args.arg2,
         para3: args.arg3,
@@ -107,9 +112,9 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         | ProxyCommand::CublasDestroyV2
         | ProxyCommand::CublasSetWorkspaceV2
         | ProxyCommand::CublasSetMathMode
-        | ProxyCommand::CublasSetStreamV2 
+        | ProxyCommand::CublasSetStreamV2
         | ProxyCommand::NcclCommDestroy
-        | ProxyCommand::NcclCommAbort 
+        | ProxyCommand::NcclCommAbort
         | ProxyCommand::NcclGroupStart
         | ProxyCommand::NcclGroupEnd => {
             let ret = HostSpace::Proxy(cmd, parameters);
@@ -122,22 +127,21 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
         ProxyCommand::NcclGetVersion => {
             error!("ncclGetVersion_sysproxy");
-            let mut version:u64 = 0;
+            let mut version: u64 = 0;
             parameters.para1 = &mut version as *mut _ as u64;
-            
+
             let ret = HostSpace::Proxy(cmd, parameters);
 
             if ret == 0 {
                 task.CopyOutObj(&version, args.arg1)?;
             }
             sys_ret = Ok(ret);
-            
         }
         ProxyCommand::NcclGetUniqueId => {
             error!("ncclGetUniqueId_sysproxy");
-            let mut ncclUniqueId_:NcclUniqueId = NcclUniqueId::default();
-            parameters.para1 = &mut ncclUniqueId_ as * mut _ as u64;
-            
+            let mut ncclUniqueId_: NcclUniqueId = NcclUniqueId::default();
+            parameters.para1 = &mut ncclUniqueId_ as *mut _ as u64;
+
             let ret = HostSpace::Proxy(cmd, parameters);
 
             if ret == 0 {
@@ -148,7 +152,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ProxyCommand::NcclCommInitRank => {
             error!("ncclCommInitRank_sysproxy");
             // let mut ncclComm_t_:NcclCommT = null_mut();
-            let mut ncclComm_t_:u64 = 0;
+            let mut ncclComm_t_: u64 = 0;
             parameters.para1 = &mut ncclComm_t_ as *mut _ as u64;
 
             // let mut comm_id:ncclUniqueId = ncclUniqueId::default();
@@ -158,8 +162,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             parameters.para3 = &comm_id as *const _ as u64;
 
             let ret = HostSpace::Proxy(cmd, parameters);
-
-    
 
             if ret == 0 {
                 task.CopyOutObj(&ncclComm_t_, args.arg1)?;
@@ -174,8 +176,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             //     ncclComm_t_s.set_len(args.arg2 as usize);
             // }
             let mut ncclComm_t_s: Vec<u64> = vec![0; args.arg2 as usize];
-            let devlist:Vec<i32>=task.CopyInVec(parameters.para3, args.arg2 as usize)?;
-
+            let devlist: Vec<i32> = task.CopyInVec(parameters.para3, args.arg2 as usize)?;
 
             // parameters.para1 = &mut ncclComm_t_s[0] as *mut _ as u64;
             parameters.para1 = ncclComm_t_s.as_mut_ptr() as u64;
@@ -192,7 +193,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ProxyCommand::NcclCommInitRankConfig => {
             error!("ncclCommInitRankConfig_sysproxy");
             // let mut ncclComm_t_:NcclCommT = null_mut();
-            let mut ncclComm_t_:u64 = 0;
+            let mut ncclComm_t_: u64 = 0;
             parameters.para1 = &mut ncclComm_t_ as *mut _ as u64;
             let comm_id: NcclUniqueId = task.CopyInObj::<NcclUniqueId>(parameters.para3)?;
             let config = task.CopyInObj::<NcclConfig>(parameters.para5)?;
@@ -205,11 +206,10 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 task.CopyOutObj(&ncclComm_t_, args.arg1)?;
             }
             sys_ret = Ok(ret);
-
         }
         ProxyCommand::NcclCommCount => {
             error!("ncclCommCount_sysproxy");
-            let mut count:u32 = 0;
+            let mut count: u32 = 0;
             parameters.para2 = &mut count as *mut _ as u64;
             let ret = HostSpace::Proxy(cmd, parameters);
             if ret == 0 {
@@ -219,7 +219,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
         ProxyCommand::NcclCommUserRank => {
             error!("ncclCommUserRank_sysproxy");
-            let mut rank:u32 = 0;
+            let mut rank: u32 = 0;
             parameters.para2 = &mut rank as *mut _ as u64;
             let ret = HostSpace::Proxy(cmd, parameters);
             if ret == 0 {
@@ -229,7 +229,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
         ProxyCommand::NcclCommCuDevice => {
             error!("ncclCommCuDevice_sysproxy");
-            let mut device:u32 = 0;
+            let mut device: u32 = 0;
             parameters.para2 = &mut device as *mut _ as u64;
             let ret = HostSpace::Proxy(cmd, parameters);
             if ret == 0 {
@@ -249,8 +249,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             sys_ret = Ok(ret);
         }
 
-
-        ProxyCommand::NcclSend=> {
+        ProxyCommand::NcclSend => {
             error!("ncclSend_sysproxy");
             let sendinfo = task.CopyInObj::<NcclSendRecvInfo>(parameters.para2)?;
             parameters.para2 = &sendinfo as *const _ as u64;
@@ -259,7 +258,7 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             sys_ret = Ok(ret);
         }
 
-        ProxyCommand::NcclRecv=> {
+        ProxyCommand::NcclRecv => {
             error!("ncclRecv_sysproxy");
             let recvinfo = task.CopyInObj::<NcclSendRecvInfo>(parameters.para2)?;
             parameters.para2 = &recvinfo as *const _ as u64;
@@ -280,7 +279,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             parameters.para3 = &sendinfo as *const _ as u64;
             let ret = HostSpace::Proxy(cmd, parameters);
             sys_ret = Ok(ret);
-
         }
         ProxyCommand::NcclReduceScatter => {
             error!("ncclReduceScatter_sysproxy");
@@ -298,7 +296,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 task.CopyOutString(args.arg2, errorString.len(), &errorString)?;
             }
             sys_ret = Ok(ret);
-
         }
         ProxyCommand::CudaChooseDevice => {
             let mut device: i32 = 0;
@@ -840,7 +837,8 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             sys_ret = Ok(ret);
         }
         ProxyCommand::CuLaunchKernel => {
-            let mut kernelInfo: CuLaunchKernelInfo = task.CopyInObj::<CuLaunchKernelInfo>(parameters.para1)?;
+            let mut kernelInfo: CuLaunchKernelInfo =
+                task.CopyInObj::<CuLaunchKernelInfo>(parameters.para1)?;
             let paramInfo = PARAM_INFOS.lock().get(&kernelInfo.f).unwrap().clone();
             // error!("cuLaunchKernelInfo data {:x?}, paramInfo {:x?}, parameters {:x?}", kernelInfo, paramInfo, parameters);
 
@@ -989,7 +987,10 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         } //_ => todo!()
         ProxyCommand::CudaHostAlloc => {
             match CudaHostAlloc(task, parameters) {
-                Ok(n) => return Ok(n),
+                Ok(n) => {
+                    error!("CudaHostAlloc 2 {}", n);
+                    return Ok(n);
+                }
                 Err(e) => {
                     error!("CudaHostAlloc fail with error {:?}", e);
 
@@ -1283,7 +1284,7 @@ fn CudaMemcpyAsync(
                     _ => task.V2P(dst, count, true, false)?,
                 },
             };
-            
+
             let parameters = ProxyParameters {
                 para1: &prs[0] as *const _ as u64,
                 para2: prs.len() as u64,

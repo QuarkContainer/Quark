@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::uid::NewUID;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::btree_set::BTreeSet;
@@ -21,6 +22,7 @@ use alloc::sync::Weak;
 use alloc::vec::Vec;
 use core::cmp::*;
 use core::ops::Deref;
+use core::sync::atomic::AtomicBool;
 
 use super::super::super::common::*;
 use super::super::super::limits::*;
@@ -284,18 +286,29 @@ pub struct ThreadGroupInternal {
     pub cudaProcessCtx: CudaProcessCtx,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct CudaProcessCtxInner {
-    pub enableGPU: bool,
+    pub ctxId: u64,
+    pub enableGPU: AtomicBool,
+}
+
+impl Default for CudaProcessCtxInner {
+    fn default() -> Self {
+        let ctxId = NewUID();
+        return Self {
+            ctxId: ctxId,
+            enableGPU: AtomicBool::new(false),
+        };
+    }
 }
 
 #[derive(Default, Debug, Clone)]
-pub struct CudaProcessCtx(pub Arc<QMutex<CudaProcessCtxInner>>);
+pub struct CudaProcessCtx(pub Arc<CudaProcessCtxInner>);
 
 impl Deref for CudaProcessCtx {
-    type Target =  Arc<QMutex<CudaProcessCtxInner>>;
+    type Target = Arc<CudaProcessCtxInner>;
 
-    fn deref(&self) -> & Arc<QMutex<CudaProcessCtxInner>> {
+    fn deref(&self) -> &Arc<CudaProcessCtxInner> {
         &self.0
     }
 }
@@ -367,7 +380,7 @@ impl Drop for ThreadGroup {
 }
 
 impl ThreadGroup {
-        pub fn Downgrade(&self) -> ThreadGroupWeak {
+    pub fn Downgrade(&self) -> ThreadGroupWeak {
         return ThreadGroupWeak {
             uid: self.uid,
             data: Arc::downgrade(&self.data),
