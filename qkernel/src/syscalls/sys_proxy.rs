@@ -61,7 +61,6 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             .fetch_add(gap as u64, Ordering::SeqCst);
     });
     let cmd: ProxyCommand = unsafe { core::mem::transmute(commandId as u64) };
-    error!("sysproxy cmd is {:?}", &cmd);
     let cudaProcessCtx = task.Thread().ThreadGroup().GetCudaCtx();
     cudaProcessCtx.enableGPU.store(true, Ordering::SeqCst);
     let mut parameters = ProxyParameters {

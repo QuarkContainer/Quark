@@ -134,12 +134,6 @@ pub fn NvidiaProxy(qmsg: &QMsg, containerId: &str) -> Result<i64> {
         unreachable!("get non sys_proxy request in NvidiaProxy")
     };
 
-    error!(
-        "NvidiaProxy ctxid is {:x?} keys is {:x?}",
-        ctxId,
-        workerMap.keys()
-    );
-
     match workerMap.get(&ctxId) {
         Some(tx) => {
             tx.send(qmsg as *const _ as u64).unwrap();
@@ -167,16 +161,17 @@ pub fn NvidiaProxy(qmsg: &QMsg, containerId: &str) -> Result<i64> {
                         } else {
                             let ret = NvidiaProxyExecute(msg2, &containerId2);
                             match ret {
-                                Ok(_res) => SHARESPACE.scheduler.ScheduleQ(
-                                    currTaskId,
-                                    currTaskId.Queue(),
-                                    true,
-                                ),
+                                Ok(_res) => (),
                                 Err(e) => {
                                     // no error
                                     error!("nvidia proxy get error {:?}", e);
                                 }
                             }
+                            SHARESPACE.scheduler.ScheduleQ(
+                                currTaskId,
+                                currTaskId.Queue(),
+                                true,
+                            )
                         }
                     }
                 }
