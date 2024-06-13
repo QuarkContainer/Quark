@@ -277,7 +277,10 @@ impl PageOpts {
 
     pub fn Kernel() -> Self {
         return PageOpts(
-            PageTableFlags::VALID,
+            PageTableFlags::VALID |
+            PageTableFlags::MT_NORMAL |
+            PageTableFlags::DIRTY |
+            PageTableFlags::ACCESSED
         );
     }
 
