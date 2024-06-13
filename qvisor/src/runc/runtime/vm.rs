@@ -56,6 +56,8 @@ use super::super::super::{
     ThreadId, KERNEL_IO_THREAD, PMA_KEEPER, QUARK_CONFIG, ROOT_CONTAINER_ID, THREAD_ID, URING_MGR,
     VCPU, VMS,
 };
+use super::vm_type;
+use super::vm_type::VmType;
 
 pub const SANDBOX_UID_NAME : &str = "io.kubernetes.cri.sandbox-uid";
 
@@ -94,43 +96,12 @@ pub fn ClearDump(id: usize) {
 pub struct VirtualMachine {
     pub kvm: Kvm,
     pub vmfd: VmFd,
+    pub vm_type: Box<dyn VmType>,
     pub vcpus: Vec<Arc<KVMVcpu>>,
     pub elf: KernelELF,
 }
 
 impl VirtualMachine {
-    pub fn SetMemRegion(
-        slotId: u32,
-        vm_fd: &VmFd,
-        phyAddr: u64,
-        hostAddr: u64,
-        pageMmapsize: u64,
-    ) -> Result<()> {
-        info!(
-            "SetMemRegion phyAddr = {:x}, hostAddr={:x}; pageMmapsize = {:x} MB",
-            phyAddr,
-            hostAddr,
-            (pageMmapsize >> 20)
-        );
-
-        // guest_phys_addr must be <512G
-        let mem_region = kvm_userspace_memory_region {
-            slot: slotId,
-            guest_phys_addr: phyAddr,
-            memory_size: pageMmapsize,
-            userspace_addr: hostAddr,
-            flags: 0, //kvm_bindings::KVM_MEM_LOG_DIRTY_PAGES,
-        };
-
-        unsafe {
-            vm_fd
-                .set_user_memory_region(mem_region)
-                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-        }
-
-        return Ok(());
-    }
-
     pub fn Umask() -> u32 {
         let umask = unsafe { libc::umask(0) };
 
@@ -174,277 +145,16 @@ impl VirtualMachine {
 
     pub const VDSO_PATH: &'static str = "/usr/local/bin/vdso.so";
 
-    pub fn InitShareSpace(
-        cpuCount: usize,
-        controlSock: i32,
-        rdmaSvcCliSock: i32,
-        podId: [u8; 64],
-    ) {
-        SHARE_SPACE_STRUCT
-            .lock()
-            .Init(cpuCount, controlSock, rdmaSvcCliSock, podId);
-
-        let spAddr = &(*SHARE_SPACE_STRUCT.lock()) as *const _ as u64;
-        SHARE_SPACE.SetValue(spAddr);
-        SHARESPACE.SetValue(spAddr);
-
-        unsafe {
-            vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
-        }
-
-        let sharespace = SHARE_SPACE.Ptr();
-        let logfd = super::super::super::print::LOG.Logfd();
-        
-        URING_MGR.lock().Addfd(logfd).unwrap();
-
-        KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
-
-        URING_MGR
-            .lock()
-            .Addfd(sharespace.HostHostEpollfd())
-            .unwrap();
-        URING_MGR.lock().Addfd(controlSock).unwrap();
-        IOURING.SetValue(sharespace.GetIOUringAddr());
-
-        unsafe {
-            KERNEL_PAGETABLE.SetRoot(VMS.lock().pageTables.GetRoot());
-            PAGE_MGR.SetValue(sharespace.GetPageMgrAddr());
-
-            KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
-                MemoryDef::DEFAULT_STACK_SIZE as usize,
-                MemoryDef::DEFAULT_STACK_SIZE as usize,
-            ));
-
-            task::InitSingleton();
-            futex::InitSingleton();
-            timer::InitSingleton();
-        }
-
-        if SHARESPACE.config.read().EnableTsot {
-            // initialize the tost_agent
-            TSOT_AGENT.NextReqId();
-            SHARESPACE.dnsSvc.Init().unwrap();
-        };
-
-        *SHARESPACE.bootId.lock() = uuid::Uuid::new_v4().to_string();
-        
-        let syncPrint = sharespace.config.read().SyncPrint();
-        super::super::super::print::SetSyncPrint(syncPrint);
-    }
-
     pub fn Init(args: Args) -> Result<Self> {
         PerfGoto(PerfType::Other);
-
-        *ROOT_CONTAINER_ID.lock() = args.ID.clone();
-        if QUARK_CONFIG.lock().PerSandboxLog {
-            let sandboxName = match args.Spec.annotations.get("io.kubernetes.cri.sandbox-name") {
-                None => {
-                    args.ID[0..12].to_owned()
-                }
-                Some(name) => name.clone()
-            };
-            LOG.Reset(&sandboxName);
-         }
-
-        let cpuCount = args.GetCpuCount();
-
-        let kvmfd = args.KvmFd;
-
-        let reserveCpuCount = QUARK_CONFIG.lock().ReserveCpuCount;
-        let cpuCount = if cpuCount == 0 {
-            VMSpace::VCPUCount() - reserveCpuCount
-        } else {
-            cpuCount.min(VMSpace::VCPUCount() - reserveCpuCount)
-        };
-
-        if cpuCount < 2 {
-            // only do cpu affinit when there more than 2 cores
-            VMS.lock().cpuAffinit = false;
-        } else {
-            VMS.lock().cpuAffinit = true;
-        }
-
-
-        match args.Spec.annotations.get(SANDBOX_UID_NAME) {
-            None => (),
-            Some(podUid) => {
-                VMS.lock().podUid = podUid.clone();
-            }
-        }
-
-        let cpuCount = cpuCount.max(2); // minimal 2 cpus
-
-        VMS.lock().vcpuCount = cpuCount;
-        VMS.lock().RandomVcpuMapping();
-        let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
-        let controlSock = args.ControlSock;
-
-        let rdmaSvcCliSock = args.RDMASvcCliSock;
-
+        let (vm_type, elf) = vm_type::noncc::VmNormal::init(Some(&args))
+            .expect("A noncc-vm can not be created");
         let umask = Self::Umask();
-        info!(
-            "reset umask from {:o} to {}, kernelMemRegionSize is {:x}",
-            umask, 0, kernelMemRegionSize
-        );
-
-        let kvm = unsafe { Kvm::from_raw_fd(kvmfd) };
-
-        #[cfg(target_arch = "x86_64")]
-        let kvm_cpuid = kvm
-            .get_supported_cpuid(kvm_bindings::KVM_MAX_CPUID_ENTRIES)
-            .unwrap();
-
-        let vm_fd = kvm
-            .create_vm()
-            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-        
-        #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
-        {
-            let mut cap: kvm_enable_cap = Default::default();
-            cap.cap = KVM_CAP_X86_DISABLE_EXITS;
-            cap.args[0] = (KVM_X86_DISABLE_EXITS_HLT | KVM_X86_DISABLE_EXITS_MWAIT) as u64;
-            vm_fd.enable_cap(&cap).unwrap();
-        }
-
-        if !kvm.check_extension(Cap::ImmediateExit) {
-            panic!("KVM_CAP_IMMEDIATE_EXIT not supported");
-        }
-
-        let mut elf = KernelELF::New()?;
-        Self::SetMemRegion(
-            1,
-            &vm_fd,
-            MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB,
-        )?;
-
-        Self::SetMemRegion(
-            2,
-            &vm_fd,
-            MemoryDef::NVIDIA_START_ADDR,
-            MemoryDef::NVIDIA_START_ADDR,
-            MemoryDef::NVIDIA_ADDR_SIZE,
-        )?;
-
-        let heapStartAddr = MemoryDef::HEAP_OFFSET;
-
-        PMA_KEEPER.Init(MemoryDef::FILE_MAP_OFFSET, MemoryDef::FILE_MAP_SIZE);
-
-        info!(
-            "set map region start={:x}, end={:x}",
-            MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::PHY_LOWER_ADDR + MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB
-        );
-
-        let autoStart;
-        let podIdStr = args.ID.clone();
-        let mut podId = [0u8; 64];
-        podId.clone_from_slice(podIdStr.as_bytes());
-
-        {
-            let vms = &mut VMS.lock();
-            vms.controlSock = controlSock;
-            PMA_KEEPER.InitHugePages();
-
-            vms.hostAddrTop =
-                MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
-            vms.pageTables = PageTables::New(&vms.allocator)?;
-
-            let mut opts = addr::PageOpts::Zero();
-            opts.SetPresent().SetWrite().SetGlobal();
-            #[cfg(target_arch = "aarch64")]
-            opts.SetMtNormal().SetDirty().SetAccessed();
-
-            vms.KernelMapHugeTable(
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR),
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
-                addr::Addr(MemoryDef::PHY_LOWER_ADDR),
-                opts.Val(),
-            )?;
-
-            vms.KernelMapHugeTable(
-                addr::Addr(MemoryDef::NVIDIA_START_ADDR),
-                addr::Addr(MemoryDef::NVIDIA_START_ADDR + MemoryDef::NVIDIA_ADDR_SIZE),
-                addr::Addr(MemoryDef::NVIDIA_START_ADDR),
-                addr::PageOpts::Zero()
-                    .SetPresent()
-                    .SetWrite()
-                    .SetGlobal()
-                    .Val(),
-            )?;
-            #[cfg(target_arch = "aarch64")]
-            {
-                let mut opts = addr::PageOpts::Zero();
-
-                opts.SetWrite().SetGlobal().SetPresent().SetAccessed();
-                opts.SetMMIOPage();
-                vms.KernelMap(
-                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
-                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE + MemoryDef::HYPERCALL_MMIO_SIZE),
-                    addr::Addr(MemoryDef::HYPERCALL_MMIO_BASE),
-                    opts.Val(),
-                )?;
-            }
-
-            autoStart = args.AutoStart;
-            vms.pivot = args.Pivot;
-            vms.args = Some(args);
-        }
-
-        Self::InitShareSpace(cpuCount, controlSock, rdmaSvcCliSock, podId);
-
-        let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
-        elf.LoadVDSO(Self::VDSO_PATH)?;
-        VMS.lock().vdsoAddr = elf.vdsoStart;
-
-        // let p = entry as *const u8;
-        // info!(
-        //     "entry is 0x{:x}, data at entry is {:x}, heapStartAddr is {:x}",
-        //     entry,
-        //     unsafe { *p },
-        //     heapStartAddr
-        // );
-
-        {
-            super::super::super::URING_MGR.lock();
-        }
-
-        #[cfg(target_arch = "aarch64")]
-        let kvi = get_kvm_vcpu_init(&vm_fd)?;
-
-        let mut vcpus = Vec::with_capacity(cpuCount);
-        for i in 0..cpuCount
-        /*args.NumCPU*/
-        {
-            let vcpu = Arc::new(KVMVcpu::Init(
-                i as usize,
-                cpuCount,
-                &vm_fd,
-                entry,
-                heapStartAddr,
-                SHARE_SPACE.Value(),
-                autoStart,
-            )?);
-            // enable cpuid in host
-            #[cfg(target_arch = "x86_64")]
-            vcpu.vcpu.set_cpuid2(&kvm_cpuid).unwrap();
-            VMS.lock().vcpus.push(vcpu.clone());
-            vcpus.push(vcpu);
-        }
-        
-        #[cfg(target_arch = "aarch64")]
-        for vcpu in vcpus.iter() {
-            vcpu.vcpu.vcpu_init(&kvi).map_err(|e| Error::SysError(e.errno()))?;
-        }
-
-        let vm = Self {
-            kvm: kvm,
-            vmfd: vm_fd,
-            vcpus: vcpus,
-            elf: elf,
-        };
-
+        info!("Reset umask from {:o} to {}.", umask, 0);
+        info!("VM will be created with parameters:{:?}", vm_type);
+        let vm = vm_type.create_vm(elf, args)
+                        .expect("VM failed to create.");
+        info!("VM creation finished.");
         PerfGofrom(PerfType::Other);
         Ok(vm)
     }
@@ -518,6 +228,7 @@ impl VirtualMachine {
     }
 }
 
+//TODO: remove the function / logic moved to aarch64 KVMVcpu implementation
 #[cfg(target_arch = "aarch64")]
 fn get_kvm_vcpu_init(vmfd: &VmFd) -> Result<kvm_vcpu_init> {
     let mut kvi = kvm_vcpu_init::default();
