@@ -190,8 +190,7 @@ impl MountNs {
         // for cuda environment and shim model
         // we need to run nvidia-container-cli when sub-container startup in host root environment
         if !QUARK_CONFIG.lock().ShimMode {
-            #[cfg(not(feature = "cuda"))]
-            if Util::Umount2("/", MNT_DETACH) < 0 {
+            if Util::Umount2("./old", MNT_DETACH) < 0 {
                 panic!("UMount2 fail")
             }
         }
