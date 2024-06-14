@@ -1021,7 +1021,8 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn CudaHostAlloc(task: &Task, mut parameters: ProxyParameters) -> Result<i64> {
     let size = parameters.para2 as usize;
     assert!(size > 0);
-    let mut cnt = ((size as u64 + MemoryDef::PAGE_SIZE_2M - 1) / MemoryDef::PAGE_SIZE_2M) as usize;
+    let mut cnt =
+        ((size as u64 + MemoryDef::PAGE_SIZE_2M - 1) / MemoryDef::PAGE_SIZE_2M) as usize + 1;
     let mut iovs: Vec<IoVec> = Vec::new();
     iovs.resize(cnt, IoVec::NewFromAddr(0, 0));
 
@@ -1044,11 +1045,21 @@ pub fn CudaHostAlloc(task: &Task, mut parameters: ProxyParameters) -> Result<i64
         iovs: iovs,
     };
 
+    let hostOffset = hostAddr & (MemoryDef::PAGE_SIZE_4K - 1);
+
     let hostm = CudaHostMappable(Arc::new(inner));
     let mappable = MMappable::CudaHost(hostm);
 
+    let totalsize = size as u64 + hostOffset;
+    let sizeOffset = totalsize & (MemoryDef::PAGE_SIZE_4K - 1);
+    let mapsize = if sizeOffset != 0 {
+        totalsize as u64 - sizeOffset + MemoryDef::PAGE_SIZE_4K
+    } else {
+        totalsize as u64
+    };
+
     let mut opts = MMapOpts {
-        Length: size as u64,
+        Length: mapsize as u64,
         Addr: 0,
         Offset: 0,
         Fixed: false,
@@ -1067,6 +1078,7 @@ pub fn CudaHostAlloc(task: &Task, mut parameters: ProxyParameters) -> Result<i64
         Hint: "".to_string(),
     };
 
+    error!("CudaHostAlloc the len is {:x}", mapsize);
     let addr = match task.mm.MMap(task, &mut opts) {
         Ok(addr) => addr,
         Err(e) => {
@@ -1075,7 +1087,8 @@ pub fn CudaHostAlloc(task: &Task, mut parameters: ProxyParameters) -> Result<i64
         }
     };
 
-    task.CopyOutObj(&addr, parameters.para1)?;
+    let addrWithOffset = addr + hostOffset;
+    task.CopyOutObj(&addrWithOffset, parameters.para1)?;
     task.mm.TlbShootdown();
     return Ok(0);
 }
