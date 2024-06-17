@@ -178,7 +178,6 @@ pub struct NividiaDriverVersion {
     pub ioctlParamsAddr: u64,
 }
 
-
 #[derive(Clone, Debug, Default)]
 pub struct HostUnixConnect {
     pub type_: i32,
@@ -959,6 +958,7 @@ pub enum HostInputMsg {
     Default,
     Hibernate,
     Wakeup,
+    ControlSockReady(i32),
 }
 
 impl Default for HostInputMsg {
