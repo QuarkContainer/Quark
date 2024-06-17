@@ -17,6 +17,7 @@ use core::arch::asm;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use super::super::super::kernel_def::*;
+use super::super::kernel::boot::controller::ControlMsgHandler;
 use super::super::kernel::GlobalRDMASvcCli;
 use super::super::linux_def::*;
 use super::super::task_mgr::*;
@@ -167,6 +168,9 @@ pub fn ProcessInputMsgs() {
                         HostSpace::SwapIn();
                         GetKernel().Unpause();
                     }
+                }
+                HostInputMsg::ControlSockReady(fd) => {
+                    CreateTask(ControlMsgHandler as u64, fd as *const u8, false);
                 }
                 HostInputMsg::Default => {}
             }

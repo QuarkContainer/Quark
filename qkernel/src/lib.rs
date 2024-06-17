@@ -634,7 +634,10 @@ pub extern "C" fn rust_main(
         if autoStart {
             CreateTask(StartRootContainer as u64, ptr::null(), false);
         }
-        CreateTask(ControllerProcess as u64, ptr::null(), true);
+
+        if SHARESPACE.config.read().Sandboxed {
+            self::InitLoader();
+        }
     }
 
     WaitFn();
@@ -658,13 +661,6 @@ fn StartSubContainerProcess(elfEntry: u64, userStackAddr: u64, kernelStackAddr: 
     currTask.AccountTaskEnter(SchedState::RunningApp);
 
     EnterUser(elfEntry, userStackAddr, kernelStackAddr);
-}
-
-fn ControllerProcess(_para: *const u8) {
-    if SHARESPACE.config.read().Sandboxed {
-        self::InitLoader();
-    }
-    ControllerProcessHandler().expect("ControllerProcess crash");
 }
 
 pub fn StartRootProcess() {
