@@ -465,6 +465,9 @@ pub fn SysProxy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             let ret = HostSpace::Proxy(cmd, parameters);
 
+            if deviceProp.maxBlocksPerMultiProcessor == 0 {
+                deviceProp.maxBlocksPerMultiProcessor = 32;
+            }
             if ret == 0 {
                 task.CopyOutObj(&deviceProp, args.arg1)?;
             }

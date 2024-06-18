@@ -436,6 +436,9 @@ pub struct CudaDeviceProperties {
     pub sharedMemPerBlockOptin: usize,
     pub pageableMemoryAccessUsesHostPageTables: i32,
     pub directManagedMemAccessFromHost: i32,
+    pub maxBlocksPerMultiProcessor: i32,
+    pub accessPolicyMaxWindowSize: i32,
+    pub reservedSharedMemPerBlock: usize,
 }
 
 impl Default for CudaDeviceProperties {
@@ -517,6 +520,9 @@ impl Default for CudaDeviceProperties {
             sharedMemPerBlockOptin: 0,
             pageableMemoryAccessUsesHostPageTables: 0,
             directManagedMemAccessFromHost: 0,
+            maxBlocksPerMultiProcessor: 0,
+            accessPolicyMaxWindowSize: 0,
+            reservedSharedMemPerBlock: 0,
         }
     }
 }
