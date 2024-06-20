@@ -1320,31 +1320,10 @@ pub fn CudaHostAlloc(parameters: &ProxyParameters) -> Result<u32> {
     let flags = parameters.para3 as u32;
     let arrAddr = parameters.para4;
     let cnt = unsafe { &mut *(parameters.para5 as *mut usize) };
-    let hostAddr = unsafe { &mut *(parameters.para6 as *mut u64) };
-
-    let mut addr: u64 = 0;
-
-    let ret = unsafe { cudaHostAlloc(&mut addr as *mut _ as u64, size, flags) };
-    if ret != 0 {
-        error!("nvidia.rs: error caused by CudaHostAlloc: {}", ret as u32);
-        return Ok(ret as u32);
-    }
-
-    *hostAddr = addr;
-
-    let hostOffset = addr & (MemoryDef::PAGE_SIZE_4K - 1);
-
-    let mapsize = size as u64 + hostOffset;
-    let mapsizeOffset = mapsize & (MemoryDef::PAGE_SIZE_4K - 1);
-    let mapsize = if mapsizeOffset == 0 {
-        mapsize
-    } else {
-        mapsize - mapsizeOffset + MemoryDef::PAGE_SIZE_4K
-    };
 
     let iovs = unsafe { slice::from_raw_parts_mut(arrAddr as *mut IoVec, *cnt) };
     let hugePageCnt =
-        ((mapsize as u64 + MemoryDef::PAGE_SIZE_2M - 1) / MemoryDef::PAGE_SIZE_2M) as usize;
+        ((size as u64 + MemoryDef::PAGE_SIZE_2M - 1) / MemoryDef::PAGE_SIZE_2M) as usize;
     let mut pages = Vec::new();
     for _i in 0..hugePageCnt {
         let pageAddr = PMA_KEEPER
@@ -1369,41 +1348,47 @@ pub fn CudaHostAlloc(parameters: &ProxyParameters) -> Result<u32> {
     iovs[idx] = iov;
 
     // in case the size < 2MB
-    let left = (mapsize % MemoryDef::PAGE_SIZE_2M) as usize;
+    let left = (size as u64 % MemoryDef::PAGE_SIZE_2M) as usize;
     if left != 0 {
         let gap = MemoryDef::PAGE_SIZE_2M as usize - left;
         iovs[idx].len -= gap;
+        iovs[idx].len = (iovs[idx].len + MemoryDef::PAGE_SIZE_4K as usize - 1)
+            & !(MemoryDef::PAGE_SIZE_4K as usize - 1);
     }
 
     *cnt = idx + 1;
 
-    let remapFlags = libc::MREMAP_MAYMOVE | libc::MREMAP_FIXED | libc::MREMAP_DONTUNMAP;
-    // let remapFlags = libc::MREMAP_FIXED;
-    let mut offset = 0;
     for i in 0..*cnt {
         let iov = iovs[i];
         let ret = unsafe {
-            libc::mremap(
-                (addr - hostOffset + offset) as _,
+            libc::mmap(
+                iov.Start() as _,
                 iov.Len() as _,
-                iov.Len() as _,
-                remapFlags,
-                iov.Start() as u64,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                0,
+                0,
             )
         } as i64;
 
         if ret == -1 {
+            error!("CudaHostAlloc fail with error {}", errno::errno().0);
             return Err(Error::SystemErr(-errno::errno().0));
         }
 
-        offset += iov.Len() as u64;
+        let ret = unsafe { cudaHostRegister(iov.Start() as _, iov.Len() as _, flags) }; //TODO: different flag
+        if ret as u32 != 0 {
+            error!(
+                "CudaHostAlloc: error caused by cudaHostRegister: {}",
+                ret as u32
+            );
+        }
     }
 
     return Ok(0);
 }
 
 pub fn CudeFreeHost(parameters: &ProxyParameters) -> Result<u32> {
-    let hostAddr = parameters.para2;
     let arrAddr = parameters.para3;
     let cnt = parameters.para4 as usize;
 
@@ -1421,14 +1406,6 @@ pub fn CudeFreeHost(parameters: &ProxyParameters) -> Result<u32> {
             PMA_KEEPER.FreeHugePage(addr);
             addr += MemoryDef::PAGE_SIZE_2M;
         }
-    }
-
-    let hostOffset = hostAddr & (MemoryDef::PAGE_SIZE_4K - 1);
-    let hostAddr = hostAddr - hostOffset;
-    let ret = unsafe { cudaFreeHost(hostAddr) };
-    if ret != 0 {
-        error!("nvidia.rs: error caused by CudeFreeHost: {}", ret as u32);
-        return Ok(ret as u32);
     }
 
     return Ok(0);
