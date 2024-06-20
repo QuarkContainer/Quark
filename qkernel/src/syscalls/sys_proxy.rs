@@ -1149,23 +1149,7 @@ pub fn CudaMemcpy(
         }
         CUDA_MEMCPY_HOST_TO_DEVICE => {
             // src is the virtual addr
-            let prs = match task.mm.GetVmaAndRangeLocked(src) {
-                None => {
-                    return Ok(1);
-                }
-                Some((v, r)) => match v.mappable {
-                    MMappable::CudaHost(hm) => {
-                        if r.Start() <= src && src + count <= r.End() {
-                            let mut prs = Vec::new();
-                            prs.push(IoVec::NewFromAddr(hm.hostAddr, count as usize));
-                            prs
-                        } else {
-                            return Ok(1);
-                        }
-                    }
-                    _ => task.V2P(src, count, false, false)?,
-                },
-            };
+            let prs = task.V2P(src, count, false, false)?;
 
             let parameters = ProxyParameters {
                 para1: dst,
@@ -1182,25 +1166,7 @@ pub fn CudaMemcpy(
         }
         CUDA_MEMCPY_DEVICE_TO_HOST => {
             // dst is the virtual addr
-            let prs = match task.mm.GetVmaAndRangeLocked(dst) {
-                None => {
-                    return Ok(1);
-                }
-                Some((v, r)) => match v.mappable {
-                    MMappable::CudaHost(hm) => {
-                        if r.Start() <= dst && dst + count <= r.End() {
-                            let mut prs = Vec::new();
-                            prs.push(IoVec::NewFromAddr(hm.hostAddr, count as usize));
-                            prs
-                        } else {
-                            return Ok(1);
-                        }
-                    }
-                    _ => task.V2P(dst, count, true, false)?,
-                },
-            };
-
-            //let prs = task.V2P(dst, count, true, false)?;
+            let prs = task.V2P(dst, count, true, false)?;
 
             let parameters = ProxyParameters {
                 para1: &prs[0] as *const _ as u64,
