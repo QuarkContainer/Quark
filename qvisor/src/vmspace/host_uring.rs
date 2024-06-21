@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::time::Duration;
-use std::ptr;
 use enum_dispatch::enum_dispatch;
+use std::ptr;
+use std::time::Duration;
 
 use io_uring::opcode;
 use io_uring::squeue;
 use io_uring::types;
 
-use crate::qlib::kernel::quring::uring_op::*;
-use crate::qlib::kernel::quring::uring_async::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::*;
 use super::kernel::SHARESPACE;
+use crate::qlib::kernel::quring::uring_async::*;
+use crate::qlib::kernel::quring::uring_op::*;
 use crate::URING;
 
 pub fn CopyCompleteEntry() -> usize {
@@ -41,9 +41,7 @@ pub fn CopyCompleteEntry() -> usize {
                 None => break,
                 Some(cqe) => {
                     count += 1;
-                    let entry = unsafe {
-                        *(&cqe as * const _ as u64 as * const _)
-                    };
+                    let entry = unsafe { *(&cqe as *const _ as u64 as *const _) };
                     match SHARESPACE.uringQueue.completeq.push(entry) {
                         Err(_) => {
                             panic!("CopyCompleteEntry fail ...");
@@ -60,61 +58,59 @@ pub fn CopyCompleteEntry() -> usize {
 
 #[inline]
 pub fn HostSubmit() -> Result<usize> {
-    let _count = CopyCompleteEntry();
-        
-    let mut count = 0;
+    if SHARESPACE.config.read().UringIO {
+        let _count = CopyCompleteEntry();
 
-    {
-        let mut uring = URING.lock();
-        let mut sq = uring.submission();
-        let mut submitq = SHARESPACE.uringQueue.submitq.lock();
+        let mut count = 0;
 
-        if sq.dropped() != 0 {
-            error!("uring fail dropped {}", sq.dropped());
-        }
+        {
+            let mut uring = URING.lock();
+            let mut sq = uring.submission();
+            let mut submitq = SHARESPACE.uringQueue.submitq.lock();
 
-        if sq.cq_overflow() {
-            error!("uring fail overflow")
-        }
-        assert!(sq.dropped() == 0, "dropped {}", sq.dropped());
-        assert!(!sq.cq_overflow());
-
-        while !sq.is_full() {
-            let uringEntry = match submitq.pop_front() {
-                None => break,
-                Some(e) => e,
-            };
-
-            let entry = match &uringEntry.ops {
-                UringOps::UringCall(call) => {
-                    call.Entry()
-                }
-                UringOps::AsyncOps(ops) => {
-                    ops.Entry()
-                }
-            };
-    
-            let entry = entry.user_data(uringEntry.userdata);
-            let entry = if uringEntry.linked {
-                entry.flags(squeue::Flags::IO_LINK)
-            } else {
-                entry
-            };
-
-            unsafe {
-                match sq.push(&entry) {
-                    Ok(_) => (),
-                    Err(_) => panic!("AUringCall submission queue is full"),
-                }
+            if sq.dropped() != 0 {
+                error!("uring fail dropped {}", sq.dropped());
             }
 
-            count += 1;
-        }
-    }
+            if sq.cq_overflow() {
+                error!("uring fail overflow")
+            }
+            assert!(sq.dropped() == 0, "dropped {}", sq.dropped());
+            assert!(!sq.cq_overflow());
 
-    if count > 0 {
-        let ret = URING.lock().submit_and_wait(0)?;
-        return Ok(ret);
+            while !sq.is_full() {
+                let uringEntry = match submitq.pop_front() {
+                    None => break,
+                    Some(e) => e,
+                };
+
+                let entry = match &uringEntry.ops {
+                    UringOps::UringCall(call) => call.Entry(),
+                    UringOps::AsyncOps(ops) => ops.Entry(),
+                };
+
+                let entry = entry.user_data(uringEntry.userdata);
+                let entry = if uringEntry.linked {
+                    entry.flags(squeue::Flags::IO_LINK)
+                } else {
+                    entry
+                };
+
+                unsafe {
+                    match sq.push(&entry) {
+                        Ok(_) => (),
+                        Err(_) => panic!("AUringCall submission queue is full"),
+                    }
+                }
+
+                count += 1;
+            }
+        }
+
+        if count > 0 {
+            let ret = URING.lock().submit_and_wait(0)?;
+            return Ok(ret);
+        }
     }
 
     return Ok(0);
@@ -151,7 +147,8 @@ impl TimerRemoveOp {
 
 impl ReadOp {
     pub fn Entry(&self) -> squeue::Entry {
-        let op = opcode::Read::new(types::Fd(self.fd), self.addr as *mut _, self.len).offset(self.offset as u64);
+        let op = opcode::Read::new(types::Fd(self.fd), self.addr as *mut _, self.len)
+            .offset(self.offset as u64);
 
         if SHARESPACE.config.read().UringFixedFile {
             return op.build().flags(squeue::Flags::FIXED_FILE);
@@ -163,14 +160,8 @@ impl ReadOp {
 
 impl WriteOp {
     pub fn Entry(&self) -> squeue::Entry {
-        let op = opcode::Write::new(
-            types::Fd(self.fd), 
-            self.addr as *const _, 
-            self.len
-        )
-        .offset(
-            self.offset as u64
-        );
+        let op = opcode::Write::new(types::Fd(self.fd), self.addr as *const _, self.len)
+            .offset(self.offset as u64);
 
         if SHARESPACE.config.read().UringFixedFile {
             return op.build().flags(squeue::Flags::FIXED_FILE);
@@ -251,11 +242,7 @@ impl EpollCtlOp {
 
 impl AcceptOp {
     pub fn Entry(&self) -> squeue::Entry {
-        let op = opcode::Accept::new(
-            types::Fd(self.fd),
-            ptr::null_mut(),
-            ptr::null_mut(),
-        );
+        let op = opcode::Accept::new(types::Fd(self.fd), ptr::null_mut(), ptr::null_mut());
 
         if SHARESPACE.config.read().UringFixedFile {
             return op.build().flags(squeue::Flags::FIXED_FILE);
@@ -300,9 +287,10 @@ impl UringAsyncOpsTrait for AsyncEventfdWrite {
 
 impl UringAsyncOpsTrait for AsyncTimeout {
     fn Entry(&self) -> squeue::Entry {
-        let ts = types::Timespec::from(
-            Duration::new(self.timeout / 1000_000_000, (self.timeout % 1000_000_000) as u32)
-        );
+        let ts = types::Timespec::from(Duration::new(
+            self.timeout / 1000_000_000,
+            (self.timeout % 1000_000_000) as u32,
+        ));
         let op = opcode::Timeout::new(&ts);
         return op.build();
     }
@@ -310,9 +298,10 @@ impl UringAsyncOpsTrait for AsyncTimeout {
 
 impl UringAsyncOpsTrait for AsyncRawTimeout {
     fn Entry(&self) -> squeue::Entry {
-        let ts = types::Timespec::from(
-            Duration::new(self.timeout / 1000_000_000, (self.timeout % 1000_000_000) as u32)
-        );
+        let ts = types::Timespec::from(Duration::new(
+            self.timeout / 1000_000_000,
+            (self.timeout % 1000_000_000) as u32,
+        ));
         let op = opcode::Timeout::new(&ts);
         return op.build();
     }
@@ -352,17 +341,10 @@ impl UringAsyncOpsTrait for AsyncTTYWrite {
     }
 }
 
-
 impl UringAsyncOpsTrait for AsyncWritev {
     fn Entry(&self) -> squeue::Entry {
-        let op = opcode::Write::new(
-            types::Fd(self.fd), 
-            self.addr as *const u8, 
-            self.len
-        )
-        .offset(
-            self.offset as u64
-        );
+        let op = opcode::Write::new(types::Fd(self.fd), self.addr as *const u8, self.len)
+            .offset(self.offset as u64);
 
         if SHARESPACE.config.read().UringFixedFile {
             return op.build().flags(squeue::Flags::FIXED_FILE);
@@ -440,13 +422,12 @@ impl UringAsyncOpsTrait for AsyncFiletWrite {
 
 impl UringAsyncOpsTrait for AsyncAccept {
     fn Entry(&self) -> squeue::Entry {
-
         let op = opcode::Accept::new(
             types::Fd(self.fd),
             &self.addr.addr.data[0] as *const _ as u64 as *mut _,
             &self.addr.len as *const _ as u64 as *mut _,
         );
-        
+
         if SHARESPACE.config.read().UringFixedFile {
             return op.build().flags(squeue::Flags::FIXED_FILE);
         } else {
@@ -478,10 +459,7 @@ impl UringAsyncOpsTrait for AsyncFileRead {
 impl UringAsyncOpsTrait for AsycnSendMsg {
     fn Entry(&self) -> squeue::Entry {
         let intern = self.lock();
-        let op = opcode::SendMsg::new(
-            types::Fd(intern.fd), 
-            &intern.msg as *const _ as *const _
-        );
+        let op = opcode::SendMsg::new(types::Fd(intern.fd), &intern.msg as *const _ as *const _);
 
         if SHARESPACE.config.read().UringFixedFile {
             return op.build().flags(squeue::Flags::FIXED_FILE);
@@ -495,8 +473,8 @@ impl UringAsyncOpsTrait for AsycnRecvMsg {
     fn Entry(&self) -> squeue::Entry {
         let intern = self.lock();
         let op = opcode::RecvMsg::new(
-            types::Fd(intern.fd), 
-            &intern.msg as *const _ as u64 as *mut _
+            types::Fd(intern.fd),
+            &intern.msg as *const _ as u64 as *mut _,
         );
 
         if SHARESPACE.config.read().UringFixedFile {
@@ -561,9 +539,7 @@ impl UringAsyncOpsTrait for AsyncLinkTimeout {
     fn Entry(&self) -> squeue::Entry {
         let tv_sec = self.timeout / 1000_000_000;
         let tv_nsec = self.timeout % 1000_000_000;
-        let ts = types::Timespec::from(
-            Duration::new(tv_sec as u64, tv_nsec as _)
-        );
+        let ts = types::Timespec::from(Duration::new(tv_sec as u64, tv_nsec as _));
         let op = opcode::LinkTimeout::new(&ts);
 
         return op.build();
@@ -585,9 +561,9 @@ impl UringAsyncOpsTrait for UnblockBlockPollAdd {
 impl UringAsyncOpsTrait for AsyncConnect {
     fn Entry(&self) -> squeue::Entry {
         let op = opcode::Connect::new(
-            types::Fd(self.fd), 
-            &self.addr.data[0] as * const _ as u64 as *const _, 
-            self.len
+            types::Fd(self.fd),
+            &self.addr.data[0] as *const _ as u64 as *const _,
+            self.len,
         );
 
         if SHARESPACE.config.read().UringFixedFile {
@@ -612,10 +588,7 @@ impl UringAsyncOpsTrait for TsotPoll {
 
 impl UringAsyncOpsTrait for DNSRecv {
     fn Entry(&self) -> squeue::Entry {
-        let op = opcode::RecvMsg::new(
-            types::Fd(self.fd), 
-            self.msgAddr as * mut _
-        );
+        let op = opcode::RecvMsg::new(types::Fd(self.fd), self.msgAddr as *mut _);
 
         if SHARESPACE.config.read().UringFixedFile {
             return op.build().flags(squeue::Flags::FIXED_FILE);
@@ -628,10 +601,7 @@ impl UringAsyncOpsTrait for DNSRecv {
 impl UringAsyncOpsTrait for DNSSend {
     fn Entry(&self) -> squeue::Entry {
         let intern = self.lock();
-        let op = opcode::SendMsg::new(
-            types::Fd(intern.fd), 
-            &intern.msg as *const _ as *const _
-        );
+        let op = opcode::SendMsg::new(types::Fd(intern.fd), &intern.msg as *const _ as *const _);
 
         if SHARESPACE.config.read().UringFixedFile {
             return op.build().flags(squeue::Flags::FIXED_FILE);

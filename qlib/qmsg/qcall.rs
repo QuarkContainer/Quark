@@ -927,6 +927,12 @@ pub struct WriteControlMsgResp {
     pub close: bool,
 }
 
+#[derive(Clone, Default, Debug, Copy)]
+pub struct WaitFDAsync {
+    pub fd: i32,
+    pub mask: EventMask,
+}
+
 pub struct Print<'a> {
     pub level: DebugLevel,
     pub str: &'a str,
@@ -944,6 +950,7 @@ pub struct QMsg<'a> {
 pub enum HostOutputMsg {
     Default,
     QCall(u64),
+    WaitFDAsync(WaitFDAsync),
     EventfdWriteAsync(EventfdWriteAsync),
 }
 
