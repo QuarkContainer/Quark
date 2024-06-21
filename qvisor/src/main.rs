@@ -71,10 +71,6 @@ pub mod elf_loader;
 pub mod heap_alloc;
 pub mod kernel_def;
 mod kvm_vcpu;
-#[cfg(target_arch = "aarch64")]
-mod kvm_vcpu_aarch64;
-#[cfg(target_arch = "x86_64")]
-mod kvm_vcpu_x86;
 mod memmgr;
 pub mod namespace;
 mod qcall;
@@ -86,8 +82,10 @@ pub mod ucall;
 pub mod unix_socket_def;
 pub mod util;
 mod vmspace;
+pub mod arch;
 
 use alloc::sync::Arc;
+use arch::vm::vcpu::ArchVirtCpu;
 use lazy_static::lazy_static;
 use spin::Mutex;
 use std::cell::RefCell;
@@ -121,7 +119,7 @@ pub fn AllocatorPrint(_class: usize) -> String {
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 
 thread_local!(static THREAD_ID: RefCell<i32> = RefCell::new(0));
-thread_local!(static VCPU: RefCell<Option<Arc<KVMVcpu>>> = RefCell::new(None));
+thread_local!(static VCPU: RefCell<Option<Arc<ArchVirtCpu>>> = RefCell::new(None));
 
 pub fn ThreadId() -> i32 {
     let mut i = 0;
@@ -131,7 +129,7 @@ pub fn ThreadId() -> i32 {
     return i;
 }
 
-pub fn LocalVcpu() -> Option<Arc<KVMVcpu>> {
+pub fn LocalVcpu() -> Option<Arc<ArchVirtCpu>> {
     let mut vcpu = None;
     VCPU.with(|f| {
         vcpu = f.borrow().clone();

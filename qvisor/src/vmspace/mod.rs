@@ -32,6 +32,7 @@ pub mod xpu;
 use core::arch::asm;
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
+use arch::vm::vcpu::ArchVirtCpu;
 use lazy_static::lazy_static;
 use libc::*;
 use serde_json;
@@ -60,7 +61,6 @@ use self::syscall::*;
 use self::tsot_agent::TSOT_AGENT;
 use self::tsot_msg::TsotMessage;
 use super::kvm_vcpu::HostPageAllocator;
-use super::kvm_vcpu::KVMVcpu;
 use super::namespace::MountNs;
 use super::qlib::addr::Addr;
 use super::qlib::common::{Error, Result};
@@ -117,7 +117,6 @@ pub struct VMSpace {
     pub podUid: String,
     pub pageTables: PageTables,
     pub allocator: HostPageAllocator,
-    pub hostAddrTop: u64,
     pub sharedLoasdOffset: u64,
     pub vdsoAddr: u64,
     pub vcpuCount: usize,
@@ -129,7 +128,7 @@ pub struct VMSpace {
     pub pivot: bool,
     pub waitingMsgCall: Option<WaitingMsgCall>,
     pub controlSock: i32,
-    pub vcpus: Vec<Arc<KVMVcpu>>,
+    pub vcpus: Vec<Arc<ArchVirtCpu>>,
     pub haveMembarrierGlobal: bool,
     pub haveMembarrierPrivateExpedited: bool,
 }
@@ -145,7 +144,6 @@ impl VMSpace {
             podUid: "".to_owned(),
             allocator: HostPageAllocator::New(),
             pageTables: PageTables::default(),
-            hostAddrTop: 0,
             sharedLoasdOffset: 0x0000_5555_0000_0000,
             vdsoAddr: 0,
             cpuAffinit: false,
@@ -2014,7 +2012,7 @@ impl VMSpace {
     }
 
     pub fn GetVcpuFreq(&self) -> i64 {
-        self.vcpus[0].get_frequency().unwrap() as i64
+        self.vcpus[0].vcpu_base.get_frequency().unwrap() as i64
     }
 
     pub fn Membarrier(cmd: i32) -> i32 {

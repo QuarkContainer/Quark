@@ -16,8 +16,6 @@ use std::fs::File;
 use std::slice;
 use xmas_elf::program::ProgramHeader::Ph64;
 use xmas_elf::program::Type;
-//use xmas_elf::program::{ProgramIter, SegmentData, Type};
-//use xmas_elf::sections::SectionData;
 use memmap::Mmap;
 use std::os::unix::io::AsRawFd;
 use xmas_elf::*;
@@ -28,10 +26,10 @@ pub use xmas_elf::sections::Rela;
 pub use xmas_elf::symbol_table::{Entry, Entry64};
 pub use xmas_elf::{P32, P64};
 
+use crate::qlib::linux_def::MemoryDef;
+
 use super::addr::Addr;
 
-//use xmas_elf::dynamic::Tag;
-//use xmas_elf::header;
 use super::qlib::common::Error;
 use super::qlib::common::Result;
 
@@ -191,12 +189,13 @@ impl KernelELF {
             return Err(Error::AddressDoesMatch);
         }
 
-        let target = unsafe { slice::from_raw_parts_mut((hostAddr + 4096) as *mut u8, len) };
+        let target = unsafe { slice::from_raw_parts_mut(
+            (hostAddr + MemoryDef::PAGE_SIZE) as *mut u8, len) };
         let source = &mmap[..];
         target.clone_from_slice(source);
 
         self.vdsoStart = hostAddr;
-        self.vdsoLen = 3 * 4096;
+        self.vdsoLen = 3 * MemoryDef::PAGE_SIZE;
         self.vdsomr = Some(mr);
 
         return Ok(());

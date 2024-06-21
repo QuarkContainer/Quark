@@ -174,10 +174,10 @@ impl ShareSpace {
                 SHARE_SPACE.scheduler.VcpuArr[i].InterruptTlbShootdown();
                 if tlbshootdown_wait {
                     let (tx, rx) = channel();
-                    cpu.interrupt(Some(tx));
+                    cpu.vcpu_base.interrupt(Some(tx));
                     waiters.push(rx);
                 } else {
-                    cpu.interrupt(None);
+                    cpu.vcpu_base.interrupt(None);
                 }
             }
         }
@@ -215,7 +215,7 @@ impl ShareSpace {
                 self.scheduler.VcpuArr[i].InterruptThreadTimeout();
                 //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
                 let vcpu = VMS.lock().vcpus[i].clone();
-                vcpu.interrupt(None);
+                vcpu.vcpu_base.interrupt(None);
             }
         }
     }
