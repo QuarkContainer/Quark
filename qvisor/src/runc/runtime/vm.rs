@@ -15,47 +15,28 @@
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use std::os::unix::io::AsRawFd;
-use std::os::unix::io::FromRawFd;
 use std::thread;
 
 use kvm_bindings::*;
-use kvm_ioctls::{Cap, Kvm, VmFd};
+use kvm_ioctls::{Kvm, VmFd};
 use lazy_static::lazy_static;
 use nix::sys::signal;
 
+use crate::arch::VirtCpu;
+use crate::arch::vm::vcpu::ArchVirtCpu;
 use crate::qlib::MAX_VCPU_COUNT;
-use crate::tsot_agent::TSOT_AGENT;
 //use crate::vmspace::hibernate::HiberMgr;
 
 use super::super::super::elf_loader::*;
 use super::super::super::kvm_vcpu::*;
-use super::super::super::print::LOG;
-use super::super::super::qlib::addr;
 use super::super::super::qlib::common::*;
-use super::super::super::qlib::kernel::kernel::futex;
-use super::super::super::qlib::kernel::kernel::timer;
-use super::super::super::qlib::kernel::task;
-use super::super::super::qlib::kernel::vcpu;
-use super::super::super::qlib::kernel::IOURING;
-use super::super::super::qlib::kernel::KERNEL_PAGETABLE;
-use super::super::super::qlib::kernel::KERNEL_STACK_ALLOCATOR;
-use super::super::super::qlib::kernel::PAGE_MGR;
-use super::super::super::qlib::kernel::SHARESPACE;
 use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::pagetable::AlignedAllocator;
-use super::super::super::qlib::pagetable::PageTables;
 use super::super::super::qlib::perf_tunning::*;
 use super::super::super::qlib::task_mgr::*;
 use super::super::super::qlib::ShareSpace;
 use super::super::super::runc::runtime::loader::*;
 use super::super::super::syncmgr;
-use super::super::super::vmspace::*;
-use super::super::super::SHARE_SPACE;
-use super::super::super::SHARE_SPACE_STRUCT;
-use super::super::super::{
-    ThreadId, KERNEL_IO_THREAD, PMA_KEEPER, QUARK_CONFIG, ROOT_CONTAINER_ID, THREAD_ID, URING_MGR,
-    VCPU, VMS,
-};
+use super::super::super::{ThreadId, THREAD_ID, URING_MGR, VCPU, VMS};
 use super::vm_type;
 use super::vm_type::VmType;
 
@@ -97,7 +78,7 @@ pub struct VirtualMachine {
     pub kvm: Kvm,
     pub vmfd: VmFd,
     pub vm_type: Box<dyn VmType>,
-    pub vcpus: Vec<Arc<KVMVcpu>>,
+    pub vcpus: Vec<Arc<ArchVirtCpu>>,
     pub elf: KernelELF,
 }
 
@@ -175,7 +156,7 @@ impl VirtualMachine {
                     VCPU.with(|f| {
                         *f.borrow_mut() = Some(cpu.clone());
                     });
-                    cpu.run(tgid).expect("vcpu run fail");
+                    cpu.vcpu_run(tgid).expect("vcpu run fail");
                     info!("cpu0 finish");
                 })
                 .unwrap(),
@@ -198,7 +179,7 @@ impl VirtualMachine {
                             *f.borrow_mut() = Some(cpu.clone());
                         });
                         info!("cpu#{} start", ThreadId());
-                        cpu.run(tgid).expect("vcpu run fail");
+                        cpu.vcpu_run(tgid).expect("vcpu run fail");
                         info!("cpu#{} finish", ThreadId());
                     })
                     .unwrap(),
@@ -228,15 +209,6 @@ impl VirtualMachine {
     }
 }
 
-//TODO: remove the function / logic moved to aarch64 KVMVcpu implementation
-#[cfg(target_arch = "aarch64")]
-fn get_kvm_vcpu_init(vmfd: &VmFd) -> Result<kvm_vcpu_init> {
-    let mut kvi = kvm_vcpu_init::default();
-    vmfd.get_preferred_target(&mut kvi).map_err(|e| Error::SysError(e.errno()))?;
-    kvi.features[0] |= 1 << kvm_bindings::KVM_ARM_VCPU_PSCI_0_2;
-    Ok(kvi)
-}
-
 fn SetSigusr1Handler() {
     let sig_action = signal::SigAction::new(
         signal::SigHandler::Handler(handleSigusr1),
@@ -253,10 +225,10 @@ extern "C" fn handleSigusr1(_signal: i32) {
     SetDumpAll();
     let vms = VMS.lock();
     for vcpu in &vms.vcpus {
-        if vcpu.state.load(Ordering::Acquire) == KVMVcpuState::HOST as u64 {
-            vcpu.dump().unwrap_or_default();
+        if vcpu.vcpu_base.state.load(Ordering::Acquire) == KVMVcpuState::HOST as u64 {
+            vcpu.vcpu_base.dump().unwrap_or_default();
         }
-        vcpu.Signal(Signal::SIGCHLD);
+        vcpu.vcpu_base.Signal(Signal::SIGCHLD);
     }
     drop(vms);
 }
