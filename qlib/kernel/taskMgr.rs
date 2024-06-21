@@ -203,11 +203,6 @@ pub fn PollAsyncMsg() -> usize {
     return ret;
 }
 
-#[inline]
-pub fn ProcessOne() -> bool {
-    return QUringProcessOne();
-}
-
 pub fn Wait() {
     CPULocal::Myself().ToSearch(&SHARESPACE);
     let start = TSC.Rdtsc();

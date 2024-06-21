@@ -40,10 +40,6 @@ pub fn QUringTrigger() -> usize {
     return IOURING.DrainCompletionQueue();
 }
 
-pub fn QUringProcessOne() -> bool {
-    return IOURING.ProcessOne();
-}
-
 // unsafe impl Send for Submission {}
 // unsafe impl Sync for Submission {}
 
@@ -556,24 +552,9 @@ impl QUring {
         return SHARESPACE.uringQueue.completeq.pop();
     }
 
-    pub fn ProcessOne(&self) -> bool {
-        if super::super::Shutdown() {
-            return false;
-        }
-
-        let cqe = self.NextCompleteEntry();
-
-        match cqe {
-            None => return false,
-            Some(cqe) => {
-                self.Process(&cqe);
-                return true;
-            }
-        }
-    }
-
     pub fn DrainCompletionQueue(&self) -> usize {
         if SHARESPACE.config.read().UringIO {
+            error!("DrainCompletionQueue xxxx");
             let mut count = 0;
             loop {
                 if super::super::Shutdown() {
