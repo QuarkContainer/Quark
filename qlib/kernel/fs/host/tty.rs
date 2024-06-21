@@ -491,7 +491,7 @@ impl Waitable for TTYFileOps {
         let queue = self.lock().queue.clone();
         queue.EventRegister(task, e, mask);
         let fd = self.lock().fd;
-        if !SHARESPACE.config.read().UringIO && ENABLE_RINGBUF {
+        if !(SHARESPACE.config.read().UringIO && ENABLE_RINGBUF) {
             UpdateFD(fd).unwrap();
         };
     }
@@ -500,7 +500,7 @@ impl Waitable for TTYFileOps {
         let queue = self.lock().queue.clone();
         queue.EventUnregister(task, e);
         let fd = self.lock().fd;
-        if !SHARESPACE.config.read().UringIO && ENABLE_RINGBUF {
+        if !(SHARESPACE.config.read().UringIO && ENABLE_RINGBUF) {
             UpdateFD(fd).unwrap();
         };
     }

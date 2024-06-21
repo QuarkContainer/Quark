@@ -16,8 +16,8 @@ use alloc::sync::Arc;
 
 use super::super::super::bytestream::*;
 use super::super::super::common::*;
-use super::super::super::CompleteEntry;
 use super::super::super::object_ref::*;
+use super::super::super::CompleteEntry;
 //pub use super::super::super::uring::*;
 use super::super::fs::file::*;
 use super::super::task::*;
@@ -29,8 +29,8 @@ use super::super::super::vcpu_mgr::*;
 use super::super::kernel::async_wait::*;
 use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
-use super::super::socket::hostinet::uring_socket::*;
 use super::super::socket::hostinet::tsotsocket::*;
+use super::super::socket::hostinet::uring_socket::*;
 use super::super::IOURING;
 use super::super::SHARESPACE;
 use super::uring_async::*;
@@ -55,7 +55,7 @@ pub struct QUring {
 
 impl Default for QUring {
     fn default() -> Self {
-        return Self::New(MemoryDef::QURING_SIZE)
+        return Self::New(MemoryDef::QURING_SIZE);
     }
 }
 
@@ -573,24 +573,28 @@ impl QUring {
     }
 
     pub fn DrainCompletionQueue(&self) -> usize {
-        let mut count = 0;
-        loop {
-            if super::super::Shutdown() {
-                return 0;
-            }
+        if SHARESPACE.config.read().UringIO {
+            let mut count = 0;
+            loop {
+                if super::super::Shutdown() {
+                    return 0;
+                }
 
-            let cqe = self.NextCompleteEntry();
+                let cqe = self.NextCompleteEntry();
 
-            match cqe {
-                None => break,
-                Some(cqe) => {
-                    count += 1;
-                    self.Process(&cqe);
+                match cqe {
+                    None => break,
+                    Some(cqe) => {
+                        count += 1;
+                        self.Process(&cqe);
+                    }
                 }
             }
+
+            return count;
         }
 
-        return count;
+        return 0;
     }
 
     // we will leave some queue idle to make uring more stable
