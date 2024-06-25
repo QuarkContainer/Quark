@@ -25,6 +25,7 @@ use nix::sys::signal;
 
 use crate::qlib::MAX_VCPU_COUNT;
 use crate::tsot_agent::TSOT_AGENT;
+use crate::FD_NOTIFIER;
 //use crate::vmspace::hibernate::HiberMgr;
 
 use super::super::super::elf_loader::*;
@@ -57,7 +58,7 @@ use super::super::super::{
     VCPU, VMS,
 };
 
-pub const SANDBOX_UID_NAME : &str = "io.kubernetes.cri.sandbox-uid";
+pub const SANDBOX_UID_NAME: &str = "io.kubernetes.cri.sandbox-uid";
 
 lazy_static! {
     static ref EXIT_STATUS: AtomicI32 = AtomicI32::new(-1);
@@ -174,12 +175,7 @@ impl VirtualMachine {
 
     pub const VDSO_PATH: &'static str = "/usr/local/bin/vdso.so";
 
-    pub fn InitShareSpace(
-        cpuCount: usize,
-        controlSock: i32,
-        rdmaSvcCliSock: i32,
-        podId: [u8; 64],
-    ) {
+    pub fn InitShareSpace(cpuCount: usize, controlSock: i32, rdmaSvcCliSock: i32, podId: [u8; 64]) {
         SHARE_SPACE_STRUCT
             .lock()
             .Init(cpuCount, controlSock, rdmaSvcCliSock, podId);
@@ -194,16 +190,17 @@ impl VirtualMachine {
 
         let sharespace = SHARE_SPACE.Ptr();
         let logfd = super::super::super::print::LOG.Logfd();
-        
+
         URING_MGR.lock().Addfd(logfd).unwrap();
 
         KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
+
+        FD_NOTIFIER.EpollCtlAdd(controlSock, EVENT_READ).unwrap();
 
         URING_MGR
             .lock()
             .Addfd(sharespace.HostHostEpollfd())
             .unwrap();
-        URING_MGR.lock().Addfd(controlSock).unwrap();
         IOURING.SetValue(sharespace.GetIOUringAddr());
 
         unsafe {
@@ -227,7 +224,7 @@ impl VirtualMachine {
         };
 
         *SHARESPACE.bootId.lock() = uuid::Uuid::new_v4().to_string();
-        
+
         let syncPrint = sharespace.config.read().SyncPrint();
         super::super::super::print::SetSyncPrint(syncPrint);
     }
@@ -238,13 +235,11 @@ impl VirtualMachine {
         *ROOT_CONTAINER_ID.lock() = args.ID.clone();
         if QUARK_CONFIG.lock().PerSandboxLog {
             let sandboxName = match args.Spec.annotations.get("io.kubernetes.cri.sandbox-name") {
-                None => {
-                    args.ID[0..12].to_owned()
-                }
-                Some(name) => name.clone()
+                None => args.ID[0..12].to_owned(),
+                Some(name) => name.clone(),
             };
             LOG.Reset(&sandboxName);
-         }
+        }
 
         let cpuCount = args.GetCpuCount();
 
@@ -263,7 +258,6 @@ impl VirtualMachine {
         } else {
             VMS.lock().cpuAffinit = true;
         }
-
 
         match args.Spec.annotations.get(SANDBOX_UID_NAME) {
             None => (),
@@ -297,7 +291,7 @@ impl VirtualMachine {
         let vm_fd = kvm
             .create_vm()
             .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-        
+
         #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
         {
             let mut cap: kvm_enable_cap = Default::default();
@@ -414,10 +408,12 @@ impl VirtualMachine {
             VMS.lock().vcpus.push(vcpu.clone());
             vcpus.push(vcpu);
         }
-        
+
         #[cfg(target_arch = "aarch64")]
         for vcpu in vcpus.iter() {
-            vcpu.vcpu.vcpu_init(&kvi).map_err(|e| Error::SysError(e.errno()))?;
+            vcpu.vcpu
+                .vcpu_init(&kvi)
+                .map_err(|e| Error::SysError(e.errno()))?;
         }
 
         let vm = Self {
@@ -503,7 +499,8 @@ impl VirtualMachine {
 #[cfg(target_arch = "aarch64")]
 fn get_kvm_vcpu_init(vmfd: &VmFd) -> Result<kvm_vcpu_init> {
     let mut kvi = kvm_vcpu_init::default();
-    vmfd.get_preferred_target(&mut kvi).map_err(|e| Error::SysError(e.errno()))?;
+    vmfd.get_preferred_target(&mut kvi)
+        .map_err(|e| Error::SysError(e.errno()))?;
     kvi.features[0] |= 1 << kvm_bindings::KVM_ARM_VCPU_PSCI_0_2;
     Ok(kvi)
 }

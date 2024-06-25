@@ -178,7 +178,6 @@ pub struct NividiaDriverVersion {
     pub ioctlParamsAddr: u64,
 }
 
-
 #[derive(Clone, Debug, Default)]
 pub struct HostUnixConnect {
     pub type_: i32,
@@ -928,6 +927,12 @@ pub struct WriteControlMsgResp {
     pub close: bool,
 }
 
+#[derive(Clone, Default, Debug, Copy)]
+pub struct WaitFDAsync {
+    pub fd: i32,
+    pub mask: EventMask,
+}
+
 pub struct Print<'a> {
     pub level: DebugLevel,
     pub str: &'a str,
@@ -945,6 +950,7 @@ pub struct QMsg<'a> {
 pub enum HostOutputMsg {
     Default,
     QCall(u64),
+    WaitFDAsync(WaitFDAsync),
     EventfdWriteAsync(EventfdWriteAsync),
 }
 
@@ -959,6 +965,7 @@ pub enum HostInputMsg {
     Default,
     Hibernate,
     Wakeup,
+    ControlSockReady(i32),
 }
 
 impl Default for HostInputMsg {

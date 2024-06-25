@@ -15,9 +15,12 @@
 use libc::*;
 
 use crate::qlib::kernel::GlobalIOMgr;
+use crate::HostInputMsg;
+use crate::VMS;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+use super::kernel::SHARESPACE;
 //use super::super::qlib::qmsg::input::*;
 //use super::super::SHARE_SPACE;
 
@@ -79,7 +82,6 @@ impl HostFdNotifier {
     pub fn HostEpollWait(&self) -> i64 {
         let mut events = [EpollEvent::default(); Self::MAX_EVENTS];
         let addr = &mut events[0] as *mut _ as u64;
-
         let epollfd = self.epollfd;
         let nfds = unsafe { epoll_wait(epollfd, addr as _, Self::MAX_EVENTS as i32, 0) };
 
@@ -99,6 +101,19 @@ impl HostFdNotifier {
     }
 
     pub fn FdNotify(fd: i32, mask: EventMask) {
-        GlobalIOMgr().Notify(fd, mask);
+        let controlSock = VMS.lock().controlSock;
+        if fd == controlSock {
+            let fd = unsafe { libc::accept(controlSock, 0 as _, 0 as _) };
+            assert!(
+                fd > 0,
+                "controlSock {} accept fail with error {}",
+                controlSock,
+                errno::errno()
+            );
+
+            SHARESPACE.AQHostInputPush(&HostInputMsg::ControlSockReady(fd));
+        } else {
+            GlobalIOMgr().Notify(fd, mask);
+        }
     }
 }

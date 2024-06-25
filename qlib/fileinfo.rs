@@ -17,11 +17,14 @@ use core::fmt;
 use core::ops::Deref;
 use core::sync::atomic::AtomicI32;
 use core::sync::atomic::Ordering;
+
 use spin::Mutex;
 
 use crate::qlib::common::*;
 use crate::qlib::kernel::kernel::waiter::*;
+use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::IOURING;
+use crate::qlib::kernel::SHARESPACE;
 use crate::qlib::rdmasocket::*;
 use crate::qlib::*;
 
@@ -56,7 +59,7 @@ impl fmt::Debug for SockInfo {
 
 impl SockInfo {
     pub fn Notify(&self, eventmask: EventMask, waitinfo: FdWaitInfo) {
-                match self {
+        match self {
             Self::File => {
                 waitinfo.Notify(eventmask);
             }
@@ -207,7 +210,15 @@ impl FdWaitInfo {
     }
 
     pub fn UpdateFDAsync(&self, fd: i32, epollfd: i32) -> Result<()> {
-                let op;
+        if SHARESPACE.config.read().UringIO {
+            return self.UringUpdate(fd, epollfd);
+        } else {
+            return self.UpdateFDSync(fd);
+        }
+    }
+
+    pub fn UringUpdate(&self, fd: i32, epollfd: i32) -> Result<()> {
+        let op;
         let mask = {
             let mut fi = self.lock();
 
@@ -238,6 +249,27 @@ impl FdWaitInfo {
         let mask = mask | LibcConst::EPOLLET as u64;
 
         IOURING.EpollCtl(epollfd, fd, op as i32, mask as u32);
+        return Ok(());
+    }
+
+    pub fn UpdateFDSync(&self, fd: i32) -> Result<()> {
+        let mask = {
+            let fi = self.lock();
+
+            let mask = fi.queue.Events();
+            if mask == fi.mask {
+                return Ok(());
+            }
+
+            mask
+        };
+
+        return Self::waitfd(fd, mask);
+    }
+
+    fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
+        HostSpace::WaitFDAsync(fd, mask);
+
         return Ok(());
     }
 
