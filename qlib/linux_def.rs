@@ -186,7 +186,7 @@ impl TcpSockAddr {
     pub fn Dup(&self) -> Self {
         return Self {
             data: self.data.clone(),
-        }
+        };
     }
 }
 
@@ -281,11 +281,18 @@ pub struct EpollEvent {
 impl EpollEvent {
     #[cfg(target_arch = "x86_64")]
     pub fn new(events: u32, data: u64) -> Self {
-        return Self {Events:events, Data:data}
+        return Self {
+            Events: events,
+            Data: data,
+        };
     }
     #[cfg(target_arch = "aarch64")]
     pub fn new(events: u32, data: u64) -> Self {
-        return Self {Events:events, _pad: 0, Data:data}
+        return Self {
+            Events: events,
+            _pad: 0,
+            Data: data,
+        };
     }
 }
 
@@ -1583,16 +1590,12 @@ impl LibcConst {
     pub const O_ASYNC: u64 = 0x2000;
     pub const O_CLOEXEC: u64 = 0x80000;
     pub const O_CREAT: u64 = 0x40;
-    pub const O_DIRECT: u64 = 0x4000;
-    pub const O_DIRECTORY: u64 = 0x10000;
     pub const O_DSYNC: u64 = 0x1000;
     pub const O_EXCL: u64 = 0x80;
     pub const O_FSYNC: u64 = 0x101000;
-    pub const O_LARGEFILE: u64 = 0x0;
     pub const O_NDELAY: u64 = 0x800;
     pub const O_NOATIME: u64 = 0x40000;
     pub const O_NOCTTY: u64 = 0x100;
-    pub const O_NOFOLLOW: u64 = 0x20000;
     pub const O_NONBLOCK: u64 = 0x800;
     pub const O_RDONLY: u64 = 0x0;
     pub const O_RDWR: u64 = 0x2;
@@ -2256,6 +2259,22 @@ impl PermMask {
 #[derive(Debug, Clone, Copy)]
 pub struct Flags(pub i32);
 
+#[cfg(target_arch = "x86_64")]
+impl Flags {
+    pub const O_DIRECT: i32 = 0o00040000; //0x00004000;
+    pub const O_LARGEFILE: i32 = 0o00100000; //0x00008000;
+    pub const O_DIRECTORY: i32 = 0o00200000; //0x00010000;
+    pub const O_NOFOLLOW: i32 = 0o00400000; //0x00020000;
+}
+
+#[cfg(target_arch = "aarch64")]
+impl Flags {
+    pub const O_DIRECT: i32 = 0o000200000;
+    pub const O_LARGEFILE: i32 = 0o000400000;
+    pub const O_DIRECTORY: i32 = 0o000040000;
+    pub const O_NOFOLLOW: i32 = 0o000100000;
+}
+
 impl Flags {
     pub const O_ACCMODE: i32 = 0o00000003; //0x00000003;
     pub const O_RDONLY: i32 = 0o00000000; //0x00000000;
@@ -2270,10 +2289,6 @@ impl Flags {
     pub const O_NONBLOCK: i32 = 0o00004000; //0x00000800;
     pub const O_DSYNC: i32 = 0o00010000; //0x00001000;
     pub const O_ASYNC: i32 = 0o00020000; //0x00002000;
-    pub const O_DIRECT: i32 = 0o00040000; //0x00004000;
-    pub const O_LARGEFILE: i32 = 0o00100000; //0x00008000;
-    pub const O_DIRECTORY: i32 = 0o00200000; //0x00010000;
-    pub const O_NOFOLLOW: i32 = 0o00400000; //0x00020000;
     pub const O_NOATIME: i32 = 0o01000000; //0x00040000;
     pub const O_CLOEXEC: i32 = 0o02000000; //0x00080000;
     pub const O_SYNC: i32 = 0o04000000; //0x00100000;
@@ -3031,7 +3046,7 @@ impl MemoryDef {
     pub const HEAP_END: u64 = Self::HEAP_OFFSET + Self::HEAP_SIZE;
     pub const IO_HEAP_SIZE: u64 = 1 * Self::ONE_GB;
     pub const IO_HEAP_END: u64 = Self::HEAP_END + Self::IO_HEAP_SIZE;
-    
+
     // Create 24GB Init memory region for KVM VM
     pub const KERNEL_MEM_INIT_REGION_SIZE: u64 = 24; // 24 GB
 
@@ -3053,8 +3068,7 @@ impl MemoryDef {
     //
     // Page not backed up by guest physical frame, access causes KVM_EXIT_MMIO.
     //
-    pub const HYPERCALL_MMIO_BASE: u64 = Self::PHY_LOWER_ADDR
-                                         - Self::PAGE_SIZE;
+    pub const HYPERCALL_MMIO_BASE: u64 = Self::PHY_LOWER_ADDR - Self::PAGE_SIZE;
     pub const HYPERCALL_MMIO_SIZE: u64 = Self::PAGE_SIZE;
 }
 
