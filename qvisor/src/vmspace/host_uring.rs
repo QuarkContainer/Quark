@@ -68,14 +68,7 @@ pub fn HostSubmit() -> Result<usize> {
             let mut sq = uring.submission();
             let mut submitq = SHARESPACE.uringQueue.submitq.lock();
 
-            if sq.dropped() != 0 {
-                error!("uring fail dropped {}", sq.dropped());
-            }
-
-            if sq.cq_overflow() {
-                error!("uring fail overflow")
-            }
-            assert!(sq.dropped() == 0, "dropped {}", sq.dropped());
+            assert!(sq.dropped() == 0, "uring dropped {}", sq.dropped());
             assert!(!sq.cq_overflow());
 
             while !sq.is_full() {
