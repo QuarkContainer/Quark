@@ -554,7 +554,6 @@ impl QUring {
 
     pub fn DrainCompletionQueue(&self) -> usize {
         if SHARESPACE.config.read().UringIO {
-            error!("DrainCompletionQueue xxxx");
             let mut count = 0;
             loop {
                 if super::super::Shutdown() {
