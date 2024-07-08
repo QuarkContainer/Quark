@@ -264,10 +264,6 @@ impl FdWaitInfo {
             mask
         };
 
-        return Self::waitfd(fd, mask);
-    }
-
-    fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
         HostSpace::WaitFDAsync(fd, mask);
 
         return Ok(());
