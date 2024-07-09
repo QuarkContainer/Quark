@@ -58,6 +58,10 @@ use crate::qlib::kernel::kernel::waiter::Queue;
 use crate::qlib::kernel::socket::hostinet::loopbacksocket::*;
 use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFConf;
 use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFReq;
+#[cfg(feature = "cc")]
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+#[cfg(feature = "cc")]
+use crate::GuestHostSharedAllocator;
 
 pub fn newUringSocketFile(
     task: &Task,
@@ -179,8 +183,13 @@ pub struct UringSocketOperationsIntern {
     passInq: AtomicBool,
 }
 
+#[cfg(not(feature = "cc"))]
 #[derive(Clone)]
 pub struct UringSocketOperationsWeak(pub Weak<UringSocketOperationsIntern>);
+
+#[cfg(feature = "cc")]
+#[derive(Clone)]
+pub struct UringSocketOperationsWeak(pub Weak<UringSocketOperationsIntern, GuestHostSharedAllocator>);
 
 impl UringSocketOperationsWeak {
     pub fn Upgrade(&self) -> Option<UringSocketOperations> {
@@ -193,8 +202,13 @@ impl UringSocketOperationsWeak {
     }
 }
 
+#[cfg(not(feature = "cc"))]
 #[derive(Clone)]
 pub struct UringSocketOperations(Arc<UringSocketOperationsIntern>);
+
+#[cfg(feature = "cc")]
+#[derive(Clone)]
+pub struct UringSocketOperations(Arc<UringSocketOperationsIntern, GuestHostSharedAllocator>);
 
 impl Drop for UringSocketOperations {
     fn drop(&mut self) {
@@ -284,7 +298,11 @@ impl UringSocketOperations {
             passInq: AtomicBool::new(false),
         };
 
+        #[cfg(not(feature = "cc"))]
         let ret = Self(Arc::new(ret));
+        #[cfg(feature = "cc")]
+        let ret = Self(Arc::new_in(ret, GUEST_HOST_SHARED_ALLOCATOR));
+
         return Ok(ret);
     }
 
@@ -398,9 +416,15 @@ impl UringSocketOperations {
     }
 
     pub fn PostConnect(&self) {
+        #[cfg(not(feature = "cc"))]
         let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(
             MemoryDef::DEFAULT_BUF_PAGE_COUNT,
         )));
+        #[cfg(feature = "cc")]
+        let socketBuf = SocketBuff(Arc::new_in(
+            SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT),
+            crate::GUEST_HOST_SHARED_ALLOCATOR,
+        ));
         *self.socketType.lock() = UringSocketType::Uring(socketBuf.clone());
         QUring::BufSockInit(self.fd, self.queue.clone(), socketBuf, true).unwrap();
     }
@@ -465,10 +489,20 @@ impl UringSocketOperations {
     }
 }
 
+#[cfg(not(feature = "cc"))]
 impl Deref for UringSocketOperations {
     type Target = Arc<UringSocketOperationsIntern>;
 
     fn deref(&self) -> &Arc<UringSocketOperationsIntern> {
+        &self.0
+    }
+}
+
+#[cfg(feature = "cc")]
+impl Deref for UringSocketOperations {
+    type Target = Arc<UringSocketOperationsIntern, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<UringSocketOperationsIntern, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -716,7 +750,10 @@ impl FileOperations for UringSocketOperations {
                     return Ok(0);
                 } else {
                     let tmp: i32 = 0;
+                    #[cfg(not(feature = "cc"))]
                     let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
+                    #[cfg(feature = "cc")]
+                    let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
                     if res < 0 {
                         return Err(Error::SysError(-res as i32));
                     }
@@ -726,7 +763,10 @@ impl FileOperations for UringSocketOperations {
             }
             _ => {
                 let tmp: i32 = 0;
+                #[cfg(not(feature = "cc"))]
                 let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
+                #[cfg(feature = "cc")]
+                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }

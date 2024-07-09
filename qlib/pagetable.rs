@@ -21,7 +21,8 @@ use core::sync::atomic::fence;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-
+#[cfg(feature = "cc")]
+use crate::qlib::kernel::Kernel::{is_cc_enabled, IDENTICAL_MAPPING};
 cfg_x86_64! {
    pub use x86_64::structures::paging::page_table::PageTableEntry;
    pub use x86_64::structures::paging::page_table::PageTableIndex;
@@ -133,6 +134,7 @@ pub struct PageTables {
 }
 
 impl PageTables {
+    #[cfg(not(feature = "cc"))]
     pub fn New(pagePool: &Allocator) -> Result<Self> {
         let root = pagePool.AllocPage(true)?;
         Ok(Self {
@@ -142,6 +144,28 @@ impl PageTables {
             freePages: Default::default(),
             hibernateLock: Default::default(),
         })
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn New(pagePool: &Allocator) -> Result<Self> {
+        let root = pagePool.AllocPage(true)?;
+        if IDENTICAL_MAPPING.load(Ordering::Acquire) || crate::IS_GUEST{
+            Ok(Self {
+                root: AtomicU64::new(root),
+                tlbEpoch: AtomicU64::new(0),
+                tlbshootdown: AtomicBool::new(false),
+                freePages: Default::default(),
+                hibernateLock: Default::default(),
+            })
+        } else {
+            Ok(Self {
+                root: AtomicU64::new(root - MemoryDef::UNIDENTICAL_MAPPING_OFFSET),
+                tlbEpoch: AtomicU64::new(0),
+                tlbshootdown: AtomicBool::new(false),
+                freePages: Default::default(),
+                hibernateLock: Default::default(),
+            })
+        }
     }
 
     pub fn TlbShootdown(&self) -> bool {
@@ -597,6 +621,7 @@ impl PageTables {
         return Ok(false);
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn MapWith1G(
         &self,
         start: Addr,
@@ -621,6 +646,7 @@ impl PageTables {
         let mut res = false;
 
         let mut curAddr = start;
+
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
         unsafe {
             let mut p4Idx = VirtAddr::new(curAddr.0).p4_index();
@@ -635,6 +661,93 @@ impl PageTables {
                     pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), default_table_user());
                 } else {
                     pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
+                }
+
+                while curAddr.0 < end.0 {
+                    let pudEntry = &mut (*pudTbl)[p3Idx];
+                    let newphysAddr = curAddr.0 - start.0 + physical.0;
+
+                    // Question: if we also do this for kernel, do we still need this?
+                    if !pudEntry.is_unused() {
+                        res = self.freeEntry(pudEntry, pagePool)?;
+                    }
+
+                    pudEntry.set_addr(PhysAddr::new(newphysAddr), hugepage_flags);
+                    curAddr = curAddr.AddLen(MemoryDef::HUGE_PAGE_SIZE_1G)?;
+
+                    if p3Idx == PageTableIndex::new(MemoryDef::ENTRY_COUNT - 1) {
+                        p3Idx = PageTableIndex::new(0);
+                        break;
+                    } else {
+                        p3Idx = PageTableIndex::new(u16::from(p3Idx) + 1);
+                    }
+                }
+
+                p4Idx = PageTableIndex::new(u16::from(p4Idx) + 1);
+            }
+        }
+
+        return Ok(res);
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn MapWith1G(
+        &self,
+        start: Addr,
+        end: Addr,
+        physical: Addr,
+        flags: PageTableFlags,
+        pagePool: &Allocator,
+        _kernel: bool,
+    ) -> Result<bool> {
+        if start.0 & (MemoryDef::HUGE_PAGE_SIZE_1G - 1) != 0
+            || end.0 & (MemoryDef::HUGE_PAGE_SIZE_1G - 1) != 0
+        {
+            panic!("start/end address not 1G aligned")
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        let hugepage_flags = flags & (!PageTableFlags::TABLE);
+
+        #[cfg(target_arch = "x86_64")]
+        let hugepage_flags = flags | PageTableFlags::HUGE_PAGE;
+
+        let mut res = false;
+
+        let mut curAddr = start;
+
+        let identical = IDENTICAL_MAPPING.load(Ordering::Acquire);
+        let pt: *mut PageTable = if identical{
+            self.GetRoot() as *mut PageTable
+        } else {
+            (self.GetRoot() + MemoryDef::UNIDENTICAL_MAPPING_OFFSET) as *mut PageTable
+        };
+        unsafe {
+            let mut p4Idx = VirtAddr::new(curAddr.0).p4_index();
+            let mut p3Idx = VirtAddr::new(curAddr.0).p3_index();
+
+            while curAddr.0 < end.0 {
+                let pgdEntry = &mut (*pt)[p4Idx];
+                let pudTbl: *mut PageTable;
+
+                if pgdEntry.is_unused() {
+                    pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
+                    if identical {
+                        pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), default_table_user());
+                    } else {
+                        pgdEntry.set_addr(
+                            PhysAddr::new(pudTbl as u64 - MemoryDef::UNIDENTICAL_MAPPING_OFFSET),
+                            default_table_user(),
+                        );
+                    }
+                } else {
+                    if identical {
+                        pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
+                    } else {
+                        pudTbl = (pgdEntry.addr().as_u64()
+                            + MemoryDef::UNIDENTICAL_MAPPING_OFFSET)
+                            as *mut PageTable;
+                    }
                 }
 
                 while curAddr.0 < end.0 {
@@ -1306,6 +1419,11 @@ impl PageTables {
 
     #[cfg(target_arch = "x86_64")]
     pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
+
+        #[cfg(feature = "cc")]
+        if is_cc_enabled(){
+            return;
+        }
         let flags = pteEntry.flags();
         // bit9 : whether the page is swapout
         // bit10: whether there is thread is working on swapin the page
@@ -1631,12 +1749,29 @@ impl AlignedAllocator {
         };
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn Allocate(&self) -> Result<u64> {
         let layout = Layout::from_size_align(self.size, self.align);
         match layout {
             Err(_e) => Err(Error::UnallignedAddress(format!("Allocate {:?}", self))),
             Ok(l) => unsafe {
                 let addr = alloc(l);
+                Ok(addr as u64)
+            },
+        }
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn Allocate(&self) -> Result<u64> {
+        let layout = Layout::from_size_align(self.size, self.align);
+        match layout {
+            Err(_e) => Err(Error::UnallignedAddress(format!("Allocate {:?}", self))),
+            Ok(l) => unsafe {
+                let addr = if crate::IS_GUEST{
+                    alloc(l)
+                } else {
+                    crate::GLOBAL_ALLOCATOR.AllocGuestPrivatMem(self.size, self.align)
+                };
                 Ok(addr as u64)
             },
         }

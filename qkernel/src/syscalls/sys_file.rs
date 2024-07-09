@@ -41,6 +41,8 @@ use super::super::qlib::range::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 use super::super::util::cstring::*;
+#[cfg(feature = "cc")]
+use crate::qlib::kernel::util::sharedstring::SharedString;
 use fs::host::hostinodeop::HostInodeOp;
 use fs::host::util::Fcntl;
 
@@ -276,7 +278,10 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
                             
                             let dirfd = parentIops.HostDirOp().expect(&format!("inodeop type is {:?}", parentIops.InodeType())).HostFd();
                             let name = d.Name();
+                            #[cfg(not(feature = "cc"))]
                             let cstr = CString::New(&name);
+                            #[cfg(feature = "cc")]
+                            let cstr = SharedString::New(&name);
                             lkiops.TryOpenWrite(dirfd, cstr.Ptr())?;
                         }
                     }
@@ -555,7 +560,10 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
                             let mut lkiops = iops.lock();
                             let dirfd = parent.Inode().lock().InodeOp.HostDirOp().unwrap().HostFd();
                             if lkiops.SkipRw() {
+                                #[cfg(not(feature = "cc"))]
                                 let cstr = CString::New(&name);
+                                #[cfg(feature = "cc")]
+                                let cstr = SharedString::New(&name);
                                 lkiops.TryOpenWrite(dirfd, cstr.Ptr())?;
                             }
                         }

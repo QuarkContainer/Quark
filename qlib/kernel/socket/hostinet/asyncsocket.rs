@@ -97,9 +97,15 @@ impl SockState {
     }
 
     fn ConnectType(&self) -> Self {
+        #[cfg(not(feature = "cc"))]
         let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(
             MemoryDef::DEFAULT_BUF_PAGE_COUNT,
         )));
+        #[cfg(feature = "cc")]
+        let socketBuf = SocketBuff(Arc::new_in(
+            SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT),
+            crate::GUEST_HOST_SHARED_ALLOCATOR,
+        ));
         return Self::TCPData(socketBuf);
     }
 }
@@ -398,7 +404,10 @@ impl FileOperations for AsyncSocketOperations {
             }
             LibcConst::TIOCINQ => {
                 let tmp: i32 = 0;
+                #[cfg(not(feature = "cc"))]
                 let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
+                #[cfg(feature = "cc")]
+                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }
@@ -407,7 +416,10 @@ impl FileOperations for AsyncSocketOperations {
             }
             _ => {
                 let tmp: i32 = 0;
+                #[cfg(not(feature = "cc"))]
                 let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
+                #[cfg(feature = "cc")]
+                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }

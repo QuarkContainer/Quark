@@ -39,6 +39,11 @@ use super::super::waiter::*;
 use super::epoll_entry::*;
 use super::epoll_list::*;
 
+#[cfg(feature = "cc")]
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+#[cfg(feature = "cc")]
+use crate::GuestHostSharedAllocator;
+
 pub static CYCLE_MU: Singleton<QMutex<()>> = Singleton::<QMutex<()>>::New();
 pub unsafe fn InitSingleton() {
     CYCLE_MU.Init(QMutex::new(()));
@@ -150,8 +155,23 @@ pub fn NewEventPoll(task: &Task) -> File {
     return File::New(&dirent, &FileFlags::default(), epoll.into());
 }
 
+#[cfg(not(feature = "cc"))]
 #[derive(Clone, Default)]
 pub struct EventPoll(Arc<EventPollInternal>);
+
+#[cfg(feature = "cc")]
+#[derive(Clone)]
+pub struct EventPoll(Arc<EventPollInternal, GuestHostSharedAllocator>);
+
+#[cfg(feature = "cc")]
+impl Default for EventPoll {
+    fn default() -> Self {
+        Self(Arc::new_in(
+            EventPollInternal::default(),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ))
+    }
+}
 
 impl PartialEq for EventPoll {
     fn eq(&self, other: &Self) -> bool {
@@ -364,7 +384,13 @@ impl EventPoll {
                     state: PollEntryState::Waiting,
                 };
 
+                #[cfg(not(feature = "cc"))]
                 let entry = PollEntry(Arc::new(QMutex::new(entryInternal)));
+                #[cfg(feature = "cc")]
+                let entry = PollEntry(Arc::new_in(
+                    QMutex::new(entryInternal),
+                    crate::GUEST_HOST_SHARED_ALLOCATOR,
+                ));
                 waiter.lock().context = WaitContext::EpollContext(entry.clone());
                 e.insert(entry.clone());
 
@@ -485,10 +511,20 @@ impl Drop for EventPollInternal {
     }
 }
 
+#[cfg(not(feature = "cc"))]
 impl Deref for EventPoll {
     type Target = Arc<EventPollInternal>;
 
     fn deref(&self) -> &Arc<EventPollInternal> {
+        &self.0
+    }
+}
+
+#[cfg(feature = "cc")]
+impl Deref for EventPoll {
+    type Target = Arc<EventPollInternal, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<EventPollInternal, GuestHostSharedAllocator> {
         &self.0
     }
 }

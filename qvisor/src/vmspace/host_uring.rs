@@ -27,6 +27,8 @@ use super::super::qlib::linux_def::*;
 use super::super::*;
 use super::kernel::SHARESPACE;
 use crate::URING;
+#[cfg(feature = "cc")]
+use std::borrow::Borrow;
 
 pub fn CopyCompleteEntry() -> usize {
     let mut count = 0;
@@ -67,7 +69,10 @@ pub fn HostSubmit() -> Result<usize> {
     {
         let mut uring = URING.lock();
         let mut sq = uring.submission();
+        #[cfg(not(feature = "cc"))]
         let mut submitq = SHARESPACE.uringQueue.submitq.lock();
+        #[cfg(feature = "cc")]
+        let submitq = SHARESPACE.uringQueue.submitq.borrow();
 
         if sq.dropped() != 0 {
             error!("uring fail dropped {}", sq.dropped());
@@ -80,7 +85,13 @@ pub fn HostSubmit() -> Result<usize> {
         assert!(!sq.cq_overflow());
 
         while !sq.is_full() {
+            #[cfg(not(feature = "cc"))]
             let uringEntry = match submitq.pop_front() {
+                None => break,
+                Some(e) => e,
+            };
+            #[cfg(feature = "cc")]
+            let uringEntry = match submitq.pop() {
                 None => break,
                 Some(e) => e,
             };

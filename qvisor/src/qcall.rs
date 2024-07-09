@@ -282,6 +282,7 @@ impl KVMVcpu {
                 super::VMS.lock().SwapOutGPUPage();
 
                 #[cfg(not(feature = "cuda"))]
+                #[cfg(not(feature = "cc"))]
                 {
                     let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
                     SHARE_SPACE
@@ -290,6 +291,14 @@ impl KVMVcpu {
                         .unwrap();
                 }
 
+                #[cfg(feature = "cc")]
+                {
+                    let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRangeAll();
+                    SHARE_SPACE
+                        .hiberMgr
+                        .SwapOut(heapStart, heapEnd - heapStart)
+                        .unwrap();
+                }
                 ret = 0;
             }
             Msg::SwapIn(_msg) => {

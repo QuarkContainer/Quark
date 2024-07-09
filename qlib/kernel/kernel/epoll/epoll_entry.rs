@@ -21,6 +21,9 @@ use super::super::super::fs::file::*;
 use super::super::waiter::*;
 use super::epoll::*;
 
+#[cfg(feature = "cc")]
+use crate::GuestHostSharedAllocator;
+
 pub type EntryFlags = i32;
 
 pub const ONE_SHOT: EntryFlags = 1 << 0;
@@ -55,8 +58,13 @@ pub struct ReadyState {
     pub mask: u32,
 }
 
+#[cfg(not(feature = "cc"))]
 #[derive(Clone)]
 pub struct PollEntry(pub Arc<QMutex<PollEntryInternal>>);
+
+#[cfg(feature = "cc")]
+#[derive(Clone)]
+pub struct PollEntry(pub Arc<QMutex<PollEntryInternal>, GuestHostSharedAllocator>);
 
 impl PollEntry {
     pub fn CallBack(&self) {
@@ -92,10 +100,20 @@ impl PollEntry {
     }
 }
 
+#[cfg(not(feature = "cc"))]
 impl Deref for PollEntry {
     type Target = Arc<QMutex<PollEntryInternal>>;
 
     fn deref(&self) -> &Arc<QMutex<PollEntryInternal>> {
+        &self.0
+    }
+}
+
+#[cfg(feature = "cc")]
+impl Deref for PollEntry {
+    type Target = Arc<QMutex<PollEntryInternal>, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<QMutex<PollEntryInternal>, GuestHostSharedAllocator> {
         &self.0
     }
 }

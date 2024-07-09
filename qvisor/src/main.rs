@@ -23,6 +23,8 @@
 #![recursion_limit = "256"]
 #![feature(unix_socket_ancillary_data)]
 #![allow(invalid_reference_casting)]
+#![feature(allocator_api)]
+#![feature(btreemap_alloc)]
 /***
 warning: `extern` block uses type `rcublas_sys::cudaMemLocationType`, which is not FFI-safe
   --> src/vmspace/nvidia.rs:70:92
@@ -114,9 +116,17 @@ use self::vmspace::uringMgr::*;
 use crate::kvm_vcpu::KVMVcpu;
 use vmspace::*;
 
+#[cfg(feature = "cc")]
+use crate::qlib::mem::cc_allocator::*;
+#[cfg(feature = "cc")]
+use crate::qlib::kernel::kernel::kernel::Kernel;
+
 pub fn AllocatorPrint(_class: usize) -> String {
     return "".to_string();
 }
+
+#[cfg(feature = "cc")]
+pub static  IS_GUEST: bool = false;
 
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 
@@ -169,6 +179,13 @@ lazy_static! {
     );
 }
 
+#[cfg(feature = "cc")]
+lazy_static! {
+    //will not be used in host, just place holder here
+    pub static ref PRIVATE_VCPU_ALLOCATOR: Box<PrivateVcpuAllocators> = Box::new(PrivateVcpuAllocators::New());
+    pub static ref GUEST_KERNEL: Mutex<Option<Kernel>> = Mutex::new(None);
+}
+
 pub const LOG_FILE: &'static str = "/var/log/quark/quark.log";
 
 pub fn InitSingleton() {
@@ -179,6 +196,8 @@ pub fn InitSingleton() {
 #[global_allocator]
 //pub static GLOBAL_ALLOCATOR: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
+#[cfg(feature = "cc")]
+pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
 
 fn main() {
     InitSingleton();

@@ -28,5 +28,6 @@
   "Sandboxed"     : false,
   "Realtime"      : false,
   "EnableIOBuf"   : false,
-  "EnableTsot"    : false
+  "EnableTsot"    : false,
+  "CCMode"        : "None"
 }

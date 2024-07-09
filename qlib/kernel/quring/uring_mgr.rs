@@ -11,13 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#[cfg(feature = "cc")]
+use core::borrow::Borrow;
 
 use alloc::sync::Arc;
 
 use super::super::super::bytestream::*;
 use super::super::super::common::*;
-use super::super::super::CompleteEntry;
 use super::super::super::object_ref::*;
+use super::super::super::CompleteEntry;
 //pub use super::super::super::uring::*;
 use super::super::fs::file::*;
 use super::super::task::*;
@@ -29,8 +31,8 @@ use super::super::super::vcpu_mgr::*;
 use super::super::kernel::async_wait::*;
 use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
-use super::super::socket::hostinet::uring_socket::*;
 use super::super::socket::hostinet::tsotsocket::*;
+use super::super::socket::hostinet::uring_socket::*;
 use super::super::IOURING;
 use super::super::SHARESPACE;
 use super::uring_async::*;
@@ -55,7 +57,7 @@ pub struct QUring {
 
 impl Default for QUring {
     fn default() -> Self {
-        return Self::New(MemoryDef::QURING_SIZE)
+        return Self::New(MemoryDef::QURING_SIZE);
     }
 }
 
@@ -258,18 +260,32 @@ impl QUring {
         IOURING.AUCall(AsyncOps::PollHostEpollWait(op));
     }
 
+    #[allow(unused_variables)]
     pub fn TsotPollInit(&self, tsotSocket: i32) {
-        let op = TsotPoll::New(tsotSocket);
-        IOURING.AUCall(AsyncOps::TsotPoll(op));
+        #[cfg(not(feature = "cc"))]{
+            let op = TsotPoll::New(tsotSocket);
+            IOURING.AUCall(AsyncOps::TsotPoll(op));
+        }
+        #[cfg(feature = "cc")]
+        todo!();
     }
 
+    #[allow(unused_variables)]
     pub fn DNSRecvInit(&self, fd: i32, msgAddr: u64) {
-        let op = DNSRecv::New(fd, msgAddr);
-        IOURING.AUCall(AsyncOps::DNSRecv(op));
+        #[cfg(not(feature = "cc"))]{
+            let op = DNSRecv::New(fd, msgAddr);
+            IOURING.AUCall(AsyncOps::DNSRecv(op));
+        }
+        #[cfg(feature = "cc")]
+        todo!();
     }
 
+    #[allow(unused_variables)]
     pub fn SendDns(&self, op: DNSSend) {
+        #[cfg(not(feature = "cc"))]
         IOURING.AUCall(AsyncOps::DNSSend(op));
+        #[cfg(feature = "cc")]
+        todo!();
     }
 
     pub fn BufSockInit(fd: i32, queue: Queue, buf: SocketBuff, isSocket: bool) -> Result<()> {
@@ -319,6 +335,7 @@ impl QUring {
         return Ok(());
     }
 
+    #[allow(unused_variables)]
     pub fn TsotSocketProduce(
         task: &Task,
         fd: i32,
@@ -328,14 +345,18 @@ impl QUring {
         ops: &TsotSocketOperations,
         iovs: &mut SocketBufIovs,
     ) -> Result<()> {
-        let writeBuf = buf.Produce(task, count, iovs)?;
-        if let Some((addr, len)) = writeBuf {
-            let writeop = TsotAsyncSend::New(fd, queue, buf, addr, len, ops);
-
-            IOURING.AUCall(AsyncOps::TsotAsyncSend(writeop));
+        #[cfg(feature = "cc")]{
+            todo!();
         }
-
-        return Ok(());
+        #[cfg(not(feature = "cc"))]
+        {
+            let writeBuf = buf.Produce(task, count, iovs)?;
+            if let Some((addr, len)) = writeBuf {
+            let writeop = TsotAsyncSend::New(fd, queue, buf, addr, len, ops);
+                IOURING.AUCall(AsyncOps::TsotAsyncSend(writeop));
+            }
+            return Ok(());
+        }
     }
 
     pub fn SocketSend(
@@ -357,6 +378,7 @@ impl QUring {
         return Ok(count as i64);
     }
 
+    #[allow(unused_variables)]
     pub fn TsotSocketSend(
         task: &Task,
         fd: i32,
@@ -365,15 +387,22 @@ impl QUring {
         srcs: &[IoVec],
         ops: &TsotSocketOperations,
     ) -> Result<i64> {
-        let (count, writeBuf) = buf.Writev(task, srcs)?;
-
-        if let Some((addr, len)) = writeBuf {
-            let writeop = TsotAsyncSend::New(fd, queue, buf, addr, len, ops);
-
-            IOURING.AUCall(AsyncOps::TsotAsyncSend(writeop));
+        #[cfg(feature = "cc")]
+        {
+            todo!();
         }
+        #[cfg(not(feature = "cc"))]
+        {
+            let (count, writeBuf) = buf.Writev(task, srcs)?;
 
-        return Ok(count as i64);
+            if let Some((addr, len)) = writeBuf {
+                let writeop = TsotAsyncSend::New(fd, queue, buf, addr, len, ops);
+
+                IOURING.AUCall(AsyncOps::TsotAsyncSend(writeop));
+            }
+
+            return Ok(count as i64);
+        }
     }
 
     pub fn SocketConsume(
@@ -465,9 +494,33 @@ impl QUring {
         //error!("uring process:xxx");
     }
 
+    #[cfg(not(feature = "cc"))]
     pub fn UCall(&self, task: &Task, msg: UringOp) -> i64 {
         let call = UringCall {
             taskId: task.GetTaskId(),
+            ret: 0,
+            msg: msg,
+        };
+
+        {
+            self.UringCall(&call);
+        }
+
+        Wait();
+
+        return call.ret as i64;
+    }
+
+    #[cfg(feature = "cc")]
+    pub fn UCall(&self, task: &Task, msg: UringOp) -> i64 {
+
+        let taskID = task.GetPrivateTaskId();
+
+        assert!(taskID.task_addr != 0);
+        assert!(taskID.task_wrapper_addr != 0);
+
+        let call = UringCall {
+            taskId: taskID,
             ret: 0,
             msg: msg,
         };
@@ -610,9 +663,23 @@ impl QUring {
     }
 
     pub fn UringPush(&self, entry: UringEntry) {
+        #[cfg(not(feature = "cc"))]
         {
             let mut s = SHARESPACE.uringQueue.submitq.lock();
             s.push_back(entry);
+        }
+
+        #[cfg(feature = "cc")]
+        {
+            let mut entry = entry;
+            loop {
+                let r = SHARESPACE.uringQueue.submitq.push(entry);
+                if r.is_ok() {
+                    break;
+                } else {
+                    entry = r.err().unwrap();
+                }
+            }
         }
 
         SHARESPACE.Submit().expect("QUringIntern::submit fail");
@@ -624,10 +691,19 @@ impl QUring {
     }
 
     pub fn AUringCallLinked(&self, entry1: UringEntry, entry2: UringEntry) {
+        #[cfg(not(feature = "cc"))]
         {
             let mut s = SHARESPACE.uringQueue.submitq.lock();
             s.push_back(entry1);
             s.push_back(entry2);
+        }
+
+        #[cfg(feature = "cc")]
+        {
+            let s = SHARESPACE.uringQueue.submitq.borrow();
+            if s.push(entry1).is_err() || s.push(entry2).is_err(){
+                panic!("submitq is full");
+            }
         }
 
         SHARESPACE.Submit().expect("QUringIntern::submit fail");

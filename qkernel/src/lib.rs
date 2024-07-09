@@ -29,6 +29,7 @@
 #![allow(deprecated)]
 #![recursion_limit = "256"]
 #![allow(invalid_reference_casting)]
+#![feature(btreemap_alloc)]
 
 #[macro_use]
 extern crate alloc;
@@ -62,6 +63,8 @@ use taskMgr::{CreateTask, IOWait, WaitFn};
 use vcpu::CPU_LOCAL;
 
 use crate::qlib::kernel::GlobalIOMgr;
+#[cfg(feature = "cc")]
+use crate::qlib::ShareSpace;
 
 //use self::qlib::buddyallocator::*;
 use self::asm::*;
@@ -87,6 +90,8 @@ use self::qlib::kernel::memmgr;
 use self::qlib::kernel::perflog;
 use self::qlib::kernel::quring;
 use self::qlib::kernel::Kernel;
+#[cfg (feature = "cc")]
+use self::qlib::kernel::Kernel::{ENABLE_CC, is_cc_enabled};
 use self::qlib::kernel::*;
 use self::qlib::{ShareSpaceRef, SysCallID};
 //use self::vcpu::*;
@@ -113,6 +118,13 @@ use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
 
+#[cfg(feature = "cc")]
+use self::qlib::mem::cc_allocator::*;
+#[cfg(feature = "cc")]
+use alloc::boxed::Box;
+#[cfg(feature = "cc")]
+use memmgr::pma::PageMgr;
+
 #[macro_use]
 mod print;
 
@@ -133,8 +145,21 @@ pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 //pub static GLOBAL_ALLOCATOR: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
 
+#[cfg(feature = "cc")]
+pub static  IS_GUEST: bool = true;
+#[cfg(feature = "cc")]
+pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
+
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
+}
+
+#[cfg(feature = "cc")]
+lazy_static! {
+    pub static ref PRIVATE_VCPU_ALLOCATOR: Box<PrivateVcpuAllocators> = Box::new(PrivateVcpuAllocators::New());
+    pub static ref PAGE_MGR_HOLDER: Box<PageMgr> = Box::new(PageMgr::default());
+    pub static ref IO_URING_HOLDER: Box<QUring> = Box::new(QUring::New(MemoryDef::QURING_SIZE));
+    pub static ref GUEST_KERNEL: Mutex<Option<kernel::kernel::Kernel>> = Mutex::new(None);
 }
 
 pub fn AllocIOBuf(size: usize) -> *mut u8 {
@@ -151,14 +176,26 @@ pub fn SingletonInit() {
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentUserTable()));
         //init fp state with current fp state as it is brand new vcpu
         FP_STATE.Reset();
-        SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
         //SHARESPACE.SetvirtualizationHandlerAddr(virtualization_handler as u64);
-        IOURING.SetValue(SHARESPACE.GetIOUringAddr());
 
         // the error! can run after this point
         //error!("error message");
 
-        PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
+        #[cfg(not(feature = "cc"))]{
+            SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
+            PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
+            IOURING.SetValue(SHARESPACE.GetIOUringAddr());
+        }
+
+        #[cfg(feature = "cc")]
+        if is_cc_enabled(){
+            PAGE_MGR.SetValue(PAGE_MGR_HOLDER.Addr());
+            IOURING.SetValue(IO_URING_HOLDER.Addr());
+        } else {
+            SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
+            PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
+            IOURING.SetValue(SHARESPACE.GetIOUringAddr());
+        }
         LOADER.Init(Loader::default());
         KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
             MemoryDef::DEFAULT_STACK_SIZE as usize,
@@ -503,7 +540,10 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
 
                     let mm = thread.lock().memoryMgr.clone();
                     thread.lock().memoryMgr = currTask.mm.clone();
+                    #[cfg(not(feature = "cc"))]
                     CPULocal::SetPendingFreeStack(currTask.taskId);
+                    #[cfg (feature = "cc")]
+                    CPULocal::SetPendingFreeStack(currTask.taskId, currTask.taskWrapperId);
 
                     /*if !SHARESPACE.config.read().KernelPagetable {
                         KERNEL_PAGETABLE.SwitchTo();
@@ -573,10 +613,34 @@ pub extern "C" fn rust_main(
 ) {
     self::qlib::kernel::asm::fninit();
     if id == 0 {
-        GLOBAL_ALLOCATOR.Init(heapStart);
-        SHARESPACE.SetValue(shareSpaceAddr);
+        //if in any cc machine, shareSpaceAddr is reused as CCMode
+        #[cfg(feature = "cc")]
+        {
+            GLOBAL_ALLOCATOR.InitPrivateAllocator(CCMode::from(shareSpaceAddr));
+            GLOBAL_ALLOCATOR.InitSharedAllocator();
+            if shareSpaceAddr < (CCMode::Max as u64) {
+                ENABLE_CC.store(true, Ordering::Release);
+                GLOBAL_ALLOCATOR.InitSharedAllocator_cc();
+                let size = core::mem::size_of::<ShareSpace>();
+                let shared_space = unsafe {
+                    GLOBAL_ALLOCATOR.AllocSharedBuf(size, 2)
+                };
+                HyperCall64_init(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
+                SHARESPACE.SetValue(shared_space as u64);
+            } else {
+                SHARESPACE.SetValue(shareSpaceAddr);
+            }
+        }
+        #[cfg(not(feature = "cc"))]
+        {
+            GLOBAL_ALLOCATOR.Init(heapStart);
+            SHARESPACE.SetValue(shareSpaceAddr);
+        }
         SingletonInit();
         debug!("init singleton finished");
+        SetVCPCount(vcpuCnt as usize);
+        #[cfg(feature = "cc")]
+        VCPU_ALLOCATOR.Print();
         VCPU_ALLOCATOR.Initializated();
         InitTsc();
         InitTimeKeeper(vdsoParamAddr);
@@ -592,7 +656,6 @@ pub extern "C" fn rust_main(
         debug!("init vsyscall finished");
         GlobalIOMgr().InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
         debug!("init host epoll fd finished");
-        SetVCPCount(vcpuCnt as usize);
         VDSO.Initialization(vdsoParamAddr);
         debug!("init vdso finished");
 
@@ -636,8 +699,25 @@ pub extern "C" fn rust_main(
         }
         CreateTask(ControllerProcess as u64, ptr::null(), true);
     }
+    #[cfg(feature = "cc")]
+    if id == 2 {
+        if is_cc_enabled(){
+            IoHanlder();
+        }
+    }
 
     WaitFn();
+}
+
+#[cfg(feature = "cc")]
+fn IoHanlder() {
+    loop {
+        if Shutdown() {
+            break;
+        }
+
+        QUringTrigger();
+    }
 }
 
 fn StartExecProcess(fd: i32, process: Process) -> ! {
