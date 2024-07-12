@@ -1023,33 +1023,35 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall,  //	421
     NotImplementSyscall,  //	422
     NotImplementSyscall,  //	423
-    NotImplementSyscall,  //	424
-    NotImplementSyscall,  //	425
-    NotImplementSyscall,  //	426
-    NotImplementSyscall,  //	427
-    NotImplementSyscall,  //	428
-    NotImplementSyscall,  //	429
-    NotImplementSyscall,  //	430
-    NotImplementSyscall,  //	431
-    NotImplementSyscall,  //	432
-    NotImplementSyscall,  //	433
-    NotImplementSyscall,  //	434
-    NotImplementSyscall,  //	435
-    NotImplementSyscall,  //	436
-    NotImplementSyscall,  //	437
-    NotImplementSyscall,  //	438
-    SysNoSys,             //	439
-    NotImplementSyscall,  //	440
-    NotImplementSyscall,  //	441
-    NotImplementSyscall,  //	442
-    NotImplementSyscall,  //	443
-    NotImplementSyscall,  //	444
-    NotImplementSyscall,  //	445
-    NotImplementSyscall,  //	446
-    NotImplementSyscall,  //	447
-    NotImplementSyscall,  //	448
-    NotImplementSyscall,  //	449
-    NotImplementSyscall,  //	450
+
+    // Linux skips ahead to syscall 424 to sync numbers between arches.
+    NotImplementSyscall, //	424 sys_pidfd_send_signal
+    SysNoSys,            //	425 sys_io_uring_setup
+    SysNoSys,            //	426 sys_io_uring_enter
+    SysNoSys,            //	427 sys_io_uring_register
+    NotImplementSyscall, //	428 sys_open_tree
+    NotImplementSyscall, //	429 sys_move_mount
+    NotImplementSyscall, //	430 sys_fsopen
+    NotImplementSyscall, //	431 sys_fsconfig
+    NotImplementSyscall, //	432 sys_fsmount
+    NotImplementSyscall, //	433 sys_fspick
+    NotImplementSyscall, //	434 sys_pidfd_open
+    SysNoSys,            //	435 sys_clone3
+    SysCloseRange,       //	436 sys_close_range
+    NotImplementSyscall, //	437 sys_openat2
+    NotImplementSyscall, //	438 sys_pidfd_getfd
+    SysNoSys,            //	439 sys_faccessat2
+    NotImplementSyscall, //	440 sys_process_madvise
+    SysPwait2,           //	441 sys_epoll_pwait2
+    NotImplementSyscall, //	442 sys_mouLoad(nt_setattr
+    NotImplementSyscall, //	443 sys_quotactl_fd
+    NotImplementSyscall, //	444 sys_landlock_create_ruleset
+    NotImplementSyscall, //	445 sys_landlock_add_rule
+    NotImplementSyscall, //	446 sys_landlock_restrict_self
+    NotImplementSyscall, //	447 sys_memfd_secret
+    NotImplementSyscall, //	448 sys_process_mrelease
+    NotImplementSyscall, //	449 sys_futex_waitv
+    NotImplementSyscall, //	450 sys_set_mempolicy_home_node
     NotExisting,          // 451 unknow syscall
 ];
 
