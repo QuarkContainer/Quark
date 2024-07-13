@@ -52,7 +52,10 @@ pub struct Version {
 
 pub const VERSION: Version = Version {
     OS: LINUX_SYSNAME,
+    #[cfg(target_arch = "x86_64")]
     Arch: Arch::AMD64,
+    #[cfg(target_arch = "aarch64")]
+    Arch: Arch::ARM64,
     Sysname: LINUX_SYSNAME,
     Release: LINUX_RELEASE,
     Version: LINUX_VERSION,
