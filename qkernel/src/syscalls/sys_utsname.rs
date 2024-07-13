@@ -88,20 +88,13 @@ pub fn SysUname(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     u.Nodename[0..uts.HostName().len()].copy_from_slice(uts.HostName().as_bytes());
     u.Release[0..version.Release.len()].copy_from_slice(version.Release.as_bytes());
     u.Version[0..version.Version.len()].copy_from_slice(version.Version.as_bytes());
+    #[cfg(target_arch = "x86_64")]
     u.Machine[0.."x86_64".len()].copy_from_slice("x86_64".as_bytes());
+    #[cfg(target_arch = "aarch64")]
+    u.Machine[0.."aarch64".len()].copy_from_slice("aarch64".as_bytes());
     u.Domainname[0..uts.DomainName().len()].copy_from_slice(uts.DomainName().as_bytes());
 
-    //let va : &mut UtsName = task.GetTypeMut(va)?;
-    //*va = u;
-
     task.CopyOutObj(&u, va)?;
-
-    /*info!("Sysname is {}", UtsNameString(&va.Sysname));
-    info!("Nodename is {}", UtsNameString(&va.Nodename));
-    info!("Release is {}", UtsNameString(&va.Release));
-    info!("Version is {}", UtsNameString(&va.Version));
-    info!("Machine is {}", UtsNameString(&va.Machine));
-    info!("Domainname is {}", UtsNameString(&va.Domainname));*/
 
     return Ok(0);
 }
