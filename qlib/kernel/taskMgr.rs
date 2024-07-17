@@ -170,7 +170,7 @@ pub fn ProcessInputMsgs() {
                     }
                 }
                 HostInputMsg::ControlSockReady(fd) => {
-                    CreateTask(ControlMsgHandler as u64, fd as *const u8, false);
+                    CreateTask(ControlMsgHandler as u64, fd as *const u8, true);
                 }
                 HostInputMsg::Default => {}
             }
