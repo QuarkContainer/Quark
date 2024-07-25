@@ -378,7 +378,8 @@ pub struct UContext {
     pub Link: u64,
     pub Stack: SignalStack,
     pub Sigset: u64,
-    __pad: [u8; (1024 / 8) - core::mem::size_of::<u64>()],
+    //For historical reasons Glibc requires 128Bytes for sigset_t
+    __pad: [u8; 1024 / 8],
     pub MContext: SigContext,
 }
 
@@ -390,7 +391,7 @@ impl Default for UContext {
             Link: 0,
             Stack: SignalStack::default(),
             Sigset: 0,
-            __pad: [0; (1024 / 8) - core::mem::size_of::<u64>()],
+            __pad: [0; 1024 / 8],
             MContext: SigContext::default(),
         }
     }
@@ -404,7 +405,7 @@ impl UContext {
             Link: 0,
             Stack: alt.clone(),
             Sigset: 0,
-            __pad: [0u8; (1024 / 8) - core::mem::size_of::<u64>()],
+            __pad: [0u8; 1024 / 8],
             MContext: SigContext::New(ptRegs, oldMask, fault_address, fpstate),
         };
     }
