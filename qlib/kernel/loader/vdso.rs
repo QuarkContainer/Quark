@@ -65,7 +65,6 @@ impl VdsoArchSymbols {
 
     pub fn get_symbol_page_offset(&self, _name: &str) -> Option<u64> {
        todo!();
-       None
     }
 }
 
