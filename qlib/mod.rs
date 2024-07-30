@@ -137,7 +137,6 @@ pub fn InitSingleton() {
 pub const HYPERCALL_PANIC: u16 = 2;
 pub const HYPERCALL_OOM: u16 = 4;
 pub const HYPERCALL_MSG: u16 = 5;
-pub const HYPERCALL_U64: u16 = 6;
 pub const HYPERCALL_PRINT: u16 = 8;
 pub const HYPERCALL_EXIT: u16 = 9;
 pub const HYPERCALL_GETTIME: u16 = 11;
