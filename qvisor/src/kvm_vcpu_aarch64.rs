@@ -414,10 +414,6 @@ impl KVMVcpu {
                 unsafe { libc::_exit(0) }
             }
 
-            qlib::HYPERCALL_U64 => {
-                info!("HYPERCALL_U64 is not handled");
-            },
-
             qlib::HYPERCALL_GETTIME => {
                 let data = para1;
 
