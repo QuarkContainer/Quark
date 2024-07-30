@@ -32,6 +32,7 @@ pub mod xpu;
 use core::arch::asm;
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
+use arch::vm::vcpu::ArchVirtCpu;
 use lazy_static::lazy_static;
 use libc::*;
 use serde_json;
@@ -60,7 +61,6 @@ use self::syscall::*;
 use self::tsot_agent::TSOT_AGENT;
 use self::tsot_msg::TsotMessage;
 use super::kvm_vcpu::HostPageAllocator;
-use super::kvm_vcpu::KVMVcpu;
 use super::namespace::MountNs;
 use super::qlib::addr::Addr;
 use super::qlib::common::{Error, Result};
@@ -129,7 +129,7 @@ pub struct VMSpace {
     pub pivot: bool,
     pub waitingMsgCall: Option<WaitingMsgCall>,
     pub controlSock: i32,
-    pub vcpus: Vec<Arc<KVMVcpu>>,
+    pub vcpus: Vec<Arc<ArchVirtCpu>>,
     pub haveMembarrierGlobal: bool,
     pub haveMembarrierPrivateExpedited: bool,
 
@@ -1967,7 +1967,7 @@ impl VMSpace {
     }
 
     pub fn GetVcpuFreq(&self) -> i64 {
-        self.vcpus[0].get_frequency().unwrap() as i64
+        self.vcpus[0].vcpu_base.get_frequency().unwrap() as i64
     }
 
     pub fn Membarrier(cmd: i32) -> i32 {

@@ -18,6 +18,8 @@ use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use kvm_ioctls::Kvm;
 use std::fs;
 
+use crate::QUARK_CONFIG;
+
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::config::*;
 use super::super::cmd::config::*;
@@ -64,7 +66,8 @@ impl CmdCmd {
             args.Spec.process.args.push(a.to_string());
         }
 
-        match VirtualMachine::Init(args) {
+        let cc_mode = QUARK_CONFIG.lock().CCMode;
+        match VirtualMachine::Init(args, cc_mode) {
             Ok(mut vm) => {
                 vm.run().expect("vm.run() fail");
             }

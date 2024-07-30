@@ -18,6 +18,7 @@ use super::FD_NOTIFIER;
 use super::VMS;
 #[cfg(not(feature = "cc"))]
 use alloc::alloc::alloc;
+use kvm_ioctls::VcpuFd;
 use core::alloc::Layout;
 use core::slice;
 use core::sync::atomic::AtomicU64;
@@ -89,20 +90,9 @@ pub struct KVMVcpu {
     pub tgid: AtomicU64,
     pub state: AtomicU64,
     pub vcpuCnt: usize,
-    //index in the cpu arrary
-    pub vcpu: kvm_ioctls::VcpuFd,
-
     pub topStackAddr: u64,
     pub entry: u64,
-
-    pub gdtAddr: u64,
-    pub idtAddr: u64,
-    pub tssIntStackStart: u64,
-    pub tssAddr: u64,
-
-    pub heapStartAddr: u64,
-    pub shareSpaceAddr: u64,
-
+    pub vcpu_fd: VcpuFd,
     pub autoStart: bool,
     pub interrupting: Mutex<(bool, Vec<Sender<()>>)>,
 }
@@ -114,51 +104,14 @@ impl KVMVcpu {
     pub fn Init(
         id: usize,
         vcpuCnt: usize,
-        vm_fd: &kvm_ioctls::VmFd,
         entry: u64,
-        pageAllocatorBaseAddr: u64,
-        shareSpaceAddr: u64,
+        stack_size: usize,
+        vcpu_fd: VcpuFd,
         autoStart: bool,
     ) -> Result<Self> {
-        const DEFAULT_STACK_PAGES: u64 = MemoryDef::DEFAULT_STACK_PAGES; //64KB
-                                                                         //let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
-        let stackSize = DEFAULT_STACK_PAGES << 12;
-        let stackAddr = AlignedAllocate(stackSize as usize, stackSize as usize, false).unwrap();
-        let topStackAddr = stackAddr + (DEFAULT_STACK_PAGES << 12);
-
-        let gdtAddr = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-        let idtAddr = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-
-        let tssIntStackStart = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-        let tssAddr = AlignedAllocate(
-            MemoryDef::PAGE_SIZE as usize,
-            MemoryDef::PAGE_SIZE as usize,
-            true,
-        )
-        .unwrap();
-
-        // info!("the tssIntStackStart is {:x}, tssAddr address is {:x}, idt addr is {:x}, gdt addr is {:x}",
-        //     tssIntStackStart, tssAddr, idtAddr, gdtAddr);
-
-        let vcpu = vm_fd
-            .create_vcpu(id as u64)
-            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))
-            .expect("create vcpu fail");
+        let stack_addr = AlignedAllocate(stack_size as usize, stack_size as usize, false)
+            .expect("Create vCPU:{id} failed - cannot allocate stack");
+        let topStackAddr = stack_addr + stack_size as u64;
         let cpuAffinit = VMS.lock().cpuAffinit;
         let vcpuCoreId = if !cpuAffinit {
             -1
@@ -172,16 +125,10 @@ impl KVMVcpu {
             threadid: AtomicU64::new(0),
             tgid: AtomicU64::new(0),
             state: AtomicU64::new(KVMVcpuState::HOST as u64),
-            vcpuCnt,
-            vcpu,
+            vcpuCnt: vcpuCnt,
             topStackAddr: topStackAddr,
             entry: entry,
-            gdtAddr: gdtAddr,
-            idtAddr: idtAddr,
-            tssIntStackStart: tssIntStackStart,
-            tssAddr: tssAddr,
-            heapStartAddr: pageAllocatorBaseAddr,
-            shareSpaceAddr: shareSpaceAddr,
+            vcpu_fd: vcpu_fd,
             autoStart: autoStart,
             interrupting: Mutex::new((false, vec![])),
         });
@@ -283,7 +230,7 @@ impl KVMVcpu {
 
         let ret = unsafe {
             ioctl(
-                self.vcpu.as_raw_fd(),
+                self.vcpu_fd.as_raw_fd(),
                 Self::KVM_SET_SIGNAL_MASK,
                 &data as *const _ as u64,
             )
@@ -294,7 +241,7 @@ impl KVMVcpu {
             "SignalMask ret is {}/{}/{}",
             ret,
             errno::errno().0,
-            self.vcpu.as_raw_fd()
+            self.vcpu_fd.as_raw_fd()
         );
     }
 }
@@ -380,7 +327,7 @@ extern "C" fn handleSigChild(signal: i32) {
     if signal == Signal::SIGCHLD {
         // used for tlb shootdown
         if let Some(vcpu) = super::LocalVcpu() {
-            vcpu.vcpu.set_kvm_immediate_exit(1);
+            vcpu.vcpu_base.vcpu_fd.set_kvm_immediate_exit(1);
             fence(Ordering::SeqCst);
         }
     }
@@ -515,27 +462,6 @@ impl CPULocal {
             return Some(0);
         }
 
-        // process in vcpu worker thread will decease the throughput of redis/etcd benchmark
-        // todo: study and fix
-        /*let mut start = TSC.Rdtsc();
-        while IsRunning() {
-            match sharespace.scheduler.GetNext() {
-                None => (),
-                Some(newTask) => {
-                    return Some(newTask.data)
-                }
-            }
-
-            let count = Self::ProcessOnce(sharespace);
-            if count > 0 {
-                start = TSC.Rdtsc()
-            }
-
-            if TSC.Rdtsc() - start >= IO_WAIT_CYCLES {
-                break;
-            }
-        }*/
-
         return None;
     }
 
@@ -549,27 +475,6 @@ impl CPULocal {
         if sharespace.AQHostInputContainsItem() {
             return Some(TaskId::New(0, 0));
         }
-
-        // process in vcpu worker thread will decease the throughput of redis/etcd benchmark
-        // todo: study and fix
-        /*let mut start = TSC.Rdtsc();
-        while IsRunning() {
-            match sharespace.scheduler.GetNext() {
-                None => (),
-                Some(newTask) => {
-                    return Some(newTask.data)
-                }
-            }
-
-            let count = Self::ProcessOnce(sharespace);
-            if count > 0 {
-                start = TSC.Rdtsc()
-            }
-
-            if TSC.Rdtsc() - start >= IO_WAIT_CYCLES {
-                break;
-            }
-        }*/
 
         return None;
     }
