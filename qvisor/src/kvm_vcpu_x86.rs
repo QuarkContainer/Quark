@@ -260,9 +260,6 @@ impl KVMVcpu {
 
         self.SetXCR0()?;
 
-        let mut lastVal: u32 = 0;
-        let mut first = true;
-
         if self.cordId > 0 {
             let coreid = core_affinity::CoreId {
                 id: self.cordId as usize,
@@ -473,17 +470,6 @@ impl KVMVcpu {
                             info!("call in HYPERCALL_EXIT");
                             unsafe { libc::_exit(0) }
                         }
-
-                        qlib::HYPERCALL_U64 => unsafe {
-                            let val = *((data as *const _) as *const u32);
-                            if first {
-                                first = false;
-                                lastVal = val
-                            } else {
-                                info!("get kernel u64 : 0x{:x}{:x}", lastVal, val);
-                                first = true;
-                            }
-                        },
 
                         qlib::HYPERCALL_GETTIME => {
                             let data = para1;
