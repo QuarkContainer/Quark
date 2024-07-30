@@ -1310,7 +1310,6 @@ impl Task {
         let signo = info.Signo as u64;
         let currTask = Task::Current();
         let regs = currTask.GetPtRegs();
-        *regs = PtRegs::default();
         regs.sp = sigCtxAddr;
         regs.pc = sigAct.handler;
         regs.pstate = 0x0;
