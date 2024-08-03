@@ -69,7 +69,7 @@ context_swap:
     stp     x29, x9, [x8], #16
     str     lr, [x8], #16
     dsb ish
-    str     x3, [x8]
+    str     x2, [x8]
     mov     x8, x1
     isb
     ldp     x19, x20, [x8], #16
@@ -83,5 +83,5 @@ context_swap:
     dsb ish
     isb
     mov     sp, x9
-    str     x2, [x8]
+    str     x3, [x8]
     ret
