@@ -1,5 +1,5 @@
 .globl CopyPageUnsafe
-.globl context_swap, __vsyscall_page
+.globl context_swap, __vsyscall_page, context_swap_cc
 
 // For aarch64 this file does not serve as the actuall syscall entry
 // The actuall syscall is caused by SVC exception and the entry is vector_table
@@ -55,6 +55,37 @@ CopyPageUnsafe:
 	stnp	x14, x15, [x0, #96 - 256]
 	stnp	x16, x17, [x0, #112 - 256]
 
+    ret
+
+context_swap_cc:
+    mov     x8, x0
+    mov     x9, sp
+    isb
+    stp     x19, x20, [x8], #16
+    stp     x21, x22, [x8], #16
+    stp     x23, x24, [x8], #16
+    stp     x25, x26, [x8], #16
+    stp     x27, x28, [x8], #16
+    stp     x29, x9, [x8], #16
+    str     lr, [x8], #16
+    dsb ish
+    mov     x8, #1
+    str     x8, [x2] //from.TaskWrapper.Ready -> false
+    mov     x8, x1
+    isb
+    ldp     x19, x20, [x8], #16
+    ldp     x21, x22, [x8], #16
+    ldp     x23, x24, [x8], #16
+    ldp     x25, x26, [x8], #16
+    ldp     x27, x28, [x8], #16
+    ldp     x29, x9, [x8], #16
+    ldr     lr, [x8], #8
+    ldr     x0, [x8], #8
+    dsb ish
+    isb
+    mov     sp, x9
+    mov     x8, #0
+    str     x8, [x3] //to.TaskWrapper.Ready -> true
     ret
 
 context_swap:
