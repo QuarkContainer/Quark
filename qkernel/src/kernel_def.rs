@@ -330,16 +330,46 @@ pub fn HyperCall64_init(type_: u16, para1: u64, para2: u64, para3: u64, para4: u
     }
 }
 
+#[cfg(feature = "cc")]
+#[inline(always)]
+fn _hcall_prepare_shared_buff(arg0: u64, arg1: u64, arg2: u64, arg3: u64) {
+    let vcpu_id = GetVcpuId();
+    let shared_buff_addr = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
+    let shared_buff = unsafe {
+        &mut (*shared_buff_addr).SharePara[vcpu_id]
+    };
+
+    shared_buff.para1 = arg0;
+    shared_buff.para2 = arg1;
+    shared_buff.para3 = arg2;
+    shared_buff.para4 = arg3;
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline(always)]
+#[cfg(feature = "cc")]
+pub fn HyperCall64_init(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
+    _hcall_prepare_shared_buff(para1, para2, para3, para4);
+    unsafe {
+        let hcall_id: u64 = MemoryDef::HYPERCALL_MMIO_BASE + (type_ as u64);
+        let dummy_data:u8 = 0;
+        asm!("str w1, [x0]",
+             in("x0") hcall_id,
+             in("w1") dummy_data,
+        )
+    }
+}
+
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     // Use MMIO to cause VM exit hence "hypercall". The data does not matter,
     // addr of the MMIO identifies the Hypercall. x0 and x1 (w1) are used by the
     // str instruction, the 4x 64-bit parameters are passed via x2,x3,x4,x5.
+    #[cfg(not(feature = "cc"))]
     unsafe {
         let data: u8 = 0;
         let addr: u64 = MemoryDef::HYPERCALL_MMIO_BASE + (type_ as u64);
-
         asm!("str w1, [x0]",
              in("x0") addr,
              in("w1") data,
@@ -348,6 +378,18 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
              in("x4") para3,
              in("x5") para4,
         )
+    }
+
+    #[cfg(feature = "cc")] {
+        _hcall_prepare_shared_buff(para1, para2, para3, para4);
+        let dummy_data: u8 = 0;
+        let hcall_id = MemoryDef::HYPERCALL_MMIO_BASE + type_ as u64;
+        unsafe {
+            asm!("str w1, [x0]",
+                 in("x0") hcall_id,
+                 in("w1") dummy_data,
+            )
+        }
     }
 }
 
