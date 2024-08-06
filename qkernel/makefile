@@ -31,11 +31,11 @@ $(kernel_debug): kernel_debug $(assembly_object_files)
 		$(assembly_object_files) $(qkernel_debug)
 
 $(cc_kernel): cc_kernel $(assembly_object_files)
-	@ld -n --gc-sections -T $(linker_script) -o $(kernel) \
+	@ld --gc-sections -T $(linker_script) -o $(kernel) \
 		$(assembly_object_files) $(qkernel)
 
 $(cc_kernel_debug): cc_kernel_debug $(assembly_object_files)
-	@ld -n --gc-sections -T $(linker_script) -o $(kernel_debug) \
+	@ld --gc-sections -T $(linker_script) -o $(kernel_debug) \
 		$(assembly_object_files) $(qkernel_debug)
 
 kernel:
