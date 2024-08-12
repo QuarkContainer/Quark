@@ -83,7 +83,7 @@ pub fn SysShmat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 // Shmdt implements shmdt(2).
 pub fn SysShmdt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
-    let addr = args.arg1 as u64;
+    let addr = args.arg0 as u64;
 
     task.mm.DetachShm(task, addr)?;
     return Ok(0);
