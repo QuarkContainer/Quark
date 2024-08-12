@@ -110,15 +110,8 @@ impl MappableInternal {
 
                 HostSpace::MUnmap(phyAddr, CHUNK_SIZE);
 
-                /*error!("DecrRefOn 1 {:x}/{:x}", phyAddr,  phyAddr + CHUNK_SIZE);
-                let mut curr = phyAddr;
-                while curr < phyAddr + CHUNK_SIZE {
-                    Clflush(curr);
-                    error!("DecrRefOn 1.1 {:x}", curr);
-                    curr += 64;
-                }
-                error!("DecrRefOn 2");*/
                 self.f2pmap.remove(&chunkStart);
+                self.chunkrefs.remove(&chunkStart);
             } else if refs > 0 {
                 self.chunkrefs.insert(chunkStart, refs);
             } else {
@@ -281,7 +274,7 @@ impl HostInodeOpIntern {
                 return Err(Error::SysError(SysErr::EPERM));
             }
 
-            return Ok(())
+            return Ok(());
         }
         let ret = HostSpace::TryOpenWrite(dirfd, self.HostFd, name);
         self.skiprw = false;
@@ -291,7 +284,7 @@ impl HostInodeOpIntern {
             return Err(Error::SysError(SysErr::EPERM));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     /*********************************start of mappable****************************************************************/
@@ -763,7 +756,7 @@ impl HostInodeOp {
         if !hostIops.lock().Writeable {
             error!("writeat {}", hostIops.lock().HostFd);
         }
-        
+
         assert!(hostIops.lock().Writeable);
 
         let size = IoVec::NumBytes(srcs);
@@ -1290,7 +1283,7 @@ impl InodeOperations for HostInodeOp {
         }
 
         let ret = Ftruncate(self.HostFd(), size);
-        
+
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }

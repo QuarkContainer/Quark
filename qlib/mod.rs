@@ -137,7 +137,6 @@ pub fn InitSingleton() {
 pub const HYPERCALL_PANIC: u16 = 2;
 pub const HYPERCALL_OOM: u16 = 4;
 pub const HYPERCALL_MSG: u16 = 5;
-pub const HYPERCALL_U64: u16 = 6;
 pub const HYPERCALL_PRINT: u16 = 8;
 pub const HYPERCALL_EXIT: u16 = 9;
 pub const HYPERCALL_GETTIME: u16 = 11;
@@ -1040,7 +1039,7 @@ pub enum SysCallID {
     syscall_368,
     syscall_369,
     syscall_370,
-    // 371
+    // 370
     syscall_371,
     syscall_372,
     syscall_373,
@@ -1095,41 +1094,39 @@ pub enum SysCallID {
     syscall_418,
     syscall_419,
     syscall_420,
-    //420
+    // 420
     syscall_421,
     syscall_422,
     syscall_423,
-    syscall_424,
-    syscall_425,
-    syscall_426,
-    syscall_427,
-    syscall_428,
-    syscall_429,
-    syscall_430,
+    sys_pidfd_send_signal,
+    sys_io_uring_setup,
+    sys_io_uring_enter,
+    sys_io_uring_register,
+    sys_open_tree,
+    sys_move_mount,
+    sys_fsopen,
     // 430
-    syscall_431,
-    syscall_432,
-    syscall_433,
-    syscall_434,
-    syscall_435,
-    syscall_436,
-    syscall_437,
-    syscall_438,
-    syscall_439,
-    syscall_440,
+    sys_fsconfig,
+    sys_fsmount,
+    sys_fspick,
+    sys_pidfd_open,
+    sys_clone3,
+    sys_close_range,
+    sys_openat2,
+    sys_pidfd_getfd,
+    sys_faccessat2,
+    sys_process_madvise,
     // 440
-    syscall_441,
-    syscall_442,
-    syscall_443,
-    syscall_444,
-    syscall_445,
-    syscall_446,
-    syscall_447,
-    syscall_448,
-    syscall_449,
-    syscall_450,
-    // No Valid syscall number
-
+    sys_epoll_pwait2,
+    nt_setattr,
+    sys_quotactl_fd,
+    sys_landlock_create_ruleset,
+    sys_landlock_add_rule,
+    sys_landlock_restrict_self,
+    sys_memfd_secret,
+    sys_process_mrelease,
+    sys_futex_waitv,
+    sys_set_mempolicy_home_node,
     UnknowSyscall = 451,
 
     EXTENSION_MAX,
