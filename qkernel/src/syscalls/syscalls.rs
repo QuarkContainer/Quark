@@ -625,7 +625,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysDup,                // 23  sys_dup,
     SysDup3,               // 24  sys_dup3,
     SysFcntl,              // 25  sys_fcntl,
-    SysInotifyInit,        // 26  sys_inotify_init1,
+    SysInotifyInit1,       // 26  sys_inotify_init1,
     SysInotifyAddWatch,    // 27  sys_inotify_add_watch,
     SysInotifyRmWatch,     // 28  sys_inotify_rm_watch,
     SysIoctl,              // 29  sys_ioctl,
