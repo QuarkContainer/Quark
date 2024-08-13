@@ -116,7 +116,9 @@ pub struct TimerOperations {
 
 impl Drop for TimerOperations {
     fn drop(&mut self) {
-        self.timer.Destroy();
+        if Arc::strong_count(&self.ops) == 1 {
+            self.timer.Destroy();
+        }
     }
 }
 
