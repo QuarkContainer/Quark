@@ -134,9 +134,30 @@ pub struct PageTables {
 }
 
 impl PageTables {
-    #[cfg(not(feature = "cc"))]
+    /// We are creating mappings from the VMM side, e.g. kernel, MMIO_PAGE on arm.
+    /// If we go for not IDENTICAL_MAPPING btw Host<->Guest, addresses of allocated
+    /// tables while on host should be adjusted.
+    fn adjust_address(address: u64, to_guest: bool) -> u64 {
+        let mut mapping_offset = 0;
+        #[cfg(not(feature = "duck-qk"))] {
+            #[cfg(feature = "cc")] {
+                if IDENTICAL_MAPPING.load(Ordering::Acquire) == false {
+                    mapping_offset = MemoryDef::UNIDENTICAL_MAPPING_OFFSET;
+                }
+            }
+        }
+
+        let adj_addr = if to_guest {
+            address - mapping_offset
+        } else {
+            address + mapping_offset
+        };
+
+        adj_addr
+    }
+
     pub fn New(pagePool: &Allocator) -> Result<Self> {
-        let root = pagePool.AllocPage(true)?;
+        let root = Self::adjust_address(pagePool.AllocPage(true)?, true);
         Ok(Self {
             root: AtomicU64::new(root),
             tlbEpoch: AtomicU64::new(0),
@@ -144,28 +165,6 @@ impl PageTables {
             freePages: Default::default(),
             hibernateLock: Default::default(),
         })
-    }
-
-    #[cfg(feature = "cc")]
-    pub fn New(pagePool: &Allocator) -> Result<Self> {
-        let root = pagePool.AllocPage(true)?;
-        if IDENTICAL_MAPPING.load(Ordering::Acquire) || crate::IS_GUEST{
-            Ok(Self {
-                root: AtomicU64::new(root),
-                tlbEpoch: AtomicU64::new(0),
-                tlbshootdown: AtomicBool::new(false),
-                freePages: Default::default(),
-                hibernateLock: Default::default(),
-            })
-        } else {
-            Ok(Self {
-                root: AtomicU64::new(root - MemoryDef::UNIDENTICAL_MAPPING_OFFSET),
-                tlbEpoch: AtomicU64::new(0),
-                tlbshootdown: AtomicBool::new(false),
-                freePages: Default::default(),
-                hibernateLock: Default::default(),
-            })
-        }
     }
 
     pub fn TlbShootdown(&self) -> bool {
@@ -621,7 +620,6 @@ impl PageTables {
         return Ok(false);
     }
 
-    #[cfg(not(feature = "cc"))]
     pub fn MapWith1G(
         &self,
         start: Addr,
@@ -647,7 +645,7 @@ impl PageTables {
 
         let mut curAddr = start;
 
-        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
+        let pt: *mut PageTable = Self::adjust_address(self.GetRoot(), false) as *mut PageTable;
         unsafe {
             let mut p4Idx = VirtAddr::new(curAddr.0).p4_index();
             let mut p3Idx = VirtAddr::new(curAddr.0).p3_index();
@@ -658,96 +656,11 @@ impl PageTables {
 
                 if pgdEntry.is_unused() {
                     pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                    pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), default_table_user());
+                    pgdEntry.set_addr(PhysAddr::new(Self::adjust_address(pudTbl as u64, true)),
+                        default_table_user());
                 } else {
-                    pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
-                }
-
-                while curAddr.0 < end.0 {
-                    let pudEntry = &mut (*pudTbl)[p3Idx];
-                    let newphysAddr = curAddr.0 - start.0 + physical.0;
-
-                    // Question: if we also do this for kernel, do we still need this?
-                    if !pudEntry.is_unused() {
-                        res = self.freeEntry(pudEntry, pagePool)?;
-                    }
-
-                    pudEntry.set_addr(PhysAddr::new(newphysAddr), hugepage_flags);
-                    curAddr = curAddr.AddLen(MemoryDef::HUGE_PAGE_SIZE_1G)?;
-
-                    if p3Idx == PageTableIndex::new(MemoryDef::ENTRY_COUNT - 1) {
-                        p3Idx = PageTableIndex::new(0);
-                        break;
-                    } else {
-                        p3Idx = PageTableIndex::new(u16::from(p3Idx) + 1);
-                    }
-                }
-
-                p4Idx = PageTableIndex::new(u16::from(p4Idx) + 1);
-            }
-        }
-
-        return Ok(res);
-    }
-
-    #[cfg(feature = "cc")]
-    pub fn MapWith1G(
-        &self,
-        start: Addr,
-        end: Addr,
-        physical: Addr,
-        flags: PageTableFlags,
-        pagePool: &Allocator,
-        _kernel: bool,
-    ) -> Result<bool> {
-        if start.0 & (MemoryDef::HUGE_PAGE_SIZE_1G - 1) != 0
-            || end.0 & (MemoryDef::HUGE_PAGE_SIZE_1G - 1) != 0
-        {
-            panic!("start/end address not 1G aligned")
-        }
-
-        #[cfg(target_arch = "aarch64")]
-        let hugepage_flags = flags & (!PageTableFlags::TABLE);
-
-        #[cfg(target_arch = "x86_64")]
-        let hugepage_flags = flags | PageTableFlags::HUGE_PAGE;
-
-        let mut res = false;
-
-        let mut curAddr = start;
-
-        let identical = IDENTICAL_MAPPING.load(Ordering::Acquire);
-        let pt: *mut PageTable = if identical{
-            self.GetRoot() as *mut PageTable
-        } else {
-            (self.GetRoot() + MemoryDef::UNIDENTICAL_MAPPING_OFFSET) as *mut PageTable
-        };
-        unsafe {
-            let mut p4Idx = VirtAddr::new(curAddr.0).p4_index();
-            let mut p3Idx = VirtAddr::new(curAddr.0).p3_index();
-
-            while curAddr.0 < end.0 {
-                let pgdEntry = &mut (*pt)[p4Idx];
-                let pudTbl: *mut PageTable;
-
-                if pgdEntry.is_unused() {
-                    pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                    if identical {
-                        pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), default_table_user());
-                    } else {
-                        pgdEntry.set_addr(
-                            PhysAddr::new(pudTbl as u64 - MemoryDef::UNIDENTICAL_MAPPING_OFFSET),
-                            default_table_user(),
-                        );
-                    }
-                } else {
-                    if identical {
-                        pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
-                    } else {
-                        pudTbl = (pgdEntry.addr().as_u64()
-                            + MemoryDef::UNIDENTICAL_MAPPING_OFFSET)
-                            as *mut PageTable;
-                    }
+                    pudTbl = Self::adjust_address(pgdEntry.addr().as_u64(), false)
+                        as *mut PageTable;
                 }
 
                 while curAddr.0 < end.0 {
@@ -1610,7 +1523,7 @@ impl PageTables {
 
         //info!("mapCanonical virtual start is {:x}, len is {:x}, phystart is {:x}", start.0, end.0 - start.0, phyAddr.0);
         let mut curAddr = start;
-        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
+        let pt: *mut PageTable = Self::adjust_address(self.GetRoot(), false) as *mut PageTable;
         unsafe {
             let mut p4Idx = VirtAddr::new(curAddr.0).p4_index();
             let mut p3Idx = VirtAddr::new(curAddr.0).p3_index();
@@ -1623,9 +1536,11 @@ impl PageTables {
 
                 if pgdEntry.is_unused() {
                     pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                    pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), default_table_user());
+                    pgdEntry.set_addr(PhysAddr::new(Self::adjust_address(pudTbl as u64, true)),
+                        default_table_user());
                 } else {
-                    pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
+                    pudTbl = Self::adjust_address(pgdEntry.addr().as_u64(), false)
+                        as *mut PageTable;
                 }
 
                 while curAddr.0 < end.0 {
@@ -1634,9 +1549,11 @@ impl PageTables {
 
                     if pudEntry.is_unused() {
                         pmdTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                        pudEntry.set_addr(PhysAddr::new(pmdTbl as u64), default_table_user());
+                        pudEntry.set_addr(PhysAddr::new(Self::adjust_address(pmdTbl as u64, true)),
+                            default_table_user());
                     } else {
-                        pmdTbl = pudEntry.addr().as_u64() as *mut PageTable;
+                        pmdTbl = Self::adjust_address(pudEntry.addr().as_u64(), false)
+                            as *mut PageTable;
                     }
 
                     while curAddr.0 < end.0 {
@@ -1645,9 +1562,12 @@ impl PageTables {
 
                         if pmdEntry.is_unused() {
                             pteTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                            pmdEntry.set_addr(PhysAddr::new(pteTbl as u64), default_table_user());
+                            pmdEntry.set_addr(PhysAddr::new(
+                                Self::adjust_address(pteTbl as u64, true)),
+                                default_table_user());
                         } else {
-                            pteTbl = pmdEntry.addr().as_u64() as *mut PageTable;
+                            pteTbl = Self::adjust_address(pmdEntry.addr().as_u64(), false)
+                                as *mut PageTable;
                         }
 
                         while curAddr.0 < end.0 {
