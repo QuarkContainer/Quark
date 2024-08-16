@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::threadmgr::task_sched::TaskSchedInfo;
 use crate::qlib::mutex::*;
+
 use alloc::collections::btree_set::BTreeSet;
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -189,7 +191,7 @@ impl TaskSet {
             childPIDNamespace: None,
             SysCallReturn: None,
             //scedSeq: SeqCount::default(),
-            sched: Task::Current().sched.clone(),
+            sched: TaskSchedInfo::default(),
             yieldCount: 0,
             pendingSignals: PendingSignals::default(),
             signalMask: cfg.SignalMask.clone(),
