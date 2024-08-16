@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::Yield;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
@@ -675,6 +676,7 @@ impl FutexMgr {
         let success = match self.lockPILocked(w, t, addr, tid, &q, retry) {
             Err(e) => {
                 self.unlock(&k);
+                Yield();
                 return Err(e);
             }
             Ok(s) => s,

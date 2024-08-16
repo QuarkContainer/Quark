@@ -339,7 +339,7 @@ impl KVMVcpu {
                         )
                     }
                 }
-                VcpuExit::IoOut(addr, data) => {
+                VcpuExit::IoOut(addr, _data) => {
                     {
                         let mut interrupting = self.interrupting.lock();
                         interrupting.0 = false;
