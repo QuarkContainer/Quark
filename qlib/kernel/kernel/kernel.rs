@@ -377,7 +377,8 @@ impl Kernel {
         };
 
         let ts = self.tasks.clone();
-        ts.NewTask(&config, true, self)?;
+        let t = ts.NewTask(&config, true, self)?;
+        t.lock().sched = task.sched.clone();
 
         let root = ts.Root();
         let tgid = root.IDOfThreadGroup(&tg);
