@@ -34,7 +34,6 @@ use super::super::SignalDef::*;
 use super::pid_namespace::*;
 use super::session::*;
 use super::task_exit::*;
-use super::task_sched::*;
 use super::thread::*;
 use super::thread_group::*;
 
@@ -190,7 +189,7 @@ impl TaskSet {
             childPIDNamespace: None,
             SysCallReturn: None,
             //scedSeq: SeqCount::default(),
-            sched: TaskSchedInfo::default(),
+            sched: Task::Current().sched.clone(),
             yieldCount: 0,
             pendingSignals: PendingSignals::default(),
             signalMask: cfg.SignalMask.clone(),
