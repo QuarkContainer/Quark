@@ -1,5 +1,5 @@
 .globl syscall_entry, kernel_stack, CopyPageUnsafe
-.globl context_swap, context_swap_to, signal_call, __vsyscall_page, rdtsc, initX86FPState
+.globl context_swap, signal_call, __vsyscall_page, rdtsc, initX86FPState
 
 .globl div_zero_handler
 .globl debug_handler
@@ -150,21 +150,6 @@ context_swap:
     sfence
     mov QWORD PTR [rsi+0x40], 0
 
-    ret
-
-context_swap_to:
-    mov rsp, [rsi+0x00]
-    mov r15, [rsi+0x08]
-    mov r14, [rsi+0x10]
-    mov r13, [rsi+0x18]
-    mov r12, [rsi+0x20]
-    mov rbx, [rsi+0x28]
-    mov rbp, [rsi+0x30]
-    mov rdi, [rsi+0x38]
-
-    sfence
-    mov [rsi+0x40], rcx
-    sfence
     ret
 
 CopyPageUnsafe:
