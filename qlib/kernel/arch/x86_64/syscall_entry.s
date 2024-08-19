@@ -137,7 +137,7 @@ context_swap:
     mov [rdi+0x30], rbp
 
     sfence
-    mov [rdi+0x40], rdx
+    mov QWORD PTR [rdi+0x40], 1
 
     mov rsp, [rsi+0x00]
     mov r15, [rsi+0x08]
@@ -148,7 +148,7 @@ context_swap:
     mov rbp, [rsi+0x30]
     mov rdi, [rsi+0x38]
     sfence
-    mov [rsi+0x40], rcx
+    mov QWORD PTR [rsi+0x40], 0
 
     ret
 

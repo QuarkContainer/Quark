@@ -151,7 +151,7 @@ pub fn switch(from: TaskId, to: TaskId) {
     toCtx.mm.VcpuEnter();
 
     unsafe {
-        context_swap(fromCtx.GetContext(), toCtx.GetContext(), 1, 0);
+        context_swap(fromCtx.GetContext(), toCtx.GetContext());
     }
 
     Task::Current().AccountTaskLeave(SchedState::Blocked);
