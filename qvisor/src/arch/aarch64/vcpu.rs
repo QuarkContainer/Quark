@@ -53,7 +53,7 @@ impl VirtCpu for Aarch64VirtCpu {
             _vcpu_fd, auto_start)?;
 
         let _conf_comp_ext = match conf_extension {
-            CCMode::Normal =>
+            CCMode::None =>
                 NonConf::initialize_conf_extension(share_space_table_addr,
                 page_allocator_base_addr)?,
             CCMode::Normal | CCMode::NormalEmu => {
