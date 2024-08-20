@@ -248,48 +248,24 @@ pub fn Invlpg(addr: u64) {
     }
 }
 
-#[cfg(target_arch = "x86_64")]
-#[cfg(not(feature = "cc"))]
+#[cfg(feature = "cc")]
 #[inline(always)]
-pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
-    unsafe {
-        let data: u8 = 0;
-        asm!("
-            out dx, al
-            ",
-            in("dx") type_,
-            in("al") data,
-            in("rsi") para1,
-            in("rcx") para2,
-            in("rdi") para3,
-            in("r10") para4
-        )
-    }
+fn _hcall_prepare_shared_buff(vcpu_id: usize, arg0: u64, arg1: u64, arg2: u64, arg3: u64) {
+    let shared_buff_addr = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
+    let shared_buff = unsafe {
+        &mut (*shared_buff_addr).SharePara[vcpu_id]
+    };
+
+    shared_buff.para1 = arg0;
+    shared_buff.para2 = arg1;
+    shared_buff.para3 = arg2;
+    shared_buff.para4 = arg3;
 }
 
 #[cfg(target_arch = "x86_64")]
-#[cfg(feature = "cc")]
 #[inline(always)]
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
-    if is_cc_enabled() {
-        let vcpuid = GetVcpuId();
-        let share_para_page = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
-        let share_para = unsafe { &mut (*share_para_page).SharePara[vcpuid] };
-        share_para.para1 = para1;
-        share_para.para2 = para2;
-        share_para.para3 = para3;
-        share_para.para4 = para4;
-
-        unsafe {
-            let data: u8 = 0;
-            asm!("
-            out dx, al
-            ",
-                in("dx") type_,
-                in("al") data,
-            )
-        }
-    } else {
+    #[cfg(not(feature = "cc"))] {
         unsafe {
             let data: u8 = 0;
             asm!("
@@ -304,59 +280,24 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
             )
         }
     }
-}
-
-//VCPU 0 did not set gs as corresponding Vcpulocal address, thus use another function to use default position
-#[cfg(target_arch = "x86_64")]
-#[cfg (feature = "cc")]
-#[inline(always)]
-pub fn HyperCall64_init(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
-
-    let share_para_page  = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
-    let share_para =unsafe{&mut (*share_para_page).SharePara[0]};
-    share_para.para1 = para1;
-    share_para.para2 = para2;
-    share_para.para3 = para3;
-    share_para.para4 = para4;
-
-    unsafe {
-        let data: u8 = 0;
-        asm!("
-            out dx, al
-            ",
-            in("dx") type_,
-            in("al") data,
-        )
-    }
-}
-
-#[cfg(feature = "cc")]
-#[inline(always)]
-fn _hcall_prepare_shared_buff(arg0: u64, arg1: u64, arg2: u64, arg3: u64) {
-    let vcpu_id = GetVcpuId();
-    let shared_buff_addr = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
-    let shared_buff = unsafe {
-        &mut (*shared_buff_addr).SharePara[vcpu_id]
-    };
-
-    shared_buff.para1 = arg0;
-    shared_buff.para2 = arg1;
-    shared_buff.para3 = arg2;
-    shared_buff.para4 = arg3;
-}
-
-#[cfg(target_arch = "aarch64")]
-#[inline(always)]
-#[cfg(feature = "cc")]
-pub fn HyperCall64_init(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
-    _hcall_prepare_shared_buff(para1, para2, para3, para4);
-    unsafe {
-        let hcall_id: u64 = MemoryDef::HYPERCALL_MMIO_BASE + (type_ as u64);
-        let dummy_data:u8 = 0;
-        asm!("str w1, [x0]",
-             in("x0") hcall_id,
-             in("w1") dummy_data,
-        )
+    #[cfg(feature = "cc")] {
+        /// We can not query which is the current vCpu before the share space is initialized.
+        let vcpu_id = if type_ != crate::qlib::HYPERCALL_SHARESPACE_INIT {
+            GetVcpuId()
+        } else {
+             0
+        };
+        _hcall_prepare_shared_buff(vcpu_id, para1, para2, para3, para4);
+        let dummy_data: u8 = 0;
+        unsafe {
+            let data: u8 = 0;
+            asm!("
+                out dx, al
+                ",
+                in("dx") type_,
+                in("al") dummy_data,
+            )
+        }
     }
 }
 
@@ -379,9 +320,14 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
              in("x5") para4,
         )
     }
-
     #[cfg(feature = "cc")] {
-        _hcall_prepare_shared_buff(para1, para2, para3, para4);
+        /// We can not query which is the current vCpu before the share space is initialized.
+        let vcpu_id = if type_ != crate::qlib::HYPERCALL_SHARESPACE_INIT {
+            GetVcpuId()
+        } else {
+             0
+        };
+        _hcall_prepare_shared_buff(vcpu_id, para1, para2, para3, para4);
         let dummy_data: u8 = 0;
         let hcall_id = MemoryDef::HYPERCALL_MMIO_BASE + type_ as u64;
         unsafe {
