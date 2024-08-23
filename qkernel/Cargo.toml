@@ -22,6 +22,7 @@ enum_dispatch = { git = "https://github.com/QuarkContainer/enum_dispatch_clone.g
 log = { version = "0.4", features = ["max_level_trace", "release_max_level_trace"] }
 
 [features]
+default = ["cc"]
 cc = []
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]

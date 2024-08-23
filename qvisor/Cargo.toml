@@ -60,6 +60,7 @@ libelf = { version = "0.1.0", optional = true }
 io-uring = "0.6.3"
 
 [features]
+default = ["cc"]
 cuda = ["cuda-driver-sys", "cuda-runtime-sys", "libelf", "rcublas-sys", "cuda11-cublasLt-sys"]
 cc = []
 
