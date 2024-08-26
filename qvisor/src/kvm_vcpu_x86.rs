@@ -626,66 +626,6 @@ impl KVMVcpu {
                         interrupting.0 = false;
                         interrupting.1.clear();
                     }
-
-                    //     SHARE_SPACE.MaskTlbShootdown(self.id as _);
-                    //
-                    //     let mut regs = self
-                    //         .vcpu
-                    //         .get_regs()
-                    //         .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                    //     let mut sregs = self
-                    //         .vcpu
-                    //         .get_sregs()
-                    //         .map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
-                    //
-                    //     let ss = sregs.ss.selector as u64;
-                    //     let rsp = regs.rsp;
-                    //     let rflags = regs.rflags;
-                    //     let cs = sregs.cs.selector as u64;
-                    //     let rip = regs.rip;
-                    //     let isUser = (ss & 0x3) != 0;
-                    //
-                    //     let stackTop = if isUser {
-                    //         self.tssIntStackStart + MemoryDef::PAGE_SIZE - 16
-                    //     } else {
-                    //         continue;
-                    //     };
-                    //
-                    //     let mut stack = KernelStack::New(stackTop);
-                    //     stack.PushU64(ss);
-                    //     stack.PushU64(rsp);
-                    //     stack.PushU64(rflags);
-                    //     stack.PushU64(cs);
-                    //     stack.PushU64(rip);
-                    //
-                    //     regs.rsp = stack.sp;
-                    //     regs.rip = SHARE_SPACE.VirtualizationHandlerAddr();
-                    //     regs.rflags = 0x2;
-                    //
-                    //     sregs.ss.selector = 0x10;
-                    //     sregs.ss.dpl = 0;
-                    //     sregs.cs.selector = 0x8;
-                    //     sregs.cs.dpl = 0;
-                    //
-                    //     /*error!("VcpuExit::Intr ss is {:x}/{:x}/{:x}/{:x}/{:x}/{}/{:x}/{:#x?}/{:#x?}",
-                    //         //self.vcpu.get_ready_for_interrupt_injection(),
-                    //         ss,
-                    //         rsp,
-                    //         rflags,
-                    //         cs,
-                    //         rip,
-                    //         isUser,
-                    //         stackTop,
-                    //         &sregs.ss,
-                    //         &sregs.cs,
-                    //     );*/
-                    //
-                    //     self.vcpu
-                    //         .set_regs(&regs)
-                    //         .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                    //     self.vcpu
-                    //         .set_sregs(&sregs)
-                    //         .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                 }
                 r => {
                     let vcpu_sregs = self
