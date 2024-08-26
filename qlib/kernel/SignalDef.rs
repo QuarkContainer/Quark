@@ -378,6 +378,9 @@ pub struct UContext {
     pub Stack: SignalStack,
     pub Sigset: u64,
     __pad: [u8; (1024 / 8) - core::mem::size_of::<u64>()],
+    __pad2: [u8; 8],
+    // MContext is 16 bytes aligned.
+    // offset here: 8 + 8 + 24 + 8 + 120 + 8 = 176
     pub MContext: SigContext,
 }
 
@@ -390,6 +393,7 @@ impl Default for UContext {
             Stack: SignalStack::default(),
             Sigset: 0,
             __pad: [0; (1024 / 8) - core::mem::size_of::<u64>()],
+            __pad2: [0; 8],
             MContext: SigContext::default(),
         }
     }
@@ -404,6 +408,7 @@ impl UContext {
             Stack: alt.clone(),
             Sigset: 0,
             __pad: [0u8; (1024 / 8) - core::mem::size_of::<u64>()],
+            __pad2: [0u8; 8],
             MContext: SigContext::New(ptRegs, oldMask, fault_address, fpstate),
         };
     }
@@ -905,6 +910,8 @@ pub struct SignalStruct {
 }
 
 // https://elixir.bootlin.com/linux/latest/source/arch/x86/include/uapi/asm/signal.h#L132
+// NOTE: repr(C) fields are self-aligned, i.e. the `size` is aligned to 8 bytes
+// and the SignalStack is in total 24 bytes instead of 20.
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct SignalStack {
