@@ -463,7 +463,7 @@ impl LoaderInternal {
             gids.push(KGID(*gid))
         }
 
-        let userns = UserNameSpace::NewRootUserNamespace();
+        let userns = Task::Current().ipcns.userNS.clone();
         let creds = auth::Credentials::NewUserCredentials(
             KUID(process.UID),
             KGID(process.GID),
@@ -475,7 +475,7 @@ impl LoaderInternal {
         let hostName = process.HostName.to_string();
 
         let utsns = UTSNamespace::New(hostName.to_string(), hostName.to_string(), userns.clone());
-        let ipcns = IPCNamespace::New(&userns);
+        let ipcns = Task::Current().ipcns.clone();
 
         let kernelArgs = InitKernelArgs {
             FeatureSet: Arc::new(QMutex::new(HostFeatureSet())),
