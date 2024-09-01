@@ -14,12 +14,68 @@
 
 use std::{string::String, fmt};
 
-pub enum MemArea {
+use hashbrown::HashMap;
+use kvm_bindings::kvm_userspace_memory_region;
+
+#[derive(PartialEq, Eq, Hash)]
+pub enum MemAreaType {
     PrivateHeapArea,
     SharedHeapArea,
     KernelArea,
     FileMapArea,
     HypercallMmioArea,
+}
+
+impl fmt::Display for MemAreaType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MemAreaType::PrivateHeapArea => write!(f, "Guest-private heap area"),
+            MemAreaType::SharedHeapArea => write!(f,  "Host-shared heap area"),
+            MemAreaType::KernelArea => write!(f, "Guest-kernel code area"),
+            MemAreaType::FileMapArea => write!(f, "Host-shared file-map area"),
+            MemAreaType::HypercallMmioArea => write!(f, "Guest hypercall-mmio area"),
+        }
+    }
+}
+
+pub(in super) struct MemArea {
+    pub base_host: u64,
+    pub base_guest: u64,
+    pub size: u64,
+    pub kvm_memory_region: Option<kvm_userspace_memory_region>,
+}
+
+impl fmt::Debug for MemArea {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("host base:{:#x}, guest base:{:#x}, size:{:#x}",
+                self.base_host,
+                self.base_guest,
+                self.size))
+    }
+}
+
+pub(in super) struct MemLayoutConfig {
+    pub guest_private: Option<HashMap<MemAreaType, MemArea>>,
+    pub host_shared: HashMap<MemAreaType, MemArea>,
+    pub kernel_stack_size: usize,
+    pub guest_mem_size: u64,
+}
+
+impl fmt::Debug for MemLayoutConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let _ = f.write_fmt(format_args!("\nGuest private:"));
+        if self.guest_private.is_some() {
+            for (_area_type, _area) in self.guest_private.iter().next().unwrap() {
+                let _ = f.write_fmt(format_args!("\n{} - {:?}", _area_type.to_string(), _area));
+            }
+        }
+        let _ = f.write_fmt(format_args!("\nHost shared:"));
+        for (_area_type, _area) in self.host_shared.iter() {
+            let _ = f.write_fmt(format_args!("\n{} - {:?}", _area_type.to_string(), _area));
+        }
+        let _ = f.write_fmt(format_args!("\nKernel init region size:{:#x}", self.guest_mem_size));
+        f.write_fmt(format_args!("\nStack size:{:#x}", self.kernel_stack_size))
+    }
 }
 
 pub struct VmResources {
@@ -32,38 +88,17 @@ pub struct VmResources {
 }
 
 impl VmResources {
-    pub fn mem_area_info(&self, mem_area: MemArea) -> Option<(u64, u64, u64)> {
-        match mem_area {
-            MemArea::PrivateHeapArea =>
-               if self.mem_layout.guest_private_mem_layout.is_some() {
-                   Some((self.mem_layout.guest_private_mem_layout
-                         .unwrap().private_heap_mem_base_host,
-                         self.mem_layout.guest_private_mem_layout
-                         .unwrap().private_heap_mem_base_guest,
-                         self.mem_layout.guest_private_mem_layout
-                         .unwrap().private_heap_total_mem_size))
-            } else {
-                None
-            },
-            MemArea::SharedHeapArea =>
-                Some((self.mem_layout.shared_heap_mem_base_host,
-                      self.mem_layout.shared_heap_mem_base_guest,
-                      self.mem_layout.shared_heap_mem_size)),
-            MemArea::KernelArea =>
-                Some((self.mem_layout.kernel_base_host,
-                      self.mem_layout.kernel_base_guest,
-                      self.mem_layout.kernel_init_region_size)),
-            MemArea::FileMapArea =>
-                Some((self.mem_layout.file_map_area_base_host,
-                      self.mem_layout.file_map_area_base_guest,
-                      self.mem_layout.file_map_area_size)),
-            #[cfg(target_arch = "aarch64")]
-            MemArea::HypercallMmioArea =>
-                Some((u64::MAX, //Not backed on host
-                       self.mem_layout.hypercall_mmio_base,
-                      self.mem_layout.hypercall_mmio_size)),
-            _ => None
+    pub fn mem_area_info(&self, mem_area: MemAreaType) -> Option<(u64, u64, u64)> {
+        if let Some((_, _mem_area)) = self.mem_layout.host_shared.get_key_value(&mem_area) {
+            return Some((_mem_area.base_host, _mem_area.base_guest, _mem_area.size));
         }
+        return self.mem_layout.guest_private.as_ref().map_or(None, |_map| {
+            if let Some((_, _mem_area)) = _map.get_key_value(&mem_area) {
+                    Some((_mem_area.base_host, _mem_area.base_guest, _mem_area.size))
+                } else {
+                    None
+                }
+        });
     }
 }
 
@@ -73,67 +108,5 @@ impl fmt::Debug for VmResources {
               Path to vdso bin:{},\nSandbox UID:{},\nPod ID:{},\nMemory layout:[{:?}]]",
               self.min_vcpu_amount, self.kernel_bin_path, self.vdso_bin_path,
               self.sandbox_uid_name, self.pod_id, self.mem_layout)
-    }
-}
-
-#[derive(Default, Copy, Clone)]
-pub(in super) struct GuestPrivateMemLayout {
-    pub(in super) private_heap_mem_base_host: u64,
-    pub(in super) private_heap_mem_base_guest: u64,
-    pub(in super) private_heap_init_mem_size: u64,
-    pub(in super) private_heap_total_mem_size: u64,
-}
-
-#[derive(Default, Copy, Clone)]
-pub(in super) struct MemLayoutConfig {
-    pub(in super) guest_private_mem_layout: Option<GuestPrivateMemLayout>,
-    pub(in super) shared_heap_mem_base_guest: u64,
-    pub(in super) shared_heap_mem_base_host: u64,
-    pub(in super) shared_heap_mem_size: u64,
-    pub(in super) kernel_base_guest: u64,
-    pub(in super) kernel_base_host: u64,
-    pub(in super) kernel_init_region_size: u64,
-    pub(in super) file_map_area_base_guest: u64,
-    pub(in super) file_map_area_base_host: u64,
-    pub(in super) file_map_area_size: u64,
-    #[cfg(target_arch = "aarch64")]
-    pub(in super) hypercall_mmio_base: u64,
-    #[cfg(target_arch = "aarch64")]
-    pub(in super) hypercall_mmio_size: u64,
-    pub(in super) stack_size: usize,
-}
-
-impl fmt::Debug for MemLayoutConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        #[cfg(target_arch = "aarch64")] {
-            f.write_fmt(format_args!("\nHyperacall-MMIO base gurst:{:#x}",
-                self.hypercall_mmio_base));
-            f.write_fmt(format_args!("\nHyperacall-MMIO size:{:#x}",
-                self.hypercall_mmio_size));
-        }
-        if self.guest_private_mem_layout.is_some() {
-            f.write_fmt(format_args!("\nPrivate-Heap Memory base host:{:#x}",
-                self.guest_private_mem_layout.unwrap().private_heap_mem_base_host));
-            f.write_fmt(format_args!("\nPrivate-Heap Memory base guest:{:#x}",
-                self.guest_private_mem_layout.unwrap().private_heap_mem_base_guest));
-            f.write_fmt(format_args!("\nPrivate-Heap Memory init size:{:#x}",
-                self.guest_private_mem_layout.unwrap().private_heap_init_mem_size));
-            f.write_fmt(format_args!("\nPrivate-Heap Memory total size:{:#x}",
-                self.guest_private_mem_layout.unwrap().private_heap_total_mem_size));
-        }
-        f.write_fmt(format_args!("\nShared-Heap Memory base host:{:#x}",
-            self.shared_heap_mem_base_host));
-        f.write_fmt(format_args!("\nShared-Heap Memory base guest:{:#x}",
-            self.shared_heap_mem_base_guest));
-        f.write_fmt(format_args!("\nShared-Heap Memory size:{:#x}", self.shared_heap_mem_size));
-        f.write_fmt(format_args!("\nKernel base host:{:#x}", self.kernel_base_host));
-        f.write_fmt(format_args!("\nKernel base guest:{:#x}", self.kernel_base_guest));
-        f.write_fmt(format_args!("\nKernel initial region:{:#x}", self.kernel_init_region_size));
-        f.write_fmt(format_args!("\nFile-Map Memory base host:{:#x}",
-            self.file_map_area_base_host));
-        f.write_fmt(format_args!("\nFile-Map Memory base guest:{:#x}",
-            self.file_map_area_base_guest));
-        f.write_fmt(format_args!("\nFile-Map region:{:#x}", self.file_map_area_size));
-        f.write_fmt(format_args!("\nGuest kernel stack size:{:#x}", self.stack_size))
     }
 }

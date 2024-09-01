@@ -14,6 +14,7 @@
 
 use std::{os::fd::FromRawFd, sync::{atomic::Ordering, Arc}};
 
+use hashbrown::HashMap;
 use kvm_bindings::kvm_enable_cap;
 use kvm_ioctls::{Cap, Kvm, VmFd};
 
@@ -27,7 +28,7 @@ use crate::{arch::{tee::util::{adjust_addr_to_guest, adjust_addr_to_host},
             KERNEL_IO_THREAD, PMA_KEEPER, QUARK_CONFIG, ROOT_CONTAINER_ID,
             SHARE_SPACE, URING_MGR, VMS};
 use crate::arch::VirtCpu;
-use super::{resources::{GuestPrivateMemLayout, MemArea, MemLayoutConfig, VmResources}, VmType};
+use super::{resources::{MemArea, MemLayoutConfig, VmResources, MemAreaType}, VmType};
 #[cfg(feature = "cc")]
 use crate::qlib::kernel::Kernel::IDENTICAL_MAPPING;
 #[cfg(feature = "cc")]
@@ -54,34 +55,51 @@ impl VmType for VmCcEmul {
         } else {
             IDENTICAL_MAPPING.store(false, Ordering::Release);
         };
-
-        let guest_priv_mem_layout = GuestPrivateMemLayout {
-            private_heap_mem_base_host:
-                adjust_addr_to_host(MemoryDef::GUEST_PRIVATE_HEAP_OFFSET, _emul_type),
-            private_heap_mem_base_guest: MemoryDef::GUEST_PRIVATE_HEAP_OFFSET,
-            private_heap_init_mem_size: MemoryDef::GUEST_PRIVATE_INIT_HEAP_SIZE,
-            private_heap_total_mem_size: MemoryDef::GUEST_PRIVATE_HEAP_SIZE,
-        };
-
+        let mut _hshared_map:HashMap<MemAreaType, MemArea> = HashMap::new();
+        let mut _gpriv_map:HashMap<MemAreaType, MemArea> = HashMap::new();
+        _gpriv_map.insert(
+            MemAreaType::PrivateHeapArea,
+            MemArea {
+                base_host: adjust_addr_to_host(MemoryDef::GUEST_PRIVATE_HEAP_OFFSET, _emul_type),
+                base_guest: MemoryDef::GUEST_PRIVATE_HEAP_OFFSET,
+                size: MemoryDef::GUEST_PRIVATE_HEAP_SIZE,
+                kvm_memory_region: None });
+        _gpriv_map.insert(
+            MemAreaType::KernelArea,
+            MemArea {
+                base_host: adjust_addr_to_host(MemoryDef::PHY_LOWER_ADDR, _emul_type),
+                base_guest: MemoryDef::PHY_LOWER_ADDR,
+                size: MemoryDef::FILE_MAP_OFFSET - MemoryDef::PHY_LOWER_ADDR,
+                kvm_memory_region: None });
+        _hshared_map.insert(
+            MemAreaType::FileMapArea,
+            MemArea {
+                base_host: MemoryDef::FILE_MAP_OFFSET,
+                base_guest: MemoryDef::FILE_MAP_OFFSET,
+                size: MemoryDef::FILE_MAP_SIZE,
+                kvm_memory_region: None });
+        _hshared_map.insert(
+            MemAreaType::SharedHeapArea,
+            MemArea {
+                base_host: MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET,
+                base_guest: MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET,
+                size: MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE,
+                kvm_memory_region: None });
+        #[cfg(target_arch = "aarch64")] {
+            _hshared_map.insert(
+                MemAreaType::HypercallMmioArea,
+                MemArea {
+                    base_host: u64::MAX,
+                    base_guest: MemoryDef::HYPERCALL_MMIO_BASE,
+                    size: MemoryDef::HYPERCALL_MMIO_SIZE,
+                    kvm_memory_region: None });
+        }
         let mem_layout_config = MemLayoutConfig {
-            guest_private_mem_layout: Some(guest_priv_mem_layout),
-            shared_heap_mem_base_guest: MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET,
-            shared_heap_mem_base_host: MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET,
-            shared_heap_mem_size: MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE,
-            kernel_base_guest: MemoryDef::PHY_LOWER_ADDR,
-            kernel_base_host: adjust_addr_to_host(MemoryDef::PHY_LOWER_ADDR, _emul_type),
-            kernel_init_region_size: MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB,
-            file_map_area_base_host: MemoryDef::FILE_MAP_OFFSET,
-            file_map_area_base_guest: MemoryDef::FILE_MAP_OFFSET,
-            file_map_area_size: MemoryDef::FILE_MAP_SIZE,
-            //NOTE: Not backed by the host
-            #[cfg(target_arch = "aarch64")]
-            hypercall_mmio_base: MemoryDef::HYPERCALL_MMIO_BASE,
-            #[cfg(target_arch = "aarch64")]
-            hypercall_mmio_size: MemoryDef::HYPERCALL_MMIO_SIZE,
-            stack_size: MemoryDef::DEFAULT_STACK_SIZE as usize,
+            guest_private: Some(_gpriv_map),
+            host_shared: _hshared_map,
+            kernel_stack_size: MemoryDef::DEFAULT_STACK_SIZE as usize,
+            guest_mem_size: MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB,
         };
-        let default_mem_layout = mem_layout_config;
         let _kernel_bin_path = VirtualMachine::KERNEL_IMAGE.to_string();
         let _vdso_bin_path = VirtualMachine::VDSO_PATH.to_string();
         let _sbox_uid_name = vm::SANDBOX_UID_NAME.to_string();
@@ -101,7 +119,7 @@ impl VmType for VmCcEmul {
                 vdso_bin_path: _vdso_bin_path,
                 sandbox_uid_name: _sbox_uid_name,
                 pod_id: _pod_id,
-                mem_layout: default_mem_layout,
+                mem_layout: mem_layout_config,
             },
             entry_address: _kernel_entry,
             vdso_address: _vdso_address,
@@ -167,7 +185,7 @@ impl VmType for VmCcEmul {
 
         self.vm_memory_initialize(&vm_fd)
             .expect("VM creation failed on memory initialization.");
-        let (_, pheap, _) = self.vm_resources.mem_area_info(MemArea::PrivateHeapArea).unwrap();
+        let (_, pheap, _) = self.vm_resources.mem_area_info(MemAreaType::PrivateHeapArea).unwrap();
         let _vcpu_total = VMS.lock().vcpuCount;
         let _auto_start = VMS.lock().args.as_ref().unwrap().AutoStart;
         let _vcpus = self
@@ -211,15 +229,16 @@ impl VmType for VmCcEmul {
         }
 
         let (fmap_base_host, _, fmap_size) = self.vm_resources
-            .mem_area_info(MemArea::FileMapArea).unwrap();
+            .mem_area_info(MemAreaType::FileMapArea).unwrap();
         PMA_KEEPER.Init(fmap_base_host, fmap_size);
         PMA_KEEPER.InitHugePages();
         vms.pageTables = PageTables::New(&vms.allocator)?;
 
         let page_opt = PageOpts::Kernel();
-        let (_, kmem_base_guest, kmem_init_region) = self.vm_resources
-            .mem_area_info(MemArea::KernelArea).unwrap();
-        vms.KernelMapHugeTable(Addr(kmem_base_guest), Addr(kmem_base_guest + kmem_init_region),
+        let (_, kmem_base_guest, _) = self.vm_resources
+            .mem_area_info(MemAreaType::KernelArea).unwrap();
+        vms.KernelMapHugeTable(Addr(kmem_base_guest),
+            Addr(kmem_base_guest + self.vm_resources.mem_layout.guest_mem_size),
             Addr(kmem_base_guest), page_opt.Val(),)?;
 
         #[cfg(target_arch = "aarch64")]
@@ -227,7 +246,7 @@ impl VmType for VmCcEmul {
             let mut page_opt = PageOpts::Zero();
             page_opt.SetWrite().SetGlobal().SetPresent().SetAccessed().SetMMIOPage();
             let (_, hcall_base, hcall_size) =
-                self.vm_resources.mem_area_info(MemArea::HypercallMmioArea).unwrap();
+                self.vm_resources.mem_area_info(MemAreaType::HypercallMmioArea).unwrap();
             vms.KernelMap(Addr(hcall_base), Addr(hcall_base + hcall_size),
                 Addr(hcall_base), page_opt.Val())?;
         }
@@ -237,21 +256,18 @@ impl VmType for VmCcEmul {
     }
 
     fn vm_memory_initialize(&self, vm_fd: &VmFd) -> Result<(), Error> {
-        let (fmap_base_host, fmap_base_guest, fmap_region) = self.vm_resources
-            .mem_area_info(MemArea::FileMapArea).unwrap();
-        let (kmem_base_host, kmem_base_guest, _) = self.vm_resources
-            .mem_area_info(MemArea::KernelArea).unwrap();
-        let kmem_private_region = fmap_base_guest - kmem_base_guest;
+        let (kmem_base_host, kmem_base_guest, kmem_size) = self.vm_resources
+            .mem_area_info(MemAreaType::KernelArea).unwrap();
         let kvm_kmem_region = kvm_bindings::kvm_userspace_memory_region {
             slot: 1,
             guest_phys_addr: kmem_base_guest,
-            memory_size: kmem_private_region,
+            memory_size: kmem_size,
             userspace_addr: kmem_base_host,
             flags: 0,
         };
 
         let (pheap_base_host, pheap_base_guest, pheap_region) = self.vm_resources
-            .mem_area_info(MemArea::PrivateHeapArea).unwrap();
+            .mem_area_info(MemAreaType::PrivateHeapArea).unwrap();
         let kvm_private_heap_region = kvm_bindings::kvm_userspace_memory_region {
             slot: 2,
             guest_phys_addr: pheap_base_guest,
@@ -260,6 +276,8 @@ impl VmType for VmCcEmul {
             flags: 0,
         };
 
+        let (fmap_base_host, fmap_base_guest, fmap_region) = self.vm_resources
+            .mem_area_info(MemAreaType::FileMapArea).unwrap();
         let kvm_file_map_region = kvm_bindings::kvm_userspace_memory_region {
             slot: 3,
             guest_phys_addr: fmap_base_guest,
@@ -269,7 +287,7 @@ impl VmType for VmCcEmul {
         };
 
         let (shared_heap_base_host, shared_heap_base_guest, shared_heap_region) = self.vm_resources
-            .mem_area_info(MemArea::SharedHeapArea).unwrap();
+            .mem_area_info(MemAreaType::SharedHeapArea).unwrap();
         let kvm_shared_heap_region = kvm_bindings::kvm_userspace_memory_region {
             slot: 4,
             guest_phys_addr: shared_heap_base_guest,
@@ -294,7 +312,7 @@ impl VmType for VmCcEmul {
         }
 
         info!("KernelMemRegion - Guest-phyAddr:{:#x}, host-VA:{:#x}, page mmap-size:{} MB",
-            kmem_base_guest, kmem_base_host, kmem_private_region >> 20);
+            kmem_base_guest, kmem_base_host, kmem_size >> 20);
         info!("PrivateHeapMemRegion - Guest-phyAddr:{:#x}, host-VA:{:#x}, page mmap-size:{} MB",
             pheap_base_guest, pheap_base_host, pheap_region >> 20);
         info!("SharedMemRegion - Guest-phyAddr:{:#x}, host-VA:{:#x}, page mmap-size:{} MB",
@@ -394,7 +412,7 @@ impl VmType for VmCcEmul {
                 page_allocator_addr,
                 share_space_addr,
                 auto_start,
-                self.vm_resources.mem_layout.stack_size,
+                self.vm_resources.mem_layout.kernel_stack_size,
                 Some(&kvm),
                 self.emul_cc_mode)?);
             vcpus.push(vcpu);
