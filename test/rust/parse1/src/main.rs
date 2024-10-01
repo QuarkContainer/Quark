@@ -16,12 +16,12 @@
 
 extern crate libc;
 
-use std::fs::OpenOptions;
-use std::os::unix::io::IntoRawFd;
-use std::env;
 use std::collections::BTreeMap;
+use std::env;
 use std::fs::File;
+use std::fs::OpenOptions;
 use std::io::{self, prelude::*, BufReader};
+use std::os::unix::io::IntoRawFd;
 
 pub const RAWLOG_FILE_DEFAULT: &str = "/var/log/quark/raw.log";
 pub const LOG_FILE_DEFAULT: &str = "/var/log/quark/quark.log";
@@ -33,65 +33,94 @@ pub struct Line {
     pub op: u64,
     pub class: u64,
     pub addr: u64,
-    pub cpuid: u64
+    pub cpuid: u64,
 }
 
 pub fn main() {
-    let args: Vec<String> = env::args().collect();
-    let pid = args[1].parse::<u64>().unwrap();
+    let logMap = LogParse().unwrap();
 
-    //RawFileParse(pid);
-    let logMap = LogParse(pid).unwrap();
-    //println!("{:#?}", logMap);
+    // println!("{:#?}", &logMap);
 
-    let rawlogMap = RawFileParse(pid);
-    for (line_num, (addr, cpuid)) in rawlogMap.iter() {
-        let count = *line_num;
-        for i in (0..count as usize).rev() {
-            let i = i as u64;
-            match logMap.get(&i) {
-                None => continue,
-                Some((cpu, line)) => {
-                    if *cpu as u64 == *cpuid {
-                        ////////////////////////////////////////////
-                        println!("{:x} {} {} {} *** {}", *addr, *cpuid, *line_num, i, line);
-                        break;
-                    }
-                }
-            }
-        }
-        //println!("{:x} {} {}", *addr, *line_num - 1, *cpuid);
+    let mut map = BTreeMap::new();
+    for (_pid, (line, o)) in &logMap {
+        map.insert(line, o);
     }
 
-    println!("total: {}", rawlogMap.len());
+    for (line, o) in map {
+        println!("{} {}", line, o);
+    }
+
+    // let rawlogMap = RawFileParse(pid);
+    // for (line_num, (addr, cpuid)) in rawlogMap.iter() {
+    //     let count = *line_num;
+    //     for i in (0..count as usize).rev() {
+    //         let i = i as u64;
+    //         match logMap.get(&i) {
+    //             None => continue,
+    //             Some((cpu, line)) => {
+    //                 if *cpu as u64 == *cpuid {
+    //                     ////////////////////////////////////////////
+    //                     println!("{:x} {} {} {} *** {}", *addr, *cpuid, *line_num, i, line);
+    //                     break;
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     //println!("{:x} {} {}", *addr, *line_num - 1, *cpuid);
+    // }
+
+    //println!("total: {:?}", rawlogMap);
 }
 
-pub fn LogParse(requestPid : u64) -> io::Result<BTreeMap<u64, (i32, String)>> {
+pub fn LogParse() -> io::Result<BTreeMap<String, (i32, String)>> {
     let file = File::open(LOG_FILE_DEFAULT)?;
     let reader = BufReader::new(file);
     let mut map = BTreeMap::new();
 
+    let mut linenum = 0;
     for line in reader.lines() {
+        linenum += 1;
         //println!("{}", line?);
         let line = line?;
-        let (pid, lineNum, cpuid) = ParseLine(&line);
+        // let (pid, lineNum, cpuid) = ParseLine(&line);
 
-        if pid ==0 || lineNum ==0 || cpuid == -1 {
+        // if pid == 0 || lineNum == 0 || cpuid == -1 {
+        //     continue;
+        // }
+        // if pid == requestPid {
+        //     map.insert(lineNum, (cpuid, line));
+        //     //println!("{} {} {}", pid, lineNum, cpuid);
+        // }
+        let pid = ParseLineFromPid(&line);
+        if pid.len() == 0 {
             continue;
         }
-        if pid == requestPid {
-            map.insert(lineNum, (cpuid, line));
-            //println!("{} {} {}", pid, lineNum, cpuid);
-        }        
+
+        map.insert(pid, (linenum, line.to_string()));
     }
 
-    return Ok(map)
+    return Ok(map);
+}
+
+pub fn ParseLineFromPid(line: &str) -> String {
+    let split: Vec<&str> = line.split(" ").collect();
+    //println!("ParseLine split is {:?}", &split);
+    if split.len() <= 3 {
+        return String::new();
+    }
+
+    let s: Vec<&str> = split[2].split(")").collect();
+    if s.len() < 2 {
+        return String::new();
+    }
+    return s[0].to_string();
 }
 
 pub fn ParseLine(line: &str) -> (u64, u64, i32) {
-    let split : Vec<&str> = line.split(" ").collect();
+    let split: Vec<&str> = line.split(" ").collect();
+    //println!("ParseLine split is {:?}", &split);
     if split.len() <= 3 {
-        return (0, 0, -1)
+        return (0, 0, -1);
     }
 
     let pid = match split[0].parse::<u64>() {
@@ -103,20 +132,21 @@ pub fn ParseLine(line: &str) -> (u64, u64, i32) {
         _ => 0,
     };
 
+    println!("pid {} linenum is {}", pid, lineNum);
     let taskSeg = split[3];
-    let cpuid : i32 = {
-        if pid == 0 || lineNum ==0 || taskSeg.as_bytes()[0] != '[' as u8 {
+    let cpuid: i32 = {
+        if pid == 0 || lineNum == 0 || taskSeg.as_bytes()[0] != '[' as u8 {
             0
         } else {
-            let segs : Vec<&str> = taskSeg[1..].split("/").collect();
+            let segs: Vec<&str> = taskSeg[1..].split("/").collect();
             match segs[0].parse::<i32>() {
                 Ok(v) => v,
-                _ => -1
+                _ => -1,
             }
         }
     };
 
-    return (pid, lineNum, cpuid)
+    return (pid, lineNum, cpuid);
 }
 
 pub fn RawFileParse(pid: u64) -> BTreeMap<u64, (u64, u64)> {
@@ -132,13 +162,7 @@ pub fn RawFileParse(pid: u64) -> BTreeMap<u64, (u64, u64)> {
     let mut data = Line::default();
     let mut total = 0;
     loop {
-        let ret = unsafe {
-            libc::read(
-                fd, 
-                &mut data as * mut Line as u64 as _, 
-                6 * 8
-            )
-        };
+        let ret = unsafe { libc::read(fd, &mut data as *mut Line as u64 as _, 6 * 8) };
 
         if ret <= 0 {
             println!("ret is {}", ret);
@@ -146,7 +170,7 @@ pub fn RawFileParse(pid: u64) -> BTreeMap<u64, (u64, u64)> {
         }
 
         assert!(ret == 6 * 8);
-        if data.op == 1 { 
+        if data.op == 1 {
             total += 1;
         }
 
@@ -158,7 +182,8 @@ pub fn RawFileParse(pid: u64) -> BTreeMap<u64, (u64, u64)> {
             continue;
         }
 
-        if data.op == 1 { // allocate
+        if data.op == 1 {
+            // allocate
             assert!(!map.contains_key(&data.addr));
             map.insert(data.addr, (data.line_num, cpuid));
         } else {
