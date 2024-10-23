@@ -170,41 +170,45 @@ impl PartialEq for Dirent {
 
 impl Eq for Dirent {}
 
-impl Drop for Dirent {
+impl Drop for DirentInternal {
     fn drop(&mut self) {
-        if Arc::strong_count(&self.0) == 1 {
-            let parent = self.main.lock().Parent.take();
-            match parent {
-                None => (),
-                Some(parent) => {
-                    let name = self.main.lock().Name.clone();
-                    parent.RemoveChild(&name);
-                }
-            }
-
-            if SHARESPACE.config.read().EnableInotify {
-                let watches = self.Watches();
-
-                // If this inode is being destroyed because it was unlinked, queue a
-                // deletion event. This may not be the case for inodes being revalidated.
-                let unlinked = watches.read().unlinked;
-                if unlinked {
-                    watches.Notify(
-                        "",
-                        InotifyEvent::IN_DELETE_SELF,
-                        0,
-                        EventType::InodeEvent,
-                        false,
-                    );
-                }
-
-                // Remove references from the watch owners to the watches on this inode,
-                // since the watches are about to be GCed. Note that we don't need to worry
-                // about the watch pins since if there were any active pins, this inode
-                // wouldn't be in the destructor.
-                watches.TargetDestroyed();
+        let parent = self.main.lock().Parent.take();
+        match parent {
+            None => (),
+            Some(parent) => {
+                let name = self.main.lock().Name.clone();
+                parent.RemoveChild(&name);
             }
         }
+
+        if SHARESPACE.config.read().EnableInotify {
+            let watches = self.Watches();
+
+            // If this inode is being destroyed because it was unlinked, queue a
+            // deletion event. This may not be the case for inodes being revalidated.
+            let unlinked = watches.read().unlinked;
+            if unlinked {
+                watches.Notify(
+                    "",
+                    InotifyEvent::IN_DELETE_SELF,
+                    0,
+                    EventType::InodeEvent,
+                    false,
+                );
+            }
+
+            // Remove references from the watch owners to the watches on this inode,
+            // since the watches are about to be GCed. Note that we don't need to worry
+            // about the watch pins since if there were any active pins, this inode
+            // wouldn't be in the destructor.
+            watches.TargetDestroyed();
+        }
+    }
+}
+
+impl DirentInternal {
+    pub fn Watches(&self) -> Watches {
+        return self.watches.clone();
     }
 }
 
@@ -229,10 +233,6 @@ impl Dirent {
         };
 
         return Self(Arc::new(intern));
-    }
-
-    pub fn Watches(&self) -> Watches {
-        return self.watches.clone();
     }
 
     pub fn SetDeleted(&self) {
