@@ -19,7 +19,7 @@ pub mod resources;
 
 use std::sync::Arc;
 use kvm_ioctls::{Kvm, VmFd};
-use crate::{arch::vm::vcpu::ArchVirtCpu, elf_loader::KernelELF, qlib::common::Error,
+use crate::{arch::vm::vcpu::ArchVirtCpu, elf_loader::KernelELF, qlib::{common::Error, config::CCMode},
             runc::runtime};
 use runtime::{vm::VirtualMachine, loader::Args};
 
@@ -27,19 +27,21 @@ pub trait VmType: std::fmt::Debug {
     fn init(args: Option<&Args>) -> Result<(Box<dyn VmType>, KernelELF), Error>
         where Self: Sized;
     /// Entry point for creating a VM
-    fn create_vm(self: Box<Self>, kernel_elf: KernelELF, args: Args)
+    #[allow(patterns_in_fns_without_body)]
+    fn create_vm(mut self: Box<Self>, kernel_elf: KernelELF, args: Args)
         -> Result<VirtualMachine, Error>;
     fn vm_space_initialize(&self, vcpu_count: usize, args: Args) -> Result<(), Error>;
     fn init_share_space(vcpu_count: usize, control_sock: i32, rdma_svc_cli_sock: i32,
                      pod_id: [u8; 64], share_space_addr: Option<u64>,
                      has_global_mem_barrier: Option<bool>) -> Result<(), Error>
         where Self: Sized;
-    fn create_kvm_vm(&self, kvm_fd: i32) -> Result<(Kvm, VmFd), Error>;
-    fn vm_memory_initialize(&self, vm_fd: &VmFd) -> Result<(), Error>;
-    fn post_memory_initialize(&mut self) -> Result<(), Error>;
+    fn create_kvm_vm(&mut self, kvm_fd: i32) -> Result<(Kvm, VmFd), Error>;
+    fn vm_memory_initialize(&mut self, vm_fd: &VmFd) -> Result<(), Error>;
+    fn post_memory_initialize(&mut self, _vm_fd: &mut VmFd) -> Result<(), Error> { Ok(()) }
     fn vm_vcpu_initialize(&self, kvm: &Kvm, vm_fd: &VmFd, total_vcpus: usize, entry_addr: u64,
                         auto_start: bool, page_allocator_addr: Option<u64>,
                         share_space_addr: Option<u64>) -> Result<Vec<Arc<ArchVirtCpu>>, Error>;
-    fn post_vm_initialize(&mut self) -> Result<(), Error>;
-    fn post_init_update(&mut self) -> Result<(), Error>;
+    fn post_vm_initialize(&mut self, _vm_fd: &mut VmFd) -> Result<(), Error> { Ok(()) }
+    fn post_init_update(&mut self, _vm_fd: &mut VmFd) -> Result<(), Error> { Ok(()) }
+    fn get_type(&self) -> CCMode;
 }

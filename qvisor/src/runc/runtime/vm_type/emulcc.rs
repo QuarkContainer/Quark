@@ -15,7 +15,6 @@
 use std::{os::fd::FromRawFd, sync::{atomic::Ordering, Arc}};
 
 use hashbrown::HashMap;
-use kvm_bindings::kvm_enable_cap;
 use kvm_ioctls::{Cap, Kvm, VmFd};
 
 use crate::FD_NOTIFIER;
@@ -55,48 +54,51 @@ impl VmType for VmCcEmul {
         } else {
             IDENTICAL_MAPPING.store(false, Ordering::Release);
         };
-        let mut _hshared_map:HashMap<MemAreaType, MemArea> = HashMap::new();
-        let mut _gpriv_map:HashMap<MemAreaType, MemArea> = HashMap::new();
-        _gpriv_map.insert(
+        let mut _mem_map:HashMap<MemAreaType, MemArea> = HashMap::new();
+        _mem_map.insert(
             MemAreaType::PrivateHeapArea,
             MemArea {
                 base_host: adjust_addr_to_host(MemoryDef::GUEST_PRIVATE_HEAP_OFFSET, _emul_type),
                 base_guest: MemoryDef::GUEST_PRIVATE_HEAP_OFFSET,
                 size: MemoryDef::GUEST_PRIVATE_HEAP_SIZE,
-                kvm_memory_region: None });
-        _gpriv_map.insert(
+                guest_private: true,
+                host_backedup: true });
+        _mem_map.insert(
             MemAreaType::KernelArea,
             MemArea {
                 base_host: adjust_addr_to_host(MemoryDef::PHY_LOWER_ADDR, _emul_type),
                 base_guest: MemoryDef::PHY_LOWER_ADDR,
                 size: MemoryDef::FILE_MAP_OFFSET - MemoryDef::PHY_LOWER_ADDR,
-                kvm_memory_region: None });
-        _hshared_map.insert(
+                guest_private: true,
+                host_backedup: true });
+        _mem_map.insert(
             MemAreaType::FileMapArea,
             MemArea {
                 base_host: MemoryDef::FILE_MAP_OFFSET,
                 base_guest: MemoryDef::FILE_MAP_OFFSET,
                 size: MemoryDef::FILE_MAP_SIZE,
-                kvm_memory_region: None });
-        _hshared_map.insert(
+                guest_private: false,
+                host_backedup: true });
+        _mem_map.insert(
             MemAreaType::SharedHeapArea,
             MemArea {
                 base_host: MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET,
                 base_guest: MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET,
                 size: MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE,
-                kvm_memory_region: None });
+                guest_private: false,
+                host_backedup: true });
         #[cfg(target_arch = "aarch64")] {
-            _hshared_map.insert(
+            _mem_map.insert(
                 MemAreaType::HypercallMmioArea,
                 MemArea {
                     base_host: u64::MAX,
                     base_guest: MemoryDef::HYPERCALL_MMIO_BASE,
                     size: MemoryDef::HYPERCALL_MMIO_SIZE,
-                    kvm_memory_region: None });
+                    guest_private: false, // Semantically this is shared
+                    host_backedup: false });
         }
         let mem_layout_config = MemLayoutConfig {
-            guest_private: Some(_gpriv_map),
-            host_shared: _hshared_map,
+            mem_area_map: _mem_map,
             kernel_stack_size: MemoryDef::DEFAULT_STACK_SIZE as usize,
             guest_mem_size: MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB,
         };
@@ -131,9 +133,9 @@ impl VmType for VmCcEmul {
     }
 
     fn create_vm(
-        self: Box<VmCcEmul>,
+        mut self: Box<VmCcEmul>,
         kernel_elf: KernelELF,
-        args: Args,
+        args: Args
     ) -> Result<VirtualMachine, Error> {
         crate::GLOBAL_ALLOCATOR.InitPrivateAllocator();
         *ROOT_CONTAINER_ID.lock() = args.ID.clone();
@@ -239,7 +241,7 @@ impl VmType for VmCcEmul {
             .mem_area_info(MemAreaType::KernelArea).unwrap();
         vms.KernelMapHugeTable(Addr(kmem_base_guest),
             Addr(kmem_base_guest + self.vm_resources.mem_layout.guest_mem_size),
-            Addr(kmem_base_guest), page_opt.Val(),)?;
+            Addr(kmem_base_guest), page_opt.Val(), HugePageType::GB1)?;
 
         #[cfg(target_arch = "aarch64")]
         {
@@ -255,7 +257,7 @@ impl VmType for VmCcEmul {
         Ok(())
     }
 
-    fn vm_memory_initialize(&self, vm_fd: &VmFd) -> Result<(), Error> {
+    fn vm_memory_initialize(&mut self, vm_fd: &VmFd) -> Result<(), Error> {
         let (kmem_base_host, kmem_base_guest, kmem_size) = self.vm_resources
             .mem_area_info(MemAreaType::KernelArea).unwrap();
         let kvm_kmem_region = kvm_bindings::kvm_userspace_memory_region {
@@ -323,7 +325,7 @@ impl VmType for VmCcEmul {
         Ok(())
     }
 
-    fn create_kvm_vm(&self, kvm_fd: i32) -> Result<(Kvm, VmFd), Error> {
+    fn create_kvm_vm(&mut self, kvm_fd: i32) -> Result<(Kvm, VmFd), Error> {
         let kvm = unsafe { Kvm::from_raw_fd(kvm_fd) };
 
         if !kvm.check_extension(Cap::ImmediateExit) {
@@ -394,10 +396,6 @@ impl VmType for VmCcEmul {
         Ok(())
     }
 
-    fn post_memory_initialize(&mut self) -> Result<(), Error> {
-        Ok(())
-    }
-
     fn vm_vcpu_initialize(&self, kvm: &Kvm, vm_fd: &VmFd, total_vcpus: usize, entry_addr: u64,
                         auto_start: bool, page_allocator_addr: Option<u64>,
                         share_space_addr: Option<u64>) -> Result<Vec<Arc<ArchVirtCpu>>, Error> {
@@ -430,11 +428,7 @@ impl VmType for VmCcEmul {
         Ok(vcpus)
     }
 
-    fn post_vm_initialize(&mut self) -> Result<(), Error> {
-        Ok(())
-    }
-
-    fn post_init_upadate(&mut self) -> Result<(), Error> {
-        Ok(())
+    fn get_type(&self) -> CCMode {
+        self.emul_cc_mode
     }
 }

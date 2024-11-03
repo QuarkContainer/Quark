@@ -15,7 +15,6 @@
 use std::{string::String, fmt};
 
 use hashbrown::HashMap;
-use kvm_bindings::kvm_userspace_memory_region;
 
 #[derive(PartialEq, Eq, Hash)]
 pub enum MemAreaType {
@@ -38,39 +37,36 @@ impl fmt::Display for MemAreaType {
     }
 }
 
+#[derive(Copy, Clone)]
 pub(in super) struct MemArea {
     pub base_host: u64,
     pub base_guest: u64,
     pub size: u64,
-    pub kvm_memory_region: Option<kvm_userspace_memory_region>,
+    pub guest_private: bool,
+    pub host_backedup: bool,
 }
 
 impl fmt::Debug for MemArea {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!("host base:{:#x}, guest base:{:#x}, size:{:#x}",
+        f.write_fmt(format_args!(
+            "host base:{:#x}, guest base:{:#x}, size:{:#x}, guest private:{}, on host backedup:{}",
                 self.base_host,
                 self.base_guest,
-                self.size))
+                self.size,
+                self.guest_private,
+                self.host_backedup))
     }
 }
 
 pub(in super) struct MemLayoutConfig {
-    pub guest_private: Option<HashMap<MemAreaType, MemArea>>,
-    pub host_shared: HashMap<MemAreaType, MemArea>,
+    pub mem_area_map: HashMap<MemAreaType, MemArea>,
     pub kernel_stack_size: usize,
     pub guest_mem_size: u64,
 }
 
 impl fmt::Debug for MemLayoutConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let _ = f.write_fmt(format_args!("\nGuest private:"));
-        if self.guest_private.is_some() {
-            for (_area_type, _area) in self.guest_private.iter().next().unwrap() {
-                let _ = f.write_fmt(format_args!("\n{} - {:?}", _area_type.to_string(), _area));
-            }
-        }
-        let _ = f.write_fmt(format_args!("\nHost shared:"));
-        for (_area_type, _area) in self.host_shared.iter() {
+        for (_area_type, _area) in &self.mem_area_map {
             let _ = f.write_fmt(format_args!("\n{} - {:?}", _area_type.to_string(), _area));
         }
         let _ = f.write_fmt(format_args!("\nKernel init region size:{:#x}", self.guest_mem_size));
@@ -89,16 +85,10 @@ pub struct VmResources {
 
 impl VmResources {
     pub fn mem_area_info(&self, mem_area: MemAreaType) -> Option<(u64, u64, u64)> {
-        if let Some((_, _mem_area)) = self.mem_layout.host_shared.get_key_value(&mem_area) {
+        if let Some((_, _mem_area)) = self.mem_layout.mem_area_map.get_key_value(&mem_area) {
             return Some((_mem_area.base_host, _mem_area.base_guest, _mem_area.size));
         }
-        return self.mem_layout.guest_private.as_ref().map_or(None, |_map| {
-            if let Some((_, _mem_area)) = _map.get_key_value(&mem_area) {
-                    Some((_mem_area.base_host, _mem_area.base_guest, _mem_area.size))
-                } else {
-                    None
-                }
-        });
+        None
     }
 }
 
