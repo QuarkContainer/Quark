@@ -16,7 +16,7 @@ pub mod emulcc;
 
 use kvm_ioctls::{VcpuExit, VcpuFd};
 
-use super::ConfCompExtension;
+use super::{ConfCompExtension, vm::vcpu::kvm_vcpu::Register};
 use crate::{qlib::common::Error, CCMode};
 
 
@@ -52,9 +52,8 @@ impl ConfCompExtension for NonConf<'_> {
         self.kvm_exits_list.is_some()
     }
 
-    fn set_sys_registers(&self, _vcpu_fd: &VcpuFd) -> Result<(), Error> { Ok(()) }
-
-    fn set_cpu_registers(&self, vcpu_fd: &VcpuFd) -> Result<(), Error> {
+    fn set_cpu_registers(&self, vcpu_fd: &VcpuFd, _regs: Option<Vec<Register>>)
+        -> Result<(), Error> {
         self._set_cpu_registers(&vcpu_fd)
     }
 
@@ -63,10 +62,7 @@ impl ConfCompExtension for NonConf<'_> {
         self._get_hypercall_arguments(&vcpu_fd, _vcpu_id)
     }
 
-    fn handle_kvm_exit(&self, _kvm_exit: &VcpuExit, _vcpu_id: usize)
-        -> Result<bool, Error> { Ok(false) }
-
-    fn handle_hypercall(&self, _hypercall: u16, _data: &[u8],  _arg0: u64, _arg1: u64, _arg2: u64,
+    fn handle_hypercall(&self, _hypercall: u16, _arg0: u64, _arg1: u64, _arg2: u64,
         _arg3: u64, _vcpu_id: usize) -> Result<bool, Error> { Ok(false) }
 
     fn confidentiality_type(&self) -> CCMode {

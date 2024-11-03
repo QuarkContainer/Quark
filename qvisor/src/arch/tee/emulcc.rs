@@ -12,17 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cmp::Ordering;
-
+use crate::arch::vm::vcpu::kvm_vcpu::Register;
 use crate::qlib::linux_def::MemoryDef;
-use crate::runc::runtime::vm::VirtualMachine;
 use crate::runc::runtime::vm_type::VmType;
 use crate::runc::runtime::vm_type::emulcc::VmCcEmul;
-//#[cfg(feature = "cc")]
-use crate::sharepara::ShareParaPage;
 use crate::VMS;
 use crate::{arch::ConfCompExtension, qlib, QUARK_CONFIG};
-use kvm_ioctls::VcpuExit;
+use kvm_ioctls::{VcpuExit, VcpuFd};
 use qlib::config::CCMode;
 use qlib::common::Error;
 
@@ -37,7 +33,8 @@ pub struct EmulCc<'a> {
 #[cfg(feature = "cc")]
 impl ConfCompExtension for EmulCc<'_> {
     fn initialize_conf_extension(_share_space_table_addr: Option<u64>,
-        _page_allocator_base_addr: Option<u64>) -> Result<Box<dyn ConfCompExtension>, crate::qlib::common::Error>
+        _page_allocator_base_addr: Option<u64>)
+        -> Result<Box<dyn ConfCompExtension>, crate::qlib::common::Error>
         where Self: Sized {
         let _cc_mode = QUARK_CONFIG.lock().CCMode;
         let _self: Box<dyn ConfCompExtension> = Box::new(EmulCc{
@@ -51,11 +48,8 @@ impl ConfCompExtension for EmulCc<'_> {
         Ok(_self)
     }
 
-    fn set_sys_registers(&self, vcpu_fd: &kvm_ioctls::VcpuFd) -> Result<(), crate::qlib::common::Error> {
-        Ok(())
-    }
-
-    fn set_cpu_registers(&self, vcpu_fd: &kvm_ioctls::VcpuFd) -> Result<(), crate::qlib::common::Error> {
+    fn set_cpu_registers(&self, vcpu_fd: &VcpuFd, _regs: Option<Vec<Register>>)
+        -> Result<(), Error> {
         self._set_cpu_registers(&vcpu_fd)
     }
 
@@ -64,7 +58,7 @@ impl ConfCompExtension for EmulCc<'_> {
         self._get_hypercall_arguments(vcpu_fd, vcpu_id)
     }
 
-    fn should_handle_kvm_exit(&self, kvm_exit: &kvm_ioctls::VcpuExit) -> bool {
+    fn should_handle_kvm_exit(&self, _kvm_exit: &kvm_ioctls::VcpuExit) -> bool {
         self.kvm_exits_list.is_some()
     }
 
@@ -76,16 +70,12 @@ impl ConfCompExtension for EmulCc<'_> {
         }
     }
 
-    fn handle_kvm_exit(&self, kvm_exit: &kvm_ioctls::VcpuExit, vcpu_id: usize) -> Result<bool, crate::qlib::common::Error> {
-        Ok(false)
-    }
-
-    fn handle_hypercall(&self, hypercall: u16, data: &[u8], arg0: u64, arg1: u64, arg2: u64,
+    fn handle_hypercall(&self, hypercall: u16, arg0: u64, arg1: u64, arg2: u64,
         arg3: u64, vcpu_id: usize) -> Result<bool , crate::qlib::common::Error> {
         let mut _exit = false;
         _exit = match hypercall {
-            HYPERCALL_SHARESPACE_INIT =>
-                self._handle_hcall_shared_space_init(data, arg0, arg1, arg2, arg3, vcpu_id)?,
+            qlib::HYPERCALL_SHARESPACE_INIT =>
+                self._handle_hcall_shared_space_init(arg0, arg1, arg2, arg3, vcpu_id)?,
             _ => false,
         };
 
@@ -105,6 +95,7 @@ impl EmulCc<'_> {
 
     fn _get_hypercall_arguments(&self, _vcpu_fd: &kvm_ioctls::VcpuFd, vcpu_id: usize)
         -> Result<(u64, u64, u64, u64), Error> {
+        use crate::sharepara::ShareParaPage;
         let shared_param_buffer = unsafe {
             *(MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *const ShareParaPage)
         };
@@ -117,14 +108,14 @@ impl EmulCc<'_> {
         Ok((_arg0, _arg1, _arg2, _arg3))
     }
 
-    pub(in self) fn _handle_hcall_shared_space_init(&self, data: &[u8], arg0: u64, arg1: u64, arg2: u64,
-        arg3: u64, vcpu_id: usize) -> Result<bool, Error> {
+    pub(in self) fn _handle_hcall_shared_space_init(&self, arg0: u64, _arg1: u64, _arg2: u64,
+        _arg3: u64, _vcpu_id: usize) -> Result<bool, Error> {
         let ctrl_sock: i32;
         let vcpu_count: usize;
         let rdma_svc_cli_sock: i32;
         let mut pod_id = [0u8; 64]; //TODO: Hardcoded length of ID set it as cost to check on
         {
-            let mut vms = VMS.lock();
+            let vms = VMS.lock();
             ctrl_sock = vms.controlSock;
             vcpu_count = vms.vcpuCount;
             rdma_svc_cli_sock = vms.args.as_ref().unwrap().RDMASvcCliSock;

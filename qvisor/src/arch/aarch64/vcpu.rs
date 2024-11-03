@@ -138,7 +138,7 @@ impl VirtCpu for Aarch64VirtCpu {
         self._run()
     }
 
-    fn default_hypercall_handler(&self, hypercall: u16, _data: &[u8], arg0: u64, arg1: u64,
+    fn default_hypercall_handler(&self, hypercall: u16, arg0: u64, arg1: u64,
         arg2: u64, arg3: u64) -> Result<bool, Error> {
         let id = self.vcpu_base.id;
         match hypercall {
@@ -383,7 +383,7 @@ impl Aarch64VirtCpu {
                 }
             };
             self.vcpu_base.state.store(KVMVcpuState::HOST as u64, Ordering::Release);
-            if let VcpuExit::MmioWrite(addr, data) = kvm_ret {
+            if let VcpuExit::MmioWrite(addr, _) = kvm_ret {
                 {
                     let mut interrupting = self.vcpu_base.interrupting.lock();
                     interrupting.0 = false;
@@ -396,11 +396,11 @@ impl Aarch64VirtCpu {
                 let (arg0, arg1, arg2, arg3) = self.conf_comp_extension
                     .get_hypercall_arguments(&self.vcpu_base.vcpu_fd, self.vcpu_base.id)?;
                 if self.conf_comp_extension.should_handle_hypercall(hypercall) {
-                    exit_loop = self.conf_comp_extension.handle_hypercall(hypercall, data, arg0,
+                    exit_loop = self.conf_comp_extension.handle_hypercall(hypercall, arg0,
                         arg1, arg2, arg3, self.vcpu_base.id)
                         .expect("VM run failed - cannot handle hypercall correctly.");
                 } else {
-                    exit_loop = self.default_hypercall_handler(hypercall, data, arg0, arg1,
+                    exit_loop = self.default_hypercall_handler(hypercall, arg0, arg1,
                         arg2, arg3)
                         .expect("VM run failed - cannot handle hypercall correctly.");
                 }
