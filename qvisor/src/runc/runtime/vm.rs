@@ -15,54 +15,32 @@
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use std::os::unix::io::AsRawFd;
-use std::os::unix::io::FromRawFd;
 use std::thread;
+use std::thread::JoinHandle;
 
 use kvm_bindings::*;
-use kvm_ioctls::{Cap, Kvm, VmFd};
+use kvm_ioctls::{Kvm, VmFd};
 use lazy_static::lazy_static;
 use nix::sys::signal;
 
 use crate::arch::VirtCpu;
 use crate::arch::vm::vcpu::ArchVirtCpu;
 #[cfg (feature = "cc")]
-use crate::qlib::kernel::Kernel::{ENABLE_CC, IDENTICAL_MAPPING};
 use crate::qlib::MAX_VCPU_COUNT;
 use crate::runc::runtime::vm_type::emulcc::VmCcEmul;
-use crate::tsot_agent::TSOT_AGENT;
-use crate::FD_NOTIFIER;
-//use crate::vmspace::hibernate::HiberMgr;
 
 use super::super::super::elf_loader::*;
 use super::super::super::kvm_vcpu::*;
-use super::super::super::print::LOG;
-use super::super::super::qlib::addr;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::config::CCMode;
-use super::super::super::qlib::kernel::kernel::futex;
-use super::super::super::qlib::kernel::kernel::timer;
-use super::super::super::qlib::kernel::task;
-use super::super::super::qlib::kernel::vcpu;
-use super::super::super::qlib::kernel::IOURING;
-use super::super::super::qlib::kernel::KERNEL_PAGETABLE;
-use super::super::super::qlib::kernel::KERNEL_STACK_ALLOCATOR;
-use super::super::super::qlib::kernel::PAGE_MGR;
-use super::super::super::qlib::kernel::SHARESPACE;
 use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::pagetable::AlignedAllocator;
-use super::super::super::qlib::pagetable::PageTables;
 use super::super::super::qlib::perf_tunning::*;
 use super::super::super::qlib::task_mgr::*;
 use super::super::super::qlib::ShareSpace;
 use super::super::super::runc::runtime::loader::*;
 use super::super::super::syncmgr;
-use super::super::super::vmspace::*;
-use super::super::super::SHARE_SPACE;
-use super::super::super::SHARE_SPACE_STRUCT;
-use super::super::super::{
-    ThreadId, KERNEL_IO_THREAD, PMA_KEEPER, QUARK_CONFIG, ROOT_CONTAINER_ID, THREAD_ID, URING_MGR,
-    VCPU, VMS,
-};
+use super::super::super::{ThreadId, THREAD_ID, URING_MGR,
+    VCPU, VMS,};
 use super::vm_type::noncc::VmNormal;
 use super::vm_type::VmType;
 
@@ -109,41 +87,8 @@ pub struct VirtualMachine {
 }
 
 impl VirtualMachine {
-    pub fn SetMemRegion(
-        slotId: u32,
-        vm_fd: &VmFd,
-        phyAddr: u64,
-        hostAddr: u64,
-        pageMmapsize: u64,
-    ) -> Result<()> {
-        info!(
-            "SetMemRegion phyAddr = {:x}, hostAddr={:x}; pageMmapsize = {:x} MB",
-            phyAddr,
-            hostAddr,
-            (pageMmapsize >> 20)
-        );
-
-        // guest_phys_addr must be <512G
-        let mem_region = kvm_userspace_memory_region {
-            slot: slotId,
-            guest_phys_addr: phyAddr,
-            memory_size: pageMmapsize,
-            userspace_addr: hostAddr,
-            flags: 0, //kvm_bindings::KVM_MEM_LOG_DIRTY_PAGES,
-        };
-
-        unsafe {
-            vm_fd
-                .set_user_memory_region(mem_region)
-                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-        }
-
-        return Ok(());
-    }
-
     pub fn Umask() -> u32 {
         let umask = unsafe { libc::umask(0) };
-
         return umask;
     }
 
@@ -193,60 +138,63 @@ impl VirtualMachine {
             _ => panic!("Unhandled type."),
         };
         let umask = Self::Umask();
-        info!(
-            "Reset umask from {:o} to {}", umask, 0);
-        info!("VM will be created with parameters:{:?}", vm_type);
-        let vm = vm_type.create_vm(kernel_elf, args)
-                        .expect("VM: faield to create.");
-        info!("Vm creation done.");
+        info!("VMM: Reset umask from {:o} to {}", umask, 0);
+        info!("VMM: VM will be created with parameters:{:?}", vm_type);
+        let vm = vm_type.create_vm(kernel_elf, args).expect("VM: faield to create.");
+        info!("VMM: Vm creation done.");
         PerfGofrom(PerfType::Other);
         Ok(vm)
     }
 
-    pub fn run(&mut self) -> Result<i32> {
-        // start the io thread
-        let cpu = self.vcpus[0].clone();
-        SetSigusr1Handler();
-        let mut threads = Vec::new();
-        let tgid = unsafe { libc::gettid() };
-        threads.push(
-            thread::Builder::new()
-                .name("0".to_string())
-                .spawn(move || {
-                    THREAD_ID.with(|f| {
-                        *f.borrow_mut() = 0;
-                    });
-                    VCPU.with(|f| {
-                        *f.borrow_mut() = Some(cpu.clone());
-                    });
-                    cpu.vcpu_run(tgid, None).expect("vcpu run fail");
-                    info!("cpu0 finish");
-                })
-                .unwrap(),
-        );
-
-        syncmgr::SyncMgr::WaitShareSpaceReady();
-        info!("shareSpace ready...");
-        // start the vcpu threads
-        for i in 1..self.vcpus.len() {
-            let cpu = self.vcpus[i].clone();
-
+    fn spawn_vm_vcpus(&mut self, threads: &mut Vec<JoinHandle<()>>, from: usize,
+        count: usize, tgid: i32) {
+        let _vm_fd_raw = self.vmfd.as_raw_fd();
+        let _kvm_fd_raw = self.kvm.as_raw_fd();
+        let vm_type = self.vm_type.get_type();
+        for i in from..count {
+            let cpu_name = i;
+            let cpu_obj = self.vcpus[cpu_name].clone();
             threads.push(
                 thread::Builder::new()
-                    .name(format!("{}", i))
-                    .spawn(move || {
-                        THREAD_ID.with(|f| {
-                            *f.borrow_mut() = i as i32;
-                        });
-                        VCPU.with(|f| {
-                            *f.borrow_mut() = Some(cpu.clone());
-                        });
-                        info!("cpu#{} start", ThreadId());
-                        cpu.vcpu_run(tgid, None).expect("vcpu run fail");
-                        info!("cpu#{} finish", ThreadId());
-                    })
-                    .unwrap(),
+                .name(cpu_name.to_string())
+                .spawn(move || {
+                    THREAD_ID.with(|f| {
+                        *f.borrow_mut() = cpu_name as i32;
+                    });
+                    VCPU.with(|f| {
+                        *f.borrow_mut() = Some(cpu_obj.clone());
+                    });
+                    info!("VMM: vCPU#{} - ThreadID:{} started", cpu_name, ThreadId());
+                    match vm_type {
+                        _ => { cpu_obj.vcpu_run(tgid, None, None).expect("VMM: vCPU failed to run."); }
+                    };
+
+                    info!("VMM: vCPU#{} - ThreadID:{} finished", cpu_name, ThreadId());
+                }).expect("VMM: Failed to spawn thread for vCPU")
             );
+        }
+    }
+
+    ///  vCPU0 - Boot vCPU, prepares the enviroment for all the other vcpus.
+    ///  Running order: Based on VmType::CCMode
+    ///     RealmVM - All expect boot vCPU enter KVM in powered-off state.
+    ///         Boot vCPU boots after a certain delay to unsure others have called kvm_run.
+    ///     SevSnp -
+    ///     TDX -
+    ///     Others - Boot vCPU runs first, prepares shared space infrastructure, then allows
+    ///         the remaining cpus to run.
+    pub fn run(&mut self) -> Result<i32> {
+        SetSigusr1Handler();
+        let mut threads: Vec<JoinHandle<()>> = Vec::new();
+        let tgid = unsafe { libc::gettid() };
+
+        match self.vm_type.get_type() {
+            _ =>  {
+                self.spawn_vm_vcpus(&mut threads, 0, 1, tgid);
+                syncmgr::SyncMgr::WaitShareSpaceReady();
+                info!("VMM: Shared-space ready...");
+                self.spawn_vm_vcpus(&mut threads, 1, self.vcpus.len(), tgid);
+            }
         }
 
         for t in threads {
@@ -270,15 +218,6 @@ impl VirtualMachine {
     pub fn PrintQ(shareSpace: &ShareSpace, vcpuId: u64) -> String {
         return shareSpace.scheduler.PrintQ(vcpuId);
     }
-}
-
-#[cfg(target_arch = "aarch64")]
-fn get_kvm_vcpu_init(vmfd: &VmFd) -> Result<kvm_vcpu_init> {
-    let mut kvi = kvm_vcpu_init::default();
-    vmfd.get_preferred_target(&mut kvi)
-        .map_err(|e| Error::SysError(e.errno()))?;
-    kvi.features[0] |= 1 << kvm_bindings::KVM_ARM_VCPU_PSCI_0_2;
-    Ok(kvi)
 }
 
 fn SetSigusr1Handler() {
