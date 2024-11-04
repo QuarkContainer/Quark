@@ -32,6 +32,7 @@ use super::super::PAGE_MGR;
 
 use crate::kernel_def::Invlpg;
 //use crate::qlib::kernel::memmgr::pmamgr::PagePool;
+use crate::qlib::kernel::arch::tee;
 
 pub type PageMgrRef = ObjectRef<PageMgr>;
 
@@ -188,8 +189,10 @@ impl PageTables {
 
             assert!(pgdEntry.is_unused());
             pudTbl = phyAddrs[3] as *mut PageTable;
+            let mut pudTbl_addr = pudTbl as u64;
+            tee::gpa_adjust_shared_bit(&mut pudTbl_addr, true);
             pgdEntry.set_addr(
-                PhysAddr::new(pudTbl as u64),
+                PhysAddr::new(pudTbl_addr),
                 PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE,
             );
 
@@ -198,8 +201,10 @@ impl PageTables {
 
             assert!(pudEntry.is_unused());
             pmdTbl = phyAddrs[2] as *mut PageTable;
+            let mut pmdTbl_addr = pmdTbl as u64;
+            tee::gpa_adjust_shared_bit(&mut pmdTbl_addr, true);
             pudEntry.set_addr(
-                PhysAddr::new(pmdTbl as u64),
+                PhysAddr::new(pmdTbl_addr),
                 PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE,
             );
 
@@ -208,15 +213,19 @@ impl PageTables {
 
             assert!(pmdEntry.is_unused());
             pteTbl = phyAddrs[1] as *mut PageTable;
+            let mut pteTbl_addr = pteTbl as u64;
+            tee::gpa_adjust_shared_bit(&mut pteTbl_addr, true);
             pmdEntry.set_addr(
-                PhysAddr::new(pteTbl as u64),
+                PhysAddr::new(pteTbl_addr),
                 PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE,
             );
 
             let pteEntry = &mut (*pteTbl)[p1Idx];
+            let mut pte_addr = phyAddrs[0];
+            tee::gpa_adjust_shared_bit(&mut pte_addr, true);
             assert!(pteEntry.is_unused());
             pteEntry.set_addr(
-                PhysAddr::new(phyAddrs[0]),
+                PhysAddr::new(pte_addr),
                 PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE,
             );
 
@@ -236,20 +245,22 @@ impl PageTables {
             if pgdEntry.is_unused() {
                 return Err(Error::AddressNotMap(0));
             }
-            let pudTbl = pgdEntry.addr().as_u64() as *const PageTable;
+            let pudTbl = tee::guest_physical_address(pgdEntry.addr().as_u64()) as *const PageTable;
             let nPt: *mut PageTable = ret.GetRoot() as *mut PageTable;
             let nPgdEntry = &mut (*nPt)[0];
             let nPudTbl = pagePool.AllocPage(true)? as *mut PageTable;
+            let mut table = nPudTbl as u64;
+            tee::gpa_adjust_shared_bit(&mut table, true);
             #[cfg(target_arch = "x86_64")]
             nPgdEntry.set_addr(
-                PhysAddr::new(nPudTbl as u64),
+                PhysAddr::new(table),
                 PageTableFlags::PRESENT
                     | PageTableFlags::WRITABLE
                     | PageTableFlags::USER_ACCESSIBLE,
             );
             #[cfg(target_arch = "aarch64")]
             nPgdEntry.set_addr(
-                PhysAddr::new(nPudTbl as u64),
+                PhysAddr::new(table),
                 PageTableFlags::VALID
                     | PageTableFlags::TABLE
                     | PageTableFlags::ACCESSED
