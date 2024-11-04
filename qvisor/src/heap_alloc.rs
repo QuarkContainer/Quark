@@ -142,7 +142,7 @@ impl HostAllocator {
 
         if sharedHeapAddr == libc::MAP_FAILED as u64 {
             panic!("mmap: failed to get mapped memory area for shared heap");
-        }
+}
 
         assert!(
             self.sharedHeapAddr.load(Ordering::Relaxed) == sharedHeapAddr,
@@ -203,6 +203,8 @@ impl HostAllocator {
 
     #[cfg(feature = "cc")]
     pub fn InitPrivateAllocator(&self) {
+        use std::convert::TryInto;
+
         let mut guestPrivHeapStart = self.guestPrivHeapAddr.load(Ordering::Acquire);
         let identical = IDENTICAL_MAPPING.load(Ordering::Acquire);
         if !identical {
@@ -212,7 +214,7 @@ impl HostAllocator {
         }
 
         let guestPrivHeapAddr = unsafe {
-            let mut flags = libc::MAP_SHARED | libc::MAP_ANON | libc::MAP_FIXED;
+            let mut flags = libc::MAP_PRIVATE | libc::MAP_ANON | libc::MAP_FIXED | libc::MAP_LOCKED;
             if ENABLE_HUGEPAGE {
                 flags |= libc::MAP_HUGE_2MB;
             }
@@ -229,13 +231,21 @@ impl HostAllocator {
         if guestPrivHeapAddr == libc::MAP_FAILED as u64 {
             panic!("mmap: failed to get mapped memory area for guest private heap");
         }
-
         assert!(
             self.guestPrivHeapAddr.load(Ordering::Relaxed) == guestPrivHeapAddr,
             "guestPrivHeapAddr expected address is {:x}, mmap address is {:x}",
             self.guestPrivHeapAddr.load(Ordering::Relaxed),
             guestPrivHeapAddr
         );
+
+        unsafe {
+            let m_lock = libc::mlock2(self.guestPrivHeapAddr.load(Ordering::Relaxed)
+                as *const libc::c_void, MemoryDef::GUEST_PRIVATE_HEAP_SIZE.try_into().unwrap(),
+                libc::MLOCK_ONFAULT.try_into().unwrap());
+                if m_lock < 0 {
+                    panic!("VM: Failed to lock heap memory - error:{:?}", std::io::Error::last_os_error());
+                }
+        }
         let heap_size = if identical {
             MemoryDef::GUEST_PRIVATE_HEAP_SIZE
         } else {
