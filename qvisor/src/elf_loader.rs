@@ -116,7 +116,7 @@ impl KernelELF {
                     if endAddr.0 < endMem.0 {
                         endAddr = end;
                     }
-                    info!("start mem {:x}, len {:x}, offset {:x}", startMem.0, len, Addr(header.offset).RoundDown()?.0);
+                    info!("Elf: Kernel - start mem {:#x}, len {:#x}, offset {:#x}", startMem.0, len, Addr(header.offset).RoundDown()?.0);
                     let mut option = &mut MapOption::New();
                     option = option
                         .Addr(startMem.0)
@@ -151,6 +151,8 @@ impl KernelELF {
                     if header.mem_size > header.file_size {
                         let bssEnd = Addr(header_host_virtual_addr + header.mem_size).RoundUp()?;
                         if bssEnd.0 != endMem.0 {
+                            info!("Elf: Kernel - bss - start mem {:#x}, len {:#x}",
+                                endMem.0, bssEnd.0 - endMem.0);
                             let mut option = &mut MapOption::New();
                             option = option
                                 .Addr(endMem.0)

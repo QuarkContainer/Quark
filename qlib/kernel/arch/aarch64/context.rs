@@ -12,13 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::qlib;
-use arch::__arch::arch_def::*;
-use memmgr::arch::{MmapLayout, MMAP_BOTTOM_UP, MMAP_TOP_DOWN};
-use qlib::common::*;
-use qlib::kernel::{arch, kernel_util::RandU64, memmgr};
-use qlib::limits::{LimitSet, LimitType, INFINITY};
-use qlib::{addr::Addr, linux_def::SysErr, MemoryDef};
+use crate::qlib::{kernel::{arch::__arch::arch_def::*, kernel_util::RandU64,
+    memmgr::arch::{MmapLayout, MMAP_BOTTOM_UP, MMAP_TOP_DOWN}}, limits::{LimitSet,
+    LimitType, INFINITY}, common::*, addr::Addr, linux_def::SysErr, MemoryDef};
 
 // MAX_ADDR64 is the maximum userspace address. It is TASK_SIZE in Linux
 // for a 64-bit process.

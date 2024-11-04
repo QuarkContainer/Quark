@@ -15,19 +15,18 @@
 use core::{slice, sync::atomic::{AtomicUsize, AtomicU64, Ordering}};
 use alloc::sync::Arc;
 
-use crate::qlib as qlib;
-use qlib::{linux_def::MemoryDef, QMutex, kernel::FP_STATE};
+use crate::qlib::{linux_def::MemoryDef, QMutex, kernel::FP_STATE};
 use super::super::super::asm;
 use super::super::super::SignalDef::*;
 
-// Aarch64 FP state
 #[derive(Debug)]
 pub struct Aarch64FPState {
     pub data: [u8; MemoryDef::PAGE_SIZE as usize],
     pub size: AtomicUsize,
 }
 
-impl Default for Aarch64FPState {    fn default() -> Self {
+impl Default for Aarch64FPState {
+    fn default() -> Self {
         Aarch64FPState {
             data: [0u8; MemoryDef::PAGE_SIZE as usize],
             size: AtomicUsize::new(MemoryDef::PAGE_SIZE as usize),
@@ -203,11 +202,3 @@ impl Aarch64Context {
         return self.ready.load(Ordering::Acquire);
     }
 }
-//
-//
-// #[derive(Debug)]
-// #[repr(C)]
-// pub struct ExceptionContext {
-//
-// }
-

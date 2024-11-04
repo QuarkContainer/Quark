@@ -14,6 +14,6 @@
 
 //pub mod output;
 pub mod qcall;
-#[cfg(feature = "cc")]
+/// Used only for active Confidential Computing mode
 pub mod sharepara;
 pub use super::qcall::*;
