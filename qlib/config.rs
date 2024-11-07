@@ -148,18 +148,15 @@ pub enum CCMode {
     Normal,
     NormalEmu,
     SevSnp,
-    Max
 }
 
 impl CCMode {
     pub fn from(value: u64) -> Self {
         match value {
-            0 => CCMode::None,
+            0 | 4.. => CCMode::None,
             1 => CCMode::Normal,
             2 => CCMode::NormalEmu,
             3 => CCMode::SevSnp,
-            4 => CCMode::Max,
-            _ => CCMode::None,
         }
     }
 
