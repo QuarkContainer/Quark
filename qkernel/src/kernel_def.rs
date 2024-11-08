@@ -248,7 +248,6 @@ pub fn Invlpg(addr: u64) {
     }
 }
 
-#[cfg(feature = "cc")]
 #[inline(always)]
 fn _hcall_prepare_shared_buff(vcpu_id: usize, arg0: u64, arg1: u64, arg2: u64, arg3: u64) {
     let shared_buff_addr = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
@@ -265,7 +264,7 @@ fn _hcall_prepare_shared_buff(vcpu_id: usize, arg0: u64, arg1: u64, arg2: u64, a
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
-    #[cfg(not(feature = "cc"))] {
+    if crate::qlib::kernel::arch::tee::is_cc_active() == false {
         unsafe {
             let data: u8 = 0;
             asm!("
@@ -279,9 +278,8 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
                 in("r10") para4
             )
         }
-    }
-    #[cfg(feature = "cc")] {
-        /// We can not query which is the current vCpu before the share space is initialized.
+    } else {
+        // We can not query which is the current vCpu before the share space is initialized.
         let vcpu_id = if type_ != crate::qlib::HYPERCALL_SHARESPACE_INIT {
             GetVcpuId()
         } else {
@@ -290,7 +288,6 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
         _hcall_prepare_shared_buff(vcpu_id, para1, para2, para3, para4);
         let dummy_data: u8 = 0;
         unsafe {
-            let data: u8 = 0;
             asm!("
                 out dx, al
                 ",
@@ -307,21 +304,21 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     // Use MMIO to cause VM exit hence "hypercall". The data does not matter,
     // addr of the MMIO identifies the Hypercall. x0 and x1 (w1) are used by the
     // str instruction, the 4x 64-bit parameters are passed via x2,x3,x4,x5.
-    #[cfg(not(feature = "cc"))]
-    unsafe {
+    if crate::qlib::kernel::arch::tee::is_cc_active() == false {
         let data: u8 = 0;
         let addr: u64 = MemoryDef::HYPERCALL_MMIO_BASE + (type_ as u64);
-        asm!("str w1, [x0]",
-             in("x0") addr,
-             in("w1") data,
-             in("x2") para1,
-             in("x3") para2,
-             in("x4") para3,
-             in("x5") para4,
-        )
-    }
-    #[cfg(feature = "cc")] {
-        /// We can not query which is the current vCpu before the share space is initialized.
+        unsafe {
+            asm!("str w1, [x0]",
+                in("x0") addr,
+                in("w1") data,
+                in("x2") para1,
+                in("x3") para2,
+                in("x4") para3,
+                in("x5") para4,
+            )
+        }
+    } else {
+        // We can not query which is the current vCpu before the share space is initialized.
         let vcpu_id = if type_ != crate::qlib::HYPERCALL_SHARESPACE_INIT {
             GetVcpuId()
         } else {
@@ -772,11 +769,11 @@ pub fn enable_access_user() -> bool {
 /// true : enable false : disable
 #[cfg(target_arch = "aarch64")]
 #[inline]
-pub fn set_access_user(allow: bool) {
+pub fn set_access_user(_allow: bool) {
     #[cfg(target_feature = "pan")]
     {
         unsafe {
-            pan_set(!allow);
+            pan_set(!_allow);
         }
     }
 }

@@ -604,9 +604,11 @@ pub extern "C" fn rust_main(
         //if in any cc machine, shareSpaceAddr is reused as CCMode
         #[cfg(feature = "cc")]
         {
-            GLOBAL_ALLOCATOR.InitPrivateAllocator(CCMode::from(shareSpaceAddr));
+            let mode = CCMode::from(shareSpaceAddr);
+            GLOBAL_ALLOCATOR.InitPrivateAllocator(mode);
             GLOBAL_ALLOCATOR.InitSharedAllocator();
-            if shareSpaceAddr < (CCMode::Max as u64) {
+            if mode != CCMode::None {
+                crate::qlib::kernel::arch::tee::set_tee_type(mode);
                 ENABLE_CC.store(true, Ordering::Release);
                 GLOBAL_ALLOCATOR.InitSharedAllocator_cc();
                 let size = core::mem::size_of::<ShareSpace>();

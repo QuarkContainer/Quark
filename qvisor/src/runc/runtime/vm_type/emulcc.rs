@@ -54,6 +54,7 @@ impl VmType for VmCcEmul {
         } else {
             IDENTICAL_MAPPING.store(false, Ordering::Release);
         };
+        crate::qlib::kernel::arch::tee::set_tee_type(_emul_type);
         let mut _mem_map:HashMap<MemAreaType, MemArea> = HashMap::new();
         _mem_map.insert(
             MemAreaType::PrivateHeapArea,

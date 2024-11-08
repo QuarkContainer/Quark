@@ -17,3 +17,5 @@ pub mod __arch;
 #[cfg(target_arch = "aarch64")]
 #[path = "./aarch64/mod.rs"]
 pub mod __arch;
+
+pub mod tee;

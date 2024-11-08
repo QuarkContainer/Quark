@@ -162,4 +162,8 @@ impl CCMode {
             _ => CCMode::None,
         }
     }
+
+    pub fn tee_backedup(_cc_type: u64) -> bool {
+        false
+    }
 }
