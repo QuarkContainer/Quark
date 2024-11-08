@@ -58,6 +58,7 @@ rcublas-sys = { version = "0.5.0", optional = true }
 cuda11-cublasLt-sys = { version = "0.3.0", optional = true }
 libelf = { version = "0.1.0", optional = true }
 io-uring = "0.6.3"
+vmm-sys-util = {version = "0.12.1", optional = false }
 
 [features]
 default = ["cc"]
