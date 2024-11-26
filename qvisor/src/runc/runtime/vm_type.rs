@@ -19,7 +19,7 @@ pub mod resources;
 
 use std::sync::Arc;
 use kvm_ioctls::{Kvm, VmFd};
-use crate::{arch::vm::vcpu::ArchVirtCpu, elf_loader::KernelELF, qlib::{common::Error, config::CCMode},
+use crate::{arch::vm::vcpu::ArchVirtCpu, elf_loader::KernelELF, qlib::common::Error,
             runc::runtime};
 use runtime::{vm::VirtualMachine, loader::Args};
 
@@ -43,5 +43,4 @@ pub trait VmType: std::fmt::Debug {
                         share_space_addr: Option<u64>) -> Result<Vec<Arc<ArchVirtCpu>>, Error>;
     fn post_vm_initialize(&mut self, _vm_fd: &mut VmFd) -> Result<(), Error> { Ok(()) }
     fn post_init_update(&mut self, _vm_fd: &mut VmFd) -> Result<(), Error> { Ok(()) }
-    fn get_type(&self) -> CCMode;
 }

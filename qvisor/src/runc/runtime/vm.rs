@@ -25,6 +25,7 @@ use nix::sys::signal;
 
 use crate::arch::VirtCpu;
 use crate::arch::vm::vcpu::ArchVirtCpu;
+use crate::qlib::kernel::arch::tee::get_tee_type;
 #[cfg (feature = "cc")]
 use crate::qlib::MAX_VCPU_COUNT;
 use crate::runc::runtime::vm_type::emulcc::VmCcEmul;
@@ -150,7 +151,7 @@ impl VirtualMachine {
         count: usize, tgid: i32) {
         let _vm_fd_raw = self.vmfd.as_raw_fd();
         let _kvm_fd_raw = self.kvm.as_raw_fd();
-        let vm_type = self.vm_type.get_type();
+        let vm_type = get_tee_type(); 
         for i in from..count {
             let cpu_name = i;
             let cpu_obj = self.vcpus[cpu_name].clone();
@@ -188,7 +189,7 @@ impl VirtualMachine {
         let mut threads: Vec<JoinHandle<()>> = Vec::new();
         let tgid = unsafe { libc::gettid() };
 
-        match self.vm_type.get_type() {
+        match get_tee_type() {
             _ =>  {
                 self.spawn_vm_vcpus(&mut threads, 0, 1, tgid);
                 syncmgr::SyncMgr::WaitShareSpaceReady();

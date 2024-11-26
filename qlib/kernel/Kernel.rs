@@ -30,15 +30,7 @@ use crate::kernel_def::HyperCall64;
 use crate::qlib::proxy::*;
 
 #[cfg (feature = "cc")]
-pub static ENABLE_CC: AtomicBool = AtomicBool::new(false);
-#[cfg (feature = "cc")]
 pub static IDENTICAL_MAPPING: AtomicBool = AtomicBool::new(true);
-
-#[inline(always)]
-#[cfg (feature = "cc")]
-pub fn is_cc_enabled() -> bool {
-    return ENABLE_CC.load(Ordering::Acquire);
-}
 
 extern "C" {
     pub fn rdtsc() -> i64;

@@ -64,14 +64,10 @@ impl ConfCompExtension for NonConf<'_> {
 
     fn handle_hypercall(&self, _hypercall: u16, _arg0: u64, _arg1: u64, _arg2: u64,
         _arg3: u64, _vcpu_id: usize) -> Result<bool, Error> { Ok(false) }
-
-    fn confidentiality_type(&self) -> CCMode {
-        return self.cc_mode;
-    }
 }
 
 pub mod util {
-    use crate::{arch::vm::vcpu::ArchVirtCpu, qlib::linux_def::MemoryDef, CCMode};
+    use crate::{qlib::linux_def::MemoryDef, CCMode};
 
     #[inline]
     pub fn get_offset(confidentiality_type: CCMode) -> u64 {
@@ -93,11 +89,5 @@ pub mod util {
     #[inline]
     pub fn adjust_addr_to_host(addr: u64, confidentiality_type: CCMode) -> u64 {
         addr + get_offset(confidentiality_type)
-    }
-
-    #[inline]
-    pub fn confidentiality_type(vcpu: &ArchVirtCpu) -> CCMode {
-        vcpu.conf_comp_extension
-        .confidentiality_type()
     }
 }

@@ -395,8 +395,4 @@ impl VmType for VmNormal {
 
         Ok(vcpus)
     }
-
-    fn get_type(&self) -> CCMode {
-        CCMode::None
-    }
 }

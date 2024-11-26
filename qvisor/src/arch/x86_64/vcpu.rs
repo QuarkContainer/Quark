@@ -21,11 +21,11 @@ use std::{os::fd::RawFd, convert::TryInto, mem::size_of, sync::atomic::{fence, O
 
 use crate::{amd64_def::{SegmentDescriptor, SEGMENT_DESCRIPTOR_ACCESS, SEGMENT_DESCRIPTOR_EXECUTE,
             SEGMENT_DESCRIPTOR_PRESENT, SEGMENT_DESCRIPTOR_WRITE}, arch::{tee::{emulcc::EmulCc,
-            util::{adjust_addr_to_guest, adjust_addr_to_host, confidentiality_type}, NonConf},
+            util::{adjust_addr_to_guest, adjust_addr_to_host}, NonConf},
             VirtCpu}, kvm_vcpu::{AlignedAllocate, KVMVcpu, KVMVcpuState, SetExitSignal},
             qlib::{self, backtracer, common::{CR0_AM, CR0_ET, CR0_NE, CR0_PE, CR0_PG, CR4_FSGSBASE,
             CR4_OSFXSR, CR4_OSXMMEXCPT, CR4_OSXSAVE, CR4_PAE, CR4_PGE, CR4_PSE, EFER_LMA, EFER_LME,
-            EFER_NX, EFER_SCE, KCODE, KDATA, KERNEL_FLAGS_SET, TSS, UDATA}, kernel::asm::xgetbv,
+            EFER_NX, EFER_SCE, KCODE, KDATA, KERNEL_FLAGS_SET, TSS, UDATA}, kernel::{arch::tee::get_tee_type, asm::xgetbv},
             linux_def::SysErr, task_mgr::TaskId}, CCMode, VMS};
 use crate::{SHARE_SPACE, KERNEL_IO_THREAD, syncmgr::SyncMgr};
 use crate::runc::runtime::vm;
@@ -445,7 +445,7 @@ impl X86_64VirtCpu {
     fn setup_gdt(&self, sregs: &mut kvm_sregs) -> Result<(), Error> {
         let gdtTbl = unsafe {
             std::slice::from_raw_parts_mut(
-                adjust_addr_to_host(self.gtd_addr, confidentiality_type(self)) as *mut u64,
+                adjust_addr_to_host(self.gtd_addr, get_tee_type()) as *mut u64,
                 (MemoryDef::PAGE_SIZE / 8).try_into().expect("Failed to convert to usize"))
         };
         let KernelCodeSegment = SegmentDescriptor::default().SetCode64(0, 0, 0);
@@ -471,7 +471,7 @@ impl X86_64VirtCpu {
                 as *const u64,
         );
 
-        let tssSegment = adjust_addr_to_host(self.tss_addr, confidentiality_type(self))
+        let tssSegment = adjust_addr_to_host(self.tss_addr, get_tee_type())
             as *mut x86_64::structures::tss::TaskStateSegment;
         unsafe {
             (*tssSegment).interrupt_stack_table[0] = stack_end;
@@ -480,7 +480,7 @@ impl X86_64VirtCpu {
                 self.tss_intr_stack_start + MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE
             );
             let (tssLow, tssHigh, limit) = Self::tss_descriptor(&(*tssSegment),
-                confidentiality_type(self));
+               get_tee_type());
 
             gdtTbl[5] = tssLow;
             gdtTbl[6] = tssHigh;

@@ -19,7 +19,7 @@ use core::sync::atomic;
 
 use crate::qlib::kernel::kernel::kernel::GetKernel;
 #[cfg(feature = "cc")]
-use crate::qlib::kernel::Kernel::is_cc_enabled;
+use crate::qlib::kernel::arch::tee::is_cc_active;
 use crate::qlib::kernel::Kernel::HostSpace;
 //use crate::qlib::mem::list_allocator::*;
 use super::super::super::super::kernel_def::{
@@ -111,7 +111,7 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
 
     #[cfg(feature = "cc")]
     {
-        if !is_cc_enabled(){
+        if !is_cc_active(){
             if signalArgs.Signo == SIGSTOP.0 || signalArgs.Signo == SIGUSR2.0 {
                 if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
                     // if the sandbox has been paused, return

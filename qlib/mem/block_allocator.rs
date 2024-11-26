@@ -23,7 +23,7 @@ use super::super::linux_def::*;
 use super::super::mutex::*;
 use super::super::pagetable::*;
 #[cfg(feature = "cc")]
-use crate::qlib::kernel::Kernel::is_cc_enabled;
+use crate::qlib::kernel::arch::tee::is_cc_active;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::SHARESPACE;
 //use super::list_allocator::*;
@@ -160,7 +160,7 @@ impl PageBlockAlloc {
         }
 
         #[cfg(feature = "cc")]
-        if SHARESPACE.hiberMgr.ContainersPage(addr) && !is_cc_enabled(){
+        if SHARESPACE.hiberMgr.ContainersPage(addr) && !is_cc_active(){
             let _ret = HostSpace::SwapInPage(addr);
         }
 

@@ -47,7 +47,7 @@ use super::fs::*;
 #[cfg(feature = "cc")]
 use crate::GUEST_KERNEL;
 #[cfg(feature = "cc")]
-use crate::qlib::kernel::Kernel::is_cc_enabled;
+use crate::qlib::kernel::arch::tee::is_cc_active;
 
 impl Process {
     pub fn TaskCaps(&self) -> TaskCaps {
@@ -135,7 +135,7 @@ impl Loader {
             *SHARESPACE.kernel.lock() = Some(kernel.clone());
         }
         #[cfg(feature = "cc")]{
-            if is_cc_enabled(){
+            if is_cc_active(){
                 *GUEST_KERNEL.lock() = Some(kernel.clone());
             } else {
                 *SHARESPACE.kernel.lock() = Some(kernel.clone());
@@ -504,7 +504,7 @@ impl LoaderInternal {
             *SHARESPACE.kernel.lock() = Some(kernel.clone());
         }
         #[cfg(feature = "cc")]{
-            if is_cc_enabled(){
+            if is_cc_active(){
                 *GUEST_KERNEL.lock() = Some(kernel.clone());
             } else {
                 *SHARESPACE.kernel.lock() = Some(kernel.clone());

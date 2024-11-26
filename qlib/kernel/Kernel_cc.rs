@@ -32,6 +32,7 @@ use crate::qlib::control_msg::ControlMsg;
 use crate::qlib::proxy::*;
 use crate::GLOBAL_ALLOCATOR;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
+use crate::qlib::kernel::arch::tee::is_cc_active;
 
 impl HostSpace {
     pub fn WakeupVcpu(vcpuId: u64) {
@@ -47,7 +48,7 @@ impl HostSpace {
     }
 
     pub fn LoadProcessKernel(processAddr: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut new_process = Box::new_in(Process::default(), GUEST_HOST_SHARED_ALLOCATOR);
             let process_ptr = &mut *new_process as *mut _;
             let mut msg = Box::new_in(
@@ -71,7 +72,7 @@ impl HostSpace {
     }
 
     pub fn CreateMemfd(len: i64, flags: u32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::CreateMemfd(CreateMemfd {
                     len: len,
@@ -92,7 +93,7 @@ impl HostSpace {
     }
 
     pub fn Fallocate(fd: i32, mode: i32, offset: i64, len: i64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::Fallocate(Fallocate {
                     fd,
@@ -117,7 +118,7 @@ impl HostSpace {
     }
 
     pub fn Sysinfo(addr: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut new_info = Box::new_in(LibcSysinfo::default(), GUEST_HOST_SHARED_ALLOCATOR);
             let info_ptr = &mut *new_info as *mut _;
             let mut msg = Box::new_in(
@@ -140,7 +141,7 @@ impl HostSpace {
     }
 
     pub fn EventfdWrite(fd: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::EventfdWrite(EventfdWrite { fd }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -155,7 +156,7 @@ impl HostSpace {
     }
 
     pub fn RenameAt(olddirfd: i32, oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::RenameAt(RenameAt {
                     olddirfd,
@@ -180,7 +181,7 @@ impl HostSpace {
     }
 
     pub fn HostMemoryBarrier() -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::HostMemoryBarrier(HostMemoryBarrier {}),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -195,7 +196,7 @@ impl HostSpace {
     }
 
     pub fn Ftruncate(fd: i32, len: i64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::Ftruncate(Ftruncate { fd, len }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -210,7 +211,7 @@ impl HostSpace {
     }
 
     pub fn Rdtsc() -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(Msg::Rdtsc(Rdtsc {}), GUEST_HOST_SHARED_ALLOCATOR);
 
             return HostSpace::HCall(&mut msg, false) as i64;
@@ -222,7 +223,7 @@ impl HostSpace {
     }
 
     pub fn SetTscOffset(offset: i64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::SetTscOffset(SetTscOffset { offset: offset }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -237,7 +238,7 @@ impl HostSpace {
     }
 
     pub fn TlbShootdown(vcpuMask: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::TlbShootdown(TlbShootdown { vcpuMask: vcpuMask }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -252,7 +253,7 @@ impl HostSpace {
     }
 
     pub fn IORead(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let iovs_size = (size_of::<IoVec>()) * (iovcnt as usize);
             let iovs_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(iovs_size, 0x8) as *mut IoVec };
             unsafe {
@@ -282,7 +283,7 @@ impl HostSpace {
     }
 
     pub fn IOTTYRead(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let iovs_size = (size_of::<IoVec>()) * (iovcnt as usize);
             let iovs_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(iovs_size, 0x8) as *mut IoVec };
             unsafe {
@@ -312,7 +313,7 @@ impl HostSpace {
     }
 
     pub fn IOWrite(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let iovs_size = (size_of::<IoVec>()) * (iovcnt as usize);
             let iovs_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(iovs_size, 0x8) as *mut IoVec };
             unsafe {
@@ -342,7 +343,7 @@ impl HostSpace {
     }
 
     pub fn IOReadAt(fd: i32, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let iovs_size = (size_of::<IoVec>()) * (iovcnt as usize);
             let iovs_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(iovs_size, 0x8) as *mut IoVec };
             unsafe {
@@ -378,7 +379,7 @@ impl HostSpace {
     }
 
     pub fn IOWriteAt(fd: i32, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let iovs_size = (size_of::<IoVec>()) * (iovcnt as usize);
             let iovs_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(iovs_size, 0x8) as *mut IoVec };
             unsafe {
@@ -414,7 +415,7 @@ impl HostSpace {
     }
 
     pub fn IOAppend(fd: i32, iovs: u64, iovcnt: i32) -> (i64, i64) {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let iovs_size = (size_of::<IoVec>()) * (iovcnt as usize);
             let iovs_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(iovs_size, 0x8) as *mut IoVec };
             unsafe {
@@ -463,7 +464,7 @@ impl HostSpace {
     }
 
     pub fn IOAccept(fd: i32, addr: u64, addrlen: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut new_socket = Box::new_in(TcpSockAddr::default(), GUEST_HOST_SHARED_ALLOCATOR);
             let mut new_len =
                 Box::new_in((*new_socket).data.len() as u32, GUEST_HOST_SHARED_ALLOCATOR);
@@ -493,7 +494,7 @@ impl HostSpace {
     }
 
     pub fn IOConnect(fd: i32, addr: u64, addrlen: u32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let socket_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(addrlen as usize, 0x8) };
             unsafe {
                 core::ptr::copy_nonoverlapping(addr as *const u8, socket_ptr, addrlen as usize);
@@ -522,7 +523,7 @@ impl HostSpace {
     }
 
     pub fn IORecvMsg(fd: i32, msghdr: u64, flags: i32, blocking: bool) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut hasName = false;
             let mut hasControl = false;
             let mut new_name_buff = core::ptr::null::<u8>() as *mut u8;
@@ -636,7 +637,7 @@ impl HostSpace {
     }
 
     pub fn IORecvfrom(fd: i32, buf: u64, size: usize, flags: i32, addr: u64, len: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut hasName = false;
             let mut new_name_buff = core::ptr::null::<u8>() as *mut u8;
             let mut new_len_ptr = core::ptr::null::<u32>() as *mut u32;
@@ -711,7 +712,7 @@ impl HostSpace {
     }
 
     pub fn IOSendMsg(fd: i32, msghdr: u64, flags: i32, blocking: bool) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut hasName = false;
             let mut hasControl = false;
             let mut new_name_buff = core::ptr::null::<u8>() as *mut u8;
@@ -824,7 +825,7 @@ impl HostSpace {
     }
 
     pub fn IOSendto(fd: i32, buf: u64, size: usize, flags: i32, addr: u64, len: u32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut hasName = false;
             let mut new_name_buff = core::ptr::null::<u8>() as *mut u8;
             if len != 0 {
@@ -870,7 +871,7 @@ impl HostSpace {
     }
 
     pub fn GetTimeOfDay(tv: u64, tz: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut new_tv = Box::new_in(
                 super::super::linux::time::Timeval::default(),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -901,7 +902,7 @@ impl HostSpace {
     }
 
     pub fn ReadLinkAt(dirfd: i32, path: u64, buf: u64, bufsize: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let new_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(bufsize as usize, 0x8) };
             unsafe {
                 core::ptr::copy_nonoverlapping(
@@ -946,7 +947,7 @@ impl HostSpace {
     }
 
     pub fn Fcntl(fd: i32, cmd: i32, arg: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             //Here arg can be used directly, flock is implemented inside the kernel
             let mut msg = Box::new_in(
                 Msg::Fcntl(Fcntl { fd, cmd, arg }),
@@ -962,7 +963,7 @@ impl HostSpace {
     }
 
     pub fn IoCtl(fd: i32, cmd: u64, argp: u64, argplen: usize) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let new_argp = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(argplen, 0x8) };
             unsafe {
                 core::ptr::copy_nonoverlapping(argp as *const u8, new_argp as *mut u8, argplen);
@@ -991,7 +992,7 @@ impl HostSpace {
     }
 
     pub fn Fstatfs(fd: i32, buf: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut new_buff = Box::new_in(LibcStatfs::default(), GUEST_HOST_SHARED_ALLOCATOR);
             let new_buff_ptr = &mut *new_buff as *mut _;
 
@@ -1016,7 +1017,7 @@ impl HostSpace {
     }
 
     pub fn NewSocket(fd: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::NewSocket(NewSocket { fd }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -1032,7 +1033,7 @@ impl HostSpace {
 
     //not used?
     pub fn FAccessAt(dirfd: i32, pathname: u64, mode: i32, flags: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::FAccessAt(FAccessAt {
                     dirfd,
@@ -1057,7 +1058,7 @@ impl HostSpace {
     }
 
     pub fn Fstat(fd: i32, buff: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut new_buff = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
             let new_buff_ptr = &mut *new_buff as *mut _;
 
@@ -1082,7 +1083,7 @@ impl HostSpace {
     }
 
     pub fn Fstatat(dirfd: i32, pathname: u64, buff: u64, flags: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut new_buff = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
             let new_buff_ptr = &mut *new_buff as *mut _;
 
@@ -1114,7 +1115,7 @@ impl HostSpace {
     }
 
     pub fn Unlinkat(dirfd: i32, pathname: u64, flags: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::Unlinkat(Unlinkat {
                     dirfd,
@@ -1137,7 +1138,7 @@ impl HostSpace {
     }
 
     pub fn Mkdirat(dirfd: i32, pathname: u64, mode_: u32, uid: u32, gid: u32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::Mkdirat(Mkdirat {
                     dirfd,
@@ -1164,7 +1165,7 @@ impl HostSpace {
     }
 
     pub fn Mkfifoat(dirfd: i32, name: u64, mode: u32, uid: u32, gid: u32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::Mkfifoat(Mkfifoat {
                     dirfd,
@@ -1191,7 +1192,7 @@ impl HostSpace {
     }
 
     pub fn Proxy(cmd: ProxyCommand, parameters: ProxyParameters) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::Proxy(Proxy { cmd, parameters }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -1206,7 +1207,7 @@ impl HostSpace {
     }
 
     pub fn SwapInPage(addr: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::SwapInPage(SwapInPage { addr }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -1221,7 +1222,7 @@ impl HostSpace {
     }
 
     pub fn SwapOut() -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(Msg::SwapOut(SwapOut {}), GUEST_HOST_SHARED_ALLOCATOR);
 
             return HostSpace::HCall(&mut msg, false) as i64;
@@ -1233,7 +1234,7 @@ impl HostSpace {
     }
 
     pub fn SwapIn() -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(Msg::SwapIn(SwapIn {}), GUEST_HOST_SHARED_ALLOCATOR);
 
             return HostSpace::HCall(&mut msg, false) as i64;
@@ -1245,7 +1246,7 @@ impl HostSpace {
     }
 
     pub fn SysSync() -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(Msg::SysSync(SysSync {}), GUEST_HOST_SHARED_ALLOCATOR);
 
             return HostSpace::Call(&mut msg, false) as i64;
@@ -1257,7 +1258,7 @@ impl HostSpace {
     }
 
     pub fn SyncFs(fd: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(Msg::SyncFs(SyncFs { fd }), GUEST_HOST_SHARED_ALLOCATOR);
 
             return HostSpace::Call(&mut msg, false) as i64;
@@ -1269,7 +1270,7 @@ impl HostSpace {
     }
 
     pub fn SyncFileRange(fd: i32, offset: i64, nbytes: i64, flags: u32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::SyncFileRange(SyncFileRange {
                     fd,
@@ -1294,7 +1295,7 @@ impl HostSpace {
     }
 
     pub fn FSync(fd: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(Msg::FSync(FSync { fd }), GUEST_HOST_SHARED_ALLOCATOR);
 
             return HostSpace::Call(&mut msg, false) as i64;
@@ -1306,7 +1307,7 @@ impl HostSpace {
     }
 
     pub fn MSync(addr: u64, len: usize, flags: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::MSync(MSync { addr, len, flags }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -1321,7 +1322,7 @@ impl HostSpace {
     }
 
     pub fn Madvise(addr: u64, len: usize, advise: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::MAdvise(MAdvise { addr, len, advise }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -1336,7 +1337,7 @@ impl HostSpace {
     }
 
     pub fn FDataSync(fd: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::FDataSync(FDataSync { fd }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -1351,7 +1352,7 @@ impl HostSpace {
     }
 
     pub fn Seek(fd: i32, offset: i64, whence: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::Seek(Seek { fd, offset, whence }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -1366,7 +1367,7 @@ impl HostSpace {
     }
 
     pub fn ReadDir(dirfd: i32, data: &mut [u8], reset: bool) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let new_data_buff_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(data.len(), 0x8) };
             unsafe {
                 core::ptr::copy_nonoverlapping(
@@ -1410,7 +1411,7 @@ impl HostSpace {
     }
 
     pub fn FSetXattr(fd: i32, name: u64, value: u64, size: usize, flags: u32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let new_value_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size, 0x8) };
             unsafe {
                 core::ptr::copy_nonoverlapping(value as *const u8, new_value_ptr, size);
@@ -1447,7 +1448,7 @@ impl HostSpace {
     }
 
     pub fn FGetXattr(fd: i32, name: u64, value: u64, size: usize) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let new_value_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size, 0x8) };
             unsafe {
                 core::ptr::copy_nonoverlapping(value as *const u8, new_value_ptr, size);
@@ -1489,7 +1490,7 @@ impl HostSpace {
     }
 
     pub fn FRemoveXattr(fd: i32, name: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::FRemoveXattr(FRemoveXattr { fd, name }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -1504,7 +1505,7 @@ impl HostSpace {
     }
 
     pub fn FListXattr(fd: i32, list: u64, size: usize) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let new_list_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size, 0x8) };
             unsafe {
                 core::ptr::copy_nonoverlapping(list as *const u8, new_list_addr, size);
@@ -1535,7 +1536,7 @@ impl HostSpace {
     }
 
     pub fn GetRandom(buf: u64, len: u64, flags: u32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let new_buf_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len as usize, 0x8) };
             unsafe {
                 core::ptr::copy_nonoverlapping(buf as *const u8, new_buf_addr, len as usize);
@@ -1567,7 +1568,7 @@ impl HostSpace {
     }
 
     pub fn Statm(statm: &mut StatmInfo) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut new_info = Box::new_in(StatmInfo::default(), GUEST_HOST_SHARED_ALLOCATOR);
             let new_info_ptr = &mut *new_info as *mut _;
             let mut msg = Box::new_in(
@@ -1590,7 +1591,7 @@ impl HostSpace {
     }
 
     pub fn Socket(domain: i32, type_: i32, protocol: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::Socket(Socket {
                     domain,
@@ -1613,7 +1614,7 @@ impl HostSpace {
     }
 
     pub fn UnblockedSocket(domain: i32, type_: i32, protocol: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::Socket(Socket {
                     domain,
@@ -1636,7 +1637,7 @@ impl HostSpace {
     }
 
     pub fn GetSockName(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let len_size = size_of::<i32>();
             let len = unsafe { *(addrlen as *const i32) };
             let new_len_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len_size, 0x8) };
@@ -1682,7 +1683,7 @@ impl HostSpace {
     }
 
     pub fn GetPeerName(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let len_size = size_of::<i32>();
             let len = unsafe { *(addrlen as *const i32) };
             let new_len_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len_size, 0x8) };
@@ -1728,7 +1729,7 @@ impl HostSpace {
     }
 
     pub fn GetSockOpt(sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let val_size = unsafe { *(optlen as *const i32) } as usize;
             let len_size = size_of::<i32>();
             let new_val_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(val_size, 0x8) };
@@ -1778,7 +1779,7 @@ impl HostSpace {
     }
 
     pub fn SetSockOpt(sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let new_val_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(optlen as usize, 0x8) };
             unsafe {
                 core::ptr::copy_nonoverlapping(optval as *const u8, new_val_addr, optlen as usize);
@@ -1815,7 +1816,7 @@ impl HostSpace {
     }
 
     pub fn Bind(sockfd: i32, addr: u64, addrlen: u32, umask: u32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let new_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(addrlen as usize, 0x8) };
             unsafe {
                 core::ptr::copy_nonoverlapping(addr as *const u8, new_addr, addrlen as usize);
@@ -1849,7 +1850,7 @@ impl HostSpace {
     }
 
     pub fn Listen(sockfd: i32, backlog: i32, block: bool) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::IOListen(IOListen {
                     sockfd,
@@ -1872,7 +1873,7 @@ impl HostSpace {
     }
 
     pub fn RDMAListen(sockfd: i32, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::RDMAListen(RDMAListen {
                     sockfd,
@@ -1897,7 +1898,7 @@ impl HostSpace {
     }
 
     pub fn RDMANotify(sockfd: i32, typ: RDMANotifyType) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::RDMANotify(RDMANotify { sockfd, typ }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -1912,7 +1913,7 @@ impl HostSpace {
     }
 
     pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::IOShutdown(IOShutdown { sockfd, how }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -1932,7 +1933,7 @@ impl HostSpace {
     }
 
     pub fn Panic(str: &str) {
-        if is_cc_enabled() {
+        if is_cc_active() {
             //copy the &str to shared buffer
             let bytes = str.as_bytes();
             let len = bytes.len();
@@ -1971,7 +1972,7 @@ impl HostSpace {
     }
 
     pub fn TryOpenWrite(dirfd: i32, oldfd: i32, name: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::TryOpenWrite(TryOpenWrite {
                     dirfd: dirfd,
@@ -1996,7 +1997,7 @@ impl HostSpace {
     }
 
     pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64, skiprw: bool) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let new_libcstat = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
             let old_tryopen = unsafe { &mut *(addr as *mut TryOpenStruct) };
             let old_libcstat = unsafe { &mut *(old_tryopen.fstat as *const _ as *mut LibcStat) };
@@ -2038,7 +2039,7 @@ impl HostSpace {
     }
 
     pub fn OpenAt(dirfd: i32, name: u64, flags: i32, addr: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let new_libcstat = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
             let old_tryopen = unsafe { &mut *(addr as *mut TryOpenStruct) };
             let old_libcstat = unsafe { &mut *(old_tryopen.fstat as *const _ as *mut LibcStat) };
@@ -2081,7 +2082,7 @@ impl HostSpace {
     }
 
     pub fn OpenDevFile(dirfd: i32, name: u64, flags: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::OpenDevFile(OpenDevFile {
                     dirfd: dirfd,
@@ -2107,7 +2108,7 @@ impl HostSpace {
     }
 
     pub fn RemapGuestMemRanges(len: u64, addr: u64, count: usize) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let range_size = size_of::<Range>();
             let new_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(range_size * count, 0x8) };
             unsafe {
@@ -2140,7 +2141,7 @@ impl HostSpace {
     }
 
     pub fn UnmapGuestMemRange(start: u64, len: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::UnmapGuestMemRange(UnmapGuestMemRange {
                     start: start,
@@ -2163,7 +2164,7 @@ impl HostSpace {
     }
 
     pub fn HostUnixConnect(type_: i32, addr: u64, len: usize) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let new_addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len, 0x8) };
             unsafe {
                 core::ptr::copy_nonoverlapping(addr as *const u8, new_addr, len);
@@ -2192,7 +2193,7 @@ impl HostSpace {
     }
 
     pub fn HostUnixRecvMsg(fd: i32, msghdr: u64, flags: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut hasName = false;
             let mut hasControl = false;
             let mut new_name_buff = core::ptr::null::<u8>() as *mut u8;
@@ -2305,7 +2306,7 @@ impl HostSpace {
     }
 
     pub fn TsotRecvMsg(msgAddr: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut new_msg = Box::new_in(TsotMessage::default(), GUEST_HOST_SHARED_ALLOCATOR);
             let new_msg_ptr = &mut *new_msg as *mut _;
             let private_msg = unsafe { &mut *(msgAddr as *mut TsotMessage) };
@@ -2330,7 +2331,7 @@ impl HostSpace {
     }
 
     pub fn TsotSendMsg(msgAddr: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut new_msg = Box::new_in(TsotMessage::default(), GUEST_HOST_SHARED_ALLOCATOR);
             let new_msg_ptr = &mut *new_msg as *mut _;
             let private_msg = unsafe { &mut *(msgAddr as *mut TsotMessage) };
@@ -2365,7 +2366,7 @@ impl HostSpace {
         gid: u32,
         fstatAddr: u64,
     ) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut new_buff = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
             let new_buff_ptr = &mut *new_buff as *mut _;
             let private_buff = unsafe { &mut *(fstatAddr as *mut LibcStat) };
@@ -2401,7 +2402,7 @@ impl HostSpace {
     }
 
     pub fn SchedGetAffinity(pid: i32, cpuSetSize: u64, mask: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::SchedGetAffinity(SchedGetAffinity {
                     pid,
@@ -2424,7 +2425,7 @@ impl HostSpace {
     }
 
     pub fn Fchdir(fd: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(Msg::Fchdir(Fchdir { fd }), GUEST_HOST_SHARED_ALLOCATOR);
 
             return HostSpace::Call(&mut msg, false) as i64;
@@ -2436,7 +2437,7 @@ impl HostSpace {
     }
 
     pub fn Fadvise(fd: i32, offset: u64, len: u64, advice: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::Fadvise(Fadvise {
                     fd,
@@ -2461,7 +2462,7 @@ impl HostSpace {
     }
 
     pub fn Mlock2(addr: u64, len: u64, flags: u32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::Mlock2(Mlock2 { addr, len, flags }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -2476,7 +2477,7 @@ impl HostSpace {
     }
 
     pub fn MUnlock(addr: u64, len: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::MUnlock(MUnlock { addr, len }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -2491,7 +2492,7 @@ impl HostSpace {
     }
 
     pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::NonBlockingPoll(NonBlockingPoll { fd, mask }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -2514,7 +2515,7 @@ impl HostSpace {
     }
 
     pub fn HostEpollWaitProcess() -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::HostEpollWaitProcess(HostEpollWaitProcess {}),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -2531,7 +2532,7 @@ impl HostSpace {
     }
 
     pub fn VcpuWait() -> TaskId {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut next = Box::new_in(TaskId::New(0, 0), GUEST_HOST_SHARED_ALLOCATOR);
             let next_ptr = &mut *next as *mut _;
             HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, next_ptr as u64, 0);
@@ -2548,7 +2549,7 @@ impl HostSpace {
     }
     
     pub fn NewTmpfsFile(typ: TmpfsFileType, addr: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut new_buff = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
             let new_buff_ptr = &mut *new_buff as *mut _;
             let private_buff = unsafe { &mut *(addr as *mut LibcStat) };
@@ -2571,7 +2572,7 @@ impl HostSpace {
     }
 
     pub fn Chown(pathname: u64, owner: u32, group: u32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::Chown(Chown {
                     pathname,
@@ -2594,7 +2595,7 @@ impl HostSpace {
     }
 
     pub fn FChown(fd: i32, owner: u32, group: u32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::FChown(FChown { fd, owner, group }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -2609,7 +2610,7 @@ impl HostSpace {
     }
 
     pub fn Chmod(pathname: u64, mode: u32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::Chmod(Chmod { pathname, mode }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -2624,7 +2625,7 @@ impl HostSpace {
     }
 
     pub fn Fchmod(fd: i32, mode: u32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::Fchmod(Fchmod { fd, mode }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -2639,7 +2640,7 @@ impl HostSpace {
     }
 
     pub fn LinkAt(olddirfd: i32, oldpath: u64, newdirfd: i32, newpath: u64, flags: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::LinkAt(LinkAt {
                     olddirfd,
@@ -2666,7 +2667,7 @@ impl HostSpace {
     }
 
     pub fn SymLinkAt(oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::SymLinkAt(SymLinkAt {
                     oldpath,
@@ -2689,7 +2690,7 @@ impl HostSpace {
     }
 
     pub fn ReadControlMsg(fd: i32, addr: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut new_buff = Box::new_in(ControlMsg::default(), GUEST_HOST_SHARED_ALLOCATOR);
             let new_buff_ptr = &mut *new_buff as *mut _;
             let private_buff = unsafe { &mut *(addr as *mut ControlMsg) };
@@ -2712,7 +2713,7 @@ impl HostSpace {
     }
 
     pub fn WriteControlMsgResp(fd: i32, addr: u64, len: usize, close: bool) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let new_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len, 0x8) };
             unsafe {
                 core::ptr::copy_nonoverlapping(addr as *const u8, new_buff as *mut u8, len);
@@ -2745,7 +2746,7 @@ impl HostSpace {
     }
 
     pub fn UpdateWaitInfo(fd: i32, waitinfo: FdWaitInfo) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::UpdateWaitInfo(UpdateWaitInfo {
                     fd: fd,
@@ -2766,7 +2767,7 @@ impl HostSpace {
     }
 
     pub fn Futimens(fd: i32, times: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::Futimens(Futimens { fd, times }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -2781,7 +2782,7 @@ impl HostSpace {
     }
 
     pub fn GetStdfds(addr: u64) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let len = size_of::<i32>() * 3;
             let new_buff = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(len, 0x8) };
             unsafe {
@@ -2810,7 +2811,7 @@ impl HostSpace {
     }
 
     pub fn MMapFile(len: u64, fd: i32, offset: u64, prot: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::MMapFile(MMapFile {
                     len,
@@ -2837,7 +2838,7 @@ impl HostSpace {
     }
 
     pub fn MUnmap(addr: u64, len: u64) {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(
                 Msg::MUnmap(qmsg::qcall::MUnmap { addr, len }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -2852,7 +2853,7 @@ impl HostSpace {
     }
 
     pub fn EventfdWriteAsync(fd: i32) {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let msg = Box::new_in(
                 HostOutputMsg::EventfdWriteAsync(EventfdWriteAsync { fd }),
                 GUEST_HOST_SHARED_ALLOCATOR,
@@ -2867,7 +2868,7 @@ impl HostSpace {
     }
 
     pub fn SyncPrint(level: DebugLevel, str: &str) {
-        if is_cc_enabled() {
+        if is_cc_active() {
             //copy the &str to shared buffer
             let bytes = str.as_bytes();
             let len: usize = bytes.len();
@@ -2919,7 +2920,7 @@ impl HostSpace {
     }
 
     pub fn KernelGetTime(clockId: i32) -> Result<i64> {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let size = size_of::<GetTimeCall>();
             let call_ptr =
                 unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size, 0x8) as *mut GetTimeCall };
@@ -2959,7 +2960,7 @@ impl HostSpace {
     }
 
     pub fn KernelVcpuFreq() -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let size = size_of::<VcpuFeq>();
             let call_ptr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size, 0x8) as *mut VcpuFeq };
             let call = unsafe { &mut *call_ptr };

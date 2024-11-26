@@ -63,7 +63,7 @@ use core::sync::atomic::AtomicU64;
 #[cfg(feature = "cc")]
 use crate::{GLOBAL_ALLOCATOR, IS_GUEST};
 #[cfg(feature = "cc")]
-use Kernel::is_cc_enabled;
+use crate::qlib::kernel::arch::tee::is_cc_active;
 
 const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
 pub const DEFAULT_STACK_PAGES: u64 = DEFAULT_STACK_SIZE as u64 / (4 * 1024);
@@ -347,7 +347,7 @@ impl Task {
 
     pub fn DummyTask() -> Self {
         #[cfg(feature = "cc")]
-        if is_cc_enabled(){
+        if is_cc_active(){
             assert!(IS_GUEST == true, "DummyTask should only be called from guest");
         }
         let creds = Credentials::default();

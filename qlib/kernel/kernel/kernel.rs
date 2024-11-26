@@ -61,7 +61,7 @@ use super::uts_namespace::*;
 #[cfg(feature = "cc")]
 use crate::GUEST_KERNEL;
 #[cfg(feature = "cc")]
-use crate::qlib::kernel::Kernel::is_cc_enabled;
+use crate::qlib::kernel::arch::tee::is_cc_active;
 
 pub static ASYNC_PROCESS_TIMER: Singleton<Timer> = Singleton::<Timer>::New();
 
@@ -72,7 +72,7 @@ pub fn GetKernel() -> Kernel {
     #[cfg(not(feature = "cc"))]
     return SHARESPACE.kernel.lock().clone().unwrap();
     #[cfg(feature = "cc")]
-    if is_cc_enabled(){
+    if is_cc_active(){
         return GUEST_KERNEL.lock().clone().unwrap();
     } else {
         return SHARESPACE.kernel.lock().clone().unwrap();
@@ -84,7 +84,7 @@ pub fn GetKernelOption() -> Option<Kernel> {
     #[cfg(not(feature = "cc"))]
     return SHARESPACE.kernel.lock().clone();
     #[cfg(feature = "cc")]
-    if is_cc_enabled(){
+    if is_cc_active(){
         return GUEST_KERNEL.lock().clone();
     } else {
         return SHARESPACE.kernel.lock().clone();
@@ -252,7 +252,7 @@ impl Kernel {
             rootUserNamespace: args.RootUserNamespace,
             rootUTSNamespace: args.RootUTSNamespace,
             rootIPCNamespace: args.RootIPCNamespace,
-            applicationCores: if is_cc_enabled() {
+            applicationCores: if is_cc_active() {
                 args.ApplicationCores as usize - 2
             } else {
                 args.ApplicationCores as usize - 1

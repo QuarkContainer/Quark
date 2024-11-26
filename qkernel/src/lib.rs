@@ -86,7 +86,7 @@ use self::qlib::kernel::perflog;
 use self::qlib::kernel::quring;
 use self::qlib::kernel::Kernel;
 #[cfg (feature = "cc")]
-use self::qlib::kernel::Kernel::{ENABLE_CC, is_cc_enabled};
+use self::qlib::kernel::arch::tee::is_cc_active;
 use self::qlib::kernel::*;
 use self::qlib::{ShareSpaceRef, SysCallID};
 use self::qlib::kernel::socket;
@@ -177,7 +177,7 @@ pub fn SingletonInit() {
         }
 
         #[cfg(feature = "cc")]
-        if is_cc_enabled(){
+        if is_cc_active(){
             PAGE_MGR.SetValue(PAGE_MGR_HOLDER.Addr());
             IOURING.SetValue(IO_URING_HOLDER.Addr());
         } else {
@@ -609,7 +609,6 @@ pub extern "C" fn rust_main(
             GLOBAL_ALLOCATOR.InitSharedAllocator();
             if mode != CCMode::None {
                 crate::qlib::kernel::arch::tee::set_tee_type(mode);
-                ENABLE_CC.store(true, Ordering::Release);
                 GLOBAL_ALLOCATOR.InitSharedAllocator_cc();
                 let size = core::mem::size_of::<ShareSpace>();
                 let shared_space = unsafe {
@@ -690,7 +689,7 @@ pub extern "C" fn rust_main(
     }
     #[cfg(feature = "cc")]
     if id == 2 {
-        if is_cc_enabled(){
+        if is_cc_active(){
             IoHanlder();
         }
     }

@@ -50,7 +50,7 @@ use crate::GUEST_HOST_SHARED_ALLOCATOR;
 #[cfg(feature = "cc")]
 use crate::GuestHostSharedAllocator;
 #[cfg(feature = "cc")]
-use crate::qlib::kernel::Kernel::is_cc_enabled;
+use crate::qlib::kernel::arch::tee::is_cc_active;
 
 pub enum UringOps {
     UringCall(UringCall),
@@ -778,7 +778,7 @@ impl AsyncOpsTrait for AsyncAccept {
         // todo: find better to handle this
         #[cfg(feature = "cc")]
         {
-            if !is_cc_enabled() {
+            if !is_cc_active() {
                 if SHARESPACE.reapFileAvaiable.load(Ordering::Relaxed) {
                     ReapSwapIn();
                 }

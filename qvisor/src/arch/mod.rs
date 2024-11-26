@@ -69,7 +69,6 @@ pub trait ConfCompExtension: Send + Sync {
         -> Result<bool, Error> { Ok(false) }
     fn handle_hypercall(&self, hypercall: u16, arg0: u64, arg1: u64, arg2: u64,
         arg3: u64, vcpu_id: usize) -> Result<bool , Error>;
-    fn confidentiality_type(&self) -> CCMode;
     #[cfg(target_arch = "aarch64")]
     fn set_vcpu_features(&self, _vcpu_id: usize, _kvi: &mut kvm_vcpu_init) {}
 }

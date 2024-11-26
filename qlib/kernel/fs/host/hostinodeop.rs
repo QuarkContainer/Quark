@@ -53,7 +53,7 @@ use super::util::*;
 use super::*;
 
 #[cfg(feature = "cc")]
-use crate::qlib::kernel::Kernel::is_cc_enabled;
+use crate::qlib::kernel::arch::tee::is_cc_active;
 
 pub struct MappableInternal {
     //addr mapping from file offset to physical address
@@ -139,7 +139,7 @@ impl MappableInternal {
 
     pub fn Clear(&mut self) {
         #[cfg(feature = "cc")]
-        if is_cc_enabled() {
+        if is_cc_active() {
             for (phyAddr, (newAddr, _, writeable)) in &self.p2pmap {
                 if *writeable {
                     unsafe {
@@ -196,7 +196,7 @@ impl MappableInternal {
                 };
 
                 #[cfg(feature = "cc")]
-                if is_cc_enabled(){
+                if is_cc_active(){
                     for i in 0..CHUNK_SIZE / PAGE_SIZE {
                         match self.p2pmap.remove(&(phyAddr + i * PAGE_SIZE)) {
                             None => (),
@@ -887,7 +887,7 @@ impl HostInodeOp {
         };
 
         #[cfg(feature = "cc")]
-        if is_cc_enabled() {
+        if is_cc_active() {
             if let Some(mappable) = self.lock().mappable.clone() {
                 mappable.lock().SyncWrite(offset, srcs);
             }
@@ -1006,7 +1006,7 @@ impl HostInodeOp {
         };
 
         #[cfg(feature = "cc")]
-        if is_cc_enabled(){
+        if is_cc_active(){
             self.lock().Mappable().lock().WritebackAllPages();
         }
 
@@ -1121,7 +1121,7 @@ impl HostInodeOp {
     pub fn MSync(&self, fr: &Range, msyncType: MSyncType) -> Result<()> {
         let ranges = self.GetPhyRanges(fr);
         #[cfg(feature = "cc")]
-        if is_cc_enabled(){
+        if is_cc_active(){
             self.WritebackRanges(&ranges)?;
         }
         for r in &ranges {

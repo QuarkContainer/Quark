@@ -59,7 +59,7 @@ use crate::PRIVATE_VCPU_ALLOCATOR;
 #[cfg (feature = "cc")]
 use super::qlib::qmsg::sharepara::*;
 #[cfg (feature = "cc")]
-use Kernel::is_cc_enabled;
+use crate::qlib::kernel::arch::tee::is_cc_active;
 #[cfg (feature = "cc")]
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
 #[cfg (feature = "cc")]
@@ -369,7 +369,7 @@ impl HostSpace {
 
     #[cfg(feature = "cc")]
     pub fn Close(fd: i32) -> i64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let mut msg = Box::new_in(Msg::Close(qcall::Close { fd }), GUEST_HOST_SHARED_ALLOCATOR);
 
             return HostSpace::HCall(&mut msg, false) as i64;
@@ -400,7 +400,7 @@ impl HostSpace {
 
     #[cfg(feature = "cc")]
     pub fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let current = Task::Current().GetPrivateTaskId();
 
             let qMsg = Box::new_in(
@@ -455,7 +455,7 @@ impl HostSpace {
 
     #[cfg(feature = "cc")]
     pub fn HCall(msg: &mut Msg, lock: bool) -> u64 {
-        if is_cc_enabled() {
+        if is_cc_active() {
             let taskId = Task::Current().GetPrivateTaskId();
             let mut event = Box::new_in(
                 QMsg {

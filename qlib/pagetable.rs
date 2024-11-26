@@ -1471,7 +1471,7 @@ impl PageTables {
     pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
 
         #[cfg(feature = "cc")]
-        if crate::qlib::kernel::Kernel::is_cc_enabled(){
+        if crate::qlib::kernel::arch::tee::is_cc_active(){
             return;
         }
         let flags = pteEntry.flags();

@@ -19,7 +19,7 @@ use lazy_static::lazy_static;
 use nix::sys::signal;
 
 #[cfg(feature = "cc")]
-use crate::qlib::kernel::Kernel::is_cc_enabled;
+use crate::qlib::kernel::arch::tee::is_cc_active;
 #[cfg(feature = "cc")]
 use crate::runc::sandbox::sandbox::SignalProcess;
 use super::super::super::qlib::backtracer;
@@ -123,7 +123,7 @@ extern "C" fn handle_sigintAct(
         SendSignalVMS(signal, console);
 
         #[cfg(feature = "cc")]
-        if is_cc_enabled(){
+        if is_cc_active(){
             let res = SignalProcess(&ROOT_CONTAINER_ID.lock().clone(), 0, signal, console);
             debug!("SignalProcess res {:?}", res);
         } else {

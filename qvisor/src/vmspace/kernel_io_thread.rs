@@ -16,7 +16,7 @@ use core::sync::atomic::Ordering;
 use std::sync::atomic::AtomicI32;
 use libc::*;
 #[cfg(feature = "cc")]
-use qlib::kernel::Kernel::is_cc_enabled;
+use qlib::kernel::arch::tee::is_cc_active;
 
 use self::host_uring::HostSubmit;
 
@@ -63,7 +63,7 @@ impl KIOThread {
             count += IOURING.DrainCompletionQueue();
         }
         #[cfg(feature = "cc")]{
-            if !is_cc_enabled() {
+            if !is_cc_active() {
                 count += IOURING.DrainCompletionQueue();
             }
         }

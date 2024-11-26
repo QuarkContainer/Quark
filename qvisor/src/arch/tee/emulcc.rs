@@ -81,18 +81,10 @@ impl ConfCompExtension for EmulCc<'_> {
 
         Ok(_exit)
     }
-
-    fn confidentiality_type(&self) -> CCMode {
-        return self.cc_mode;
-    }
 }
 
 #[cfg(feature = "cc")]
 impl EmulCc<'_> {
-    fn _confidentiality_type(&self) -> CCMode {
-        self.cc_mode
-    }
-
     fn _get_hypercall_arguments(&self, _vcpu_fd: &kvm_ioctls::VcpuFd, vcpu_id: usize)
         -> Result<(u64, u64, u64, u64), Error> {
         use crate::sharepara::ShareParaPage;

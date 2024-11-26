@@ -30,8 +30,6 @@ use crate::arch::VirtCpu;
 use super::{resources::{MemArea, MemLayoutConfig, VmResources, MemAreaType}, VmType};
 #[cfg(feature = "cc")]
 use crate::qlib::kernel::Kernel::IDENTICAL_MAPPING;
-#[cfg(feature = "cc")]
-use crate::qlib::kernel::Kernel::ENABLE_CC;
 
 
 #[derive(Debug)]
@@ -45,7 +43,6 @@ pub struct VmCcEmul {
 #[cfg(feature = "cc")]
 impl VmType for VmCcEmul {
     fn init(args: Option<&Args>) -> Result<(Box<dyn VmType>, KernelELF), Error> {
-        ENABLE_CC.store(true, Ordering::Release);
         let _pod_id = args.expect("VM creation expects arguments").ID.clone();
         let default_min_vcpus = 3;
         let _emul_type: CCMode = QUARK_CONFIG.lock().CCMode;
@@ -427,9 +424,5 @@ impl VmType for VmCcEmul {
         VMS.lock().vcpus = vcpus.clone();
 
         Ok(vcpus)
-    }
-
-    fn get_type(&self) -> CCMode {
-        self.emul_cc_mode
     }
 }
