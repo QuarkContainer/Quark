@@ -100,7 +100,6 @@ impl VmType for VmNormal {
             mem_area_map: _hshared_map,
             kernel_stack_size: MemoryDef::DEFAULT_STACK_SIZE as usize,
             guest_mem_size: MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB
-                + MemoryDef::IO_HEAP_SIZE + MemoryDef::HOST_INIT_HEAP_SIZE,
         };
         let _kernel_bin_path = VirtualMachine::KERNEL_IMAGE.to_string();
         let _vdso_bin_path = VirtualMachine::VDSO_PATH.to_string();
@@ -279,6 +278,7 @@ impl VmType for VmNormal {
             .lock()
             .Init(cpu_count, control_sock, rdma_svc_cli_sock, pod_id);
         let shared_space_table = SHARE_SPACE_STRUCT.lock().deref().Addr();
+        info!("shared_space_table: {:x}", shared_space_table);
         SHARE_SPACE.SetValue(shared_space_table);
         SHARESPACE.SetValue(shared_space_table);
         let share_space_ptr = SHARE_SPACE.Ptr();

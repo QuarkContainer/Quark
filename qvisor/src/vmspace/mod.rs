@@ -239,8 +239,8 @@ impl VMSpace {
 
         SetConole(spec.process.terminal);
         process.Terminal = spec.process.terminal;
-        process.Args.append(&mut spec.process.args);
-        process.Envs.append(&mut spec.process.env);
+        process.Args.append(&mut spec.process.args.clone());
+        process.Envs.append(&mut spec.process.env.clone());
 
         //todo: credential fix.
         //error!("LoadProcessKernel: need to study the user mapping handling...");
@@ -248,7 +248,7 @@ impl VMSpace {
         process.GID = spec.process.user.gid;
         process
             .AdditionalGids
-            .append(&mut spec.process.user.additional_gids);
+            .append(&mut spec.process.user.additional_gids.clone());
         process.limitSet = CreateLimitSet(&spec)
             .expect("load limitSet fail")
             .GetInternalCopy();
