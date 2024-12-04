@@ -45,16 +45,10 @@ pub unsafe fn InitSingleton() {
 pub struct TimerUpdater {}
 
 impl TimerListenerTrait for TimerUpdater {
-    #[cfg(feature = "cc")]
     fn Notify(&self, _exp: u64) {
-        if crate::IS_GUEST {
+        if !crate::qlib::kernel::arch::tee::is_cc_active() || crate::IS_GUEST {
             TIME_KEEPER.write().Update();
         }
-    }
-
-    #[cfg(not(feature = "cc"))]
-    fn Notify(&self, _exp: u64) {
-        TIME_KEEPER.write().Update();
     }
 
     fn Destroy(&self) {}

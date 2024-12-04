@@ -36,7 +36,6 @@ use super::qlib::common::Error;
 use super::qlib::common::Result;
 
 use super::memmgr::{MapOption, MappedRegion};
-#[cfg(feature = "cc")]
 use crate::qlib::kernel::Kernel::IDENTICAL_MAPPING;
 pub struct KernelELF {
     pub startAddr: Addr,
@@ -90,14 +89,11 @@ impl KernelELF {
             if let Ph64(header) = p {
                 info!("program header: {:?}", header);
                 if header.get_type().map_err(Error::ELFLoadError)? == Type::Load {
-                    #[cfg(feature = "cc")]
                     let header_host_virtual_addr = if IDENTICAL_MAPPING.load(std::sync::atomic::Ordering::Acquire) {
                         header.virtual_addr
                     } else {
                         header.virtual_addr + crate::MemoryDef::UNIDENTICAL_MAPPING_OFFSET
                     };
-                    #[cfg(not(feature = "cc"))]
-                    let header_host_virtual_addr = header.virtual_addr;
                     let startMem = Addr(header_host_virtual_addr).RoundDown()?;
                     let endMem = Addr(header_host_virtual_addr)
                         .AddLen(header.file_size)?

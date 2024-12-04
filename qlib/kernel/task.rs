@@ -610,7 +610,6 @@ impl Task {
         return unsafe { &mut *(self.taskId as *mut Task) };
     }
 
-    //rsp & DEFAULT_STACK_MAST in cc is not task addr/taskid,is TaskWrapper
     #[inline(always)]
     pub fn TaskAddr() -> u64 {
         let rsp = GetCurrentKernelSp();

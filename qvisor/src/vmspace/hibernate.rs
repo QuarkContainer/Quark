@@ -174,46 +174,11 @@ impl HiberMgr {
         crate::PMA_KEEPER.DontNeed()?;
 
         //SHARE_SPACE.scheduler.CleanVcpPageCache();
-        #[cfg(not(feature = "cc"))]
-        let allocated1 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
-        #[cfg(feature = "cc")]
-        let allocated1 = GLOBAL_ALLOCATOR.HostInitAllocator().heap.lock().allocated
-            + GLOBAL_ALLOCATOR
-                .GuestHostSharedAllocator()
-                .heap
-                .lock()
-                .allocated
-            + GLOBAL_ALLOCATOR
-                .GuestPrivateAllocator()
-                .heap
-                .lock()
-                .allocated;
+        let allocated1 = GLOBAL_ALLOCATOR.GuestHostSharedAllocator().heap.lock().allocated;
 
-        #[cfg(not(feature = "cc"))]
-        GLOBAL_ALLOCATOR.Allocator().FreeAll();
+        GLOBAL_ALLOCATOR.GuestHostSharedAllocator().FreeAll();
 
-        #[cfg(feature = "cc")]
-        {
-            GLOBAL_ALLOCATOR.HostInitAllocator().FreeAll();
-            GLOBAL_ALLOCATOR.GuestHostSharedAllocator().FreeAll();
-            GLOBAL_ALLOCATOR.GuestPrivateAllocator().FreeAll();
-        }
-
-        #[cfg(not(feature = "cc"))]
-        let allocated2 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
-
-        #[cfg(feature = "cc")]
-        let allocated2 = GLOBAL_ALLOCATOR.HostInitAllocator().heap.lock().allocated
-            + GLOBAL_ALLOCATOR
-                .GuestHostSharedAllocator()
-                .heap
-                .lock()
-                .allocated
-            + GLOBAL_ALLOCATOR
-                .GuestPrivateAllocator()
-                .heap
-                .lock()
-                .allocated;
+        let allocated2 = GLOBAL_ALLOCATOR.GuestHostSharedAllocator().heap.lock().allocated;
 
         info!(
             "free pagepool {} pages, total allocated1 {} allocated2 {} free bytes {}",
@@ -228,15 +193,7 @@ impl HiberMgr {
         }
         info!("heap usage3 is {:?}", &GLOBAL_ALLOCATOR.Allocator().maxnum);*/
 
-        #[cfg(not(feature = "cc"))]
-        GLOBAL_ALLOCATOR.Allocator().heap.lock().DontNeed();
-
-        #[cfg(feature = "cc")]
-        {
-            GLOBAL_ALLOCATOR.HostInitAllocator().heap.lock().DontNeed();
-            GLOBAL_ALLOCATOR.GuestHostSharedAllocator().heap.lock().DontNeed();
-            GLOBAL_ALLOCATOR.GuestPrivateAllocator().heap.lock().DontNeed();
-        }
+        GLOBAL_ALLOCATOR.GuestHostSharedAllocator().heap.lock().DontNeed();
         error!("swap out done ...");
         return Ok(());
     }

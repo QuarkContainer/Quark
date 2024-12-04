@@ -1,4 +1,4 @@
-.PHONY: debug release cuda_debug cuda_release cc_debug cc_release
+.PHONY: debug release cuda_debug cuda_release
 
 debug:
 	CARGO_TARGET_DIR=../target cargo +$(TOOLCHAIN) build
@@ -11,9 +11,3 @@ cuda_debug:
 
 cuda_release:
 	CARGO_TARGET_DIR=../target cargo +$(TOOLCHAIN) build --release --features cuda
-
-cc_debug:
-	CARGO_TARGET_DIR=../target cargo +$(TOOLCHAIN) build --features cc
-
-cc_release:
-	CARGO_TARGET_DIR=../target cargo +$(TOOLCHAIN) build --release --features cc

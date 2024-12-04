@@ -28,7 +28,6 @@ use crate::{arch::{tee::util::{adjust_addr_to_guest, adjust_addr_to_host},
             SHARE_SPACE, URING_MGR, VMS};
 use crate::arch::VirtCpu;
 use super::{resources::{MemArea, MemLayoutConfig, VmResources, MemAreaType}, VmType};
-#[cfg(feature = "cc")]
 use crate::qlib::kernel::Kernel::IDENTICAL_MAPPING;
 
 
@@ -40,7 +39,6 @@ pub struct VmCcEmul {
     emul_cc_mode: CCMode,
 }
 
-#[cfg(feature = "cc")]
 impl VmType for VmCcEmul {
     fn init(args: Option<&Args>) -> Result<(Box<dyn VmType>, KernelELF), Error> {
         let _pod_id = args.expect("VM creation expects arguments").ID.clone();
@@ -82,7 +80,7 @@ impl VmType for VmCcEmul {
             MemArea {
                 base_host: MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET,
                 base_guest: MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET,
-                size: MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE,
+                size: MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE + MemoryDef::IO_HEAP_SIZE,
                 guest_private: false,
                 host_backedup: true });
         #[cfg(target_arch = "aarch64")] {
@@ -135,7 +133,7 @@ impl VmType for VmCcEmul {
         kernel_elf: KernelELF,
         args: Args
     ) -> Result<VirtualMachine, Error> {
-        crate::GLOBAL_ALLOCATOR.InitPrivateAllocator();
+        crate::GLOBAL_ALLOCATOR.InitAllocator();
         *ROOT_CONTAINER_ID.lock() = args.ID.clone();
         if QUARK_CONFIG.lock().PerSandboxLog {
             let sandbox_name = match args

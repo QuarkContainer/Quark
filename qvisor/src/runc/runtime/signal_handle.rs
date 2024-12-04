@@ -18,9 +18,7 @@ use core::sync::atomic::Ordering;
 use lazy_static::lazy_static;
 use nix::sys::signal;
 
-#[cfg(feature = "cc")]
 use crate::qlib::kernel::arch::tee::is_cc_active;
-#[cfg(feature = "cc")]
 use crate::runc::sandbox::sandbox::SignalProcess;
 use super::super::super::qlib::backtracer;
 use super::super::super::qlib::common::*;
@@ -119,10 +117,6 @@ extern "C" fn handle_sigintAct(
             panic!("get signal 11");
         }
 
-        #[cfg(not(feature = "cc"))]
-        SendSignalVMS(signal, console);
-
-        #[cfg(feature = "cc")]
         if is_cc_active(){
             let res = SignalProcess(&ROOT_CONTAINER_ID.lock().clone(), 0, signal, console);
             debug!("SignalProcess res {:?}", res);

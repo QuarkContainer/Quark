@@ -233,34 +233,6 @@ impl KVMVcpu {
     }
 }
 
-#[cfg(not(feature = "cc"))]
-pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64> {
-    assert!(
-        size % 8 == 0,
-        "AlignedAllocate get unaligned size {:x}",
-        size
-    );
-    let layout = Layout::from_size_align(size, align);
-    match layout {
-        Err(_e) => Err(Error::UnallignedAddress(format!(
-            "AlignedAllocate {:?}",
-            align
-        ))),
-        Ok(l) => unsafe {
-            let addr = alloc(l);
-            if zeroData {
-                let arr = slice::from_raw_parts_mut(addr as *mut u64, size / 8);
-                for i in 0..512 {
-                    arr[i] = 0
-                }
-            }
-
-            Ok(addr as u64)
-        },
-    }
-}
-
-#[cfg(feature = "cc")]
 pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64> {
     assert!(
         size % 8 == 0,

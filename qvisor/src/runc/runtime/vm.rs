@@ -26,7 +26,6 @@ use nix::sys::signal;
 use crate::arch::VirtCpu;
 use crate::arch::vm::vcpu::ArchVirtCpu;
 use crate::qlib::kernel::arch::tee::get_tee_type;
-#[cfg (feature = "cc")]
 use crate::qlib::MAX_VCPU_COUNT;
 use crate::runc::runtime::vm_type::emulcc::VmCcEmul;
 

@@ -23,9 +23,7 @@ use core::ops::Deref;
 use super::super::super::IOURING;
 use super::timer::*;
 use super::*;
-#[cfg(feature = "cc")]
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
-#[cfg(feature = "cc")]
 use crate::GuestHostSharedAllocator;
 
 #[derive(Debug, Copy, Clone)]
@@ -111,17 +109,6 @@ impl TimerStore {
     }
 }
 
-#[cfg(not(feature = "cc"))]
-#[derive(Default)]
-pub struct TimerStoreIntern {
-    // expire time -> Timer
-    pub timerSeq: BTreeMap<TimerUnit, Timer>, // order by expire time
-    pub nextExpire: i64,
-    pub uringExpire: i64,
-    pub uringId: u64,
-}
-
-#[cfg(feature = "cc")]
 pub struct TimerStoreIntern {
     // expire time -> Timer
     pub timerSeq: BTreeMap<TimerUnit, Timer, GuestHostSharedAllocator>, // order by expire time
@@ -130,7 +117,6 @@ pub struct TimerStoreIntern {
     pub uringId: u64,
 }
 
-#[cfg(feature = "cc")]
 impl Default for TimerStoreIntern {
     fn default() -> Self {
         let res = Self {

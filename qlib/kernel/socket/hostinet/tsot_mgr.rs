@@ -579,9 +579,6 @@ impl TsotSocketMgr {
                     self.NewSocket(fd);
                 }
                 TsotMsg::PeerConnectNotify(m) => {
-                    #[cfg(not(feature = "cc"))]
-                    let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::default()));
-                    #[cfg(feature = "cc")]
                     let sockBuf = SocketBuff(Arc::new_in(
                         SocketBuffIntern::default(),
                         crate::GUEST_HOST_SHARED_ALLOCATOR,

@@ -22,7 +22,6 @@ use super::super::common::*;
 use super::super::linux_def::*;
 use super::super::mutex::*;
 use super::super::pagetable::*;
-#[cfg(feature = "cc")]
 use crate::qlib::kernel::arch::tee::is_cc_active;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::SHARESPACE;
@@ -154,12 +153,6 @@ impl PageBlockAlloc {
 
         // try to swap in the page in case it is freed before swap in
         // todo: if disable this, system is not stable. root cause this.
-        #[cfg(not(feature = "cc"))]
-        if SHARESPACE.hiberMgr.ContainersPage(addr) {
-            let _ret = HostSpace::SwapInPage(addr);
-        }
-
-        #[cfg(feature = "cc")]
         if SHARESPACE.hiberMgr.ContainersPage(addr) && !is_cc_active(){
             let _ret = HostSpace::SwapInPage(addr);
         }

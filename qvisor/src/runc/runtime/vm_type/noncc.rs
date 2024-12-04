@@ -55,8 +55,7 @@ impl fmt::Debug for VmNormal {
 impl VmType for VmNormal {
     //NOTE: Use defaults for now, but we can improve it, e.g. configuration file.
     fn init(args: Option<&Args>) -> Result<(Box<dyn VmType>, KernelELF), Error> {
-        crate::GLOBAL_ALLOCATOR.InitPrivateAllocator();
-        crate::GLOBAL_ALLOCATOR.InitSharedAllocator();
+        crate::GLOBAL_ALLOCATOR.InitAllocator();
         crate::GLOBAL_ALLOCATOR.vmLaunched.store(true, Ordering::SeqCst);
         let _pod_id = args.expect("VM creation expects arguments").ID.clone();
         let default_min_vcpus = 2;

@@ -81,14 +81,6 @@ impl HostAllocator {
         let allocator = self.GuestPrivateAllocator();
         return (allocator.heapStart, allocator.heapEnd);
     }
-
-    #[inline]
-    pub fn HeapRangeAll(&self) -> (u64, u64) {
-        return (
-            MemoryDef::HEAP_OFFSET,
-            MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE,
-        );
-    }
 }
 
 #[derive(Debug, Default, Copy, Clone)]

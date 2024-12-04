@@ -44,9 +44,7 @@ use super::super::threadmgr::thread_group::*;
 use super::super::SignalDef::*;
 use super::super::SHARESPACE;
 use super::fs::*;
-#[cfg(feature = "cc")]
 use crate::GUEST_KERNEL;
-#[cfg(feature = "cc")]
 use crate::qlib::kernel::arch::tee::is_cc_active;
 
 impl Process {
@@ -131,15 +129,10 @@ impl Loader {
         };
 
         let kernel = Kernel::Init(kernelArgs);
-        #[cfg(not(feature = "cc"))]{
+        if is_cc_active(){
+            *GUEST_KERNEL.lock() = Some(kernel.clone());
+        } else {
             *SHARESPACE.kernel.lock() = Some(kernel.clone());
-        }
-        #[cfg(feature = "cc")]{
-            if is_cc_active(){
-                *GUEST_KERNEL.lock() = Some(kernel.clone());
-            } else {
-                *SHARESPACE.kernel.lock() = Some(kernel.clone());
-            }
         }
         let task = Task::Current();
         self.Lock(task)?.kernel = kernel;
@@ -500,15 +493,10 @@ impl LoaderInternal {
         };
 
         let kernel = Kernel::Init(kernelArgs);
-        #[cfg(not(feature = "cc"))]{
+        if is_cc_active(){
+            *GUEST_KERNEL.lock() = Some(kernel.clone());
+        } else {
             *SHARESPACE.kernel.lock() = Some(kernel.clone());
-        }
-        #[cfg(feature = "cc")]{
-            if is_cc_active(){
-                *GUEST_KERNEL.lock() = Some(kernel.clone());
-            } else {
-                *SHARESPACE.kernel.lock() = Some(kernel.clone());
-            }
         }
         let rootMounts =
             InitRootFs(Task::Current(), &process.Root).expect("in loader::New, InitRootfs fail");

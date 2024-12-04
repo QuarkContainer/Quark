@@ -52,7 +52,6 @@ use super::hostfileop::*;
 use super::util::*;
 use super::*;
 
-#[cfg(feature = "cc")]
 use crate::qlib::kernel::arch::tee::is_cc_active;
 
 pub struct MappableInternal {
@@ -68,12 +67,10 @@ pub struct MappableInternal {
 
     //addr mapping for shared pages from shared memory to private memory
     //need to write back to shared pages when munmap in cc. the value is (private memory,fileOffset,writeable)
-    #[cfg(feature = "cc")]
     pub p2pmap: BTreeMap<u64, (u64, u64, bool)>,
 }
 
 impl MappableInternal {
-    #[cfg(feature = "cc")]
     pub fn WritebackPage(&self, phyAddr: u64) {
         match self.p2pmap.get(&phyAddr) {
             None => (),
@@ -89,7 +86,6 @@ impl MappableInternal {
         }
     }
 
-    #[cfg(feature = "cc")]
     pub fn SyncWrite(&self, offset: i64, srcs: &[IoVec]) {
         for i in 0..srcs.len() {
             let start_page = offset as u64 & !PAGE_MASK;
@@ -122,7 +118,6 @@ impl MappableInternal {
         }
     }
 
-    #[cfg(feature = "cc")]
     pub fn WritebackAllPages(&self) {
         for (phyAddr, (newAddr, _, writeable)) in &self.p2pmap {
             if *writeable {
@@ -138,7 +133,6 @@ impl MappableInternal {
     }
 
     pub fn Clear(&mut self) {
-        #[cfg(feature = "cc")]
         if is_cc_active() {
             for (phyAddr, (newAddr, _, writeable)) in &self.p2pmap {
                 if *writeable {
@@ -195,7 +189,6 @@ impl MappableInternal {
                     Some(offset) => *offset,
                 };
 
-                #[cfg(feature = "cc")]
                 if is_cc_active(){
                     for i in 0..CHUNK_SIZE / PAGE_SIZE {
                         match self.p2pmap.remove(&(phyAddr + i * PAGE_SIZE)) {
@@ -250,7 +243,6 @@ impl Default for MappableInternal {
             f2pmap: BTreeMap::new(),
             mapping: AreaSet::New(0, core::u64::MAX),
             chunkrefs: BTreeMap::new(),
-            #[cfg(feature = "cc")]
             p2pmap: BTreeMap::new(),
         };
     }
@@ -472,7 +464,6 @@ impl HostInodeOpIntern {
         return Ok(phyAddr + (fileOffset - chunkStart));
     }
 
-    #[cfg(feature = "cc")]
     pub fn MapSharedPage(&mut self, phyAddr: u64, newAddr: u64, offset: u64, writeable: bool) {
         let mappable = self.Mappable();
         let mut mappableLock = mappable.lock();
@@ -886,7 +877,6 @@ impl HostInodeOp {
             size
         };
 
-        #[cfg(feature = "cc")]
         if is_cc_active() {
             if let Some(mappable) = self.lock().mappable.clone() {
                 mappable.lock().SyncWrite(offset, srcs);
@@ -1005,7 +995,6 @@ impl HostInodeOp {
             false
         };
 
-        #[cfg(feature = "cc")]
         if is_cc_active(){
             self.lock().Mappable().lock().WritebackAllPages();
         }
@@ -1112,7 +1101,6 @@ impl HostInodeOp {
         return self.lock().MapFilePage(task, fileOffset);
     }
 
-    #[cfg(feature = "cc")]
     pub fn MapSharedPage(&self, phyAddr: u64, newAddr: u64, offset: u64, writeable: bool) {
         self.lock()
             .MapSharedPage(phyAddr, newAddr, offset, writeable);
@@ -1120,7 +1108,6 @@ impl HostInodeOp {
 
     pub fn MSync(&self, fr: &Range, msyncType: MSyncType) -> Result<()> {
         let ranges = self.GetPhyRanges(fr);
-        #[cfg(feature = "cc")]
         if is_cc_active(){
             self.WritebackRanges(&ranges)?;
         }
@@ -1209,7 +1196,6 @@ impl HostInodeOp {
         return rs;
     }
 
-    #[cfg(feature = "cc")]
     pub fn WritebackRanges(&self, ranges: &Vec<Range>) -> Result<()> {
         let mappable = self.lock().Mappable();
         let mappableLock = mappable.lock();

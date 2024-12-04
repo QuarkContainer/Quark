@@ -105,16 +105,13 @@ use self::vmspace::uringMgr::*;
 use crate::kvm_vcpu::KVMVcpu;
 use vmspace::*;
 
-#[cfg(feature = "cc")]
 use crate::qlib::mem::cc_allocator::*;
-#[cfg(feature = "cc")]
 use crate::qlib::kernel::kernel::kernel::Kernel;
 
 pub fn AllocatorPrint(_class: usize) -> String {
     return "".to_string();
 }
 
-#[cfg(feature = "cc")]
 pub static  IS_GUEST: bool = false;
 
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
@@ -166,11 +163,7 @@ lazy_static! {
     pub static ref URING: Mutex::<io_uring::IoUring> = Mutex::new(
         io_uring::IoUring::new(MemoryDef::QURING_SIZE as u32).expect("setup io_Uring fail")
     );
-}
-
-#[cfg(feature = "cc")]
-lazy_static! {
-    //will not be used in host, just place holder here
+    //will not be used in host when cc enabled, just place holder here
     pub static ref PRIVATE_VCPU_ALLOCATOR: Box<PrivateVcpuAllocators> = Box::new(PrivateVcpuAllocators::New());
     pub static ref GUEST_KERNEL: Mutex<Option<Kernel>> = Mutex::new(None);
 }
@@ -183,7 +176,6 @@ pub fn InitSingleton() {
 
 #[global_allocator]
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
-#[cfg(feature = "cc")]
 pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
 
 fn main() {

@@ -10,7 +10,7 @@ use super::qlib::mem::list_allocator::*;
 
 pub const ENABLE_HUGEPAGE: bool = false;
 
-#[cfg(feature = "cc")]
+use crate::qlib::kernel::arch::tee::is_cc_active;
 use crate::qlib::kernel::Kernel::IDENTICAL_MAPPING;
 
 impl BitmapAllocatorWrapper {
@@ -54,15 +54,6 @@ impl BitmapAllocatorWrapper {
 }
 
 impl HostAllocator {
-    #[cfg(not(feature = "cc"))]
-    pub const fn New() -> Self {
-        return Self {
-            listHeapAddr: AtomicU64::new(MemoryDef::HEAP_OFFSET),
-            ioHeapAddr: AtomicU64::new(MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE),
-            initialized: AtomicBool::new(false),
-        };
-    }
-    #[cfg(feature = "cc")]
     pub const fn New() -> Self {
         return Self {
             ioHeapAddr: AtomicU64::new(MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE),
@@ -74,56 +65,7 @@ impl HostAllocator {
         };
     }
 
-    #[cfg(not(feature = "cc"))]
-    pub fn Init(&self) {
-        let heapSize = MemoryDef::HEAP_SIZE as usize + MemoryDef::IO_HEAP_SIZE as usize;
-        let addr = unsafe {
-            let mut flags = libc::MAP_SHARED | libc::MAP_ANON | libc::MAP_FIXED;
-            if ENABLE_HUGEPAGE {
-                flags |= libc::MAP_HUGE_2MB;
-            }
-            libc::mmap(
-                self.listHeapAddr.load(Ordering::Relaxed) as _,
-                heapSize,
-                libc::PROT_READ | libc::PROT_WRITE,
-                flags,
-                -1,
-                0,
-            ) as u64
-        };
-
-        if addr == libc::MAP_FAILED as u64 {
-            panic!("mmap: failed to get mapped memory area for heap");
-        }
-
-        assert!(
-            self.listHeapAddr.load(Ordering::Relaxed) == addr,
-            "listHeapAddr is {:x}, addr is {:x}",
-            self.listHeapAddr.load(Ordering::Relaxed),
-            addr
-        );
-
-        let heapStart = self.listHeapAddr.load(Ordering::Relaxed);
-        let heapEnd = heapStart + MemoryDef::HEAP_SIZE as u64;
-        *self.Allocator() = ListAllocator::New(heapStart as _, heapEnd);
-
-        let ioHeapEnd = heapStart + MemoryDef::HEAP_SIZE as u64 + MemoryDef::IO_HEAP_SIZE;
-        *self.IOAllocator() = ListAllocator::New(heapEnd as _, ioHeapEnd);
-
-        // reserve first 4KB gor the listAllocator
-        let size = core::mem::size_of::<ListAllocator>();
-        self.Allocator().Add(
-            MemoryDef::HEAP_OFFSET as usize + size,
-            MemoryDef::HEAP_SIZE as usize - size,
-        );
-        self.IOAllocator().Add(
-            MemoryDef::HEAP_END as usize + size,
-            MemoryDef::IO_HEAP_SIZE as usize - size,
-        );
-        self.initialized.store(true, Ordering::SeqCst);
-    }
-
-    #[cfg(feature = "cc")]
+    //Map shared heap here
     pub fn Init(&self) {
         let sharedHeapAddr = unsafe {
             let mut flags = libc::MAP_SHARED | libc::MAP_ANON | libc::MAP_FIXED;
@@ -180,12 +122,6 @@ impl HostAllocator {
         let hostInitHeapStart = self.hostInitHeapAddr.load(Ordering::Relaxed);
         let hostInitHeapEnd = hostInitHeapStart + MemoryDef::HOST_INIT_HEAP_SIZE as u64;
         *self.HostInitAllocator() = ListAllocator::New(hostInitHeapStart as _, hostInitHeapEnd);
-        /*let ioHeapEnd = heapStart + MemoryDef::HEAP_SIZE as u64 + MemoryDef::IO_HEAP_SIZE;
-        *self.IOAllocator() = ListAllocator::New(heapEnd as _, ioHeapEnd);
-        self.IOAllocator().Add(
-            MemoryDef::HEAP_END as usize + size,
-            MemoryDef::IO_HEAP_SIZE as usize - size,
-        );*/
         //reserve first 4KB gor the listAllocator
         let size = core::mem::size_of::<ListAllocator>();
         self.HostInitAllocator().Add(
@@ -201,8 +137,7 @@ impl HostAllocator {
         return false;
     }
 
-    #[cfg(feature = "cc")]
-    pub fn InitPrivateAllocator(&self) {
+    pub fn InitAllocator(&self) {
         use std::convert::TryInto;
 
         let mut guestPrivHeapStart = self.guestPrivHeapAddr.load(Ordering::Acquire);
@@ -259,46 +194,23 @@ impl HostAllocator {
             guestPrivHeapAddr as usize + size,
             heap_size as usize - size,
         );
-    }
 
-    #[cfg(feature = "cc")]
-    pub fn InitSharedAllocator(&self) {
-        let sharedHeapStart = self.sharedHeapAddr.load(Ordering::Relaxed);
-        let shaedHeapEnd = sharedHeapStart + MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as u64;
-        *self.GuestHostSharedAllocator() = ListAllocator::New(sharedHeapStart as _, shaedHeapEnd);
+        if !is_cc_active() {
+            self.sharedHeapAddr.store(MemoryDef::HEAP_OFFSET, Ordering::SeqCst);
+            self.GuestHostSharedAllocator().enlarge(MemoryDef::HEAP_OFFSET, MemoryDef::HEAP_END);
+            self.GuestHostSharedAllocator().Add(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET as usize,
+                MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as usize);
 
-
-        // reserve 4 pages for the listAllocator and share para page
-        let size = 4 * MemoryDef::PAGE_SIZE as usize;
-        self.GuestHostSharedAllocator().Add(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET as usize + size,
-            MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as usize - size);
-    }
-}
-
-#[cfg(not(feature = "cc"))]
-unsafe impl GlobalAlloc for HostAllocator {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let initialized = self.initialized.load(Ordering::Relaxed);
-        if !initialized {
-            self.Init();
-        }
-
-        return self.Allocator().alloc(layout);
-    }
-
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-
-        let addr = ptr as u64;
-        if !Self::IsIOBuf(addr) {
-            self.Allocator().dealloc(ptr, layout);
-        } else {
-            //self.Allocator().dealloc(ptr, layout);
-            self.IOAllocator().dealloc(ptr, layout);
+            let ioHeapEnd = MemoryDef::HEAP_END + MemoryDef::IO_HEAP_SIZE;
+            *self.IOAllocator() = ListAllocator::New(MemoryDef::HEAP_END as _, ioHeapEnd);
+            self.IOAllocator().Add(
+                MemoryDef::HEAP_END as usize,
+                MemoryDef::IO_HEAP_SIZE as usize,
+            );
         }
     }
 }
 
-#[cfg(feature = "cc")]
 unsafe impl GlobalAlloc for HostAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let initialized = self.initialized.load(Ordering::Relaxed);
@@ -329,6 +241,8 @@ unsafe impl GlobalAlloc for HostAllocator {
             self.HostInitAllocator().dealloc(ptr, layout);
         } else if Self::IsIOBuf(addr) {
             self.IOAllocator().dealloc(ptr, layout);
+        } else if self.IsGuestPrivateHeapAddr(addr) && !is_cc_active(){
+            self.GuestPrivateAllocator().dealloc(ptr, layout);
         }
     }
 }

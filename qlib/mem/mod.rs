@@ -22,5 +22,4 @@ pub mod list_allocator;
 pub mod pool;
 pub mod seq;
 pub mod stackvec;
-#[cfg(feature = "cc")]
 pub mod cc_allocator;

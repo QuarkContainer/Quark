@@ -26,13 +26,8 @@ use super::super::super::super::linux_def::*;
 use super::super::super::super::qmsg::qcall::TryOpenStruct;
 use super::super::super::kernel::time::*;
 use super::super::super::task::*;
-#[cfg(not(feature = "cc"))]
-use super::super::super::util::cstring::*;
-#[cfg(feature = "cc")]
-use super::super::super::util::sharedstring::*;
-#[cfg(feature = "cc")]
+use super::super::super::util::sharedcstring::*;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
-#[cfg(feature = "cc")]
 use Box;
 
 use super::super::super::super::path;
@@ -293,10 +288,7 @@ pub fn TryOpenAt(dirfd: i32, name: &str, skiprw: bool) -> Result<(i32, bool, Lib
         fstat: &fstat,
         writeable: false,
     };
-    #[cfg(not(feature = "cc"))]
-    let cstr = CString::New(&name);
-    #[cfg(feature = "cc")]
-    let cstr = SharedString::New(&name);
+    let cstr = SharedCString::New(&name);
 
     let ret = HostSpace::TryOpenAt(dirfd, cstr.Ptr(), &mut tryopen as *mut TryOpenStruct as u64, skiprw);
 
@@ -318,10 +310,7 @@ pub fn OpenAt(dirfd: i32, name: &str, flags: i32) -> Result<(i32, LibcStat)> {
         fstat: &fstat,
         writeable: false,
     };
-    #[cfg(not(feature = "cc"))]
-    let cstr = CString::New(&name);
-    #[cfg(feature = "cc")]
-    let cstr = SharedString::New(&name);
+    let cstr = SharedCString::New(&name);
 
     let ret = HostSpace::OpenAt(
         dirfd,
@@ -342,10 +331,7 @@ pub fn Fstat(fd: i32, fstat: &mut LibcStat) -> i64 {
 }
 
 pub fn Fstatat(dirfd: i32, pathname: &str, fstat: &mut LibcStat, flags: i32) -> i64 {
-    #[cfg(not(feature = "cc"))]
-    let cstr = CString::New(pathname);
-    #[cfg(feature = "cc")]
-    let cstr = SharedString::New(pathname);
+    let cstr = SharedCString::New(pathname);
     return HostSpace::Fstatat(dirfd, cstr.Ptr(), fstat as *mut _ as u64, flags);
 }
 
@@ -354,66 +340,39 @@ pub fn Fcntl(fd: i32, cmd: i32, arg: u64) -> i64 {
 }
 
 pub fn Mkdirat(fd: i32, name: &str, perm: u32, uid: u32, gid: u32) -> i64 {
-    #[cfg(not(feature = "cc"))]
-    let cstr = CString::New(name);
-    #[cfg(feature = "cc")]
-    let cstr = SharedString::New(name);
+    let cstr = SharedCString::New(name);
     let res = HostSpace::Mkdirat(fd, cstr.Ptr(), perm, uid, gid);
     return res;
 }
 
 pub fn Mkfifoat(fd: i32, name: &str, perm: u32, uid: u32, gid: u32) -> i64 {
-    #[cfg(not(feature = "cc"))]
-    let cstr = CString::New(name);
-    #[cfg(feature = "cc")]
-    let cstr = SharedString::New(name);
+    let cstr = SharedCString::New(name);
     let res = HostSpace::Mkfifoat(fd, cstr.Ptr(), perm, uid, gid);
     return res;
 }
 
 pub fn LinkAt(olddirfd: i32, oldpath: &str, newdirfd: i32, newpath: &str, flags: i32) -> i64 {
-    #[cfg(not(feature = "cc"))]
-    let oldpath = CString::New(oldpath);
-    #[cfg(not(feature = "cc"))]
-    let newpath = CString::New(newpath);
-    #[cfg(feature = "cc")]
-    let oldpath = SharedString::New(oldpath);
-    #[cfg(feature = "cc")]
-    let newpath = SharedString::New(newpath);
+    let oldpath = SharedCString::New(oldpath);
+    let newpath = SharedCString::New(newpath);
 
     return HostSpace::LinkAt(olddirfd, oldpath.Ptr(), newdirfd, newpath.Ptr(), flags);
 }
 
 pub fn SymLinkAt(oldpath: &str, newdirfd: i32, newpath: &str) -> i64 {
-    #[cfg(not(feature = "cc"))]
-    let oldpath = CString::New(oldpath);
-    #[cfg(not(feature = "cc"))]
-    let newpath = CString::New(newpath);
-    #[cfg(feature = "cc")]
-    let oldpath = SharedString::New(oldpath);
-    #[cfg(feature = "cc")]
-    let newpath = SharedString::New(newpath);
+    let oldpath = SharedCString::New(oldpath);
+    let newpath = SharedCString::New(newpath);
 
     return HostSpace::SymLinkAt(oldpath.Ptr(), newdirfd, newpath.Ptr());
 }
 
 pub fn UnLinkAt(dirfd: i32, pathname: &str, flags: i32) -> i64 {
-    #[cfg(not(feature = "cc"))]
-    let cstr = CString::New(pathname);
-    #[cfg(feature = "cc")]
-    let cstr = SharedString::New(pathname);
+    let cstr = SharedCString::New(pathname);
     return HostSpace::Unlinkat(dirfd, cstr.Ptr(), flags);
 }
 
 pub fn RenameAt(olddirfd: i32, oldpath: &str, newdirfd: i32, newpath: &str) -> i64 {
-    #[cfg(not(feature = "cc"))]
-    let oldpath = CString::New(oldpath);
-    #[cfg(not(feature = "cc"))]
-    let newpath = CString::New(newpath);
-    #[cfg(feature = "cc")]
-    let oldpath = SharedString::New(oldpath);
-    #[cfg(feature = "cc")]
-    let newpath = SharedString::New(newpath);
+    let oldpath = SharedCString::New(oldpath);
+    let newpath = SharedCString::New(newpath);
 
     return HostSpace::RenameAt(olddirfd, oldpath.Ptr(), newdirfd, newpath.Ptr());
 }
@@ -436,10 +395,7 @@ pub fn Fallocate(fd: i32, mode: i32, offset: i64, len: i64) -> i64 {
 
 pub fn ReadLinkAt(dirfd: i32, path: &str) -> Result<String> {
     let mut buf: [u8; 1024] = [0; 1024];
-    #[cfg(not(feature = "cc"))]
-    let cstr = CString::New(path);
-    #[cfg(feature = "cc")]
-    let cstr = SharedString::New(path);
+    let cstr = SharedCString::New(path);
 
     let ret = HostSpace::ReadLinkAt(dirfd, cstr.Ptr(), &mut buf[0] as *mut _ as u64, 1024);
 
@@ -459,10 +415,7 @@ pub fn createAt(
     uid: u32,
     gid: u32,
 ) -> Result<(i32, LibcStat)> {
-    #[cfg(not(feature = "cc"))]
-    let cstr = CString::New(name);
-    #[cfg(feature = "cc")]
-    let cstr = SharedString::New(name);
+    let cstr = SharedCString::New(name);
     let mut fstat = LibcStat::default();
 
     let ret = HostSpace::CreateAt(
@@ -482,12 +435,6 @@ pub fn createAt(
     return Ok((ret, fstat));
 }
 
-#[cfg(not(feature = "cc"))]
-pub fn Ioctl(fd: i32, cmd: u64, argp: u64) -> i32 {
-    return HostSpace::IoCtl(fd, cmd, argp) as i32;
-}
-
-#[cfg(feature = "cc")]
 pub fn Ioctl(fd: i32, cmd: u64, argp: u64, argplen: usize) -> i32 {
     return HostSpace::IoCtl(fd, cmd, argp, argplen) as i32;
 }
@@ -501,16 +448,11 @@ pub fn SetTimestamps(fd: i32, ts: &InterTimeSpec) -> Result<()> {
         return Ok(());
     }
 
-    #[cfg(not(feature = "cc"))]
-    let mut sts: [Timespec; 2] = [Timespec::default(); 2];
-    #[cfg(feature = "cc")]
     let mut sts = Box::new_in([Timespec::default(); 2], GUEST_HOST_SHARED_ALLOCATOR);
+    
     sts[0] = TimespecFromTimestamp(ts.ATime, ts.ATimeOmit, ts.ATimeSetSystemTime);
     sts[1] = TimespecFromTimestamp(ts.MTime, ts.MTimeOmit, ts.MTimeSetSystemTime);
 
-    #[cfg(not(feature = "cc"))]
-    let ret = HostSpace::Futimens(fd, &sts as *const _ as u64);
-    #[cfg(feature = "cc")]
     let ret = HostSpace::Futimens(fd, &*sts as *const _ as u64);
 
     if ret < 0 {
@@ -619,55 +561,28 @@ pub fn UnstableAttr(
 
         return Ok(s.UnstableAttr(mo));
     } else {
-        #[cfg(not(feature = "cc"))]
-        {
-            let mut s: Statx = Default::default();
-            let str = CString::New("");
-            let ret = IOURING.Statx(
-                task,
-                hostfd,
-                str.Ptr(),
-                &mut s as *mut _ as u64,
-                ATType::AT_EMPTY_PATH,
-                StatxMask::STATX_BASIC_STATS,
-            );
+        let s = Box::new_in(Statx::default(), GUEST_HOST_SHARED_ALLOCATOR);
+        let addr = &*s as *const  _ as u64;
+        let str =  SharedCString::New("");
+        let ret = IOURING.Statx(
+            task,
+            hostfd,
+            str.Ptr(),
+            addr,
+            ATType::AT_EMPTY_PATH,
+            StatxMask::STATX_BASIC_STATS,
+        );
 
-            if ret < 0 {
-                return Err(Error::SysError(-ret as i32));
-            }
-
-            return Ok(s.UnstableAttr(mo));
+        if ret < 0 {
+            return Err(Error::SysError(-ret as i32));
         }
 
-
-        #[cfg(feature = "cc")]
-        {
-            let s = Box::new_in(Statx::default(), GUEST_HOST_SHARED_ALLOCATOR);
-            let addr = &*s as *const  _ as u64;
-            let str =  SharedString::New("");
-            let ret = IOURING.Statx(
-                task,
-                hostfd,
-                str.Ptr(),
-                addr,
-                ATType::AT_EMPTY_PATH,
-                StatxMask::STATX_BASIC_STATS,
-            );
-
-            if ret < 0 {
-                return Err(Error::SysError(-ret as i32));
-            }
-
-            return Ok(s.UnstableAttr(mo));
-        }
+        return Ok(s.UnstableAttr(mo));
     }
 }
 
 pub fn Getxattr(fd: i32, name: &str) -> Result<Vec<u8>> {
-    #[cfg(not(feature = "cc"))]
-    let str = CString::New(name);
-    #[cfg(feature = "cc")]
-    let str = SharedString::New(name);
+    let str = SharedCString::New(name);
     let val: &mut [u8; Xattr::XATTR_NAME_MAX] = &mut [0; Xattr::XATTR_NAME_MAX];
     let ret = HostSpace::FGetXattr(fd, str.Ptr(), &val[0] as *const _ as u64, val.len()) as i32;
     if ret < 0 {
@@ -678,10 +593,7 @@ pub fn Getxattr(fd: i32, name: &str) -> Result<Vec<u8>> {
 }
 
 pub fn Setxattr(fd: i32, name: &str, value: &[u8], flags: u32) -> Result<()> {
-    #[cfg(not(feature = "cc"))]
-    let name = CString::New(name);
-    #[cfg(feature = "cc")]
-    let name = SharedString::New(name);
+    let name = SharedCString::New(name);
     let addr = if value.len() == 0 {
         0
     } else {
@@ -719,10 +631,7 @@ pub fn Listxattr(fd: i32) -> Result<Vec<String>> {
 }
 
 pub fn Removexattr(fd: i32, name: &str) -> Result<()> {
-    #[cfg(not(feature = "cc"))]
-    let name = CString::New(name);
-    #[cfg(feature = "cc")]
-    let name = SharedString::New(name);
+    let name = SharedCString::New(name);
     let ret = HostSpace::FRemoveXattr(fd, name.Ptr()) as i32;
 
     if ret < 0 {

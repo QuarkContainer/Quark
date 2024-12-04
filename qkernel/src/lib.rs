@@ -61,7 +61,6 @@ use taskMgr::{CreateTask, IOWait, WaitFn};
 use vcpu::CPU_LOCAL;
 
 use crate::qlib::kernel::GlobalIOMgr;
-#[cfg(feature = "cc")]
 use crate::qlib::ShareSpace;
 
 use self::asm::*;
@@ -85,7 +84,6 @@ use self::qlib::kernel::memmgr;
 use self::qlib::kernel::perflog;
 use self::qlib::kernel::quring;
 use self::qlib::kernel::Kernel;
-#[cfg (feature = "cc")]
 use self::qlib::kernel::arch::tee::is_cc_active;
 use self::qlib::kernel::*;
 use self::qlib::{ShareSpaceRef, SysCallID};
@@ -112,11 +110,8 @@ use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
 
-#[cfg(feature = "cc")]
 use self::qlib::mem::cc_allocator::*;
-#[cfg(feature = "cc")]
 use alloc::boxed::Box;
-#[cfg(feature = "cc")]
 use memmgr::pma::PageMgr;
 
 #[macro_use]
@@ -135,16 +130,14 @@ pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
-#[cfg(feature = "cc")]
 pub static  IS_GUEST: bool = true;
-#[cfg(feature = "cc")]
 pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
 
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
 }
 
-#[cfg(feature = "cc")]
+//used when cc is enabled
 lazy_static! {
     pub static ref PRIVATE_VCPU_ALLOCATOR: Box<PrivateVcpuAllocators> = Box::new(PrivateVcpuAllocators::New());
     pub static ref PAGE_MGR_HOLDER: Box<PageMgr> = Box::new(PageMgr::default());
@@ -170,13 +163,6 @@ pub fn SingletonInit() {
         // the error! can run after this point
         //error!("error message");
 
-        #[cfg(not(feature = "cc"))]{
-            SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
-            PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
-            IOURING.SetValue(SHARESPACE.GetIOUringAddr());
-        }
-
-        #[cfg(feature = "cc")]
         if is_cc_active(){
             PAGE_MGR.SetValue(PAGE_MGR_HOLDER.Addr());
             IOURING.SetValue(IO_URING_HOLDER.Addr());
@@ -599,33 +585,26 @@ pub extern "C" fn rust_main(
     self::qlib::kernel::asm::fninit();
     if id == 0 {
         //if in any cc machine, shareSpaceAddr is reused as CCMode
-        #[cfg(feature = "cc")]
-        {
-            let mode = CCMode::from(shareSpaceAddr);
-            GLOBAL_ALLOCATOR.InitPrivateAllocator(mode);
-            GLOBAL_ALLOCATOR.InitSharedAllocator();
-            if mode != CCMode::None {
-                crate::qlib::kernel::arch::tee::set_tee_type(mode);
-                GLOBAL_ALLOCATOR.InitSharedAllocator_cc();
-                let size = core::mem::size_of::<ShareSpace>();
-                let shared_space = unsafe {
-                    GLOBAL_ALLOCATOR.AllocSharedBuf(size, 2)
-                };
-                HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
-                SHARESPACE.SetValue(shared_space as u64);
-            } else {
-                SHARESPACE.SetValue(shareSpaceAddr);
-            }
-        }
-        #[cfg(not(feature = "cc"))]
-        {
-            GLOBAL_ALLOCATOR.Init(heapStart);
+        let mode = CCMode::from(shareSpaceAddr);
+        GLOBAL_ALLOCATOR.InitPrivateAllocator(mode);
+        if mode != CCMode::None {
+            crate::qlib::kernel::arch::tee::set_tee_type(mode);
+            GLOBAL_ALLOCATOR.InitSharedAllocator(mode);
+            let size = core::mem::size_of::<ShareSpace>();
+            let shared_space = unsafe {
+                GLOBAL_ALLOCATOR.AllocSharedBuf(size, 2)
+            };
+            HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
+            SHARESPACE.SetValue(shared_space as u64);
+        } else {
+            GLOBAL_ALLOCATOR.InitSharedAllocator(mode);
             SHARESPACE.SetValue(shareSpaceAddr);
         }
+
         SingletonInit();
         debug!("init singleton finished");
         SetVCPCount(vcpuCnt as usize);
-        #[cfg(feature = "cc")]
+
         VCPU_ALLOCATOR.Print();
         VCPU_ALLOCATOR.Initializated();
         InitTsc();
@@ -684,7 +663,7 @@ pub extern "C" fn rust_main(
             self::InitLoader();
         }
     }
-    #[cfg(feature = "cc")]
+
     if id == 2 {
         if is_cc_active(){
             IoHanlder();
@@ -694,7 +673,6 @@ pub extern "C" fn rust_main(
     WaitFn();
 }
 
-#[cfg(feature = "cc")]
 fn IoHanlder() {
     loop {
         if Shutdown() {

@@ -13,5 +13,4 @@
 // limitations under the License.
 
 pub mod cstring;
-#[cfg(feature = "cc")]
-pub mod sharedstring;
+pub mod sharedcstring;

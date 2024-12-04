@@ -83,7 +83,6 @@ impl VirtCpu for X86_64VirtCpu {
             CCMode::None =>
                 NonConf::initialize_conf_extension(share_space_table_addr,
                 page_allocator_base_addr)?,
-            #[cfg(feature = "cc")]
             CCMode::Normal | CCMode::NormalEmu =>
                 EmulCc::initialize_conf_extension(share_space_table_addr,
                 page_allocator_base_addr)?,

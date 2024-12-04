@@ -1072,7 +1072,6 @@ impl MemoryManager {
                 let fileOffset = vmaOffset + vma.offset; // offset in the file
                 debug!("VM: Install Page - HostIO - vma-offset:{:#0x} - file-offset:{:#0x}", vmaOffset, fileOffset);
                 let phyAddr = iops.MapFilePage(task, fileOffset)?;
-                #[cfg(feature = "cc")]
                 if is_cc_active() {
                     let writeable = vma.effectivePerms.Write();
                     let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };

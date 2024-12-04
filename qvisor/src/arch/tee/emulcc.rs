@@ -30,7 +30,6 @@ pub struct EmulCc<'a> {
     pub page_allocator_addr: u64,
 }
 
-#[cfg(feature = "cc")]
 impl ConfCompExtension for EmulCc<'_> {
     fn initialize_conf_extension(_share_space_table_addr: Option<u64>,
         _page_allocator_base_addr: Option<u64>)
@@ -83,7 +82,6 @@ impl ConfCompExtension for EmulCc<'_> {
     }
 }
 
-#[cfg(feature = "cc")]
 impl EmulCc<'_> {
     fn _get_hypercall_arguments(&self, _vcpu_fd: &kvm_ioctls::VcpuFd, vcpu_id: usize)
         -> Result<(u64, u64, u64, u64), Error> {

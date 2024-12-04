@@ -25,11 +25,8 @@ use super::waiter::*;
 use super::*;
 use crate::qlib::TaskId;
 
-#[cfg(feature = "cc")]
 use crate::GuestHostSharedAllocator;
-#[cfg(feature = "cc")]
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
-#[cfg(feature = "cc")]
 use alloc::boxed::Box;
 pub enum WaitContext {
     None,
@@ -139,15 +136,9 @@ pub struct EntryInternal {
     pub context: WaitContext,
 }
 
-#[cfg(not(feature = "cc"))]
-#[derive(Clone, Default)]
-pub struct WaitEntryWeak(pub Weak<QMutex<EntryInternal>>);
-
-#[cfg(feature = "cc")]
 #[derive(Clone)]
 pub struct WaitEntryWeak(pub Weak<QMutex<EntryInternal>, GuestHostSharedAllocator>);
 
-#[cfg(feature = "cc")]
 impl Default for WaitEntryWeak {
     fn default() -> Self {
         return WaitEntry::default().Downgrade();
@@ -165,24 +156,9 @@ impl WaitEntryWeak {
     }
 }
 
-#[cfg(not(feature = "cc"))]
-#[derive(Default, Clone)]
-pub struct WaitEntry(Arc<QMutex<EntryInternal>>);
-
-#[cfg(not(feature = "cc"))]
-impl Deref for WaitEntry {
-    type Target = Arc<QMutex<EntryInternal>>;
-
-    fn deref(&self) -> &Arc<QMutex<EntryInternal>> {
-        &self.0
-    }
-}
-
-#[cfg(feature = "cc")]
 #[derive(Clone)]
 pub struct WaitEntry(Arc<QMutex<EntryInternal>, GuestHostSharedAllocator>);
 
-#[cfg(feature = "cc")]
 impl Default for WaitEntry {
     fn default() -> Self {
         return WaitEntry(Arc::new_in(
@@ -192,7 +168,6 @@ impl Default for WaitEntry {
     }
 }
 
-#[cfg(feature = "cc")]
 impl Deref for WaitEntry {
     type Target = Arc<QMutex<EntryInternal>, GuestHostSharedAllocator>;
 
@@ -218,19 +193,6 @@ impl WaitEntry {
         return self.lock().context.TaskId();
     }
 
-    #[cfg(not(feature = "cc"))]
-    pub fn New() -> Self {
-        let internal = EntryInternal {
-            next: None,
-            prev: None,
-            mask: 0,
-            context: WaitContext::None,
-        };
-
-        return Self(Arc::new(QMutex::new(internal)));
-    }
-
-    #[cfg(feature = "cc")]
     pub fn New() -> Self {
         let internal = EntryInternal {
             next: None,
@@ -249,26 +211,6 @@ impl WaitEntry {
         self.Notify(1);
     }
 
-    #[cfg(not(feature = "cc"))]
-    pub fn NewThreadContext(waiter: &Waiter, waiterId: WaiterID, mask: EventMask) -> Self {
-        let context = ThreadContext {
-            waiterID: waiterId,
-            waiter: waiter.clone(),
-            tid: 0,
-            key: Key::default(),
-        };
-
-        let internal = EntryInternal {
-            next: None,
-            prev: None,
-            mask: mask,
-            context: WaitContext::ThreadContext(RefCell::new(context)),
-        };
-
-        return Self(Arc::new(QMutex::new(internal)));
-    }
-
-    #[cfg(feature = "cc")]
     pub fn NewThreadContext(waiter: &Waiter, waiterId: WaiterID, mask: EventMask) -> Self {
         let context = Box::new_in(
             ThreadContext {

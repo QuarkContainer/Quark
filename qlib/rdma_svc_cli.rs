@@ -323,33 +323,6 @@ impl RDMASvcClient {
                                 SockInfo::Socket(_) => {
                                     let ioBufIndex = response.ioBufIndex as usize;
                                     let shareRegion = self.cliShareRegion.lock();
-                                    #[cfg(not(feature = "cc"))]
-                                    let sockBuf = SocketBuff(Arc::new(
-                                        SocketBuffIntern::InitWithShareMemory(
-                                            MemoryDef::DEFAULT_BUF_PAGE_COUNT,
-                                            &shareRegion.ioMetas[ioBufIndex].readBufAtoms
-                                                as *const _
-                                                as u64,
-                                            &shareRegion.ioMetas[ioBufIndex].readBufWaitingRW
-                                                as *const _
-                                                as u64,
-                                            &shareRegion.ioMetas[ioBufIndex].writeBufAtoms
-                                                as *const _
-                                                as u64,
-                                            &shareRegion.ioMetas[ioBufIndex].writeBufWaitingRW
-                                                as *const _
-                                                as u64,
-                                            &shareRegion.ioMetas[ioBufIndex].consumeReadData
-                                                as *const _
-                                                as u64,
-                                            &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
-                                            &shareRegion.iobufs[ioBufIndex].write as *const _
-                                                as u64,
-                                            false,
-                                        ),
-                                    ));
-
-                                    #[cfg(feature = "cc")]
                                     let sockBuf = SocketBuff(Arc::new_in(
                                         SocketBuffIntern::InitWithShareMemory(
                                             MemoryDef::DEFAULT_BUF_PAGE_COUNT,
@@ -441,33 +414,6 @@ impl RDMASvcClient {
                                     self.rdmaIdToSocketMappings.lock().insert(rdmaId, fd);
                                     let ioBufIndex = response.ioBufIndex as usize;
                                     let shareRegion = self.cliShareRegion.lock();
-                                    #[cfg(not(feature = "cc"))]
-                                    let sockBuf = SocketBuff(Arc::new(
-                                        SocketBuffIntern::InitWithShareMemory(
-                                            MemoryDef::DEFAULT_BUF_PAGE_COUNT,
-                                            &shareRegion.ioMetas[ioBufIndex].readBufAtoms
-                                                as *const _
-                                                as u64,
-                                            &shareRegion.ioMetas[ioBufIndex].readBufWaitingRW
-                                                as *const _
-                                                as u64,
-                                            &shareRegion.ioMetas[ioBufIndex].writeBufAtoms
-                                                as *const _
-                                                as u64,
-                                            &shareRegion.ioMetas[ioBufIndex].writeBufWaitingRW
-                                                as *const _
-                                                as u64,
-                                            &shareRegion.ioMetas[ioBufIndex].consumeReadData
-                                                as *const _
-                                                as u64,
-                                            &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
-                                            &shareRegion.iobufs[ioBufIndex].write as *const _
-                                                as u64,
-                                            false,
-                                        ),
-                                    ));
-
-                                    #[cfg(feature = "cc")]
                                     let sockBuf = SocketBuff(Arc::new_in(
                                         SocketBuffIntern::InitWithShareMemory(
                                             MemoryDef::DEFAULT_BUF_PAGE_COUNT,

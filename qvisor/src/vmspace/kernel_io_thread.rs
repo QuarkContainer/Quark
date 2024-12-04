@@ -15,7 +15,6 @@
 use core::sync::atomic::Ordering;
 use std::sync::atomic::AtomicI32;
 use libc::*;
-#[cfg(feature = "cc")]
 use qlib::kernel::arch::tee::is_cc_active;
 
 use self::host_uring::HostSubmit;
@@ -59,14 +58,9 @@ impl KIOThread {
         count += HostSubmit().unwrap();
         TIMER_STORE.Trigger();
         count += HostSubmit().unwrap();
-        #[cfg(not(feature = "cc"))]{
+        if !is_cc_active() {
             count += IOURING.DrainCompletionQueue();
-        }
-        #[cfg(feature = "cc")]{
-            if !is_cc_active() {
-                count += IOURING.DrainCompletionQueue();
             }
-        }
         count += HostSubmit().unwrap();
         count += KVMVcpu::GuestMsgProcess(sharespace);
         count += HostSubmit().unwrap();

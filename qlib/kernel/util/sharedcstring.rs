@@ -22,11 +22,11 @@ use super::super::task::*;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 #[derive(Debug)]
-pub struct SharedString {
+pub struct SharedCString {
     pub data: Vec<u8,GuestHostSharedAllocator>,
 }
 
-impl SharedString {
+impl SharedCString {
     pub fn New(s: &str) -> Self {
         let s = s.as_bytes();
         let mut data = Vec::with_capacity_in(s.len() + 1,GUEST_HOST_SHARED_ALLOCATOR);

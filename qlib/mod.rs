@@ -47,8 +47,6 @@ pub mod range;
 pub mod auth;
 pub mod backtracer;
 pub mod bytestream;
-#[cfg(feature = "cc")]
-pub mod bytestream_cc;
 pub mod config;
 pub mod control_msg;
 pub mod cpuid;
@@ -90,8 +88,6 @@ pub mod unix_socket;
 
 use self::kernel::dns::dns_svc::DnsSvc;
 use self::mutex::*;
-#[cfg(not(feature = "cc"))]
-use alloc::collections::VecDeque;
 use alloc::string::String;
 use alloc::vec::Vec;
 use cache_padded::CachePadded;
@@ -155,10 +151,8 @@ pub const HYPERCALL_VCPU_DEBUG: u16 = 21;
 pub const HYPERCALL_VCPU_PRINT: u16 = 22;
 pub const HYPERCALL_VCPU_WAIT: u16 = 23;
 pub const HYPERCALL_RELEASE_VCPU: u16 = 24;
-#[cfg(feature = "cc")]
 pub const HYPERCALL_SHARESPACE_INIT: u16 = 25;
 
-#[cfg(not(feature = "cc"))]
 pub const DUMMY_TASKID: TaskId = TaskId::New(0xffff_ffff);
 
 pub const MAX_VCPU_COUNT: usize = 64;
@@ -1189,9 +1183,6 @@ impl CompleteEntry {
 }
 
 pub struct UringQueue {
-    #[cfg(not(feature = "cc"))]
-    pub submitq: QMutex<VecDeque<UringEntry>>,
-    #[cfg(feature = "cc")]
     pub submitq: ArrayQueue<UringEntry>,
     pub completeq: ArrayQueue<CompleteEntry>,
 }
@@ -1199,9 +1190,6 @@ pub struct UringQueue {
 impl Default for UringQueue {
     fn default() -> Self {
         return Self {
-            #[cfg(not(feature = "cc"))]
-            submitq: Default::default(),
-            #[cfg(feature = "cc")]
             submitq: ArrayQueue::new(MemoryDef::QURING_SIZE),
             completeq: ArrayQueue::new(MemoryDef::QURING_SIZE),
         };

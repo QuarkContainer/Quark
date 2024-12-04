@@ -19,9 +19,6 @@ use super::tty::*;
 use super::util::*;
 
 pub fn ioctlGetTermios(fd: i32, termios: &mut Termios) -> Result<()> {
-    #[cfg(not(feature = "cc"))]
-    let ret = Ioctl(fd, IoCtlCmd::TCGETS, termios as *mut Termios as u64);
-    #[cfg(feature = "cc")]
     let ret = Ioctl(fd, IoCtlCmd::TCGETS, termios as *mut Termios as u64, core::mem::size_of::<Termios>());
 
     if ret < 0 {
@@ -32,9 +29,6 @@ pub fn ioctlGetTermios(fd: i32, termios: &mut Termios) -> Result<()> {
 }
 
 pub fn ioctlSetTermios(fd: i32, req: u64, termios: &Termios) -> Result<()> {
-    #[cfg(not(feature = "cc"))]
-    let ret = Ioctl(fd, req, termios as *const Termios as u64);
-    #[cfg(feature = "cc")]
     let ret = Ioctl(fd, req, termios as *const Termios as u64, core::mem::size_of::<Termios>());
 
     if ret < 0 {
@@ -45,9 +39,6 @@ pub fn ioctlSetTermios(fd: i32, req: u64, termios: &Termios) -> Result<()> {
 }
 
 pub fn ioctlGetWinsize(fd: i32, w: &mut Winsize) -> Result<()> {
-    #[cfg(not(feature = "cc"))]
-    let ret = Ioctl(fd, IoCtlCmd::TIOCGWINSZ, w as *mut Winsize as u64);
-    #[cfg(feature = "cc")]
     let ret = Ioctl(fd, IoCtlCmd::TIOCGWINSZ, w as *mut Winsize as u64, core::mem::size_of::<Winsize>());
 
     if ret < 0 {
@@ -58,9 +49,6 @@ pub fn ioctlGetWinsize(fd: i32, w: &mut Winsize) -> Result<()> {
 }
 
 pub fn ioctlSetWinsize(fd: i32, w: &Winsize) -> Result<()> {
-    #[cfg(not(feature = "cc"))]
-    let ret = Ioctl(fd, IoCtlCmd::TIOCSWINSZ, w as *const Winsize as u64);
-    #[cfg(feature = "cc")]
     let ret = Ioctl(fd, IoCtlCmd::TIOCSWINSZ, w as *const Winsize as u64, core::mem::size_of::<Winsize>());
 
     if ret < 0 {

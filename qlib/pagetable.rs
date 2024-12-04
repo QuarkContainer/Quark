@@ -1469,8 +1469,6 @@ impl PageTables {
 
     #[cfg(target_arch = "x86_64")]
     pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
-
-        #[cfg(feature = "cc")]
         if crate::qlib::kernel::arch::tee::is_cc_active(){
             return;
         }
@@ -1818,19 +1816,6 @@ impl AlignedAllocator {
         };
     }
 
-    #[cfg(not(feature = "cc"))]
-    pub fn Allocate(&self) -> Result<u64> {
-        let layout = Layout::from_size_align(self.size, self.align);
-        match layout {
-            Err(_e) => Err(Error::UnallignedAddress(format!("Allocate {:?}", self))),
-            Ok(l) => unsafe {
-                let addr = alloc(l);
-                Ok(addr as u64)
-            },
-        }
-    }
-
-    #[cfg(feature = "cc")]
     pub fn Allocate(&self) -> Result<u64> {
         let layout = Layout::from_size_align(self.size, self.align);
         match layout {

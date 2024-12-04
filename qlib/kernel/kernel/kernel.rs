@@ -58,9 +58,7 @@ use super::timer::timekeeper::*;
 use super::timer::timer::*;
 use super::timer::*;
 use super::uts_namespace::*;
-#[cfg(feature = "cc")]
 use crate::GUEST_KERNEL;
-#[cfg(feature = "cc")]
 use crate::qlib::kernel::arch::tee::is_cc_active;
 
 pub static ASYNC_PROCESS_TIMER: Singleton<Timer> = Singleton::<Timer>::New();
@@ -69,9 +67,6 @@ static CLOCK_TICK_MS: i64 = CLOCK_TICK / MILLISECOND;
 
 #[inline]
 pub fn GetKernel() -> Kernel {
-    #[cfg(not(feature = "cc"))]
-    return SHARESPACE.kernel.lock().clone().unwrap();
-    #[cfg(feature = "cc")]
     if is_cc_active(){
         return GUEST_KERNEL.lock().clone().unwrap();
     } else {
@@ -81,9 +76,6 @@ pub fn GetKernel() -> Kernel {
 
 #[inline]
 pub fn GetKernelOption() -> Option<Kernel> {
-    #[cfg(not(feature = "cc"))]
-    return SHARESPACE.kernel.lock().clone();
-    #[cfg(feature = "cc")]
     if is_cc_active(){
         return GUEST_KERNEL.lock().clone();
     } else {
@@ -218,33 +210,6 @@ impl Deref for Kernel {
 impl Kernel {
     pub fn Init(args: InitKernelArgs) -> Self {
         let cpuTicker = Arc::new(KernelCPUClockTicker::New());
-        #[cfg(not(feature = "cc"))]
-        let internal = KernelInternal {
-            extMu: QMutex::new(()),
-            featureSet: args.FeatureSet,
-            tasks: TaskSet::New(),
-            rootUserNamespace: args.RootUserNamespace,
-            rootUTSNamespace: args.RootUTSNamespace,
-            rootIPCNamespace: args.RootIPCNamespace,
-            applicationCores: args.ApplicationCores as usize - 1,
-            mounts: QRwLock::new(BTreeMap::new()),
-            sockets: SocketStore::default(),
-            globalInit: QMutex::new(None),
-            cpuClock: AtomicU64::new(0),
-            staticInfo: QMutex::new(StaticInfo {
-                ApplicationCores: args.ApplicationCores,
-                useHostCores: false,
-                cpu: 0,
-            }),
-            //cpuClockTicker: Timer::New(&MONOTONIC_CLOCK, &cpuTicker),
-            cpuClockTicker: cpuTicker,
-            startTime: Task::RealTimeNow(),
-            started: AtomicBool::new(false),
-            platform: DefaultPlatform::default(),
-            lastProcessTime: QMutex::new(0),
-            syslog: SysLog::default(),
-        };
-        #[cfg(feature = "cc")]
         let internal = KernelInternal {
             extMu: QMutex::new(()),
             featureSet: args.FeatureSet,

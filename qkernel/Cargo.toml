@@ -21,10 +21,6 @@ hashbrown = "0.12.3"
 enum_dispatch = { git = "https://github.com/QuarkContainer/enum_dispatch_clone.git" }
 log = { version = "0.4", features = ["max_level_trace", "release_max_level_trace"] }
 
-[features]
-default = ["cc"]
-cc = []
-
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 x86_64 = "0.14.7"
 
