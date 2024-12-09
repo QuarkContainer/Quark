@@ -2049,7 +2049,7 @@ impl PostRDMAConnect {
         self.ret = ret;
         SHARE_SPACE
             .scheduler
-            .ScheduleQ(self.taskId, self.taskId.Queue(), true)
+            .ScheduleQ(self.taskId, self.taskId.QueueId(), true)
     }
 
     pub fn ToRef(addr: u64) -> &'static mut Self {

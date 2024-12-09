@@ -54,17 +54,11 @@ use super::Kernel::HostSpace;
 
 use crate::GLOBAL_ALLOCATOR;
 
-#[cfg(feature = "cc")]
 use crate::PRIVATE_VCPU_ALLOCATOR;
-#[cfg (feature = "cc")]
 use super::qlib::qmsg::sharepara::*;
-#[cfg (feature = "cc")]
 use crate::qlib::kernel::arch::tee::is_cc_active;
-#[cfg (feature = "cc")]
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
-#[cfg (feature = "cc")]
 use alloc::boxed::Box;
-#[cfg (feature = "cc")]
 use crate::qlib::config::CCMode;
 
 impl OOMHandler for ListAllocator {
@@ -149,10 +143,8 @@ impl CounterSet {
 }
 
 #[inline]
-#[cfg(not(feature = "cc"))]
 pub fn switch(from: TaskId, to: TaskId) {
     Task::Current().AccountTaskEnter(SchedState::Blocked);
-
     CPULocal::SetCurrentTask(to.Addr());
     let fromCtx = from.GetTask();
     let toCtx = to.GetTask();
@@ -165,36 +157,21 @@ pub fn switch(from: TaskId, to: TaskId) {
     fromCtx.mm.VcpuLeave();
     toCtx.mm.VcpuEnter();
 
-    unsafe {
-        context_swap(fromCtx.GetContext(), toCtx.GetContext());
-    }
-
-    Task::Current().AccountTaskLeave(SchedState::Blocked);
-}
-
-#[inline]
-#[cfg(feature = "cc")]
-pub fn switch(from: TaskId, to: TaskId) {
-    Task::Current().AccountTaskEnter(SchedState::Blocked);
-
-    CPULocal::SetCurrentTask(to.PrivateTaskAddr(), to.SharedTaskAddr());
-    let fromCtx = from.GetPrivateTask();
-    let toCtx = to.GetPrivateTask();
-
-    if !SHARESPACE.config.read().KernelPagetable {
-        toCtx.SwitchPageTable();
-    }
-    toCtx.SetTLS();
-
-    fromCtx.mm.VcpuLeave();
-    toCtx.mm.VcpuEnter();
-
-    assert!(from.task_wrapper_addr > 0, "switch from.task_wrapper_addr > 0");
-    assert!(to.task_wrapper_addr > 0, "switch to.task_wrapper_addr > 0");
-
-    unsafe {
-        // rdi, rsi, rdx, rcx, r8, r9
-        context_swap_cc(fromCtx.GetContext(), toCtx.GetContext(), from.task_wrapper_addr, to.task_wrapper_addr);
+    if !is_cc_active() {
+        unsafe {
+            context_swap(fromCtx.GetContext(), toCtx.GetContext(), 1, 0);
+        }
+    } else {
+        assert!(!HostAllocator::IsSharedHeapAddr(fromCtx as *const _ as u64));
+        assert!(!HostAllocator::IsSharedHeapAddr(toCtx as *const _ as u64));
+        unsafe {
+            context_swap_cc(
+                fromCtx.GetContext(),
+                toCtx.GetContext(),
+                from.GetTaskWrapper() as *const _ as u64,
+                to.GetTaskWrapper() as *const _ as u64,
+            );
+        }
     }
 
     //Task::Current().PerfGofrom(PerfType::Blocked);
@@ -401,7 +378,7 @@ impl HostSpace {
     #[cfg(feature = "cc")]
     pub fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
         if is_cc_active() {
-            let current = Task::Current().GetPrivateTaskId();
+            let current = Task::Current().GetTaskId();
 
             let qMsg = Box::new_in(
                 QMsg {
@@ -419,7 +396,7 @@ impl HostSpace {
             taskMgr::Wait();
             return qMsg.ret;
         } else {
-            let current = Task::Current().GetPrivateTaskId();
+            let current = Task::Current().GetTaskId();
 
             let qMsg = QMsg {
                 taskId: current,
@@ -456,7 +433,7 @@ impl HostSpace {
     #[cfg(feature = "cc")]
     pub fn HCall(msg: &mut Msg, lock: bool) -> u64 {
         if is_cc_active() {
-            let taskId = Task::Current().GetPrivateTaskId();
+            let taskId = Task::Current().GetTaskId();
             let mut event = Box::new_in(
                 QMsg {
                     taskId: taskId,
@@ -470,7 +447,7 @@ impl HostSpace {
             HyperCall64(HYPERCALL_HCALL, &mut *event as *const _ as u64, 0, 0, 0);
             return event.ret;
         } else {
-            let taskId = Task::Current().GetPrivateTaskId();
+            let taskId = Task::Current().GetTaskId();
 
             let mut event = QMsg {
                 taskId: taskId,

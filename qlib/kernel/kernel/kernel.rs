@@ -405,8 +405,6 @@ impl Kernel {
 
         let config = TaskConfig {
             TaskId: task.taskId,
-            #[cfg(feature = "cc")]
-            TaskWrapperId: task.taskWrapperId,
             Kernel: self.clone(),
             Parent: None,
             InheritParent: None,

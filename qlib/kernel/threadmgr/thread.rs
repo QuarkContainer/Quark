@@ -60,9 +60,6 @@ pub struct ThreadInternal {
     pub taskId: u64,
     //the task of the Task Stack
 
-    #[cfg(feature = "cc")]
-    pub taskIdWrapperId: u64,
-
     pub blocker: Blocker,
 
     pub k: Kernel,

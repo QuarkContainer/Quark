@@ -26,7 +26,7 @@ use crate::{amd64_def::{SegmentDescriptor, SEGMENT_DESCRIPTOR_ACCESS, SEGMENT_DE
             qlib::{self, backtracer, common::{CR0_AM, CR0_ET, CR0_NE, CR0_PE, CR0_PG, CR4_FSGSBASE,
             CR4_OSFXSR, CR4_OSXMMEXCPT, CR4_OSXSAVE, CR4_PAE, CR4_PGE, CR4_PSE, EFER_LMA, EFER_LME,
             EFER_NX, EFER_SCE, KCODE, KDATA, KERNEL_FLAGS_SET, TSS, UDATA}, kernel::{arch::tee::get_tee_type, asm::xgetbv},
-            linux_def::SysErr, task_mgr::TaskId}, CCMode, VMS};
+            linux_def::SysErr}, CCMode, VMS};
 use crate::{SHARE_SPACE, KERNEL_IO_THREAD, syncmgr::SyncMgr};
 use crate::runc::runtime::vm;
 use crate::arch::ConfCompExtension;
@@ -311,13 +311,8 @@ impl VirtCpu for X86_64VirtCpu {
                 let ret = SHARE_SPACE.scheduler.WaitVcpu(&SHARE_SPACE, id, true);
                 match ret {
                     //NOTE: _fn WaitVcpu()_ dependency
-                    #[cfg(not(feature = "cc"))]
                     Ok(taskId) => unsafe {
                         *(retAddr as *mut u64) = taskId as u64;
-                    },
-                    #[cfg(feature = "cc")]
-                    Ok(taskId) => unsafe {
-                        *(retAddr as *mut TaskId) = taskId;
                     },
                     Err(Error::Exit) => {
                         return Ok(true)

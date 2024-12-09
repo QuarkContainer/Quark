@@ -148,82 +148,30 @@ impl CPULocal {
         return Self::Myself().userStack.load(Ordering::SeqCst);
     }
 
-    #[cfg(not(feature = "cc"))]
     pub fn SetWaitTask(task: u64) {
         Self::Myself().waitTask.store(task, Ordering::SeqCst);
     }
 
-    #[cfg(feature = "cc")]
-    pub fn SetWaitTask(task: u64, task_wrapper: u64) {
-        Self::Myself().waitTask.store(task, Ordering::SeqCst);
-        Self::Myself().waitTaskWrapper.store(task_wrapper, Ordering::SeqCst);
-    }
-
-    #[cfg(not(feature = "cc"))]
     pub fn WaitTask() -> u64 {
         return Self::Myself().waitTask.load(Ordering::SeqCst);
     }
 
-    #[cfg(feature = "cc")]
-    pub fn WaitTask() -> (u64, u64) {
-        let task = Self::Myself().waitTask.load(Ordering::SeqCst);
-        let task_wrapper = Self::Myself().waitTaskWrapper.load(Ordering::SeqCst);
-
-        return (task, task_wrapper)
-    }
-
-    #[cfg(not(feature = "cc"))]
     pub fn SetCurrentTask(task: u64) {
         Self::Myself().currentTask.store(task, Ordering::SeqCst);
     }
 
-    #[cfg(feature = "cc")]
-    pub fn SetCurrentTask(task: u64, task_wrapper: u64) {
-        Self::Myself().currentTask.store(task, Ordering::SeqCst);
-        Self::Myself().currentTaskWrapper.store(task_wrapper, Ordering::SeqCst);
-    }
-
-    #[cfg(not(feature = "cc"))]
     pub fn CurrentTask() -> u64 {
         return Self::Myself().currentTask.load(Ordering::SeqCst);
     }
 
-    #[cfg(feature = "cc")]
-    pub fn CurrentTask() -> (u64, u64) {
-        let task = Self::Myself().currentTask.load(Ordering::SeqCst);
-        let task_wrapper =  Self::Myself().currentTaskWrapper.load(Ordering::SeqCst);
-        return (task, task_wrapper);
-    }
-
-    #[cfg(not(feature = "cc"))]
     pub fn SetPendingFreeStack(stack: u64) {
         Self::Myself()
             .pendingFreeStack
             .store(stack, Ordering::SeqCst);
     }
 
-    #[cfg(feature = "cc")]
-    pub fn SetPendingFreeStack(stack: u64, stack_wp: u64) {
-        Self::Myself()
-            .pendingFreeStack
-            .store(stack, Ordering::SeqCst);
-
-            Self::Myself()
-            .pendingFreeStackWapper
-            .store(stack_wp, Ordering::SeqCst);
-    }
-
-    #[cfg(not(feature = "cc"))]
     pub fn PendingFreeStack() -> u64 {
         return Self::Myself().pendingFreeStack.load(Ordering::SeqCst);
-    }
-
-    #[cfg(feature = "cc")]
-    pub fn PendingFreeStack() -> (u64, u64) {
-        let task =  Self::Myself().pendingFreeStack.load(Ordering::SeqCst);
-        let task_wp =  Self::Myself().pendingFreeStackWapper.load(Ordering::SeqCst);
-
-        return (task , task_wp)
     }
 
     pub fn CPUState() -> VcpuState {

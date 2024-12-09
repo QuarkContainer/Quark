@@ -47,13 +47,6 @@ pub struct CPULocal {
     pub pendingFreeStack: AtomicU64, //offset 40
     pub state: AtomicU64,            //offset 48
 
-    #[cfg(feature = "cc")]
-    pub currentTaskWrapper: AtomicU64,
-    #[cfg(feature = "cc")]
-    pub waitTaskWrapper: AtomicU64,
-    #[cfg(feature = "cc")]
-    pub pendingFreeStackWapper: AtomicU64,
-
     pub switchCount: AtomicU64,
     pub uringMsgCount: AtomicU64,
     pub tlbEpoch: AtomicU64,

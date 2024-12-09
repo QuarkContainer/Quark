@@ -2531,20 +2531,16 @@ impl HostSpace {
         }
     }
 
-    pub fn VcpuWait() -> TaskId {
+    pub fn VcpuWait() -> i64 {
         if is_cc_active() {
-            let mut next = Box::new_in(TaskId::New(0, 0), GUEST_HOST_SHARED_ALLOCATOR);
-            let next_ptr = &mut *next as *mut _;
-            HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, next_ptr as u64, 0);
-            assert!(next.PrivateTaskAddr() != 0);
-            assert!(next.SharedTaskAddr() != 0);
-            return *next;
+            let mut ret = Box::new_in(0i64, GUEST_HOST_SHARED_ALLOCATOR);
+            let ret_ptr = &mut *ret as *mut _;
+            HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, ret_ptr as u64, 0);
+            return *ret;
         } else {
-            let mut next: TaskId = TaskId::New(0, 0);
-            HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, &mut next as *mut _ as u64, 0);
-            assert!(next.PrivateTaskAddr() != 0);
-            assert!(next.SharedTaskAddr() != 0);
-            return next;
+            let mut ret: i64 = 0;
+            HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, &mut ret as *mut _ as u64, 0);
+            return ret;
         }
     }
     

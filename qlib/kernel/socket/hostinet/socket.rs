@@ -1873,9 +1873,9 @@ impl SockOperations for SocketOperations {
         }
         */
 
-        /*defer!(task.GetMut().iovs.clear());
-        task.V2PIovs(dsts, true, &mut task.GetMut().iovs)?;
-        let iovs = &mut task.GetMut().iovs;*/
+        /*defer!(task.GetPtr().iovs.clear());
+        task.V2PIovs(dsts, true, &mut task.GetPtr().iovs)?;
+        let iovs = &mut task.GetPtr().iovs;*/
 
         let size = IoVec::NumBytes(dsts);
         let buf = DataBuff::New(size);

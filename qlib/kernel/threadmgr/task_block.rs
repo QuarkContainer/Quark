@@ -23,8 +23,6 @@ use super::super::kernel::timer::timer::*;
 use super::super::kernel::timer::*;
 use super::super::kernel::waiter::*;
 use super::super::threadmgr::thread::*;
-#[cfg(feature = "cc")]
-use crate::qlib::TaskId;
 
 impl Thread {
     pub fn Interrupted(&self, clear: bool) -> bool {
@@ -132,41 +130,7 @@ impl Blocker {
         self.realBlockTimer.Destroy();
     }
 
-    #[cfg(not(feature = "cc"))]
     pub fn New(taskId: u64) -> Self {
-        let waiter = Waiter::New(taskId);
-
-        let timerEntry = waiter.NewWaitEntry(Waiter::TIMER_WAITID, 1);
-        let listener = WaitEntryListener::New(&timerEntry);
-
-        let interruptEntry = waiter.NewWaitEntry(Waiter::INTERRUPT_WAITID, 1);
-        let generalEntry = waiter.NewWaitEntry(Waiter::GENERAL_WAITID, 0);
-
-        let monoClock = MONOTONIC_CLOCK.clone();
-        let monoTimer = Timer::New(
-            &monoClock,
-            TimerListener::WaitEntryListener(listener.clone()),
-        );
-
-        let realClock = REALTIME_CLOCK.clone();
-        let realTimer = Timer::New(
-            &realClock,
-            TimerListener::WaitEntryListener(listener.clone()),
-        );
-
-        return Self {
-            waiter: waiter,
-            timerEntry: timerEntry,
-            timerListner: listener,
-            realBlockTimer: realTimer,
-            monoBlockTimer: monoTimer,
-            interruptEntry: interruptEntry,
-            generalEntry: generalEntry,
-        };
-    }
-
-    #[cfg(feature = "cc")]
-    pub fn New(taskId: TaskId) -> Self {
         let waiter = Waiter::New(taskId);
 
         let timerEntry = waiter.NewWaitEntry(Waiter::TIMER_WAITID, 1);

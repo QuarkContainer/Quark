@@ -175,8 +175,6 @@ impl TaskSet {
             id: 0,
             name: "".to_string(),
             taskId: cfg.TaskId,
-            #[cfg(feature = "cc")]
-            taskIdWrapperId: cfg.TaskWrapperId,
             blocker: cfg.Blocker.clone(),
             k: kernel.clone(),
             memoryMgr: cfg.MemoryMgr.clone(),

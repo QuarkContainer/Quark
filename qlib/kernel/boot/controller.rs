@@ -198,10 +198,7 @@ pub fn SignalHandler(_: *const u8) {
         }
     }
 
-    #[cfg(not(feature = "cc"))]
     CPULocal::SetPendingFreeStack(Task::Current().taskId);
-    #[cfg(feature = "cc")]
-    CPULocal::SetPendingFreeStack(Task::Current().taskId, Task::Current().taskWrapperId);
     super::super::taskMgr::SwitchToNewTask();
 }
 
@@ -290,10 +287,7 @@ pub fn ControlMsgHandler(fd: *const u8) {
     }
 
     // free curent task in the waitfn context
-    #[cfg(not(feature = "cc"))]
     CPULocal::SetPendingFreeStack(Task::Current().taskId);
-    #[cfg(feature = "cc")]
-    CPULocal::SetPendingFreeStack(Task::Current().taskId, Task::Current().taskWrapperId);
     super::super::taskMgr::SwitchToNewTask();
 }
 

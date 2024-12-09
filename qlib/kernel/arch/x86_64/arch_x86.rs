@@ -15,7 +15,6 @@
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use core::sync::atomic::AtomicUsize;
-#[cfg(not(feature = "cc"))]
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
@@ -339,7 +338,6 @@ pub struct X86Context {
     pub rbx: u64,
     pub rbp: u64,
     pub rdi: u64,
-    #[cfg(not(feature = "cc"))]
     pub ready: AtomicU64,
     pub fs: u64,
 }
@@ -355,7 +353,6 @@ impl X86Context {
             rbx: 0,
             rbp: 0,
             rdi: 0,
-            #[cfg(not(feature = "cc"))]
             ready: AtomicU64::new(1),
             fs: 0,
         };
@@ -381,12 +378,10 @@ impl X86Context {
         self.rdi = para;
     }
 
-    #[cfg(not(feature = "cc"))]
     pub fn set_ready(&self, val: u64) {
         self.ready.store(val, Ordering::Release);
     }
 
-    #[cfg(not(feature = "cc"))]
     pub fn get_ready(&self) -> u64 {
         return self.ready.load(Ordering::Acquire);
     }

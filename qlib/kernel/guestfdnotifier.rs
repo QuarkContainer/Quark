@@ -36,7 +36,6 @@ pub fn Notify(fd: i32, mask: EventMask) {
 }
 
 impl IOMgr {
-    #[cfg(not(feature = "cc"))]
     pub fn VcpuWait(&self) -> u64 {
         let ret = HostSpace::VcpuWait();
         if ret < 0 {

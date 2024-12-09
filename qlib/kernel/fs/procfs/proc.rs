@@ -53,8 +53,6 @@ use super::mounts::*;
 use super::net::*;
 use super::stat::*;
 use super::uptime::*;
-#[cfg(feature = "cc")]
-use crate::IS_GUEST;
 
 pub struct ProcNodeInternal {
     pub kernel: Kernel,
@@ -90,16 +88,7 @@ impl DirDataNodeTrait for ProcNode {
             Some(t) => t,
         };
 
-        let otherTask;
-        #[cfg(feature = "cc")]{
-            assert!(IS_GUEST == true, "Lookup is called by the host");
-        let other_tid = otherThread.lock().taskId;
-        otherTask = TaskId::New(other_tid, 0).GetPrivateTask();
-        }
-
-        #[cfg(not(feature = "cc"))]{
-            otherTask = TaskId::New(otherThread.lock().taskId).GetTask();
-        }
+        let otherTask = TaskId::New(otherThread.lock().taskId).GetTask();
 
         let ms = dir.lock().MountSource.clone();
         let td = self.NewTaskDir(&otherTask, &otherThread, &ms, true);

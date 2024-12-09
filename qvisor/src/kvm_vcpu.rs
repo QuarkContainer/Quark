@@ -16,8 +16,6 @@ use super::qlib::ShareSpace;
 use super::vmspace::VMSpace;
 use super::FD_NOTIFIER;
 use super::VMS;
-#[cfg(not(feature = "cc"))]
-use alloc::alloc::alloc;
 use kvm_ioctls::VcpuFd;
 use core::alloc::Layout;
 use core::slice;
@@ -28,9 +26,6 @@ use spin::Mutex;
 use std::os::unix::io::AsRawFd;
 use std::sync::atomic::{fence, Ordering};
 use std::sync::mpsc::Sender;
-#[cfg(feature = "cc")]
-use crate::qlib::task_mgr::TaskId;
-#[cfg(feature = "cc")]
 use crate::qlib::kernel::Kernel::IDENTICAL_MAPPING;
 
 pub struct HostPageAllocator {
@@ -157,18 +152,10 @@ impl KVMVcpu {
                         qmsg.ret = Self::qCall(qmsg.msg);
                     }
 
-                    #[cfg(not(feature = "cc"))]
                     if currTaskId.Addr() != 0 {
                         sharespace
                             .scheduler
-                            .ScheduleQ(currTaskId, currTaskId.Queue(), true)
-                    }
-
-                    #[cfg(feature = "cc")]
-                    if currTaskId.PrivateTaskAddr() != 0 {
-                        sharespace
-                            .scheduler
-                            .ScheduleQ(currTaskId, currTaskId.Queue(), true)
+                            .ScheduleQ(currTaskId, currTaskId.QueueId(), true)
                     }
                 }
                 Some(msg) => {
@@ -354,13 +341,7 @@ impl Scheduler {
         return (prev & mask) != 0;
     }
 
-    #[cfg(not(feature = "cc"))]
     pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, block: bool) -> Result<u64> {
-        return self.VcpuArr[vcpuId].VcpuWait(sharespace, block);
-    }
-
-    #[cfg(feature = "cc")]
-    pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, block: bool) -> Result<TaskId> {
         return self.VcpuArr[vcpuId].VcpuWait(sharespace, block);
     }
 }
@@ -451,7 +432,6 @@ impl CPULocal {
         return count;
     }
 
-    #[cfg(not(feature = "cc"))]
     pub fn Process(&self, sharespace: &ShareSpace) -> Option<u64> {
         match sharespace.scheduler.GetNext() {
             None => (),
@@ -465,21 +445,6 @@ impl CPULocal {
         return None;
     }
 
-    #[cfg(feature = "cc")]
-    pub fn Process(&self, sharespace: &ShareSpace) -> Option<TaskId> {
-        match sharespace.scheduler.GetNext() {
-            None => (),
-            Some(newTask) => return Some(newTask),
-        }
-
-        if sharespace.AQHostInputContainsItem() {
-            return Some(TaskId::New(0, 0));
-        }
-
-        return None;
-    }
-
-    #[cfg(not(feature = "cc"))]
     pub fn VcpuWait(&self, sharespace: &ShareSpace, block: bool) -> Result<u64> {
         let mut events = [libc::epoll_event { events: 0, u64: 0 }; 2];
 
@@ -509,64 +474,6 @@ impl CPULocal {
                 match sharespace.scheduler.GetNext() {
                     None => (),
                     Some(newTask) => return Ok(newTask.data),
-                }
-
-                //Self::ProcessOnce(sharespace);
-            }
-
-            super::GLOBAL_ALLOCATOR.Clear();
-
-            let _nfds = unsafe { libc::epoll_wait(self.epollfd, &mut events[0], 2, time) };
-           
-            {
-                let mut data: u64 = 0;
-                let ret = unsafe {
-                    libc::read(self.eventfd, &mut data as *mut _ as *mut libc::c_void, 8)
-                };
-
-                if ret < 0 && errno::errno().0 != SysErr::EINTR {
-                    panic!(
-                        "Vcppu::Wakeup fail... eventfd is {}, errno is {}",
-                        self.eventfd,
-                        errno::errno().0
-                    );
-                }
-            }
-        }
-
-        return Err(Error::Exit);
-    }
-
-    #[cfg(feature = "cc")]
-    pub fn VcpuWait(&self, sharespace: &ShareSpace, block: bool) -> Result<TaskId> {
-        let mut events = [libc::epoll_event { events: 0, u64: 0 }; 2];
-
-        let time = if block { -1 } else { 0 };
-
-        sharespace.scheduler.VcpuWaitMaskSet(self.vcpuId);
-        defer!(sharespace.scheduler.VcpuWaitMaskClear(self.vcpuId););
-
-        match self.Process(sharespace) {
-            None => (),
-            Some(newTask) => return Ok(newTask),
-        }
-
-        super::GLOBAL_ALLOCATOR.Clear();
-        self.ToWaiting(sharespace);
-        defer!(self.ToSearch(sharespace););
-
-        while !sharespace.Shutdown() {
-            match self.Process(sharespace) {
-                None => (),
-                Some(newTask) => {
-                    return Ok(newTask);
-                }
-            }
-
-            if sharespace.scheduler.VcpuWaitMaskSet(self.vcpuId) {
-                match sharespace.scheduler.GetNext() {
-                    None => (),
-                    Some(newTask) => return Ok(newTask),
                 }
 
                 //Self::ProcessOnce(sharespace);

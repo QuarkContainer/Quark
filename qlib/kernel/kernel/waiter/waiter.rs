@@ -26,9 +26,7 @@ use super::*;
 
 pub type WaiterID = u32;
 
-#[cfg(feature = "cc")]
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
-#[cfg(feature = "cc")]
 use crate::GuestHostSharedAllocator;
 
 #[derive(Copy, Clone, Debug)]
@@ -47,32 +45,14 @@ impl Default for WaiterInternal {
             mask: 0,
             idCnt: 0,
             state: WaitState::default(),
-            #[cfg(not(feature = "cc"))]
             taskId: TaskId::New(0),
-            #[cfg(feature = "cc")]
-            taskId: TaskId::New(0, 0),
         };
     }
 }
 
-#[cfg(not(feature = "cc"))]
-#[derive(Clone, Default)]
-pub struct Waiter(Arc<QMutex<WaiterInternal>>);
-
-#[cfg(not(feature = "cc"))]
-impl Deref for Waiter {
-    type Target = Arc<QMutex<WaiterInternal>>;
-
-    fn deref(&self) -> &Arc<QMutex<WaiterInternal>> {
-        &self.0
-    }
-}
-
-#[cfg(feature = "cc")]
 #[derive(Clone)]
 pub struct Waiter(Arc<QMutex<WaiterInternal>, GuestHostSharedAllocator>);
 
-#[cfg(feature = "cc")]
 impl Default for Waiter {
     fn default() -> Self {
         return Waiter(Arc::new_in(
@@ -82,7 +62,6 @@ impl Default for Waiter {
     }
 }
 
-#[cfg(feature = "cc")]
 impl Deref for Waiter {
     type Target = Arc<QMutex<WaiterInternal>, GuestHostSharedAllocator>;
 
@@ -92,20 +71,9 @@ impl Deref for Waiter {
 }
 
 impl Waiter {
-    #[cfg(not(feature = "cc"))]
     pub fn New(taskId: u64) -> Self {
         let internal = WaiterInternal {
             taskId: TaskId::New(taskId),
-            ..Default::default()
-        };
-
-        return Self(Arc::new(QMutex::new(internal)));
-    }
-
-    #[cfg(feature = "cc")]
-    pub fn New(taskId: TaskId) -> Self {
-        let internal = WaiterInternal {
-            taskId: taskId,
             ..Default::default()
         };
 

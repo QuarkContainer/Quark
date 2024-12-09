@@ -64,19 +64,10 @@ pub fn PrintPrefix() -> String {
         0
     };
 
-    #[cfg(not(feature = "cc"))]
     return format!(
         "[{}/{:x}|{}]",
         CPULocal::CpuId(),
-        Task::TaskId().Addr(),
-        now
-    );
-
-    #[cfg (feature = "cc")]
-    return format!(
-        "[{}/{:x}|{}]",
-        CPULocal::CpuId(),
-        Task::PrivateTaskID(),
+        Task::TaskAddr(),
         now
     );
 }

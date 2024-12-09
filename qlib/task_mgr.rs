@@ -26,25 +26,13 @@ use core::sync::atomic::Ordering;
 
 use super::vcpu_mgr::*;
 
-#[cfg(feature = "cc")]
-use crate::IS_GUEST;
-#[cfg(feature = "cc")]
-use crate::qlib::kernel::task::{TaskWrapper, Task};
+use crate::qlib::kernel::arch::tee::is_cc_active;
 
-#[cfg(not(feature = "cc"))]
 #[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub struct TaskId {
     pub data: u64,
 }
 
-#[cfg(feature = "cc")]
-#[derive(Debug, Copy, Clone, Default, PartialEq)]
-pub struct TaskId {
-    pub task_addr: u64,
-    pub task_wrapper_addr: u64,
-}
-
-#[cfg(not(feature = "cc"))]
 impl TaskId {
     #[inline]
     pub const fn New(addr: u64) -> Self {
@@ -57,46 +45,29 @@ impl TaskId {
     }
 
     #[inline]
-    pub fn Queue(&self) -> u64 {
-        return self.GetTask().QueueId() as u64;
-    }
-}
-
-#[cfg(feature = "cc")]
-impl TaskId {
-    #[inline]
-    pub const fn New(task_addr: u64, task_wrapper_addr: u64) -> Self {
-        return Self {
-                    task_addr,
-                    task_wrapper_addr
-                };
+    pub fn QueueId(&self) -> u64 {
+        if !is_cc_active(){
+            return self.GetTask().QueueId() as u64;
+        } else {
+            return self.GetTaskWrapper().QueueId() as u64;
+        }
     }
 
-    #[inline]
-    pub fn PrivateTaskAddr(&self) -> u64 {
-        return self.task_addr;
+    pub fn SetQueueId(&self, queueId: usize) {
+        if !is_cc_active(){
+            return self.GetTask().SetQueueId(queueId);
+        } else {
+            return self.GetTaskWrapper().SetQueueId(queueId)
+        }
     }
 
     #[inline]
-    pub fn SharedTaskAddr(&self) -> u64 {
-        return self.task_wrapper_addr;
-    }
-
-    #[inline]
-    pub fn GetPrivateTask(&self) -> &'static mut Task {
-        assert!(IS_GUEST == true, "GetPrivateTask is called from host");
-
-        return unsafe { &mut *(self.PrivateTaskAddr() as *mut Task) };
-    }
-
-    #[inline]
-    pub fn GetSharedTask(&self) -> &'static mut TaskWrapper {
-        return unsafe { &mut *(self.SharedTaskAddr() as *mut TaskWrapper) };
-    }
-
-    #[inline]
-    pub fn Queue(&self) -> u64 {
-        return self.GetSharedTask().queueId.load(Ordering::Relaxed) as u64;
+    pub fn Ready(&self) -> u64 {
+        if !is_cc_active(){
+            return self.GetTask().Ready() as u64;
+        } else {
+            return self.GetTaskWrapper().Ready() as u64;
+        }
     }
 }
 
@@ -265,14 +236,8 @@ pub struct TaskQueueIntern {
 impl Default for TaskQueueIntern {
     fn default() -> Self {
         return Self {
-            #[cfg(not(feature = "cc"))]
             workingTask: TaskId::New(0),
-            #[cfg(feature = "cc")]
-            workingTask: TaskId::New(0, 0),
             workingTaskReady: false,
-            #[cfg(not(feature = "cc"))]
-            queue: VecDeque::with_capacity(8),
-            #[cfg(feature = "cc")]
             queue: VecDeque::with_capacity(512),
         };
     }
@@ -322,13 +287,7 @@ impl TaskQueue {
             data.workingTaskReady = false;
             return Some(data.workingTask);
         } else {
-            #[cfg(not(feature = "cc"))]{
-                data.workingTask = TaskId::New(0);
-            }
-
-            #[cfg(feature = "cc")]{
-                data.workingTask = TaskId::New(0, 0);
-            }
+            data.workingTask = TaskId::New(0);
             return None;
         }
     }
@@ -359,25 +318,14 @@ impl TaskQueue {
                     match data.queue.pop_front() {
                         None => panic!("TaskQueue none task"),
                         Some(taskId) => {
-                            #[cfg(not(feature = "cc"))]
-                            {
-                                if taskId.GetTask().Ready() != 0 {
-                                    self.queueSize.fetch_sub(1, Ordering::Release);
-                                    return Some(taskId);
-                                }
-                                data.queue.push_back(taskId);
+                            if taskId.Ready() != 0 {
+                                self.queueSize.fetch_sub(1, Ordering::Release);
+                                return Some(taskId);
                             }
-                            #[cfg(feature = "cc")]
-                            {
-                                if taskId.GetSharedTask().Ready() != 0 {
-                                    self.queueSize.fetch_sub(1, Ordering::Release);
-                                    return Some(taskId);
-                                }
-                                if data.queue.len() == data.queue.capacity() {
-                                    panic!("queue is full");
-                                } else {
-                                    data.queue.push_back(taskId);
-                                }
+                            if data.queue.len() == data.queue.capacity() {
+                                panic!("queue is full");
+                            } else {
+                                data.queue.push_back(taskId);
                             }
                         }
                     }
@@ -398,9 +346,6 @@ impl TaskQueue {
             return false;
         }
 
-        #[cfg(not(feature = "cc"))]
-        data.queue.push_back(task);
-        #[cfg(feature = "cc")]
         if data.queue.len() == data.queue.capacity()
         {
             panic!("queue is full");

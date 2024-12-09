@@ -303,10 +303,8 @@ pub fn Load(
     let usersp = SetupUserStack(
         task, &mut stack, &loaded, filename, &argv, envv, extraAuxv, vdsoAddr,
     )?;
-    #[cfg(not(feature = "cc"))]
-    let kernelsp = Task::TaskId().Addr() + MemoryDef::DEFAULT_STACK_SIZE - 0x10;
-    #[cfg(feature = "cc")]
-    let kernelsp = Task::PrivateTaskID() + MemoryDef::DEFAULT_STACK_SIZE - 0x10;
+
+    let kernelsp = Task::TaskAddr() + MemoryDef::DEFAULT_STACK_SIZE - 0x10;
     let entry = loaded.entry;
 
     return Ok((entry, usersp, kernelsp));

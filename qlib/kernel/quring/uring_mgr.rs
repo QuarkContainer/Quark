@@ -510,10 +510,7 @@ impl QUring {
     #[cfg(feature = "cc")]
     pub fn UCall(&self, task: &Task, msg: UringOp) -> i64 {
 
-        let taskID = task.GetPrivateTaskId();
-
-        assert!(taskID.task_addr != 0);
-        assert!(taskID.task_wrapper_addr != 0);
+        let taskID = task.GetTaskId();
 
         let call = UringCall {
             taskId: taskID,

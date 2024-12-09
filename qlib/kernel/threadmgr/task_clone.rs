@@ -16,9 +16,9 @@ use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use core::ptr;
-#[cfg(not(feature = "cc"))]
 use core::sync::atomic::AtomicUsize;
 
+use crate::qlib::kernel::arch::tee::is_cc_active;
 use super::super::super::super::kernel_def::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
@@ -230,8 +230,7 @@ impl CloneOptions {
 }
 
 impl Thread {
-    #[cfg(not(feature = "cc"))]
-    pub fn Clone(&self, opts: &CloneOptions, stackAddr: u64) -> Result<Self> {
+    pub fn Clone(&self, opts: &CloneOptions, taskid: u64) -> Result<Self> {
         let pidns = self.PIDNamespace();
         let ts = pidns.Owner();
         let _wl = ts.WriteLock();
@@ -318,7 +317,7 @@ impl Thread {
         }
 
         let mut cfg = TaskConfig {
-            TaskId: stackAddr,
+            TaskId: taskid,
             Kernel: t.k.clone(),
             Parent: None,
             InheritParent: None,
@@ -333,150 +332,7 @@ impl Thread {
             AllowedCPUMask: t.allowedCPUMask.Copy(),
             UTSNamespace: utsns,
             IPCNamespace: ipcns,
-            Blocker: Blocker::New(stackAddr),
-            ContainerID: t.containerID.to_string(),
-        };
-
-        if opts.sharingOption.NewThreadGroup {
-            cfg.Parent = Some(self.clone());
-        } else {
-            cfg.InheritParent = Some(self.clone())
-        }
-
-        if opts.sharingOption.NewNetworkNamespace {
-            cfg.NetworkNamespaced = true;
-        }
-
-        let pidns = tg.PIDNamespace();
-        let ts = pidns.lock().owner.clone();
-
-        let name = t.name.to_string();
-        core::mem::drop(t);
-        let kernel = self.lock().k.clone();
-        let nt = ts.NewTask(&cfg, false, &kernel)?;
-
-        nt.lock().name = name;
-
-        if userns != creds.lock().UserNamespace.clone() {
-            nt.SetUserNamespace(&userns)
-                .expect("Task.Clone: SetUserNamespace failed: ")
-        }
-
-        if opts.Vfork {
-            nt.lock().vforkParent = vforkParent;
-            self.MaybeBeginVforkStop(&nt);
-        }
-
-        return Ok(nt);
-    }
-
-    #[cfg(feature = "cc")]
-    pub fn Clone(&self, opts: &CloneOptions, stackAddr: u64, taskWrapperAddr: u64) -> Result<Self> {
-        let pidns = self.PIDNamespace();
-        let ts = pidns.Owner();
-        let _wl = ts.WriteLock();
-
-        let t = self.lock();
-        let creds = t.creds.clone();
-        let mut userns = creds.lock().UserNamespace.clone();
-
-        if opts.sharingOption.NewUserNamespace {
-            if t.IsChrooted() {
-                return Err(Error::SysError(SysErr::EPERM));
-            }
-
-            userns = creds.NewChildUserNamespace()?;
-        }
-
-        if opts.sharingOption.NewPIDNamespace
-            || opts.sharingOption.NewNetworkNamespace
-            || opts.sharingOption.NewUTSNamespace
-                && !creds.HasCapabilityIn(Capability::CAP_SYS_ADMIN, &userns)
-        {
-            return Err(Error::SysError(SysErr::EPERM));
-        }
-
-        let mut utsns = t.utsns.clone();
-        if opts.sharingOption.NewUTSNamespace {
-            let tmp = utsns.Fork(&userns);
-            utsns = tmp;
-        }
-
-        let mut ipcns = t.ipcns.clone();
-        if opts.sharingOption.NewIPCNamespace {
-            ipcns = IPCNamespace::New(&userns);
-        }
-
-        let mut memoryMgr = t.memoryMgr.clone();
-        if opts.sharingOption.NewAddressSpace {
-            let newMM = memoryMgr.Fork()?;
-            memoryMgr = newMM;
-        }
-
-        let vforkParent = if opts.Vfork { Some(self.clone()) } else { None };
-
-        let mut fsc = t.fsc.clone();
-        if opts.sharingOption.NewFSContext {
-            let temp = fsc.Fork();
-            fsc = temp;
-        }
-
-        let mut fdTbl = t.fdTbl.clone();
-        if opts.sharingOption.NewFiles {
-            let newFDTbl = fdTbl.Fork(i32::MAX);
-            fdTbl = newFDTbl;
-        }
-
-        let pidns = t.tg.PIDNamespace();
-
-        if t.childPIDNamespace.is_some() {
-            panic!("doesn't support childPIDNamespace********************");
-            //pidns = t.childPIDNamespace.clone().unwrap();
-        } else if opts.sharingOption.NewPIDNamespace {
-            panic!("doesn't support NewPIDNamespace********************");
-            //pidns = pidns.NewChild(&userns);
-        }
-
-        let mut tg = t.tg.clone();
-        if opts.sharingOption.NewThreadGroup {
-            let mut sh = tg.lock().signalHandlers.clone();
-            if opts.sharingOption.NewSignalHandlers {
-                sh = sh.Fork();
-            }
-
-            let kernel = t.k.clone();
-            let limit = tg.lock().limits.clone();
-            let cid = tg.lock().containerID.clone();
-            tg = kernel.newThreadGroup(
-                &pidns,
-                &sh,
-                opts.sharingOption.TerminationSignal.clone(),
-                &limit.GetCopy(),
-                &cid,
-                &None,
-            );
-        }
-
-        let blocker = Blocker::New(TaskId::New(stackAddr, taskWrapperAddr));
-
-        let mut cfg = TaskConfig {
-            TaskId: stackAddr,
-            TaskWrapperId: taskWrapperAddr,
-            Kernel: t.k.clone(),
-            Parent: None,
-            InheritParent: None,
-            ThreadGroup: tg.clone(),
-            SignalMask: t.signalMask.clone(),
-            MemoryMgr: memoryMgr,
-            FSContext: fsc,
-            Fdtbl: fdTbl,
-            Credentials: creds.clone(),
-            Niceness: t.niceness,
-            NetworkNamespaced: false,
-            AllowedCPUMask: t.allowedCPUMask.Copy(),
-            UTSNamespace: utsns,
-            IPCNamespace: ipcns,
-            Blocker: blocker,
+            Blocker: Blocker::New(taskid),
             ContainerID: t.containerID.to_string(),
         };
 
@@ -599,14 +455,10 @@ impl Task {
             cTask.context.set_tls(tls);
         }
 
-        #[cfg(not(feature = "cc"))]
         taskMgr::NewTask(TaskId::New(cTask.taskId));
-        #[cfg(feature = "cc")]
-        taskMgr::NewTask(TaskId::New(cTask.taskId, cTask.taskWrapperId));
         return Ok(pid);
     }
 
-    #[cfg(not(feature = "cc"))]
     pub fn CloneVM(&self, opts: &CloneOptions, userSp: u64) -> Result<(i32, *mut Self)> {
         //let pid = self.GetProcessId();
         let cPid;
@@ -617,7 +469,27 @@ impl Task {
         let task = Task::Current();
         let thread = task.Thread();
 
-        let nt = thread.Clone(&opts, s_ptr as u64)?;
+        let mut taskId = s_ptr as u64;
+        if is_cc_active() {
+            let tw_size  = core::mem::size_of::<TaskWrapper>();
+            let tw_ptr = unsafe {
+                crate::GLOBAL_ALLOCATOR.AllocSharedBuf(tw_size, 2)
+            };
+
+            let t_wp = TaskWrapper::New(s_ptr as u64);
+            let t_wp_ptr = tw_ptr as *mut TaskWrapper;
+            unsafe {
+                ptr::write(
+                    t_wp_ptr,
+                    t_wp
+                );
+            }
+            taskId = t_wp_ptr as u64;
+        }
+        
+
+
+        let nt = thread.Clone(&opts, taskId as u64)?;
 
         unsafe {
             let mm = nt.lock().memoryMgr.clone();
@@ -654,7 +526,7 @@ impl Task {
                 taskPtr,
                 Self {
                     context: Context::New(),
-                    taskId: s_ptr as u64,
+                    taskId: taskId as u64,
                     mm: mm,
                     tidInfo: Default::default(),
                     isWaitThread: false,
@@ -679,109 +551,6 @@ impl Task {
                     savefpsate: false,
                     archfpstate:  Some(Default::default()),
                     queueId: AtomicUsize::new(0),
-                    guard: Guard::default(),
-                },
-            );
-        }
-
-        let curr = Self::Current();
-        let new = unsafe { &mut *taskPtr };
-
-        //new.PerfGoto(PerfType::Blocked);
-        //new.PerfGoto(PerfType::User);
-        CreateCloneTask(curr, new, userSp);
-
-        return Ok((cPid, taskPtr));
-    }
-
-    #[cfg(feature = "cc")]
-    pub fn CloneVM(&self, opts: &CloneOptions, userSp: u64) -> Result<(i32, *mut Self)> {
-        //let pid = self.GetProcessId();
-        let cPid;
-
-        let s_ptr = KERNEL_STACK_ALLOCATOR.Allocate().unwrap() as *mut u8;
-        let taskPtr = s_ptr as *mut Self;
-
-        let task = Task::Current();
-        let thread = task.Thread();
-
-        let tw_size  = core::mem::size_of::<TaskWrapper>();
-        let tw_ptr = unsafe {
-            crate::GLOBAL_ALLOCATOR.AllocSharedBuf(tw_size, 2)
-        };
-        debug!("CloneVM fs:{:x}",task.context.get_tls());
-        let t_wp = TaskWrapper::New(s_ptr as u64);
-        let t_wp_ptr = tw_ptr as *mut TaskWrapper;
-        unsafe {
-            ptr::write(
-                t_wp_ptr,
-                t_wp
-            );
-        }
-
-
-        let nt = thread.Clone(&opts, s_ptr as u64, t_wp_ptr as u64)?;
-
-        unsafe {
-            let mm = nt.lock().memoryMgr.clone();
-            let creds = nt.lock().creds.clone();
-            let utsns = nt.lock().utsns.clone();
-            let ipcns = nt.lock().ipcns.clone();
-            let fsContext = nt.lock().fsc.clone();
-            let fdTbl = nt.lock().fdTbl.clone();
-            let blocker = nt.lock().blocker.clone();
-            let sched = nt.lock().sched.clone();
-
-            let tg = nt.lock().tg.clone();
-            tg.lock().liveThreads.Add(1);
-            let pidns = tg.PIDNamespace();
-            let ntid = pidns.IDOfTask(&nt);
-
-            let futexMgr = if opts.sharingOption.NewAddressSpace {
-                task.futexMgr.Fork()
-            } else {
-                task.futexMgr.clone()
-            };
-
-            cPid = ntid;
-
-            let signalStack = if opts.sharingOption.NewAddressSpace || opts.Vfork {
-                self.CloneSignalStack()
-            } else {
-                SignalStack::default()
-            };
-
-            let ioUsage = nt.lock().ioUsage.clone();
-
-            ptr::write_volatile(
-                taskPtr,
-                Self {
-                    context: Context::New(),
-                    taskId: s_ptr as u64,
-                    taskWrapperId: t_wp_ptr as u64,
-                    mm: mm,
-                    tidInfo: Default::default(),
-                    isWaitThread: false,
-                    signalStack: signalStack,
-                    mountNS: task.mountNS.clone(),
-                    // Arc::new(QMutex::new(Default::default())),
-                    creds: creds,
-                    utsns: utsns,
-                    ipcns: ipcns,
-                    fsContext: fsContext,
-                    fdTbl: fdTbl,
-                    blocker: blocker,
-                    //Blocker::New(s_ptr as u64),
-                    thread: Some(nt.clone()),
-                    haveSyscallReturn: false,
-                    syscallRestartBlock: None,
-                    futexMgr: futexMgr,
-                    ioUsage: ioUsage,
-                    sched: sched,
-                    exiting: false,
-                    perfcounters: None, //Some(THREAD_COUNTS.lock().NewCounters()),
-                    savefpsate: false,
-                    archfpstate:  Some(Default::default()),
                     guard: Guard::default(),
                 },
             );
@@ -913,10 +682,8 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
             from -= 8;
             to -= 8;
         }
-        #[cfg(not(feature = "cc"))]
+
         toTask.SetReady(1);
-        #[cfg(feature = "cc")]
-        toTask.GetSharedTask().SetReady(1);
         toTask.context.set_tls(fromTask.context.get_tls());
         toTask.context.set_sp(toTask.GetPtRegs() as *const _ as u64 - 8);
         toTask.context.set_para(userSp);

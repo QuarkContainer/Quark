@@ -21,7 +21,7 @@ use libc::gettid;
 use crate::{arch::{tee::{NonConf, emulcc::EmulCc}, ConfCompExtension, VirtCpu},
             kvm_vcpu::{KVMVcpuState, SetExitSignal}, qlib::{self, common::Error,
             linux::time::Timespec, linux_def::{MemoryDef, SysErr}, qmsg::qcall::{Print, QMsg},
-            GetTimeCall, VcpuFeq, config::CCMode, task_mgr::TaskId}, runc::runtime::vm, syncmgr::SyncMgr, KVMVcpu, GLOCK,
+            GetTimeCall, VcpuFeq, config::CCMode}, runc::runtime::vm, syncmgr::SyncMgr, KVMVcpu, GLOCK,
             KERNEL_IO_THREAD, SHARE_SPACE, VMS};
 use super::vcpu::kvm_vcpu::*;
 use std::{sync::atomic::Ordering, vec::Vec, os::fd::RawFd};
@@ -289,13 +289,8 @@ impl VirtCpu for Aarch64VirtCpu {
                 let retAddr = arg2;
                 let ret = SHARE_SPACE.scheduler.WaitVcpu(&SHARE_SPACE, id, true);
                 match ret {
-                    #[cfg(not(feature = "cc"))]
                     Ok(taskId) => unsafe {
                         *(retAddr as *mut u64) = taskId as u64;
-                    },
-                    #[cfg(feature = "cc")]
-                    Ok(taskId) => unsafe {
-                        *(retAddr as *mut TaskId) = taskId;
                     },
                     Err(Error::Exit) => {
                         return Ok(true)
