@@ -259,9 +259,9 @@ impl Thread {
     //
     // Preconditions: The caller must be running on the task goroutine.
     pub fn PrepareExit(&self, es: ExitStatus) {
-        let mut t = self.lock();
-        let lock = t.tg.lock().signalLock.clone();
+        let lock = self.lock().tg.lock().signalLock.clone();
         let _s = lock.lock();
+        let mut t = self.lock();
         t.exitStatus = es;
     }
 
