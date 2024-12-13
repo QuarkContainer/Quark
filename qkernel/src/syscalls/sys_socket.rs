@@ -13,7 +13,10 @@
 // limitations under the License.
 
 use alloc::vec::Vec;
+use alloc::boxed::Box;
 
+use crate::GuestHostSharedAllocator;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::socket::socket::*;
@@ -122,14 +125,14 @@ pub fn SysSocketPair(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     return Ok(0);
 }
 
-pub fn CaptureAddress(task: &Task, addr: u64, addrlen: u32) -> Result<Vec<u8>> {
+pub fn CaptureAddress(task: &Task, addr: u64, addrlen: u32) -> Result<Vec<u8, GuestHostSharedAllocator>> {
     if addrlen > MAX_ADDR_LEN {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
     //task.CheckPermission(addr, addrlen as u64, false, false)?;
 
-    return task.CopyInVec(addr, addrlen as usize);
+    return task.CopyInVecShared(addr, addrlen as usize);
 }
 
 #[derive(Debug)]
@@ -245,7 +248,7 @@ pub fn SysBind(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    let addrstr = task.CopyInVec(addr, addrlen as usize)?;
+    let addrstr = task.CopyInVecShared(addr, addrlen as usize)?;
     let res = sock.Bind(task, &addrstr);
 
     return res;
@@ -318,7 +321,7 @@ pub fn SysGetSockOpt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         0
     };
 
-    let mut optVal: [u8; MAX_OPT_LEN as usize] = [0; MAX_OPT_LEN as usize];
+    let mut optVal = Box::new_in([0u8; MAX_OPT_LEN as usize], GUEST_HOST_SHARED_ALLOCATOR);
     let res = sock.GetSockOpt(task, level, name, &mut optVal[..optlen as usize])?;
 
     if res < 0 {
@@ -350,7 +353,7 @@ pub fn SysSetSockOpt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    let optVal = task.CopyInVec(optValAddr, optLen as usize)?;
+    let optVal = task.CopyInVecShared(optValAddr, optLen as usize)?;
     let res = sock.SetSockOpt(task, level, name, &optVal[..optLen as usize])?;
 
     return Ok(res);
@@ -365,7 +368,7 @@ pub fn SysGetSockName(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let sock = file.FileOp.clone();
 
-    let mut buf: [u8; MAX_ADDR_LEN as usize] = [0; MAX_ADDR_LEN as usize];
+    let mut buf = Box::new_in([0u8; MAX_ADDR_LEN as usize], GUEST_HOST_SHARED_ALLOCATOR);
     let len = task.CopyInObj::<i32>(addrlen)?;
 
     let len = if len > MAX_ADDR_LEN as i32 {
@@ -395,9 +398,9 @@ pub fn SysGetPeerName(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
     let sock = file.FileOp.clone();
-    let mut buf: [u8; MAX_ADDR_LEN as usize] = [0; MAX_ADDR_LEN as usize];
+    let mut buf = Box::new_in([0u8; MAX_ADDR_LEN as usize], GUEST_HOST_SHARED_ALLOCATOR);
 
-    let mut outputlen = sock.GetPeerName(task, &mut buf)? as usize;
+    let mut outputlen = sock.GetPeerName(task, &mut *buf)? as usize;
 
     //info!("SysGetPeerName buf is {}", &buf[..outputlen as usize]);
 
@@ -559,10 +562,10 @@ fn sendSingleMsg(
         return Err(Error::SysError(SysErr::EMSGSIZE));
     }
 
-    let msgVec: Vec<u8> = task.CopyInVec(msg.msgName, msg.nameLen as usize)?;
-    let controlVec: Vec<u8> = task.CopyInVec(msg.msgControl, msg.msgControlLen as usize)?;
+    let msgVec: Vec<u8, GuestHostSharedAllocator> = task.CopyInVecShared(msg.msgName, msg.nameLen as usize)?;
+    let controlVec: Vec<u8, GuestHostSharedAllocator> = task.CopyInVecShared(msg.msgControl, msg.msgControlLen as usize)?;
 
-    let mut pMsg = msg;
+    let mut pMsg = Box::new_in(msg, GUEST_HOST_SHARED_ALLOCATOR);
     if msg.nameLen > 0 {
         pMsg.msgName = &msgVec[0] as *const _ as u64;
     }
@@ -573,7 +576,7 @@ fn sendSingleMsg(
 
     let src = task.IovsFromAddr(msg.iov, msg.iovLen)?;
 
-    let res = sock.SendMsg(task, &src, flags, &mut pMsg, deadline)?;
+    let res = sock.SendMsg(task, &src, flags, &mut *pMsg, deadline)?;
     task.CopyOutObj(&msg, msgPtr)?;
     return Ok(res);
 }
@@ -938,11 +941,11 @@ pub fn SysSendTo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         };
     }
 
-    let mut pMsg = MsgHdr::default();
+    let mut pMsg = Box::new_in(MsgHdr::default(), GUEST_HOST_SHARED_ALLOCATOR);
 
     let _msgVec = if namePtr != 0 && nameLen > 0 {
         //let vec = task.GetSlice::<u8>(namePtr, nameLen as usize)?.to_vec();
-        let vec = task.CopyInVec::<u8>(namePtr, nameLen as usize)?;
+        let vec = task.CopyInVecShared::<u8>(namePtr, nameLen as usize)?;
         pMsg.msgName = vec.as_ptr() as u64;
         pMsg.nameLen = nameLen;
         Some(vec)

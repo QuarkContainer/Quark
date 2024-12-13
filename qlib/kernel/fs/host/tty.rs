@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
+use alloc::boxed::Box;
 use core::any::Any;
 use core::ops::Deref;
 
@@ -445,7 +447,7 @@ impl TTYFileOps {
             fd: fd,
             buf: SocketBuff(Arc::new_in(
                 SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT),
-                crate::GUEST_HOST_SHARED_ALLOCATOR,
+                GUEST_HOST_SHARED_ALLOCATOR,
             )),
             queue: queue,
         };
@@ -644,19 +646,19 @@ impl FileOperations for TTYFileOps {
         match ioctl {
             IoCtlCmd::TCGETS => {
                 //error!("TCGETS 1");
-                let mut term = Termios::default();
-                ioctlGetTermios(fd, &mut term)?;
+                let mut term = Box::new_in(Termios::default(), GUEST_HOST_SHARED_ALLOCATOR);
+                ioctlGetTermios(fd, &mut *term)?;
                 //error!("TCGETS 2 {:x?}", term);
-                task.CopyOutObj(&term, val)?;
+                task.CopyOutObj(&*term, val)?;
                 return Ok(0);
             }
 
             IoCtlCmd::TCSETS | IoCtlCmd::TCSETSW | IoCtlCmd::TCSETSF => {
                 self.lock().checkChange(task, Signal(Signal::SIGTTOU))?;
 
-                let t: Termios = task.CopyInObj(val)?;
-                ioctlSetTermios(fd, ioctl, &t)?;
-                self.lock().termios.FromTermios(&t);
+                let t  = task.CopyInObjShared(val)?;
+                ioctlSetTermios(fd, ioctl, &*t)?;
+                self.lock().termios.FromTermios(&*t);
                 return Ok(0);
             }
             IoCtlCmd::TIOCGPGRP => {
@@ -719,15 +721,15 @@ impl FileOperations for TTYFileOps {
             }
             IoCtlCmd::TIOCGWINSZ => {
                 //error!("TIOCGWINSZ 1");
-                let mut win = Winsize::default();
-                ioctlGetWinsize(fd, &mut win)?;
+                let mut win = Box::new_in(Winsize::default(), GUEST_HOST_SHARED_ALLOCATOR);
+                ioctlGetWinsize(fd, &mut *win)?;
                 //error!("TIOCGWINSZ 2 {:x?}", win);
-                task.CopyOutObj(&win, val)?;
+                task.CopyOutObj(&*win, val)?;
                 return Ok(0);
             }
             IoCtlCmd::TIOCSWINSZ => {
-                let w: Winsize = task.CopyInObj(val)?;
-                ioctlSetWinsize(fd, &w)?;
+                let w= task.CopyInObjShared(val)?;
+                ioctlSetWinsize(fd, &*w)?;
                 return Ok(0);
             }
             IoCtlCmd::TIOCSETD

@@ -20,6 +20,7 @@ use alloc::collections::VecDeque;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use alloc::boxed::Box;
 use core::fmt;
 use core::ops::Deref;
 use spin::Mutex;
@@ -37,6 +38,7 @@ use crate::qlib::tsot_msg::*;
 
 use super::loopbacksocket::LoopbackSocket;
 use super::tsotsocket::TsotSocketOperations;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 #[derive(Debug, Default)]
 pub struct TsotBindings {
@@ -358,9 +360,12 @@ impl TsotSocketMgr {
     }
 
     pub fn CreateSocket(&self) -> Result<()> {
-        let msg = TsotMsg::CreateSocketReq(CreateSocketReq {}).into();
+        let msg = Box::new_in(
+            TsotMsg::CreateSocketReq(CreateSocketReq {}).into(),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        );
 
-        Self::SendMsg(&msg)?;
+        Self::SendMsg(&*msg)?;
         return Ok(());
     }
 
@@ -448,13 +453,16 @@ impl TsotSocketMgr {
         drop(bindingAddrs);
 
         if !ip.IsLoopback() {
-            let msg = TsotMsg::ListenReq(ListenReq {
-                port: port,
-                backlog: finalBacklog,
-            })
-            .into();
+            let msg = Box::new_in(
+                TsotMsg::ListenReq(ListenReq {
+                    port: port,
+                    backlog: finalBacklog,
+                })
+                .into(),
+                GUEST_HOST_SHARED_ALLOCATOR,
+            );
 
-            Self::SendMsg(&msg)?;
+            Self::SendMsg(&*msg)?;
         }
 
         return Ok(acceptQueue);
@@ -476,18 +484,24 @@ impl TsotSocketMgr {
         drop(bindingAddrs);
 
         if !ip.IsLoopback() {
-            let msg = TsotMsg::StopListenReq(StopListenReq { port: port }).into();
+            let msg = Box::new_in(
+                TsotMsg::StopListenReq(StopListenReq { port: port }).into(),
+                GUEST_HOST_SHARED_ALLOCATOR,
+            );
 
-            Self::SendMsg(&msg)?;
+            Self::SendMsg(&*msg)?;
         }
 
         return Ok(());
     }
 
     pub fn Accept(&self, port: u16) -> Result<()> {
-        let msg = TsotMsg::AcceptReq(AcceptReq { port: port }).into();
+        let msg = Box::new_in(
+            TsotMsg::AcceptReq(AcceptReq { port: port }).into(),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        );
 
-        Self::SendMsg(&msg)?;
+        Self::SendMsg(&*msg)?;
         return Ok(());
     }
 
@@ -507,12 +521,15 @@ impl TsotSocketMgr {
             srcPort: srcPort,
         };
 
-        let msg = TsotMessage {
-            socket: socket,
-            msg: TsotMsg::PodConnectReq(connectReq),
-        };
+        let msg = Box::new_in(
+            TsotMessage {
+                socket: socket,
+                msg: TsotMsg::PodConnectReq(connectReq),
+            },
+            GUEST_HOST_SHARED_ALLOCATOR,
+        );
 
-        Self::SendMsg(&msg)?;
+        Self::SendMsg(&*msg)?;
 
         self.connectingSockets.lock().insert(reqId, ops.clone());
 
@@ -522,8 +539,8 @@ impl TsotSocketMgr {
     // caller should make sure the
     pub fn DnsReq(reqId: u16, domains: &[String]) -> Result<()> {
         let req = DnsReq::New(reqId, domains)?;
-        let msg = TsotMsg::DnsReq(req).into();
-        Self::SendMsg(&msg)?;
+        let msg = Box::new_in(TsotMsg::DnsReq(req).into(), GUEST_HOST_SHARED_ALLOCATOR);
+        Self::SendMsg(&*msg)?;
         return Ok(());
     }
 

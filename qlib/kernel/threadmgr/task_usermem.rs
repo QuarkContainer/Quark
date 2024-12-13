@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::boxed::Box;
 use alloc::slice;
 use alloc::str;
 use alloc::string::String;
@@ -29,6 +30,8 @@ use super::super::task::*;
 use super::super::util::cstring::*;
 use crate::kernel_def::IsKernel;
 use crate::qlib::kernel::SHARESPACE;
+use crate::GuestHostSharedAllocator;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 impl MemoryManager {
     // copy raw data from user to kernel
@@ -588,6 +591,13 @@ impl MemoryManager {
         return Ok(data);
     }
 
+    pub fn CopyInObjShared<T: Sized + Copy>(&self, task: &Task, src: u64) -> Result<Box<T, GuestHostSharedAllocator>> {
+        let data = Box::new_in(unsafe { MaybeUninit::<T>::uninit().assume_init() }, GUEST_HOST_SHARED_ALLOCATOR);
+        let size = size_of::<T>();
+        self.CopyDataIn(task, src, &*data as *const _ as u64, size, false)?;
+        return Ok(data);
+    }
+
     pub fn CopyOutObjLocked<T: Sized + Copy>(
         &self,
         task: &Task,
@@ -659,6 +669,29 @@ impl MemoryManager {
 
         let recordLen = core::mem::size_of::<T>();
         let mut vec: Vec<T> = Vec::with_capacity(count);
+        unsafe {
+            vec.set_len(count);
+        }
+        self.CopyDataIn(task, src, vec.as_ptr() as u64, recordLen * count, false)?;
+        return Ok(vec);
+    }
+
+    pub fn CopyInVecShared<T: Sized + Copy>(
+        &self,
+        task: &Task,
+        src: u64,
+        count: usize,
+    ) -> Result<Vec<T, GuestHostSharedAllocator>> {
+        if src == 0 && count == 0 {
+            return Ok(Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR));
+        }
+
+        if src == 0 {
+            return Err(Error::SysError(SysErr::EFAULT));
+        }
+
+        let recordLen = core::mem::size_of::<T>();
+        let mut vec = Vec::with_capacity_in(count, GUEST_HOST_SHARED_ALLOCATOR);
         unsafe {
             vec.set_len(count);
         }
@@ -882,6 +915,11 @@ impl Task {
         return self.mm.CopyInVec(self, addr, size);
     }
 
+    pub fn CopyInVecShared<T: Sized + Copy>(&self, addr: u64, size: usize) -> Result<Vec<T, GuestHostSharedAllocator>> {
+        assert!(self.Addr() == Task::Current().Addr());
+        return self.mm.CopyInVecShared(self, addr, size);
+    }
+
     pub fn CopyInVecManaul<T: Sized + Copy>(&self, addr: u64, size: usize) -> Result<Vec<T>> {
         assert!(self.Addr() == Task::Current().Addr());
         return self.mm.CopyInVecManaul(self, addr, size);
@@ -953,6 +991,11 @@ impl Task {
     pub fn CopyInObj<T: Sized + Copy>(&self, src: u64) -> Result<T> {
         assert!(self.Addr() == Task::Current().Addr());
         return self.mm.CopyInObj(self, src);
+    }
+
+    pub fn CopyInObjShared<T: Sized + Copy>(&self, src: u64) -> Result<Box<T, GuestHostSharedAllocator>> {
+        assert!(self.Addr() == Task::Current().Addr());
+        return self.mm.CopyInObjShared(self, src);
     }
 
     //Copy an Object to user memory

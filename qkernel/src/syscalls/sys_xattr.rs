@@ -228,7 +228,7 @@ pub fn SetXAttr(
         return Err(Error::SysError(SysErr::E2BIG));
     }
 
-    let buf = task.CopyInVec(valueAddr, size)?;
+    let buf = task.CopyInVecShared(valueAddr, size)?;
 
     if !HasPrefix(&name, Xattr::XATTR_USER_PREFIX) {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));

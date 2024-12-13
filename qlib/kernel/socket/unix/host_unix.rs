@@ -20,7 +20,10 @@ use alloc::slice;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use alloc::boxed::Box;
 
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+use crate::GuestHostSharedAllocator;
 use crate::qlib::common::*;
 use crate::qlib::kernel::Kernel;
 use crate::qlib::kernel::fd::{IORead, IOWrite};
@@ -103,8 +106,8 @@ impl HostUnixSocketOperations {
             false,
         );
 
-        let mut fstat = LibcStat::default();
-        let ret = Fstat(fd, &mut fstat);
+        let mut fstat = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
+        let ret = Fstat(fd, &mut *fstat);
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }
@@ -114,7 +117,7 @@ impl HostUnixSocketOperations {
             &msrc.lock().MountSourceOperations.clone(),
             fd,
             fstat.WouldBlock(),
-            &fstat,
+            &*fstat,
             true,
             false,
             false,
@@ -226,35 +229,35 @@ impl HostUnixSocketOperations {
                 return Ok(0);
             }
             LibcConst::TIOCINQ => {
-                let tmp: i32 = 0;
-                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
+                let tmp = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
+                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }
-                task.CopyOutObj(&tmp, val)?;
+                task.CopyOutObj(&*tmp, val)?;
                 return Ok(0);
             }
             _ => {
-                let tmp: i32 = 0;
-                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
+                let tmp = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
+                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
             if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }
-                task.CopyOutObj(&tmp, val)?;
+                task.CopyOutObj(&*tmp, val)?;
                 return Ok(0);
             }
         }
     }
 
     pub fn GetSockOpt(&self, _task: &Task, level: i32, name: i32, opt: &mut [u8]) -> Result<i64> {
-        let mut optLen = opt.len();
-        let res = if optLen == 0 {
+        let mut optLen = Box::new_in(opt.len(), GUEST_HOST_SHARED_ALLOCATOR);
+        let res = if *optLen == 0 {
             Kernel::HostSpace::GetSockOpt(
                 self.fd,
                 level,
                 name,
                 ptr::null::<u8>() as u64,
-                &mut optLen as *mut _ as u64,
+                &mut *optLen as *mut _ as u64,
             )
         } else {
             Kernel::HostSpace::GetSockOpt(
@@ -262,7 +265,7 @@ impl HostUnixSocketOperations {
                 level,
                 name,
                 &mut opt[0] as *mut _ as u64,
-                &mut optLen as *mut _ as u64,
+                &mut *optLen as *mut _ as u64,
             )
         };
 
@@ -270,37 +273,37 @@ impl HostUnixSocketOperations {
             return Err(Error::SysError(-res as i32));
         }
 
-        return Ok(optLen as i64);
+        return Ok(*optLen as i64);
     }
 
 
     pub fn GetSockName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
-        let len = socketaddr.len() as i32;
+        let len = Box::new_in(socketaddr.len() as i32, GUEST_HOST_SHARED_ALLOCATOR);
 
         let res = Kernel::HostSpace::GetSockName(
             self.fd,
             &socketaddr[0] as *const _ as u64,
-            &len as *const _ as u64,
+            &*len as *const _ as u64,
         );
         if res < 0 {
             return Err(Error::SysError(-res as i32));
         }
 
-        return Ok(len as i64);
+        return Ok(*len as i64);
     }
 
     pub fn GetPeerName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
-        let len = socketaddr.len() as i32;
+        let len = Box::new_in(socketaddr.len() as i32, GUEST_HOST_SHARED_ALLOCATOR);
         let res = Kernel::HostSpace::GetPeerName(
             self.fd,
             &socketaddr[0] as *const _ as u64,
-            &len as *const _ as u64,
+            &*len as *const _ as u64,
         );
         if res < 0 {
             return Err(Error::SysError(-res as i32));
         }
 
-        return Ok(len as i64);
+        return Ok(*len as i64);
     }
     
     pub fn RecvMsg(
@@ -330,7 +333,7 @@ impl HostUnixSocketOperations {
         let buf = DataBuff::New(size);
         let iovs = buf.Iovs(size);
 
-        let mut msgHdr = MsgHdr::default();
+        let mut msgHdr = Box::new_in(MsgHdr::default(), GUEST_HOST_SHARED_ALLOCATOR);
         msgHdr.iov = &iovs[0] as *const _ as u64;
         msgHdr.iovLen = iovs.len();
 
@@ -340,7 +343,8 @@ impl HostUnixSocketOperations {
         //     msgHdr.nameLen = SIZEOF_SOCKADDR_UNIX as u32;
         // }
 
-        let mut controlVec: Vec<u8> = vec![0; controlDataLen];
+        let mut controlVec: Vec<u8, GuestHostSharedAllocator> = Vec::with_capacity_in(controlDataLen, GUEST_HOST_SHARED_ALLOCATOR);
+        controlVec.resize(controlDataLen, 0);
         msgHdr.msgControlLen = controlDataLen;
         if msgHdr.msgControlLen != 0 {
             msgHdr.msgControl = &mut controlVec[0] as *mut _ as u64;
@@ -354,7 +358,7 @@ impl HostUnixSocketOperations {
 
         let mut res = Kernel::HostSpace::HostUnixRecvMsg(
             self.fd,
-            &mut msgHdr as *mut _ as u64,
+            &mut *msgHdr as *mut _ as u64,
             flags | MsgType::MSG_DONTWAIT
         ) as i32;
 
@@ -376,7 +380,7 @@ impl HostUnixSocketOperations {
 
             res = Kernel::HostSpace::IORecvMsg(
                 self.fd,
-                &mut msgHdr as *mut _ as u64,
+                &mut *msgHdr as *mut _ as u64,
                 flags | MsgType::MSG_DONTWAIT,
                 false,
             ) as i32;
@@ -441,7 +445,7 @@ impl HostUnixSocketOperations {
             buf.buf.len() as i32
         };
         let _len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
-        return Ok((res as i64, msgFlags, senderAddr, controlVec));
+        return Ok((res as i64, msgFlags, senderAddr, controlVec.to_vec()));
     }
 
     pub fn SendMsg(

@@ -13,10 +13,12 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::Any;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
@@ -41,13 +43,13 @@ pub fn NewTmpfsFileInode(
     uattr: UnstableAttr,
     msrc: &Arc<QMutex<MountSource>>,
 ) -> Result<Inode> {
-    let mut fstat = LibcStat::default();
-    let tmpfd = HostSpace::NewTmpfsFile(TmpfsFileType::File, &mut fstat as *mut _ as u64) as i32;
+    let mut fstat = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
+    let tmpfd = HostSpace::NewTmpfsFile(TmpfsFileType::File, &mut *fstat as *mut _ as u64) as i32;
     if tmpfd < 0 {
         return Err(Error::SysError(-tmpfd));
     }
 
-    let inode = Inode::NewHostInode(task, msrc, tmpfd, &fstat, true, false, true)?;
+    let inode = Inode::NewHostInode(task, msrc, tmpfd, &*fstat, true, false, true)?;
 
     let inodeops = inode.lock().InodeOp.clone();
     let hostiops = match inodeops.as_any().downcast_ref::<HostInodeOp>() {

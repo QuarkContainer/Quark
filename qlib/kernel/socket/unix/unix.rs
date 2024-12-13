@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::util::sharedcstring::SharedCString;
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::mutex::*;
 use alloc::boxed::Box;
@@ -375,7 +376,8 @@ impl UnixSocketOperations {
                             let cid = task.Thread().ContainerID();
                             let path = "/".to_string() + &cid + &path;
                             if path.len() + 1 < 108 {
-                                let str = path.as_bytes();
+                                let cstring = SharedCString::New(&path);
+                                let str = cstring.Slice();
                                 let fd = HostSpace::HostUnixConnect(self.stype, &str[0] as * const _ as u64, str.len()) as i32;
                                 if fd < 0 {
                                     return Err(Error::SysError(-fd));

@@ -2508,9 +2508,8 @@ impl DataBuff {
     pub fn New(size: usize) -> Self {
         // allocate memory even size is zero. So that Ptr() can get valid address
         let count = if size > 0 { size } else { 1 };
-        let mut buf = Vec::with_capacity_in(count,GUEST_HOST_SHARED_ALLOCATOR);
+        let mut buf = Vec::with_capacity_in(count, GUEST_HOST_SHARED_ALLOCATOR);
         buf.resize(size, 0);
-
         return Self { buf: buf };
     }
 
@@ -2535,8 +2534,10 @@ impl DataBuff {
         };
     }
 
-    pub fn Iovs(&self, len: usize) -> [IoVec; 1] {
-        return [self.IoVec(len)];
+    pub fn Iovs(&self, len: usize) -> Vec<IoVec, GuestHostSharedAllocator> {
+        let mut iovs = Vec::with_capacity_in(1, GUEST_HOST_SHARED_ALLOCATOR);
+        iovs.push(self.IoVec(len));
+        return iovs;
     }
 
     pub fn BlockSeq(&self) -> BlockSeq {
@@ -3075,22 +3076,27 @@ impl MemoryDef {
 }
 
 impl MemoryDef {
-    pub const HYPERCALL_PARA_PAGE_OFFSET :u64 = MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET + MemoryDef::PAGE_SIZE*3;
+    pub const HYPERCALL_PARA_PAGE_OFFSET: u64 =
+        MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET + MemoryDef::PAGE_SIZE * 3;
     pub const HOST_INIT_HEAP_OFFSET: u64 = Self::IO_HEAP_END;
     pub const HOST_INIT_HEAP_SIZE: u64 = 1 * Self::ONE_GB;
     pub const HOST_INIT_HEAP_END: u64 = Self::HOST_INIT_HEAP_OFFSET + Self::HOST_INIT_HEAP_SIZE;
     pub const GUEST_PRIVATE_HEAP_OFFSET: u64 = Self::HEAP_OFFSET;
     pub const GUEST_PRIVATE_HEAP_SIZE: u64 = 5 * Self::ONE_GB;
-    pub const GUEST_PRIVATE_HEAP_END: u64 = Self::GUEST_PRIVATE_HEAP_OFFSET + Self::GUEST_PRIVATE_HEAP_SIZE;
+    pub const GUEST_PRIVATE_HEAP_END: u64 =
+        Self::GUEST_PRIVATE_HEAP_OFFSET + Self::GUEST_PRIVATE_HEAP_SIZE;
     pub const GUEST_HOST_SHARED_HEAP_OFFSET: u64 = Self::GUEST_PRIVATE_HEAP_END;
     pub const GUEST_HOST_SHARED_HEAP_SIZE: u64 = 5 * Self::ONE_GB;
-    pub const GUEST_HOST_SHARED_HEAP_END: u64 = Self::GUEST_HOST_SHARED_HEAP_OFFSET + Self::GUEST_HOST_SHARED_HEAP_SIZE;
+    pub const GUEST_HOST_SHARED_HEAP_END: u64 =
+        Self::GUEST_HOST_SHARED_HEAP_OFFSET + Self::GUEST_HOST_SHARED_HEAP_SIZE;
     pub const UNIDENTICAL_MAPPING_OFFSET: u64 = 30 * Self::ONE_GB;
     pub const GUEST_PRIVATE_INIT_HEAP_OFFSET: u64 = Self::HEAP_OFFSET;
     pub const GUEST_PRIVATE_INIT_HEAP_SIZE: u64 = 1 * Self::ONE_GB;
-    pub const GUEST_PRIVATE_INIT_HEAP_END: u64 = Self::GUEST_PRIVATE_INIT_HEAP_OFFSET + Self::GUEST_PRIVATE_INIT_HEAP_SIZE;
+    pub const GUEST_PRIVATE_INIT_HEAP_END: u64 =
+        Self::GUEST_PRIVATE_INIT_HEAP_OFFSET + Self::GUEST_PRIVATE_INIT_HEAP_SIZE;
     pub const GUEST_PRIVATE_RUNNING_HEAP_OFFSET: u64 = Self::GUEST_PRIVATE_INIT_HEAP_END;
-    pub const GUEST_PRIVATE_RUNNING_HEAP_SIZE: u64 = Self::GUEST_PRIVATE_HEAP_SIZE - Self::GUEST_PRIVATE_INIT_HEAP_SIZE;
+    pub const GUEST_PRIVATE_RUNNING_HEAP_SIZE: u64 =
+        Self::GUEST_PRIVATE_HEAP_SIZE - Self::GUEST_PRIVATE_INIT_HEAP_SIZE;
     pub const GUEST_PRIVATE_RUNNING_HEAP_END: u64 = Self::GUEST_PRIVATE_HEAP_END;
 }
 

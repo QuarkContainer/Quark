@@ -641,10 +641,10 @@ impl TsotSocketMgr {
     }
 
     pub fn RecvMsg() -> Result<TsotMessage> {
-        let mut m = TsotMessage::default();
-        let res = HostSpace::TsotRecvMsg(&mut m as * mut _ as u64);
+        let mut m = Box::new_in(TsotMessage::default(), GUEST_HOST_SHARED_ALLOCATOR);
+        let res = HostSpace::TsotRecvMsg(&mut *m as * mut _ as u64);
         if res == 0 {
-            return Ok(m)
+            return Ok(*m)
         }
 
         return Err(Error::SysError(SysErr::EINVAL));

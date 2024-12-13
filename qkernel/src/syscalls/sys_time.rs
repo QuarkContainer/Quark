@@ -14,6 +14,7 @@
 
 use alloc::boxed::Box;
 
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use super::super::kernel::timer::timer::*;
 use super::super::kernel::timer::*;
 use super::super::qlib::common::*;
@@ -301,11 +302,11 @@ pub fn SysGettimeofday(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
     let tvAddr = args.arg0 as u64;
     let tzAddr = args.arg1 as u64;
 
-    let mut timeV = Timeval::default();
-    let mut timezone: [u32; 2] = [0; 2];
+    let mut timeV = Box::new_in(Timeval::default(), GUEST_HOST_SHARED_ALLOCATOR);
+    let mut timezone = Box::new_in([0u32; 2], GUEST_HOST_SHARED_ALLOCATOR);
 
     let ret = HostSpace::GetTimeOfDay(
-        &mut timeV as *mut _ as u64,
+        &mut *timeV as *mut _ as u64,
         &mut timezone[0] as *mut _ as u64,
     );
     if ret < 0 {
@@ -316,14 +317,14 @@ pub fn SysGettimeofday(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
         //let tv : &mut Timeval = task.GetTypeMut(tvAddr)?;
         //*tv = timeV;
 
-        task.CopyOutObj(&timeV, tvAddr)?;
+        task.CopyOutObj(&*timeV, tvAddr)?;
     }
 
     if tzAddr != 0 {
         //let tz : &mut [u32; 2] = task.GetTypeMut(tzAddr)?;
         //*tz = timezone;
 
-        task.CopyOutObj(&timezone, tzAddr)?;
+        task.CopyOutObj(&*timezone, tzAddr)?;
     }
 
     return Ok(0);

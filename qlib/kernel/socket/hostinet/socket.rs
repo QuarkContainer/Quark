@@ -24,6 +24,8 @@ use core::slice;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+use crate::GuestHostSharedAllocator;
 
 use crate::qlib::mutex::*;
 use crate::qlib::rdma_share::*;
@@ -629,13 +631,13 @@ impl DummyHostSocket {
 
 // pass the ioctl to the shadow hostfd
 pub fn HostIoctlIFReq(task: &Task, hostfd: i32, request: u64, addr: u64) -> Result<()> {
-    let mut ifr: IFReq = task.CopyInObj(addr)?;
-    let res = HostSpace::IoCtl(hostfd, request, &mut ifr as *const _ as u64,core::mem::size_of::<IFReq>());
+    let mut ifr: Box<IFReq, GuestHostSharedAllocator> = task.CopyInObjShared(addr)?;
+    let res = HostSpace::IoCtl(hostfd, request, &mut *ifr as *const _ as u64);
     if res < 0 {
         return Err(Error::SysError(-res as i32));
     }
 
-    task.CopyOutObj(&ifr, addr)?;
+    task.CopyOutObj(&*ifr, addr)?;
     return Ok(());
 }
 
@@ -653,16 +655,19 @@ pub fn HostIoctlIFConf(task: &Task, hostfd: i32, request: u64, addr: u64) -> Res
 
     let buf = DataBuff::New(len);
 
-    let mut ifr = IFConf {
-        Len: len as i32,
-        ..Default::default()
-    };
+    let mut ifr = Box::new_in(
+        IFConf {
+            Len: len as i32,
+            ..Default::default()
+        },
+        GUEST_HOST_SHARED_ALLOCATOR,
+    );
 
     if ifc.Ptr != 0 {
         ifr.Ptr = buf.Ptr();
     }
 
-    let res = HostSpace::IoCtl(hostfd, request, &mut ifr as *const _ as u64, core::mem::size_of::<IFConf>());
+    let res = HostSpace::IoCtl(hostfd, request, &mut *ifr as *const _ as u64);
     if res < 0 {
         return Err(Error::SysError(-res as i32));
     }
@@ -889,22 +894,22 @@ impl FileOperations for SocketOperations {
                         }
                     }
                 } else {
-                    let tmp: i32 = 0;
-                    let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
+                    let tmp = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
+                    let res = Kernel::HostSpace::IoCtl(self.fd, request, &*tmp as *const _ as u64);
                     if res < 0 {
                         return Err(Error::SysError(-res as i32));
                     }
-                    task.CopyOutObj(&tmp, val)?;
+                    task.CopyOutObj(&*tmp, val)?;
                     return Ok(0);
                 }
             }
             _ => {
-                let tmp: i32 = 0;
-                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
+                let tmp = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
+                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }
-                task.CopyOutObj(&tmp, val)?;
+                task.CopyOutObj(&*tmp, val)?;
                 return Ok(0);
             }
         }
@@ -1036,25 +1041,25 @@ impl SockOperations for SocketOperations {
             }
         }
 
-        let mut val: i32 = 0;
-        let len: i32 = 4;
+        let mut val = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
+        let len = Box::new_in(4i32, GUEST_HOST_SHARED_ALLOCATOR);
         let res = HostSpace::GetSockOpt(
             self.fd,
             LibcConst::SOL_SOCKET as i32,
             LibcConst::SO_ERROR as i32,
-            &mut val as *mut i32 as u64,
-            &len as *const i32 as u64,
+            &mut *val as *mut i32 as u64,
+            &*len as *const i32 as u64,
         ) as i32;
 
         if res < 0 {
             return Err(Error::SysError(-res));
         }
 
-        if val != 0 {
-            if val == SysErr::ECONNREFUSED {
+        if *val != 0 {
+            if *val == SysErr::ECONNREFUSED {
                 return Err(Error::SysError(SysErr::EINPROGRESS));
             }
-            return Err(Error::SysError(val as i32));
+            return Err(Error::SysError(*val as i32));
         }
 
         self.SetRemoteAddr(socketaddr.to_vec())?;
@@ -1458,14 +1463,14 @@ impl SockOperations for SocketOperations {
         return Ok(optlen as i64)
         */
 
-        let mut optLen = opt.len();
-        let res = if optLen == 0 {
+        let mut optLen = Box::new_in(opt.len(), GUEST_HOST_SHARED_ALLOCATOR);
+        let res = if *optLen == 0 {
             Kernel::HostSpace::GetSockOpt(
                 self.fd,
                 level,
                 name,
                 ptr::null::<u8>() as u64,
-                &mut optLen as *mut _ as u64,
+                &mut *optLen as *mut _ as u64,
             )
         } else {
             Kernel::HostSpace::GetSockOpt(
@@ -1473,7 +1478,7 @@ impl SockOperations for SocketOperations {
                 level,
                 name,
                 &mut opt[0] as *mut _ as u64,
-                &mut optLen as *mut _ as u64,
+                &mut *optLen as *mut _ as u64,
             )
         };
 
@@ -1481,7 +1486,7 @@ impl SockOperations for SocketOperations {
             return Err(Error::SysError(-res as i32));
         }
 
-        return Ok(optLen as i64);
+        return Ok(*optLen as i64);
     }
 
     fn SetSockOpt(&self, task: &Task, level: i32, name: i32, opt: &[u8]) -> Result<i64> {
@@ -1651,18 +1656,18 @@ impl SockOperations for SocketOperations {
             //TODO: handle unhappy case
             return Ok(len as i64);
         }
-        let len = socketaddr.len() as i32;
+        let len = Box::new_in(socketaddr.len() as i32, GUEST_HOST_SHARED_ALLOCATOR);
 
         let res = Kernel::HostSpace::GetSockName(
             self.fd,
             &socketaddr[0] as *const _ as u64,
-            &len as *const _ as u64,
+            &*len as *const _ as u64,
         );
         if res < 0 {
             return Err(Error::SysError(-res as i32));
         }
 
-        return Ok(len as i64);
+        return Ok(*len as i64);
     }
 
     fn GetPeerName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
@@ -1859,17 +1864,19 @@ impl SockOperations for SocketOperations {
         let buf = DataBuff::New(size);
         let iovs = buf.Iovs(size);
 
-        let mut msgHdr = MsgHdr::default();
+        let mut msgHdr = Box::new_in(MsgHdr::default(), GUEST_HOST_SHARED_ALLOCATOR);
         msgHdr.iov = &iovs[0] as *const _ as u64;
         msgHdr.iovLen = iovs.len();
 
-        let mut addr: [u8; SIZEOF_SOCKADDR] = [0; SIZEOF_SOCKADDR];
+        let mut addr: Vec<u8, GuestHostSharedAllocator> = Vec::with_capacity_in(SIZEOF_SOCKADDR, GUEST_HOST_SHARED_ALLOCATOR);
+        addr.resize(SIZEOF_SOCKADDR, 0);
         if senderRequested {
             msgHdr.msgName = &mut addr[0] as *mut _ as u64;
             msgHdr.nameLen = SIZEOF_SOCKADDR as u32;
         }
 
-        let mut controlVec: Vec<u8> = vec![0; controlDataLen];
+        let mut controlVec: Vec<u8, GuestHostSharedAllocator> = Vec::with_capacity_in(controlDataLen, GUEST_HOST_SHARED_ALLOCATOR);
+        controlVec.resize(controlDataLen, 0);
         msgHdr.msgControlLen = controlDataLen;
         if msgHdr.msgControlLen != 0 {
             msgHdr.msgControl = &mut controlVec[0] as *mut _ as u64;
@@ -1886,7 +1893,7 @@ impl SockOperations for SocketOperations {
             let mut res = if msgHdr.msgControlLen != 0 {
                 Kernel::HostSpace::IORecvMsg(
                     self.fd,
-                    &mut msgHdr as *mut _ as u64,
+                    &mut *msgHdr as *mut _ as u64,
                     flags | MsgType::MSG_DONTWAIT,
                     false,
                 ) as i32
@@ -1918,7 +1925,7 @@ impl SockOperations for SocketOperations {
                 res = if msgHdr.msgControlLen != 0 {
                     Kernel::HostSpace::IORecvMsg(
                         self.fd,
-                        &mut msgHdr as *mut _ as u64,
+                        &mut *msgHdr as *mut _ as u64,
                         flags | MsgType::MSG_DONTWAIT,
                         false,
                     ) as i32
@@ -1958,7 +1965,7 @@ impl SockOperations for SocketOperations {
                 buf.buf.len() as i32
             };
             let _len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
-            return Ok((res as i64, msgFlags, senderAddr, controlVec));
+            return Ok((res as i64, msgFlags, senderAddr, controlVec.to_vec()));
         } else {
             // if msgHdr.msgControlLen != 0 {
             //     panic!("TODO: UDP over RDMA doesn't support control msg yet!");
@@ -2057,7 +2064,7 @@ impl SockOperations for SocketOperations {
                         None
                     };
                     let msgFlags = msgHdr.msgFlags & !MsgType::MSG_CTRUNC;
-                    return Ok((len as i64, msgFlags, senderAddr, controlVec));
+                    return Ok((len as i64, msgFlags, senderAddr, controlVec.to_vec()));
                 }
                 _ => {
                     panic!("SockInfo: {:?} is not expected for UDP", sockInfo);
@@ -2371,15 +2378,15 @@ impl SockOperations for SocketOperations {
     }
 
     fn State(&self) -> u32 {
-        let mut info = TCPInfo::default();
-        let mut len = SocketSize::SIZEOF_TCPINFO;
+        let mut info = Box::new_in(TCPInfo::default(), GUEST_HOST_SHARED_ALLOCATOR);
+        let mut len = Box::new_in(SocketSize::SIZEOF_TCPINFO, GUEST_HOST_SHARED_ALLOCATOR);
 
         let ret = HostSpace::GetSockOpt(
             self.fd,
             LibcConst::SOL_TCP as _,
             LibcConst::TCP_INFO as _,
-            &mut info as *mut _ as u64,
-            &mut len as *mut _ as u64,
+            &mut *info as *mut _ as u64,
+            &mut *len as *mut _ as u64,
         ) as i32;
 
         if ret < 0 {
@@ -2394,7 +2401,7 @@ impl SockOperations for SocketOperations {
             }
         }
 
-        if len != SocketSize::SIZEOF_TCPINFO {
+        if *len != SocketSize::SIZEOF_TCPINFO {
             error!("Failed to get TCP socket info getsockopt(2) returned {} bytes, expecting {} bytes.", SocketSize::SIZEOF_TCPINFO, ret);
             return 0;
         }

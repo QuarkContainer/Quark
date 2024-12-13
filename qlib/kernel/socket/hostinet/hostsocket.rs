@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::arch::tee::is_cc_active;
 use crate::qlib::mutex::*;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+use crate::GuestHostSharedAllocator;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use alloc::boxed::Box;
 use core::any::Any;
 use core::ops::Deref;
 use core::ptr;
@@ -129,6 +133,7 @@ impl HostSocketOperations {
     }
 
     pub fn IOAccept(&self) -> Result<AcceptItem> {
+        if is_cc_active() {}
         let mut ai = AcceptItem::default();
         ai.len = ai.addr.data.len() as _;
         let res = Kernel::HostSpace::IOAccept(
@@ -330,21 +335,21 @@ impl FileOperations for HostSocketOperations {
                 return Ok(0);
             }
             LibcConst::TIOCINQ => {
-                let tmp: i32 = 0;
-                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
+                let tmp = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
+                let res = Kernel::HostSpace::IoCtl(self.fd, request, &*tmp as *const _ as u64);
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }
-                task.CopyOutObj(&tmp, val)?;
+                task.CopyOutObj(&*tmp, val)?;
                 return Ok(0);
             }
             _ => {
-                let tmp: i32 = 0;
-                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
+                let tmp = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
+                let res = Kernel::HostSpace::IoCtl(self.fd, request, &*tmp as *const _ as u64);
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }
-                task.CopyOutObj(&tmp, val)?;
+                task.CopyOutObj(&*tmp, val)?;
                 return Ok(0);
             }
         }
@@ -413,22 +418,22 @@ impl SockOperations for HostSocketOperations {
             }
         }
 
-        let mut val: i32 = 0;
-        let len: i32 = 4;
+        let mut val = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
+        let len = Box::new_in(4i32, GUEST_HOST_SHARED_ALLOCATOR);
         let res = HostSpace::GetSockOpt(
             self.fd,
             LibcConst::SOL_SOCKET as i32,
             LibcConst::SO_ERROR as i32,
-            &mut val as *mut i32 as u64,
-            &len as *const i32 as u64,
+            &mut *val as *mut i32 as u64,
+            &*len as *const i32 as u64,
         ) as i32;
 
         if res < 0 {
             return Err(Error::SysError(-res));
         }
 
-        if val != 0 {
-            return Err(Error::SysError(val as i32));
+        if *val != 0 {
+            return Err(Error::SysError(*val as i32));
         }
 
         self.SetRemoteAddr(socketaddr.to_vec())?;
@@ -644,14 +649,14 @@ impl SockOperations for HostSocketOperations {
         return Ok(optlen as i64)
         */
 
-        let mut optLen = opt.len();
-        let res = if optLen == 0 {
+        let mut optLen = Box::new_in(opt.len(), GUEST_HOST_SHARED_ALLOCATOR);
+        let res = if *optLen == 0 {
             Kernel::HostSpace::GetSockOpt(
                 self.fd,
                 level,
                 name,
                 ptr::null::<u8>() as u64,
-                &mut optLen as *mut _ as u64,
+                &mut *optLen as *mut _ as u64,
             )
         } else {
             Kernel::HostSpace::GetSockOpt(
@@ -659,7 +664,7 @@ impl SockOperations for HostSocketOperations {
                 level,
                 name,
                 &mut opt[0] as *mut _ as u64,
-                &mut optLen as *mut _ as u64,
+                &mut *optLen as *mut _ as u64,
             )
         };
 
@@ -667,7 +672,7 @@ impl SockOperations for HostSocketOperations {
             return Err(Error::SysError(-res as i32));
         }
 
-        return Ok(optLen as i64);
+        return Ok(*optLen as i64);
     }
 
     fn SetSockOpt(&self, task: &Task, level: i32, name: i32, opt: &[u8]) -> Result<i64> {
@@ -728,32 +733,32 @@ impl SockOperations for HostSocketOperations {
     }
 
     fn GetSockName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
-        let len = socketaddr.len() as i32;
+        let len = Box::new_in(socketaddr.len() as i32, GUEST_HOST_SHARED_ALLOCATOR);
 
         let res = Kernel::HostSpace::GetSockName(
             self.fd,
             &socketaddr[0] as *const _ as u64,
-            &len as *const _ as u64,
+            &*len as *const _ as u64,
         );
         if res < 0 {
             return Err(Error::SysError(-res as i32));
         }
 
-        return Ok(len as i64);
+        return Ok(*len as i64);
     }
 
     fn GetPeerName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
-        let len = socketaddr.len() as i32;
+        let len = Box::new_in(socketaddr.len() as i32, GUEST_HOST_SHARED_ALLOCATOR);
         let res = Kernel::HostSpace::GetPeerName(
             self.fd,
             &socketaddr[0] as *const _ as u64,
-            &len as *const _ as u64,
+            &*len as *const _ as u64,
         );
         if res < 0 {
             return Err(Error::SysError(-res as i32));
         }
 
-        return Ok(len as i64);
+        return Ok(*len as i64);
     }
 
     fn RecvMsg(
@@ -781,17 +786,18 @@ impl SockOperations for HostSocketOperations {
         let buf = DataBuff::New(size);
         let iovs = buf.Iovs(size);
 
-        let mut msgHdr = MsgHdr::default();
+        let mut msgHdr = Box::new_in(MsgHdr::default(), GUEST_HOST_SHARED_ALLOCATOR);
         msgHdr.iov = &iovs[0] as *const _ as u64;
         msgHdr.iovLen = iovs.len();
 
-        let mut addr: [u8; SIZEOF_SOCKADDR] = [0; SIZEOF_SOCKADDR];
+        let mut addr: Vec<u8, GuestHostSharedAllocator> = Vec::with_capacity_in(SIZEOF_SOCKADDR, GUEST_HOST_SHARED_ALLOCATOR);
+        addr.resize(SIZEOF_SOCKADDR, 0);
         if senderRequested {
             msgHdr.msgName = &mut addr[0] as *mut _ as u64;
             msgHdr.nameLen = SIZEOF_SOCKADDR as u32;
         }
-
-        let mut controlVec: Vec<u8> = vec![0; controlDataLen];
+        let mut controlVec: Vec<u8, GuestHostSharedAllocator> = Vec::with_capacity_in(controlDataLen, GUEST_HOST_SHARED_ALLOCATOR);
+        controlVec.resize(controlDataLen, 0);
         msgHdr.msgControlLen = controlDataLen;
         if msgHdr.msgControlLen != 0 {
             msgHdr.msgControl = &mut controlVec[0] as *mut _ as u64;
@@ -805,7 +811,7 @@ impl SockOperations for HostSocketOperations {
 
         let mut res = Kernel::HostSpace::IORecvMsg(
             self.fd,
-            &mut msgHdr as *mut _ as u64,
+            &mut *msgHdr as *mut _ as u64,
             flags | MsgType::MSG_DONTWAIT,
             false,
         ) as i32;
@@ -828,7 +834,7 @@ impl SockOperations for HostSocketOperations {
 
             res = Kernel::HostSpace::IORecvMsg(
                 self.fd,
-                &mut msgHdr as *mut _ as u64,
+                &mut *msgHdr as *mut _ as u64,
                 flags | MsgType::MSG_DONTWAIT,
                 false,
             ) as i32;
@@ -859,7 +865,7 @@ impl SockOperations for HostSocketOperations {
             buf.buf.len() as i32
         };
         let _len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
-        return Ok((res as i64, msgFlags, senderAddr, controlVec));
+        return Ok((res as i64, msgFlags, senderAddr, controlVec.to_vec()));
     }
 
     fn SendMsg(
@@ -966,15 +972,15 @@ impl SockOperations for HostSocketOperations {
     }
 
     fn State(&self) -> u32 {
-        let mut info = TCPInfo::default();
-        let mut len = SocketSize::SIZEOF_TCPINFO;
+        let mut info = Box::new_in(TCPInfo::default(), GUEST_HOST_SHARED_ALLOCATOR);
+        let mut len = Box::new_in(SocketSize::SIZEOF_TCPINFO, GUEST_HOST_SHARED_ALLOCATOR);
 
         let ret = HostSpace::GetSockOpt(
             self.fd,
             LibcConst::SOL_TCP as _,
             LibcConst::TCP_INFO as _,
-            &mut info as *mut _ as u64,
-            &mut len as *mut _ as u64,
+            &mut *info as *mut _ as u64,
+            &mut *len as *mut _ as u64,
         ) as i32;
 
         if ret < 0 {
@@ -989,7 +995,7 @@ impl SockOperations for HostSocketOperations {
             }
         }
 
-        if len != SocketSize::SIZEOF_TCPINFO {
+        if *len != SocketSize::SIZEOF_TCPINFO {
             return 0;
         }
 

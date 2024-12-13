@@ -19,7 +19,7 @@ use super::tty::*;
 use super::util::*;
 
 pub fn ioctlGetTermios(fd: i32, termios: &mut Termios) -> Result<()> {
-    let ret = Ioctl(fd, IoCtlCmd::TCGETS, termios as *mut Termios as u64, core::mem::size_of::<Termios>());
+    let ret = Ioctl(fd, IoCtlCmd::TCGETS, termios as *mut Termios as u64);
 
     if ret < 0 {
         return Err(Error::SysError(-ret));
@@ -29,7 +29,7 @@ pub fn ioctlGetTermios(fd: i32, termios: &mut Termios) -> Result<()> {
 }
 
 pub fn ioctlSetTermios(fd: i32, req: u64, termios: &Termios) -> Result<()> {
-    let ret = Ioctl(fd, req, termios as *const Termios as u64, core::mem::size_of::<Termios>());
+    let ret = Ioctl(fd, req, termios as *const Termios as u64);
 
     if ret < 0 {
         return Err(Error::SysError(-ret));
@@ -39,7 +39,7 @@ pub fn ioctlSetTermios(fd: i32, req: u64, termios: &Termios) -> Result<()> {
 }
 
 pub fn ioctlGetWinsize(fd: i32, w: &mut Winsize) -> Result<()> {
-    let ret = Ioctl(fd, IoCtlCmd::TIOCGWINSZ, w as *mut Winsize as u64, core::mem::size_of::<Winsize>());
+    let ret = Ioctl(fd, IoCtlCmd::TIOCGWINSZ, w as *mut Winsize as u64);
 
     if ret < 0 {
         return Err(Error::SysError(-ret));
@@ -49,7 +49,7 @@ pub fn ioctlGetWinsize(fd: i32, w: &mut Winsize) -> Result<()> {
 }
 
 pub fn ioctlSetWinsize(fd: i32, w: &Winsize) -> Result<()> {
-    let ret = Ioctl(fd, IoCtlCmd::TIOCSWINSZ, w as *const Winsize as u64, core::mem::size_of::<Winsize>());
+    let ret = Ioctl(fd, IoCtlCmd::TIOCSWINSZ, w as *const Winsize as u64);
 
     if ret < 0 {
         return Err(Error::SysError(-ret));

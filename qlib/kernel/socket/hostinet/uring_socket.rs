@@ -16,6 +16,7 @@ use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 use alloc::vec::Vec;
+use alloc::boxed::Box;
 use core::any::Any;
 use core::fmt;
 use core::ops::Deref;
@@ -215,18 +216,18 @@ impl UringSocketOperations {
     }
 
     pub fn InnerGetSockName(&self) -> Result<SockAddrInet> {
-        let socketAddr = SockAddrInet::default();
-        let len = core::mem::size_of_val(&socketAddr);
+        let socketAddr = Box::new_in(SockAddrInet::default(), GUEST_HOST_SHARED_ALLOCATOR);
+        let len = Box::new_in(core::mem::size_of_val(&*socketAddr), GUEST_HOST_SHARED_ALLOCATOR) ;
         let res = Kernel::HostSpace::GetSockName(
             self.fd,
-            &socketAddr as *const _ as u64,
-            &len as *const _ as u64,
+            &*socketAddr as *const _ as u64,
+            &*len as *const _ as u64,
         );
         if res < 0 {
             return Err(Error::SysError(-res as i32));
         }
 
-        return Ok(socketAddr);
+        return Ok(*socketAddr);
     }
 
     pub fn SetConnErrno(&self, errno: i32) {
@@ -403,7 +404,7 @@ impl UringSocketOperations {
     pub fn PostConnect(&self) {
         let socketBuf = SocketBuff(Arc::new_in(
             SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT),
-            crate::GUEST_HOST_SHARED_ALLOCATOR,
+            GUEST_HOST_SHARED_ALLOCATOR,
         ));
         *self.socketType.lock() = UringSocketType::Uring(socketBuf.clone());
         QUring::BufSockInit(self.fd, self.queue.clone(), socketBuf, true).unwrap();
@@ -719,22 +720,22 @@ impl FileOperations for UringSocketOperations {
                     task.CopyOutObj(&v, val)?;
                     return Ok(0);
                 } else {
-                    let tmp: i32 = 0;
-                    let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
+                    let tmp = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
+                    let res = Kernel::HostSpace::IoCtl(self.fd, request, &*tmp as *const _ as u64);
                     if res < 0 {
                         return Err(Error::SysError(-res as i32));
                     }
-                    task.CopyOutObj(&tmp, val)?;
+                    task.CopyOutObj(&*tmp, val)?;
                     return Ok(0);
                 }
             }
             _ => {
-                let tmp: i32 = 0;
-                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64,core::mem::size_of::<i32>());
+                let tmp = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
+                let res = Kernel::HostSpace::IoCtl(self.fd, request, &*tmp as *const _ as u64);
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }
-                task.CopyOutObj(&tmp, val)?;
+                task.CopyOutObj(&*tmp, val)?;
                 return Ok(0);
             }
         }
@@ -1161,14 +1162,14 @@ impl SockOperations for UringSocketOperations {
             _ => (),
         };
 
-        let mut optLen = opt.len();
-        let res = if optLen == 0 {
+        let mut optLen = Box::new_in(opt.len(), GUEST_HOST_SHARED_ALLOCATOR);
+        let res = if *optLen == 0 {
             Kernel::HostSpace::GetSockOpt(
                 self.fd,
                 level,
                 name,
                 ptr::null::<u8>() as u64,
-                &mut optLen as *mut _ as u64,
+                &mut *optLen as *mut _ as u64,
             )
         } else {
             Kernel::HostSpace::GetSockOpt(
@@ -1176,7 +1177,7 @@ impl SockOperations for UringSocketOperations {
                 level,
                 name,
                 &mut opt[0] as *mut _ as u64,
-                &mut optLen as *mut _ as u64,
+                &mut *optLen as *mut _ as u64,
             )
         };
 
@@ -1184,7 +1185,7 @@ impl SockOperations for UringSocketOperations {
             return Err(Error::SysError(-res as i32));
         }
 
-        return Ok(optLen as i64);
+        return Ok(*optLen as i64);
     }
 
     fn SetSockOpt(&self, task: &Task, level: i32, name: i32, opt: &[u8]) -> Result<i64> {
@@ -1282,22 +1283,22 @@ impl SockOperations for UringSocketOperations {
     }
 
     fn GetSockName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
-        let len = socketaddr.len() as i32;
+        let len = Box::new_in(socketaddr.len() as i32, GUEST_HOST_SHARED_ALLOCATOR);
 
         let res = Kernel::HostSpace::GetSockName(
             self.fd,
             &socketaddr[0] as *const _ as u64,
-            &len as *const _ as u64,
+            &*len as *const _ as u64,
         );
         if res < 0 {
             return Err(Error::SysError(-res as i32));
         }
 
-        return Ok(len as i64);
+        return Ok(*len as i64);
     }
 
     fn GetPeerName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
-        let len = socketaddr.len() as i32;
+        let len = Box::new_in(socketaddr.len() as i32, GUEST_HOST_SHARED_ALLOCATOR);
 
         {
             let peerName = self.remoteAddr.lock();
@@ -1317,13 +1318,13 @@ impl SockOperations for UringSocketOperations {
         let res = Kernel::HostSpace::GetPeerName(
             self.fd,
             &socketaddr[0] as *const _ as u64,
-            &len as *const _ as u64,
+            &*len as *const _ as u64,
         );
         if res < 0 {
             return Err(Error::SysError(-res as i32));
         }
 
-        return Ok(len as i64);
+        return Ok(*len as i64);
     }
 
     fn RecvMsg(
@@ -1589,15 +1590,15 @@ impl SockOperations for UringSocketOperations {
     }
 
     fn State(&self) -> u32 {
-        let mut info = TCPInfo::default();
-        let mut len = SocketSize::SIZEOF_TCPINFO;
+        let mut info = Box::new_in(TCPInfo::default(), GUEST_HOST_SHARED_ALLOCATOR);
+        let mut len = Box::new_in(SocketSize::SIZEOF_TCPINFO, GUEST_HOST_SHARED_ALLOCATOR);
 
         let ret = HostSpace::GetSockOpt(
             self.fd,
             LibcConst::SOL_TCP as _,
             LibcConst::TCP_INFO as _,
-            &mut info as *mut _ as u64,
-            &mut len as *mut _ as u64,
+            &mut *info as *mut _ as u64,
+            &mut *len as *mut _ as u64,
         ) as i32;
 
         if ret < 0 {
@@ -1612,7 +1613,7 @@ impl SockOperations for UringSocketOperations {
             }
         }
 
-        if len != SocketSize::SIZEOF_TCPINFO {
+        if *len != SocketSize::SIZEOF_TCPINFO {
             error!("Failed to get TCP socket info getsockopt(2) returned {} bytes, expecting {} bytes.", SocketSize::SIZEOF_TCPINFO, ret);
             return 0;
         }

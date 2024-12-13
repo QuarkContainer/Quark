@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use crate::qlib::mutex::*;
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -637,9 +639,9 @@ impl HostInodeOp {
             return Err(Error::SysError(-fd as i32));
         }
 
-        let mut fstat = LibcStat::default();
+        let mut fstat = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
 
-        let ret = Fstat(fd, &mut fstat) as i32;
+        let ret = Fstat(fd, &mut *fstat) as i32;
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }
@@ -655,7 +657,7 @@ impl HostInodeOp {
             &msrc.MountSourceOperations.clone(),
             fd,
             false,
-            &fstat,
+            &*fstat,
             true,
             false,
             true,
@@ -721,9 +723,9 @@ impl HostInodeOp {
 
     // return (st_size, st_blocks)
     pub fn Size(&self) -> Result<(i64, i64)> {
-        let mut s: LibcStat = Default::default();
+        let mut s = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
         let hostfd = self.lock().HostFd;
-        let ret = Fstat(hostfd, &mut s) as i32;
+        let ret = Fstat(hostfd, &mut *s) as i32;
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }
