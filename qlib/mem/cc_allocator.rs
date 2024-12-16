@@ -39,6 +39,36 @@ impl PrivateVcpuAllocators {
     }
 }
 
+#[derive(Debug, Default)]
+#[repr(C)]
+#[repr(align(16))]
+pub struct PrivateVcpuSharedAllocators {
+    pub allocators: Vec<UnsafeCell<VcpuSharedAllocator>>,
+}
+
+unsafe impl Send for PrivateVcpuSharedAllocators {}
+unsafe impl Sync for PrivateVcpuSharedAllocators {}
+
+impl PrivateVcpuSharedAllocators {
+    pub fn New() -> Self {
+        let mut v = Vec::new();
+        let vcpu_number = VCPU_COUNT.load(Ordering::Acquire);
+
+        info!("PrivateCPULocal new, cpu number {}", vcpu_number);
+
+        for _ in 0..vcpu_number {
+            let a = VcpuSharedAllocator::default().into();
+            v.push(a);
+        }
+        return Self { allocators: v };
+    }
+
+    pub fn AllocatorMut(&self) -> &mut VcpuSharedAllocator {
+        //return unsafe { &mut *(&self.allocator as *const _ as u64 as *mut VcpuAllocator) };
+        return unsafe { &mut *self.allocators[VcpuId()].get() };
+    }
+}
+
 impl HostAllocator {
     pub fn HostInitAllocator(&self) -> &mut ListAllocator {
         return unsafe {
@@ -84,15 +114,15 @@ impl HostAllocator {
 }
 
 #[derive(Debug, Default, Copy, Clone)]
-pub struct GuestHostSharedAllocator {}
+pub struct GlobalVcpuSharedAllocator {}
 
-impl GuestHostSharedAllocator {
+impl GlobalVcpuSharedAllocator {
     pub const fn New() -> Self {
         return Self {};
     }
 }
 
-unsafe impl GlobalAlloc for GuestHostSharedAllocator {
+unsafe impl GlobalAlloc for GlobalVcpuSharedAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let addr = GLOBAL_ALLOCATOR.AllocSharedBuf(layout.size(), layout.align());
         return addr;
@@ -103,7 +133,7 @@ unsafe impl GlobalAlloc for GuestHostSharedAllocator {
     }
 }
 
-unsafe impl Allocator for GuestHostSharedAllocator {
+unsafe impl Allocator for GlobalVcpuSharedAllocator {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         //info!("GuestHostSharedAllocator allocate");
 

@@ -17,7 +17,7 @@ use alloc::vec::Vec;
 use core::sync::atomic::Ordering;
 
 use super::super::kernel_def::*;
-use crate::qlib::mem::cc_allocator::GuestHostSharedAllocator;
+use crate::qlib::mem::list_allocator::GuestHostSharedAllocator;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 pub struct Xattr {}

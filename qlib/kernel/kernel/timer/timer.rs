@@ -35,7 +35,7 @@ use super::timekeeper::*;
 use super::timer_store::*;
 use super::*;
 
-use crate::qlib::mem::cc_allocator::GuestHostSharedAllocator;
+use crate::qlib::mem::list_allocator::GuestHostSharedAllocator;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 // ClockEventSet occurs when a Clock undergoes a discontinuous change.

@@ -54,6 +54,7 @@ use super::Kernel::HostSpace;
 use crate::GLOBAL_ALLOCATOR;
 
 use crate::PRIVATE_VCPU_ALLOCATOR;
+use crate::PRIVATE_VCPU_SHARED_ALLOCATOR;
 use super::qlib::qmsg::sharepara::*;
 use crate::qlib::kernel::arch::tee::is_cc_active;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
@@ -605,6 +606,45 @@ unsafe impl GlobalAlloc for GlobalVcpuAllocator {
     }
 }
 
+use alloc::alloc::AllocError;
+use core::ptr::NonNull;
+
+unsafe impl core::alloc::Allocator for GuestHostSharedAllocator {
+    fn allocate(&self, layout: Layout) -> core::result::Result<NonNull<[u8]>, AllocError> {
+        unsafe{
+            if !GUEST_HOST_SHARED_ALLOCATOR_INIT.load(Ordering::Acquire) {
+                let ptr = GLOBAL_ALLOCATOR.AllocSharedBuf(layout.size(), layout.align());
+                let slice = core::slice::from_raw_parts_mut(ptr, layout.size());
+                return Ok(NonNull::new_unchecked(slice));
+            }
+            if is_cc_active(){
+                let ptr = PRIVATE_VCPU_SHARED_ALLOCATOR.AllocatorMut().alloc(layout);
+                let slice = core::slice::from_raw_parts_mut(ptr, layout.size());
+                return Ok(NonNull::new_unchecked(slice));
+            } else {
+                let ptr = CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout);
+                let slice = core::slice::from_raw_parts_mut(ptr, layout.size());
+                return Ok(NonNull::new_unchecked(slice));
+            }
+        }
+    }
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        let ptr = ptr.as_ptr();
+        if !HostAllocator::IsHeapAddr( ptr as u64) {
+            return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
+        }
+
+        if !GUEST_HOST_SHARED_ALLOCATOR_INIT.load(Ordering::Relaxed) {
+            return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
+        }
+        if is_cc_active(){
+            return PRIVATE_VCPU_SHARED_ALLOCATOR.AllocatorMut().dealloc(ptr, layout);
+        } else {
+            return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout);
+        }
+    }
+}
 
 impl UringAsyncMgr {
     pub fn FreeSlot(&self, id: usize) {

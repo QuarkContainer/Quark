@@ -17,7 +17,7 @@ use alloc::sync::Arc;
 use core::fmt;
 use core::ops::Deref;
 
-use crate::qlib::mem::cc_allocator::GuestHostSharedAllocator;
+use crate::qlib::mem::list_allocator::GuestHostSharedAllocator;
 use super::entry::*;
 use super::waitlist::*;
 use super::*;

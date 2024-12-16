@@ -165,6 +165,7 @@ lazy_static! {
     );
     //will not be used in host when cc enabled, just place holder here
     pub static ref PRIVATE_VCPU_ALLOCATOR: Box<PrivateVcpuAllocators> = Box::new(PrivateVcpuAllocators::New());
+    pub static ref PRIVATE_VCPU_SHARED_ALLOCATOR: Box<PrivateVcpuSharedAllocators> = Box::new(PrivateVcpuSharedAllocators::New());
     pub static ref GUEST_KERNEL: Mutex<Option<Kernel>> = Mutex::new(None);
 }
 
@@ -176,6 +177,7 @@ pub fn InitSingleton() {
 
 #[global_allocator]
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
+pub static SHARED_ALLOCATOR : GlobalVcpuSharedAllocator = GlobalVcpuSharedAllocator::New();
 pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
 
 fn main() {

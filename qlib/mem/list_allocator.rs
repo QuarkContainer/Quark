@@ -25,13 +25,14 @@ use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
 use crate::qlib::kernel::arch::tee::is_cc_active;
 use super::super::super::kernel_def::VcpuId;
 use super::super::kernel::vcpu::CPU_LOCAL;
-use crate::PRIVATE_VCPU_ALLOCATOR;
+use crate::{PRIVATE_VCPU_ALLOCATOR, PRIVATE_VCPU_SHARED_ALLOCATOR};
 use super::super::linux_def::*;
 use super::super::mutex::*;
 use super::super::pagetable::AlignedAllocator;
 use super::buddy_allocator::Heap;
 use crate::qlib::vcpu_mgr::CPULocal;
 use crate::GLOBAL_ALLOCATOR;
+use crate::SHARED_ALLOCATOR;
 
 pub const CLASS_CNT: usize = 16;
 pub const FREE_THRESHOLD: usize = 30; // when free size less than 30%, need to free buffer
@@ -89,6 +90,33 @@ impl GlobalVcpuAllocator {
 
     pub fn Initializated(&self) {
         self.init.store(true, Ordering::Release)
+    }
+}
+
+pub static GUEST_HOST_SHARED_ALLOCATOR_INIT: AtomicBool = AtomicBool::new(false);
+
+#[derive(Default, Clone, Copy)]
+pub struct GuestHostSharedAllocator { }
+
+impl GuestHostSharedAllocator {
+    pub const fn New() -> Self {
+        return Self { };
+    }
+
+    pub fn Print(&self) {
+        if is_cc_active() {
+            error!("GuestHostSharedAllocator {}/{}", VcpuId(), unsafe {
+                (*PRIVATE_VCPU_SHARED_ALLOCATOR.allocators[VcpuId()].get()).bufs.len()
+            })
+        } else {
+            error!("GuestHostSharedAllocator {}/{}", VcpuId(), unsafe {
+                (*CPU_LOCAL[VcpuId()].allocator.get()).bufs.len()
+            })
+        }
+    }
+
+    pub fn Initializated(&self) {
+        GUEST_HOST_SHARED_ALLOCATOR_INIT.store(true, Ordering::Release)
     }
 }
 
@@ -247,6 +275,64 @@ impl VcpuAllocator {
             self.bufs[idx].Push(ptr as u64);
         } else {
             unsafe { GLOBAL_ALLOCATOR.dealloc(ptr, layout) }
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct VcpuSharedAllocator {
+    pub bufs: [StackAllocator; 8],
+}
+
+impl VcpuSharedAllocator {
+    pub fn Clear(&mut self) {
+        for idx in 3..self.bufs.len() {
+            let size = 1 << idx;
+            let layout =
+                Layout::from_size_align(size, size).expect("VcpuAllocator layout alloc fail");
+            while !self.bufs[idx].IsEmpty() {
+                let addr = self.bufs[idx].Pop();
+                unsafe {
+                    SHARED_ALLOCATOR.dealloc(addr as _, layout);
+                }
+            }
+        }
+    }
+}
+
+impl VcpuSharedAllocator {
+    #[inline(never)]
+    pub fn alloc(&mut self, layout: Layout) -> *mut u8 {
+        let size = max(
+            layout.size().next_power_of_two(),
+            max(layout.align(), size_of::<usize>()),
+        );
+        let class = size.trailing_zeros() as usize;
+        assert!(class >= 3);
+        let idx = class - 3;
+
+        let ret;
+        if idx < self.bufs.len() && !self.bufs[idx].IsEmpty() {
+            ret = self.bufs[idx].Pop();
+        } else {
+            unsafe { ret = SHARED_ALLOCATOR.alloc(layout) as u64 };
+        }
+        return ret as *mut u8;
+    }
+
+    pub fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
+        let size = max(
+            layout.size().next_power_of_two(),
+            max(layout.align(), size_of::<usize>()),
+        );
+        let class = size.trailing_zeros() as usize;
+        assert!(class >= 3);
+        let idx = class - 3;
+
+        if idx < self.bufs.len() && !self.bufs[idx].IsFull() {
+            self.bufs[idx].Push(ptr as u64);
+        } else {
+            unsafe { SHARED_ALLOCATOR.dealloc(ptr, layout) }
         }
     }
 }

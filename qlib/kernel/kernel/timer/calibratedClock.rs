@@ -29,7 +29,7 @@ use super::sampler::*;
 use super::*;
 
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
-use crate::qlib::mem::cc_allocator::GuestHostSharedAllocator;
+use crate::qlib::mem::list_allocator::GuestHostSharedAllocator;
 
 pub static FALLBACK_METRIC: Singleton<Arc<U64Metric>> = Singleton::<Arc<U64Metric>>::New();
 pub unsafe fn InitSingleton() {
