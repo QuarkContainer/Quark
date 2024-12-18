@@ -13,9 +13,11 @@
 // limitations under the License.
 use core::borrow::Borrow;
 
+use alloc::boxed::Box;
 use alloc::sync::Arc;
 
 use crate::qlib::kernel::arch::tee::is_cc_active;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use super::super::super::bytestream::*;
 use super::super::super::common::*;
 use super::super::super::object_ref::*;
@@ -466,7 +468,7 @@ impl QUring {
             let idx = data as usize;
             let rerun = {
                 let mut ops = self.asyncMgr.ops[idx].lock();
-                //error!("uring process2: call is {:?}, idx {}", ops.Type(), idx);
+                //error!("uring process2: call is {:?}, idx {}, ret {}", ops.Type(), idx, ret);
                 ops.ProcessResult(ret, idx)
             };
 
@@ -482,14 +484,17 @@ impl QUring {
     }
 
     pub fn UCall(&self, task: &Task, msg: UringOp) -> i64 {
-        let call = UringCall {
-            taskId: task.GetTaskId(),
-            ret: 0,
-            msg: msg,
-        };
+        let call = Box::new_in(
+            UringCall {
+                taskId: task.GetTaskId(),
+                ret: 0,
+                msg: msg,
+            },
+            GUEST_HOST_SHARED_ALLOCATOR,
+        );
 
         {
-            self.UringCall(&call);
+            self.UringCall(&*call);
         }
 
         Wait();

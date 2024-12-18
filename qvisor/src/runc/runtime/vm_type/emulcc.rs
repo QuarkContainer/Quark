@@ -42,7 +42,7 @@ pub struct VmCcEmul {
 impl VmType for VmCcEmul {
     fn init(args: Option<&Args>) -> Result<(Box<dyn VmType>, KernelELF), Error> {
         let _pod_id = args.expect("VM creation expects arguments").ID.clone();
-        let default_min_vcpus = 3;
+        let default_min_vcpus = 2;
         let _emul_type: CCMode = QUARK_CONFIG.lock().CCMode;
         if _emul_type == CCMode::Normal {
             IDENTICAL_MAPPING.store(true, Ordering::Release);
@@ -375,7 +375,8 @@ impl VmType for VmCcEmul {
         let share_space_ptr = SHARE_SPACE.Ptr();
         KERNEL_IO_THREAD.Init(share_space_ptr.scheduler.VcpuArr[0].eventfd);
         FD_NOTIFIER.EpollCtlAdd(control_sock, EVENT_READ).unwrap();
-        
+        IOURING.SetValue(share_space_ptr.GetIOUringAddr());
+
         unsafe {
             CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
             futex::InitSingleton();

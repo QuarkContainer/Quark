@@ -143,7 +143,6 @@ lazy_static! {
     pub static ref PRIVATE_VCPU_ALLOCATOR: Box<PrivateVcpuAllocators> = Box::new(PrivateVcpuAllocators::New());
     pub static ref PRIVATE_VCPU_SHARED_ALLOCATOR: Box<PrivateVcpuSharedAllocators> = Box::new(PrivateVcpuSharedAllocators::New());
     pub static ref PAGE_MGR_HOLDER: Box<PageMgr> = Box::new(PageMgr::default());
-    pub static ref IO_URING_HOLDER: Box<QUring> = Box::new(QUring::New(MemoryDef::QURING_SIZE));
     pub static ref GUEST_KERNEL: Mutex<Option<kernel::kernel::Kernel>> = Mutex::new(None);
 }
 
@@ -167,12 +166,11 @@ pub fn SingletonInit() {
 
         if is_cc_active(){
             PAGE_MGR.SetValue(PAGE_MGR_HOLDER.Addr());
-            IOURING.SetValue(IO_URING_HOLDER.Addr());
         } else {
             SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
             PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
-            IOURING.SetValue(SHARESPACE.GetIOUringAddr());
         }
+        IOURING.SetValue(SHARESPACE.GetIOUringAddr());
         LOADER.Init(Loader::default());
         KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
             MemoryDef::DEFAULT_STACK_SIZE as usize,
@@ -668,23 +666,7 @@ pub extern "C" fn rust_main(
         }
     }
 
-    if id == 2 {
-        if is_cc_active(){
-            IoHanlder();
-        }
-    }
-
     WaitFn();
-}
-
-fn IoHanlder() {
-    loop {
-        if Shutdown() {
-            break;
-        }
-
-        QUringTrigger();
-    }
 }
 
 fn StartExecProcess(fd: i32, process: Process) -> ! {

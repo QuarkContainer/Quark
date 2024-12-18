@@ -148,24 +148,28 @@ impl AsyncOps {
     }
 }
 
-#[derive(Default)]
 pub struct UringAsyncMgr {
-    pub ops: Vec<QMutex<AsyncOps>>,
-    pub ids: QMutex<VecDeque<u16>>,
+    pub ops: Vec<QMutex<AsyncOps>, GuestHostSharedAllocator>,
+    pub ids: QMutex<VecDeque<u16, GuestHostSharedAllocator>>,
 
     // It might not be ok to free AsyncOps in Qvisor (Some drop function will use qkernel's version).
     // That's weird rust compiler behavior. So we have to store the idx here
     // and wait for qkernel to clear it.
-    pub freeids: QMutex<VecDeque<u16>>,
+    pub freeids: QMutex<VecDeque<u16, GuestHostSharedAllocator>>,
 }
 
+impl Default for UringAsyncMgr {
+    fn default() -> Self {
+        return Self::New(MemoryDef::QURING_SIZE);
+    }
+}
 unsafe impl Sync for UringAsyncMgr {}
 unsafe impl Send for UringAsyncMgr {}
 
 impl UringAsyncMgr {
     pub fn New(size: usize) -> Self {
-        let mut ids = VecDeque::with_capacity(size);
-        let mut ops = Vec::with_capacity(size);
+        let mut ids = VecDeque::with_capacity_in(size, GUEST_HOST_SHARED_ALLOCATOR);
+        let mut ops = Vec::with_capacity_in(size, GUEST_HOST_SHARED_ALLOCATOR);
         for i in 0..size {
             ids.push_back(i as u16);
             ops.push(QMutex::new(AsyncOps::None(AsyncNone {})));
@@ -173,7 +177,7 @@ impl UringAsyncMgr {
         return Self {
             ops: ops,
             ids: QMutex::new(ids),
-            freeids: QMutex::new(VecDeque::new()),
+            freeids: QMutex::new(VecDeque::new_in(GUEST_HOST_SHARED_ALLOCATOR)),
         };
     }
 
@@ -201,8 +205,8 @@ impl UringAsyncMgr {
 
     pub fn SetOps(&self, id: usize, ops: AsyncOps) -> UringEntry {
         // squeue::Entry {
-        *self.ops[id].lock() = ops.clone();
-
+            *self.ops[id].lock() = ops.clone();
+        
         let uringEntry = UringEntry {
             ops: UringOps::AsyncOps(ops),
             userdata: id as u64,
@@ -758,7 +762,7 @@ impl AsyncOpsTrait for AsyncAccept {
             }
 
         }
-
+        
         /**************************hibernate wakeu end **************************/
 
         NewSocket(result);

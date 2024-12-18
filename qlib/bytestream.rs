@@ -23,8 +23,10 @@ use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicU32};
 use core::{fmt, mem};
 
-use crate::GLOBAL_ALLOCATOR;
 use crate::qlib::kernel::SHARESPACE;
+use crate::GuestHostSharedAllocator;
+use crate::GLOBAL_ALLOCATOR;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 use super::common::*;
 use super::linux_def::*;
@@ -301,9 +303,7 @@ impl HeapAllocator {
         assert!(IsPowerOfTwo(pageCount));
 
         let addr = if SHARESPACE.config.read().EnableIOBuf {
-            unsafe {
-                GLOBAL_ALLOCATOR.AllocIOBuf(pageCount * MemoryDef::PAGE_SIZE as usize)
-            }
+            unsafe { GLOBAL_ALLOCATOR.AllocIOBuf(pageCount * MemoryDef::PAGE_SIZE as usize) }
         } else {
             let size = pageCount * MemoryDef::PAGE_SIZE as usize;
             let align = MemoryDef::PAGE_SIZE as usize;
@@ -313,7 +313,7 @@ impl HeapAllocator {
 
         // use crate::qlib::mem::list_allocator::HostAllocator;
         // error!("AlllocBuf addr {:x} isIOBuf {}", addr as u64, HostAllocator ::IsIOBuf(addr as u64) );
-         
+
         return addr as u64;
     }
 
@@ -778,7 +778,7 @@ impl RingBuf {
 ///
 
 #[derive(Clone)]
-pub struct ByteStream(pub Arc<QMutex<ByteStreamIntern>>);
+pub struct ByteStream(pub Arc<QMutex<ByteStreamIntern>, GuestHostSharedAllocator>);
 
 impl fmt::Debug for ByteStream {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -787,9 +787,9 @@ impl fmt::Debug for ByteStream {
 }
 
 impl Deref for ByteStream {
-    type Target = Arc<QMutex<ByteStreamIntern>>;
+    type Target = Arc<QMutex<ByteStreamIntern>, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<QMutex<ByteStreamIntern>> {
+    fn deref(&self) -> &Arc<QMutex<ByteStreamIntern>, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -803,7 +803,10 @@ impl PartialEq for ByteStream {
 
 impl ByteStream {
     pub fn Init(pageCount: u64) -> Self {
-        return Self(Arc::new(QMutex::new(ByteStreamIntern::Init(pageCount))));
+        return Self(Arc::new_in(
+            QMutex::new(ByteStreamIntern::Init(pageCount)),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
     }
 
     pub fn InitWithShareMemory(
@@ -813,15 +816,16 @@ impl ByteStream {
         bufAddr: u64,
         init: bool,
     ) -> Self {
-        return Self(Arc::new(QMutex::new(
-            ByteStreamIntern::InitWithShareMemory(
+        return Self(Arc::new_in(
+            QMutex::new(ByteStreamIntern::InitWithShareMemory(
                 pageCount,
                 headTailAddr,
                 waitingRWAddr,
                 bufAddr,
                 init,
-            ),
-        )));
+            )),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
     }
 }
 
