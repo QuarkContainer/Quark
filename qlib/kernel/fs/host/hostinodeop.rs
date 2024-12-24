@@ -998,7 +998,9 @@ impl HostInodeOp {
         };
 
         if is_cc_active(){
-            self.lock().Mappable().lock().WritebackAllPages();
+            if self.lock().mappable.is_some() {
+                self.lock().Mappable().lock().WritebackAllPages();
+            }
         }
 
         let ret = if SHARESPACE.config.read().UringIO && self.InodeType() == InodeType::RegularFile
