@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::arch::tee::is_cc_active;
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use core::ops::Deref;
@@ -90,7 +91,7 @@ impl CalibratedClockInternal {
         let clockId = self.sampler.clockID;
         logErrorAdjustement(clockId, errorNS, &self.params, &newParams);
 
-        if Magnitude(errorNS) > MAX_CLOCK_ERROR {
+        if Magnitude(errorNS) > MAX_CLOCK_ERROR && !is_cc_active(){
             // We should never get such extreme error, something is very
             // wrong. Reset everything and start again.
             self.resetLocked("Extreme clock error.");
