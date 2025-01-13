@@ -16,9 +16,9 @@ use alloc::str;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use super::super::super::mem::list_allocator::GuestHostSharedAllocator;
-use super::super::super::common::*;
-use super::super::task::*;
+use crate::qlib::mem::list_allocator::GuestHostSharedAllocator;
+use crate::qlib::common::*;
+use crate::qlib::kernel::task::*;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 #[derive(Debug)]

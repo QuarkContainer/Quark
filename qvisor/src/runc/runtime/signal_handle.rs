@@ -127,7 +127,7 @@ extern "C" fn handle_sigintAct(
     }
 }
 
-pub fn SendSignalVMS(signal: i32, console: bool) {
+fn SendSignalVMS(signal: i32, console: bool) {
     let signal = SignalArgs {
         Signo: signal,
         CID: ROOT_CONTAINER_ID.lock().clone(),

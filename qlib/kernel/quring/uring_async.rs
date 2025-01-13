@@ -205,7 +205,7 @@ impl UringAsyncMgr {
 
     pub fn SetOps(&self, id: usize, ops: AsyncOps) -> UringEntry {
         // squeue::Entry {
-            *self.ops[id].lock() = ops.clone();
+        *self.ops[id].lock() = ops.clone();
         
         let uringEntry = UringEntry {
             ops: UringOps::AsyncOps(ops),

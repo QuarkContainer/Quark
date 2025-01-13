@@ -530,8 +530,8 @@ impl Addr {
         self.PageOffset() == 0
     }
 
-    pub fn is_huge_page_aligned(&self, _type: pagetable::HugePageType) -> bool {
-        let align_size = _type.size();
+    pub fn is_huge_page_aligned(&self, huge_page_type: pagetable::HugePageType) -> bool {
+        let align_size = huge_page_type.size();
         return (self.0 & (align_size -1)) == 0
     }
 

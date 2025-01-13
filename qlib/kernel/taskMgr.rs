@@ -58,7 +58,7 @@ pub fn CreateTask(runFnAddr: u64, para: *const u8, kernel: bool) {
 }
 
 extern "C" {
-    pub fn context_swap(_fromCxt: u64, _toCtx: u64, _one: u64, _zero: u64);
+    pub fn context_swap(_fromCxt: u64, _toCtx: u64);
     pub fn context_swap_cc(_fromCxt: u64, _toCtx: u64, _fromTaskWrapper: u64, _toTaskWrapper: u64);
 }
 

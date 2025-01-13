@@ -159,7 +159,7 @@ pub fn switch(from: TaskId, to: TaskId) {
 
     if !is_cc_active() {
         unsafe {
-            context_swap(fromCtx.GetContext(), toCtx.GetContext(), 1, 0);
+            context_swap(fromCtx.GetContext(), toCtx.GetContext());
         }
     } else {
         assert!(!HostAllocator::IsSharedHeapAddr(fromCtx as *const _ as u64));
