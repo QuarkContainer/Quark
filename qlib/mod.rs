@@ -88,7 +88,6 @@ pub mod unix_socket;
 
 use self::kernel::dns::dns_svc::DnsSvc;
 use self::mutex::*;
-use alloc::collections::VecDeque;
 use alloc::string::String;
 use alloc::vec::Vec;
 use cache_padded::CachePadded;
@@ -152,6 +151,7 @@ pub const HYPERCALL_VCPU_DEBUG: u16 = 21;
 pub const HYPERCALL_VCPU_PRINT: u16 = 22;
 pub const HYPERCALL_VCPU_WAIT: u16 = 23;
 pub const HYPERCALL_RELEASE_VCPU: u16 = 24;
+pub const HYPERCALL_SHARESPACE_INIT: u16 = 25;
 
 pub const DUMMY_TASKID: TaskId = TaskId::New(0xffff_ffff);
 
@@ -1183,14 +1183,14 @@ impl CompleteEntry {
 }
 
 pub struct UringQueue {
-    pub submitq: QMutex<VecDeque<UringEntry>>,
+    pub submitq: ArrayQueue<UringEntry>,
     pub completeq: ArrayQueue<CompleteEntry>,
 }
 
 impl Default for UringQueue {
     fn default() -> Self {
         return Self {
-            submitq: Default::default(),
+            submitq: ArrayQueue::new(MemoryDef::QURING_SIZE),
             completeq: ArrayQueue::new(MemoryDef::QURING_SIZE),
         };
     }

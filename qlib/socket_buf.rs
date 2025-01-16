@@ -29,9 +29,17 @@ use super::mutex::*;
 use crate::qlib::kernel::kernel::waiter::Queue;
 use crate::qlib::kernel::socket::hostinet::loopbacksocket::LoopbackSocket;
 use crate::qlib::kernel::Kernel::HostSpace;
+use crate::GuestHostSharedAllocator;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
-#[derive(Clone, Default)]
-pub struct SocketBuffWeak(pub Weak<SocketBuffIntern>);
+#[derive(Clone)]
+pub struct SocketBuffWeak(pub Weak<SocketBuffIntern, GuestHostSharedAllocator>);
+
+impl Default for SocketBuffWeak {
+    fn default() -> Self {
+        SocketBuff::default().Downgrade()
+    }
+}
 
 impl SocketBuffWeak {
     pub fn Upgrade(&self) -> Option<SocketBuff> {
@@ -44,14 +52,23 @@ impl SocketBuffWeak {
     }
 }
 
-#[derive(Clone, Default)]
-pub struct SocketBuff(pub Arc<SocketBuffIntern>);
+#[derive(Clone)]
+pub struct SocketBuff(pub Arc<SocketBuffIntern, GuestHostSharedAllocator>);
 
 impl Deref for SocketBuff {
-    type Target = Arc<SocketBuffIntern>;
+    type Target = Arc<SocketBuffIntern, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<SocketBuffIntern> {
+    fn deref(&self) -> &Arc<SocketBuffIntern, GuestHostSharedAllocator> {
         &self.0
+    }
+}
+
+impl Default for SocketBuff {
+    fn default() -> Self {
+        Self(Arc::new_in(
+            SocketBuffIntern::default(),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ))
     }
 }
 
@@ -70,7 +87,7 @@ impl fmt::Debug for SocketBuff {
 impl SocketBuff {
     pub fn New(readbuf: ByteStream, writebuf: ByteStream) -> Self {
         let inner = SocketBuffIntern::New(readbuf, writebuf);
-        return Self(Arc::new(inner));
+        return Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR));
     }
 
     pub fn Downgrade(&self) -> SocketBuffWeak {
@@ -137,8 +154,14 @@ impl SocketBuffIntern {
                 let addr = 0 as *mut AtomicU64;
                 &mut (*addr)
             },
-            readBuf: ByteStream(Arc::new(QMutex::new(ByteStreamIntern::Init(pageCount)))),
-            writeBuf: ByteStream(Arc::new(QMutex::new(ByteStreamIntern::Init(pageCount)))),
+            readBuf: ByteStream(Arc::new_in(
+                QMutex::new(ByteStreamIntern::Init(pageCount)),
+                GUEST_HOST_SHARED_ALLOCATOR,
+            )),
+            writeBuf: ByteStream(Arc::new_in(
+                QMutex::new(ByteStreamIntern::Init(pageCount)),
+                GUEST_HOST_SHARED_ALLOCATOR,
+            )),
         };
     }
 
@@ -167,24 +190,26 @@ impl SocketBuffIntern {
             pendingWShutdown: AtomicBool::new(false),
             error: AtomicI32::new(0),
             consumeReadData,
-            readBuf: ByteStream(Arc::new(QMutex::new(
-                ByteStreamIntern::InitWithShareMemory(
+            readBuf: ByteStream(Arc::new_in(
+                QMutex::new(ByteStreamIntern::InitWithShareMemory(
                     pageCount,
                     readBufHeadTailAddr,
                     readBufWaitingRWAddr,
                     readBufAddr,
                     init,
-                ),
-            ))),
-            writeBuf: ByteStream(Arc::new(QMutex::new(
-                ByteStreamIntern::InitWithShareMemory(
+                )),
+                GUEST_HOST_SHARED_ALLOCATOR,
+            )),
+            writeBuf: ByteStream(Arc::new_in(
+                QMutex::new(ByteStreamIntern::InitWithShareMemory(
                     pageCount,
                     writeBufHeadTailAddr,
                     writeBufWaitingRWAddr,
                     writeBufAddr,
                     init,
-                ),
-            ))),
+                )),
+                GUEST_HOST_SHARED_ALLOCATOR,
+            )),
         };
     }
 
@@ -349,12 +374,12 @@ pub struct AcceptItem {
 }
 
 #[derive(Clone, Debug)]
-pub struct AcceptQueue(Arc<QMutex<AcceptQueueIntern>>);
+pub struct AcceptQueue(Arc<QMutex<AcceptQueueIntern>, GuestHostSharedAllocator>);
 
 impl Deref for AcceptQueue {
-    type Target = Arc<QMutex<AcceptQueueIntern>>;
+    type Target = Arc<QMutex<AcceptQueueIntern>, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<QMutex<AcceptQueueIntern>> {
+    fn deref(&self) -> &Arc<QMutex<AcceptQueueIntern>, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -362,14 +387,14 @@ impl Deref for AcceptQueue {
 impl AcceptQueue {
     pub fn New(len: usize, queue: Queue) -> Self {
         let inner = AcceptQueueIntern {
-            aiQueue: VecDeque::new(),
+            aiQueue: VecDeque::new_in(GUEST_HOST_SHARED_ALLOCATOR),
             queueLen: len,
             error: 0,
             total: 0,
             queue: queue,
         };
 
-        return Self(Arc::new(QMutex::new(inner)));
+        return Self(Arc::new_in(QMutex::new(inner), GUEST_HOST_SHARED_ALLOCATOR));
     }
 
     pub fn EnqSocket(
@@ -407,7 +432,7 @@ impl AcceptQueue {
 }
 
 pub struct AcceptQueueIntern {
-    pub aiQueue: VecDeque<AcceptItem>,
+    pub aiQueue: VecDeque<AcceptItem, GuestHostSharedAllocator>,
     pub queueLen: usize,
     pub error: i32,
     pub total: u64,

@@ -18,6 +18,7 @@ use alloc::sync::Arc;
 use core::ptr;
 use core::sync::atomic::AtomicUsize;
 
+use crate::qlib::kernel::arch::tee::is_cc_active;
 use super::super::super::super::kernel_def::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
@@ -229,7 +230,7 @@ impl CloneOptions {
 }
 
 impl Thread {
-    pub fn Clone(&self, opts: &CloneOptions, stackAddr: u64) -> Result<Self> {
+    pub fn Clone(&self, opts: &CloneOptions, taskid: u64) -> Result<Self> {
         let pidns = self.PIDNamespace();
         let ts = pidns.Owner();
         let _wl = ts.WriteLock();
@@ -316,7 +317,7 @@ impl Thread {
         }
 
         let mut cfg = TaskConfig {
-            TaskId: stackAddr,
+            TaskId: taskid,
             Kernel: t.k.clone(),
             Parent: None,
             InheritParent: None,
@@ -331,7 +332,7 @@ impl Thread {
             AllowedCPUMask: t.allowedCPUMask.Copy(),
             UTSNamespace: utsns,
             IPCNamespace: ipcns,
-            Blocker: Blocker::New(stackAddr),
+            Blocker: Blocker::New(taskid),
             ContainerID: t.containerID.to_string(),
         };
 
@@ -455,7 +456,6 @@ impl Task {
         }
 
         taskMgr::NewTask(TaskId::New(cTask.taskId));
-
         return Ok(pid);
     }
 
@@ -469,7 +469,27 @@ impl Task {
         let task = Task::Current();
         let thread = task.Thread();
 
-        let nt = thread.Clone(&opts, s_ptr as u64)?;
+        let mut taskId = s_ptr as u64;
+        if is_cc_active() {
+            let tw_size  = core::mem::size_of::<TaskWrapper>();
+            let tw_ptr = unsafe {
+                crate::GLOBAL_ALLOCATOR.AllocSharedBuf(tw_size, 2)
+            };
+
+            let t_wp = TaskWrapper::New(s_ptr as u64);
+            let t_wp_ptr = tw_ptr as *mut TaskWrapper;
+            unsafe {
+                ptr::write(
+                    t_wp_ptr,
+                    t_wp
+                );
+            }
+            taskId = t_wp_ptr as u64;
+        }
+        
+
+
+        let nt = thread.Clone(&opts, taskId as u64)?;
 
         unsafe {
             let mm = nt.lock().memoryMgr.clone();
@@ -506,7 +526,7 @@ impl Task {
                 taskPtr,
                 Self {
                     context: Context::New(),
-                    taskId: s_ptr as u64,
+                    taskId: taskId as u64,
                     mm: mm,
                     tidInfo: Default::default(),
                     isWaitThread: false,

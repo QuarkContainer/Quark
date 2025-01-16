@@ -39,6 +39,9 @@ use super::super::waiter::*;
 use super::epoll_entry::*;
 use super::epoll_list::*;
 
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+use crate::GuestHostSharedAllocator;
+
 pub static CYCLE_MU: Singleton<QMutex<()>> = Singleton::<QMutex<()>>::New();
 pub unsafe fn InitSingleton() {
     CYCLE_MU.Init(QMutex::new(()));
@@ -150,8 +153,17 @@ pub fn NewEventPoll(task: &Task) -> File {
     return File::New(&dirent, &FileFlags::default(), epoll.into());
 }
 
-#[derive(Clone, Default)]
-pub struct EventPoll(Arc<EventPollInternal>);
+#[derive(Clone)]
+pub struct EventPoll(Arc<EventPollInternal, GuestHostSharedAllocator>);
+
+impl Default for EventPoll {
+    fn default() -> Self {
+        Self(Arc::new_in(
+            EventPollInternal::default(),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ))
+    }
+}
 
 impl PartialEq for EventPoll {
     fn eq(&self, other: &Self) -> bool {
@@ -364,7 +376,10 @@ impl EventPoll {
                     state: PollEntryState::Waiting,
                 };
 
-                let entry = PollEntry(Arc::new(QMutex::new(entryInternal)));
+                let entry = PollEntry(Arc::new_in(
+                    QMutex::new(entryInternal),
+                    crate::GUEST_HOST_SHARED_ALLOCATOR,
+                ));
                 waiter.lock().context = WaitContext::EpollContext(entry.clone());
                 e.insert(entry.clone());
 
@@ -486,9 +501,9 @@ impl Drop for EventPollInternal {
 }
 
 impl Deref for EventPoll {
-    type Target = Arc<EventPollInternal>;
+    type Target = Arc<EventPollInternal, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<EventPollInternal> {
+    fn deref(&self) -> &Arc<EventPollInternal, GuestHostSharedAllocator> {
         &self.0
     }
 }

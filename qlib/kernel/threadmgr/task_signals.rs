@@ -16,9 +16,11 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 
 use super::super::super::common::*;
+#[cfg(target_arch="x86_64")]
 use super::super::super::cpuid::*;
 use super::super::super::linux::time::*;
 use super::super::super::linux_def::*;
+#[cfg(target_arch="x86_64")]
 use super::super::arch::__arch::arch_def::ArchFPState;
 use super::super::kernel::posixtimer::*;
 use super::super::kernel::waiter::*;

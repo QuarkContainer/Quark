@@ -25,6 +25,7 @@ use super::flags::*;
 use super::inode::*;
 use super::overlay::*;
 use crate::qlib::kernel::fs::file::FileOperations;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 
 pub fn copyUp(task: &Task, d: &Dirent) -> Result<()> {
     let _a = RENAME.read();
@@ -250,7 +251,10 @@ fn copyAttributesLocked(task: &Task, upper: &mut Inode, lower: &Inode) -> Result
             continue;
         }
 
-        let value = lower.Getxattr(task, name, Xattr::XATTR_SIZE_MAX)?;
+        let value = lower
+            .Getxattr(task, name, Xattr::XATTR_SIZE_MAX)?
+            .to_vec_in(GUEST_HOST_SHARED_ALLOCATOR);
+
         upperInodeOp.Setxattr(upper, name, &value, 0)?;
     }
 

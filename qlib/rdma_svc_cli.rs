@@ -323,7 +323,7 @@ impl RDMASvcClient {
                                 SockInfo::Socket(_) => {
                                     let ioBufIndex = response.ioBufIndex as usize;
                                     let shareRegion = self.cliShareRegion.lock();
-                                    let sockBuf = SocketBuff(Arc::new(
+                                    let sockBuf = SocketBuff(Arc::new_in(
                                         SocketBuffIntern::InitWithShareMemory(
                                             MemoryDef::DEFAULT_BUF_PAGE_COUNT,
                                             &shareRegion.ioMetas[ioBufIndex].readBufAtoms
@@ -346,6 +346,7 @@ impl RDMASvcClient {
                                                 as u64,
                                             false,
                                         ),
+                                        crate::GUEST_HOST_SHARED_ALLOCATOR,
                                     ));
 
                                     let dataSock = RDMADataSock::New(
@@ -413,7 +414,7 @@ impl RDMASvcClient {
                                     self.rdmaIdToSocketMappings.lock().insert(rdmaId, fd);
                                     let ioBufIndex = response.ioBufIndex as usize;
                                     let shareRegion = self.cliShareRegion.lock();
-                                    let sockBuf = SocketBuff(Arc::new(
+                                    let sockBuf = SocketBuff(Arc::new_in(
                                         SocketBuffIntern::InitWithShareMemory(
                                             MemoryDef::DEFAULT_BUF_PAGE_COUNT,
                                             &shareRegion.ioMetas[ioBufIndex].readBufAtoms
@@ -436,6 +437,7 @@ impl RDMASvcClient {
                                                 as u64,
                                             false,
                                         ),
+                                        crate::GUEST_HOST_SHARED_ALLOCATOR,
                                     ));
 
                                     let dataSock = RDMADataSock::New(

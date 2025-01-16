@@ -26,6 +26,9 @@ use super::*;
 
 pub type WaiterID = u32;
 
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+use crate::GuestHostSharedAllocator;
+
 #[derive(Copy, Clone, Debug)]
 pub struct WaiterInternal {
     pub bitmap: u64,
@@ -47,13 +50,22 @@ impl Default for WaiterInternal {
     }
 }
 
-#[derive(Clone, Default)]
-pub struct Waiter(Arc<QMutex<WaiterInternal>>);
+#[derive(Clone)]
+pub struct Waiter(Arc<QMutex<WaiterInternal>, GuestHostSharedAllocator>);
+
+impl Default for Waiter {
+    fn default() -> Self {
+        return Waiter(Arc::new_in(
+            QMutex::new(WaiterInternal::default()),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
+    }
+}
 
 impl Deref for Waiter {
-    type Target = Arc<QMutex<WaiterInternal>>;
+    type Target = Arc<QMutex<WaiterInternal>, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<QMutex<WaiterInternal>> {
+    fn deref(&self) -> &Arc<QMutex<WaiterInternal>, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -65,7 +77,10 @@ impl Waiter {
             ..Default::default()
         };
 
-        return Self(Arc::new(QMutex::new(internal)));
+        return Self(Arc::new_in(
+            QMutex::new(internal),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
     }
 
     fn NextWaiterId(&self) -> WaiterID {

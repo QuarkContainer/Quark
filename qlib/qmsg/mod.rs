@@ -14,4 +14,6 @@
 
 //pub mod output;
 pub mod qcall;
+/// Used only for active Confidential Computing mode
+pub mod sharepara;
 pub use super::qcall::*;

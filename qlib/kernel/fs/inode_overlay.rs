@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::util::sharedcstring::SharedCString;
 use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
@@ -51,10 +52,11 @@ pub fn OverlayHasWhiteout(task: &Task, parent: &Inode, name: &str) -> bool {
 
 pub fn overlayCreateWhiteout(parent: &mut Inode, name: &str) -> Result<()> {
     let iops = parent.lock().InodeOp.clone();
+    
     return iops.Setxattr(
         parent,
         &XattrOverlayWhiteout(name),
-        &"y".to_string().as_bytes(),
+        SharedCString::New(&"y").Slice(),
         0,
     );
 }

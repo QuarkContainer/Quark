@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use spin::*;
 //use alloc::string::ToString;
 use crate::qlib::mutex::*;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 use core::any::Any;
@@ -426,9 +428,9 @@ impl Inode {
     }
 
     pub fn NewTmpDirInode(task: &Task, root: &str) -> Result<Self> {
-        let mut fstat = LibcStat::default();
+        let mut fstat = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
         let tmpDirfd =
-            HostSpace::NewTmpfsFile(TmpfsFileType::Dir, &mut fstat as *mut _ as u64) as i32;
+            HostSpace::NewTmpfsFile(TmpfsFileType::Dir, &mut *fstat as *mut _ as u64) as i32;
         if tmpDirfd < 0 {
             return Err(Error::SysError(-tmpDirfd));
         }
@@ -450,7 +452,7 @@ impl Inode {
             task,
             &Arc::new(QMutex::new(ms)),
             tmpDirfd,
-            &fstat,
+            &*fstat,
             true,
             false,
             false,

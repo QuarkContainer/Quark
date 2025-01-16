@@ -45,6 +45,7 @@ pub struct Config {
     pub Realtime: bool,
     pub EnableIOBuf: bool,
     pub EnableTsot: bool,
+    pub CCMode: CCMode,
 }
 
 impl Config {
@@ -92,6 +93,7 @@ impl Default for Config {
             Realtime: false,
             EnableIOBuf: false,
             EnableTsot: false,
+            CCMode: CCMode::None,
         };
     }
 }
@@ -138,4 +140,27 @@ pub enum CudaMemType {
     Default,
     UM, //Unified Memory
     MemPool,
+}
+
+#[derive(Clone, Copy, Debug, PartialOrd, Ord, Eq, PartialEq, Serialize, Deserialize)]
+pub enum CCMode {
+    None,
+    Normal,
+    NormalEmu,
+    SevSnp,
+}
+
+impl CCMode {
+    pub fn from(value: u64) -> Self {
+        match value {
+            0 | 4.. => CCMode::None,
+            1 => CCMode::Normal,
+            2 => CCMode::NormalEmu,
+            3 => CCMode::SevSnp,
+        }
+    }
+
+    pub fn tee_backedup(_cc_type: u64) -> bool {
+        false
+    }
 }

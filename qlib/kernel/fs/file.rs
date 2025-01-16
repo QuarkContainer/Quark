@@ -17,10 +17,12 @@ use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 use alloc::vec::Vec;
+use alloc::boxed::Box;
 use core::any::Any;
 use core::ops::Deref;
 use enum_dispatch::enum_dispatch;
 
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use crate::qlib::kernel::socket::hostinet::tsotsocket::TsotSocketOperations;
 use crate::qlib::mutex::*;
 use super::super::super::auth::*;
@@ -665,9 +667,9 @@ impl File {
         stdio: bool,
         isTTY: bool,
     ) -> Result<Self> {
-        let mut fstat = LibcStat::default();
+        let mut fstat = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
 
-        let ret = Fstat(fd, &mut fstat) as i32;
+        let ret = Fstat(fd, &mut *fstat) as i32;
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }
@@ -700,7 +702,7 @@ impl File {
                         task,
                         &Arc::new(QMutex::new(msrc)),
                         fd,
-                        &fstat,
+                        &*fstat,
                         fileFlags.Write,
                     )?
                 } else {
@@ -708,7 +710,7 @@ impl File {
                         task,
                         &Arc::new(QMutex::new(msrc)),
                         fd,
-                        &fstat,
+                        &*fstat,
                         fileFlags.Write,
                         false,
                         false,
@@ -749,8 +751,8 @@ impl File {
             return Err(Error::SysError(-fd as i32));
         }
 
-        let mut fstat = LibcStat::default();
-        let ret = Fstat(fd, &mut fstat) as i32;
+        let mut fstat = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
+        let ret = Fstat(fd, &mut *fstat) as i32;
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }
@@ -768,7 +770,7 @@ impl File {
             task,
             &Arc::new(QMutex::new(msrc)),
             fd,
-            &fstat,
+            &*fstat,
             fileFlags.Write,
             false,
             true,

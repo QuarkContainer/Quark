@@ -13,11 +13,13 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use alloc::boxed::Box;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
@@ -231,8 +233,8 @@ impl Filesystem for WhitelistFileSystem {
         let msrc =
             MountSource::NewHostMountSource(&rootPath, &owner, self, flags, dontTranslateOwnership);
 
-        let mut fstat = LibcStat::default();
-        let ret = Fstat(fd, &mut fstat);
+        let mut fstat = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
+        let ret = Fstat(fd, &mut *fstat);
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }
@@ -240,7 +242,7 @@ impl Filesystem for WhitelistFileSystem {
             task,
             &Arc::new(QMutex::new(msrc)),
             fd,
-            &fstat,
+            &*fstat,
             writable,
             false,
             false,

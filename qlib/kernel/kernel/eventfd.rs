@@ -32,6 +32,9 @@ use super::super::fs::file::*;
 use super::super::fs::flags::*;
 use super::super::fs::host::hostinodeop::*;
 
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+use crate::GuestHostSharedAllocator;
+
 // Constants for eventfd2(2).
 pub const EFD_SEMAPHORE: i32 = 0x1;
 pub const EFD_CLOEXEC: i32 = Flags::O_CLOEXEC;
@@ -60,7 +63,7 @@ pub fn NewEventfd(task: &Task, initVal: u64, semMode: bool) -> File {
         semMode: semMode,
     };
 
-    let ops = EventOperations(Arc::new(QMutex::new(internal)));
+    let ops = EventOperations(Arc::new_in(QMutex::new(internal), GUEST_HOST_SHARED_ALLOCATOR));
 
     return File::New(
         &dirent,
@@ -74,12 +77,11 @@ pub fn NewEventfd(task: &Task, initVal: u64, semMode: bool) -> File {
 }
 
 #[derive(Clone)]
-pub struct EventOperations(Arc<QMutex<EventOperationsInternal>>);
-
+pub struct EventOperations(Arc<QMutex<EventOperationsInternal>, GuestHostSharedAllocator>);
 impl Deref for EventOperations {
-    type Target = Arc<QMutex<EventOperationsInternal>>;
+    type Target = Arc<QMutex<EventOperationsInternal>, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<QMutex<EventOperationsInternal>> {
+    fn deref(&self) -> &Arc<QMutex<EventOperationsInternal>, GuestHostSharedAllocator> {
         &self.0
     }
 }

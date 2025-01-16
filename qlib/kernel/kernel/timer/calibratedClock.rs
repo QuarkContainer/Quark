@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::arch::tee::is_cc_active;
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use core::ops::Deref;
@@ -27,6 +28,9 @@ use super::super::super::TSC;
 use super::parameters::*;
 use super::sampler::*;
 use super::*;
+
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+use crate::qlib::mem::list_allocator::GuestHostSharedAllocator;
 
 pub static FALLBACK_METRIC: Singleton<Arc<U64Metric>> = Singleton::<Arc<U64Metric>>::New();
 pub unsafe fn InitSingleton() {
@@ -87,7 +91,7 @@ impl CalibratedClockInternal {
         let clockId = self.sampler.clockID;
         logErrorAdjustement(clockId, errorNS, &self.params, &newParams);
 
-        if Magnitude(errorNS) > MAX_CLOCK_ERROR {
+        if Magnitude(errorNS) > MAX_CLOCK_ERROR && !is_cc_active(){
             // We should never get such extreme error, something is very
             // wrong. Reset everything and start again.
             self.resetLocked("Extreme clock error.");
@@ -101,12 +105,12 @@ impl CalibratedClockInternal {
 }
 
 #[derive(Clone)]
-pub struct CalibratedClock(Arc<QRwLock<CalibratedClockInternal>>);
+pub struct CalibratedClock(Arc<QRwLock<CalibratedClockInternal>, GuestHostSharedAllocator>);
 
 impl Deref for CalibratedClock {
-    type Target = Arc<QRwLock<CalibratedClockInternal>>;
+    type Target = Arc<QRwLock<CalibratedClockInternal>, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<QRwLock<CalibratedClockInternal>> {
+    fn deref(&self) -> &Arc<QRwLock<CalibratedClockInternal>, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -119,7 +123,10 @@ impl CalibratedClock {
             params: Parameters::default(),
             errorNS: 0,
         };
-        return Self(Arc::new(QRwLock::new(internal)));
+        return Self(Arc::new_in(
+            QRwLock::new(internal),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
     }
 
     // reset forces the clock to restart the calibration process, logging the

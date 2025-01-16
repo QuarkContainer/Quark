@@ -912,7 +912,7 @@ impl Thread {
 
         let creds = self.Credentials();
         let kuid = creds.lock().RealKUID;
-        let userns = receiver.UserNamespace();
+        let userns = creds.lock().UserNamespace.clone();
 
         info.SigChld().uid = kuid.In(&userns).OrOverflow().0;
 

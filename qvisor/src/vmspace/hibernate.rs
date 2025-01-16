@@ -174,9 +174,12 @@ impl HiberMgr {
         crate::PMA_KEEPER.DontNeed()?;
 
         //SHARE_SPACE.scheduler.CleanVcpPageCache();
-        let allocated1 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
-        GLOBAL_ALLOCATOR.Allocator().FreeAll();
-        let allocated2 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
+        let allocated1 = GLOBAL_ALLOCATOR.GuestHostSharedAllocator().heap.lock().allocated;
+
+        GLOBAL_ALLOCATOR.GuestHostSharedAllocator().FreeAll();
+
+        let allocated2 = GLOBAL_ALLOCATOR.GuestHostSharedAllocator().heap.lock().allocated;
+
         info!(
             "free pagepool {} pages, total allocated1 {} allocated2 {} free bytes {}",
             cnt,
@@ -190,8 +193,7 @@ impl HiberMgr {
         }
         info!("heap usage3 is {:?}", &GLOBAL_ALLOCATOR.Allocator().maxnum);*/
 
-        GLOBAL_ALLOCATOR.Allocator().heap.lock().DontNeed();
-
+        GLOBAL_ALLOCATOR.GuestHostSharedAllocator().heap.lock().DontNeed();
         error!("swap out done ...");
         return Ok(());
     }

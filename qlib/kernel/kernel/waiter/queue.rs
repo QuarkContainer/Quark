@@ -17,13 +17,18 @@ use alloc::sync::Arc;
 use core::fmt;
 use core::ops::Deref;
 
+use crate::qlib::mem::list_allocator::GuestHostSharedAllocator;
 use super::entry::*;
 use super::waitlist::*;
 use super::*;
 
-#[derive(Default, Clone)]
-pub struct Queue(Arc<QRwLock<WaitList>>);
-
+#[derive(Clone)]
+pub struct Queue(Arc<QRwLock<WaitList>,GuestHostSharedAllocator>);
+impl Default for Queue{
+    fn default() -> Self{
+        return Queue(Arc::new_in(QRwLock::new(WaitList::default()), crate::GUEST_HOST_SHARED_ALLOCATOR));
+    }
+}
 impl fmt::Debug for Queue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Queue",)
@@ -31,9 +36,9 @@ impl fmt::Debug for Queue {
 }
 
 impl Deref for Queue {
-    type Target = Arc<QRwLock<WaitList>>;
+    type Target = Arc<QRwLock<WaitList>,GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<QRwLock<WaitList>> {
+    fn deref(&self) -> &Arc<QRwLock<WaitList>,GuestHostSharedAllocator> {
         &self.0
     }
 }

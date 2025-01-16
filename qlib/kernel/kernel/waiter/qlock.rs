@@ -11,8 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 use crate::qlib::mutex::*;
+use crate::GuestHostSharedAllocator;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use alloc::sync::Arc;
 use core::cell::UnsafeCell;
 use core::ops::Deref;
@@ -167,16 +168,33 @@ impl Drop for QAsyncLockGuard {
     }
 }*/
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct QAsyncLock {
-    pub locked: Arc<QMutex<bool>>,
+    pub locked: Arc<QMutex<bool>, GuestHostSharedAllocator>,
     pub queue: Queue,
 }
 
-#[derive(Default)]
+impl Default for QAsyncLock {
+    fn default() -> Self {
+        Self {
+            locked: Arc::new_in(QMutex::default(), GUEST_HOST_SHARED_ALLOCATOR),
+            queue: Queue::default(),
+        }
+    }
+}
+
 pub struct QAsyncLockGuard {
-    pub locked: Arc<QMutex<bool>>,
+    pub locked: Arc<QMutex<bool>, GuestHostSharedAllocator>,
     pub queue: Queue,
+}
+
+impl Default for QAsyncLockGuard {
+    fn default() -> Self {
+        Self {
+            locked: Arc::new_in(QMutex::default(), GUEST_HOST_SHARED_ALLOCATOR),
+            queue: Queue::default(),
+        }
+    }
 }
 
 impl QAsyncLock {
@@ -254,22 +272,47 @@ impl Default for RWState {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct QAsyncRwLock {
-    pub locked: Arc<QMutex<RWState>>,
+    pub locked: Arc<QMutex<RWState>, GuestHostSharedAllocator>,
     pub queue: Queue,
 }
 
-#[derive(Default)]
+impl Default for QAsyncRwLock {
+    fn default() -> Self {
+        Self {
+            locked: Arc::new_in(QMutex::<RWState>::default(), GUEST_HOST_SHARED_ALLOCATOR),
+            queue: Queue::default(),
+        }
+    }
+}
+
 pub struct QAsyncReadLockGuard {
-    pub locked: Arc<QMutex<RWState>>,
+    pub locked: Arc<QMutex<RWState>, GuestHostSharedAllocator>,
     pub queue: Queue,
 }
 
-#[derive(Default)]
+impl Default for QAsyncReadLockGuard {
+    fn default() -> Self {
+        Self {
+            locked: Arc::new_in(QMutex::<RWState>::default(), GUEST_HOST_SHARED_ALLOCATOR),
+            queue: Queue::default(),
+        }
+    }
+}
+
 pub struct QAsyncWriteLockGuard {
-    pub locked: Arc<QMutex<RWState>>,
+    pub locked: Arc<QMutex<RWState>, GuestHostSharedAllocator>,
     pub queue: Queue,
+}
+
+impl Default for QAsyncWriteLockGuard {
+    fn default() -> Self {
+        Self {
+            locked: Arc::new_in(QMutex::<RWState>::default(), GUEST_HOST_SHARED_ALLOCATOR),
+            queue: Queue::default(),
+        }
+    }
 }
 
 impl QAsyncRwLock {

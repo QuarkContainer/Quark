@@ -27,6 +27,7 @@ use super::kernel::SHARESPACE;
 use crate::qlib::kernel::quring::uring_async::*;
 use crate::qlib::kernel::quring::uring_op::*;
 use crate::URING;
+use std::borrow::Borrow;
 
 pub fn CopyCompleteEntry() -> usize {
     let mut count = 0;
@@ -62,17 +63,16 @@ pub fn HostSubmit() -> Result<usize> {
         let _count = CopyCompleteEntry();
 
         let mut count = 0;
-
         {
             let mut uring = URING.lock();
             let mut sq = uring.submission();
-            let mut submitq = SHARESPACE.uringQueue.submitq.lock();
+            let submitq = SHARESPACE.uringQueue.submitq.borrow();
 
             assert!(sq.dropped() == 0, "uring dropped {}", sq.dropped());
             assert!(!sq.cq_overflow());
 
             while !sq.is_full() {
-                let uringEntry = match submitq.pop_front() {
+                let uringEntry = match submitq.pop() {
                     None => break,
                     Some(e) => e,
                 };

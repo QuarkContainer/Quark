@@ -25,6 +25,9 @@ use super::waiter::*;
 use super::*;
 use crate::qlib::TaskId;
 
+use crate::GuestHostSharedAllocator;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+use alloc::boxed::Box;
 pub enum WaitContext {
     None,
     ThreadContext(RefCell<ThreadContext>),
@@ -133,8 +136,14 @@ pub struct EntryInternal {
     pub context: WaitContext,
 }
 
-#[derive(Clone, Default)]
-pub struct WaitEntryWeak(pub Weak<QMutex<EntryInternal>>);
+#[derive(Clone)]
+pub struct WaitEntryWeak(pub Weak<QMutex<EntryInternal>, GuestHostSharedAllocator>);
+
+impl Default for WaitEntryWeak {
+    fn default() -> Self {
+        return WaitEntry::default().Downgrade();
+    }
+}
 
 impl WaitEntryWeak {
     pub fn Upgrade(&self) -> Option<WaitEntry> {
@@ -147,17 +156,25 @@ impl WaitEntryWeak {
     }
 }
 
-#[derive(Default, Clone)]
-pub struct WaitEntry(Arc<QMutex<EntryInternal>>);
+#[derive(Clone)]
+pub struct WaitEntry(Arc<QMutex<EntryInternal>, GuestHostSharedAllocator>);
 
-impl Deref for WaitEntry {
-    type Target = Arc<QMutex<EntryInternal>>;
-
-    fn deref(&self) -> &Arc<QMutex<EntryInternal>> {
-        &self.0
+impl Default for WaitEntry {
+    fn default() -> Self {
+        return WaitEntry(Arc::new_in(
+            QMutex::new(EntryInternal::default()),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
     }
 }
 
+impl Deref for WaitEntry {
+    type Target = Arc<QMutex<EntryInternal>, GuestHostSharedAllocator>;
+
+    fn deref(&self) -> &Arc<QMutex<EntryInternal>, GuestHostSharedAllocator> {
+        &self.0
+    }
+}
 impl PartialEq for WaitEntry {
     fn eq(&self, other: &Self) -> bool {
         return Arc::ptr_eq(&self.0, &other.0);
@@ -184,7 +201,10 @@ impl WaitEntry {
             context: WaitContext::None,
         };
 
-        return Self(Arc::new(QMutex::new(internal)));
+        return Self(Arc::new_in(
+            QMutex::new(internal),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
     }
 
     pub fn Timeout(&self) {
@@ -192,21 +212,27 @@ impl WaitEntry {
     }
 
     pub fn NewThreadContext(waiter: &Waiter, waiterId: WaiterID, mask: EventMask) -> Self {
-        let context = ThreadContext {
-            waiterID: waiterId,
-            waiter: waiter.clone(),
-            tid: 0,
-            key: Key::default(),
-        };
+        let context = Box::new_in(
+            ThreadContext {
+                waiterID: waiterId,
+                waiter: waiter.clone(),
+                tid: 0,
+                key: Key::default(),
+            },
+            GUEST_HOST_SHARED_ALLOCATOR,
+        );
 
         let internal = EntryInternal {
             next: None,
             prev: None,
             mask: mask,
-            context: WaitContext::ThreadContext(RefCell::new(context)),
+            context: WaitContext::ThreadContext(RefCell::new(*context)),
         };
 
-        return Self(Arc::new(QMutex::new(internal)));
+        return Self(Arc::new_in(
+            QMutex::new(internal),
+            GUEST_HOST_SHARED_ALLOCATOR,
+        ));
     }
 
     pub fn ID(&self) -> WaiterID {

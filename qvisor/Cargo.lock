@@ -634,7 +634,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a78c049190826fff959994b7c1d8a2930d0a348f1b8f3aa4f9bb34cd5d7f2952"
 dependencies = [
- "vmm-sys-util",
+ "vmm-sys-util 0.8.0",
 ]
 
 [[package]]
@@ -644,7 +644,7 @@ source = "git+https://github.com/QuarkContainer/kvm-ioctls.git#8e6e66b565c28bbce
 dependencies = [
  "kvm-bindings",
  "libc",
- "vmm-sys-util",
+ "vmm-sys-util 0.8.0",
 ]
 
 [[package]]
@@ -1015,6 +1015,7 @@ dependencies = [
  "tempfile",
  "time 0.3.7",
  "uuid",
+ "vmm-sys-util 0.12.1",
  "x86_64",
  "xmas-elf",
 ]
@@ -1505,6 +1506,16 @@ name = "vmm-sys-util"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "01cf11afbc4ebc0d5c7a7748a77d19e2042677fc15faa2f4ccccb27c18a60605"
+dependencies = [
+ "bitflags",
+ "libc",
+]
+
+[[package]]
+name = "vmm-sys-util"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d1435039746e20da4f8d507a72ee1b916f7b4b05af7a91c093d2c6561934ede"
 dependencies = [
  "bitflags",
  "libc",

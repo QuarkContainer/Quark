@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::ptr;
 use core::sync::atomic;
 
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use crate::qlib::kernel::kernel::kernel::GetKernel;
+use crate::qlib::kernel::arch::tee::is_cc_active;
 use crate::qlib::kernel::Kernel::HostSpace;
 //use crate::qlib::mem::list_allocator::*;
 use super::super::super::super::kernel_def::{
@@ -69,39 +72,41 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
         return;
     }*/
 
-    if signalArgs.Signo == SIGSTOP.0 || signalArgs.Signo == SIGUSR2.0 {
-        if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
-            // if the sandbox has been paused, return
-            return;
-        }
+    if !is_cc_active(){
+        if signalArgs.Signo == SIGSTOP.0 || signalArgs.Signo == SIGUSR2.0 {
+            if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
+                // if the sandbox has been paused, return
+                return;
+            }
 
-        GetKernel().Pause();
-        GetKernel().ClearFsCache();
-        HostSpace::SwapOut();
-        SHARESPACE
-            .hibernatePause
-            .store(true, atomic::Ordering::SeqCst);
-        return;
-
-        /*for vcpu in CPU_LOCAL.iter() {
-            vcpu.AllocatorMut().Clear();
-        }*/
-    }
-
-    if signalArgs.Signo == SIGCONT.0
-        || signalArgs.Signo == SIGKILL.0
-        || signalArgs.Signo == SIGINT.0
-    {
-        if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
+            GetKernel().Pause();
+            GetKernel().ClearFsCache();
+            HostSpace::SwapOut();
             SHARESPACE
                 .hibernatePause
-                .store(false, atomic::Ordering::SeqCst);
-            HostSpace::SwapIn();
-            GetKernel().Unpause();
+                .store(true, atomic::Ordering::SeqCst);
+            return;
+
+            /*for vcpu in CPU_LOCAL.iter() {
+                vcpu.AllocatorMut().Clear();
+            }*/
         }
 
-        if signalArgs.Signo == SIGCONT.0 {
-            return;
+        if signalArgs.Signo == SIGCONT.0
+            || signalArgs.Signo == SIGKILL.0
+            || signalArgs.Signo == SIGINT.0
+        {
+            if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
+                SHARESPACE
+                    .hibernatePause
+                    .store(false, atomic::Ordering::SeqCst);
+                HostSpace::SwapIn();
+                GetKernel().Unpause();
+            }
+
+            if signalArgs.Signo == SIGCONT.0 {
+                return;
+            }
         }
     }
 
@@ -161,8 +166,8 @@ pub fn ControlMsgHandler(fd: *const u8) {
     let fd = fd as i32;
 
     let task = Task::Current();
-    let mut msg = ControlMsg::default();
-    Kernel::HostSpace::ReadControlMsg(fd, &mut msg as *mut _ as u64);
+    let mut msg = Box::new_in(ControlMsg::default(), GUEST_HOST_SHARED_ALLOCATOR);
+    Kernel::HostSpace::ReadControlMsg(fd, &mut *msg as *mut _ as u64);
 
     //info!("payload: {:?}", &msg.payload);
     //defer!(error!("payload handling ends"));
@@ -261,8 +266,9 @@ pub fn WriteWaitAllResponse(cid: String, execId: String, status: i32) {
 
 pub fn WriteControlMsgResp(fd: i32, msg: &UCallResp, close: bool) {
     let data: Vec<u8> = serde_json::to_vec(&msg).expect("LoadProcessKernel ser fail...");
-    let addr = &data[0] as *const _ as u64;
-    let len = data.len();
+    let shared_data = data.to_vec_in(GUEST_HOST_SHARED_ALLOCATOR);
+    let addr = &shared_data[0] as *const _ as u64;
+    let len = shared_data.len();
 
     Kernel::HostSpace::WriteControlMsgResp(fd, addr, len, close);
 }

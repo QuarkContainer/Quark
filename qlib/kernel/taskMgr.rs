@@ -22,6 +22,7 @@ use super::super::kernel::GlobalRDMASvcCli;
 use super::super::linux_def::*;
 use super::super::task_mgr::*;
 use super::super::vcpu_mgr::*;
+use super::arch::tee::is_cc_active;
 use super::kernel::kernel::GetKernel;
 use super::quring::uring_mgr::*;
 use super::task::*;
@@ -32,6 +33,7 @@ use super::KERNEL_STACK_ALLOCATOR;
 use super::SHARESPACE;
 use super::TSC;
 use crate::qlib::qcall::*;
+use crate::{GLOBAL_ALLOCATOR, IS_GUEST};
 
 static ACTIVE_TASK: AtomicU32 = AtomicU32::new(0);
 
@@ -42,6 +44,7 @@ pub fn IncrActiveTask() -> u32 {
 pub fn DecrActiveTask() -> u32 {
     return ACTIVE_TASK.fetch_sub(1, Ordering::SeqCst);
 }
+
 
 pub fn AddNewCpu() {
     let mainTaskId = TaskStore::CreateFromThread();
@@ -56,6 +59,7 @@ pub fn CreateTask(runFnAddr: u64, para: *const u8, kernel: bool) {
 
 extern "C" {
     pub fn context_swap(_fromCxt: u64, _toCtx: u64);
+    pub fn context_swap_cc(_fromCxt: u64, _toCtx: u64, _fromTaskWrapper: u64, _toTaskWrapper: u64);
 }
 
 pub const IO_WAIT_CYCLES: i64 = 20_000_000;
@@ -107,10 +111,9 @@ pub fn WaitFn() -> ! {
                 defer!(SHARESPACE.scheduler.DecreaseHaltVcpuCnt());
 
                 let mut addr;
-                loop {
+                loop{
                     //debug!("vcpu sleep");
                     addr = HostSpace::VcpuWait();
-                    //debug!("vcpu wakeup {:x}", addr);
                     assert!(addr >= 0);
                     ProcessInputMsgs();
                     if addr != 0 {
@@ -130,10 +133,25 @@ pub fn WaitFn() -> ! {
                 if pendingFreeStack != 0 {
                     //(*PAGE_ALLOCATOR).Free(pendingFreeStack, DEFAULT_STACK_PAGES).unwrap();
                     let task = TaskId::New(pendingFreeStack).GetTask();
-                    //free FPstate
+                    //free X86fpstate
                     task.archfpstate.take();
-
-                    KERNEL_STACK_ALLOCATOR.Free(pendingFreeStack).unwrap();
+                    if is_cc_active() {
+                        KERNEL_STACK_ALLOCATOR
+                            .Free(task.GetTaskWrapper().taskAddr)
+                            .unwrap();
+                        let tw_size = core::mem::size_of::<TaskWrapper>();
+                        let layout = core::alloc::Layout::from_size_align(tw_size, 2)
+                            .expect("WaitFn layout for TaskWrapper failed");
+                        unsafe {
+                            GLOBAL_ALLOCATOR.DeallocShareBuf(
+                                pendingFreeStack as *mut u8,
+                                layout.size(),
+                                layout.align(),
+                            );
+                        };
+                    } else {
+                        KERNEL_STACK_ALLOCATOR.Free(pendingFreeStack).unwrap();
+                    }
                     CPULocal::SetPendingFreeStack(0);
                 }
 
@@ -203,6 +221,9 @@ pub fn PollAsyncMsg() -> usize {
 }
 
 pub fn Wait() {
+
+    assert!(IS_GUEST == true,  "pub fn Wait() is called by host");
+
     CPULocal::Myself().ToSearch(&SHARESPACE);
     let start = TSC.Rdtsc();
 
@@ -257,7 +278,7 @@ pub fn Wait() {
 pub fn SwitchToNewTask() -> ! {
     CPULocal::Myself().ToSearch(&SHARESPACE);
 
-    let current = Task::TaskId();
+    let current = Task::Current().GetTaskId();
     let waitTask = TaskId::New(CPULocal::WaitTask());
     switch(current, waitTask);
     panic!("SwitchToNewTask end impossible");
@@ -309,7 +330,7 @@ impl Scheduler {
                 //error!("stealing ... {:x?}", t);
                 let task = match self.queue[vcpuId].SwapWoringTask(t) {
                     None => {
-                        t.GetTask().SetQueueId(vcpuId);
+                        t.SetQueueId(vcpuId);
                         t
                     }
                     Some(task) => {
@@ -336,7 +357,7 @@ impl Scheduler {
     }
 
     pub fn Schedule(&self, taskId: TaskId, cpuAff: bool) {
-        let vcpuId = taskId.GetTask().QueueId();
+        let vcpuId = taskId.QueueId();
         //assert!(CPULocal::CpuId()==vcpuId, "cpu {}, target cpu {}", CPULocal::CpuId(), vcpuId);
         self.ScheduleQ(taskId, vcpuId as _, cpuAff);
     }
@@ -351,7 +372,14 @@ pub fn Yield() {
     if SHARESPACE.scheduler.GlobalReadyTaskCnt() == 0 {
         return;
     }
-    SHARESPACE.scheduler.Schedule(Task::TaskId(), false);
+        assert!(IS_GUEST == true);
+
+        let task_addr = Task::TaskAddr();
+        let task = unsafe { &*(task_addr as *const Task) };
+        let taskID = TaskId::New(task.taskId);
+
+        SHARESPACE.scheduler.Schedule(taskID, false);
+
     Wait();
 }
 
@@ -362,5 +390,5 @@ pub fn NewTask(taskId: TaskId) {
 pub fn ScheduleQ(taskId: TaskId, cpuAff: bool) {
     SHARESPACE
         .scheduler
-        .ScheduleQ(taskId, taskId.Queue(), cpuAff);
+        .ScheduleQ(taskId, taskId.QueueId(), cpuAff);
 }

@@ -45,6 +45,9 @@ use super::super::SHARESPACE;
 use super::uring_op::UringCall;
 use crate::qlib::kernel::kernel::kernel::GetKernel;
 use crate::qlib::kernel::tcpip::tcpip::SockAddrInet;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+use crate::GuestHostSharedAllocator;
+use crate::qlib::kernel::arch::tee::is_cc_active;
 
 pub enum UringOps {
     UringCall(UringCall),
@@ -145,24 +148,28 @@ impl AsyncOps {
     }
 }
 
-#[derive(Default)]
 pub struct UringAsyncMgr {
-    pub ops: Vec<QMutex<AsyncOps>>,
-    pub ids: QMutex<VecDeque<u16>>,
+    pub ops: Vec<QMutex<AsyncOps>, GuestHostSharedAllocator>,
+    pub ids: QMutex<VecDeque<u16, GuestHostSharedAllocator>>,
 
     // It might not be ok to free AsyncOps in Qvisor (Some drop function will use qkernel's version).
     // That's weird rust compiler behavior. So we have to store the idx here
     // and wait for qkernel to clear it.
-    pub freeids: QMutex<VecDeque<u16>>,
+    pub freeids: QMutex<VecDeque<u16, GuestHostSharedAllocator>>,
 }
 
+impl Default for UringAsyncMgr {
+    fn default() -> Self {
+        return Self::New(MemoryDef::QURING_SIZE);
+    }
+}
 unsafe impl Sync for UringAsyncMgr {}
 unsafe impl Send for UringAsyncMgr {}
 
 impl UringAsyncMgr {
     pub fn New(size: usize) -> Self {
-        let mut ids = VecDeque::with_capacity(size);
-        let mut ops = Vec::with_capacity(size);
+        let mut ids = VecDeque::with_capacity_in(size, GUEST_HOST_SHARED_ALLOCATOR);
+        let mut ops = Vec::with_capacity_in(size, GUEST_HOST_SHARED_ALLOCATOR);
         for i in 0..size {
             ids.push_back(i as u16);
             ops.push(QMutex::new(AsyncOps::None(AsyncNone {})));
@@ -170,7 +177,7 @@ impl UringAsyncMgr {
         return Self {
             ops: ops,
             ids: QMutex::new(ids),
-            freeids: QMutex::new(VecDeque::new()),
+            freeids: QMutex::new(VecDeque::new_in(GUEST_HOST_SHARED_ALLOCATOR)),
         };
     }
 
@@ -199,7 +206,7 @@ impl UringAsyncMgr {
     pub fn SetOps(&self, id: usize, ops: AsyncOps) -> UringEntry {
         // squeue::Entry {
         *self.ops[id].lock() = ops.clone();
-
+        
         let uringEntry = UringEntry {
             ops: UringOps::AsyncOps(ops),
             userdata: id as u64,
@@ -409,12 +416,12 @@ pub struct AsyncBufWriteInner {
 }
 
 #[derive(Clone)]
-pub struct AsyncBufWrite(Arc<AsyncBufWriteInner>);
+pub struct AsyncBufWrite(Arc<AsyncBufWriteInner, GuestHostSharedAllocator>);
 
 impl Deref for AsyncBufWrite {
-    type Target = Arc<AsyncBufWriteInner>;
+    type Target = Arc<AsyncBufWriteInner, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<AsyncBufWriteInner> {
+    fn deref(&self) -> &Arc<AsyncBufWriteInner, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -442,7 +449,7 @@ impl AsyncBufWrite {
             lockGuard: QMutex::new(Some(lockGuard)),
         };
 
-        return Self(Arc::new(inner));
+        return Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR));
     }
 }
 
@@ -639,7 +646,6 @@ pub struct AsyncFiletWrite {
     pub buf: SocketBuff,
     pub addr: u64,
     pub len: usize,
-    pub fops: Arc<FileOperations>,
 }
 
 impl AsyncOpsTrait for AsyncFiletWrite {
@@ -697,7 +703,7 @@ impl AsyncFiletWrite {
         buf: SocketBuff,
         addr: u64,
         len: usize,
-        fops: Arc<FileOperations>,
+        _fops: Arc<FileOperations>,
     ) -> Self {
         SHARESPACE.IncrPendingWrite();
         return Self {
@@ -706,7 +712,6 @@ impl AsyncFiletWrite {
             buf,
             addr,
             len,
-            fops,
         };
     }
 }
@@ -731,7 +736,7 @@ pub struct AsyncAccept {
     pub fd: i32,
     pub queue: Queue,
     pub acceptQueue: AcceptQueue,
-    pub addr: Arc<AcceptAddr>,
+    pub addr: Arc<AcceptAddr, GuestHostSharedAllocator>,
 }
 
 impl AsyncOpsTrait for AsyncAccept {
@@ -746,19 +751,25 @@ impl AsyncOpsTrait for AsyncAccept {
         /**************************hibernate wakeu **************************/
         // so far the quark hibernate is wakeup by accept.
         // todo: find better to handle this
-        if SHARESPACE.reapFileAvaiable.load(Ordering::Relaxed) {
-            ReapSwapIn();
-        }
+        if !is_cc_active() {
+            if SHARESPACE.reapFileAvaiable.load(Ordering::Relaxed) {
+                ReapSwapIn();
+            }
 
-        if SHARESPACE.hibernatePause.load(Ordering::Relaxed) {
-            GetKernel().Unpause();
-            SHARESPACE.hibernatePause.store(false, Ordering::SeqCst);
-        }
+            if SHARESPACE.hibernatePause.load(Ordering::Relaxed) {
+                GetKernel().Unpause();
+                SHARESPACE.hibernatePause.store(false, Ordering::SeqCst);
+            }
 
+        }
+        
         /**************************hibernate wakeu end **************************/
 
         NewSocket(result);
-        let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::default()));
+        let sockBuf = SocketBuff(Arc::new_in(
+            SocketBuffIntern::default(),
+            crate::GUEST_HOST_SHARED_ALLOCATOR,
+        ));
         let hasSpace = self.acceptQueue.EnqSocket(
             result,
             self.addr.addr.Dup(),
@@ -779,7 +790,7 @@ impl AsyncAccept {
             fd,
             queue,
             acceptQueue,
-            addr: Arc::new(AcceptAddr::New()), //size of TcpSockAddr
+            addr: Arc::new_in(AcceptAddr::New(), GUEST_HOST_SHARED_ALLOCATOR), //size of TcpSockAddr
         };
     }
 }
@@ -1016,12 +1027,12 @@ pub struct AIOWriteInner {
 }
 
 #[derive(Clone)]
-pub struct AIOWrite(Arc<AIOWriteInner>);
+pub struct AIOWrite(Arc<AIOWriteInner, GuestHostSharedAllocator>);
 
 impl Deref for AIOWrite {
-    type Target = Arc<AIOWriteInner>;
+    type Target = Arc<AIOWriteInner, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<AIOWriteInner> {
+    fn deref(&self) -> &Arc<AIOWriteInner, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -1061,8 +1072,11 @@ impl AIOWrite {
         eventfops: Option<EventOperations>,
     ) -> Result<Self> {
         let vec = task.CopyInVec(cb.buf, cb.bytes as usize)?;
-        let buf = DataBuff { buf: vec };
-
+        let mut shared_vec = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
+        for item in vec {
+            shared_vec.push(item);
+        };
+        let buf = DataBuff { buf: shared_vec };
         let inner = AIOWriteInner {
             fd: cb.fd as i32,
             buf: buf,
@@ -1073,7 +1087,7 @@ impl AIOWrite {
             eventfops: eventfops,
         };
 
-        return Ok(Self(Arc::new(inner)));
+        return Ok(Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR)));
     }
 
     pub fn NewWritev(
@@ -1098,14 +1112,14 @@ impl AIOWrite {
             eventfops: eventfops,
         };
 
-        return Ok(Self(Arc::new(inner)));
+        return Ok(Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR)));
     }
 }
 
 pub struct AIOReadInner {
     pub fd: i32,
     pub buf: DataBuff,
-    pub iovs: Vec<IoVec>,
+    pub iovs: Vec<IoVec, GuestHostSharedAllocator>,
     pub offset: i64,
     pub taskId: u64,
 
@@ -1116,12 +1130,12 @@ pub struct AIOReadInner {
 }
 
 #[derive(Clone)]
-pub struct AIORead(Arc<AIOReadInner>);
+pub struct AIORead(Arc<AIOReadInner, GuestHostSharedAllocator>);
 
 impl Deref for AIORead {
-    type Target = Arc<AIOReadInner>;
+    type Target = Arc<AIOReadInner, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<AIOReadInner> {
+    fn deref(&self) -> &Arc<AIOReadInner, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -1169,8 +1183,9 @@ impl AIORead {
         eventfops: Option<EventOperations>,
     ) -> Result<Self> {
         let iov = IoVec::NewFromAddr(cb.buf, cb.bytes as usize);
+        let mut iovs = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
+        iovs.push(iov);
 
-        let iovs = vec![iov];
         task.FixPermissionForIovs(&iovs, true)?;
         let buf = DataBuff::New(cb.bytes as usize);
 
@@ -1186,7 +1201,7 @@ impl AIORead {
             eventfops: eventfops,
         };
 
-        return Ok(Self(Arc::new(inner)));
+        return Ok(Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR)));
     }
 
     pub fn NewReadv(
@@ -1201,10 +1216,15 @@ impl AIORead {
         let size = IoVec::NumBytes(&iovs);
         let buf = DataBuff::New(size as usize);
 
+        let mut iovs_s = Vec::new_in(GUEST_HOST_SHARED_ALLOCATOR);
+        for a in iovs{
+            iovs_s.push(a)
+        }
+
         let inner = AIOReadInner {
             fd: cb.fd as i32,
             buf: buf,
-            iovs: iovs,
+            iovs: iovs_s,
             offset: cb.offset,
             taskId: task.taskId,
             cbAddr: cbAddr,
@@ -1213,7 +1233,7 @@ impl AIORead {
             eventfops: eventfops,
         };
 
-        return Ok(Self(Arc::new(inner)));
+        return Ok(Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR)));
     }
 }
 
@@ -1228,12 +1248,12 @@ pub struct AIOFsyncInner {
 }
 
 #[derive(Clone)]
-pub struct AIOFsync(Arc<AIOFsyncInner>);
+pub struct AIOFsync(Arc<AIOFsyncInner, GuestHostSharedAllocator>);
 
 impl Deref for AIOFsync {
-    type Target = Arc<AIOFsyncInner>;
+    type Target = Arc<AIOFsyncInner, GuestHostSharedAllocator>;
 
-    fn deref(&self) -> &Arc<AIOFsyncInner> {
+    fn deref(&self) -> &Arc<AIOFsyncInner, GuestHostSharedAllocator> {
         &self.0
     }
 }
@@ -1282,7 +1302,7 @@ impl AIOFsync {
             eventfops: eventfops,
         };
 
-        return Ok(Self(Arc::new(inner)));
+        return Ok(Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR)));
     }
 }
 
@@ -1340,7 +1360,7 @@ impl UnblockBlockPollAdd {
 #[derive(Clone)]
 pub struct AsyncConnect {
     pub fd: i32,
-    pub addr: Arc<TcpSockAddr>,
+    pub addr: Arc<TcpSockAddr, GuestHostSharedAllocator>,
     pub len: u32,
     pub socket: UringSocketOperationsWeak,
 }
@@ -1392,7 +1412,7 @@ impl AsyncConnect {
         socket.SetConnErrno(-SysErr::EINPROGRESS);
         return Self {
             fd,
-            addr: Arc::new(addr),
+            addr: Arc::new_in(addr, GUEST_HOST_SHARED_ALLOCATOR),
             len: len as _,
             socket: socket.Downgrade(),
         };

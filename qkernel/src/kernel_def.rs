@@ -53,6 +53,14 @@ use super::Kernel::HostSpace;
 
 use crate::GLOBAL_ALLOCATOR;
 
+use crate::PRIVATE_VCPU_ALLOCATOR;
+use crate::PRIVATE_VCPU_SHARED_ALLOCATOR;
+use super::qlib::qmsg::sharepara::*;
+use crate::qlib::kernel::arch::tee::is_cc_active;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+use alloc::boxed::Box;
+use crate::qlib::config::CCMode;
+
 impl OOMHandler for ListAllocator {
     fn handleError(&self, size: u64, alignment: u64) {
         HostSpace::KernelOOM(size, alignment);
@@ -137,7 +145,6 @@ impl CounterSet {
 #[inline]
 pub fn switch(from: TaskId, to: TaskId) {
     Task::Current().AccountTaskEnter(SchedState::Blocked);
-
     CPULocal::SetCurrentTask(to.Addr());
     let fromCtx = from.GetTask();
     let toCtx = to.GetTask();
@@ -150,10 +157,24 @@ pub fn switch(from: TaskId, to: TaskId) {
     fromCtx.mm.VcpuLeave();
     toCtx.mm.VcpuEnter();
 
-    unsafe {
-        context_swap(fromCtx.GetContext(), toCtx.GetContext());
+    if !is_cc_active() {
+        unsafe {
+            context_swap(fromCtx.GetContext(), toCtx.GetContext());
+        }
+    } else {
+        assert!(!HostAllocator::IsSharedHeapAddr(fromCtx as *const _ as u64));
+        assert!(!HostAllocator::IsSharedHeapAddr(toCtx as *const _ as u64));
+        unsafe {
+            context_swap_cc(
+                fromCtx.GetContext(),
+                toCtx.GetContext(),
+                from.GetTaskWrapper() as *const _ as u64,
+                to.GetTaskWrapper() as *const _ as u64,
+            );
+        }
     }
 
+    //Task::Current().PerfGofrom(PerfType::Blocked);
     Task::Current().AccountTaskLeave(SchedState::Blocked);
 }
 
@@ -204,21 +225,53 @@ pub fn Invlpg(addr: u64) {
     }
 }
 
+#[inline(always)]
+fn _hcall_prepare_shared_buff(vcpu_id: usize, arg0: u64, arg1: u64, arg2: u64, arg3: u64) {
+    let shared_buff_addr = MemoryDef::HYPERCALL_PARA_PAGE_OFFSET as *mut ShareParaPage;
+    let shared_buff = unsafe {
+        &mut (*shared_buff_addr).SharePara[vcpu_id]
+    };
+
+    shared_buff.para1 = arg0;
+    shared_buff.para2 = arg1;
+    shared_buff.para3 = arg2;
+    shared_buff.para4 = arg3;
+}
+
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
-    unsafe {
-        let data: u8 = 0;
-        asm!("
-            out dx, al
-            ",
-            in("dx") type_,
-            in("al") data,
-            in("rsi") para1,
-            in("rcx") para2,
-            in("rdi") para3,
-            in("r10") para4
-        )
+    if crate::qlib::kernel::arch::tee::is_cc_active() == false {
+        unsafe {
+            let data: u8 = 0;
+            asm!("
+                out dx, al
+                ",
+                in("dx") type_,
+                in("al") data,
+                in("rsi") para1,
+                in("rcx") para2,
+                in("rdi") para3,
+                in("r10") para4
+            )
+        }
+    } else {
+        // We can not query which is the current vCpu before the share space is initialized.
+        let vcpu_id = if type_ != crate::qlib::HYPERCALL_SHARESPACE_INIT {
+            GetVcpuId()
+        } else {
+             0
+        };
+        _hcall_prepare_shared_buff(vcpu_id, para1, para2, para3, para4);
+        let dummy_data: u8 = 0;
+        unsafe {
+            asm!("
+                out dx, al
+                ",
+                in("dx") type_,
+                in("al") dummy_data,
+            )
+        }
     }
 }
 
@@ -228,18 +281,35 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     // Use MMIO to cause VM exit hence "hypercall". The data does not matter,
     // addr of the MMIO identifies the Hypercall. x0 and x1 (w1) are used by the
     // str instruction, the 4x 64-bit parameters are passed via x2,x3,x4,x5.
-    unsafe {
+    if crate::qlib::kernel::arch::tee::is_cc_active() == false {
         let data: u8 = 0;
         let addr: u64 = MemoryDef::HYPERCALL_MMIO_BASE + (type_ as u64);
-
-        asm!("str w1, [x0]",
-             in("x0") addr,
-             in("w1") data,
-             in("x2") para1,
-             in("x3") para2,
-             in("x4") para3,
-             in("x5") para4,
-        )
+        unsafe {
+            asm!("str w1, [x0]",
+                in("x0") addr,
+                in("w1") data,
+                in("x2") para1,
+                in("x3") para2,
+                in("x4") para3,
+                in("x5") para4,
+            )
+        }
+    } else {
+        // We can not query which is the current vCpu before the share space is initialized.
+        let vcpu_id = if type_ != crate::qlib::HYPERCALL_SHARESPACE_INIT {
+            GetVcpuId()
+        } else {
+             0
+        };
+        _hcall_prepare_shared_buff(vcpu_id, para1, para2, para3, para4);
+        let dummy_data: u8 = 0;
+        let hcall_id = MemoryDef::HYPERCALL_MMIO_BASE + type_ as u64;
+        unsafe {
+            asm!("str w1, [x0]",
+                 in("x0") hcall_id,
+                 in("w1") dummy_data,
+            )
+        }
     }
 }
 
@@ -269,42 +339,82 @@ pub fn NewSocket(fd: i32) -> i64 {
 
 impl HostSpace {
     pub fn Close(fd: i32) -> i64 {
-        let mut msg = Msg::Close(qcall::Close { fd });
+        if is_cc_active() {
+            let mut msg = Box::new_in(Msg::Close(qcall::Close { fd }), GUEST_HOST_SHARED_ALLOCATOR);
 
-        return HostSpace::HCall(&mut msg, false) as i64;
+            return HostSpace::HCall(&mut msg, false) as i64;
+        } else {
+            let mut msg = Msg::Close(qcall::Close { fd });
+            return HostSpace::HCall(&mut msg, false) as i64;
+        }
     }
 
     pub fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
-        let current = Task::Current().GetTaskId();
+        if is_cc_active() {
+            let current = Task::Current().GetTaskId();
 
-        let qMsg = QMsg {
-            taskId: current,
-            globalLock: true,
-            ret: 0,
-            msg: msg,
-        };
+            let qMsg = Box::new_in(
+                QMsg {
+                    taskId: current,
+                    globalLock: true,
+                    ret: 0,
+                    msg: msg,
+                },
+                GUEST_HOST_SHARED_ALLOCATOR,
+            );
 
-        let addr = &qMsg as *const _ as u64;
-        let om = HostOutputMsg::QCall(addr);
+            let addr = &*qMsg as *const _ as u64;
+            let om = Box::new_in(HostOutputMsg::QCall(addr), GUEST_HOST_SHARED_ALLOCATOR);
+            super::SHARESPACE.AQCall(&*om);
+            taskMgr::Wait();
+            return qMsg.ret;
+        } else {
+            let current = Task::Current().GetTaskId();
 
-        super::SHARESPACE.AQCall(&om);
-        taskMgr::Wait();
-        return qMsg.ret;
+            let qMsg = QMsg {
+                taskId: current,
+                globalLock: true,
+                ret: 0,
+                msg: msg,
+            };
+
+            let addr = &qMsg as *const _ as u64;
+            let om = HostOutputMsg::QCall(addr);
+
+            super::SHARESPACE.AQCall(&om);
+            taskMgr::Wait();
+            return qMsg.ret;
+        }
     }
 
     pub fn HCall(msg: &mut Msg, lock: bool) -> u64 {
-        let taskId = Task::Current().GetTaskId();
+        if is_cc_active() {
+            let taskId = Task::Current().GetTaskId();
+            let mut event = Box::new_in(
+                QMsg {
+                    taskId: taskId,
+                    globalLock: lock,
+                    ret: 0,
+                    msg: msg,
+                },
+                GUEST_HOST_SHARED_ALLOCATOR,
+            );
 
-        let mut event = QMsg {
-            taskId: taskId,
-            globalLock: lock,
-            ret: 0,
-            msg: msg,
-        };
+            HyperCall64(HYPERCALL_HCALL, &mut *event as *const _ as u64, 0, 0, 0);
+            return event.ret;
+        } else {
+            let taskId = Task::Current().GetTaskId();
 
-        HyperCall64(HYPERCALL_HCALL, &mut event as *const _ as u64, 0, 0, 0);
+            let mut event = QMsg {
+                taskId: taskId,
+                globalLock: lock,
+                ret: 0,
+                msg: msg,
+            };
 
-        return event.ret;
+            HyperCall64(HYPERCALL_HCALL, &mut event as *const _ as u64, 0, 0, 0);
+            return event.ret;
+        }
     }
 }
 
@@ -351,30 +461,99 @@ impl BitmapAllocatorWrapper {
 impl HostAllocator {
     pub const fn New() -> Self {
         return Self {
-            listHeapAddr: AtomicU64::new(0),
             ioHeapAddr: AtomicU64::new(0),
+            guestPrivHeapAddr: AtomicU64::new(0),
+            hostInitHeapAddr: AtomicU64::new(0),
+            sharedHeapAddr: AtomicU64::new(0),
+            vmLaunched: AtomicBool::new(true),
             initialized: AtomicBool::new(true),
         };
     }
 
-    pub fn Init(&self, heapAddr: u64) {
-        self.listHeapAddr.store(heapAddr, Ordering::SeqCst);
-        self.ioHeapAddr.store(heapAddr + MemoryDef::HEAP_SIZE, Ordering::SeqCst)
+    pub fn InitPrivateAllocator(&self, mode: CCMode) {
+        match mode {
+            CCMode::NormalEmu => {
+                crate::qlib::kernel::Kernel::IDENTICAL_MAPPING.store(false, Ordering::SeqCst);
+                self.guestPrivHeapAddr.store(
+                    MemoryDef::GUEST_PRIVATE_RUNNING_HEAP_OFFSET,
+                    Ordering::SeqCst,
+                );
+                *self.GuestPrivateAllocator() = ListAllocator::New(
+                    MemoryDef::GUEST_PRIVATE_RUNNING_HEAP_OFFSET,
+                    MemoryDef::GUEST_PRIVATE_RUNNING_HEAP_OFFSET
+                        + MemoryDef::GUEST_PRIVATE_RUNNING_HEAP_SIZE,
+                );
+                let size = core::mem::size_of::<ListAllocator>();
+                self.GuestPrivateAllocator().Add(
+                    MemoryDef::GUEST_PRIVATE_RUNNING_HEAP_OFFSET as usize + size,
+                    MemoryDef::GUEST_PRIVATE_RUNNING_HEAP_SIZE as usize - size,
+                );
+            }
+            CCMode::None => {
+                self.guestPrivHeapAddr
+                    .store(MemoryDef::HEAP_OFFSET, Ordering::SeqCst);
+            }
+            _ => {
+                self.guestPrivHeapAddr
+                    .store(MemoryDef::GUEST_PRIVATE_HEAP_OFFSET, Ordering::SeqCst);
+            }
+        }
+    }
+
+    pub fn InitSharedAllocator(&self, mode: CCMode) {
+        match mode {
+            CCMode::None => self
+                .sharedHeapAddr
+                .store(MemoryDef::HEAP_OFFSET, Ordering::SeqCst),
+            _ => {
+                self.sharedHeapAddr
+                    .store(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET, Ordering::SeqCst);
+                let sharedHeapStart = self.sharedHeapAddr.load(Ordering::Relaxed);
+                let sharedHeapEnd = sharedHeapStart + MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as u64;
+                *self.GuestHostSharedAllocator() =
+                    ListAllocator::New(sharedHeapStart as _, sharedHeapEnd);
+                let ioHeapEnd = sharedHeapEnd + MemoryDef::IO_HEAP_SIZE;
+
+                self.ioHeapAddr.store(sharedHeapEnd, Ordering::SeqCst);
+                *self.IOAllocator() = ListAllocator::New(sharedHeapEnd as _, ioHeapEnd);
+
+                let size = core::mem::size_of::<ListAllocator>();
+                self.IOAllocator().Add(
+                    MemoryDef::HEAP_END as usize + size,
+                    MemoryDef::IO_HEAP_SIZE as usize - size,
+                );
+                // reserve 4 pages for the listAllocator and share para page
+                let size = 4 * MemoryDef::PAGE_SIZE as usize;
+                self.GuestHostSharedAllocator().Add(
+                    MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET as usize + size,
+                    MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as usize - size,
+                );
+            }
+        };
     }
 }
 
 unsafe impl GlobalAlloc for HostAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        return self.Allocator().alloc(layout);
+        return self.GuestPrivateAllocator().alloc(layout);
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        
         let addr = ptr as u64;
-        if !Self::IsIOBuf(addr) {
-            self.Allocator().dealloc(ptr, layout);
+        if !is_cc_active() {
+            if Self::IsIOBuf(addr) {
+                self.IOAllocator().dealloc(ptr, layout);
+            } else {
+                self.GuestHostSharedAllocator().dealloc(ptr, layout);
+            }
         } else {
-            self.IOAllocator().dealloc(ptr, layout);
+            if self.IsGuestPrivateHeapAddr(addr) {
+                self.GuestPrivateAllocator().dealloc(ptr, layout);
+            } else if Self::IsSharedHeapAddr(addr) {
+                self.GuestHostSharedAllocator().dealloc(ptr, layout);
+            } else if Self::IsIOBuf(addr) {
+                self.IOAllocator().dealloc(ptr, layout);
+            }
         }
     }
 }
@@ -404,7 +583,11 @@ unsafe impl GlobalAlloc for GlobalVcpuAllocator {
         if !self.init.load(Ordering::Acquire) {
             return GLOBAL_ALLOCATOR.alloc(layout);
         }
-        return CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout);
+        if is_cc_active(){
+            return PRIVATE_VCPU_ALLOCATOR.AllocatorMut().alloc(layout);
+        } else {
+            return CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout);
+        }
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
@@ -415,7 +598,51 @@ unsafe impl GlobalAlloc for GlobalVcpuAllocator {
         if !self.init.load(Ordering::Relaxed) {
             return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
         }
-        return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout);
+        if is_cc_active(){
+            return PRIVATE_VCPU_ALLOCATOR.AllocatorMut().dealloc(ptr, layout);
+        } else {
+            return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout);
+        }
+    }
+}
+
+use alloc::alloc::AllocError;
+use core::ptr::NonNull;
+
+unsafe impl core::alloc::Allocator for GuestHostSharedAllocator {
+    fn allocate(&self, layout: Layout) -> core::result::Result<NonNull<[u8]>, AllocError> {
+        unsafe{
+            if !GUEST_HOST_SHARED_ALLOCATOR_INIT.load(Ordering::Acquire) {
+                let ptr = GLOBAL_ALLOCATOR.AllocSharedBuf(layout.size(), layout.align());
+                let slice = core::slice::from_raw_parts_mut(ptr, layout.size());
+                return Ok(NonNull::new_unchecked(slice));
+            }
+            if is_cc_active(){
+                let ptr = PRIVATE_VCPU_SHARED_ALLOCATOR.AllocatorMut().alloc(layout);
+                let slice = core::slice::from_raw_parts_mut(ptr, layout.size());
+                return Ok(NonNull::new_unchecked(slice));
+            } else {
+                let ptr = CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout);
+                let slice = core::slice::from_raw_parts_mut(ptr, layout.size());
+                return Ok(NonNull::new_unchecked(slice));
+            }
+        }
+    }
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        let ptr = ptr.as_ptr();
+        if !HostAllocator::IsHeapAddr( ptr as u64) {
+            return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
+        }
+
+        if !GUEST_HOST_SHARED_ALLOCATOR_INIT.load(Ordering::Relaxed) {
+            return GLOBAL_ALLOCATOR.dealloc(ptr, layout);
+        }
+        if is_cc_active(){
+            return PRIVATE_VCPU_SHARED_ALLOCATOR.AllocatorMut().dealloc(ptr, layout);
+        } else {
+            return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout);
+        }
     }
 }
 
@@ -454,10 +681,10 @@ impl TsotSocketMgr {
     }
 
     pub fn RecvMsg() -> Result<TsotMessage> {
-        let mut m = TsotMessage::default();
-        let res = HostSpace::TsotRecvMsg(&mut m as * mut _ as u64);
+        let mut m = Box::new_in(TsotMessage::default(), GUEST_HOST_SHARED_ALLOCATOR);
+        let res = HostSpace::TsotRecvMsg(&mut *m as * mut _ as u64);
         if res == 0 {
-            return Ok(m)
+            return Ok(*m)
         }
 
         return Err(Error::SysError(SysErr::EINVAL));
@@ -492,11 +719,11 @@ pub fn enable_access_user() -> bool {
 /// true : enable false : disable
 #[cfg(target_arch = "aarch64")]
 #[inline]
-pub fn set_access_user(allow: bool) {
+pub fn set_access_user(_allow: bool) {
     #[cfg(target_feature = "pan")]
     {
         unsafe {
-            pan_set(!allow);
+            pan_set(!_allow);
         }
     }
 }

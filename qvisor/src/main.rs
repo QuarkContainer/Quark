@@ -22,6 +22,8 @@
 #![recursion_limit = "256"]
 #![feature(unix_socket_ancillary_data)]
 #![allow(invalid_reference_casting)]
+#![feature(allocator_api)]
+#![feature(btreemap_alloc)]
 #![allow(improper_ctypes_definitions)]
 #![allow(improper_ctypes)]
 
@@ -63,10 +65,6 @@ pub mod elf_loader;
 pub mod heap_alloc;
 pub mod kernel_def;
 mod kvm_vcpu;
-#[cfg(target_arch = "aarch64")]
-mod kvm_vcpu_aarch64;
-#[cfg(target_arch = "x86_64")]
-mod kvm_vcpu_x86;
 mod memmgr;
 pub mod namespace;
 mod qcall;
@@ -78,8 +76,10 @@ pub mod ucall;
 pub mod unix_socket_def;
 pub mod util;
 mod vmspace;
+pub mod arch;
 
 use alloc::sync::Arc;
+use arch::vm::vcpu::ArchVirtCpu;
 use lazy_static::lazy_static;
 use spin::Mutex;
 use std::cell::RefCell;
@@ -105,14 +105,19 @@ use self::vmspace::uringMgr::*;
 use crate::kvm_vcpu::KVMVcpu;
 use vmspace::*;
 
+use crate::qlib::mem::cc_allocator::*;
+use crate::qlib::kernel::kernel::kernel::Kernel;
+
 pub fn AllocatorPrint(_class: usize) -> String {
     return "".to_string();
 }
 
+pub static  IS_GUEST: bool = false;
+
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 
 thread_local!(static THREAD_ID: RefCell<i32> = RefCell::new(0));
-thread_local!(static VCPU: RefCell<Option<Arc<KVMVcpu>>> = RefCell::new(None));
+thread_local!(static VCPU: RefCell<Option<Arc<ArchVirtCpu>>> = RefCell::new(None));
 
 pub fn ThreadId() -> i32 {
     let mut i = 0;
@@ -122,7 +127,7 @@ pub fn ThreadId() -> i32 {
     return i;
 }
 
-pub fn LocalVcpu() -> Option<Arc<KVMVcpu>> {
+pub fn LocalVcpu() -> Option<Arc<ArchVirtCpu>> {
     let mut vcpu = None;
     VCPU.with(|f| {
         vcpu = f.borrow().clone();
@@ -158,6 +163,10 @@ lazy_static! {
     pub static ref URING: Mutex::<io_uring::IoUring> = Mutex::new(
         io_uring::IoUring::new(MemoryDef::QURING_SIZE as u32).expect("setup io_Uring fail")
     );
+    //will not be used in host when cc enabled, just place holder here
+    pub static ref PRIVATE_VCPU_ALLOCATOR: Box<PrivateVcpuAllocators> = Box::new(PrivateVcpuAllocators::New());
+    pub static ref PRIVATE_VCPU_SHARED_ALLOCATOR: Box<PrivateVcpuSharedAllocators> = Box::new(PrivateVcpuSharedAllocators::New());
+    pub static ref GUEST_KERNEL: Mutex<Option<Kernel>> = Mutex::new(None);
 }
 
 pub const LOG_FILE: &'static str = "/var/log/quark/quark.log";
@@ -168,6 +177,8 @@ pub fn InitSingleton() {
 
 #[global_allocator]
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
+pub static SHARED_ALLOCATOR : GlobalVcpuSharedAllocator = GlobalVcpuSharedAllocator::New();
+pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
 
 fn main() {
     InitSingleton();

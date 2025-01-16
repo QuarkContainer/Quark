@@ -23,6 +23,8 @@ use core::ops::Deref;
 use super::super::super::IOURING;
 use super::timer::*;
 use super::*;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+use crate::GuestHostSharedAllocator;
 
 #[derive(Debug, Copy, Clone)]
 pub struct TimerUnit {
@@ -107,13 +109,25 @@ impl TimerStore {
     }
 }
 
-#[derive(Default)]
 pub struct TimerStoreIntern {
     // expire time -> Timer
-    pub timerSeq: BTreeMap<TimerUnit, Timer>, // order by expire time
+    pub timerSeq: BTreeMap<TimerUnit, Timer, GuestHostSharedAllocator>, // order by expire time
     pub nextExpire: i64,
     pub uringExpire: i64,
     pub uringId: u64,
+}
+
+impl Default for TimerStoreIntern {
+    fn default() -> Self {
+        let res = Self {
+            timerSeq: BTreeMap::new_in(GUEST_HOST_SHARED_ALLOCATOR),
+            nextExpire: 0,
+            uringExpire: 0,
+            uringId: 0,
+        };
+
+        return res;
+    }
 }
 
 impl TimerStoreIntern {

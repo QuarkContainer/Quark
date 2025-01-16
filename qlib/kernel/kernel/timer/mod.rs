@@ -46,7 +46,9 @@ pub struct TimerUpdater {}
 
 impl TimerListenerTrait for TimerUpdater {
     fn Notify(&self, _exp: u64) {
-        TIME_KEEPER.write().Update();
+        if !crate::qlib::kernel::arch::tee::is_cc_active() || crate::IS_GUEST {
+            TIME_KEEPER.write().Update();
+        }
     }
 
     fn Destroy(&self) {}

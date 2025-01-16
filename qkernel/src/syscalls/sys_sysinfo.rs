@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::boxed::Box;
+
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::qmsg::qcall::StatmInfo;
@@ -21,17 +25,16 @@ use super::super::task::*;
 
 pub fn SysInfo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
+    let mut info = Box::new_in(LibcSysinfo::default(), GUEST_HOST_SHARED_ALLOCATOR);
 
-    let mut info: LibcSysinfo = LibcSysinfo::default();
-
-    /*let ret = Kernel::HostSpace::Sysinfo(&mut info as * mut _ as u64);
+    /*let ret = Kernel::HostSpace::Sysinfo(&mut *info as * mut _ as u64);
     if ret < 0 {
         return Err(Error::SysError(-ret as i32))
     }*/
 
-    let statm: StatmInfo = StatmInfo::default();
+    let statm = Box::new_in(StatmInfo::default(), GUEST_HOST_SHARED_ALLOCATOR);
     // TODO(Cong): bypassing this issue for now, fix this...
-    //Kernel::HostSpace::Statm(&mut statm);
+    //Kernel::HostSpace::Statm(&mut *statm);
     info!("pass to here, rss, {}", statm.rss);
 
     let totalUsage = statm.rss;
@@ -45,7 +48,7 @@ pub fn SysInfo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     info.mem_unit = 1;
 
     //*sysInfo = info;
-    task.CopyOutObj(&info, addr)?;
+    task.CopyOutObj(&*info, addr)?;
     //error!("SysInfo output is {:?}", &info);
 
     //return Ok(ret)

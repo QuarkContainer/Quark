@@ -16,6 +16,7 @@ use alloc::string::String;
 use alloc::string::ToString;
 use core::u64;
 
+use super::pagetable;
 use super::pagetable::PageTableFlags;
 use super::common::*;
 use super::linux_def::*;
@@ -277,7 +278,10 @@ impl PageOpts {
 
     pub fn Kernel() -> Self {
         return PageOpts(
-            PageTableFlags::VALID,
+            PageTableFlags::VALID |
+            PageTableFlags::MT_NORMAL |
+            PageTableFlags::DIRTY |
+            PageTableFlags::ACCESSED
         );
     }
 
@@ -524,6 +528,11 @@ impl Addr {
 
     pub fn IsPageAligned(&self) -> bool {
         self.PageOffset() == 0
+    }
+
+    pub fn is_huge_page_aligned(&self, huge_page_type: pagetable::HugePageType) -> bool {
+        let align_size = huge_page_type.size();
+        return (self.0 & (align_size -1)) == 0
     }
 
     pub fn PageAligned(&self) -> Result<()> {

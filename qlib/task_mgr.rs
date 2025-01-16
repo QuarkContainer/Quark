@@ -18,12 +18,15 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use cache_padded::CachePadded;
 use core::cmp::PartialEq;
+use core::panic;
 use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
 use super::vcpu_mgr::*;
+
+use crate::qlib::kernel::arch::tee::is_cc_active;
 
 #[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub struct TaskId {
@@ -42,8 +45,29 @@ impl TaskId {
     }
 
     #[inline]
-    pub fn Queue(&self) -> u64 {
-        return self.GetTask().QueueId() as u64;
+    pub fn QueueId(&self) -> u64 {
+        if !is_cc_active(){
+            return self.GetTask().QueueId() as u64;
+        } else {
+            return self.GetTaskWrapper().QueueId() as u64;
+        }
+    }
+
+    pub fn SetQueueId(&self, queueId: usize) {
+        if !is_cc_active(){
+            return self.GetTask().SetQueueId(queueId);
+        } else {
+            return self.GetTaskWrapper().SetQueueId(queueId)
+        }
+    }
+
+    #[inline]
+    pub fn Ready(&self) -> u64 {
+        if !is_cc_active(){
+            return self.GetTask().Ready() as u64;
+        } else {
+            return self.GetTaskWrapper().Ready() as u64;
+        }
     }
 }
 
@@ -214,7 +238,7 @@ impl Default for TaskQueueIntern {
         return Self {
             workingTask: TaskId::New(0),
             workingTaskReady: false,
-            queue: VecDeque::with_capacity(8),
+            queue: VecDeque::with_capacity(512),
         };
     }
 }
@@ -294,11 +318,15 @@ impl TaskQueue {
                     match data.queue.pop_front() {
                         None => panic!("TaskQueue none task"),
                         Some(taskId) => {
-                            if taskId.GetTask().Ready() != 0 {
+                            if taskId.Ready() != 0 {
                                 self.queueSize.fetch_sub(1, Ordering::Release);
                                 return Some(taskId);
                             }
-                            data.queue.push_back(taskId)
+                            if data.queue.len() == data.queue.capacity() {
+                                panic!("queue is full");
+                            } else {
+                                data.queue.push_back(taskId);
+                            }
                         }
                     }
                 }
@@ -318,7 +346,13 @@ impl TaskQueue {
             return false;
         }
 
-        data.queue.push_back(task);
+        if data.queue.len() == data.queue.capacity()
+        {
+            panic!("queue is full");
+        } else {
+            data.queue.push_back(task);
+        }
+
         self.queueSize.fetch_add(1, Ordering::Release);
         return true;
     }

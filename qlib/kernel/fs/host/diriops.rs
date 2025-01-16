@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -96,13 +98,12 @@ impl HostDirOpIntern {
     pub fn ReadDirAll(&self, _task: &Task) -> Result<DentMap> {
         let fd = self.HostFd();
 
-        let mut buf: [u8; 4096 * 4] = [0; 4096 * 4]; // 16KB in stack
-
+        let mut buf = Box::new_in([0u8; 4096 * 4], GUEST_HOST_SHARED_ALLOCATOR);// 16KB in shared heap
         //let deviceId = self.sattr.DeviceId;
         let mut entries = BTreeMap::new();
         let mut reset = true;
         loop {
-            let res = HostSpace::ReadDir(fd, &mut buf, reset);
+            let res = HostSpace::ReadDir(fd, &mut *buf, reset);
             if res < 0 {
                 return Err(Error::SysError(-res as i32));
             }

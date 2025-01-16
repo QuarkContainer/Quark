@@ -58,6 +58,8 @@ use super::timer::timekeeper::*;
 use super::timer::timer::*;
 use super::timer::*;
 use super::uts_namespace::*;
+use crate::GUEST_KERNEL;
+use crate::qlib::kernel::arch::tee::is_cc_active;
 
 pub static ASYNC_PROCESS_TIMER: Singleton<Timer> = Singleton::<Timer>::New();
 
@@ -65,12 +67,20 @@ static CLOCK_TICK_MS: i64 = CLOCK_TICK / MILLISECOND;
 
 #[inline]
 pub fn GetKernel() -> Kernel {
-    return SHARESPACE.kernel.lock().clone().unwrap();
+    if is_cc_active(){
+        return GUEST_KERNEL.lock().clone().unwrap();
+    } else {
+        return SHARESPACE.kernel.lock().clone().unwrap();
+    }
 }
 
 #[inline]
 pub fn GetKernelOption() -> Option<Kernel> {
-    return SHARESPACE.kernel.lock().clone();
+    if is_cc_active(){
+        return GUEST_KERNEL.lock().clone();
+    } else {
+        return SHARESPACE.kernel.lock().clone();
+    }
 }
 
 #[derive(Default)]
@@ -225,7 +235,6 @@ impl Kernel {
             lastProcessTime: QMutex::new(0),
             syslog: SysLog::default(),
         };
-
         //error!("hasXSAVEOPT is {}", internal.featureSet.lock().UseXsaveopt());
         //error!("hasXSAVE is {}", internal.featureSet.lock().UseXsave());
         //error!("hasFSGSBASE is {}", internal.featureSet.lock().HasFeature(Feature(X86Feature::X86FeatureFSGSBase as i32)));

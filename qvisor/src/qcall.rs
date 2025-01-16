@@ -302,7 +302,6 @@ impl KVMVcpu {
                         .SwapOut(heapStart, heapEnd - heapStart)
                         .unwrap();
                 }
-
                 ret = 0;
             }
             Msg::SwapIn(_msg) => {

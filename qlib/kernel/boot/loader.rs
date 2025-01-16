@@ -44,6 +44,8 @@ use super::super::threadmgr::thread_group::*;
 use super::super::SignalDef::*;
 use super::super::SHARESPACE;
 use super::fs::*;
+use crate::GUEST_KERNEL;
+use crate::qlib::kernel::arch::tee::is_cc_active;
 
 impl Process {
     pub fn TaskCaps(&self) -> TaskCaps {
@@ -127,7 +129,11 @@ impl Loader {
         };
 
         let kernel = Kernel::Init(kernelArgs);
-        *SHARESPACE.kernel.lock() = Some(kernel.clone());
+        if is_cc_active(){
+            *GUEST_KERNEL.lock() = Some(kernel.clone());
+        } else {
+            *SHARESPACE.kernel.lock() = Some(kernel.clone());
+        }
         let task = Task::Current();
         self.Lock(task)?.kernel = kernel;
         Ok(())
@@ -487,8 +493,11 @@ impl LoaderInternal {
         };
 
         let kernel = Kernel::Init(kernelArgs);
-        *SHARESPACE.kernel.lock() = Some(kernel.clone());
-
+        if is_cc_active(){
+            *GUEST_KERNEL.lock() = Some(kernel.clone());
+        } else {
+            *SHARESPACE.kernel.lock() = Some(kernel.clone());
+        }
         let rootMounts =
             InitRootFs(Task::Current(), &process.Root).expect("in loader::New, InitRootfs fail");
         kernel.mounts.write().insert(sandboxID.clone(), rootMounts);

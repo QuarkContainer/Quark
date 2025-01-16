@@ -1,7 +1,11 @@
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use std::alloc::GlobalAlloc;
 use std::fmt;
 use std::sync::mpsc::channel;
+use alloc::alloc::AllocError;
+use core::ptr::NonNull;
+use core::alloc::Layout;
 
 use cache_padded::CachePadded;
 use libc::*;
@@ -29,6 +33,7 @@ use super::qlib::kernel::TSC;
 use super::qlib::linux::time::*;
 use super::qlib::linux_def::*;
 use super::qlib::loader::*;
+use crate::qlib::mem::list_allocator::GuestHostSharedAllocator;
 use super::qlib::mutex::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::qmsg::*;
@@ -174,10 +179,10 @@ impl ShareSpace {
                 SHARE_SPACE.scheduler.VcpuArr[i].InterruptTlbShootdown();
                 if tlbshootdown_wait {
                     let (tx, rx) = channel();
-                    cpu.interrupt(Some(tx));
+                    cpu.vcpu_base.interrupt(Some(tx));
                     waiters.push(rx);
                 } else {
-                    cpu.interrupt(None);
+                    cpu.vcpu_base.interrupt(None);
                 }
             }
         }
@@ -215,7 +220,7 @@ impl ShareSpace {
                 self.scheduler.VcpuArr[i].InterruptThreadTimeout();
                 //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
                 let vcpu = VMS.lock().vcpus[i].clone();
-                vcpu.interrupt(None);
+                vcpu.vcpu_base.interrupt(None);
             }
         }
     }
@@ -402,5 +407,22 @@ impl DnsSvc {
         IOURING.DNSRecvInit(sock, msgAddr);
 
         return Ok(())
+    }
+}
+
+
+unsafe impl core::alloc::Allocator for GuestHostSharedAllocator {
+    fn allocate(&self, layout: Layout) -> core::result::Result<NonNull<[u8]>, AllocError> {
+        unsafe{
+            let ptr = crate::GLOBAL_ALLOCATOR.alloc(layout);
+            let slice = core::slice::from_raw_parts_mut(ptr, layout.size());
+            return Ok(NonNull::new_unchecked(slice));
+        }
+    }
+        
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        let ptr = ptr.as_ptr();
+        return crate::GLOBAL_ALLOCATOR.dealloc(ptr, layout);
     }
 }

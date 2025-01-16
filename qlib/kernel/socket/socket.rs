@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use alloc::boxed::Box;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
@@ -158,12 +159,12 @@ pub fn NewSocketDirent(task: &Task, _d: Arc<QMutex<Device>>, fd: i32) -> Result<
         false,
     );
 
-    let mut fstat = LibcStat::default();
-    let ret = Fstat(fd, &mut fstat);
+    let mut fstat = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
+    let ret = Fstat(fd, &mut *fstat);
     if ret < 0 {
         return Err(Error::SysError(-ret as i32));
     }
-    let inode = Inode::NewHostInode(task, &Arc::new(QMutex::new(msrc)), fd, &fstat, true, false, false)?;
+    let inode = Inode::NewHostInode(task, &Arc::new(QMutex::new(msrc)), fd, &*fstat, true, false, false)?;
 
     let name = format!("socket:[{}]", fd);
     return Ok(Dirent::New(&inode, &name.to_string()));
@@ -179,12 +180,12 @@ pub fn NewHostfileDirent(task: &Task, _d: Arc<QMutex<Device>>, fd: i32) -> Resul
         false,
     );
 
-    let mut fstat = LibcStat::default();
-    let ret = Fstat(fd, &mut fstat);
+    let mut fstat = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
+    let ret = Fstat(fd, &mut *fstat);
     if ret < 0 {
         return Err(Error::SysError(-ret as i32));
     }
-    let inode = Inode::NewHostInode(task, &Arc::new(QMutex::new(msrc)), fd, &fstat, true, false, false)?;
+    let inode = Inode::NewHostInode(task, &Arc::new(QMutex::new(msrc)), fd, &*fstat, true, false, false)?;
 
     let name = format!("file:[{}]", fd);
     return Ok(Dirent::New(&inode, &name.to_string()));

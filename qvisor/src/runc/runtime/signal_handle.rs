@@ -18,6 +18,8 @@ use core::sync::atomic::Ordering;
 use lazy_static::lazy_static;
 use nix::sys::signal;
 
+use crate::qlib::kernel::arch::tee::is_cc_active;
+use crate::runc::sandbox::sandbox::SignalProcess;
 use super::super::super::qlib::backtracer;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::control_msg::*;
@@ -115,19 +117,29 @@ extern "C" fn handle_sigintAct(
             panic!("get signal 11");
         }
 
-        let signal = SignalArgs {
-            Signo: signal,
-            CID: ROOT_CONTAINER_ID.lock().clone(),
-            PID: 0,
-            Mode: if console {
-                SignalDeliveryMode::DeliverToForegroundProcessGroup
-            } else {
-                SignalDeliveryMode::DeliverToProcess
-            },
-        };
+        if is_cc_active(){
+            let res = SignalProcess(&ROOT_CONTAINER_ID.lock().clone(), 0, signal, console);
+            debug!("SignalProcess res {:?}", res);
+        } else {
+            SendSignalVMS(signal, console);
+        }
 
-        VMS.lock().Signal(signal);
     }
+}
+
+fn SendSignalVMS(signal: i32, console: bool) {
+    let signal = SignalArgs {
+        Signo: signal,
+        CID: ROOT_CONTAINER_ID.lock().clone(),
+        PID: 0,
+        Mode: if console {
+            SignalDeliveryMode::DeliverToForegroundProcessGroup
+        } else {
+            SignalDeliveryMode::DeliverToProcess
+        },
+    };
+
+    VMS.lock().Signal(signal);
 }
 
 // numSignals is the number of normal (non-realtime) signals on Linux.

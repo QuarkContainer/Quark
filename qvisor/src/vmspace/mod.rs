@@ -32,6 +32,7 @@ pub mod xpu;
 use core::arch::asm;
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
+use arch::vm::vcpu::ArchVirtCpu;
 use lazy_static::lazy_static;
 use libc::*;
 use serde_json;
@@ -60,7 +61,6 @@ use self::syscall::*;
 use self::tsot_agent::TSOT_AGENT;
 use self::tsot_msg::TsotMessage;
 use super::kvm_vcpu::HostPageAllocator;
-use super::kvm_vcpu::KVMVcpu;
 use super::namespace::MountNs;
 use super::qlib::addr::Addr;
 use super::qlib::common::{Error, Result};
@@ -129,9 +129,12 @@ pub struct VMSpace {
     pub pivot: bool,
     pub waitingMsgCall: Option<WaitingMsgCall>,
     pub controlSock: i32,
-    pub vcpus: Vec<Arc<KVMVcpu>>,
+    pub vcpus: Vec<Arc<ArchVirtCpu>>,
     pub haveMembarrierGlobal: bool,
     pub haveMembarrierPrivateExpedited: bool,
+
+    pub rdmaSvcCliSock: i32,
+    pub podId: [u8;64],
 }
 
 unsafe impl Sync for VMSpace {}
@@ -159,6 +162,8 @@ impl VMSpace {
             vcpus: Vec::new(),
             haveMembarrierGlobal: haveMembarrierGlobal,
             haveMembarrierPrivateExpedited: haveMembarrierPrivateExpedited,
+            rdmaSvcCliSock: 0,
+            podId: [0u8;64],
         };
     }
 
@@ -234,8 +239,8 @@ impl VMSpace {
 
         SetConole(spec.process.terminal);
         process.Terminal = spec.process.terminal;
-        process.Args.append(&mut spec.process.args);
-        process.Envs.append(&mut spec.process.env);
+        process.Args.append(&mut spec.process.args.clone());
+        process.Envs.append(&mut spec.process.env.clone());
 
         //todo: credential fix.
         //error!("LoadProcessKernel: need to study the user mapping handling...");
@@ -243,7 +248,7 @@ impl VMSpace {
         process.GID = spec.process.user.gid;
         process
             .AdditionalGids
-            .append(&mut spec.process.user.additional_gids);
+            .append(&mut spec.process.user.additional_gids.clone());
         process.limitSet = CreateLimitSet(&spec)
             .expect("load limitSet fail")
             .GetInternalCopy();
@@ -1795,11 +1800,20 @@ impl VMSpace {
         end: Addr,
         physical: Addr,
         flags: PageTableFlags,
+        hpage_size: pagetable::HugePageType
     ) -> Result<bool> {
-        info!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
-        return self
-            .pageTables
-            .MapWith1G(start, end, physical, flags, &mut self.allocator, true);
+        match hpage_size {
+            pagetable::HugePageType::GB1 => {
+                info!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
+                return self.pageTables
+                    .MapWith1G(start, end, physical, flags, &mut self.allocator, true);
+            },
+            pagetable::HugePageType::MB2 => {
+                info!("KernelMap2MB start is {:x}, end is {:x}", start.0, end.0);
+                return self.pageTables
+                    .MapWith2MB(start, end, physical, flags, &mut self.allocator, true);
+            }
+        };
     }
 
     pub fn PrintStr(phAddr: u64) {
@@ -1962,7 +1976,7 @@ impl VMSpace {
     }
 
     pub fn GetVcpuFreq(&self) -> i64 {
-        self.vcpus[0].get_frequency().unwrap() as i64
+        self.vcpus[0].vcpu_base.get_frequency().unwrap() as i64
     }
 
     pub fn Membarrier(cmd: i32) -> i32 {
@@ -2035,7 +2049,7 @@ impl PostRDMAConnect {
         self.ret = ret;
         SHARE_SPACE
             .scheduler
-            .ScheduleQ(self.taskId, self.taskId.Queue(), true)
+            .ScheduleQ(self.taskId, self.taskId.QueueId(), true)
     }
 
     pub fn ToRef(addr: u64) -> &'static mut Self {

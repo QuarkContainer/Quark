@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::boxed::Box;
+use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use super::super::common::*;
 use super::Kernel::*;
 
@@ -28,13 +30,13 @@ pub fn Random(buf: u64, len: u64, flags: u32) -> Result<()> {
 }
 
 pub fn RandU64() -> Result<u64> {
-    let res: u64 = 0;
-    Random(&res as *const _ as u64, 8, GRND_RANDOM)?;
-    return Ok(res);
+    let res = Box::new_in(0u64, GUEST_HOST_SHARED_ALLOCATOR);
+    Random(&*res as *const _ as u64, 8, GRND_RANDOM)?;
+    return Ok(*res);
 }
 
 pub fn RandU128() -> Result<(u64, u64)> {
-    let res: [u64; 2] = [0; 2];
+    let res = Box::new_in([0u64; 2], GUEST_HOST_SHARED_ALLOCATOR);
     Random(&res[0] as *const _ as u64, 16, GRND_RANDOM)?;
     return Ok((res[0], res[1]));
 }

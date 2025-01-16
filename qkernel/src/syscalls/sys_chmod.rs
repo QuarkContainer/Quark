@@ -18,7 +18,7 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
-use super::super::util::cstring::*;
+use crate::qlib::kernel::util::sharedcstring::SharedCString;
 use super::super::Kernel::HostSpace;
 use super::sys_file::*;
 
@@ -66,7 +66,7 @@ pub fn SysChmod(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             // todo: this is workaround. Need to good way to handle non file chmod.
             info!("chmod.....");
             let (path, _) = copyInPath(task, addr, false)?;
-            let path = CString::New(&path);
+            let path = SharedCString::New(&path);
             let ret = HostSpace::Chmod(path.Ptr(), mode.0 as u32);
             return Ok(ret);
             //return Ok(task.Chmod(addr as u64, mode.0 as u64));

@@ -27,6 +27,7 @@
 #![allow(deprecated)]
 #![recursion_limit = "256"]
 #![allow(invalid_reference_casting)]
+#![feature(btreemap_alloc)]
 
 #[macro_use]
 extern crate alloc;
@@ -60,6 +61,7 @@ use taskMgr::{CreateTask, IOWait, WaitFn};
 use vcpu::CPU_LOCAL;
 
 use crate::qlib::kernel::GlobalIOMgr;
+use crate::qlib::ShareSpace;
 
 use self::asm::*;
 use self::boot::controller::*;
@@ -82,6 +84,7 @@ use self::qlib::kernel::memmgr;
 use self::qlib::kernel::perflog;
 use self::qlib::kernel::quring;
 use self::qlib::kernel::Kernel;
+use self::qlib::kernel::arch::tee::is_cc_active;
 use self::qlib::kernel::*;
 use self::qlib::{ShareSpaceRef, SysCallID};
 use self::qlib::kernel::socket;
@@ -107,6 +110,10 @@ use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
 
+use self::qlib::mem::cc_allocator::*;
+use alloc::boxed::Box;
+use memmgr::pma::PageMgr;
+
 #[macro_use]
 mod print;
 
@@ -123,8 +130,20 @@ pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
+pub static  IS_GUEST: bool = true;
+pub static SHARED_ALLOCATOR : GlobalVcpuSharedAllocator = GlobalVcpuSharedAllocator::New();
+pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
+
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
+}
+
+//used when cc is enabled
+lazy_static! {
+    pub static ref PRIVATE_VCPU_ALLOCATOR: Box<PrivateVcpuAllocators> = Box::new(PrivateVcpuAllocators::New());
+    pub static ref PRIVATE_VCPU_SHARED_ALLOCATOR: Box<PrivateVcpuSharedAllocators> = Box::new(PrivateVcpuSharedAllocators::New());
+    pub static ref PAGE_MGR_HOLDER: Box<PageMgr> = Box::new(PageMgr::default());
+    pub static ref GUEST_KERNEL: Mutex<Option<kernel::kernel::Kernel>> = Mutex::new(None);
 }
 
 pub fn AllocIOBuf(size: usize) -> *mut u8 {
@@ -141,13 +160,17 @@ pub fn SingletonInit() {
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentUserTable()));
         //init fp state with current fp state as it is brand new vcpu
         FP_STATE.Reset();
-        SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
-        IOURING.SetValue(SHARESPACE.GetIOUringAddr());
 
         // the error! can run after this point
         //error!("error message");
 
-        PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
+        if is_cc_active(){
+            PAGE_MGR.SetValue(PAGE_MGR_HOLDER.Addr());
+        } else {
+            SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
+            PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
+        }
+        IOURING.SetValue(SHARESPACE.GetIOUringAddr());
         LOADER.Init(Loader::default());
         KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
             MemoryDef::DEFAULT_STACK_SIZE as usize,
@@ -561,11 +584,31 @@ pub extern "C" fn rust_main(
 ) {
     self::qlib::kernel::asm::fninit();
     if id == 0 {
-        GLOBAL_ALLOCATOR.Init(heapStart);
-        SHARESPACE.SetValue(shareSpaceAddr);
+        //if in any cc machine, shareSpaceAddr is reused as CCMode
+        let mode = CCMode::from(shareSpaceAddr);
+        GLOBAL_ALLOCATOR.InitPrivateAllocator(mode);
+        if mode != CCMode::None {
+            crate::qlib::kernel::arch::tee::set_tee_type(mode);
+            GLOBAL_ALLOCATOR.InitSharedAllocator(mode);
+            let size = core::mem::size_of::<ShareSpace>();
+            let shared_space = unsafe {
+                GLOBAL_ALLOCATOR.AllocSharedBuf(size, 2)
+            };
+            HyperCall64(qlib::HYPERCALL_SHARESPACE_INIT, shared_space as u64, 0, 0, 0);
+            SHARESPACE.SetValue(shared_space as u64);
+        } else {
+            GLOBAL_ALLOCATOR.InitSharedAllocator(mode);
+            SHARESPACE.SetValue(shareSpaceAddr);
+        }
+
         SingletonInit();
         debug!("init singleton finished");
+        SetVCPCount(vcpuCnt as usize);
+
+        VCPU_ALLOCATOR.Print();
         VCPU_ALLOCATOR.Initializated();
+        GUEST_HOST_SHARED_ALLOCATOR.Print();
+        GUEST_HOST_SHARED_ALLOCATOR.Initializated();
         InitTsc();
         InitTimeKeeper(vdsoParamAddr);
         debug!("init time keeper finished");
@@ -580,7 +623,6 @@ pub extern "C" fn rust_main(
         debug!("init vsyscall finished");
         GlobalIOMgr().InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
         debug!("init host epoll fd finished");
-        SetVCPCount(vcpuCnt as usize);
         VDSO.Initialization(vdsoParamAddr);
         debug!("init vdso finished");
 

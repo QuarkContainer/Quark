@@ -53,6 +53,8 @@ use super::*;
 use crate::qlib::kernel::{SHARESPACE, asm::*};
 use crate::qlib::vcpu_mgr::VcpuMode;
 
+use crate::qlib::kernel::arch::tee::{is_cc_active, guest_physical_address};
+
 pub struct MMMapping {
     pub vmas: AreaSet<VMA>,
 
@@ -1068,7 +1070,28 @@ impl MemoryManager {
             Some(iops) => {
                 let vmaOffset = pageAddr - range.Start();
                 let fileOffset = vmaOffset + vma.offset; // offset in the file
+                debug!("VM: Install Page - HostIO - vma-offset:{:#0x} - file-offset:{:#0x}", vmaOffset, fileOffset);
                 let phyAddr = iops.MapFilePage(task, fileOffset)?;
+                if is_cc_active() {
+                    let writeable = vma.effectivePerms.Write();
+                    let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
+                    debug!("VM: Install Page - copy pha:{:#0x} to page:{:#0x}", phyAddr, page);
+                    CopyPage(page, phyAddr);
+                    debug!("VM: Install Page - copy done.");
+
+                    let ret;
+                    if writeable {
+                        ret = self.MapPageWriteLocked(pageAddr, page, exec);
+                    } else {
+                        ret = self.MapPageReadLocked(pageAddr, page, exec);
+                    }
+
+                    if !vma.private {
+                        iops.MapSharedPage(phyAddr, page, fileOffset, writeable);
+                    }
+                    super::super::PAGE_MGR.DerefPage(page);
+                    return ret;
+                }
                 //error!("fault 2.1, vma.mappable.is_some() is {}, vaddr is {:x}, paddr is {:x}",
                 //      vma.mappable.is_some(), pageAddr, phyAddr);
 
@@ -1447,7 +1470,7 @@ impl MemoryManager {
                     };
 
                     (
-                        entry.addr().as_u64(),
+                        guest_physical_address(entry.addr().as_u64()),
                         AccessType::NewFromPageFlags(entry.flags()),
                     )
                 }
