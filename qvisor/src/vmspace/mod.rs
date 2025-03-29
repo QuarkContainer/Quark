@@ -1802,11 +1802,13 @@ impl VMSpace {
         flags: PageTableFlags,
         hpage_size: pagetable::HugePageType
     ) -> Result<bool> {
+        // The kernel current shares the same first level page table entry with guest
+        // TODO: Set _kernel to true if the kernel moves to upper half
         match hpage_size {
             pagetable::HugePageType::GB1 => {
                 info!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
                 return self.pageTables
-                    .MapWith1G(start, end, physical, flags, &mut self.allocator, true);
+                    .MapWith1G(start, end, physical, flags, &mut self.allocator, false);
             },
             pagetable::HugePageType::MB2 => {
                 info!("KernelMap2MB start is {:x}, end is {:x}", start.0, end.0);
