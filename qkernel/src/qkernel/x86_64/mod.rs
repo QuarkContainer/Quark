@@ -11,12 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#[path = "./arch_x86.rs"]
+pub mod arch_def;
 
-//
-// TODO - Arm next
-//
-#[cfg(target_arch = "aarch64")]
-#[path = "./aarch64/mod.rs"]
-pub mod __arch;
-
-pub mod tee;
+pub mod context;
