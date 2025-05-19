@@ -260,10 +260,7 @@ fn fstat(task: &Task, f: &File, statAddr: u64) -> Result<()> {
 
 // TODO: this needs more care because the stat struct is different per arch
 fn copyOutStat(task: &Task, statAddr: u64, sattr: &StableAttr, uattr: &UnstableAttr) -> Result<()> {
-    //let mut s: &mut LibcStat = task.GetTypeMut(statAddr)?;
-
     let mut s: LibcStat = LibcStat::default();
-    //*s = LibcStat::default();
     let creds = task.creds.clone();
     let ns = creds.lock().UserNamespace.clone();
 
@@ -273,7 +270,7 @@ fn copyOutStat(task: &Task, statAddr: u64, sattr: &StableAttr, uattr: &UnstableA
     let st_nlink = uattr.Links;
 
     #[cfg(target_arch = "aarch64")]
-    let st_blksize = uattr.Links as i32;
+    let st_blksize = sattr.BlockSize as i32;
     #[cfg(target_arch = "x86_64")]
     let st_blksize = sattr.BlockSize;
 
@@ -301,7 +298,6 @@ fn copyOutStat(task: &Task, statAddr: u64, sattr: &StableAttr, uattr: &UnstableA
     s.st_ctime_nsec = ctime.tv_nsec;
 
     task.CopyOutObj(&s, statAddr)?;
-    //info!("copyOutStat stat is {:x?}", s);
     return Ok(());
 }
 
@@ -311,7 +307,6 @@ fn statx(task: &Task, sattr: &StableAttr, uattr: &UnstableAttr, statxAddr: u64) 
     let creds = task.creds.clone();
     let ns = creds.lock().UserNamespace.clone();
 
-    //let out: &mut Statx = task.GetTypeMut::<Statx>(statxAddr)?;
 
     let s = Statx {
         stx_mask: StatxMask::STATX_BASIC_STATS,
@@ -336,8 +331,6 @@ fn statx(task: &Task, sattr: &StableAttr, uattr: &UnstableAttr, statxAddr: u64) 
         stx_dev_minor: devMinor,
         __statx_pad2: [0; 14],
     };
-
-    //*out = s;
 
     task.CopyOutObj(&s, statxAddr)?;
     return Ok(());
