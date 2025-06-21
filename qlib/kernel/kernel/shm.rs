@@ -558,11 +558,9 @@ impl MemoryManager {
                 if vma.mlockMode != MLockMode::MlockNone {
                     mapping.lockedAS -= r.Len();
                 }
-
-                let mut pt = self.pagetable.write();
-
-                pt.pt.MUnmap(r.Start(), r.Len())?;
-                pt.curRSS -= r.Len();
+                self.pagetable.write()
+                    .pt.MUnmap(r.Start(), r.Len())?;
+                self.RemoveRssLock(&r);
                 let vgap = mapping.vmas.Remove(&vseg);
                 vseg = vgap.NextSeg();
             } else {
