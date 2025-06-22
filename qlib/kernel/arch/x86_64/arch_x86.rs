@@ -123,7 +123,7 @@ pub const MXCSR_OFFSET: usize = 24;
 #[repr(C)]
 #[derive(Debug)]
 pub struct X86fpstate {
-    pub data: [u8; 4096],
+    pub data: [u8; 12288],
     pub size: AtomicUsize,
 }
 
@@ -176,12 +176,12 @@ impl X86fpstate {
     fn New() -> Self {
         let (size, _align) = HostFeatureSet().ExtendedStateSize();
 
-        if size > 4096 {
-            panic!("X86fpstate capacity size({}) > 4096", size);
+        if size > 12288 {
+            panic!("X86fpstate capacity size({}) > 4096 * 3 ", size);
         }
 
         return Self {
-            data: [0; 4096],
+            data: [0; 12288],
             size: AtomicUsize::new(size as usize),
         };
     }
@@ -252,8 +252,8 @@ impl X86fpstate {
 
     pub const fn Init() -> Self {
         return Self {
-            data: [0; 4096],
-            size: AtomicUsize::new(4096),
+            data: [0; 12288],
+            size: AtomicUsize::new(12288),
         };
     }
 
