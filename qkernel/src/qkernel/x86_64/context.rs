@@ -12,14 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::super::super::addr::*;
-use super::super::super::super::common::*;
-use super::super::super::super::limits::*;
-use super::super::super::super::linux_def::*;
-use super::super::super::kernel_util::*;
-use super::super::super::memmgr::arch::*;
-use super::super::super::SignalDef::*;
-use super::arch_def::*;
+use addr::*;
+use crate::kernel_util;
+use crate::qlib::addr;
+use crate::qlib::common;
+use crate::qlib::kernel::memmgr;
+use crate::qlib::kernel::SignalDef;
+use crate::qlib::limits;
+use crate::qlib::linux_def;
+
+use common::*;
+use limits::*;
+use linux_def::*;
+use kernel_util::*;
+use memmgr::arch::*;
+use SignalDef::*;
+use arch_def::*;
+
+use super::arch_def;
 
 // These constants come directly from Linux.
 

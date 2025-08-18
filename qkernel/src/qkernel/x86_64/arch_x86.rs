@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::SignalDef;
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
-use super::super::super::super::cpuid::*;
-use super::super::super::asm::*;
-use super::super::super::SignalDef::*;
-use super::super::super::FP_STATE;
+use crate::qlib::cpuid::*;
+use crate::asm::*;
+use SignalDef::*;
+use FP_STATE;
 
 // System-related constants for x86.
 
