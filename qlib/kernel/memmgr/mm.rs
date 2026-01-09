@@ -458,24 +458,10 @@ impl MemoryManager {
             let vma = vseg.Value();
 
             if !vma.kernel {
-                /*if vma.mappable.is_some() {
-                    let mappable = vma.mappable.clone().unwrap();
-                    // todo: fix the Madvise/MADV_DONTNEED, when there are multiple process MAdviseOp::MADV_DONTNEED
-                    // with current implementation, the first Madvise/MADV_DONTNEED will work.
-                    mappable.RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
-                }
-
-                mapping.usageAS -= r.Len();
-                if vma.mlockMode != MLockMode::MlockNone {
-                    mapping.lockedAS -= r.Len();
-                }*/
-
-                let mut pt = self.pagetable.write();
-
-                pt.pt.MUnmap(r.Start(), r.Len())?;
-                pt.curRSS -= r.Len();
+                self.pagetable.write()
+                    .pt.MUnmap(r.Start(), r.Len())?;
+                self.RemoveRssLock(&r);
             }
-            //let vgap = mapping.vmas.Remove(&vseg);
             vseg = vgap.NextSeg();
         }
 
@@ -504,10 +490,9 @@ impl MemoryManager {
                     mapping.lockedAS -= r.Len();
                 }
 
-                let mut pt = self.pagetable.write();
-
-                pt.pt.MUnmap(r.Start(), r.Len())?;
-                pt.curRSS -= r.Len();
+                self.pagetable.write()
+                    .pt.MUnmap(r.Start(), r.Len())?;
+                self.RemoveRssLock(&r);
             }
             let vgap = mapping.vmas.Remove(&vseg);
             vseg = vgap.NextSeg();
@@ -563,7 +548,11 @@ impl MemoryManager {
 
     pub fn RemoveRssLock(&self, ar: &Range) {
         let mut pt = self.pagetable.write();
-        pt.curRSS -= ar.Len();
+        if ar.Len() <= pt.curRSS {
+            pt.curRSS -= ar.Len();
+        } else {
+            pt.curRSS = 0;
+        }
     }
 
     pub fn GenStatmSnapshot(&self, _task: &Task) -> Vec<u8> {
