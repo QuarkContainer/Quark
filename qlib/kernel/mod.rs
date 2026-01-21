@@ -175,7 +175,8 @@ impl Tsc {
     pub fn RawRdtsc() -> i64 {
         let val: u64;
         unsafe {
-            asm!("mrs {0}, cntvct_el0",
+            asm!("isb
+                mrs {0}, cntvct_el0",
             out(reg) val
             )
         };
