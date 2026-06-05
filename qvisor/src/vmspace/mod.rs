@@ -1203,18 +1203,24 @@ impl VMSpace {
     ///////////start of network operation//////////////////////////////////////////////////////////////////
 
     pub fn HostUnixRecvMsg(fd: i32, msghdr: u64, flags: i32) -> i64 {
+        let fd = match Self::GetOsfd(fd) {
+            Some(fd) => fd,
+            None => return -SysErr::EBADF as i64,
+        };
+
         match Self::HostUnixRecvMsgHelper(fd, msghdr, flags) {
             Err(Error::SysError(errno)) => return -errno as i64,
-            Ok(()) => return 0,
+            Ok(ret) => return ret,
             _ => panic!("HostUnixRecvMsg impossible"),
         }
     }
 
-    pub fn HostUnixRecvMsgHelper(fd: i32, msghdr: u64, flags: i32) -> Result<()> {
+    pub fn HostUnixRecvMsgHelper(fd: i32, msghdr: u64, flags: i32) -> Result<i64> {
         let ret = unsafe { libc::recvmsg(fd, msghdr as *mut _, flags) };
 
         if ret < 0 {
-            return Err(Error::SysError(Self::GetRet(ret as i64) as i32));
+            let errno = -Self::GetRet(ret as i64);
+            return Err(Error::SysError(errno as i32));
         }
 
         let hdr = unsafe { &mut *(msghdr as *mut MsgHdr) };
@@ -1251,7 +1257,7 @@ impl VMSpace {
             hdr.msgControlLen = new_size;
         }
 
-        return Ok(());
+        return Ok(ret as i64);
     }
 
     pub fn HostUnixConnect(type_: i32, addr: u64, len: usize) -> i64 {
