@@ -1148,6 +1148,25 @@ impl SockOperations for UringSocketOperations {
                         return Err(Error::SysError(SysErr::EINVAL));
                     }
 
+                    if self.ConnErrno() == -SysErr::EINPROGRESS {
+                        let mut hostErrno = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
+                        let mut hostLen = Box::new_in(4i32, GUEST_HOST_SHARED_ALLOCATOR);
+                        let res = Kernel::HostSpace::GetSockOpt(
+                            self.fd,
+                            level,
+                            name,
+                            &mut *hostErrno as *mut i32 as u64,
+                            &mut *hostLen as *mut i32 as u64,
+                        );
+                        if res < 0 {
+                            return Err(Error::SysError(-res as i32));
+                        }
+                        if *hostErrno == 0 {
+                            self.SetConnErrno(0);
+                            self.PostConnect();
+                        }
+                    }
+
                     if self.ConnErrno() != 0 {
                         let errno = self.ConnErrno();
                         self.SetConnErrno(0);
