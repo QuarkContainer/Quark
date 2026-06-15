@@ -378,11 +378,10 @@ impl HostUnixSocketOperations {
                 _ => (),
             }
 
-            res = Kernel::HostSpace::IORecvMsg(
+            res = Kernel::HostSpace::HostUnixRecvMsg(
                 self.fd,
                 &mut *msgHdr as *mut _ as u64,
                 flags | MsgType::MSG_DONTWAIT,
-                false,
             ) as i32;
         }
 

@@ -1,4 +1,4 @@
-all: std server client server_conn client_conn unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek gettimeofday server_benchmark client_benchmark epoll_client epoll_server multithread_client multithread_server multithread_pp_client multithread_pp_server poll udpcli udpsrv udpclidual udpsrvdual
+all: std server client server_conn client_conn host_uds_recv unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek gettimeofday server_benchmark client_benchmark epoll_client epoll_server multithread_client multithread_server multithread_pp_client multithread_pp_server poll udpcli udpsrv udpclidual udpsrvdual
 
 std: std.c
 	gcc -o std std.c
@@ -14,6 +14,8 @@ server_conn: server_conn.c
 	gcc -o server_conn server_conn.c
 client_conn: client_conn.c
 	gcc -o client_conn client_conn.c
+host_uds_recv: host_uds_recv.c
+	gcc -static -o host_uds_recv host_uds_recv.c
 epoll_client: epoll_client.c
 	gcc -o epollc epoll_client.c
 epoll_server: epoll_server.c
@@ -79,4 +81,4 @@ udpclidual: udpclidual.c
 udpsrvdual: udpsrvdual.c
 	gcc -o udpsrvdual udpsrvdual.c
 clean:
-	rm std server client unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek gettimeofday
+	rm -f std server client host_uds_recv unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek gettimeofday
