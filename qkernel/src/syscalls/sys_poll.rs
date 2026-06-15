@@ -205,7 +205,7 @@ pub fn DoSelect(
             if (events & SELECT_EXCEPT_EVENTS) != 0 {
                 bitSetCount += 1;
             } else {
-                w[i] &= !m;
+                e[i] &= !m;
             }
         }
     }
