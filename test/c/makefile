@@ -1,4 +1,4 @@
-all: std server client server_conn client_conn unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek gettimeofday server_benchmark client_benchmark epoll_client epoll_server multithread_client multithread_server multithread_pp_client multithread_pp_server poll select_except_connect udpcli udpsrv udpclidual udpsrvdual
+all: std server client server_conn client_conn unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek gettimeofday server_benchmark client_benchmark epoll_client epoll_server multithread_client multithread_server multithread_pp_client multithread_pp_server poll select_except_connect soerror_connect_loop udpcli udpsrv udpclidual udpsrvdual
 
 std: std.c
 	gcc -o std std.c
@@ -8,6 +8,8 @@ poll: poll.c
 	gcc -o poll poll.c
 select_except_connect: select_except_connect.c
 	gcc -Wall -Wextra -o select_except_connect select_except_connect.c
+soerror_connect_loop: soerror_connect_loop.c
+	gcc -Wall -Wextra -o soerror_connect_loop soerror_connect_loop.c
 server: server.c
 	gcc -o server server.c
 client: client.c
@@ -81,4 +83,4 @@ udpclidual: udpclidual.c
 udpsrvdual: udpsrvdual.c
 	gcc -o udpsrvdual udpsrvdual.c
 clean:
-	rm -f std server client select_except_connect unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek gettimeofday
+	rm -f std server client select_except_connect soerror_connect_loop unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek gettimeofday

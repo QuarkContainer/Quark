@@ -238,6 +238,64 @@ impl UringSocketOperations {
         return self.connErrNo.load(Ordering::Acquire);
     }
 
+    pub fn SetRemoteAddrFromHost(&self) -> Result<()> {
+        let mut addr: Vec<u8, GuestHostSharedAllocator> =
+            Vec::with_capacity_in(SIZEOF_SOCKADDR, GUEST_HOST_SHARED_ALLOCATOR);
+        addr.resize(SIZEOF_SOCKADDR, 0);
+
+        let mut len = Box::new_in(SIZEOF_SOCKADDR as i32, GUEST_HOST_SHARED_ALLOCATOR);
+        let res = Kernel::HostSpace::GetPeerName(
+            self.fd,
+            &mut addr[0] as *mut _ as u64,
+            &mut *len as *mut _ as u64,
+        );
+        if res < 0 {
+            return Err(Error::SysError(-res as i32));
+        }
+
+        let addr = GetAddr(addr[0] as i16, &addr[..*len as usize])?;
+        *self.remoteAddr.lock() = Some(addr);
+        return Ok(());
+    }
+
+    pub fn CompletePendingConnect(&self) -> Result<i32> {
+        if self.ConnErrno() != -SysErr::EINPROGRESS {
+            return Ok(self.ConnErrno());
+        }
+
+        match self.SocketType() {
+            UringSocketType::TCPConnecting => (),
+            _ => return Ok(self.ConnErrno()),
+        }
+
+        let mut hostErrno = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
+        let mut hostLen = Box::new_in(4i32, GUEST_HOST_SHARED_ALLOCATOR);
+        let res = Kernel::HostSpace::GetSockOpt(
+            self.fd,
+            LibcConst::SOL_SOCKET as i32,
+            LibcConst::SO_ERROR as i32,
+            &mut *hostErrno as *mut i32 as u64,
+            &mut *hostLen as *mut i32 as u64,
+        );
+        if res < 0 {
+            return Err(Error::SysError(-res as i32));
+        }
+
+        if *hostErrno == 0 {
+            self.SetRemoteAddrFromHost()?;
+            self.SetConnErrno(0);
+            self.PostConnect();
+            return Ok(0);
+        }
+
+        if *hostErrno != SysErr::EINPROGRESS {
+            self.SetConnErrno(-*hostErrno);
+            *self.socketType.lock() = UringSocketType::TCPInit;
+        }
+
+        return Ok(self.ConnErrno());
+    }
+
     pub fn New(
         family: i32,
         fd: i32,
@@ -406,7 +464,15 @@ impl UringSocketOperations {
             SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT),
             GUEST_HOST_SHARED_ALLOCATOR,
         ));
-        *self.socketType.lock() = UringSocketType::Uring(socketBuf.clone());
+
+        {
+            let mut socketType = self.socketType.lock();
+            match &*socketType {
+                UringSocketType::Uring(_) => return,
+                _ => *socketType = UringSocketType::Uring(socketBuf.clone()),
+            }
+        }
+
         QUring::BufSockInit(self.fd, self.queue.clone(), socketBuf, true).unwrap();
     }
 
@@ -500,7 +566,10 @@ impl Waitable for UringSocketOperations {
     fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
         match self.SocketType() {
             UringSocketType::TCPConnecting => {
-                let errno = self.ConnErrno();
+                let errno = match self.CompletePendingConnect() {
+                    Ok(errno) => errno,
+                    Err(_) => self.ConnErrno(),
+                };
                 if errno != -SysErr::EINPROGRESS {
                     return EVENT_OUT & mask;
                 }
@@ -841,6 +910,10 @@ impl SockOperations for UringSocketOperations {
         }
 
         let errno = self.ConnErrno();
+        if errno == 0 {
+            return Ok(0);
+        }
+
         return Err(Error::SysError(-errno));
     }
 
@@ -1147,6 +1220,8 @@ impl SockOperations for UringSocketOperations {
                     if opt.len() < 4 {
                         return Err(Error::SysError(SysErr::EINVAL));
                     }
+
+                    self.CompletePendingConnect()?;
 
                     if self.ConnErrno() != 0 {
                         let errno = self.ConnErrno();
