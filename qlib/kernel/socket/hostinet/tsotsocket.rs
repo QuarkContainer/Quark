@@ -1396,19 +1396,6 @@ impl SockOperations for TsotSocketOperations {
         let trunc = (flags & MsgType::MSG_TRUNC) != 0;
         let peek = (flags & MsgType::MSG_PEEK) != 0;
 
-        if buf.RClosed() {
-            let senderAddr = if senderRequested {
-                let addr = self.RemoteAddr()?.ToSockAddr();
-                let l = addr.Len();
-                Some((addr, l))
-            } else {
-                None
-            };
-
-            let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
-            return Ok((0 as i64, retFlags, senderAddr, controlData));
-        }
-
         let len = IoVec::NumBytes(dsts);
         let data = if trunc { Some(Iovs(dsts).Data()) } else { None };
 
