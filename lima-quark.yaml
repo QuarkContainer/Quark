@@ -1,0 +1,49 @@
+# Quark development VM — Linux on macOS via Lima.
+# Create: limactl create --name=quark ./lima-quark.yaml
+# Start:  limactl start quark
+# Shell:  limactl shell quark
+arch: aarch64
+vmType: vz
+nestedVirtualization: true
+cpus: 8
+memory: 16GiB
+disk: 80GiB
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: aarch64
+mounts:
+  - location: "~/Documents/Kesk2/kvisor/Quark"
+    writable: true
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -euxo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y --no-install-recommends \
+        build-essential cmake gcc git curl ca-certificates \
+        pkg-config ninja-build python3-dev cython3 pandoc libclang-dev \
+        libcap-dev libudev-dev libnl-3-dev libnl-route-3-dev \
+        cpu-checker docker.io
+      # Rust toolchain system-wide (match Makefile)
+      export CARGO_HOME=/usr/local/cargo
+      export RUSTUP_HOME=/usr/local/rustup
+      if [ ! -x /usr/local/cargo/bin/rustc ]; then
+        curl -fsSL https://sh.rustup.rs | sh -s -- -y --no-modify-path \
+          --default-toolchain nightly-2024-07-01-aarch64-unknown-linux-gnu
+      fi
+      /usr/local/cargo/bin/rustup toolchain install nightly-2024-07-01-aarch64-unknown-linux-gnu
+      /usr/local/cargo/bin/rustup default nightly-2024-07-01-aarch64-unknown-linux-gnu
+      /usr/local/cargo/bin/rustup component add rust-src
+      # cargo-xbuild needs a newer cargo than the Quark build toolchain
+      /usr/local/cargo/bin/rustup toolchain install nightly-2024-12-01-aarch64-unknown-linux-gnu
+      /usr/local/cargo/bin/cargo +nightly-2024-12-01 install cargo-xbuild --version 0.6.5
+      ln -sf /usr/local/cargo/bin/* /usr/local/bin/
+      chown -R "${LIMA_CIDATA_USER:-lima}:${LIMA_CIDATA_USER:-lima}" /usr/local/cargo /usr/local/rustup
+      echo 'export PATH=/usr/local/cargo/bin:$PATH' >/etc/profile.d/quark-rust.sh
+      echo 'export RUSTUP_HOME=/usr/local/rustup' >>/etc/profile.d/quark-rust.sh
+      echo 'export CARGO_HOME=/usr/local/cargo' >>/etc/profile.d/quark-rust.sh
+      # Docker for the default lima user
+      usermod -aG docker "${LIMA_CIDATA_USER:-lima}" || true
+      systemctl enable --now docker

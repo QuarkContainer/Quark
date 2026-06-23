@@ -34,7 +34,7 @@ uuid = {version = "1.8.0", default-features = false, features = ["serde"]}
 serde-big-array = "0.5.1"
 
 [features]
-default = ["snp"]
+default = []
 snp = ["yaxpeax-x86", "yaxpeax-arch"]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]

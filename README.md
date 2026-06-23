@@ -70,6 +70,18 @@ below. The introduction is [here](doc/TSoR.pptx)
 3. Docker: > 17.09.0
 4. Enable virtualization technology in BIOS (Usually in Security tab of BIOS)
 
+### macOS development (Apple Silicon)
+
+For local development on macOS, use the Python CLI with a Lima VM:
+
+```bash
+python3 quark.py vm start
+python3 quark.py rebuild
+python3 quark.py bench run
+```
+
+See [scripts/dev/README.md](scripts/dev/README.md) and [benchmark/README.md](benchmark/README.md).
+
 Quark primarily supports X86-64. aarch64 support is preliminary and under active
 development. Other architecture will be available in the future.
 

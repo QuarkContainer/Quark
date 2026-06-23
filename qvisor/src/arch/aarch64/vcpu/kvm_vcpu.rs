@@ -14,7 +14,22 @@
 
 #![allow(non_upper_case_globals)]
 use kvm_bindings::kvm_vcpu_events;
+use kvm_ioctls::VcpuFd;
 use crate::{KVMVcpu, qlib::common::Error, vmspace::VMSpace, qlib::backtracer};
+
+pub(crate) fn set_one_reg_u64(vcpu_fd: &VcpuFd, reg: u64, val: u64) -> Result<(), Error> {
+    let bytes = val.to_le_bytes();
+    vcpu_fd.set_one_reg(reg, &bytes)
+        .map_err(|e| Error::SysError(e.errno()))?;
+    Ok(())
+}
+
+pub(crate) fn get_one_reg_u64(vcpu_fd: &VcpuFd, reg: u64) -> Result<u64, Error> {
+    let mut bytes = [0u8; 8];
+    vcpu_fd.get_one_reg(reg, &mut bytes)
+        .map_err(|e| Error::SysError(e.errno()))?;
+    Ok(u64::from_le_bytes(bytes))
+}
 
 const _TCR_IPS_40BITS: u64 = 2 << 32; // PA=40
 const _TCR_IPS_48BITS: u64 = 5 << 32; // PA=48
@@ -130,8 +145,7 @@ impl KVMVcpu {
         for reg in reg_list.iter() {
             match reg {
                 Register::Reg(reg_addr, reg_val) => {
-                    self.vcpu_fd.set_one_reg(*reg_addr as u64, *reg_val)
-                        .map_err(|e| Error::SysError(e.errno()))?;
+                    set_one_reg_u64(&self.vcpu_fd, *reg_addr as u64, *reg_val)?;
                 }
             }
         }
@@ -148,9 +162,9 @@ impl KVMVcpu {
 
     pub fn backtrace(&self) -> Result<(), Error> {
         use KvmAarch64Reg::{PC, SpEl1, X29};
-        let pc = self.vcpu_fd.get_one_reg(PC as u64).map_err(|e| Error::SysError(e.errno()))?;
-        let rsp = self.vcpu_fd.get_one_reg(SpEl1 as u64).map_err(|e| Error::SysError(e.errno()))?;
-        let rbp = self.vcpu_fd.get_one_reg(X29 as u64).map_err(|e| Error::SysError(e.errno()))?;
+        let pc = get_one_reg_u64(&self.vcpu_fd, PC as u64)?;
+        let rsp = get_one_reg_u64(&self.vcpu_fd, SpEl1 as u64)?;
+        let rbp = get_one_reg_u64(&self.vcpu_fd, X29 as u64)?;
 
         backtracer::trace(pc, rsp, rbp, &mut |frame| {
             print!("host frame is {:#x?}", frame);

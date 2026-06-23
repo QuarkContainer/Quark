@@ -27,6 +27,7 @@
 #![recursion_limit = "256"]
 #![allow(invalid_reference_casting)]
 #![feature(btreemap_alloc)]
+#![feature(sync_unsafe_cell)]
 
 #[macro_use]
 extern crate alloc;
@@ -138,6 +139,7 @@ use memmgr::pma::PageMgr;
 #[cfg(feature = "snp")]
 use crate::qlib::kernel::arch::__arch::arch_def::*;
 pub mod drivers;
+#[cfg(feature = "snp")]
 pub mod attestation_client;
 
 #[macro_use]
@@ -625,6 +627,7 @@ pub extern "C" fn rust_main(
         GLOBAL_ALLOCATOR.InitPrivateAllocator(mode);
         if mode != CCMode::None {
             crate::qlib::kernel::arch::tee::set_tee_type(mode);
+            #[cfg(feature = "snp")]
             if mode == CCMode::SevSnp {
                 LOG_AVAILABLE.store(false, Ordering::Release);
                 for i in (MemoryDef::PHY_LOWER_ADDR..MemoryDef::IO_HEAP_END)
@@ -748,9 +751,13 @@ pub extern "C" fn rust_main(
 //Dummy: Only to avoid issues with qvisor
 use alloc::string::String;
 use alloc::vec::Vec;
+#[cfg(feature = "snp")]
 pub fn try_attest(config_path: Option<String>, envv: Option<Vec<String>>) {
     crate::attestation_client::AttestationClient::try_attest(config_path, envv);
 }
+
+#[cfg(not(feature = "snp"))]
+pub fn try_attest(_config_path: Option<String>, _envv: Option<Vec<String>>) {}
 
 fn ControllerProcess(_para: *const u8) {
     ControllerProcessHandler().expect("ControllerProcess crash");

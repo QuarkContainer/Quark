@@ -13,16 +13,14 @@
 // limitations under the License.
 
 use kvm_ioctls::VcpuFd;
-use super::vcpu::kvm_vcpu::KvmAarch64Reg::{X0, X1, X2, X3, X4, X5};
+use super::vcpu::kvm_vcpu::{KvmAarch64Reg::{X0, X1, X2, X3, X4, X5}, get_one_reg_u64, set_one_reg_u64};
 
 use crate::{arch::tee::{NonConf, emulcc::EmulCc}, qlib::common::Error};
 
 impl NonConf<'_> {
     pub(in crate::arch) fn _set_cpu_registers(&self, vcpu_fd: &VcpuFd) -> Result<(), Error> {
-        vcpu_fd.set_one_reg(X0 as u64, self.page_allocator_addr)
-            .map_err(|e| Error::SysError(e.errno()))?;
-        vcpu_fd.set_one_reg(X1 as u64, self.share_space_table_addr)
-            .map_err(|e| Error::SysError(e.errno()))?;
+        set_one_reg_u64(vcpu_fd, X0 as u64, self.page_allocator_addr)?;
+        set_one_reg_u64(vcpu_fd, X1 as u64, self.share_space_table_addr)?;
 
         Ok(())
     }
@@ -34,14 +32,10 @@ impl NonConf<'_> {
         // x0 and x1 (w1) are used by the str instruction
         // the 64-bit parameters 1,2,3,4 are passed via
         // x2,x3,x4,x5
-        let para1 = vcpu_fd.get_one_reg(X2 as u64)
-            .map_err(|e| Error::SysError(e.errno()))?;
-        let para2 = vcpu_fd.get_one_reg(X3 as u64)
-            .map_err(|e| Error::SysError(e.errno()))?;
-        let para3 = vcpu_fd.get_one_reg(X4 as u64)
-            .map_err(|e| Error::SysError(e.errno()))?;
-        let para4 = vcpu_fd.get_one_reg(X5 as u64)
-            .map_err(|e| Error::SysError(e.errno()))?;
+        let para1 = get_one_reg_u64(vcpu_fd, X2 as u64)?;
+        let para2 = get_one_reg_u64(vcpu_fd, X3 as u64)?;
+        let para3 = get_one_reg_u64(vcpu_fd, X4 as u64)?;
+        let para4 = get_one_reg_u64(vcpu_fd, X5 as u64)?;
         Ok((para1, para2, para3, para4))
     }
 }
@@ -49,11 +43,8 @@ impl NonConf<'_> {
 impl EmulCc<'_> {
     pub(in crate::arch) fn _set_cpu_registers(&self, vcpu_fd: &kvm_ioctls::VcpuFd) -> Result<(), Error> {
         //arg0
-        vcpu_fd.set_one_reg(X0 as u64, self.page_allocator_addr)
-            .map_err(|e| Error::SysError(e.errno()))?;
-        //arg1
-        vcpu_fd.set_one_reg(X1 as u64, self.cc_mode as u64)
-            .map_err(|e| Error::SysError(e.errno()))?;
+        set_one_reg_u64(vcpu_fd, X0 as u64, self.page_allocator_addr)?;
+        set_one_reg_u64(vcpu_fd, X1 as u64, self.cc_mode as u64)?;
         Ok(())
     }
 }
