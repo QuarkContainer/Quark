@@ -14,5 +14,5 @@
 // limitations under the License.
 
 pub mod attestation;
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", feature = "snp"))]
 pub mod sev;

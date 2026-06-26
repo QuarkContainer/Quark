@@ -70,20 +70,20 @@ below. The introduction is [here](doc/TSoR.pptx)
 3. Docker: > 17.09.0
 4. Enable virtualization technology in BIOS (Usually in Security tab of BIOS)
 
-### macOS development (Apple Silicon)
+### Development lab (physical host)
 
-For local development on macOS, use the Python CLI with a Lima VM:
+Interactive experiments and benchmarks run on the Keska lab server via the
+IPython-native lab shell:
 
 ```bash
-python3 quark.py vm start
-python3 quark.py rebuild
-python3 quark.py bench run
+cd lab
+pip install -e .
+keska-lab          # IPython shell — Quark + Firecracker backends
 ```
 
-See [scripts/dev/README.md](scripts/dev/README.md) and [benchmark/README.md](benchmark/README.md).
+Default remote: `lab@lab.keska.vpn`. See [lab/README.md](lab/README.md).
 
-Quark primarily supports X86-64. aarch64 support is preliminary and under active
-development. Other architecture will be available in the future.
+Quark primarily supports X86-64. aarch64 support is preliminary.
 
 ## Installing from source
 

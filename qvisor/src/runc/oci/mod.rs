@@ -528,6 +528,7 @@ pub enum LinuxNamespaceType {
     user = 0x10000000,    /* New user namespace */
     pid = 0x20000000,     /* New pid namespace */
     network = 0x40000000, /* New network namespace */
+    time = 0x01000000,    /* New time namespace (OCI 1.2+, Docker 29+) */
 }
 
 impl Default for LinuxNamespaceType {

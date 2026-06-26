@@ -12,7 +12,7 @@
   "PerfDebug"     : false,
   "UringStatx"    : false,
   "FileBufWrite"  : true,
-  "MmapRead"      : false,
+  "MmapRead"      : true,
   "AsyncAccept"   : true,
   "EnableRDMA"    : false,
   "RDMAPort"      : 1,
@@ -27,7 +27,7 @@
   "TlbShootdownWait": true,
   "Sandboxed"     : false,
   "Realtime"      : false,
-  "EnableIOBuf"   : false,
+  "EnableIOBuf"   : true,
   "EnableTsot"    : false,
   "CCMode"        : "None"
 }

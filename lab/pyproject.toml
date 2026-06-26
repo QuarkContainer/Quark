@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "keska-lab"
+version = "0.1.0"
+description = "IPython-native sandbox lab — Quark, Kata, benchmarks"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "ipython>=8.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+keska-lab = "keska_lab.shell:main"
+keska-lab-provision = "keska_lab.provision:main"
+keska-lab-bootstrap-host = "keska_lab.sudo:main"
+keska-lab-registry-check = "keska_lab.registry_check:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

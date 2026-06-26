@@ -310,7 +310,7 @@ impl SandboxProcess {
 
         for ns in nss {
             //don't use os pid namespace as there is pid namespace support in qkernel
-            if ns.typ == LinuxNamespaceType::pid {
+            if ns.typ == LinuxNamespaceType::pid || ns.typ == LinuxNamespaceType::time {
                 continue;
             }
 

@@ -162,7 +162,10 @@ impl VmType for VmNormal {
         }
 
         let mut pod_id = [0u8; 64];
-        pod_id.copy_from_slice(VMS.lock().args.as_ref().unwrap().ID.clone().as_bytes());
+        let id = VMS.lock().args.as_ref().unwrap().ID.clone();
+        let id_bytes = id.as_bytes();
+        let n = id_bytes.len().min(64);
+        pod_id[..n].copy_from_slice(&id_bytes[..n]);
         let _vcpu_total = VMS.lock().vcpuCount;
         let _ctrl_sock = VMS.lock().controlSock;
         let _rdma_sock = VMS.lock().args.as_ref().unwrap().RDMASvcCliSock;

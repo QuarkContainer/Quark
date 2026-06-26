@@ -177,7 +177,9 @@ impl SevSnp<'_> {
             ctrl_sock = vms.controlSock;
             vcpu_count = vms.vcpuCount;
             rdma_svc_cli_sock = vms.args.as_ref().unwrap().RDMASvcCliSock;
-            pod_id.copy_from_slice(vms.args.as_ref().unwrap().ID.clone().as_bytes());
+            let id_bytes = vms.args.as_ref().unwrap().ID.as_bytes();
+            let n = id_bytes.len().min(64);
+            pod_id[..n].copy_from_slice(&id_bytes[..n]);
         }
         if let Err(e) = VmCcEmul::init_share_space(
             vcpu_count,

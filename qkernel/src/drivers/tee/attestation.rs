@@ -19,7 +19,7 @@ use spin::{Mutex, lazy::Lazy};
 use log::*;
 use crate::{qlib::{common::{Error, Result}, kernel::arch::tee::get_tee_type, linux_def::SysErr}, CCMode};
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", feature = "snp"))]
 use super::sev::attestation::SevAttestation;
 
 pub type Challenge = Vec<u8>;
@@ -55,21 +55,22 @@ pub trait AttestationDriverT {
     }
 }
 
-//
-// Frontend for requests
-//
+struct NoopAttestation;
+
+impl AttestationDriverT for NoopAttestation {}
+
 pub struct AttestationDriver {
     tee_attester: Box<dyn AttestationDriverT>,
     tee_type: CCMode,
 }
 
-
 impl Default for AttestationDriver {
     fn default() -> Self {
-        let (tee_attester, tee_type): (Box<dyn AttestationDriverT>, CCMode) = match get_tee_type() {
-            #[cfg(target_arch = "x86_64")]
-            crate::CCMode::SevSnp => (Box::new(SevAttestation::default()), CCMode::SevSnp),
-            _ => panic!("not supported"),
+        let tee_type = get_tee_type();
+        let tee_attester: Box<dyn AttestationDriverT> = match tee_type {
+            #[cfg(all(target_arch = "x86_64", feature = "snp"))]
+            CCMode::SevSnp => Box::new(SevAttestation::default()),
+            _ => Box::new(NoopAttestation),
         };
 
         Self {
@@ -109,14 +110,11 @@ impl AttestationDriver {
         true
     }
 
-
     fn challenge_range(&self) -> (usize, usize) {
-        let res = match self.tee_type {
-            #[cfg(target_arch = "x86_64")]
+        match self.tee_type {
+            #[cfg(all(target_arch = "x86_64", feature = "snp"))]
             CCMode::SevSnp => (0usize, 64usize),
-            _ => panic!("add me"),
-        };
-        res
-
+            _ => (0, 0),
+        }
     }
 }

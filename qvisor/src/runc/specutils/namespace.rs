@@ -43,6 +43,7 @@ pub fn NsPath(nst: LinuxNamespaceType) -> String {
         LinuxNamespaceType::pid => Join(base, "pid"),
         LinuxNamespaceType::user => Join(base, "user"),
         LinuxNamespaceType::uts => Join(base, "uts"),
+        LinuxNamespaceType::time => Join(base, "time"),
     }
 }
 
