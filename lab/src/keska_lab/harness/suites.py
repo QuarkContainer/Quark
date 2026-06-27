@@ -5,6 +5,7 @@ from __future__ import annotations
 from keska_lab.harness.case import (
     CASE_INET_CONNECT,
     CASE_INET_DOWNLOAD,
+    CASE_IO_CONCURRENT_READ,
     CASE_IO_READ,
     CASE_IO_WRITE,
     CASE_MEM_IDLE,
@@ -40,10 +41,15 @@ NETWORK_CASES: tuple[BenchCase, ...] = (
 
 STANDARD_CASES: tuple[BenchCase, ...] = LIGHT_CASES
 
-HEAVY_CASES: tuple[BenchCase, ...] = (
+FULL_CASES: tuple[BenchCase, ...] = (
     *LIGHT_CASES,
     CASE_IO_WRITE,
     CASE_IO_READ,
+    CASE_IO_CONCURRENT_READ,
+)
+
+HEAVY_CASES: tuple[BenchCase, ...] = (
+    *FULL_CASES,
     *NETWORK_CASES,
 )
 
@@ -55,7 +61,7 @@ DB_CASES: tuple[BenchCase, ...] = (
 
 SUITE_MODES: dict[str, tuple[BenchCase, ...]] = {
     "light": LIGHT_CASES,
-    "full": LIGHT_CASES,
+    "full": FULL_CASES,
     "workloads": WORKLOADS_CASES,
     "network": NETWORK_CASES,
     "standard": STANDARD_CASES,

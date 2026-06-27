@@ -30,7 +30,6 @@ pub struct Config {
     pub KernelPagetable: bool,
     pub PerfDebug: bool,
     pub UringStatx: bool,
-    pub FileBufWrite: bool,
     pub MmapRead: bool,
     pub AsyncAccept: bool,
     pub EnableRDMA: bool,
@@ -47,7 +46,6 @@ pub struct Config {
     #[serde(default)]
     pub Sandboxed: bool,
     pub Realtime: bool,
-    pub EnableIOBuf: bool,
     pub EnableTsot: bool,
     pub CCMode: CCMode,
 }
@@ -79,7 +77,6 @@ impl Default for Config {
             KernelPagetable: false,
             PerfDebug: true,
             UringStatx: false,
-            FileBufWrite: true,
             MmapRead: true,
             AsyncAccept: true,
             EnableRDMA: false,
@@ -95,7 +92,6 @@ impl Default for Config {
             TlbShootdownWait: false,
             Sandboxed: false,
             Realtime: false,
-            EnableIOBuf: false,
             EnableTsot: false,
             CCMode: CCMode::None,
         };

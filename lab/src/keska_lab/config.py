@@ -15,6 +15,7 @@ class LabConfig:
     repo_path: str = "~/Quark"
     local_repo: Path | None = None
     work_dir: str = "/tmp/keska-lab"
+    io_bench_dir: str = "/var/lib/keska-lab/io-bench"
     default_backend: str = "quark"
     bench_iterations: int = 100
     stress_wave_size: int = 20
@@ -72,6 +73,7 @@ class LabConfig:
             repo_path=os.environ.get("KESKA_LAB_REPO", "~/Quark"),
             local_repo=Path(local).expanduser() if local else None,
             work_dir=os.environ.get("KESKA_LAB_WORK", "/tmp/keska-lab"),
+            io_bench_dir=os.environ.get("KESKA_LAB_IO_BENCH_DIR", "/var/lib/keska-lab/io-bench"),
             default_backend=os.environ.get("KESKA_LAB_BACKEND", "quark"),
             bench_iterations=int(os.environ.get("KESKA_LAB_BENCH_N", "100")),
             stress_wave_size=int(os.environ.get("KESKA_LAB_STRESS_WAVE", "20")),

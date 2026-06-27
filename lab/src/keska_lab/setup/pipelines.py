@@ -19,6 +19,7 @@ from keska_lab.setup.image_registry import ImageRegistryAuthStep
 from keska_lab.setup.kata_firecracker import KataHypervisorStep
 from keska_lab.setup.oci_bundle import (
     CtrImagePullStep,
+    EnsurePostgresDataTemplateStep,
     EnsureWorkloadBundleStep,
 )
 from keska_lab.setup.quark_cleanup import cleanup_quark_sandboxes
@@ -34,6 +35,25 @@ class CleanupSandboxesStep(SetupStep):
         return StepResult(self.name, True, "stopped stray sandboxes")
 
 
+class IoBenchDirStep(SetupStep):
+    name = "io-bench-dir"
+
+    def __init__(self, config: LabConfig):
+        self.config = config
+
+    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+        import shlex
+
+        path = self.config.io_bench_dir.rstrip("/")
+        r = remote.sh(
+            f"sudo -n mkdir -p {shlex.quote(path)} && sudo -n chmod 755 {shlex.quote(path)}",
+            timeout=30,
+        )
+        if not r.ok:
+            return StepResult(self.name, False, remote.format_failure(r))
+        return StepResult(self.name, True, path)
+
+
 class QuarkDirectCheckStep(SetupStep):
     name = "quark-direct-check"
 
@@ -42,22 +62,18 @@ class QuarkDirectCheckStep(SetupStep):
         self.workload = workload
 
     def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
-        import shlex
-
         from keska_lab.backends.quark import QuarkBackend
-        from keska_lab.setup.oci_bundle import bundle_dir
+        from keska_lab.setup.oci_bundle import bundle_dir, verify_bundle_markers
 
         spec = get_workload(self.workload)
         backend = QuarkBackend(remote, profile=self.config.quark_build_profile, exec_mode="direct")
         if not remote.which(self.config.quark_binary):
             return StepResult(self.name, False, f"{self.config.quark_binary} not installed")
         bundle = bundle_dir(self.config, spec.image)
-        br = remote.sh(
-            f"test -f {shlex.quote(bundle)}/config.json && test -d {shlex.quote(bundle)}/rootfs && echo OK",
-            timeout=15,
-        )
-        if not br.ok or "OK" not in br.stdout:
-            return StepResult(self.name, False, f"bundle not ready: {bundle}")
+        try:
+            verify_bundle_markers(remote, bundle, spec.image)
+        except RuntimeError as e:
+            return StepResult(self.name, False, str(e))
         try:
             ms = backend.tti_once(image=spec.image, exec_cmd=spec.tti_exec, timeout=spec.tti_timeout)
             return StepResult(self.name, True, f"direct OCI smoke OK ({ms:.0f} ms)")
@@ -94,7 +110,7 @@ class KataCtrCheckStep(SetupStep):
 def _workloads_for_mode(mode: str | None, workload: str | None) -> list[str]:
     if workload:
         return [workload]
-    if mode in ("standard", "heavy"):
+    if mode in ("standard", "heavy", "full"):
         return ["busybox", "python"]
     if mode == "db":
         return ["postgres"]
@@ -179,6 +195,65 @@ def kata_multi_image_pipeline(config: LabConfig | None = None, workloads: list[s
     return pipe
 
 
+def quark_full_ready_pipeline(
+    config: LabConfig | None = None,
+    workload: str = "busybox",
+) -> SetupPipeline:
+    """Light + host-backed I/O benchmarks (no network/CNI)."""
+    cfg = config or LabConfig.from_env()
+    pipe = workload_setup_pipeline(cfg, workload)
+    pipe.name = "quark-full-ready"
+    return pipe.add(IoBenchDirStep(cfg))
+
+
+def quark_heavy_ready_pipeline(
+    config: LabConfig | None = None,
+    workload: str = "busybox",
+) -> SetupPipeline:
+    """Light + IO workloads plus CRI/CNI for network cases in the heavy suite."""
+    cfg = config or LabConfig.from_env()
+    extras = list(dict.fromkeys(["python", "iperf"]))
+    pipe = workload_setup_pipeline(cfg, workload, extra_workloads=extras)
+    pipe.name = "quark-heavy-ready"
+    pipe.add(IoBenchDirStep(cfg))
+    pipe.add(CniPluginsStep()).add(ContainerdCriStep()).add(CrictlInstallStep())
+    if cfg.enable_tsot:
+        pipe.add(TsotBenchReadyStep())
+    for name in extras:
+        spec = get_workload(name)
+        pipe.add(DockerPullStep(spec.image, cfg))
+    return pipe
+
+
+def kata_full_ready_pipeline(
+    config: LabConfig | None = None,
+    workload: str = "busybox",
+) -> SetupPipeline:
+    cfg = config or LabConfig.from_env()
+    spec = get_workload(workload)
+    return (
+        SetupPipeline("kata-full-ready")
+        .extend(_lab_prep(cfg))
+        .add(KataInstallStep())
+        .add(KataHypervisorStep(cfg))
+        .add(CtrImagePullStep(spec.image, cfg))
+        .add(IoBenchDirStep(cfg))
+        .add(KataCtrCheckStep(cfg, workload=workload))
+    )
+
+
+def kata_heavy_ready_pipeline(config: LabConfig | None = None) -> SetupPipeline:
+    """Multi-image ctr bench plus CRI/CNI for network cases in the heavy suite."""
+    cfg = config or LabConfig.from_env()
+    pipe = kata_full_ready_pipeline(cfg, "busybox")
+    pipe.name = "kata-heavy-ready"
+    pipe.add(CniPluginsStep()).add(ContainerdCriStep()).add(CrictlInstallStep())
+    for name in ("python", "iperf"):
+        spec = get_workload(name)
+        pipe.add(CtrImagePullStep(spec.image, cfg))
+    return pipe
+
+
 def kata_network_ready_pipeline(
     config: LabConfig | None = None,
     workload: str | None = None,
@@ -208,6 +283,7 @@ def quark_db_ready_pipeline(config: LabConfig | None = None) -> SetupPipeline:
         .extend(_lab_prep(cfg))
         .add(QuarkBenchConfigStep())
         .add(EnsureWorkloadBundleStep(cfg, "postgres"))
+        .add(EnsurePostgresDataTemplateStep(cfg))
         .add(QuarkDirectCheckStep(cfg, workload="postgres"))
     )
 
@@ -221,5 +297,6 @@ def kata_db_ready_pipeline(config: LabConfig | None = None) -> SetupPipeline:
         .add(KataInstallStep())
         .add(KataHypervisorStep(cfg))
         .add(CtrImagePullStep(spec.image, cfg))
+        .add(EnsurePostgresDataTemplateStep(cfg))
         .add(KataCtrCheckStep(cfg, workload="postgres"))
     )

@@ -180,12 +180,6 @@ lazy_static! {
     pub static ref GUEST_KERNEL: Mutex<Option<kernel::kernel::Kernel>> = Mutex::new(None);
 }
 
-pub fn AllocIOBuf(size: usize) -> *mut u8 {
-    unsafe {
-        return GLOBAL_ALLOCATOR.AllocIOBuf(size);
-    }
-}
-
 pub fn SingletonInit() {
     unsafe {
         vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
@@ -544,8 +538,6 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     drop(fdtbl);
 
                     {
-                        // the block has to been dropped after drop the fdtbl
-                        // It is because we might to wait for QAsyncLockGuard in AsyncBufWrite
                         let dummyTask = DUMMY_TASK.read();
                         currTask.blocker = dummyTask.blocker.clone();
                     }

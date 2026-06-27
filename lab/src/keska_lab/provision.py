@@ -210,6 +210,15 @@ def cleanup_sandboxes(ctx: ProvisionContext) -> str:
     return "stopped stray sandboxes"
 
 
+def deploy_quark_bench_config(ctx: ProvisionContext) -> str:
+    from keska_lab.setup.quark_config import QuarkBenchConfigStep
+
+    result = QuarkBenchConfigStep().run(ctx.remote, stream=ctx.stream)
+    if not result.ok:
+        raise ProvisionError(result.message)
+    return result.message or "quark bench config deployed"
+
+
 def ensure_oci_bundle_step(ctx: ProvisionContext) -> str:
     from keska_lab.setup.oci_bundle import ensure_oci_bundle
 
@@ -219,6 +228,10 @@ def ensure_oci_bundle_step(ctx: ProvisionContext) -> str:
 
 def smoke_test(ctx: ProvisionContext) -> str:
     from keska_lab.backends.quark import QuarkBackend
+    from keska_lab.setup.oci_bundle import bundle_dir, verify_bundle_markers
+
+    path = bundle_dir(ctx.config, ctx.config.bench_image)
+    verify_bundle_markers(ctx.remote, path, ctx.config.bench_image)
 
     backend = QuarkBackend(
         ctx.remote,
@@ -269,6 +282,7 @@ def provision_quark(
     steps.extend(
         [
             ("install-quark", lambda: install_quark(ctx)),
+            ("quark-bench-config", lambda: deploy_quark_bench_config(ctx)),
             ("oci-bundle", lambda: ensure_oci_bundle_step(ctx)),
             ("smoke-test", lambda: smoke_test(ctx)),
         ]

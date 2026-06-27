@@ -11,8 +11,7 @@
   "KernelPagetable": false,
   "PerfDebug"     : false,
   "UringStatx"    : false,
-  "FileBufWrite"  : true,
-  "MmapRead"      : true,
+  "MmapRead"      : false,
   "AsyncAccept"   : true,
   "EnableRDMA"    : false,
   "RDMAPort"      : 1,
@@ -27,7 +26,6 @@
   "TlbShootdownWait": true,
   "Sandboxed"     : false,
   "Realtime"      : false,
-  "EnableIOBuf"   : true,
   "EnableTsot"    : false,
   "CCMode"        : "None"
 }

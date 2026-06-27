@@ -94,6 +94,8 @@ def print_suite_compare(
 
     metrics = left.metrics if hasattr(left, "metrics") else {}
     console.print(f"\n[bold]Compare {left_label} vs {right_label} (p50)[/bold]")
+    if right_label == "kata":
+        console.print("[dim]Kata/Firecracker is the reference runtime; Quark ratios <1.0 mean Quark is faster.[/dim]")
     for name in metrics:
         lv = metrics.get(name)
         rv = right.metrics.get(name) if hasattr(right, "metrics") else None

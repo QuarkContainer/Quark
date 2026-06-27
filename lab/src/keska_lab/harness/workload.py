@@ -63,7 +63,7 @@ WORKLOADS: dict[str, WorkloadSpec] = {
             },
         ),
         oci_user=(70, 70),
-        tti_timeout=120,
+        tti_timeout=180,
     ),
     "iperf": WorkloadSpec(
         name="iperf",

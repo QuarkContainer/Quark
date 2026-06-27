@@ -17,6 +17,8 @@ def _backend_supports(backend: SandboxBackend, case: BenchCase) -> bool:
         if not probe.get("tsot_ready") and not probe.get("network_ready"):
             return False
     if case.name.startswith("io_"):
+        if case.name == "io_concurrent_read_mib_s":
+            return callable(getattr(backend, "io_fs_concurrent_read_once", None))
         return callable(getattr(backend, "io_fs_once", None))
     if case.name == "tti_under_load_ms":
         return callable(getattr(backend, "tti_under_load_once", None))

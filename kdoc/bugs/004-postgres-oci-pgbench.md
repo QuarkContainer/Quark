@@ -18,7 +18,7 @@
 - Per-run bundle: symlink `rootfs`, bind-mount isolated `data/` dir, run as uid 70.
 - Benchmark path runs `pgbench -c1 -T5` only (no `-i` in hot path).
 - Add tmpfs mount at `/var/run/postgresql` (mode 1777) so postgres can create socket lock files.
-- Lab bench: `MmapRead` + `EnableIOBuf` in `/etc/quark/config.json`; PGDATA bind mount backed by host tmpfs.
+- Lab bench: PGDATA bind mount backed by host tmpfs; `UringIO` in `/etc/quark/config.json`.
 
 ## Verify
 

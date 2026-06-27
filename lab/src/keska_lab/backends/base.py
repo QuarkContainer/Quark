@@ -38,7 +38,11 @@ class SandboxBackend(ABC):
     def tti_once(self, *, image: str = "busybox") -> float:
         """
         One sequential TTI sample in milliseconds.
-        Create/provision → first successful command → teardown (teardown not timed).
+        Create/provision → first successful command → stop clock → teardown.
+
+        Quark and Kata (Firecracker) must use the same lifecycle shape so
+        comparisons reflect runtime performance, not harness artifacts.
+        Teardown is never included in the timed window.
         """
 
     @abstractmethod

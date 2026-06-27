@@ -24,8 +24,7 @@ DEFAULT_QUARK_CONFIG: dict = {
     "KernelPagetable": False,
     "PerfDebug": False,
     "UringStatx": False,
-    "FileBufWrite": True,
-    "MmapRead": True,
+    "MmapRead": False,
     "AsyncAccept": True,
     "EnableRDMA": False,
     "RDMAPort": 1,
@@ -40,7 +39,6 @@ DEFAULT_QUARK_CONFIG: dict = {
     "TlbShootdownWait": True,
     "Sandboxed": False,
     "Realtime": False,
-    "EnableIOBuf": True,
     "EnableTsot": False,
     "CCMode": "None",
 }
@@ -78,4 +76,8 @@ class QuarkBenchConfigStep(SetupStep):
         r = remote.sh(deploy_config_script(bench_config_json()), timeout=60, stream=stream)
         if not r.ok:
             return StepResult(self.name, False, remote.format_failure(r))
-        return StepResult(self.name, True, "fast IO bench config (UringIO, MmapRead, EnableIOBuf)")
+        return StepResult(
+            self.name,
+            True,
+            "bench config (UringIO)",
+        )

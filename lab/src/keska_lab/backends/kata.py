@@ -8,6 +8,14 @@ import textwrap
 from keska_lab.backends.base import SandboxBackend
 from keska_lab.config import LabConfig
 from keska_lab.harness.db import parse_pgbench_tps
+from keska_lab.harness.io_fs import (
+    concurrent_read_bench_sh,
+    concurrent_read_mib_s,
+    concurrent_read_total_bytes,
+    dd_io_bench_sh,
+    io_bench_host_dir,
+)
+from keska_lab.setup.oci_bundle import postgres_data_template_dir
 from keska_lab.harness.network import (
     INET_CONNECT_PY,
     INET_DOWNLOAD_PY,
@@ -15,6 +23,10 @@ from keska_lab.harness.network import (
     crictl_python_exec_script,
     parse_dd_mib_s,
     parse_iperf_mbps,
+)
+from keska_lab.harness.postgres import (
+    POSTGRES_STARTUP_SLEEP_SECS,
+    kata_postgres_ctr_mounts_shell,
 )
 from keska_lab.harness.workload import is_postgres_workload
 from keska_lab.setup.image_registry import ctr_image_ref
@@ -88,19 +100,102 @@ class KataBackend(SandboxBackend):
             )
         return ""
 
-    def _postgres_tti_script(self, *, image: str, probe: str, idle_cmd: str, wait_secs: int = 600) -> str:
+    def _pg_ready_wait_secs(self, timeout: int, *, exec_timeout: int = 8) -> int:
+        overhead = 45
+        per_iter = exec_timeout + 1
+        budget = max(10, timeout - overhead)
+        return min(60, budget // per_iter)
+
+    def _kata_kill_rm(self, id_ref: str = '"$ID"') -> str:
+        return (
+            f"sudo -n ctr task kill -s SIGKILL {id_ref} >/dev/null 2>&1 || true\n"
+            f"            sudo -n ctr containers rm {id_ref} >/dev/null 2>&1 || true"
+        )
+
+    def _detached_lifecycle_script(
+        self,
+        *,
+        image: str,
+        probe: str,
+        idle_cmd: str = "/bin/sleep 3600",
+        id_prefix: str = "keska-kata",
+        exec_timeout: int = 60,
+    ) -> str:
         ref = self._image_ref(image)
         env = self._ctr_env_flags(image)
         return textwrap.dedent(
             f"""
             set -euo pipefail
-            ID=keska-kata-pg-tti-$RANDOM
+            ID={id_prefix}-$RANDOM
+            cleanup() {{
+              {self._kata_kill_rm()}
+            }}
+            trap cleanup EXIT INT TERM
             t0=$(date +%s%N)
             sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()}{env} \\
               {shlex.quote(ref)} "$ID" {idle_cmd} >/dev/null
+            timeout {exec_timeout} sudo -n ctr task exec --exec-id probe-$RANDOM "$ID" {probe} >/dev/null
+            t1=$(date +%s%N)
+            echo $(( (t1 - t0) / 1000000 ))
+            cleanup
+            trap - EXIT INT TERM
+            """
+        ).strip()
+
+    def _postgres_data_prep_script(self) -> str:
+        tmpl = postgres_data_template_dir(self.config)
+        return textwrap.dedent(
+            f"""
+            TMPL={shlex.quote(tmpl)}
+            sudo test -f "$TMPL/PG_VERSION" || {{
+              echo "missing postgres data template at $TMPL (run db setup)" >&2
+              exit 1
+            }}
+            DATA=/tmp/keska-kata-pgdata-$RANDOM
+            mkdir -p "$DATA"
+            if ! mountpoint -q "$DATA" 2>/dev/null; then
+              sudo -n mount -t tmpfs -o size=512m,mode=1777 tmpfs "$DATA"
+            fi
+            sudo cp -a "$TMPL/." "$DATA/"
+            sudo chown -R 70:70 "$DATA"
+            sudo chmod 700 "$DATA"
+            PGDATA_MOUNT="type=bind,src=$DATA,dst=/var/lib/postgresql/data,options=rbind:rw"
+            {kata_postgres_ctr_mounts_shell()}
+            trap 'sudo -n umount "$DATA" 2>/dev/null || true' EXIT INT TERM
+            """
+        ).strip()
+
+    def _kata_postgres_mount_flags(self) -> str:
+        return '--mount "$PGDATA_MOUNT" --mount "$PG_SHM_MOUNT" --mount "$PG_RUN_MOUNT"'
+
+    def _postgres_tti_script(
+        self,
+        *,
+        image: str,
+        probe: str,
+        idle_cmd: str,
+        wait_secs: int = 600,
+        exec_timeout: int = 8,
+    ) -> str:
+        ref = self._image_ref(image)
+        env = self._ctr_env_flags(image)
+        prep = self._postgres_data_prep_script()
+        return textwrap.dedent(
+            f"""
+            set -euo pipefail
+            {prep}
+            ID=keska-kata-pg-tti-$RANDOM
+            cleanup() {{
+              {self._kata_kill_rm()}
+            }}
+            trap cleanup EXIT INT TERM
+            t0=$(date +%s%N)
+            sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()}{env} \\
+              {self._kata_postgres_mount_flags()} \\
+              {shlex.quote(ref)} "$ID" {idle_cmd} >/dev/null
             ready=0
             for i in $(seq 1 {wait_secs}); do
-              if sudo -n ctr task exec --exec-id chk-$RANDOM "$ID" {probe} >/dev/null 2>&1; then
+              if timeout {exec_timeout} sudo -n ctr task exec --user 70:70 --exec-id chk-$RANDOM "$ID" {probe} >/dev/null 2>&1; then
                 ready=1
                 break
               fi
@@ -108,23 +203,9 @@ class KataBackend(SandboxBackend):
             done
             test "$ready" = 1
             t1=$(date +%s%N)
-            sudo -n ctr task kill -s SIGKILL "$ID" >/dev/null 2>&1 || true
-            sudo -n ctr containers rm "$ID" >/dev/null 2>&1 || true
             echo $(( (t1 - t0) / 1000000 ))
-            """
-        ).strip()
-
-    def _ctr_run_cmd(self, image: str, cmd: str, *, id_prefix: str = "keska-kata") -> str:
-        ref = self._image_ref(image)
-        return textwrap.dedent(
-            f"""
-            set -euo pipefail
-            ID={id_prefix}-$RANDOM
-            t0=$(date +%s%N)
-            sudo -n ctr run --rm --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()} \\
-              {shlex.quote(ref)} "$ID" {cmd} >/dev/null
-            t1=$(date +%s%N)
-            echo $(( (t1 - t0) / 1000000 ))
+            cleanup
+            trap - EXIT INT TERM
             """
         ).strip()
 
@@ -139,21 +220,32 @@ class KataBackend(SandboxBackend):
         if not info["ready"]:
             raise RuntimeError("Kata not ready. Run: lab.kata.run()")
         if is_postgres_workload(image, exec_cmd):
+            exec_timeout = 8
+            wait = self._pg_ready_wait_secs(timeout, exec_timeout=exec_timeout)
             script = self._postgres_tti_script(
                 image=image,
                 probe=exec_cmd,
                 idle_cmd="docker-entrypoint.sh postgres",
-                wait_secs=timeout,
+                wait_secs=wait,
+                exec_timeout=exec_timeout,
             )
+            timeout = min(timeout, 45 + wait * (exec_timeout + 1) + 30)
         else:
-            script = self._ctr_run_cmd(image, exec_cmd)
+            script = self._detached_lifecycle_script(
+                image=image,
+                probe=exec_cmd,
+            )
         r = self.remote.sh(script, timeout=timeout, check=True)
         return float(r.stdout.strip().splitlines()[-1])
 
     def stress_once(self, *, image: str = "busybox", wave_index: int = 0) -> float:
         del wave_index
         r = self.remote.sh(
-            self._ctr_run_cmd(image, "/bin/true", id_prefix="keska-kata-stress"),
+            self._detached_lifecycle_script(
+                image=image,
+                probe="/bin/true",
+                id_prefix="keska-kata-stress",
+            ),
             timeout=120,
             check=False,
         )
@@ -172,26 +264,29 @@ class KataBackend(SandboxBackend):
     def memory_idle_once(self, *, image: str = "busybox", idle_cmd: str = "/bin/sleep 600") -> float:
         ref = self._image_ref(image)
         env = self._ctr_env_flags(image)
+        prep = ""
+        pg_mount_line = ""
         pg_wait = ""
         if is_postgres_workload(image):
-            pg_wait = textwrap.dedent(
-                """
-                for i in $(seq 1 120); do
-                  sudo -n ctr task exec --exec-id chk-$RANDOM "$ID" pg_isready -U postgres >/dev/null 2>&1 && break || sleep 1
-                done
-                """
-            ).strip()
+            prep = self._postgres_data_prep_script()
+            pg_mount_line = f"{self._kata_postgres_mount_flags()} \\"
+            pg_wait = f"sleep {POSTGRES_STARTUP_SLEEP_SECS}"
         script = textwrap.dedent(
             f"""
             set -euo pipefail
+            {prep}
             ID=keska-kata-mem-$RANDOM
+            cleanup() {{
+              {self._kata_kill_rm()}
+            }}
+            trap cleanup EXIT INT TERM
             sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()}{env} \\
-              {shlex.quote(ref)} "$ID" {idle_cmd} >/dev/null
+              {pg_mount_line}  {shlex.quote(ref)} "$ID" {idle_cmd} >/dev/null
             {pg_wait}
             sleep 2
             {self._rss_for_sandbox("$ID")}
-            sudo -n ctr task kill -s SIGKILL "$ID" >/dev/null 2>&1 || true
-            sudo -n ctr containers rm "$ID" >/dev/null 2>&1 || true
+            cleanup
+            trap - EXIT INT TERM
             echo "${{rss:-0}}"
             """
         ).strip()
@@ -254,16 +349,18 @@ class KataBackend(SandboxBackend):
               lid=keska-kata-load-$RANDOM-$i
               LOAD_IDS="$LOAD_IDS $lid"
               sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()} \\
-                {shlex.quote(ref)} "$lid" /bin/sleep 20 >/dev/null
+                {shlex.quote(ref)} "$lid" /bin/sleep 3600 >/dev/null
             done
             sleep 1
-            t0=$(date +%s%N)
             ID=keska-kata-tti-$RANDOM
-            sudo -n ctr run --rm --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()} \\
-              {shlex.quote(ref)} "$ID" {exec_cmd} >/dev/null
+            t0=$(date +%s%N)
+            sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()} \\
+              {shlex.quote(ref)} "$ID" /bin/sleep 3600 >/dev/null
+            timeout 60 sudo -n ctr task exec --exec-id probe-$RANDOM "$ID" {exec_cmd} >/dev/null
             t1=$(date +%s%N)
-            cleanup
             echo $(( (t1 - t0) / 1000000 ))
+            {self._kata_kill_rm()}
+            cleanup
             """
         ).strip()
         r = self.remote.sh(script, timeout=360, check=True)
@@ -271,26 +368,54 @@ class KataBackend(SandboxBackend):
 
     def cleanup(self) -> None:
         cleanup_quark_sandboxes(self.remote)
-        self.remote.sh(
-            "sudo -n ctr containers ls -q 2>/dev/null | grep '^keska-kata' | "
-            "xargs -r -I{} sh -c 'sudo -n ctr task kill -s SIGKILL {} 2>/dev/null; sudo -n ctr containers rm {} 2>/dev/null' || true",
-            timeout=30,
-        )
-        self.remote.sh("sudo -n killall -9 firecracker 2>/dev/null || true", timeout=15)
 
-    def io_fs_once(self, *, image: str = "busybox") -> tuple[float, float]:
+    def _kata_io_bench_script(
+        self,
+        *,
+        image: str,
+        guest_cmd: str,
+        id_prefix: str,
+        timed: bool = False,
+    ) -> str:
+        """Detached ctr sandbox + task exec on /bench (teardown not timed)."""
         ref = self._image_ref(image)
-        script = textwrap.dedent(
+        host_root = io_bench_host_dir(self.config)
+        timing_start = "t0=$(date +%s%N)\n            " if timed else ""
+        timing_end = (
+            "t1=$(date +%s%N)\n            echo ELAPSED_NS=$((t1 - t0))\n            "
+            if timed
+            else ""
+        )
+        cmd_q = shlex.quote(guest_cmd)
+        return textwrap.dedent(
             f"""
             set -euo pipefail
-            ID=keska-kata-io-$RANDOM
-            out=$(sudo -n ctr run --rm --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()} \\
-              {shlex.quote(ref)} "$ID" sh -c \\
-              '"w=$(dd if=/dev/zero of=/tmp/bench bs=1M count=64 conv=fsync 2>&1 | tail -1); '
-              'r=$(dd if=/tmp/bench of=/dev/null bs=1M 2>&1 | tail -1); echo WRITE \\"$w\\"; echo READ \\"$r\\""' 2>&1)
-            echo "$out"
+            HOST_BENCH={shlex.quote(host_root)}/run-$RANDOM
+            sudo -n mkdir -p {shlex.quote(host_root)} "$HOST_BENCH"
+            sudo -n chmod 755 "$HOST_BENCH"
+            cleanup() {{
+              {self._kata_kill_rm()}
+              sudo -n rm -rf "$HOST_BENCH" 2>/dev/null || true
+            }}
+            trap cleanup EXIT INT TERM
+            ID={id_prefix}-$RANDOM
+            MOUNT="type=bind,src=$HOST_BENCH,dst=/bench,options=rbind:rw"
+            sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()} \\
+              --mount "$MOUNT" \\
+              {shlex.quote(ref)} "$ID" /bin/sleep 3600 >/dev/null
+            {timing_start}out=$(sudo -n ctr task exec --exec-id io-$RANDOM "$ID" sh -c {cmd_q} 2>&1)
+            {timing_end}echo "$out"
+            cleanup
+            trap - EXIT INT TERM
             """
         ).strip()
+
+    def io_fs_once(self, *, image: str = "busybox") -> tuple[float, float]:
+        script = self._kata_io_bench_script(
+            image=image,
+            guest_cmd=dd_io_bench_sh(),
+            id_prefix="keska-kata-io",
+        )
         r = self.remote.sh(script, timeout=180, check=True)
         write_mib_s = read_mib_s = 0.0
         for line in r.stdout.splitlines():
@@ -299,6 +424,25 @@ class KataBackend(SandboxBackend):
             elif line.startswith("READ "):
                 read_mib_s = parse_dd_mib_s(line)
         return write_mib_s, read_mib_s
+
+    def io_fs_concurrent_read_once(self, *, image: str = "busybox") -> float:
+        script = self._kata_io_bench_script(
+            image=image,
+            guest_cmd=concurrent_read_bench_sh(),
+            id_prefix="keska-kata-io-c",
+            timed=True,
+        )
+        r = self.remote.sh(script, timeout=180, check=True)
+        if "CONCURRENT_READ_OK" not in r.stdout:
+            raise RuntimeError(f"concurrent read bench failed: {r.stdout!r}")
+        elapsed_ns = 0
+        for line in r.stdout.splitlines():
+            if line.startswith("ELAPSED_NS="):
+                elapsed_ns = int(line.split("=", 1)[1])
+        return concurrent_read_mib_s(
+            total_bytes=concurrent_read_total_bytes(),
+            elapsed_ns=elapsed_ns,
+        )
 
     def inet_tcp_connect_once_ms(self, *, image: str = "python:3.12-slim") -> float:
         if not self.probe().get("network_ready"):
@@ -346,19 +490,23 @@ class KataBackend(SandboxBackend):
     ) -> float:
         ref = self._image_ref(image)
         env = self._ctr_env_flags(image)
+        prep = self._postgres_data_prep_script()
         script = textwrap.dedent(
             f"""
             set -euo pipefail
+            {prep}
             ID=keska-kata-pg-$RANDOM
+            cleanup() {{
+              {self._kata_kill_rm()}
+            }}
+            trap cleanup EXIT INT TERM
             sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()}{env} \\
+              {self._kata_postgres_mount_flags()} \\
               {shlex.quote(ref)} "$ID" {idle_cmd} >/dev/null
-            for i in $(seq 1 120); do
-              sudo -n ctr task exec --exec-id chk-$RANDOM "$ID" pg_isready -U postgres >/dev/null 2>&1 && break || sleep 1
-            done
-            sudo -n ctr task exec --user 70:70 --exec-id init-$RANDOM "$ID" pgbench -i -s1 -U postgres >/dev/null
+            sleep {POSTGRES_STARTUP_SLEEP_SECS}
             out=$(sudo -n ctr task exec --user 70:70 --exec-id pgb-$RANDOM "$ID" pgbench -c1 -T5 -U postgres 2>&1 || true)
-            sudo -n ctr task kill -s SIGKILL "$ID" >/dev/null 2>&1 || true
-            sudo -n ctr containers rm "$ID" >/dev/null 2>&1 || true
+            cleanup
+            trap - EXIT INT TERM
             echo "$out"
             """
         ).strip()

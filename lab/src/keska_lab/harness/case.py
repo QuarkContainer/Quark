@@ -65,6 +65,13 @@ def _io_read(ctx: CaseContext) -> float:
     return read_mib_s
 
 
+def _io_concurrent_read(ctx: CaseContext) -> float:
+    fn = getattr(ctx.backend, "io_fs_concurrent_read_once", None)
+    if not callable(fn):
+        raise NotImplementedError("io_fs_concurrent_read_once")
+    return fn(image=ctx.workload.image)
+
+
 def _inet_connect(ctx: CaseContext) -> float:
     return ctx.backend.inet_tcp_connect_once_ms(image=ctx.workload.image)
 
@@ -90,6 +97,9 @@ CASE_RESUME = BenchCase("resume_ms", "ms", run=_resume_ms)
 CASE_MEM_PAUSED = BenchCase("memory_while_paused_rss_mb", "MB", run=_memory_paused)
 CASE_IO_WRITE = BenchCase("io_write_mib_s", "MiB/s", run=_io_write)
 CASE_IO_READ = BenchCase("io_read_mib_s", "MiB/s", run=_io_read)
+CASE_IO_CONCURRENT_READ = BenchCase(
+    "io_concurrent_read_mib_s", "MiB/s", run=_io_concurrent_read
+)
 CASE_INET_CONNECT = BenchCase("inet_tcp_connect_ms", "ms", frozenset({"tsot", "network"}), _inet_connect)
 CASE_INET_DOWNLOAD = BenchCase("inet_download_mbps", "Mbits/s", frozenset({"tsot", "network"}), _inet_download)
 CASE_SANDBOX_IPERF = BenchCase(

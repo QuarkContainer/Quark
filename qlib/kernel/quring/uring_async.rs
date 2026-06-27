@@ -18,8 +18,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::Send;
 use core::ops::Deref;
-use core::sync::atomic::AtomicU32;
-use core::sync::atomic::Ordering;
+use core::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
 use enum_dispatch::enum_dispatch;
 use spin::Mutex;
 
@@ -40,6 +39,7 @@ use super::super::kernel::waiter::*;
 use super::super::socket::hostinet::socket::*;
 use super::super::socket::hostinet::uring_socket::*;
 use super::super::task::*;
+use super::super::taskMgr::*;
 use super::super::IOURING;
 use super::super::SHARESPACE;
 use super::uring_op::UringCall;
@@ -48,6 +48,7 @@ use crate::qlib::kernel::tcpip::tcpip::SockAddrInet;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use crate::GuestHostSharedAllocator;
 use crate::qlib::kernel::arch::tee::is_cc_active;
+use crate::qlib::task_mgr::TaskId;
 
 pub enum UringOps {
     UringCall(UringCall),
@@ -88,7 +89,6 @@ pub enum AsyncOps {
     AsyncStatx(AsyncStatx),
     AsyncLinkTimeout(AsyncLinkTimeout),
     UnblockBlockPollAdd(UnblockBlockPollAdd),
-    AsyncBufWrite(AsyncBufWrite),
     AsyncAccept(AsyncAccept),
     AsyncEpollCtl(AsyncEpollCtl),
     AsyncSend(AsyncSend),
@@ -131,7 +131,6 @@ impl AsyncOps {
             AsyncOps::AsyncStatx(_) => return 15,
             AsyncOps::AsyncLinkTimeout(_) => return 16,
             AsyncOps::UnblockBlockPollAdd(_) => return 17,
-            AsyncOps::AsyncBufWrite(_) => return 18,
             AsyncOps::AsyncAccept(_) => return 19,
             AsyncOps::AsyncEpollCtl(_) => return 20,
             AsyncOps::AsyncSend(_) => return 21,
@@ -405,51 +404,6 @@ impl AsyncWritev {
             len: len as u32,
             offset: offset,
         };
-    }
-}
-
-pub struct AsyncBufWriteInner {
-    pub fd: i32,
-    pub buf: DataBuff,
-    pub offset: i64,
-    pub lockGuard: QMutex<Option<QAsyncLockGuard>>,
-}
-
-#[derive(Clone)]
-pub struct AsyncBufWrite(Arc<AsyncBufWriteInner, GuestHostSharedAllocator>);
-
-impl Deref for AsyncBufWrite {
-    type Target = Arc<AsyncBufWriteInner, GuestHostSharedAllocator>;
-
-    fn deref(&self) -> &Arc<AsyncBufWriteInner, GuestHostSharedAllocator> {
-        &self.0
-    }
-}
-
-impl AsyncOpsTrait for AsyncBufWrite {
-    fn Process(&mut self, result: i32) -> bool {
-        assert!(
-            result as usize == self.buf.Len(),
-            "result is {}, self.buf.len() is {}, fd is {}",
-            result,
-            self.buf.Len(),
-            self.fd
-        );
-        *self.lockGuard.lock() = None;
-        return false;
-    }
-}
-
-impl AsyncBufWrite {
-    pub fn New(fd: i32, buf: DataBuff, offset: i64, lockGuard: QAsyncLockGuard) -> Self {
-        let inner = AsyncBufWriteInner {
-            fd,
-            buf,
-            offset,
-            lockGuard: QMutex::new(Some(lockGuard)),
-        };
-
-        return Self(Arc::new_in(inner, GUEST_HOST_SHARED_ALLOCATOR));
     }
 }
 

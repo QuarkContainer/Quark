@@ -56,6 +56,41 @@ def bundle_dir(config: LabConfig, image: str) -> str:
     return f"{config.work_dir.rstrip('/')}/bundles/{image_slug(image)}"
 
 
+def rootfs_markers_for_image(image: str) -> list[str]:
+    """Paths under rootfs that must exist (any one suffices)."""
+    if "postgres" in image.lower():
+        return ["usr/local/bin/postgres"]
+    return ["bin/busybox", "bin/sh"]
+
+
+def bundle_template_dir(config: LabConfig, image: str) -> str:
+    return f"{bundle_dir(config, image)}/rootfs.template"
+
+
+def bundle_markers_ok_script(
+    *, rootfs_var: str, image: str, use_return: bool = False
+) -> str:
+    """Shell fragment: success when at least one marker exists under ${rootfs_var}."""
+    checks = " || ".join(
+        f'[ -f "${{{rootfs_var}}}/{marker}" ]' for marker in rootfs_markers_for_image(image)
+    )
+    if use_return:
+        return f"if {checks}; then return 0; else return 1; fi"
+    return f"if {checks}; then exit 0; else exit 1; fi"
+
+
+def verify_bundle_markers(remote: RemoteHost, bundle: str, image: str) -> None:
+    script = bundle_markers_ok_script(rootfs_var="ROOTFS", image=image)
+    r = remote.sh(
+        f"ROOTFS={shlex.quote(bundle)}/rootfs; {script}",
+        timeout=15,
+        check=False,
+    )
+    if not r.ok:
+        markers = ", ".join(rootfs_markers_for_image(image))
+        raise RuntimeError(f"OCI bundle missing markers ({markers}) at {bundle}/rootfs")
+
+
 def containerd_image_purge_script(*refs: str) -> str:
     """Remove image refs and orphaned snapshots across containerd namespaces."""
     uniq = list(dict.fromkeys(r for r in refs if r))
@@ -130,23 +165,51 @@ def build_oci_config(
     return cfg
 
 
+def refresh_bundle_rootfs_script(*, bundle_var: str, image: str) -> str:
+    """Restore mutable rootfs from immutable template before quark create."""
+    tmpl_var = f"${bundle_var}/rootfs.template"
+    checks = " || ".join(
+        f'[ -f "{tmpl_var}/{marker}" ]' for marker in rootfs_markers_for_image(image)
+    )
+    return textwrap.dedent(
+        f"""
+        if [ -d "${{{bundle_var}}}/rootfs.template" ] && ( {checks} ); then
+          rm -rf "${{{bundle_var}}}/rootfs"
+          cp -a "${{{bundle_var}}}/rootfs.template" "${{{bundle_var}}}/rootfs"
+        fi
+        """
+    ).strip()
+
+
 def ensure_bundle_script(config: LabConfig, image: str, *, oci: dict | None = None) -> str:
     bundle = bundle_dir(config, image)
     cfg_text = json.dumps(oci or OCI_CONFIG, indent=2) + "\n"
     cfg_b64 = base64.b64encode(cfg_text.encode()).decode()
+    marker_ok = bundle_markers_ok_script(rootfs_var="TMPL", image=image, use_return=True)
     return textwrap.dedent(
         f"""
         set -euo pipefail
         BUNDLE={shlex.quote(bundle)}
-        if [ -f "$BUNDLE/config.json" ] && [ -d "$BUNDLE/rootfs/bin" ]; then
-          :
-        else
-          mkdir -p "$BUNDLE/rootfs"
+        TMPL="$BUNDLE/rootfs.template"
+        marker_ok() {{
+          {marker_ok}
+        }}
+        if ! marker_ok; then
+          rm -rf "$TMPL"
+          mkdir -p "$TMPL"
           {docker_pull_with_mirror_script(image, config.image_registry or None)}
-          cid=$(sg docker -c 'docker create {shlex.quote(image)}' 2>/dev/null)
-          sg docker -c "docker export \\"$cid\\" | tar -xC \\"$BUNDLE/rootfs\\"" 2>/dev/null
+          cid=$(sg docker -c 'docker create {shlex.quote(image)}')
+          if [ -z "$cid" ]; then
+            echo "docker create failed for {shlex.quote(image)}" >&2
+            exit 1
+          fi
+          sg docker -c "docker export \\"$cid\\" | tar -xC \\"$TMPL\\""
           sg docker -c "docker rm \\"$cid\\"" >/dev/null 2>&1 || true
+          marker_ok || {{ echo "docker export missing rootfs markers in $TMPL" >&2; exit 1; }}
         fi
+        rm -rf "$BUNDLE/rootfs"
+        cp -a "$TMPL" "$BUNDLE/rootfs"
+        marker_ok || {{ echo "rootfs copy missing markers" >&2; exit 1; }}
         echo {shlex.quote(cfg_b64)} | base64 -d | sudo -n tee "$BUNDLE/config.json" >/dev/null
         echo "$BUNDLE"
         """
@@ -171,6 +234,7 @@ def ensure_oci_bundle(
     if not check.ok or "OK" not in check.stdout:
         tail = (r.stdout or r.stderr or check.stdout or check.stderr or "").strip()
         raise RuntimeError(f"OCI bundle not ready at {path}" + (f": {tail}" if tail else ""))
+    verify_bundle_markers(remote, path, image)
     return path
 
 
@@ -190,6 +254,13 @@ def ensure_workload_bundle(remote: RemoteHost, config: LabConfig, workload: str 
 
 def postgres_data_template_dir(config: LabConfig) -> str:
     return f"{config.work_dir.rstrip('/')}/postgres-data-template"
+
+
+def ensure_postgres_data_template(remote: RemoteHost, config: LabConfig) -> str:
+    """Ensure pre-init postgres PGDATA exists on the lab host (shared by Quark and Kata)."""
+    bundle = bundle_dir(config, "postgres:16-alpine")
+    _ensure_postgres_bundle_data(remote, bundle, config)
+    return postgres_data_template_dir(config)
 
 
 def _ensure_postgres_bundle_data(remote: RemoteHost, bundle: str, config: LabConfig) -> None:
@@ -245,6 +316,20 @@ class EnsureWorkloadBundleStep(SetupStep):
     def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
         try:
             path = ensure_workload_bundle(remote, self.config, self.workload)
+            return StepResult(self.name, True, path)
+        except Exception as e:
+            return StepResult(self.name, False, str(e))
+
+
+class EnsurePostgresDataTemplateStep(SetupStep):
+    name = "postgres-data-template"
+
+    def __init__(self, config: LabConfig):
+        self.config = config
+
+    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+        try:
+            path = ensure_postgres_data_template(remote, self.config)
             return StepResult(self.name, True, path)
         except Exception as e:
             return StepResult(self.name, False, str(e))

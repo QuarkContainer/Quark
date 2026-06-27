@@ -302,17 +302,9 @@ impl HeapAllocator {
     pub fn AlllocBuf(pageCount: usize) -> u64 {
         assert!(IsPowerOfTwo(pageCount));
 
-        let addr = if SHARESPACE.config.read().EnableIOBuf {
-            unsafe { GLOBAL_ALLOCATOR.AllocIOBuf(pageCount * MemoryDef::PAGE_SIZE as usize) }
-        } else {
-            let size = pageCount * MemoryDef::PAGE_SIZE as usize;
-            let align = MemoryDef::PAGE_SIZE as usize;
-            let addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size, align) };
-            addr
-        };
-
-        // use crate::qlib::mem::list_allocator::HostAllocator;
-        // error!("AlllocBuf addr {:x} isIOBuf {}", addr as u64, HostAllocator ::IsIOBuf(addr as u64) );
+        let size = pageCount * MemoryDef::PAGE_SIZE as usize;
+        let align = MemoryDef::PAGE_SIZE as usize;
+        let addr = unsafe { GLOBAL_ALLOCATOR.AllocSharedBuf(size, align) };
 
         return addr as u64;
     }

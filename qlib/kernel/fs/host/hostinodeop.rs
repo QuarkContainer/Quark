@@ -278,7 +278,6 @@ pub struct HostInodeOpIntern {
     pub size: i64,
 
     pub mappable: Option<Mappable>,
-    pub bufWriteLock: QAsyncLock,
     pub hasMappable: bool,
 
     pub isMemfd: bool,
@@ -297,7 +296,6 @@ impl Default for HostInodeOpIntern {
             errorcode: 0,
             mappable: None,
             size: 0,
-            bufWriteLock: QAsyncLock::default(),
             hasMappable: false,
             isMemfd: false,
         };
@@ -310,14 +308,6 @@ impl Drop for HostInodeOpIntern {
             //default fd
             return;
         }
-
-        let task = Task::Current();
-
-        let _l = if self.BufWriteEnable() {
-            Some(self.BufWriteLock().Lock(task))
-        } else {
-            None
-        };
 
         if SHARESPACE.config.read().MmapRead {
             match self.mappable.take() {
@@ -353,7 +343,6 @@ impl HostInodeOpIntern {
             errorcode: 0,
             mappable: None,
             size: fstat.st_size,
-            bufWriteLock: QAsyncLock::default(),
             hasMappable: false,
             isMemfd: isMemfd,
         };
@@ -549,14 +538,6 @@ impl HostInodeOpIntern {
         return self.HostFd;
     }
 
-    pub fn BufWriteEnable(&self) -> bool {
-        return SHARESPACE.config.read().FileBufWrite && !self.hasMappable;
-    }
-
-    pub fn BufWriteLock(&self) -> QAsyncLock {
-        return self.bufWriteLock.clone();
-    }
-
     pub fn WouldBlock(&self) -> bool {
         return self.WouldBlock;
     }
@@ -735,10 +716,6 @@ impl HostInodeOp {
 
     /*********************************start of fileoperation *******************/
 
-    pub fn BufWriteEnable(&self) -> bool {
-        return self.lock().BufWriteEnable();
-    }
-
     // ReadEndOffset returns an exclusive end offset for a read operation
     // so that the read does not overflow an int64 nor size.
     //
@@ -808,11 +785,6 @@ impl HostInodeOp {
             }
 
             if SHARESPACE.config.read().UringIO {
-                if self.BufWriteEnable() {
-                    // try to gain the lock once, release immediately
-                    self.BufWriteLock().Lock(task);
-                }
-
                 let ret = IOURING.Read(
                     task,
                     hostIops.HostFd(),
@@ -847,10 +819,6 @@ impl HostInodeOp {
             task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, true)?;
             return Ok(ret as i64);
         }
-    }
-
-    pub fn BufWriteLock(&self) -> QAsyncLock {
-        return self.lock().BufWriteLock();
     }
 
     pub fn WriteAt(
@@ -902,19 +870,13 @@ impl HostInodeOp {
             };
 
             if SHARESPACE.config.read().UringIO {
-                let ret = if self.BufWriteEnable() {
-                    let lock = self.BufWriteLock().Lock(task);
-                    let count = IOURING.BufFileWrite(hostIops.HostFd(), buf, offset, lock);
-                    count
-                } else {
-                    IOURING.Write(
-                        task,
-                        hostIops.HostFd(),
-                        buf.Ptr(),
-                        buf.Len() as u32,
-                        offset as i64,
-                    )
-                };
+                let ret = IOURING.Write(
+                    task,
+                    hostIops.HostFd(),
+                    buf.Ptr(),
+                    buf.Len() as u32,
+                    offset as i64,
+                );
 
                 if ret < 0 {
                     if ret as i32 != -SysErr::EINVAL {
@@ -1005,18 +967,8 @@ impl HostInodeOp {
 
         let ret = if SHARESPACE.config.read().UringIO && self.InodeType() == InodeType::RegularFile
         {
-            if self.BufWriteEnable() {
-                // try to gain the lock once, release immediately
-                self.BufWriteLock().Lock(task);
-            }
-
             IOURING.Fsync(task, fd, datasync)
         } else {
-            if self.BufWriteEnable() {
-                // try to gain the lock once, release immediately
-                self.BufWriteLock().Lock(task);
-            }
-
             if datasync {
                 HostSpace::FDataSync(fd)
             } else {
@@ -1042,17 +994,6 @@ impl HostInodeOp {
         writeable: bool,
     ) -> Result<()> {
         self.lock().hasMappable = true;
-
-        // todo: if there is bufwrite ongoing, should we wait for it?
-        /*let _= if self.BufWriteEnable() {
-            let task = Task::Current();
-            error!("AddMapping 1");
-            let lock = self.lock().bufWriteLock.Lock(task);
-            error!("AddMapping 2");
-            Some(lock)
-        } else {
-            None
-        };*/
 
         let mappable = self.lock().Mappable();
         let mut mappableLock = mappable.lock();
@@ -1354,11 +1295,6 @@ impl InodeOperations for HostInodeOp {
     }
 
     fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr> {
-        if self.BufWriteEnable() {
-            // try to gain the lock once, release immediately
-            self.BufWriteLock().Lock(task);
-        }
-
         let mops = self.lock().mops.clone();
         let fd = self.HostFd();
 

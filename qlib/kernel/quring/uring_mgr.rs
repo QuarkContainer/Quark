@@ -435,20 +435,6 @@ impl QUring {
         return Ok(cnt as i64);
     }
 
-    pub fn BufFileWrite(
-        &self,
-        fd: i32,
-        buf: DataBuff,
-        offset: i64,
-        lockGuard: QAsyncLockGuard,
-    ) -> i64 {
-        let len = buf.Len() as i64;
-        let writeop = AsyncBufWrite::New(fd, buf, offset, lockGuard);
-
-        IOURING.AUCall(AsyncOps::AsyncBufWrite(writeop));
-        return len;
-    }
-
     pub fn Process(&self, cqe: &CompleteEntry) {
         if super::super::Shutdown() {
             return;

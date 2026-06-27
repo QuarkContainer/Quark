@@ -123,11 +123,24 @@ class QuarkEnvironment(RuntimeEnvironment):
         from keska_lab.display import print_setup_report
 
         wl = workload or "busybox"
-        if mode in ("standard", "heavy"):
-            extras = ["python"] if wl == "busybox" else []
-            report = workload_setup_pipeline(self.config, wl, extra_workloads=extras).run(
-                self.remote, stream=stream
-            )
+        if mode in ("standard", "heavy", "full"):
+            if mode == "heavy":
+                from keska_lab.setup.pipelines import quark_heavy_ready_pipeline
+
+                report = quark_heavy_ready_pipeline(self.config, wl).run(
+                    self.remote, stream=stream
+                )
+            elif mode == "full":
+                from keska_lab.setup.pipelines import quark_full_ready_pipeline
+
+                report = quark_full_ready_pipeline(self.config, wl).run(
+                    self.remote, stream=stream
+                )
+            else:
+                extras = ["python"] if wl == "busybox" else []
+                report = workload_setup_pipeline(self.config, wl, extra_workloads=extras).run(
+                    self.remote, stream=stream
+                )
         elif mode == "network":
             report = quark_network_ready_pipeline(self.config, workload=wl).run(
                 self.remote, stream=stream
@@ -185,10 +198,23 @@ class KataEnvironment(RuntimeEnvironment):
             )
         elif mode == "db":
             report = kata_db_ready_pipeline(self.config).run(self.remote, stream=stream)
-        elif mode in ("standard", "heavy"):
-            report = kata_multi_image_pipeline(self.config, ["busybox", "python"]).run(
-                self.remote, stream=stream
-            )
+        elif mode in ("standard", "heavy", "full"):
+            if mode == "heavy":
+                from keska_lab.setup.pipelines import kata_heavy_ready_pipeline
+
+                report = kata_heavy_ready_pipeline(self.config).run(
+                    self.remote, stream=stream
+                )
+            elif mode == "full":
+                from keska_lab.setup.pipelines import kata_full_ready_pipeline
+
+                report = kata_full_ready_pipeline(self.config, workload or "busybox").run(
+                    self.remote, stream=stream
+                )
+            else:
+                report = kata_multi_image_pipeline(self.config, ["busybox", "python"]).run(
+                    self.remote, stream=stream
+                )
         else:
             report = kata_bench_ready_pipeline(self.config, workload or "busybox").run(
                 self.remote, stream=stream
