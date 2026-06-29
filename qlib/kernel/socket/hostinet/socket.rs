@@ -59,8 +59,7 @@ use super::super::super::task::*;
 use super::super::super::tcpip::tcpip::*;
 use super::super::super::GlobalIOMgr;
 use super::super::super::GlobalRDMASvcCli;
-use super::super::super::Kernel;
-use super::super::super::Kernel::HostSpace;
+use super::super::super::hostspace::HostSpace;
 use super::super::super::IOURING;
 use super::super::super::SHARESPACE;
 use super::super::control::*;
@@ -278,7 +277,7 @@ impl SocketOperations {
     pub fn IOAccept(&self) -> Result<AcceptItem> {
         let mut ai = AcceptItem::default();
         ai.len = ai.addr.data.len() as _;
-        let res = Kernel::HostSpace::IOAccept(
+        let res = HostSpace::IOAccept(
             self.fd,
             &ai.addr as *const _ as u64,
             &ai.len as *const _ as u64,
@@ -895,7 +894,7 @@ impl FileOperations for SocketOperations {
                     }
                 } else {
                     let tmp = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
-                    let res = Kernel::HostSpace::IoCtl(self.fd, request, &*tmp as *const _ as u64);
+                    let res = HostSpace::IoCtl(self.fd, request, &*tmp as *const _ as u64);
                     if res < 0 {
                         return Err(Error::SysError(-res as i32));
                     }
@@ -905,7 +904,7 @@ impl FileOperations for SocketOperations {
             }
             _ => {
                 let tmp = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
-                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
+                let res = HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }
@@ -983,7 +982,7 @@ impl SockOperations for SocketOperations {
                 }
             }
         } else {
-            res = Kernel::HostSpace::IOConnect(
+            res = HostSpace::IOConnect(
                 self.fd,
                 &socketaddr[0] as *const _ as u64,
                 socketaddr.len() as u32,
@@ -1185,7 +1184,7 @@ impl SockOperations for SocketOperations {
             socketaddr = &socketaddr[..SIZEOF_SOCKADDR]
         }
 
-        let res = Kernel::HostSpace::Bind(
+        let res = HostSpace::Bind(
             self.fd,
             &socketaddr[0] as *const _ as u64,
             socketaddr.len() as u32,
@@ -1267,7 +1266,7 @@ impl SockOperations for SocketOperations {
         };
 
         let res = if self.tcpRDMA {
-            // Kernel::HostSpace::RDMAListen(self.fd, backlog, asyncAccept, acceptQueue.clone())
+            // HostSpace::RDMAListen(self.fd, backlog, asyncAccept, acceptQueue.clone())
             let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
             let socketInfo = fdInfo.lock().sockInfo.lock().clone();
 
@@ -1294,7 +1293,7 @@ impl SockOperations for SocketOperations {
             }
             0
         } else {
-            Kernel::HostSpace::Listen(self.fd, backlog, asyncAccept)
+            HostSpace::Listen(self.fd, backlog, asyncAccept)
         };
 
         if res < 0 {
@@ -1364,7 +1363,7 @@ impl SockOperations for SocketOperations {
             let res = 0;
 
             if !self.tcpRDMA {
-                let res = Kernel::HostSpace::Shutdown(self.fd, how as i32);
+                let res = HostSpace::Shutdown(self.fd, how as i32);
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }
@@ -1440,9 +1439,9 @@ impl SockOperations for SocketOperations {
                 LibcConst::IP_TOS => {
                     let res = if bufferSize == 0 {
                         // dirty, any better way?
-                        Kernel::HostSpace::GetSockOpt(self.fd, level, name, &bufferSize as *const _ as u64, &bufferSize as *const _ as u64)
+                        HostSpace::GetSockOpt(self.fd, level, name, &bufferSize as *const _ as u64, &bufferSize as *const _ as u64)
                     } else {
-                        Kernel::HostSpace::GetSockOpt(self.fd, level, name, &opt[0] as *const _ as u64, &bufferSize as *const _ as u64)
+                        HostSpace::GetSockOpt(self.fd, level, name, &opt[0] as *const _ as u64, &bufferSize as *const _ as u64)
                     };
                     if res < 0 {
                         return Err(Error::SysError(-res as i32))
@@ -1455,7 +1454,7 @@ impl SockOperations for SocketOperations {
         };
 
         let opt = &opt[..optlen];
-        let res = Kernel::HostSpace::GetSockOpt(self.fd, level, name, &opt[0] as *const _ as u64, &optlen as *const _ as u64);
+        let res = HostSpace::GetSockOpt(self.fd, level, name, &opt[0] as *const _ as u64, &optlen as *const _ as u64);
         if res < 0 {
             return Err(Error::SysError(-res as i32))
         }
@@ -1465,7 +1464,7 @@ impl SockOperations for SocketOperations {
 
         let mut optLen = Box::new_in(opt.len(), GUEST_HOST_SHARED_ALLOCATOR);
         let res = if *optLen == 0 {
-            Kernel::HostSpace::GetSockOpt(
+            HostSpace::GetSockOpt(
                 self.fd,
                 level,
                 name,
@@ -1473,7 +1472,7 @@ impl SockOperations for SocketOperations {
                 &mut *optLen as *mut _ as u64,
             )
         } else {
-            Kernel::HostSpace::GetSockOpt(
+            HostSpace::GetSockOpt(
                 self.fd,
                 level,
                 name,
@@ -1562,7 +1561,7 @@ impl SockOperations for SocketOperations {
 
         let optLen = opt.len();
         let res = if optLen == 0 {
-            Kernel::HostSpace::SetSockOpt(
+            HostSpace::SetSockOpt(
                 self.fd,
                 level,
                 name,
@@ -1570,7 +1569,7 @@ impl SockOperations for SocketOperations {
                 optLen as u32,
             )
         } else {
-            Kernel::HostSpace::SetSockOpt(
+            HostSpace::SetSockOpt(
                 self.fd,
                 level,
                 name,
@@ -1658,7 +1657,7 @@ impl SockOperations for SocketOperations {
         }
         let len = Box::new_in(socketaddr.len() as i32, GUEST_HOST_SHARED_ALLOCATOR);
 
-        let res = Kernel::HostSpace::GetSockName(
+        let res = HostSpace::GetSockName(
             self.fd,
             &socketaddr[0] as *const _ as u64,
             &*len as *const _ as u64,
@@ -1891,14 +1890,14 @@ impl SockOperations for SocketOperations {
         if self.tcpRDMA {
             //TODO: this needs revisit for TCP over RDMA
             let mut res = if msgHdr.msgControlLen != 0 {
-                Kernel::HostSpace::IORecvMsg(
+                HostSpace::IORecvMsg(
                     self.fd,
                     &mut *msgHdr as *mut _ as u64,
                     flags | MsgType::MSG_DONTWAIT,
                     false,
                 ) as i32
             } else {
-                Kernel::HostSpace::IORecvfrom(
+                HostSpace::IORecvfrom(
                     self.fd,
                     buf.Ptr(),
                     size,
@@ -1923,14 +1922,14 @@ impl SockOperations for SocketOperations {
                 }
 
                 res = if msgHdr.msgControlLen != 0 {
-                    Kernel::HostSpace::IORecvMsg(
+                    HostSpace::IORecvMsg(
                         self.fd,
                         &mut *msgHdr as *mut _ as u64,
                         flags | MsgType::MSG_DONTWAIT,
                         false,
                     ) as i32
                 } else {
-                    Kernel::HostSpace::IORecvfrom(
+                    HostSpace::IORecvfrom(
                         self.fd,
                         buf.Ptr(),
                         size,
@@ -2303,14 +2302,14 @@ impl SockOperations for SocketOperations {
         // msgHdr.msgFlags = 0;
 
         // let mut res = if msgHdr.msgControlLen > 0 {
-        //     Kernel::HostSpace::IOSendMsg(
+        //     HostSpace::IOSendMsg(
         //         self.fd,
         //         msgHdr as *const _ as u64,
         //         flags | MsgType::MSG_DONTWAIT,
         //         false,
         //     ) as i32
         // } else {
-        //     Kernel::HostSpace::IOSendto(
+        //     HostSpace::IOSendto(
         //         self.fd,
         //         buf.Ptr(),
         //         len,
@@ -2336,14 +2335,14 @@ impl SockOperations for SocketOperations {
         //     }
 
         //     res = if msgHdr.msgControlLen > 0 {
-        //         Kernel::HostSpace::IOSendMsg(
+        //         HostSpace::IOSendMsg(
         //             self.fd,
         //             msgHdr as *const _ as u64,
         //             flags | MsgType::MSG_DONTWAIT,
         //             false,
         //         ) as i32
         //     } else {
-        //         Kernel::HostSpace::IOSendto(
+        //         HostSpace::IOSendto(
         //             self.fd,
         //             buf.Ptr(),
         //             len,
@@ -2454,7 +2453,7 @@ impl Provider for SocketProvider {
                 return Err(Error::SysError(SysErr::ESOCKTNOSUPPORT));
             }
         } else {
-            let res = Kernel::HostSpace::Socket(self.family, stype | SocketFlags::SOCK_CLOEXEC, protocol);
+            let res = HostSpace::Socket(self.family, stype | SocketFlags::SOCK_CLOEXEC, protocol);
             if res < 0 {
                 return Err(Error::SysError(-res as i32));
             }
@@ -2556,7 +2555,7 @@ impl Provider for SocketProvider {
         /*if self.family == AFType::AF_UNIX {
             let fds: [i32; 2] = [0; 2];
 
-            let res = Kernel::HostSpace::SocketPair(self.family, stype | SocketFlags::SOCK_CLOEXEC, protocol, &fds[0] as *const _ as u64);
+            let res = HostSpace::SocketPair(self.family, stype | SocketFlags::SOCK_CLOEXEC, protocol, &fds[0] as *const _ as u64);
             if res < 0 {
                 return Err(Error::SysError(-res as i32))
             }

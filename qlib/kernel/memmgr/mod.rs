@@ -22,7 +22,6 @@ pub mod pma;
 pub mod pmamgr;
 pub mod syscalls;
 pub mod vma;
-//pub mod buf_allocator;
 pub mod linked_list;
 
 use alloc::string::String;

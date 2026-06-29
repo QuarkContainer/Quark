@@ -90,7 +90,7 @@ impl HostAllocator {
 
     pub fn IsGuestPrivateHeapAddr(&self, addr: u64) -> bool {
         let heapStart = self.guestPrivHeapAddr.load(Ordering::Relaxed);
-        let heapSize = if crate::qlib::kernel::Kernel::IDENTICAL_MAPPING.load(Ordering::Acquire)
+        let heapSize = if crate::qlib::kernel::hostspace::IDENTICAL_MAPPING.load(Ordering::Acquire)
             && get_tee_type() != CCMode::SevSnp
         {
             MemoryDef::GUEST_PRIVATE_HEAP_SIZE

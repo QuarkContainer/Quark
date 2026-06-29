@@ -40,7 +40,7 @@ pub use super::super::super::memmgr::vma::MMappable;
 use super::super::super::memmgr::*;
 use super::super::super::socket::unix::transport::unix::*;
 use super::super::super::task::*;
-use super::super::super::Kernel::HostSpace;
+use super::super::super::hostspace::HostSpace;
 use super::super::super::IOURING;
 use super::super::super::SHARESPACE;
 use super::super::attr::*;
@@ -309,7 +309,7 @@ impl Drop for HostInodeOpIntern {
             return;
         }
 
-        if SHARESPACE.config.read().MmapRead {
+        if SHARESPACE.config.read().effective_mmap_read() {
             match self.mappable.take() {
                 None => (),
                 Some(mapable) => {
@@ -766,7 +766,7 @@ impl HostInodeOp {
             task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, false)?;
             return Ok(ret as i64);
         } else {
-            if inodeType == InodeType::RegularFile && SHARESPACE.config.read().MmapRead {
+            if inodeType == InodeType::RegularFile && SHARESPACE.config.read().effective_mmap_read() {
                 let mut intern = self.lock();
                 if offset > intern.size {
                     return Ok(0);

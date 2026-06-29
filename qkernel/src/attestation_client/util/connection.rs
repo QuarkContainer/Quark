@@ -21,6 +21,7 @@ use embedded_io;
 use embedded_tls::blocking::*;
 use kbs_types::Response;
 use crate::qlib::kernel::fs::file::{FileOperations, SockOperations};
+use crate::qlib::kernel::hostspace::HostSpace;
 use crate::qlib::common::Result;
 
 use crate::qlib::kernel::kernel::time::Time;
@@ -470,7 +471,7 @@ impl Provider for HttpSocketProvider {
         -> Result<Option<Arc<File>>> {
         let non_blocking = stype & SocketFlags::SOCK_NONBLOCK != 0;
         let stype = stype & SocketType::SOCK_TYPE_MASK;
-        let res = Kernel::HostSpace::Socket(self.family,
+        let res = HostSpace::Socket(self.family,
             stype | SocketFlags::SOCK_CLOEXEC, protocol);
         if res < 0 {
             return Err(Error::SysError(-res as i32));

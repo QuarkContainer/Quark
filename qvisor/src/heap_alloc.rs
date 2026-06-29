@@ -12,7 +12,7 @@ pub const ENABLE_HUGEPAGE: bool = false;
 
 use crate::qlib::kernel::arch::tee::{is_cc_active, get_tee_type};
 use crate::CCMode;
-use crate::qlib::kernel::Kernel::IDENTICAL_MAPPING;
+use crate::qlib::kernel::hostspace::IDENTICAL_MAPPING;
 
 impl BitmapAllocatorWrapper {
     pub const fn New() -> Self {
@@ -57,7 +57,6 @@ impl BitmapAllocatorWrapper {
 impl HostAllocator {
     pub const fn New() -> Self {
         return Self {
-            ioHeapAddr: AtomicU64::new(MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE),
             hostInitHeapAddr: AtomicU64::new(MemoryDef::HOST_INIT_HEAP_OFFSET),
             guestPrivHeapAddr: AtomicU64::new(MemoryDef::GUEST_PRIVATE_HEAP_OFFSET),
             sharedHeapAddr: AtomicU64::new(MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET),
@@ -75,8 +74,7 @@ impl HostAllocator {
             }
             libc::mmap(
                 self.guestPrivHeapAddr.load(Ordering::Relaxed) as _,
-                (MemoryDef::HEAP_SIZE + MemoryDef::IO_HEAP_SIZE + MemoryDef::HOST_INIT_HEAP_SIZE)
-                    as usize,
+                (MemoryDef::HEAP_SIZE + MemoryDef::HOST_INIT_HEAP_SIZE) as usize,
                 libc::PROT_READ | libc::PROT_WRITE,
                 flags,
                 -1,
@@ -194,13 +192,6 @@ impl HostAllocator {
                 MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET as usize,
                 MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as usize,
             );
-
-            let ioHeapEnd = MemoryDef::HEAP_END + MemoryDef::IO_HEAP_SIZE;
-            *self.IOAllocator() = ListAllocator::New(MemoryDef::HEAP_END as _, ioHeapEnd);
-            self.IOAllocator().Add(
-                MemoryDef::HEAP_END as usize,
-                MemoryDef::IO_HEAP_SIZE as usize,
-            );
         }
     }
 
@@ -302,8 +293,6 @@ unsafe impl GlobalAlloc for HostAllocator {
             self.GuestHostSharedAllocator().dealloc(ptr, layout);
         } else if Self::IsInitHeapAddr(addr) {
             self.HostInitAllocator().dealloc(ptr, layout);
-        } else if Self::IsIOBuf(addr) {
-            self.IOAllocator().dealloc(ptr, layout);
         } else if self.IsGuestPrivateHeapAddr(addr) && !is_cc_active() {
             self.GuestPrivateAllocator().dealloc(ptr, layout);
         }

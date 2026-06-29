@@ -115,13 +115,21 @@ class QuarkBackend(SandboxBackend):
         return f"sudo -n {shlex.quote(bin_path)} {subcmd}"
 
     def _quark_force_delete(self, id_ref: str = '"$ID"') -> str:
-        """Delete sandbox with timeout; kill orphaned VM if delete hangs."""
+        """Delete sandbox with timeout; kill its VM if delete hangs."""
+        var = id_ref.strip('"').lstrip("$")
+        qlist = self._quark_cmd("list")
+        kill = (
+            f'__pid=$({qlist} 2>/dev/null | awk -v id="${var}" \'$1==id {{print $2; exit}}\'); '
+            f'if [ -n "${{__pid:-}}" ] && [ "$__pid" != "-1" ]; then '
+            f"sudo -n kill -9 \"$__pid\" 2>/dev/null || true; fi"
+        )
+        rm_meta = f'sudo rm -rf "/run/qvisor/${var}" "/var/lib/quark/${var}" 2>/dev/null || true'
         qdel = f"timeout 20 {self._quark_cmd(f'delete --force {id_ref}')}"
         return (
             f"({qdel} >/dev/null 2>&1) || "
-            f"{{ sudo -n pkill -9 -f '[q]uark boot' 2>/dev/null || true; "
-            f"sudo -n pkill -9 qemu 2>/dev/null || true; "
-            f"timeout 15 {self._quark_cmd(f'delete --force {id_ref}')} >/dev/null 2>&1 || true; }}"
+            f"{{ {kill}; "
+            f"timeout 15 {self._quark_cmd(f'delete --force {id_ref}')} >/dev/null 2>&1 || true; "
+            f"{rm_meta}; }}"
         )
 
     def _pg_ready_wait_secs(self, timeout: int, *, exec_timeout: int = 8) -> int:
@@ -351,7 +359,7 @@ class QuarkBackend(SandboxBackend):
             set -euo pipefail
             ID=keska-pause-$RANDOM
             BUNDLE={shlex.quote(bundle)}
-            cleanup() {{ {q('delete --force "$ID"')} >/dev/null 2>&1 || true; }}
+            cleanup() {{ {self._quark_force_delete()}; }}
             trap cleanup EXIT INT TERM
             {q('create "$ID" -b "$BUNDLE"')}
             {q('start "$ID"')}
@@ -386,15 +394,17 @@ class QuarkBackend(SandboxBackend):
         script = textwrap.dedent(
             f"""
             set -euo pipefail
-            sudo rm -rf /run/qvisor/keska-* /var/lib/quark/keska-* 2>/dev/null || true
             BUNDLE={shlex.quote(bundle)}
             {self._refresh_rootfs(image, bundle_var="BUNDLE")}
             LOAD_IDS=""
+            ID=""
             cleanup() {{
               for id in $LOAD_IDS; do
-                {q('delete --force "$id"')} >/dev/null 2>&1 || true
+                {self._quark_force_delete('"$id"')}
               done
-              {q('delete --force "$ID"')} >/dev/null 2>&1 || true
+              if [ -n "${{ID:-}}" ]; then
+                {self._quark_force_delete()}
+              fi
             }}
             trap cleanup EXIT INT TERM
             for i in $(seq 1 {load}); do
@@ -443,7 +453,7 @@ class QuarkBackend(SandboxBackend):
         q = self._quark_cmd
         prep = quark_io_bench_bundle_preamble(self.config, image)
         cleanup = quark_io_bench_cleanup_trap(
-            quark_delete_cmd=self._quark_cmd('delete --force "$ID"'),
+            quark_delete_cmd=self._quark_force_delete(),
         )
         io_exec = q(
             f'exec --user 0:0 "$ID" -- sh -c {shlex.quote(dd_io_bench_sh())}'
@@ -475,7 +485,7 @@ class QuarkBackend(SandboxBackend):
         q = self._quark_cmd
         prep = quark_io_bench_bundle_preamble(self.config, image)
         cleanup = quark_io_bench_cleanup_trap(
-            quark_delete_cmd=self._quark_cmd('delete --force "$ID"'),
+            quark_delete_cmd=self._quark_force_delete(),
         )
         bench = concurrent_read_bench_sh()
         io_exec = q(
@@ -515,7 +525,7 @@ class QuarkBackend(SandboxBackend):
         q = self._quark_cmd
         prep = quark_io_bench_bundle_preamble(self.config, image)
         cleanup = quark_io_bench_cleanup_trap(
-            quark_delete_cmd=self._quark_cmd('delete --force "$ID"'),
+            quark_delete_cmd=self._quark_force_delete(),
         )
         bench_file = IO_BENCH_FILE
         script = textwrap.dedent(
@@ -557,7 +567,7 @@ class QuarkBackend(SandboxBackend):
             set -euo pipefail
             ID=keska-py-$RANDOM
             BUNDLE={shlex.quote(bundle)}
-            cleanup() {{ {q('delete --force "$ID"')} >/dev/null 2>&1 || true; }}
+            cleanup() {{ {self._quark_force_delete()}; }}
             trap cleanup EXIT INT TERM
             {q('create "$ID" -b "$BUNDLE"')}
             {q('start "$ID"')}

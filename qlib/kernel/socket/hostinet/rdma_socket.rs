@@ -9,7 +9,7 @@ use super::super::super::super::linux_def::*;
 use super::super::super::super::qmsg::qcall::*;
 use super::super::super::super::socket_buf::*;
 use super::super::super::task::*;
-use super::super::super::Kernel::HostSpace;
+use super::super::super::hostspace::HostSpace;
 //use super::super::super::kernel::waiter::*;
 
 pub struct RDMA {}

@@ -753,18 +753,6 @@ impl VMSpace {
         return Self::GetRet(ret as i64);
     }
 
-    pub fn IOBufWrite(fd: i32, addr: u64, len: usize, offset: isize) -> i64 {
-        PerfGoto(PerfType::BufWrite);
-        defer!(PerfGofrom(PerfType::BufWrite));
-
-        let fdInfo = match Self::GetFdInfo(fd) {
-            Some(info) => info,
-            None => return -SysErr::EBADF as i64,
-        };
-
-        return fdInfo.IOBufWrite(addr, len, offset);
-    }
-
     pub fn IOWrite(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
         let fdInfo = match Self::GetFdInfo(fd) {
             Some(info) => info,

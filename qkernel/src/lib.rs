@@ -77,6 +77,8 @@ use core::{mem, ptr};
 
 use spin::mutex::Mutex;
 
+pub use crate::qlib::kernel::hostspace as Kernel;
+
 use qlib::mutex::*;
 use taskMgr::{CreateTask, IOWait, WaitFn};
 use vcpu::CPU_LOCAL;
@@ -104,7 +106,6 @@ use self::qlib::kernel::loader;
 use self::qlib::kernel::memmgr;
 use self::qlib::kernel::perflog;
 use self::qlib::kernel::quring;
-use self::qlib::kernel::Kernel;
 use self::qlib::kernel::arch::tee::is_cc_active;
 use self::qlib::kernel::*;
 use self::qlib::{ShareSpaceRef, SysCallID};
@@ -622,7 +623,7 @@ pub extern "C" fn rust_main(
             #[cfg(feature = "snp")]
             if mode == CCMode::SevSnp {
                 LOG_AVAILABLE.store(false, Ordering::Release);
-                for i in (MemoryDef::PHY_LOWER_ADDR..MemoryDef::IO_HEAP_END)
+                for i in (MemoryDef::PHY_LOWER_ADDR..MemoryDef::HEAP_END)
                         .step_by(MemoryDef::PAGE_SIZE as usize)
                     {
                         let _ret = pvalidate(VirtAddr::new(i), PvalidateSize::Size4K, true);

@@ -461,7 +461,6 @@ impl BitmapAllocatorWrapper {
 impl HostAllocator {
     pub const fn New() -> Self {
         return Self {
-            ioHeapAddr: AtomicU64::new(0),
             guestPrivHeapAddr: AtomicU64::new(0),
             hostInitHeapAddr: AtomicU64::new(0),
             sharedHeapAddr: AtomicU64::new(0),
@@ -517,16 +516,8 @@ impl HostAllocator {
                 let sharedHeapEnd = sharedHeapStart + MemoryDef::GUEST_HOST_SHARED_HEAP_SIZE as u64;
                 *self.GuestHostSharedAllocator() =
                     ListAllocator::New(sharedHeapStart as _, sharedHeapEnd);
-                let ioHeapEnd = sharedHeapEnd + MemoryDef::IO_HEAP_SIZE;
-
-                self.ioHeapAddr.store(sharedHeapEnd, Ordering::SeqCst);
-                *self.IOAllocator() = ListAllocator::New(sharedHeapEnd as _, ioHeapEnd);
 
                 let size = core::mem::size_of::<ListAllocator>();
-                self.IOAllocator().Add(
-                    MemoryDef::HEAP_END as usize + size,
-                    MemoryDef::IO_HEAP_SIZE as usize - size,
-                );
                 // reserve 4 pages for the listAllocator and share para page
                 let size = 4 * MemoryDef::PAGE_SIZE as usize;
                 self.GuestHostSharedAllocator().Add(
@@ -546,18 +537,12 @@ unsafe impl GlobalAlloc for HostAllocator {
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         let addr = ptr as u64;
         if !is_cc_active() {
-            if Self::IsIOBuf(addr) {
-                self.IOAllocator().dealloc(ptr, layout);
-            } else {
-                self.GuestHostSharedAllocator().dealloc(ptr, layout);
-            }
+            self.GuestHostSharedAllocator().dealloc(ptr, layout);
         } else {
             if self.IsGuestPrivateHeapAddr(addr) {
                 self.GuestPrivateAllocator().dealloc(ptr, layout);
             } else if Self::IsSharedHeapAddr(addr) {
                 self.GuestHostSharedAllocator().dealloc(ptr, layout);
-            } else if Self::IsIOBuf(addr) {
-                self.IOAllocator().dealloc(ptr, layout);
             }
         }
     }

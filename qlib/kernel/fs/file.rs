@@ -46,7 +46,7 @@ use super::super::kernel::fasync::*;
 use super::super::memmgr::*;
 use super::super::task::*;
 use super::super::tcpip::tcpip::*;
-use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::hostspace::HostSpace;
 
 use crate::qlib::kernel::fs::dev::full::FullFileOperations;
 use crate::qlib::kernel::fs::dev::null::NullFileOperations;

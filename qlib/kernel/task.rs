@@ -170,7 +170,7 @@ impl Guard {
         if self.0 != Self::MAGIC_GUILD {
             let task = Task::Current();
             raw!(0x240, task.taskId, self.0, 0);
-            super::Kernel::HostSpace::VcpuDebug();
+            super::hostspace::HostSpace::VcpuDebug();
             loop {}
         }
         //assert!(self.0==Self::MAGIC_GUILD)
@@ -341,7 +341,7 @@ impl Task {
         let task = rsp & DEFAULT_STACK_MAST;
         if rsp - task < 0x2000 {
             raw!(0x238, rsp, task, 0);
-            super::Kernel::HostSpace::VcpuDebug();
+            super::hostspace::HostSpace::VcpuDebug();
             loop {}
             //panic!("TaskAddress panic");
         }
@@ -460,7 +460,7 @@ impl Task {
         let task = rsp & DEFAULT_STACK_MAST;
         if rsp - task < 0x2000 {
             raw!(0x237, rsp, task, 0);
-            super::Kernel::HostSpace::VcpuDebug();
+            super::hostspace::HostSpace::VcpuDebug();
             loop {}
             //panic!("TaskAddress panic");
         }

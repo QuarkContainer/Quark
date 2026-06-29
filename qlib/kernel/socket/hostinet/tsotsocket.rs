@@ -49,8 +49,7 @@ use super::super::super::kernel::waiter::*;
 use super::super::super::quring::QUring;
 use super::super::super::task::*;
 use super::super::super::tcpip::tcpip::*;
-use super::super::super::Kernel;
-use super::super::super::Kernel::HostSpace;
+use super::super::super::hostspace::HostSpace;
 use super::super::super::SHARESPACE;
 use super::super::control::*;
 use super::super::socket::*;
@@ -710,7 +709,7 @@ impl FileOperations for TsotSocketOperations {
                     return Ok(0);
                 } else {
                     let tmp = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
-                    let res = Kernel::HostSpace::IoCtl(self.fd, request, &*tmp as *const _ as u64);
+                    let res = HostSpace::IoCtl(self.fd, request, &*tmp as *const _ as u64);
                     if res < 0 {
                         return Err(Error::SysError(-res as i32));
                     }
@@ -720,7 +719,7 @@ impl FileOperations for TsotSocketOperations {
             }
             _ => {
                 let tmp = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
-                let res = Kernel::HostSpace::IoCtl(self.fd, request, &*tmp as *const _ as u64);
+                let res = HostSpace::IoCtl(self.fd, request, &*tmp as *const _ as u64);
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }
@@ -774,7 +773,7 @@ impl SockOperations for TsotSocketOperations {
                         LoopbackSocketPair(self.queue.clone(), serverQueue.clone());
                     *self.socketType.lock() = TsotSocketType::Loopback(clientSock);
 
-                    let res = Kernel::HostSpace::Socket(
+                    let res = HostSpace::Socket(
                         AFType::AF_INET,
                         SocketType::SOCK_STREAM | SocketFlags::SOCK_CLOEXEC,
                         0,
@@ -1039,7 +1038,7 @@ impl SockOperations for TsotSocketOperations {
         }
 
         if how == LibcConst::SHUT_RD || how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR {
-            let res = Kernel::HostSpace::Shutdown(self.fd, how as i32);
+            let res = HostSpace::Shutdown(self.fd, how as i32);
             if res < 0 {
                 return Err(Error::SysError(-res as i32));
             }
@@ -1126,9 +1125,9 @@ impl SockOperations for TsotSocketOperations {
                 LibcConst::IP_TOS => {
                     let res = if bufferSize == 0 {
                         // dirty, any better way?
-                        Kernel::HostSpace::GetSockOpt(self.fd, level, name, &bufferSize as *const _ as u64, &bufferSize as *const _ as u64)
+                        HostSpace::GetSockOpt(self.fd, level, name, &bufferSize as *const _ as u64, &bufferSize as *const _ as u64)
                     } else {
-                        Kernel::HostSpace::GetSockOpt(self.fd, level, name, &opt[0] as *const _ as u64, &bufferSize as *const _ as u64)
+                        HostSpace::GetSockOpt(self.fd, level, name, &opt[0] as *const _ as u64, &bufferSize as *const _ as u64)
                     };
                     if res < 0 {
                         return Err(Error::SysError(-res as i32))
@@ -1141,7 +1140,7 @@ impl SockOperations for TsotSocketOperations {
         };
 
         let opt = &opt[..optlen];
-        let res = Kernel::HostSpace::GetSockOpt(self.fd, level, name, &opt[0] as *const _ as u64, &optlen as *const _ as u64);
+        let res = HostSpace::GetSockOpt(self.fd, level, name, &opt[0] as *const _ as u64, &optlen as *const _ as u64);
         if res < 0 {
             return Err(Error::SysError(-res as i32))
         }
@@ -1205,7 +1204,7 @@ impl SockOperations for TsotSocketOperations {
 
         let mut optLen = Box::new_in(opt.len(), GUEST_HOST_SHARED_ALLOCATOR);
         let res = if *optLen == 0 {
-            Kernel::HostSpace::GetSockOpt(
+            HostSpace::GetSockOpt(
                 self.fd,
                 level,
                 name,
@@ -1213,7 +1212,7 @@ impl SockOperations for TsotSocketOperations {
                 &mut *optLen as *mut _ as u64,
             )
         } else {
-            Kernel::HostSpace::GetSockOpt(
+            HostSpace::GetSockOpt(
                 self.fd,
                 level,
                 name,
@@ -1313,7 +1312,7 @@ impl SockOperations for TsotSocketOperations {
 
         let optLen = opt.len();
         let res = if optLen == 0 {
-            Kernel::HostSpace::SetSockOpt(
+            HostSpace::SetSockOpt(
                 self.fd,
                 level,
                 name,
@@ -1321,7 +1320,7 @@ impl SockOperations for TsotSocketOperations {
                 optLen as u32,
             )
         } else {
-            Kernel::HostSpace::SetSockOpt(
+            HostSpace::SetSockOpt(
                 self.fd,
                 level,
                 name,
@@ -1340,7 +1339,7 @@ impl SockOperations for TsotSocketOperations {
     fn GetSockName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
         let len = Box::new_in(socketaddr.len() as i32, GUEST_HOST_SHARED_ALLOCATOR);
 
-        let res = Kernel::HostSpace::GetSockName(
+        let res = HostSpace::GetSockName(
             self.fd,
             &socketaddr[0] as *const _ as u64,
             &*len as *const _ as u64,

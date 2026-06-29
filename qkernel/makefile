@@ -12,6 +12,10 @@ assembly_source_files := $(wildcard src/qlib/kernel/arch/$(arch)/*.s)
 assembly_object_files := $(patsubst src/qlib/kernel/arch/$(arch)/%.s, \
 	../build/arch/$(arch)/%.o, $(assembly_source_files))
 
+ifdef CARGO_FEATURES
+FEATURES_FLAG = --features $(CARGO_FEATURES)
+endif
+
 all: $(kernel)
 
 release: $(kernel)
@@ -39,10 +43,10 @@ $(snp_kernel_debug): snp_kernel_debug $(assembly_object_files)
 		$(assembly_object_files) $(qkernel_debug)
 
 kernel:
-	CARGO_TARGET_DIR=../target cargo +$(TOOLCHAIN) build --target $(arch)-qkernel.json --release
+	CARGO_TARGET_DIR=../target cargo +$(TOOLCHAIN) build --target $(arch)-qkernel.json --release $(FEATURES_FLAG)
 
 kernel_debug:
-	CARGO_TARGET_DIR=../target cargo +$(TOOLCHAIN) build --target $(arch)-qkernel.json
+	CARGO_TARGET_DIR=../target cargo +$(TOOLCHAIN) build --target $(arch)-qkernel.json $(FEATURES_FLAG)
 
 
 snp_kernel:

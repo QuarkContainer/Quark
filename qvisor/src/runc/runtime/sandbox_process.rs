@@ -811,6 +811,12 @@ impl SandboxProcess {
             SetRLimit(rlimit.typ as u32, rlimit.soft, rlimit.hard)?;
         }
 
+        if self.spec.process.no_new_privileges {
+            prctl::set_no_new_privileges(true).map_err(|e| {
+                Error::Common(format!("PR_SET_NO_NEW_PRIVS failed: {:?}", e))
+            })?;
+        }
+
         let mut rdmaSvcCliSock = 0;
         if QUARK_CONFIG.lock().EnableRDMA {
             rdmaSvcCliSock =

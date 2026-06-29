@@ -42,7 +42,7 @@ use super::super::mm::*;
 use super::super::stack::*;
 use super::super::task::*;
 use super::super::uid::*;
-use super::super::Kernel::HostSpace;
+use super::super::hostspace::HostSpace;
 use super::super::KERNEL_PAGETABLE;
 use super::super::PAGE_MGR;
 use super::arch::*;

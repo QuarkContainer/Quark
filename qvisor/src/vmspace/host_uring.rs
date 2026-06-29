@@ -142,12 +142,7 @@ impl ReadOp {
     pub fn Entry(&self) -> squeue::Entry {
         let op = opcode::Read::new(types::Fd(self.fd), self.addr as *mut _, self.len)
             .offset(self.offset as u64);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -155,12 +150,7 @@ impl WriteOp {
     pub fn Entry(&self) -> squeue::Entry {
         let op = opcode::Write::new(types::Fd(self.fd), self.addr as *const _, self.len)
             .offset(self.offset as u64);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -173,12 +163,7 @@ impl StatxOp {
         )
         .flags(self.flags)
         .mask(self.mask);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -189,12 +174,7 @@ impl FsyncOp {
         } else {
             opcode::Fsync::new(types::Fd(self.fd))
         };
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -207,12 +187,7 @@ impl SpliceOp {
             self.offsetOut,
             self.len,
         );
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -224,24 +199,14 @@ impl EpollCtlOp {
             self.op,
             &self.ev as *const _ as u64 as _, //*const types::epoll_event,
         );
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
 impl AcceptOp {
     pub fn Entry(&self) -> squeue::Entry {
         let op = opcode::Accept::new(types::Fd(self.fd), ptr::null_mut(), ptr::null_mut());
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -269,12 +234,7 @@ impl UringAsyncOpsTrait for AsyncEventfdWrite {
             &self.addr as *const _ as u64 as *const u8,
             8,
         );
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -325,12 +285,7 @@ impl UringAsyncOpsTrait for AsyncStatx {
 impl UringAsyncOpsTrait for AsyncTTYWrite {
     fn Entry(&self) -> squeue::Entry {
         let op = opcode::Write::new(types::Fd(self.fd), self.addr as *const _, self.len as u32);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -338,24 +293,14 @@ impl UringAsyncOpsTrait for AsyncWritev {
     fn Entry(&self) -> squeue::Entry {
         let op = opcode::Write::new(types::Fd(self.fd), self.addr as *const u8, self.len)
             .offset(self.offset as u64);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
 impl UringAsyncOpsTrait for AsyncLogFlush {
     fn Entry(&self) -> squeue::Entry {
         let op = opcode::Write::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32); //.flags(MsgType::MSG_DONTWAIT);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -363,11 +308,7 @@ impl UringAsyncOpsTrait for AsyncSend {
     fn Entry(&self) -> squeue::Entry {
         //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
         let op = opcode::Send::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32);
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -375,23 +316,14 @@ impl UringAsyncOpsTrait for TsotAsyncSend {
     fn Entry(&self) -> squeue::Entry {
         //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
         let op = opcode::Send::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32);
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
 impl UringAsyncOpsTrait for AsyncFiletWrite {
     fn Entry(&self) -> squeue::Entry {
         let op = opcode::Write::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -402,12 +334,7 @@ impl UringAsyncOpsTrait for AsyncAccept {
             &self.addr.addr.data[0] as *const _ as u64 as *mut _,
             &self.addr.len as *const _ as u64 as *mut _,
         );
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -415,19 +342,11 @@ impl UringAsyncOpsTrait for AsyncFileRead {
     fn Entry(&self) -> squeue::Entry {
         if self.isSocket {
             let op = opcode::Recv::new(types::Fd(self.fd), self.addr as *mut u8, self.len as u32);
-            if SHARESPACE.config.read().UringFixedFile {
-                return op.build().flags(squeue::Flags::FIXED_FILE);
-            } else {
-                return op.build();
-            }
+        return op.build();
         }
 
         let op = opcode::Read::new(types::Fd(self.fd), self.addr as *mut u8, self.len as u32);
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -435,12 +354,7 @@ impl UringAsyncOpsTrait for AsycnSendMsg {
     fn Entry(&self) -> squeue::Entry {
         let intern = self.lock();
         let op = opcode::SendMsg::new(types::Fd(intern.fd), &intern.msg as *const _ as *const _);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -451,12 +365,7 @@ impl UringAsyncOpsTrait for AsycnRecvMsg {
             types::Fd(intern.fd),
             &intern.msg as *const _ as u64 as *mut _,
         );
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -468,12 +377,7 @@ impl UringAsyncOpsTrait for AIOWrite {
             self.buf.Len() as u32,
         )
         .offset(self.offset as u64);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -485,12 +389,7 @@ impl UringAsyncOpsTrait for AIORead {
             self.buf.Len() as u32,
         )
         .offset(self.offset as u64);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -501,12 +400,7 @@ impl UringAsyncOpsTrait for AIOFsync {
         } else {
             opcode::Fsync::new(types::Fd(self.fd))
         };
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -524,12 +418,7 @@ impl UringAsyncOpsTrait for AsyncLinkTimeout {
 impl UringAsyncOpsTrait for UnblockBlockPollAdd {
     fn Entry(&self) -> squeue::Entry {
         let op = opcode::PollAdd::new(types::Fd(self.fd), self.flags);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -540,36 +429,21 @@ impl UringAsyncOpsTrait for AsyncConnect {
             &self.addr.data[0] as *const _ as u64 as *const _,
             self.len,
         );
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
 impl UringAsyncOpsTrait for TsotPoll {
     fn Entry(&self) -> squeue::Entry {
         let op = opcode::PollAdd::new(types::Fd(self.fd), EVENT_READ as u32);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
 impl UringAsyncOpsTrait for DNSRecv {
     fn Entry(&self) -> squeue::Entry {
         let op = opcode::RecvMsg::new(types::Fd(self.fd), self.msgAddr as *mut _);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -577,24 +451,14 @@ impl UringAsyncOpsTrait for DNSSend {
     fn Entry(&self) -> squeue::Entry {
         let intern = self.lock();
         let op = opcode::SendMsg::new(types::Fd(intern.fd), &intern.msg as *const _ as *const _);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
 impl UringAsyncOpsTrait for PollHostEpollWait {
     fn Entry(&self) -> squeue::Entry {
         let op = opcode::PollAdd::new(types::Fd(self.fd), EVENT_READ as u32);
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 
@@ -606,12 +470,7 @@ impl UringAsyncOpsTrait for AsyncEpollCtl {
             self.op,
             &self.ev as *const _ as u64 as *const types::epoll_event,
         );
-
-        if SHARESPACE.config.read().UringFixedFile {
-            return op.build().flags(squeue::Flags::FIXED_FILE);
-        } else {
-            return op.build();
-        }
+        return op.build();
     }
 }
 

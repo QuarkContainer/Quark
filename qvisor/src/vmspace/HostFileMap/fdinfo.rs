@@ -349,11 +349,6 @@ impl FdInfo {
         return Self::ReadDir(fd, addr, len, reset);
     }
 
-    pub fn IOBufWrite(&self, addr: u64, len: usize, offset: isize) -> i64 {
-        let fd = self.lock().fd;
-        return Self::BufWrite(fd, addr, len, offset);
-    }
-
     pub fn IOWrite(&self, iovs: u64, iovcnt: i32) -> i64 {
         let fd = self.lock().fd;
         return Self::Write(fd, iovs, iovcnt);

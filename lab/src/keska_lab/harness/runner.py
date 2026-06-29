@@ -104,6 +104,10 @@ def run_suite(
                 report.errors.append(f"{case.name}: {e}")
                 if verbose:
                     print(f"  {case.name} [{i + 1}/{n}] error: {e}")
+                backend.cleanup()
+            finally:
+                if case.name == "tti_under_load_ms":
+                    backend.cleanup()
         report.metrics[case.name] = MetricStats.from_values(samples, case.unit)
 
     backend.cleanup()

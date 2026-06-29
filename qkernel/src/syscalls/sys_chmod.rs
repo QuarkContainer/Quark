@@ -19,7 +19,7 @@ use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 use crate::qlib::kernel::util::sharedcstring::SharedCString;
-use super::super::Kernel::HostSpace;
+use crate::qlib::kernel::hostspace::HostSpace;
 use super::sys_file::*;
 
 fn Chmod(task: &Task, d: &Dirent, mode: FileMode) -> Result<()> {

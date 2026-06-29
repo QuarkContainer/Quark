@@ -23,7 +23,7 @@ use super::super::linux_def::*;
 use super::super::mutex::*;
 use super::super::pagetable::*;
 use crate::qlib::kernel::arch::tee::is_cc_active;
-use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::hostspace::HostSpace;
 use crate::qlib::kernel::SHARESPACE;
 //use super::list_allocator::*;
 use crate::GLOBAL_ALLOCATOR;

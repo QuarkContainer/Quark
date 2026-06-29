@@ -22,7 +22,7 @@ use spin::Mutex;
 
 use crate::qlib::common::*;
 use crate::qlib::kernel::kernel::waiter::*;
-use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::hostspace::HostSpace;
 use crate::qlib::kernel::IOURING;
 use crate::qlib::kernel::SHARESPACE;
 use crate::qlib::rdmasocket::*;

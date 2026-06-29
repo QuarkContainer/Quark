@@ -14,3 +14,4 @@
 
 pub mod cgroup;
 pub mod cgroup_v2;
+pub mod stats;

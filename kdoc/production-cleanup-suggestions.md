@@ -1,5 +1,7 @@
 # Production cleanup suggestions
 
+> **Broader roadmap:** see [aaa-runtime-roadmap.md](aaa-runtime-roadmap.md) for the operational batch plan (Remove → Simplify → Harden → Build → Resolve experimental I/O). This file remains a dead-code and config inventory.
+
 Suggestions for trimming, hardening, and simplifying the Quark tree before a production push. This is a **review checklist**, not a committed plan — prioritize against your actual deployment shape (bare OCI CLI vs containerd shim vs K8s + TSOT).
 
 ---
@@ -73,7 +75,6 @@ These survived the FileBuf removal and can go next:
 | Flag | Shipped `config.json` | Rust `Default` | Action |
 |------|----------------------|----------------|--------|
 | `MmapRead` | `false` | `true` | **Remove flag + branch** in `hostinodeop.rs` *or* pick one behavior and delete the other |
-| `UringFixedFile` | `false` | `false` | ~29 branch copies in `qvisor/src/vmspace/host_uring.rs` — remove or `cfg(feature)` |
 | `UringStatx` | `false` | `false` | Single use in `qlib/kernel/fs/host/util.rs` — remove or document |
 | `EnableRDMA` | `false` | `false` | Large socket/RDMA surface in `qlib/kernel/socket/hostinet/socket.rs` — feature-gate entire subsystem |
 | `KernelPagetable` | `false` | `false` | Mostly commented code in `qkernel/src/interrupt/x86_64/mod.rs` — implement or delete |
@@ -151,7 +152,7 @@ Shipped [`config.json`](../config.json) differs from [`qlib/config.rs`](../qlib/
 ### io_uring path (current baseline)
 
 - **`UringIO: true`** — keep; this is the lab-validated path after FileBuf fastpath removal.
-- Trim **`UringFixedFile`** dead branches if not on a roadmap.
+- **`UringFixedFile` (E1):** deleted 2026-06-29 after Group 5 n=30 run.
 
 ### Network (only if TSOT/RDMA enabled)
 
@@ -217,7 +218,7 @@ All ~30 fields in `qlib/config.rs` — avoids rediscovering flags via grep.
 ### Phase 3 — Scope cuts (product decision)
 
 1. Feature-gate or move **`qserverless/`**, **`rdma_*`** out of main repo.
-2. Remove **`MmapRead`** or **`UringFixedFile`** if not on roadmap.
+2. Resolve **`MmapRead`** or **`UringStatx`** via Group 5 (E1 deleted).
 3. **`qservice/`** as separate release artifact for K8s-only customers.
 4. Complete or drop **aarch64** and **hibernate** paths.
 

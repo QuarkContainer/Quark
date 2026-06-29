@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::super::qlib::common::*;
-use super::super::qlib::kernel::Kernel::HostSpace;
+use super::super::qlib::kernel::hostspace::HostSpace;
 use super::super::qlib::kernel::*;
 use super::super::qlib::linux::membarrier::*;
 use super::super::qlib::linux_def::*;

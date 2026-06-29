@@ -32,7 +32,8 @@ use self::memmgr::pma::*;
 use self::quring::*;
 use self::taskMgr::*;
 
-pub mod Kernel;
+pub mod hostspace;
+pub(crate) use hostspace as Kernel;
 pub mod SignalDef;
 pub mod arch;
 pub mod asm;

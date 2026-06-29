@@ -18,7 +18,7 @@ serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 serde_derive = { version = "1.0.106", default-features = false}
 scopeguard = { version = "^1.1.0", default-features = false }
 enum_dispatch = { git = "https://github.com/QuarkContainer/enum_dispatch_clone.git" }
-log = { version = "0.4", features = ["max_level_trace", "release_max_level_trace"] }
+log = { version = "0.4", features = ["max_level_trace", "release_max_level_warn"] }
 #Requires features for Confidential Computing
 rsa = {version = "0.6.1", default-features = false, features = ["pem"]}
 aes-gcm = {version = "0.10.3"}
@@ -36,6 +36,9 @@ serde-big-array = "0.5.1"
 [features]
 default = []
 snp = ["yaxpeax-x86", "yaxpeax-arch"]
+experimental-mmap-read = []
+experimental-uring-statx = []
+experimental-io = ["experimental-mmap-read", "experimental-uring-statx"]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 x86_64 = "0.14.7"

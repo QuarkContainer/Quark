@@ -141,22 +141,39 @@ def clean_vdso(ctx: ProvisionContext) -> str:
     return "vdso artifacts cleaned"
 
 
-def build_quark(ctx: ProvisionContext) -> str:
+def build_quark(ctx: ProvisionContext, *, cargo_features: str | None = None) -> str:
     repo = shlex.quote(ctx.config.remote_repo)
     target = "debug" if ctx.profile == "debug" else "release"
     tc = PINNED_TOOLCHAIN
+    features = (cargo_features if cargo_features is not None else ctx.config.cargo_features).strip()
+    qkernel_only = {"experimental-mmap-read", "experimental-uring-statx", "experimental-io"}
+    feat_list = [f.strip() for f in features.split(",") if f.strip()] if features else []
+    qk_feats = [f for f in feat_list if f in qkernel_only]
+    unknown = [f for f in feat_list if f not in qkernel_only]
+    if unknown:
+        raise ProvisionError(f"unknown Cargo features: {', '.join(unknown)}")
+
+    if not feat_list:
+        build_body = f"make {target}"
+    elif qk_feats:
+        qk = shlex.quote(",".join(qk_feats))
+        build_body = f"make qvisor_{target} && make qkernel_{target} CARGO_FEATURES={qk} && make -C vdso"
+    else:
+        build_body = f"make {target}"
+
     script = f"""
     set -euo pipefail
     export PATH="$HOME/.cargo/bin:$PATH"
     cd {repo}
     rm -f vdso/*.d vdso/*.o
     make -C vdso clean
-    make {target}
+    {build_body}
     """
     r = ctx.remote.sh(script, timeout=3600, stream=ctx.stream)
     if not r.ok:
         raise ProvisionError(ctx.remote.format_failure(r))
-    return f"make {target} OK"
+    tag = f" ({features})" if features else ""
+    return f"make {target} OK{tag}"
 
 
 def install_quark(ctx: ProvisionContext) -> str:
@@ -164,7 +181,9 @@ def install_quark(ctx: ProvisionContext) -> str:
     script = f"""
     set -euo pipefail
     cd {repo}
-    # install only — build step already produced artifacts; sudo drops ~/.cargo/bin from PATH
+    if [ ! -f vdso/vdso.so ]; then
+      make -C vdso
+    fi
     sudo -n make install
     sudo -n mkdir -p /var/log/quark
     """

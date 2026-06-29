@@ -27,7 +27,7 @@ use super::qlib::control_msg::*;
 use super::qlib::kernel::memmgr::pma::*;
 use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 use super::qlib::kernel::task::*;
-use super::qlib::kernel::Kernel::*;
+use super::qlib::kernel::hostspace::*;
 use super::qlib::kernel::Tsc;
 use super::qlib::kernel::TSC;
 use super::qlib::linux::time::*;

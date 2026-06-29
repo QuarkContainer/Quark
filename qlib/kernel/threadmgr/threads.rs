@@ -110,7 +110,7 @@ impl TaskSetInternal {
         self.taskCount -= 1;
         /*if self.taskCount == 0 {
             info!("start to exit vm...");
-            super::super::super::Kernel::HostSpace::ExitVM().unwrap();
+            super::super::super::hostspace::HostSpace::ExitVM().unwrap();
         }*/
         return self.taskCount;
     }

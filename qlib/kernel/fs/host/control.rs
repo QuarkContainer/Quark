@@ -19,7 +19,7 @@ use super::super::file::*;
 use super::super::flags::*;
 use super::super::super::task::*;
 use super::super::super::socket::control::*;
-use super::super::super::Kernel::HostSpace;
+use super::super::super::hostspace::HostSpace;
 
 pub struct HostSCMRights (Vec<i32>);
 

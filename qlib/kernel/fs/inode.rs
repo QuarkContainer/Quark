@@ -29,7 +29,7 @@ use super::super::super::auth::*;
 use super::super::super::common::*;
 use super::super::super::kernel::fs::filesystems::*;
 use super::super::super::kernel::fs::host::fs::*;
-use super::super::super::kernel::Kernel::HostSpace;
+use super::super::hostspace::HostSpace;
 use super::super::super::linux_def::*;
 use super::super::super::qmsg::qcall::TmpfsFileType;
 use super::super::kernel::time::*;

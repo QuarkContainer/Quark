@@ -7,7 +7,7 @@ from keska_lab.harness.workload import get_workload
 from keska_lab.remote import RemoteHost
 from keska_lab.setup.base import SetupPipeline, SetupStep, StepResult
 from keska_lab.setup.cni import CniPluginsStep
-from keska_lab.setup.containerd_cri import ContainerdCriStep, CrictlInstallStep
+from keska_lab.setup.containerd_cri import ContainerdCriStep, CrictlInstallStep, QuarkCriStatsStep
 from keska_lab.setup.docker import (
     DockerEnsureStep,
     DockerPullStep,
@@ -120,7 +120,10 @@ def _workloads_for_mode(mode: str | None, workload: str | None) -> list[str]:
 
 
 def _lab_prep(cfg: LabConfig) -> list[SetupStep]:
-    return [CleanupSandboxesStep(), DockerEnsureStep(), ImageRegistryAuthStep(cfg)]
+    steps: list[SetupStep] = [CleanupSandboxesStep(), DockerEnsureStep()]
+    if not cfg.skip_registry_auth:
+        steps.append(ImageRegistryAuthStep(cfg))
+    return steps
 
 
 def workload_setup_pipeline(
@@ -155,6 +158,7 @@ def quark_network_ready_pipeline(
     extras = _workloads_for_mode("network", workload)
     pipe = workload_setup_pipeline(cfg, extras[0], extra_workloads=extras[1:])
     pipe.add(CniPluginsStep()).add(ContainerdCriStep()).add(CrictlInstallStep())
+    pipe.add(QuarkCriStatsStep())
     if cfg.enable_tsot:
         pipe.add(TsotBenchReadyStep())
     for name in extras:
@@ -217,6 +221,7 @@ def quark_heavy_ready_pipeline(
     pipe.name = "quark-heavy-ready"
     pipe.add(IoBenchDirStep(cfg))
     pipe.add(CniPluginsStep()).add(ContainerdCriStep()).add(CrictlInstallStep())
+    pipe.add(QuarkCriStatsStep())
     if cfg.enable_tsot:
         pipe.add(TsotBenchReadyStep())
     for name in extras:

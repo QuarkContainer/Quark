@@ -25,7 +25,7 @@ use alloc::boxed::Box;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use crate::GuestHostSharedAllocator;
 use crate::qlib::common::*;
-use crate::qlib::kernel::Kernel;
+use crate::qlib::kernel::hostspace;
 use crate::qlib::kernel::fd::{IORead, IOWrite};
 use crate::qlib::kernel::fs::file::{File, FileOps};
 use crate::qlib::kernel::fs::filesystems::MountSourceFlags;
@@ -230,7 +230,7 @@ impl HostUnixSocketOperations {
             }
             LibcConst::TIOCINQ => {
                 let tmp = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
-                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
+                let res = hostspace::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }
@@ -239,7 +239,7 @@ impl HostUnixSocketOperations {
             }
             _ => {
                 let tmp = Box::new_in(0i32, GUEST_HOST_SHARED_ALLOCATOR);
-                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
+                let res = hostspace::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
             if res < 0 {
                     return Err(Error::SysError(-res as i32));
                 }
@@ -252,7 +252,7 @@ impl HostUnixSocketOperations {
     pub fn GetSockOpt(&self, _task: &Task, level: i32, name: i32, opt: &mut [u8]) -> Result<i64> {
         let mut optLen = Box::new_in(opt.len(), GUEST_HOST_SHARED_ALLOCATOR);
         let res = if *optLen == 0 {
-            Kernel::HostSpace::GetSockOpt(
+            hostspace::HostSpace::GetSockOpt(
                 self.fd,
                 level,
                 name,
@@ -260,7 +260,7 @@ impl HostUnixSocketOperations {
                 &mut *optLen as *mut _ as u64,
             )
         } else {
-            Kernel::HostSpace::GetSockOpt(
+            hostspace::HostSpace::GetSockOpt(
                 self.fd,
                 level,
                 name,
@@ -280,7 +280,7 @@ impl HostUnixSocketOperations {
     pub fn GetSockName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
         let len = Box::new_in(socketaddr.len() as i32, GUEST_HOST_SHARED_ALLOCATOR);
 
-        let res = Kernel::HostSpace::GetSockName(
+        let res = hostspace::HostSpace::GetSockName(
             self.fd,
             &socketaddr[0] as *const _ as u64,
             &*len as *const _ as u64,
@@ -294,7 +294,7 @@ impl HostUnixSocketOperations {
 
     pub fn GetPeerName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
         let len = Box::new_in(socketaddr.len() as i32, GUEST_HOST_SHARED_ALLOCATOR);
-        let res = Kernel::HostSpace::GetPeerName(
+        let res = hostspace::HostSpace::GetPeerName(
             self.fd,
             &socketaddr[0] as *const _ as u64,
             &*len as *const _ as u64,
@@ -356,7 +356,7 @@ impl HostUnixSocketOperations {
         self.EventRegister(task, &general, EVENT_READ);
         defer!(self.EventUnregister(task, &general));
 
-        let mut res = Kernel::HostSpace::HostUnixRecvMsg(
+        let mut res = hostspace::HostSpace::HostUnixRecvMsg(
             self.fd,
             &mut *msgHdr as *mut _ as u64,
             flags | MsgType::MSG_DONTWAIT
@@ -378,7 +378,7 @@ impl HostUnixSocketOperations {
                 _ => (),
             }
 
-            res = Kernel::HostSpace::IORecvMsg(
+            res = hostspace::HostSpace::IORecvMsg(
                 self.fd,
                 &mut *msgHdr as *mut _ as u64,
                 flags | MsgType::MSG_DONTWAIT,
@@ -530,14 +530,14 @@ impl HostUnixSocketOperations {
         }
 
         let mut res = if msgHdr.msgControlLen > 0 {
-            Kernel::HostSpace::IOSendMsg(
+            hostspace::HostSpace::IOSendMsg(
                 self.fd,
                 msgHdr as *const _ as u64,
                 flags | MsgType::MSG_DONTWAIT,
                 false,
             ) as i32
         } else {
-            Kernel::HostSpace::IOSendto(
+            hostspace::HostSpace::IOSendto(
                 self.fd,
                 buf.Ptr(),
                 len,
@@ -563,14 +563,14 @@ impl HostUnixSocketOperations {
             }
 
             res = if msgHdr.msgControlLen > 0 {
-                Kernel::HostSpace::IOSendMsg(
+                hostspace::HostSpace::IOSendMsg(
                     self.fd,
                     msgHdr as *const _ as u64,
                     flags | MsgType::MSG_DONTWAIT,
                     false,
                 ) as i32
             } else {
-                Kernel::HostSpace::IOSendto(
+                hostspace::HostSpace::IOSendto(
                     self.fd,
                     buf.Ptr(),
                     len,

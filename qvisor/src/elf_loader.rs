@@ -36,7 +36,7 @@ use super::qlib::common::Error;
 use super::qlib::common::Result;
 
 use super::memmgr::{MapOption, MappedRegion};
-use crate::qlib::kernel::Kernel::IDENTICAL_MAPPING;
+use crate::qlib::kernel::hostspace::IDENTICAL_MAPPING;
 pub struct KernelELF {
     pub startAddr: Addr,
     pub endAddr: Addr,

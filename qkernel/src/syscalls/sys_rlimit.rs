@@ -14,7 +14,7 @@
 
 use alloc::collections::btree_set::BTreeSet;
 
-//use super::super::Kernel;
+//use super::super::hostspace;
 use super::super::qlib::common::*;
 use super::super::qlib::limits::*;
 use super::super::qlib::linux_def::*;

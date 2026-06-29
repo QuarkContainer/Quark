@@ -522,11 +522,12 @@ impl Task for ShimTask {
     fn stats(&self, _ctx: &TtrpcContext, req: StatsRequest) -> TtrpcResult<StatsResponse> {
         debug!("shim: Stats request for {:?}", req);
         let containers = self.containers.lock().unwrap();
-        let _container = containers.get(req.get_id()).ok_or_else(|| {
+        let container = containers.get(req.get_id()).ok_or_else(|| {
             TtrpcError::Other(format!("can not find container by id {}", req.get_id()))
         })?;
-        // TODO(Cong): implement stats
-        let stats = Metrics::default();
+        let stats = container
+            .stats()
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
         // marshal to ttrpc Any
         let mut any = Any::new();
         let mut data = Vec::new();

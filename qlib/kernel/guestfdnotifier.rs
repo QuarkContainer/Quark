@@ -16,7 +16,7 @@ use crate::qlib::common::*;
 use crate::qlib::fileinfo::*;
 use crate::qlib::kernel::kernel::waiter::Queue;
 use crate::qlib::kernel::GlobalIOMgr;
-use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::hostspace::HostSpace;
 use crate::qlib::linux_def::*;
 
 pub fn SetWaitInfo(fd: i32, queue: Queue) {

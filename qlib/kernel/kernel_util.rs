@@ -15,7 +15,7 @@
 use alloc::boxed::Box;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use super::super::common::*;
-use super::Kernel::*;
+use super::hostspace::*;
 
 pub const GRND_NONBLOCK: u32 = 0x01;
 pub const GRND_RANDOM: u32 = 0x02;

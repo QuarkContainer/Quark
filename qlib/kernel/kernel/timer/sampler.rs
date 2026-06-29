@@ -15,7 +15,7 @@
 use alloc::collections::vec_deque::VecDeque;
 
 use super::super::super::super::common::*;
-use super::super::super::Kernel::HostSpace;
+use super::super::super::hostspace::HostSpace;
 use super::super::super::TSC;
 
 use super::*;

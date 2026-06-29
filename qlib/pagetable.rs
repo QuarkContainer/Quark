@@ -122,7 +122,7 @@ cfg_aarch64! {
 use super::addr::*;
 use super::common::{Allocator, Error, Result};
 use super::kernel::asm::*;
-use super::kernel::Kernel::HostSpace;
+use super::kernel::hostspace::HostSpace;
 use super::linux_def::*;
 use super::mutex::*;
 use crate::kernel_def::Invlpg;
@@ -158,7 +158,7 @@ impl PageTables {
     /// If we go for not IDENTICAL_MAPPING btw Host<->Guest, addresses of allocated
     /// tables while on host should be adjusted.
     fn adjust_address(address: u64, to_guest: bool) -> u64 {
-        use crate::qlib::kernel::Kernel::IDENTICAL_MAPPING;
+        use crate::qlib::kernel::hostspace::IDENTICAL_MAPPING;
         let mut mapping_offset = 0;
         if crate::IS_GUEST == false
             && crate::qlib::kernel::arch::tee::is_cc_active()

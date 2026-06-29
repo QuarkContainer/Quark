@@ -29,7 +29,7 @@ use crate::qlib::common::*;
 use crate::qlib::kernel::kernel::waiter::{Queue, WaitEntry, Waitable};
 use crate::qlib::kernel::task::Task;
 use crate::qlib::kernel::tcpip::tcpip::{SockAddr, SockAddrInet};
-use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::hostspace::HostSpace;
 use crate::qlib::kernel::SHARESPACE;
 use crate::qlib::linux_def::*;
 use crate::qlib::qmsg::HostInputMsg;

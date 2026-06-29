@@ -418,8 +418,8 @@ unsafe impl GlobalAlloc for StackHeap {
                     .map_or(0 as *mut u8, |allocation| allocation.as_ptr()) as u64;
 
                 if ret == 0 {
-                    super::super::Kernel::HostSpace::KernelMsg(ret, 0, 0);
-                    super::super::Kernel::HostSpace::KernelOOM(size as u64, layout.align() as u64);
+                    super::super::hostspace::HostSpace::KernelMsg(ret, 0, 0);
+                    super::super::hostspace::HostSpace::KernelOOM(size as u64, layout.align() as u64);
                     loop {}
                 }
                 ret

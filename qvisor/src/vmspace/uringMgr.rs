@@ -12,13 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
-use super::super::print::*;
+use super::super::qlib::common::*;
 use super::super::*;
 
-//#[derive(Debug)]
 pub struct UringMgr {
-    pub fds: Vec<i32>,
     pub uringSize: usize,
 }
 
@@ -28,37 +25,15 @@ impl Drop for UringMgr {
     }
 }
 
-pub const FDS_SIZE: usize = 1024 * 16;
-
 impl UringMgr {
     pub fn New(size: usize) -> Self {
-        let fdsSize = if QUARK_CONFIG.lock().UringFixedFile {
-            FDS_SIZE
-        } else {
-            0
-        };
-
-        let mut fds = Vec::with_capacity(fdsSize);
-        for _i in 0..fdsSize {
-            fds.push(-1);
-        }
-
-        let ret = Self {
-            fds: fds,
-            uringSize: size,
-        };
-
-        return ret;
+        Self { uringSize: size }
     }
 
-    pub fn Close(&mut self) {
-        let logfd = LOG.Logfd();
-        for fd in &self.fds {
-            if *fd >= 0 && *fd != logfd {
-                unsafe {
-                    libc::close(*fd);
-                }
-            }
-        }
+    /// No-op hook retained for RDMA socket setup (`rdma_socket.rs`).
+    pub fn Addfd(&mut self, _host_fd: i32) -> Result<()> {
+        Ok(())
     }
+
+    pub fn Close(&mut self) {}
 }

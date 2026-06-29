@@ -31,6 +31,8 @@ class LabConfig:
     kata_hypervisor: str = "firecracker"
     enable_tsot: bool = False
     image_registry: str = "europe-north1-docker.pkg.dev/keska-devops/base-images"
+    cargo_features: str = ""
+    skip_registry_auth: bool = False
 
     @property
     def quark_bin_dir(self) -> str:
@@ -90,6 +92,9 @@ class LabConfig:
                 "KESKA_LAB_IMAGE_REGISTRY",
                 "europe-north1-docker.pkg.dev/keska-devops/base-images",
             ),
+            cargo_features=os.environ.get("KESKA_LAB_CARGO_FEATURES", ""),
+            skip_registry_auth=os.environ.get("KESKA_LAB_SKIP_REGISTRY_AUTH", "").lower()
+            in ("1", "true", "yes"),
         )
 
     @property

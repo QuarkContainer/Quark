@@ -281,11 +281,11 @@ impl Container {
             // Check if the sandbox process is still running.
             if !c.isSandboxRunning() {
                 info!("sandbox is not running, marking container as stopped...");
-                c.changeStatus(Status::Stopped);
+                c.changeStatus(Status::Stopped).ok();
             } else if c.Status == Status::Running {
                 match c.SignalContainer(0, false) {
                     Err(_e) => {
-                        c.changeStatus(Status::Stopped);
+                        c.changeStatus(Status::Stopped).ok();
                     }
                     Ok(_) => (),
                 }
@@ -365,33 +365,45 @@ impl Container {
             .SignalProcess(&self.ID, pid, sig, false);
     }
 
-    fn changeStatus(&mut self, s: Status) {
+    fn changeStatus(&mut self, s: Status) -> Result<()> {
         match s {
             Status::Creating => {
-                panic!("invalid state transition: {:?} => {:?}", self.Status, s)
+                return Err(Error::Common(format!(
+                    "invalid state transition: {:?} => {:?}",
+                    self.Status, s
+                )));
             }
             Status::Created => {
                 if self.Status != Status::Creating {
-                    panic!("invalid state transition: {:?} => {:?}", self.Status, s)
+                    return Err(Error::Common(format!(
+                        "invalid state transition: {:?} => {:?}",
+                        self.Status, s
+                    )));
                 }
                 if self.Sandbox.is_none() {
-                    panic!("sandbox cannot be nil")
+                    return Err(Error::Common("sandbox cannot be nil".to_string()));
                 }
             }
             Status::Paused => {
                 if self.Status != Status::Running {
-                    panic!("invalid state transition: {:?} => {:?}", self.Status, s)
+                    return Err(Error::Common(format!(
+                        "invalid state transition: {:?} => {:?}",
+                        self.Status, s
+                    )));
                 }
                 if self.Sandbox.is_none() {
-                    panic!("sandbox cannot be nil")
+                    return Err(Error::Common("sandbox cannot be nil".to_string()));
                 }
             }
             Status::Running => {
                 if self.Status != Status::Created && self.Status != Status::Paused {
-                    panic!("invalid state transition: {:?} => {:?}", self.Status, s)
+                    return Err(Error::Common(format!(
+                        "invalid state transition: {:?} => {:?}",
+                        self.Status, s
+                    )));
                 }
                 if self.Sandbox.is_none() {
-                    panic!("sandbox cannot be nil")
+                    return Err(Error::Common("sandbox cannot be nil".to_string()));
                 }
             }
             Status::Stopped => {
@@ -400,12 +412,16 @@ impl Container {
                     && self.Status != Status::Running
                     && self.Status != Status::Stopped
                 {
-                    panic!("invalid state transition: {:?} => {:?}", self.Status, s)
+                    return Err(Error::Common(format!(
+                        "invalid state transition: {:?} => {:?}",
+                        self.Status, s
+                    )));
                 }
             }
         }
 
         self.Status = s;
+        Ok(())
     }
 
     fn isSandboxRunning(&self) -> bool {
@@ -618,7 +634,7 @@ impl Container {
                 */
             }
 
-            c.changeStatus(Status::Created);
+            c.changeStatus(Status::Created)?;
 
             // Save the metadata file.
             let ret = c.Save();
@@ -811,7 +827,7 @@ impl Container {
                 }
             }
 
-            c.changeStatus(Status::Created);
+            c.changeStatus(Status::Created)?;
 
             // Save the metadata file.
             let ret = c.Save();
@@ -855,7 +871,7 @@ impl Container {
             detach,
             pivot,
         )?;
-        c.changeStatus(Status::Running);
+        c.changeStatus(Status::Running)?;
 
         return c.Wait();
     }
@@ -902,7 +918,7 @@ impl Container {
         self.RequireStatus("Pause", &[Status::Running])?;
 
         self.Sandbox.as_ref().unwrap().Pause(&self.ID)?;
-        self.changeStatus(Status::Paused);
+        self.changeStatus(Status::Paused)?;
         return self.Save();
     }
 
@@ -914,7 +930,7 @@ impl Container {
         self.RequireStatus("Resume", &[Status::Paused])?;
 
         self.Sandbox.as_ref().unwrap().Unpause(&self.ID)?;
-        self.changeStatus(Status::Running);
+        self.changeStatus(Status::Running)?;
         return self.Save();
     }
 
@@ -963,7 +979,7 @@ impl Container {
             executeHooksBestEffort(&self.Spec.hooks.as_ref().unwrap().poststart, &self.State());
         }
 
-        self.changeStatus(Status::Running);
+        self.changeStatus(Status::Running)?;
         return self.Save();
     }
 
@@ -1040,7 +1056,7 @@ impl Container {
             );
         }
 
-        self.changeStatus(Status::Stopped);
+        self.changeStatus(Status::Stopped)?;
         if self.Spec.hooks.is_some() {
             executeHooksBestEffort(&self.Spec.hooks.as_ref().unwrap().poststop, &self.State());
         }

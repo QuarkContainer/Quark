@@ -3040,15 +3040,12 @@ impl MemoryDef {
     pub const FILE_MAP_OFFSET: u64 = Self::RDMA_GLOBAL_SHARE_OFFSET + Self::RDMA_GLOBAL_SHARE_SIZE;
     pub const FILE_MAP_SIZE: u64 = Self::HEAP_OFFSET - Self::FILE_MAP_OFFSET;
 
-    // heap
+    // heap (IO heap removed — was 1 GB reserved for FileBuf fastpath)
     pub const HEAP_OFFSET: u64 = MemoryDef::PHY_LOWER_ADDR
         + Self::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB
-        - Self::HEAP_SIZE
-        - Self::IO_HEAP_SIZE;
+        - Self::HEAP_SIZE;
     pub const HEAP_SIZE: u64 = 10 * Self::ONE_GB;
     pub const HEAP_END: u64 = Self::HEAP_OFFSET + Self::HEAP_SIZE;
-    pub const IO_HEAP_SIZE: u64 = 1 * Self::ONE_GB;
-    pub const IO_HEAP_END: u64 = Self::HEAP_END + Self::IO_HEAP_SIZE;
 
     // Create 24GB Init memory region for KVM VM
     pub const KERNEL_MEM_INIT_REGION_SIZE: u64 = 24; // 24 GB
@@ -3078,7 +3075,7 @@ impl MemoryDef {
 impl MemoryDef {
     pub const HYPERCALL_PARA_PAGE_OFFSET: u64 =
         MemoryDef::GUEST_HOST_SHARED_HEAP_OFFSET + MemoryDef::PAGE_SIZE * 3;
-    pub const HOST_INIT_HEAP_OFFSET: u64 = Self::IO_HEAP_END;
+    pub const HOST_INIT_HEAP_OFFSET: u64 = Self::HEAP_END;
     pub const HOST_INIT_HEAP_SIZE: u64 = 1 * Self::ONE_GB;
     pub const HOST_INIT_HEAP_END: u64 = Self::HOST_INIT_HEAP_OFFSET + Self::HOST_INIT_HEAP_SIZE;
     pub const GUEST_PRIVATE_HEAP_OFFSET: u64 = Self::HEAP_OFFSET;

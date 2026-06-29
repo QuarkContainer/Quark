@@ -7,10 +7,10 @@ from keska_lab.remote import RemoteHost
 CLEANUP_SCRIPT = """
 set -euo pipefail
 sudo -n killall -9 firecracker 2>/dev/null || true
-pkill -9 -f '[q]uark exec' 2>/dev/null || true
-pkill -9 -f '[q]uark_d exec' 2>/dev/null || true
-pkill -9 -f '[q]uark boot' 2>/dev/null || true
-pkill -9 qemu 2>/dev/null || true
+sudo -n pkill -9 -f '[q]uark exec' 2>/dev/null || true
+sudo -n pkill -9 -f '[q]uark_d exec' 2>/dev/null || true
+sudo -n pkill -9 -f '[q]uark boot' 2>/dev/null || true
+sudo -n pkill -9 qemu 2>/dev/null || true
 for ns in default k8s.io; do
   ids=$(sudo -n ctr --namespace "$ns" containers ls -q 2>/dev/null | grep -E '^keska-' || true)
   for id in $ids; do

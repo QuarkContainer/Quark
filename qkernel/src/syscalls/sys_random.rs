@@ -16,7 +16,7 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::Task;
-use super::super::Kernel::HostSpace;
+use crate::qlib::kernel::hostspace::HostSpace;
 
 pub fn SysGetRandom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0;

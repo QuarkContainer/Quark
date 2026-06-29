@@ -34,7 +34,7 @@ use super::super::super::socket::unix::transport::unix::*;
 use super::super::super::socket::unix::unix::*;
 use super::super::super::task::*;
 use super::super::super::util::cstring::*;
-use super::super::super::Kernel::HostSpace;
+use super::super::super::hostspace::HostSpace;
 use super::super::super::SHARESPACE;
 use super::super::attr::*;
 use super::super::dentry::*;

@@ -26,7 +26,7 @@ use spin::Mutex;
 use std::os::unix::io::AsRawFd;
 use std::sync::atomic::{fence, Ordering};
 use std::sync::mpsc::Sender;
-use crate::qlib::kernel::Kernel::IDENTICAL_MAPPING;
+use crate::qlib::kernel::hostspace::IDENTICAL_MAPPING;
 
 pub struct HostPageAllocator {
     pub allocator: AlignedAllocator,

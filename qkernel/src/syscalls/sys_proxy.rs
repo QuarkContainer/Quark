@@ -20,7 +20,7 @@ use alloc::vec::Vec;
 use spin::Mutex;
 
 use crate::qlib::common::*;
-use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::hostspace::HostSpace;
 use crate::qlib::kernel::TSC;
 use crate::qlib::linux_def::{SysErr, PATH_MAX};
 use crate::qlib::proxy::*;

@@ -21,7 +21,7 @@ dev = ["pytest>=7.0"]
 keska-lab = "keska_lab.shell:main"
 keska-lab-provision = "keska_lab.provision:main"
 keska-lab-bootstrap-host = "keska_lab.sudo:main"
-keska-lab-registry-check = "keska_lab.registry_check:main"
+keska-lab-group5 = "keska_lab.group5:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -16,7 +16,7 @@ use core::mem;
 
 use super::super::super::common::*;
 use super::super::asm::*;
-use super::super::Kernel::HostSpace;
+use super::super::hostspace::HostSpace;
 use super::super::TSC;
 use super::timer::*;
 

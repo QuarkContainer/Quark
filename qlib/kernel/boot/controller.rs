@@ -21,7 +21,7 @@ use core::sync::atomic;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use crate::qlib::kernel::kernel::kernel::GetKernel;
 use crate::qlib::kernel::arch::tee::is_cc_active;
-use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::hostspace::HostSpace;
 //use crate::qlib::mem::list_allocator::*;
 use super::super::super::super::kernel_def::{
     StartExecProcess, StartRootContainer, StartSubContainerProcess,
@@ -31,7 +31,6 @@ use super::super::super::control_msg::*;
 use super::super::super::vcpu_mgr::*;
 use super::super::task::*;
 use super::super::taskMgr;
-use super::super::Kernel;
 use super::super::SetWaitContainerfd;
 use super::super::WaitContainerfd;
 use super::super::IOURING;
@@ -166,7 +165,7 @@ pub fn ControlMsgHandler(fd: *const u8) {
     let fd = fd as i32;
     let task = Task::Current();
     let mut msg = Box::new_in(ControlMsg::default(), GUEST_HOST_SHARED_ALLOCATOR);
-    Kernel::HostSpace::ReadControlMsg(fd, &mut *msg as *mut _ as u64);
+    HostSpace::ReadControlMsg(fd, &mut *msg as *mut _ as u64);
 
     info!("ControlMsgHandler payload: {:?}", &msg.payload);
     defer!(error!("ControlMsgHandler payload handling ends"));
@@ -269,5 +268,5 @@ pub fn WriteControlMsgResp(fd: i32, msg: &UCallResp, close: bool) {
     let addr = &shared_data[0] as *const _ as u64;
     let len = shared_data.len();
 
-    Kernel::HostSpace::WriteControlMsgResp(fd, addr, len, close);
+    HostSpace::WriteControlMsgResp(fd, addr, len, close);
 }

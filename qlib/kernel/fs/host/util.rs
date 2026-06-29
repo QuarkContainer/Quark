@@ -31,7 +31,7 @@ use crate::GUEST_HOST_SHARED_ALLOCATOR;
 use Box;
 
 use super::super::super::super::path;
-use super::super::super::Kernel::HostSpace;
+use super::super::super::hostspace::HostSpace;
 use super::super::super::IOURING;
 use super::super::super::SHARESPACE;
 use super::super::attr::*;
@@ -555,10 +555,7 @@ pub fn UnstableAttr(
     task: &Task,
     mo: &Arc<QMutex<MountSourceOperations>>,
 ) -> Result<UnstableAttr> {
-    let uringStatx = SHARESPACE.config.read().UringStatx;
-
-    // the statx uring call sometime become very slow. todo: root cause this.
-    if !uringStatx {
+    if !SHARESPACE.config.read().effective_uring_statx() {
         let mut s = Box::new_in(LibcStat::default(), GUEST_HOST_SHARED_ALLOCATOR);
         let ret = Fstat(hostfd, &mut *s) as i32;
         if ret < 0 {

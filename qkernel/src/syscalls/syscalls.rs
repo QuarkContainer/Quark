@@ -415,7 +415,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysSplice,              // 275 sys_splice,
     SysTee,                 // 276 sys_tee,
     SysSyncFileRange,       // 277 sys_sync_file_range,
-    NotImplementSyscall,    // 278 sys_vmsplice,
+    SysNoSys,               // 278 sys_vmsplice,
     SysCapErr,              // 279 sys_move_pages,          CAP_SYS_NICE
     SysUtimensat,           // 280 sys_utimensat,
     SysPwait,               // 281 sys_epoll_pwait,
@@ -567,20 +567,20 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     //don't use numbers 334 through 423
 
     // Linux skips ahead to syscall 424 to sync numbers between arches.
-    NotImplementSyscall, //	424 sys_pidfd_send_signal
+    SysNoSys,            //	424 sys_pidfd_send_signal
     SysNoSys,            //	425 sys_io_uring_setup
     SysNoSys,            //	426 sys_io_uring_enter
     SysNoSys,            //	427 sys_io_uring_register
-    NotImplementSyscall, //	428 sys_open_tree
-    NotImplementSyscall, //	429 sys_move_mount
+    SysNoSys,            //	428 sys_open_tree
+    SysNoSys,            //	429 sys_move_mount
     NotImplementSyscall, //	430 sys_fsopen
     NotImplementSyscall, //	431 sys_fsconfig
     NotImplementSyscall, //	432 sys_fsmount
     NotImplementSyscall, //	433 sys_fspick
-    NotImplementSyscall, //	434 sys_pidfd_open
+    SysNoSys,            //	434 sys_pidfd_open
     SysNoSys,            //	435 sys_clone3
     SysCloseRange,       //	436 sys_close_range
-    NotImplementSyscall, //	437 sys_openat2
+    SysNoSys,            //	437 sys_openat2
     NotImplementSyscall, //	438 sys_pidfd_getfd
     SysNoSys,            //	439 sys_faccessat2
     NotImplementSyscall, //	440 sys_process_madvise
@@ -674,7 +674,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysPSelect,            // 72  sys_pselect6,
     SysPpoll,              // 73  sys_ppoll,
     SysSignalfd4,          // 74  sys_signalfd4,
-    NotImplementSyscall,   // 75  sys_vmsplice,
+    SysNoSys,   // 75  sys_vmsplice,
     SysSplice,             // 76  sys_splice,
     SysTee,                // 77  sys_tee,
     SysReadLinkAt,         // 78  sys_readlinkat,
@@ -1025,20 +1025,20 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall,  //	423
 
     // Linux skips ahead to syscall 424 to sync numbers between arches.
-    NotImplementSyscall, //	424 sys_pidfd_send_signal
+    SysNoSys,            //	424 sys_pidfd_send_signal
     SysNoSys,            //	425 sys_io_uring_setup
     SysNoSys,            //	426 sys_io_uring_enter
     SysNoSys,            //	427 sys_io_uring_register
-    NotImplementSyscall, //	428 sys_open_tree
-    NotImplementSyscall, //	429 sys_move_mount
+    SysNoSys,            //	428 sys_open_tree
+    SysNoSys,            //	429 sys_move_mount
     NotImplementSyscall, //	430 sys_fsopen
     NotImplementSyscall, //	431 sys_fsconfig
     NotImplementSyscall, //	432 sys_fsmount
     NotImplementSyscall, //	433 sys_fspick
-    NotImplementSyscall, //	434 sys_pidfd_open
+    SysNoSys,            //	434 sys_pidfd_open
     SysNoSys,            //	435 sys_clone3
     SysCloseRange,       //	436 sys_close_range
-    NotImplementSyscall, //	437 sys_openat2
+    SysNoSys,            //	437 sys_openat2
     NotImplementSyscall, //	438 sys_pidfd_getfd
     SysNoSys,            //	439 sys_faccessat2
     NotImplementSyscall, //	440 sys_process_madvise

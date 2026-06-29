@@ -30,7 +30,7 @@ use super::super::super::kernel::waiter::*;
 use super::super::super::socket::unix::transport::unix::*;
 use super::super::super::task::*;
 use super::super::super::uid::*;
-use super::super::super::Kernel;
+use super::super::super::hostspace::HostSpace;
 use super::super::host::hostinodeop::*;
 
 use super::super::attr::*;
@@ -409,7 +409,7 @@ pub struct RandomReader {}
 
 impl IOReader for RandomReader {
     fn Read(&mut self, buf: &mut [u8]) -> Result<i64> {
-        let res = Kernel::HostSpace::GetRandom(&buf[0] as *const _ as u64, buf.len() as u64, 0);
+        let res = HostSpace::GetRandom(&buf[0] as *const _ as u64, buf.len() as u64, 0);
         if res < 0 {
             return Err(Error::SysError(-res as i32));
         }

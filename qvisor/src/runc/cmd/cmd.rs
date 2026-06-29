@@ -88,7 +88,13 @@ impl Config {
             _ => return false,
         };
 
-        let mut config: Config = serde_json::from_str(&contents).expect("configuration wrong format");
+        let mut config: Config = match serde_json::from_str(&contents) {
+            Ok(c) => c,
+            Err(e) => {
+                error!("invalid {}: {}", Self::CONFIG_FILE, e);
+                std::process::exit(1);
+            }
+        };
 
         if config.CCMode > CCMode::None {
             config.EnableRDMA = false;

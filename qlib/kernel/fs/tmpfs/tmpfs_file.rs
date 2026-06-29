@@ -28,7 +28,7 @@ use super::super::super::super::qmsg::*;
 use super::super::super::kernel::time::*;
 use super::super::super::socket::unix::transport::unix::*;
 use super::super::super::task::*;
-use super::super::super::Kernel::*;
+use super::super::super::hostspace::*;
 use super::super::attr::*;
 use super::super::dirent::*;
 use super::super::file::*;

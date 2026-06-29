@@ -22,7 +22,7 @@ ARCH := ${shell uname -m}
 RUST_TOOLCHAIN  = nightly-2024-07-01-$(ARCH)-unknown-linux-gnu
 
 
-.PHONY: all release debug clean install qvisor_release qvisor_debug cuda_make cuda_all cleanall
+.PHONY: all release debug clean install install-debug qvisor_release qvisor_debug cuda_make cuda_all cleanall
 
 all:: release debug
 
@@ -35,16 +35,16 @@ release:: qvisor_release qkernel_release $(VDSO)
 debug:: qvisor_debug qkernel_debug $(VDSO)
 
 qvisor_release:
-	make -C ./qvisor TOOLCHAIN=$(RUST_TOOLCHAIN) release
+	$(MAKE) -C ./qvisor TOOLCHAIN=$(RUST_TOOLCHAIN) release $(if $(CARGO_FEATURES),CARGO_FEATURES=$(CARGO_FEATURES))
 
 qkernel_release:
-	make -C ./qkernel TOOLCHAIN=$(RUST_TOOLCHAIN) release
+	$(MAKE) -C ./qkernel TOOLCHAIN=$(RUST_TOOLCHAIN) release $(if $(CARGO_FEATURES),CARGO_FEATURES=$(CARGO_FEATURES))
 
 qvisor_debug:
-	make -C ./qvisor TOOLCHAIN=$(RUST_TOOLCHAIN) debug
+	$(MAKE) -C ./qvisor TOOLCHAIN=$(RUST_TOOLCHAIN) debug $(if $(CARGO_FEATURES),CARGO_FEATURES=$(CARGO_FEATURES))
 
 qkernel_debug:
-	make -C ./qkernel TOOLCHAIN=$(RUST_TOOLCHAIN) debug
+	$(MAKE) -C ./qkernel TOOLCHAIN=$(RUST_TOOLCHAIN) debug $(if $(CARGO_FEATURES),CARGO_FEATURES=$(CARGO_FEATURES))
 
 $(VDSO):
 	make -C ./vdso
@@ -92,6 +92,11 @@ install:
 	-sudo cp -f $(QKERNEL_RELEASE) $(QBIN_DIR)/
 	-sudo cp -f $(QUARK_RELEASE) $(QBIN_DIR)/quark
 	-sudo cp -f $(QUARK_RELEASE) $(QBIN_DIR)/containerd-shim-quark-v1
+	sudo cp -f $(VDSO) $(QBIN_DIR)/vdso.so
+	sudo mkdir -p $(QCONFIG_DIR)
+	sudo cp -f config.json $(QCONFIG_DIR)
+
+install-debug:
 	-sudo cp -f $(QKERNEL_DEBUG) $(QBIN_DIR)/
 	-sudo cp -f $(QUARK_DEBUG) $(QBIN_DIR)/quark_d
 	-sudo cp -f $(QUARK_DEBUG) $(QBIN_DIR)/containerd-shim-quarkd-v1

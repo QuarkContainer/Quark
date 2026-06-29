@@ -17,7 +17,7 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
-use super::super::Kernel::HostSpace;
+use crate::qlib::kernel::hostspace::HostSpace;
 
 // Sync implements linux system call sync(2).
 pub fn SysSync(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {

@@ -28,7 +28,7 @@ use super::linux_def::*;
 use super::mutex::*;
 use crate::qlib::kernel::kernel::waiter::Queue;
 use crate::qlib::kernel::socket::hostinet::loopbacksocket::LoopbackSocket;
-use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::hostspace::HostSpace;
 use crate::GuestHostSharedAllocator;
 use crate::GUEST_HOST_SHARED_ALLOCATOR;
 

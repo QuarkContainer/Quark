@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::qlib::kernel::util::sharedcstring::SharedCString;
-use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::hostspace::HostSpace;
 use crate::qlib::mutex::*;
 use alloc::boxed::Box;
 use alloc::string::String;

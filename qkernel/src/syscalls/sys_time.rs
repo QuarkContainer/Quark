@@ -25,7 +25,7 @@ use super::super::task::*;
 use super::super::taskMgr::*;
 use super::super::threadmgr::task_syscall::*;
 use super::super::threadmgr::thread::*;
-use super::super::Kernel::HostSpace;
+use crate::qlib::kernel::hostspace::HostSpace;
 use super::sys_poll::TIMEOUT_PROCESS_TIME;
 
 // The most significant 29 bits hold either a pid or a file descriptor.

@@ -340,7 +340,6 @@ impl VcpuSharedAllocator {
 
 #[derive(Debug, Default)]
 pub struct HostAllocator {
-    pub ioHeapAddr: AtomicU64,
     pub hostInitHeapAddr: AtomicU64,
     pub guestPrivHeapAddr: AtomicU64,
     pub sharedHeapAddr: AtomicU64,
@@ -349,26 +348,8 @@ pub struct HostAllocator {
 }
 
 impl HostAllocator {
-    pub fn IOAllocator(&self) -> &mut ListAllocator {
-        return unsafe { &mut *(self.ioHeapAddr.load(Ordering::SeqCst) as *mut ListAllocator) };
-    }
-
     pub fn IsHeapAddr(addr: u64) -> bool {
         return addr < MemoryDef::HEAP_END;
-    }
-
-    pub fn IsIOBuf(addr: u64) -> bool {
-        return MemoryDef::HEAP_END <= addr && addr < MemoryDef::HEAP_END + MemoryDef::IO_HEAP_SIZE;
-    }
-
-    pub unsafe fn AllocIOBuf(&self, size: usize) -> *mut u8 {
-        let layout = Layout::from_size_align(size, size)
-            .expect("RingeBufAllocator::AllocHeadTail can't allocate memory");
-        return self.IOAllocator().alloc(layout);
-    }
-
-    unsafe fn DeallocIOBuf(&self, ptr: *mut u8, layout: Layout) {
-        self.IOAllocator().dealloc(ptr, layout);
     }
 
     // should be called by host

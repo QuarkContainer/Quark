@@ -24,7 +24,6 @@ pub struct Config {
     pub LogLevel: LogLevel,
     pub CudaMemType: CudaMemType,
     pub UringIO: bool,
-    pub UringFixedFile: bool,
     pub EnableAIO: bool,
     pub PrintException: bool,
     pub KernelPagetable: bool,
@@ -58,6 +57,30 @@ impl Config {
     pub fn Async(&self) -> bool {
         return self.LogType == LogType::Async;
     }
+
+    /// Requires `experimental-mmap-read` Cargo feature on qkernel.
+    pub fn effective_mmap_read(&self) -> bool {
+        #[cfg(feature = "experimental-mmap-read")]
+        {
+            return self.MmapRead;
+        }
+        #[cfg(not(feature = "experimental-mmap-read"))]
+        {
+            return false;
+        }
+    }
+
+    /// Requires `experimental-uring-statx` Cargo feature on qkernel.
+    pub fn effective_uring_statx(&self) -> bool {
+        #[cfg(feature = "experimental-uring-statx")]
+        {
+            return self.UringStatx;
+        }
+        #[cfg(not(feature = "experimental-uring-statx"))]
+        {
+            return false;
+        }
+    }
 }
 
 impl Config {}
@@ -71,25 +94,24 @@ impl Default for Config {
             LogLevel: LogLevel::Simple,
             CudaMemType: CudaMemType::Default,
             UringIO: true,
-            UringFixedFile: false,
             EnableAIO: false,
             PrintException: false,
             KernelPagetable: false,
-            PerfDebug: true,
+            PerfDebug: false,
             UringStatx: false,
-            MmapRead: true,
+            MmapRead: false,
             AsyncAccept: true,
             EnableRDMA: false,
             RDMAPort: 1,
             PerSandboxLog: false,
             ReserveCpuCount: 2,
             ShimMode: false,
-            EnableInotify: false,
+            EnableInotify: true,
             ReaddirCache: true,
             HiberODirect: true,
-            DisableCgroup: true,
-            CopyDataWithPf: false,
-            TlbShootdownWait: false,
+            DisableCgroup: false,
+            CopyDataWithPf: true,
+            TlbShootdownWait: true,
             Sandboxed: false,
             Realtime: false,
             EnableTsot: false,
@@ -113,8 +135,6 @@ impl Default for DebugLevel {
         return Self::Off;
     }
 }
-
-pub const ENABLE_BUFF_IO: bool = false;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum LogLevel {

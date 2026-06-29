@@ -64,7 +64,7 @@ impl VmType for VmNormal {
             MemArea{
                 base_host: MemoryDef::HEAP_OFFSET,
                 base_guest: MemoryDef::HEAP_OFFSET,
-                size: MemoryDef::HEAP_SIZE + MemoryDef::IO_HEAP_SIZE,
+                size: MemoryDef::HEAP_SIZE,
                 guest_private: false,
                 host_backedup: true });
         _hshared_map.insert(

@@ -26,7 +26,7 @@ use super::arch::tee::is_cc_active;
 use super::kernel::kernel::GetKernel;
 use super::quring::uring_mgr::*;
 use super::task::*;
-use super::Kernel::HostSpace;
+use super::hostspace::HostSpace;
 use super::Shutdown;
 use super::ASYNC_PROCESS;
 use super::KERNEL_STACK_ALLOCATOR;
@@ -157,7 +157,7 @@ pub fn WaitFn() -> ! {
 
                 if Shutdown() {
                     //error!("shutdown: {}", super::AllocatorPrint(10));
-                    super::Kernel::HostSpace::ExitVM(super::EXIT_CODE.load(QOrdering::SEQ_CST));
+                    super::hostspace::HostSpace::ExitVM(super::EXIT_CODE.load(QOrdering::SEQ_CST));
                 }
 
                 // todo: free heap cache

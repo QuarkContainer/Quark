@@ -27,14 +27,14 @@ pub fn SysInfo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
     let mut info = Box::new_in(LibcSysinfo::default(), GUEST_HOST_SHARED_ALLOCATOR);
 
-    /*let ret = Kernel::HostSpace::Sysinfo(&mut *info as * mut _ as u64);
+    /*let ret = HostSpace::Sysinfo(&mut *info as * mut _ as u64);
     if ret < 0 {
         return Err(Error::SysError(-ret as i32))
     }*/
 
     let statm = Box::new_in(StatmInfo::default(), GUEST_HOST_SHARED_ALLOCATOR);
     // TODO(Cong): bypassing this issue for now, fix this...
-    //Kernel::HostSpace::Statm(&mut *statm);
+    //HostSpace::Statm(&mut *statm);
     info!("pass to here, rss, {}", statm.rss);
 
     let totalUsage = statm.rss;
