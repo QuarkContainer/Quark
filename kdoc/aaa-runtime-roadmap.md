@@ -12,6 +12,7 @@ See also: [production-cleanup-suggestions.md](production-cleanup-suggestions.md)
 |-------|----------|
 | `MmapRead`, `UringStatx` | Keep behind Cargo features; resolve in Group 5 via full lab benchmarking → implement properly or delete |
 | `UringFixedFile` (E1) | **Deleted** (2026-06-29) — no measurable gain at n=30; see [group5/e1-uring-fixed-file-decision-packet.md](group5/e1-uring-fixed-file-decision-packet.md) |
+| `MmapRead` (E2) | **Recommend delete** — −70% io_read, coherency C7 RSS fail; see [group5/e2-mmap-read-decision-packet.md](group5/e2-mmap-read-decision-packet.md) |
 | `qserverless/` | **Out of scope** for this roadmap — handled separately by product owner |
 | `rdma_cli` / `rdma_srv`, TSOT | Keep — strategic performance differentiators |
 
@@ -94,6 +95,7 @@ Lab harness in [lab/src/keska_lab/setup/quark_config.py](../lab/src/keska_lab/se
 ```bash
 keska-lab-group5 MmapRead
 keska-lab-group5 UringStatx
+keska-lab-coherency              # C1–C5,C7 (default); add --include-c6 for 30 min soak
 ```
 
 ```python

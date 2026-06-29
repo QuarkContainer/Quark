@@ -22,6 +22,7 @@ keska-lab = "keska_lab.shell:main"
 keska-lab-provision = "keska_lab.provision:main"
 keska-lab-bootstrap-host = "keska_lab.sudo:main"
 keska-lab-group5 = "keska_lab.group5:main"
+keska-lab-coherency = "keska_lab.coherency.mmap_read:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
