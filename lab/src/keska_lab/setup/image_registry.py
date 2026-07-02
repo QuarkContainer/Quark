@@ -133,7 +133,7 @@ def ctr_mirror_pull_auth_shell(registry: str | None) -> str:
           if [[ "$ref" == *{host_q}* ]]; then
             {lab_path_setup_script()}
             if token=$(gcloud auth print-access-token 2>/dev/null); then
-              auth=(--user oauth2accesstoken --secret "$token")
+              auth=(-u "oauth2accesstoken:$token")
             fi
           fi
           sudo -n ctr images pull "${{auth[@]}}" "$@" "$ref"
@@ -164,7 +164,7 @@ def check_registry_auth_ctr_script(registry: str) -> str:
         probe={shlex.quote(probe)}
         command -v gcloud >/dev/null
         token=$(gcloud auth print-access-token)
-        sudo -n ctr images pull --user oauth2accesstoken --secret "$token" --platform linux/amd64 "$probe"
+        sudo -n ctr images pull -u "oauth2accesstoken:$token" --platform linux/amd64 "$probe"
         sudo -n ctr images rm "$probe" >/dev/null 2>&1 || true
         """
     ).strip()

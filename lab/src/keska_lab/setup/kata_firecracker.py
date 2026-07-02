@@ -215,7 +215,11 @@ def containerd_devmapper_config_script() -> str:
             text += "\\n# " + marker + "\\n" + devmapper_body
             changed = True
 
-        if "snapshotter = 'devmapper'" not in text and 'snapshotter = "devmapper"' not in text:
+        if not re.search(
+            r"\\[\\[plugins\\.'io\\.containerd\\.transfer\\.v1\\.local'\\.unpack_config\\]\\][\\s\\S]*?"
+            r"snapshotter = 'devmapper'",
+            text,
+        ):
             anchor = "[plugins.'io.containerd.transfer.v1.local']"
             idx = text.find(anchor)
             if idx == -1:

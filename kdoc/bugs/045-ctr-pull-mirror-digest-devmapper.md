@@ -10,16 +10,20 @@ ctr: content digest sha256:c6348fa86ba0...: not found
 
 ## Cause
 
-`ctr_pull_with_mirror_script` tried mirror/upstream `ctr pull` without GCP credentials, fell back to `docker pull` + `ctr import`, then re-pulled `docker.io/library/...` for devmapper unpack — wrong registry/digest vs the mirror image.
+1. **containerd 2.x `ctr`** auth is `-u oauth2accesstoken:TOKEN`, not `--user … --secret` (containerd 1.x).
+2. **Devmapper unpack** needs a `transfer.v1.local` `unpack_config` for `devmapper`; kata setup skipped it because `snapshotter = 'devmapper'` already appeared on the kata CRI runtime block.
+3. Without mirror `ctr` auth + devmapper unpack, the script fell back to `docker pull` + re-pull `docker.io/library/...` for devmapper — wrong digest.
 
 ## Fix
 
-- `ctr_pull_ref()` helper: `gcloud auth print-access-token` for Keska mirror refs on all `ctr pull` paths.
-- Devmapper unpack uses the mirror ref that docker pulled (`dm_src`), not canonical docker.io.
+- `ctr_pull_ref()`: `-u "oauth2accesstoken:$token"` for Keska mirror pulls; devmapper unpack uses mirror ref.
+- `containerd_cri.py` / `kata_firecracker.py`: add devmapper `unpack_config` stanza (regex check, not global `snapshotter = 'devmapper'`).
 
 ## Files
 
 - `lab/src/keska_lab/setup/image_registry.py`
+- `lab/src/keska_lab/setup/containerd_cri.py`
+- `lab/src/keska_lab/setup/kata_firecracker.py`
 
 ## Verify
 

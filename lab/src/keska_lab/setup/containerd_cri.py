@@ -89,21 +89,33 @@ base = re.sub(
     base,
 )
 
-# containerd 2.x Transfer API needs explicit unpack platforms for CRI image pull
-if "unpack_config" not in base:
-    unpack = """
+# containerd 2.x Transfer API needs explicit unpack platforms for CRI + ctr devmapper
+anchor = "[plugins.'io.containerd.transfer.v1.local']"
+idx = base.find(anchor)
+if idx == -1:
+    raise SystemExit("containerd default config missing transfer.v1.local block")
+end = base.find("\\n\\n", idx)
+if end == -1:
+    end = len(base)
+transfer_tail = base[idx:end]
+extra_unpack = ""
+if "snapshotter = 'overlayfs'" not in transfer_tail:
+    extra_unpack += """
     [[plugins.'io.containerd.transfer.v1.local'.unpack_config]]
       platform = 'linux/amd64'
       snapshotter = 'overlayfs'
 """
-    anchor = "[plugins.'io.containerd.transfer.v1.local']"
-    idx = base.find(anchor)
-    if idx == -1:
-        raise SystemExit("containerd default config missing transfer.v1.local block")
-    end = base.find("\n\n", idx)
-    if end == -1:
-        end = len(base)
-    base = base[:end] + unpack + base[end:]
+if not re.search(
+    r"\\[\\[plugins\\.'io\\.containerd\\.transfer\\.v1\\.local'\\.unpack_config\\]\\][\\s\\S]*?snapshotter = 'devmapper'",
+    base,
+):
+    extra_unpack += """
+    [[plugins.'io.containerd.transfer.v1.local'.unpack_config]]
+      platform = 'linux/amd64'
+      snapshotter = 'devmapper'
+"""
+if extra_unpack:
+    base = base[:end] + extra_unpack + base[end:]
 
 cfg_path.write_text(base)
 print("wrote containerd config (containerd 2.x cri.v1)")

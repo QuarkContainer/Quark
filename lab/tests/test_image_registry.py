@@ -3,6 +3,7 @@
 from keska_lab.setup.image_registry import (
     DEFAULT_IMAGE_REGISTRY,
     GCLOUD_AUTH_LOGIN_CMD,
+    check_registry_auth_ctr_script,
     check_registry_auth_script,
     ctr_pull_with_mirror_script,
     docker_auth_preamble,
@@ -50,3 +51,12 @@ def test_gcloud_auth_login_uses_no_launch_browser():
     assert lab_path_setup_script() in script
     diag = registry_auth_diagnostic_script(DEFAULT_IMAGE_REGISTRY)
     assert "--no-launch-browser" in diag
+
+
+def test_ctr_auth_uses_user_password_not_secret():
+    script = ctr_pull_with_mirror_script("busybox", DEFAULT_IMAGE_REGISTRY, snapshotter="devmapper")
+    assert 'oauth2accesstoken:$token' in script
+    assert "--secret" not in script
+    ctr_probe = check_registry_auth_ctr_script(DEFAULT_IMAGE_REGISTRY)
+    assert '-u "oauth2accesstoken:$token"' in ctr_probe
+    assert "--secret" not in ctr_probe
