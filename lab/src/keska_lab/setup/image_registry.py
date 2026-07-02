@@ -112,6 +112,36 @@ def docker_auth_preamble(registry: str | None) -> str:
     return "\n".join(parts)
 
 
+def ctr_mirror_pull_auth_shell(registry: str | None) -> str:
+    """Shell helper: gcloud token flags for ctr pull of Keska mirror refs."""
+    if not registry:
+        return textwrap.dedent(
+            """
+            ctr_pull_ref() {
+              sudo -n ctr images pull "$@"
+            }
+            """
+        ).strip()
+    host = registry_host(registry)
+    host_q = shlex.quote(host)
+    return textwrap.dedent(
+        f"""
+        ctr_pull_ref() {{
+          local ref=$1
+          shift
+          local auth=()
+          if [[ "$ref" == *{host_q}* ]]; then
+            {lab_path_setup_script()}
+            if token=$(gcloud auth print-access-token 2>/dev/null); then
+              auth=(--user oauth2accesstoken --secret "$token")
+            fi
+          fi
+          sudo -n ctr images pull "${{auth[@]}}" "$@" "$ref"
+        }}
+        """
+    ).strip()
+
+
 def configure_gcp_docker_script(registry: str) -> str:
     host = registry_host(registry)
     return textwrap.dedent(
@@ -296,15 +326,18 @@ def ctr_pull_with_mirror_script(
     short = image.strip().split("@")[0]
     import_base = shlex.quote(ctr_import_base_name(image))
     snap_name = shlex.quote(snapshotter or "")
+    ctr_auth = ctr_mirror_pull_auth_shell(registry)
     return textwrap.dedent(
         f"""
         set -euo pipefail
+        {ctr_auth}
         canonical={shlex.quote(canonical)}
         refs=({refs_shell})
         short={shlex.quote(short)}
         pulled=0
+        dm_src=""
         for src in "${{refs[@]}}"; do
-          if sudo -n ctr images pull{snap_flag}{local_flag} --platform linux/amd64 "$src" 2>/dev/null; then
+          if ctr_pull_ref "$src"{snap_flag}{local_flag} --platform linux/amd64 2>/dev/null; then
             if [ "$src" != "$canonical" ]; then
               sudo -n ctr images rm "$canonical" >/dev/null 2>&1 || true
               sudo -n ctr images tag "$src" "$canonical" 2>/dev/null || true
@@ -317,6 +350,7 @@ def ctr_pull_with_mirror_script(
           {docker_auth_preamble(registry) if registry else lab_path_setup_script()}
           for src in "${{refs[@]}}"; do
             if sg docker -c "docker pull \\"$src\\""; then
+              dm_src="$src"
               if [ "$src" != "$short" ]; then
                 sg docker -c "docker tag \\"$src\\" \\"$short\\"" >/dev/null 2>&1 || true
               fi
@@ -324,7 +358,11 @@ def ctr_pull_with_mirror_script(
               sudo -n ctr images tag "$short" "$canonical" 2>/dev/null || true
               sudo -n ctr images tag {import_base}:latest "$canonical" 2>/dev/null || true
               if [ -n {snap_name} ]; then
-                sudo -n ctr images pull{snap_flag}{local_flag} --platform linux/amd64 "$canonical"
+                unpack=${{dm_src:-$canonical}}
+                ctr_pull_ref "$unpack"{snap_flag}{local_flag} --platform linux/amd64
+                if [ "$unpack" != "$canonical" ]; then
+                  sudo -n ctr images tag "$unpack" "$canonical" 2>/dev/null || true
+                fi
               fi
               pulled=1
               break

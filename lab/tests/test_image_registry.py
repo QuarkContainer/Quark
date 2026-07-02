@@ -33,6 +33,8 @@ def test_ctr_pull_docker_fallback_includes_auth():
     script = ctr_pull_with_mirror_script("busybox", DEFAULT_IMAGE_REGISTRY, snapshotter="devmapper")
     assert "ctr images import" in script
     assert "oauth2accesstoken" in script
+    assert "ctr_pull_ref" in script
+    assert "unpack=${dm_src:-$canonical}" in script
 
 
 def test_gcloud_login_script_has_host():
