@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import textwrap
 
+from keska_lab.cri.lifecycle import cri_lifecycle_smoke_script
 from keska_lab.harness.network import crictl_config_script
 from keska_lab.remote import RemoteHost
 from keska_lab.setup.base import SetupStep, StepResult
@@ -60,6 +61,7 @@ extra_runtimes = """
       [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.kata]
         runtime_type = 'io.containerd.kata.v2'
         sandboxer = 'podsandbox'
+        snapshotter = 'devmapper'
 """
 if "runtimes.quark" not in base:
     runc_end = base.find("\n\n", base.find("runtimes.runc.options"))
@@ -162,37 +164,9 @@ def cri_smoke_script() -> str:
     ).strip()
 
 
-def cri_run_smoke_script() -> str:
-    """Verify crictl run works (crictl v1.29+ takes pod-config, not pod id)."""
-    return textwrap.dedent(
-        """
-        set -euo pipefail
-        LOG=/tmp/keska-cri-smoke-logs
-        mkdir -p "$LOG"
-        WD=/tmp/keska-cri-smoke-$$
-        mkdir -p "$WD"
-        CID=""
-        POD=""
-        cleanup() {
-          sudo crictl rm -f "$CID" 2>/dev/null || true
-          if [ -n "$POD" ]; then
-            sudo crictl stopp "$POD" 2>/dev/null || true
-            sudo crictl rmp "$POD" 2>/dev/null || true
-          fi
-          rm -rf "$WD"
-        }
-        trap cleanup EXIT INT TERM
-        cat >"$WD/pod.json" <<JSON
-{"metadata":{"name":"keska-cri-smoke","uid":"keska-cri-smoke-uid","namespace":"default"},"log_directory":"$LOG","linux":{}}
-JSON
-        cat >"$WD/container.json" <<'JSON'
-{"metadata":{"name":"keska-cri-smoke-c","namespace":"default"},"image":{"image":"docker.io/library/busybox:latest"},"command":["/bin/sleep","30"],"log_path":"smoke.log"}
-JSON
-        CID=$(sudo crictl run --no-pull "$WD/container.json" "$WD/pod.json")
-        POD=$(sudo crictl pods -q --name keska-cri-smoke | head -1)
-        echo "cri run smoke ok pod=$POD cid=$CID"
-        """
-    ).strip()
+def cri_lifecycle_setup_smoke_script(*, runtime_handler: str = "") -> str:
+    """L2-equivalent smoke for ContainerdCriStep — runp → create → start → exec → teardown."""
+    return cri_lifecycle_smoke_script(runtime_handler=runtime_handler, pod_name="keska-cri-setup")
 
 
 def cri_stats_smoke_script(*, memory_min_bytes: int = 1) -> str:
@@ -207,10 +181,13 @@ def cri_stats_smoke_script(*, memory_min_bytes: int = 1) -> str:
         CID=""
         POD=""
         cleanup() {{
-          sudo crictl rm -f "$CID" 2>/dev/null || true
+          if [ -n "$CID" ]; then
+            sudo crictl stop -t 30 "$CID" 2>/dev/null || true
+            sudo crictl rm "$CID" 2>/dev/null || true
+          fi
           if [ -n "$POD" ]; then
             sudo crictl stopp "$POD" 2>/dev/null || true
-            sudo crictl rmp "$POD" 2>/dev/null || true
+            sudo crictl rmp -f "$POD" 2>/dev/null || true
           fi
           rm -rf "$WD"
         }}
@@ -221,7 +198,9 @@ JSON
         cat >"$WD/container.json" <<'JSON'
 {{"metadata":{{"name":"keska-cri-stats-c","namespace":"default"}},"image":{{"image":"docker.io/library/busybox:latest"}},"command":["/bin/sleep","600"],"log_path":"stats.log","linux":{{"resources":{{"memory_limit_in_bytes":67108864}}}}}}
 JSON
-        CID=$(sudo crictl run --no-pull "$WD/container.json" "$WD/pod.json")
+        POD=$(sudo crictl runp "$WD/pod.json")
+        CID=$(sudo crictl create --no-pull "$POD" "$WD/container.json" "$WD/pod.json")
+        sudo crictl start "$CID"
         POD=$(sudo crictl pods -q --name keska-cri-stats | head -1)
         sleep 4
         sudo crictl stats "$CID" | python3 -c "
@@ -277,7 +256,7 @@ class ContainerdCriStep(SetupStep):
         smoke = remote.sh(cri_smoke_script(), timeout=60, stream=stream)
         if not smoke.ok:
             return StepResult(self.name, False, remote.format_failure(smoke))
-        run_smoke = remote.sh(cri_run_smoke_script(), timeout=180, stream=stream)
+        run_smoke = remote.sh(cri_lifecycle_setup_smoke_script(), timeout=300, stream=stream)
         if not run_smoke.ok:
             return StepResult(self.name, False, remote.format_failure(run_smoke))
         msg = run_smoke.stdout.strip().splitlines()[-1]

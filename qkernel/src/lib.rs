@@ -600,8 +600,20 @@ pub fn InitTsc() {
 
 fn InitLoader() {
     let mut process = Process::default();
-    Kernel::HostSpace::LoadProcessKernel(&mut process as *mut _ as u64) as usize;
+    let mut msg = self::qlib::qmsg::Msg::LoadProcessKernel(
+        self::qlib::qmsg::qcall::LoadProcessKernel {
+            processAddr: &mut process as *mut _ as u64,
+        },
+    );
+    Kernel::HostSpace::HCall(&mut msg, false);
     LOADER.InitKernel(process).unwrap();
+}
+
+fn BootstrapTask(_para: *const u8) {
+    if SHARESPACE.config.read().Sandboxed {
+        InitLoader();
+    }
+    ControllerProcessHandler().expect("ControllerProcess crash");
 }
 
 #[no_mangle]
@@ -720,22 +732,22 @@ pub extern "C" fn rust_main(
 
     /***************** can't run any qcall before this point ************************************/
 
-    if id == 0 {
-        IOWait();
-    };
+    // vCPU 1 normally bootstraps the kernel and control socket. With a single vCPU
+    // (CRI pause sandbox), vCPU 0 must do that work or StartRootContainer hangs.
+    let bootstrap = id == 1 || (id == 0 && SHARESPACE.scheduler.vcpuCnt == 1);
 
-    if id == 1 {
+    if id == 0 && SHARESPACE.scheduler.vcpuCnt > 1 {
+        IOWait();
+    }
+
+    if bootstrap {
         debug!("heap starts at:{:#x}", heapStart);
         self::Init();
         if autoStart {
             CreateTask(StartRootContainer as u64, ptr::null(), false);
         }
-    
-        if SHARESPACE.config.read().Sandboxed {
-            self::InitLoader();
-        }
 
-        CreateTask(ControllerProcess as u64, ptr::null(), true);
+        CreateTask(BootstrapTask as u64, ptr::null(), true);
     }
 
     WaitFn();

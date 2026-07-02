@@ -403,11 +403,7 @@ impl Sandbox {
         mounter.MountContainerFs(bundleDir, spec, id)?;
         let client = self.SandboxConnect()?;
 
-        let container_root = if crate::QUARK_CONFIG.lock().Sandboxed {
-            format!("/{}/rootfs", id)
-        } else {
-            format!("/{}", id)
-        };
+        let container_root = format!("/{}", id);
         // to avoid sharing the spec structure with qkernel, construct the process spec from oci Spec.
         let process = loader::Process {
             UID: spec.process.user.uid,

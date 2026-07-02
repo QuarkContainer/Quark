@@ -124,6 +124,10 @@ pub fn WaitFn() -> ! {
             }
 
             Some(newTask) => {
+                // InitLoader's Wait() may return with state Running on the wait task.
+                if CPULocal::Myself().State() != VcpuState::Searching {
+                    CPULocal::Myself().ToSearch(&SHARESPACE);
+                }
                 let current = TaskId::New(CPULocal::CurrentTask());
                 CPULocal::Myself().SwitchToRunning();
                 Task::Current().SaveFp();
@@ -221,8 +225,13 @@ pub fn Wait() {
 
     assert!(IS_GUEST == true,  "pub fn Wait() is called by host");
 
-    CPULocal::Myself().ToSearch(&SHARESPACE);
+    // Bootstrap vCPU enters rust_main with state Searching after IncrVcpuSearching.
+    // InitLoader calls LoadProcessKernel -> Wait before WaitFn; skip duplicate ToSearch.
+    if CPULocal::Myself().State() != VcpuState::Searching {
+        CPULocal::Myself().ToSearch(&SHARESPACE);
+    }
     let start = TSC.Rdtsc();
+    let mut ioWaitStart = start;
 
     let vcpuId = CPULocal::CpuId() as usize;
     let mut next = SHARESPACE.scheduler.GetNext();
@@ -259,12 +268,24 @@ pub fn Wait() {
                 Some(t) => next = Some(t),
             }
         } else {
-            if PollAsyncMsg() == 0 {
-                #[cfg(target_arch = "x86_64")]
-                unsafe {
-                    asm!("pause");
+            let polled = PollAsyncMsg();
+            if polled == 0 {
+                let now = TSC.Rdtsc();
+                if now - ioWaitStart >= IO_WAIT_CYCLES
+                    && SHARESPACE.scheduler.vcpuCnt > 1
+                {
+                    // Multi-vCPU: dedicated IO vCPU path via IOWait hypercall.
+                    HostSpace::IOWait();
+                    ioWaitStart = TSC.Rdtsc();
+                } else {
+                    #[cfg(target_arch = "x86_64")]
+                    unsafe {
+                        asm!("pause");
+                    }
+                    // todo: perhaps a similar instruction for aarch64?
                 }
-                // todo: perhaps a similar instruction for aarh64?
+            } else {
+                ioWaitStart = TSC.Rdtsc();
             }
 
             next = SHARESPACE.scheduler.GetNext();

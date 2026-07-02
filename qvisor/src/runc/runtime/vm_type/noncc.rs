@@ -149,7 +149,12 @@ impl VmType for VmNormal {
         let cpu_count = args.GetCpuCount();
         let reserve_cpu_count = QUARK_CONFIG.lock().ReserveCpuCount;
         let cpu_count = if cpu_count == 0 {
-            VMSpace::VCPUCount() - reserve_cpu_count
+            if crate::QUARK_CONFIG.lock().Sandboxed {
+                // CRI pod sandbox (pause) has no cpu quota; boot with one vCPU.
+                1
+            } else {
+                VMSpace::VCPUCount() - reserve_cpu_count
+            }
         } else {
             cpu_count.min(VMSpace::VCPUCount() - reserve_cpu_count)
         };
@@ -226,7 +231,11 @@ impl VmType for VmNormal {
 
     fn vm_space_initialize(&self, vcpu_count: usize, args: Args) -> Result<(), Error> {
         let vms = &mut VMS.lock();
-        vms.vcpuCount = vcpu_count.max(self.vm_resources.min_vcpu_amount);
+        vms.vcpuCount = if crate::QUARK_CONFIG.lock().Sandboxed && args.GetCpuCount() == 0 {
+            1
+        } else {
+            vcpu_count.max(self.vm_resources.min_vcpu_amount)
+        };
         vms.cpuAffinit = true;
         vms.RandomVcpuMapping();
         vms.controlSock = args.ControlSock;
@@ -300,7 +309,6 @@ impl VmType for VmNormal {
         }
 
         if SHARESPACE.config.read().EnableTsot {
-            //Initialize tsot_agent
             TSOT_AGENT.NextReqId();
             SHARESPACE.dnsSvc.Init().unwrap();
         }

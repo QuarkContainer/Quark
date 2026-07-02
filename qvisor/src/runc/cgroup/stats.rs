@@ -40,10 +40,9 @@ fn read_cpu_usage_usec(cpu_path: &str) -> Result<u64> {
 
 pub fn MetricsFromCgroup(cgroup: &Cgroup) -> Result<Metrics> {
     let mut metrics = Metrics::new();
+    let base = cgroup.process_path();
 
-    let mem_path = cgroup.MakePath("memory");
-    let usage = read_u64_file(&format!("{}/memory.current", mem_path))
-        .or_else(|_| read_u64_file(&format!("{}/memory.usage_in_bytes", mem_path)))?;
+    let usage = read_u64_file(&format!("{}/memory.current", base))?;
 
     let mut mem_entry = MemoryEntry::new();
     mem_entry.set_usage(usage);
@@ -51,8 +50,7 @@ pub fn MetricsFromCgroup(cgroup: &Cgroup) -> Result<Metrics> {
     mem_stat.set_usage(mem_entry);
     metrics.set_memory(mem_stat);
 
-    let cpu_path = cgroup.MakePath("cpu");
-    let usage_usec = read_cpu_usage_usec(&cpu_path).unwrap_or(0);
+    let usage_usec = read_cpu_usage_usec(&base).unwrap_or(0);
     let mut cpu_usage = CPUUsage::new();
     cpu_usage.set_total(usage_usec);
     let mut cpu_stat = CPUStat::new();

@@ -181,6 +181,19 @@ pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 pub static SHARED_ALLOCATOR : GlobalVcpuSharedAllocator = GlobalVcpuSharedAllocator::New();
 pub static GUEST_HOST_SHARED_ALLOCATOR: GuestHostSharedAllocator = GuestHostSharedAllocator::New();
 
+fn invoked_as_containerd_shim() -> bool {
+    env::args()
+        .next()
+        .map(|p| {
+            let name = std::path::Path::new(&p)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("");
+            name.starts_with("containerd-shim-")
+        })
+        .unwrap_or(false)
+}
+
 fn main() {
     InitSingleton();
 
@@ -197,8 +210,9 @@ fn main() {
         info!("commandline args is {}", str);
     }
 
-    let shimMode = QUARK_CONFIG.lock().ShimMode;
-    if shimMode == true && &cmd != "boot" {
+    // Shim entry is by binary name (containerd-shim-quark-v1). CRI pod behavior
+    // is controlled by Sandboxed in config.
+    if invoked_as_containerd_shim() && &cmd != "boot" {
         error!("***************shim mode***************");
         containerd_shim::run::<Service>("io.containerd.empty.v1", None)
     } else {

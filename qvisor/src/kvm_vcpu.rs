@@ -330,7 +330,7 @@ impl CPULocal {
             );
         }
 
-        let eventfd = unsafe { libc::eventfd(0, libc::EFD_CLOEXEC) };
+        let eventfd = unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) };
 
         if eventfd < 0 {
             panic!("Vcpu::Init fail...");
@@ -420,7 +420,16 @@ impl CPULocal {
     pub fn VcpuWait(&self, sharespace: &ShareSpace, block: bool) -> Result<u64> {
         let mut events = [libc::epoll_event { events: 0, u64: 0 }; 2];
 
-        let time = if block { -1 } else { 0 };
+        // Single-vCPU: io_uring CQEs are polled via ProcessOnce each loop iteration.
+        // epollfd does not watch the io_uring fd, so we must use a short timeout
+        // to re-enter ProcessOnce and discover completions that arrived between calls.
+        let time = if !block {
+            0
+        } else if sharespace.scheduler.vcpuCnt == 1 {
+            1
+        } else {
+            -1
+        };
 
         sharespace.scheduler.VcpuWaitMaskSet(self.vcpuId);
         defer!(sharespace.scheduler.VcpuWaitMaskClear(self.vcpuId););
@@ -448,7 +457,17 @@ impl CPULocal {
                     Some(newTask) => return Ok(newTask.data),
                 }
 
-                //Self::ProcessOnce(sharespace);
+                // Single-vCPU sandboxes have no dedicated IO vCPU (vCPU 0 runs IOWait in
+                // multi-vCPU). Here we must flush pending submitq SQEs and drain completions
+                // so io_uring Accept and async ops can complete while the guest is idle.
+                if sharespace.scheduler.vcpuCnt == 1 {
+                    Self::ProcessOnce(sharespace);
+                    // Re-check before epoll_wait — avoid up to 1ms latency if io_uring
+                    // completions made a task runnable.
+                    if let Some(newTask) = self.Process(sharespace) {
+                        return Ok(newTask);
+                    }
+                }
             }
 
             super::GLOBAL_ALLOCATOR.Clear();
@@ -461,7 +480,10 @@ impl CPULocal {
                     libc::read(self.eventfd, &mut data as *mut _ as *mut libc::c_void, 8)
                 };
 
-                if ret < 0 && errno::errno().0 != SysErr::EINTR {
+                if ret < 0
+                    && errno::errno().0 != SysErr::EINTR
+                    && errno::errno().0 != SysErr::EAGAIN
+                {
                     panic!(
                         "Vcppu::Wakeup fail... eventfd is {}, errno is {}",
                         self.eventfd,

@@ -46,7 +46,9 @@ pub struct ContainerFactory {}
 impl ContainerFactory {
     pub fn Create(ns: &str, req: &CreateTaskRequest) -> Result<CommonContainer> {
         let mut bundle = req.bundle.clone();
-        if crate::QUARK_CONFIG.lock().Sandboxed {
+        // containerd 2.x podsandboxer passes the real bundle path; legacy lab
+        // direct paths used "/{id}" only when bundle was unset.
+        if crate::QUARK_CONFIG.lock().Sandboxed && req.bundle.is_empty() {
             bundle = format!("/{}", req.id);
         }
 
@@ -344,6 +346,11 @@ impl CommonContainer {
     pub fn stats(&self) -> Result<Metrics> {
         if crate::QUARK_CONFIG.lock().DisableCgroup {
             return Ok(Metrics::new());
+        }
+        if let Ok(Some(cg)) = super::super::cgroup::cgroup::Cgroup::New(&self.container.Spec) {
+            if let Ok(m) = super::super::cgroup::stats::MetricsFromCgroup(&cg) {
+                return Ok(m);
+            }
         }
         let sandbox = self
             .container

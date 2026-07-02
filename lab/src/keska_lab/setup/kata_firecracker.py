@@ -176,57 +176,91 @@ def devmapper_pool_script(image_registry: str | None = DEFAULT_IMAGE_REGISTRY) -
 
 
 def containerd_devmapper_config_script() -> str:
-    """Enable devmapper snapshotter in containerd (patch main config — conf.d merge is unreliable)."""
+    """Enable devmapper snapshotter in containerd (patch default table in place)."""
     marker = "keska-lab devmapper"
+    py = textwrap.dedent(
+        """
+        import re
+        from pathlib import Path
+
+        marker = __MARKER__
+        root_path = __ROOT_PATH__
+        pool_name = __POOL_NAME__
+        cfg_path = Path("/etc/containerd/config.toml")
+        text = cfg_path.read_text()
+        changed = False
+
+        if ("# " + marker) in text:
+            text = text[: text.index("# " + marker)].rstrip() + "\\n"
+            changed = True
+
+        devmapper_single = "[plugins.'io.containerd.snapshotter.v1.devmapper']"
+        devmapper_double = '[plugins."io.containerd.snapshotter.v1.devmapper"]'
+        devmapper_body = (
+            devmapper_single + "\\n"
+            + "    root_path = '" + root_path + "'\\n"
+            + "    pool_name = '" + pool_name + "'\\n"
+            + "    base_image_size = '512MB'\\n"
+            + "    discard_blocks = true\\n"
+        )
+        for hdr in (devmapper_single, devmapper_double):
+            if hdr in text:
+                pattern = re.escape(hdr) + r"[^\\[]*"
+                new_text, n = re.subn(pattern, devmapper_body.strip() + "\\n", text, count=1)
+                if n:
+                    text = new_text
+                    changed = True
+                break
+        else:
+            text += "\\n# " + marker + "\\n" + devmapper_body
+            changed = True
+
+        if "snapshotter = 'devmapper'" not in text and 'snapshotter = "devmapper"' not in text:
+            anchor = "[plugins.'io.containerd.transfer.v1.local']"
+            idx = text.find(anchor)
+            if idx == -1:
+                raise SystemExit("missing transfer.v1.local block")
+            insert = (
+                "\\n    [[plugins.'io.containerd.transfer.v1.local'.unpack_config]]\\n"
+                "      platform = 'linux/amd64'\\n"
+                "      snapshotter = 'devmapper'\\n"
+            )
+            end = text.find("\\n\\n", idx)
+            if end == -1:
+                end = len(text)
+            text = text[:end] + insert + text[end:]
+            changed = True
+
+        kata_key = "runtimes.kata]"
+        if kata_key in text and "snapshotter = 'devmapper'" not in text.split(kata_key, 1)[1].split("[", 1)[0]:
+            text, n = re.subn(
+                r"(\\[plugins\\.'io\\.containerd\\.cri\\.v1\\.runtime'\\.containerd\\.runtimes\\.kata\\]\\n"
+                r"\\s*runtime_type = 'io\\.containerd\\.kata\\.v2'\\n"
+                r"\\s*sandboxer = 'podsandbox')",
+                r"\\1\\n        snapshotter = 'devmapper'",
+                text,
+                count=1,
+            )
+            if n:
+                changed = True
+
+        if changed:
+            cfg_path.write_text(text)
+            print("changed")
+        else:
+            print("unchanged")
+        """
+    ).strip()
+    py = (
+        py.replace("__MARKER__", repr(marker))
+        .replace("__ROOT_PATH__", repr(DEVMAPPER_DATA_DIR))
+        .replace("__POOL_NAME__", repr(DEVMAPPER_POOL))
+    )
     return textwrap.dedent(
         f"""
         set -euo pipefail
         out=$(sudo -n python3 <<'PY'
-import re
-from pathlib import Path
-
-marker = {marker!r}
-cfg_path = Path("/etc/containerd/config.toml")
-text = cfg_path.read_text()
-changed = False
-
-if marker not in text:
-    text += f"\\n# {{marker}}\\n"
-    changed = True
-
-if not re.search(r'pool_name\\s*=\\s*["\\']devpool["\\']', text):
-    text += f'''
-[plugins."io.containerd.snapshotter.v1.devmapper"]
-  root_path = "{DEVMAPPER_DATA_DIR}"
-  pool_name = "{DEVMAPPER_POOL}"
-  base_image_size = "512MB"
-  discard_blocks = true
-'''
-    changed = True
-else:
-    new_text, n = re.subn(
-        r'base_image_size\\s*=\\s*"[^"]+"',
-        'base_image_size = "512MB"',
-        text,
-        count=1,
-    )
-    if n:
-        text = new_text
-        changed = True
-
-if 'snapshotter = "devmapper"' not in text and "snapshotter = 'devmapper'" not in text:
-    text += '''
-[[plugins."io.containerd.transfer.v1.local".unpack_config]]
-  platform = "linux/amd64"
-  snapshotter = "devmapper"
-'''
-    changed = True
-
-if changed:
-    cfg_path.write_text(text)
-    print("changed")
-else:
-    print("unchanged")
+{py}
 PY
         )
         echo "$out"
@@ -248,13 +282,13 @@ def ensure_kata_firecracker(
     registry = image_registry if image_registry is not None else remote.config.image_registry
     steps = [configure_kata_hypervisor_script("firecracker")]
     devmapper_ok = remote.sh(
-        "sudo -n ctr plugins ls 2>/dev/null | grep -F devmapper | grep -q ' ok ' && "
-        "test -f /etc/containerd/config.toml",
+        "grep -q \"pool_name = 'devpool'\" /etc/containerd/config.toml 2>/dev/null && "
+        "sudo -n ctr plugins ls 2>/dev/null | grep -F devmapper | grep -q ' ok '",
         timeout=30,
         stream=stream,
     )
     if not devmapper_ok.ok:
-        steps.append(containerd_devmapper_config_script())
+        steps.insert(0, containerd_devmapper_config_script())
     steps.append(devmapper_pool_script(registry))
     timeouts = (60, 180, 600) if len(steps) == 3 else (60, 600)
     for script, timeout in zip(steps, timeouts):

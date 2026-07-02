@@ -36,9 +36,8 @@ serde-big-array = "0.5.1"
 [features]
 default = []
 snp = ["yaxpeax-x86", "yaxpeax-arch"]
-experimental-mmap-read = []
 experimental-uring-statx = []
-experimental-io = ["experimental-mmap-read", "experimental-uring-statx"]
+experimental-io = ["experimental-uring-statx"]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 x86_64 = "0.14.7"

@@ -29,7 +29,6 @@ DEFAULT_QUARK_CONFIG: dict = {
     "RDMAPort": 1,
     "PerSandboxLog": False,
     "ReserveCpuCount": 1,
-    "ShimMode": False,
     "EnableInotify": True,
     "ReaddirCache": True,
     "HiberODirect": True,
@@ -47,7 +46,6 @@ def bench_config_json(*, enable_tsot: bool = False) -> dict:
     cfg = dict(DEFAULT_QUARK_CONFIG)
     if enable_tsot:
         cfg["EnableTsot"] = True
-        cfg["ShimMode"] = True
         cfg["PerSandboxLog"] = True
     return cfg
 
@@ -55,7 +53,6 @@ def bench_config_json(*, enable_tsot: bool = False) -> dict:
 def cri_bench_config_json() -> dict:
     """Quark config for CRI pods (H2 stats, multi-container sandbox)."""
     cfg = bench_config_json()
-    cfg["ShimMode"] = True
     cfg["Sandboxed"] = True
     cfg["DisableCgroup"] = False
     return cfg

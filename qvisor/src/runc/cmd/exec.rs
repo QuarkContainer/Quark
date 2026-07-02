@@ -210,21 +210,37 @@ impl ExecCmd {
         let mut envv = Vec::new();
         envv.append(&mut self.envv);
 
-        let ids: Vec<&str> = self.user.split(':').collect();
-        let uid = match ids[0].parse::<u32>() {
-            Err(e) => panic!("parsing uid: {} fail, err is {:?}", ids[1], e),
-            Ok(id) => id,
-        };
-
-        let gid = if ids.len() > 2 {
-            panic!("user's format should be <uid>[:<gid>]");
-        } else if ids.len() == 2 {
-            match ids[1].parse::<u32>() {
-                Err(e) => panic!("parsing gid: {} fail, err is {:?}", ids[1], e),
-                Ok(id) => id,
-            }
+        let (uid, gid) = if self.user.is_empty() {
+            (0, 0)
         } else {
-            0
+            let ids: Vec<&str> = self.user.split(':').collect();
+            let uid = match ids[0].parse::<u32>() {
+                Err(e) => {
+                    return Err(Error::Common(format!(
+                        "parsing uid {:?} fail, err is {:?}",
+                        ids[0], e
+                    )))
+                }
+                Ok(id) => id,
+            };
+            let gid = if ids.len() > 2 {
+                return Err(Error::Common(
+                    "user's format should be <uid>[:<gid]>".to_string(),
+                ));
+            } else if ids.len() == 2 {
+                match ids[1].parse::<u32>() {
+                    Err(e) => {
+                        return Err(Error::Common(format!(
+                            "parsing gid {:?} fail, err is {:?}",
+                            ids[1], e
+                        )))
+                    }
+                    Ok(id) => id,
+                }
+            } else {
+                0
+            };
+            (uid, gid)
         };
 
         if self.detach && self.terminal && self.consoleSocket.len() == 0 {

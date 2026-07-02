@@ -3,8 +3,8 @@
 Enable tsot in config.json
 
 set EnableTsot to true
-set ShimMode to true
 set PerSandboxLog to true
+# Shim: install containerd-shim-quark-v1 via `make install`; set Sandboxed true for CRI pods
 
 2. Start cadvisor/etcd
 

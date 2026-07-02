@@ -49,7 +49,8 @@ Everything else is optional, experimental, or dev-only unless you explicitly pro
 ### Docs / assets to thin
 
 - **`doc/`** — mix of markdown + large binaries (PDF, PPTX, XLSX); archive binaries externally
-- **`kdoc/bugs/`** — useful internally; fix duplicate numbering (`002-*`, `003-*` each appear twice)
+- **`kdoc/architecture/`** — canonical system docs (start here for shim/runc/CRI)
+- **`kdoc/bugs/`** — per-fix notes; fix duplicate numbering (`002-*`, `003-*` each appear twice)
 - **`qservice/cmd.txt`**, **`env.txt`** — long runbooks; move into `kdoc/` as structured guides
 - **`scripts/`** — empty; delete or restore intentionally
 
@@ -123,7 +124,7 @@ Rename `Kernel.rs` → `hostspace.rs` (or similar) to stop onboarding mistakes.
 
 ### Shim / runtime identity
 
-- `qvisor/src/main.rs` — `ShimMode` selects containerd shim vs CLI; verify `"io.containerd.empty.v1"` runtime string is intentional for your registry/shim wiring.
+- `qvisor/src/main.rs` — argv0 `containerd-shim-*` selects containerd Task API vs CLI; verify `"io.containerd.empty.v1"` runtime string is intentional for your registry/shim wiring.
 
 ---
 

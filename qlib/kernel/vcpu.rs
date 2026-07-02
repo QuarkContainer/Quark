@@ -183,6 +183,9 @@ impl CPULocal {
     }
 
     pub fn SwitchToRunning(&self) {
+        if self.State() != VcpuState::Searching {
+            self.ToSearch(&SHARESPACE);
+        }
         let _searchingCnt = self.ToRunning(&SHARESPACE);
         /*if searchingCnt == 0 {
             SHARESPACE.scheduler.WakeOne();

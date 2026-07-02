@@ -727,11 +727,12 @@ impl Container {
                 sandboxed: false,
             };
 
-            if crate::QUARK_CONFIG.lock().Sandboxed {
+            if crate::QUARK_CONFIG.lock().Sandboxed && !crate::SANDBOX.lock().ID.is_empty() {
                 let sandbox = crate::SANDBOX.lock();
                 c.Sandbox = Some(Sandbox {
                     ID: sandbox.ID.to_string(),
                     Pid: sandbox.Pid,
+                    Cgroup: sandbox.Cgroup.clone(),
                     ..Default::default()
                 });
                 c.sandboxed = true;
@@ -739,7 +740,7 @@ impl Container {
                     .as_ref()
                     .unwrap()
                     .CreateSubContainer(conf, id, io)?;
-            } else if IsRoot(&c.Spec) {
+            } else if IsRoot(&c.Spec) || crate::QUARK_CONFIG.lock().Sandboxed {
                 // If the metadata annotations indicate that this container should be
                 // started in an existing sandbox, we must do so. The metadata will
                 // indicate the ID of the sandbox, which is the same as the ID of the
@@ -956,6 +957,7 @@ impl Container {
         let _unlock = self.Lock()?;
 
         self.RequireStatus("start", &[Status::Created])?;
+
         // "If any prestart hook fails, the runtime MUST generate an error,
         // stop and destroy the container" -OCI spec.
         if self.Spec.hooks.is_some() {
@@ -1107,7 +1109,6 @@ impl Container {
 
             sandbox.DestroyContainer(&self.ID)?;
 
-            // Only uninstall cgroup for sandbox stop.
             if sandbox.IsRootContainer(&self.ID) {
                 let destroyed = sandbox.Destroy();
                 cgroup = self.Sandbox.as_mut().unwrap().Cgroup.take();
@@ -1115,10 +1116,8 @@ impl Container {
                     Ok(()) => (),
                     Err(e) => return Err(e),
                 }
+                self.Sandbox = None;
             }
-
-            // Only set sandbox to none after it has been told to destroy the container.
-            self.Sandbox = None;
         }
 
         self.WaitforStopped()?;
@@ -1131,6 +1130,9 @@ impl Container {
     }
 
     pub fn WaitforStopped(&self) -> Result<()> {
+        if self.Status == Status::Stopped {
+            return Ok(());
+        }
         if self.isSandboxRunning() {
             return self.SignalContainer(0, false);
         }

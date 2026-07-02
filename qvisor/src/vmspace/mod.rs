@@ -126,6 +126,7 @@ pub struct VMSpace {
     pub rng: RandGen,
     pub args: Option<Args>,
     pub pivot: bool,
+    pub pivoted: bool,
     pub waitingMsgCall: Option<WaitingMsgCall>,
     pub controlSock: i32,
     pub vcpus: Vec<Arc<ArchVirtCpu>>,
@@ -156,6 +157,7 @@ impl VMSpace {
             rng: RandGen::Init(),
             args: None,
             pivot: false,
+            pivoted: false,
             waitingMsgCall: None,
             controlSock: -1,
             vcpus: Vec::new(),
@@ -187,6 +189,14 @@ impl VMSpace {
     pub fn PivotRoot(&self, rootfs: &str) {
         let mns = MountNs::New(rootfs.to_string());
         mns.PivotRoot();
+    }
+
+    pub fn pivotOnce(&mut self, rootfs: &str) {
+        if !self.pivot || self.pivoted {
+            return;
+        }
+        self.PivotRoot(rootfs);
+        self.pivoted = true;
     }
 
     pub fn WriteControlMsgResp(fd: i32, addr: u64, len: usize, close: bool) -> i64 {
@@ -274,9 +284,7 @@ impl VMSpace {
 
         let rootfs = self.args.as_ref().unwrap().Rootfs.to_string();
 
-        if self.pivot {
-            self.PivotRoot(&rootfs);
-        }
+        self.pivotOnce(&rootfs);
 
         StartSignalHandle();
         return 0;

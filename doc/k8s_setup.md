@@ -1,31 +1,29 @@
 # Kubernates Quick Start
 This document records how to use quark container with Kubernates. Quark uses containerd as high level container runtime with running on k8s.
 
-Follow the steps to use quark runtime with kubernates.
-### 1. Build Quark Runtime with shim mode
-When quark is used as a container runtime, qvisor process will need to serve as the shim for the runtime as specified by containerd [shim-api](https://github.com/containerd/containerd/blob/main/runtime/v2/README.md).
+**Architecture (how shim, runc, and CRI fit together):** [`kdoc/architecture/containers-and-runtime/`](../kdoc/architecture/containers-and-runtime/README.md)
 
-To build Quark with shim mode, please open `Quark/config.json`  and change the following configuration: 
+Follow the steps to use quark runtime with kubernates.
+### 1. Build and install Quark with containerd shim binary
+
+When Quark is used as a CRI runtime, the same `qvisor` binary is installed as `containerd-shim-quark-v1` (see [containerd shim v2 API](https://github.com/containerd/containerd/blob/main/runtime/v2/README.md)). Shim entry is selected by **argv0**, not a config flag.
+
+For pod sandboxes (CRI), set in `/etc/quark/config.json`:
+
 ```
-........
-  "ShimMode"      : true,
-......
+  "Sandboxed"     : true,
+  "EnableTsot"    : false,
+  "DisableCgroup" : false,
 ```
-and run 
+
+Then rebuild and install:
+
 ```
 make clean; make
-```
-in a terminal to rebuild quark binary
-
-### 2. Install Quark binary to each k8s nodes
-
-
-```
 make install
 ```
-Notice the quark binary is renamed as `containerd-shim-quark-v1`, this is to follow containerd's naming convention for shims.
 
-### 3. Config containerd in k8s cluster
+`make install` copies the binary to both `quark` and `containerd-shim-quark-v1`.
 This step need to happen on every k8s node with kubelet running.
 open `/etc/containerd/config.toml` and add/modify the following entry in the containerd config
 ```

@@ -219,7 +219,6 @@ impl Task for ShimTask {
         let mut resp = container
             .state(exec_id)
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
-        resp.pid = 123;
         info!("shim: state resp for {:?}", &resp);
         Ok(resp)
     }
@@ -243,10 +242,18 @@ impl Task for ShimTask {
         let pid = container.pid() as u32;
         resp.pid = pid;
 
-        if !crate::QUARK_CONFIG.lock().Sandboxed {
+        if containers.is_empty() {
             let mut sandboxLock = crate::SANDBOX.lock();
             sandboxLock.ID = container.SandboxId();
             sandboxLock.Pid = container.Pid();
+            if let Some(cg) = container
+                .container
+                .Sandbox
+                .as_ref()
+                .and_then(|s| s.Cgroup.clone())
+            {
+                sandboxLock.Cgroup = Some(cg);
+            }
         }
         let len = containers.len();
         if len == 0 {

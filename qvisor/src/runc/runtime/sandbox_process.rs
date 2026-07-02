@@ -19,6 +19,7 @@ use std::fs::OpenOptions;
 use std::fs::{canonicalize, create_dir_all};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::io::FromRawFd;
+use std::os::unix::io::IntoRawFd;
 use std::os::unix::prelude::RawFd;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -174,6 +175,21 @@ impl SandboxProcess {
 
     pub fn Run(&self, controlSock: i32, rdmaSvcCliSock: i32, taskSockFd: i32) {
         let id = &self.containerId;
+
+        // Redirect stderr to per-sandbox panic log; Rust panics are otherwise lost.
+        let stderr_log = format!("/var/log/quark/{}.stderr", id);
+        if let Ok(f) = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&stderr_log)
+        {
+            let fd = f.into_raw_fd();
+            unsafe {
+                libc::dup2(fd, 2);
+                libc::close(fd);
+            }
+        }
+
         let sid = unsafe {
             //signal (SIGHUP, SIG_IGN);
             libc::setsid()
@@ -204,7 +220,7 @@ impl SandboxProcess {
             Ok(mut vm) => {
                 if taskSockFd > 0 {
                     if self.pivot {
-                        crate::VMS.lock().PivotRoot(&self.SandboxRootDir);
+                        crate::VMS.lock().pivotOnce(&self.SandboxRootDir);
                     }
                     self.StartTaskService(taskSockFd as RawFd).unwrap();
                 }

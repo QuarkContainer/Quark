@@ -1,0 +1,46 @@
+---
+description: When and how to update kdoc/architecture system documentation (human approval required)
+alwaysApply: true
+---
+
+# Architecture documentation
+
+## Location
+
+Primary system docs live in **`kdoc/architecture/`**. Bug notes stay in `kdoc/bugs/`. Ops runbooks stay in `kdoc/ops/`.
+
+## When to propose doc updates
+
+Propose architecture doc changes after:
+
+1. **Big changes** — new subsystem, CRI/shim behavior change, config model change, lifecycle change.
+2. **Suspected gap** — code and docs disagree, onboarding would be painful, or a design decision is only in chat/PR comments.
+
+Do **not** silently expand docs for small bugfixes (use `kdoc/bugs/` instead).
+
+## Approval gate
+
+Before editing `kdoc/architecture/**`:
+
+1. Tell the user **what** is outdated or missing and **which files** you would add/change.
+2. Wait for explicit approval (or a request that includes doc work).
+3. Then write human-focused prose: longer, readable, with diagrams — not bullet dumps.
+
+## Style
+
+- Explain *why*, not only *what*.
+- Basics → Quark-specific → file map.
+- Use mermaid for flows; link to source paths.
+- When replacing old docs, delete or stub redirects — avoid duplicate sources of truth.
+
+## Subfolders
+
+| Path | Status |
+|------|--------|
+| `kdoc/architecture/containers-and-runtime/` | Written (8 chapters) |
+| `kdoc/architecture/guest-kernel/` | Stub |
+| `kdoc/architecture/vmm/` | Stub |
+| `kdoc/architecture/networking-tsot/` | Stub |
+| `kdoc/architecture/confidential-compute/` | Stub |
+
+Expand stubs into full chapters only with user approval.

@@ -53,9 +53,9 @@ version = 2
   runtime_type = "io.containerd.quarkd.v1"
 EOF
 
-3. Enable shim mode in config.json
+3. CRI pod config (/etc/quark/config.json)
 
-in config.json, set "ShimMode" to true
+Set `"Sandboxed": true` for pod sandboxes. Install shim via `make install` (containerd-shim-quark-v1).
 
 4. Enable PerSandboxLog in config.json so that different container has different log name
 in config.json, set "PerSandboxLog" to true
@@ -122,8 +122,8 @@ change pub const DefaultRuntimeHandler             : &str = "quarkd" to "runc";
 Enable tsot in config.json
 
 set EnableTsot to true
-set ShimMode to true
 set PerSandboxLog to true
+# CRI shim: make install → containerd-shim-quark-v1; Sandboxed true for pod VMs
 
 2. Start cadvisor/etcd
 

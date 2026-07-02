@@ -1,16 +1,6 @@
 // Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
@@ -26,26 +16,46 @@ use std::{thread, time};
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::path::*;
+use super::cgroup_v2::{Cpu2, CpuSet2, Memory2, SUBTREE_CONTROL};
 use super::super::oci::*;
-use super::super::specutils::specutils::MkdirAll;
-
-pub const CONTROLLERS: [(&str, fn(spec: &LinuxResources, path: &str) -> Result<()>); 11] = [
-    ("blkio", BlockIO),
-    ("cpu", CPU),
-    ("cpuset", CpuSet),
-    ("memory", Memory),
-    ("net_cls", NetworkClass),
-    ("net_prio", NetworkPrio),
-    // These controllers either don't have anything in the OCI spec or is
-    // irrevalant for a sandbox, e.g. pids.
-    ("devices", Noop),
-    ("freezer", Noop),
-    ("perf_event", Noop),
-    ("pids", Noop),
-    ("systemd", Noop),
-];
 
 pub const CGROUP_ROOT: &str = "/sys/fs/cgroup";
+const CONTROLLERS_FILE: &str = "cgroup.controllers";
+const V2_CONTROLLERS: &[&str] = &["cpu", "memory", "cpuset"];
+/// Leaf name for the sandbox process when the OCI path is a delegation parent (CRI pod cgroup).
+const PROCESS_LEAF: &str = "init";
+
+/// Quark requires the unified cgroup v2 hierarchy (Linux 5.8+ / modern K8s nodes).
+pub fn cgroup_v2_available() -> bool {
+    Path::new(&Join(CGROUP_ROOT, CONTROLLERS_FILE)).exists()
+}
+
+pub fn require_cgroup_v2() -> Result<()> {
+    if cgroup_v2_available() {
+        return Ok(());
+    }
+    Err(Error::Common(
+        "Quark requires cgroup v2 (unified hierarchy at /sys/fs/cgroup)".to_string(),
+    ))
+}
+
+pub fn unified_cgroup_path(name: &str) -> String {
+    Join(CGROUP_ROOT, name.trim_start_matches('/'))
+}
+
+fn self_cgroup_v2_path() -> Result<String> {
+    let f = File::open("/proc/self/cgroup").map_err(|e| Error::IOError(format!("{:?}", e)))?;
+    for line in BufReader::new(f).lines() {
+        let l = line.map_err(|e| Error::IOError(format!("{:?}", e)))?;
+        let parts: Vec<&str> = l.splitn(3, ':').collect();
+        if parts.len() == 3 && parts[0] == "0" {
+            return Ok(unified_cgroup_path(parts[2]));
+        }
+    }
+    Err(Error::Common(
+        "cgroup v2 path not found in /proc/self/cgroup".to_string(),
+    ))
+}
 
 pub fn SetOptionalValueInt(path: &str, name: &str, val: Option<i64>) -> Result<()> {
     let val = match val {
@@ -57,9 +67,7 @@ pub fn SetOptionalValueInt(path: &str, name: &str, val: Option<i64>) -> Result<(
             v
         }
     };
-
-    let str = format!("{}", val);
-    return SetValue(path, name, &str);
+    SetValue(path, name, &format!("{}", val))
 }
 
 pub fn SetOptionalValueUint(path: &str, name: &str, val: Option<u64>) -> Result<()> {
@@ -72,50 +80,15 @@ pub fn SetOptionalValueUint(path: &str, name: &str, val: Option<u64>) -> Result<
             v
         }
     };
-
-    let str = format!("{}", val);
-    return SetValue(path, name, &str);
-}
-
-pub fn SetOptionalValueU32(path: &str, name: &str, val: Option<u32>) -> Result<()> {
-    let val = match val {
-        None => return Ok(()),
-        Some(v) => {
-            if v == 0 {
-                return Ok(());
-            }
-            v
-        }
-    };
-
-    let str = format!("{}", val);
-    return SetValue(path, name, &str);
-}
-
-pub fn SetOptionalValueU16(path: &str, name: &str, val: Option<u16>) -> Result<()> {
-    let val = match val {
-        None => return Ok(()),
-        Some(v) => {
-            if v == 0 {
-                return Ok(());
-            }
-            v
-        }
-    };
-
-    let str = format!("{}", val);
-    return SetValue(path, name, &str);
+    SetValue(path, name, &format!("{}", val))
 }
 
 pub fn SetValue(path: &str, name: &str, data: &str) -> Result<()> {
-    let fullpath = Join(path, name);
-
-    return WriteFile(&fullpath, data);
+    WriteFile(&Join(path, name), data)
 }
 
 pub fn WriteFile(path: &str, data: &str) -> Result<()> {
-    let mut options = OpenOptions::new();
-    let mut file = options
+    let mut file = OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)
@@ -123,123 +96,146 @@ pub fn WriteFile(path: &str, data: &str) -> Result<()> {
         .map_err(|e| Error::IOError(format!("WriteFile {:?} io::error is {:?}", path, e)))?;
     file.write_all(data.as_bytes())
         .map_err(|e| Error::IOError(format!("SetValue {:?} io::error is {:?}", path, e)))?;
-    return Ok(());
+    Ok(())
 }
 
 pub fn GetValue(path: &str, name: &str) -> Result<String> {
     let fullpath = Join(path, name);
-
-    let contents = fs::read_to_string(&fullpath).map_err(|e| {
+    fs::read_to_string(&fullpath).map_err(|e| {
         Error::IOError(format!(
             "GetValue fail when read file {} with error {:?}",
             &fullpath, e
         ))
-    })?;
-
-    return Ok(contents);
+    })
 }
 
-// fillFromAncestor sets the value of a cgroup file from the first ancestor
-// that has content. It does nothing if the file in 'path' has already been set.
-pub fn FillFromAncestor(path: &str) -> Result<String> {
-    let out = fs::read_to_string(&path).map_err(|e| {
-        Error::IOError(format!(
-            "FileFromAncestor fail when read file {} with error {:?}",
-            path, e
-        ))
+/// If `cgroup_path/<file>` is empty, copy from the nearest ancestor (explicit
+/// value first, then `*.effective` — cgroup v2 leaves `cpuset.cpus` empty when
+/// inheriting the full mask).
+pub fn inherit_cgroup_file(cgroup_path: &str, file: &str) -> Result<()> {
+    let file_path = Join(cgroup_path, file);
+    let current = fs::read_to_string(&file_path).map_err(|e| {
+        Error::IOError(format!("inherit_cgroup_file read {}: {:?}", file_path, e))
     })?;
-
-    let val = out.trim();
-    if val.len() != 0 {
-        // File is set, stop here.
-        return Ok(val.to_string());
+    if !current.trim().is_empty() {
+        return Ok(());
     }
 
-    // File is not set, recurse to parent and then  set here.
-    let name = Base(path);
-    let parent = Dir(&Dir(path));
+    let effective_file = match file {
+        "cpuset.cpus" => "cpuset.cpus.effective",
+        "cpuset.mems" => "cpuset.mems.effective",
+        _ => file,
+    };
 
-    let val = FillFromAncestor(&Join(&parent, &name))?;
-    WriteFile(path, &val)?;
-
-    return Ok(val);
-}
-
-pub fn LoadPaths(pid: &str) -> Result<BTreeMap<String, String>> {
-    // Open the file in read-only mode (ignoring errors).
-    let file = File::open(format!("/proc/{}/cgroup", pid))
-        .map_err(|e| Error::IOError(format!("LoadPath:: io::error is {:?}", e)))?;
-    let reader = BufReader::new(file);
-
-    let mut paths = BTreeMap::new();
-    // Read the file line by line using the lines() iterator from std::io::BufRead.
-    for (_index, line) in reader.lines().enumerate() {
-        let line = line.map_err(|e| Error::IOError(format!("LoadPath:: io::error is {:?}", e)))?; // Ignore errors.
-                                                                                                  // Show the line and its number.
-        let tokens: Vec<&str> = line.split(':').collect();
-
-        if tokens.len() != 3 {
-            return Err(Error::Common(format!(
-                "invalid cgroups file, line: {}",
-                &line
-            )));
+    let mut parent = Dir(cgroup_path);
+    loop {
+        let explicit = Join(&parent, file);
+        if let Ok(v) = fs::read_to_string(&explicit) {
+            if !v.trim().is_empty() {
+                return WriteFile(&file_path, v.trim());
+            }
         }
-
-        let tokens1 = tokens[1].to_string();
-        let ctrlrs: Vec<&str> = tokens1.split(',').collect();
-        for ctrlr in ctrlrs {
-            paths.insert(ctrlr.to_string(), tokens[2].to_string());
+        if effective_file != file {
+            let eff_path = Join(&parent, effective_file);
+            if let Ok(v) = fs::read_to_string(&eff_path) {
+                if !v.trim().is_empty() {
+                    return WriteFile(&file_path, v.trim());
+                }
+            }
         }
+        if parent.len() <= CGROUP_ROOT.len() {
+            break;
+        }
+        parent = Dir(&parent);
     }
 
-    return Ok(paths);
+    Err(Error::Common(format!(
+        "cgroup file {}/{} has no inheritable value",
+        cgroup_path, file
+    )))
 }
 
-// countCpuset returns the number of CPU in a string formatted like:
-// 		"0-2,7,12-14  # bits 0, 1, 2, 7, 12, 13, and 14 set" - man 7 cpuset
-pub fn CountCpuset(cpuset: &str) -> Result<usize> {
+/// True when `path` has delegated controllers and cannot hold processes (cgroup v2).
+pub fn subtree_control_active(path: &str) -> Result<bool> {
+    let control = Join(path, SUBTREE_CONTROL);
+    if !Path::new(&control).exists() {
+        return Ok(false);
+    }
+    let s = fs::read_to_string(&control)
+        .map_err(|e| Error::IOError(format!("read {}: {:?}", control, e)))?;
+    Ok(!s.trim().is_empty())
+}
+
+/// Enable cgroup v2 controllers on `parent` so a child cgroup may use them.
+fn enable_subtree_controllers(parent: &str, controllers: &[&str]) -> Result<()> {
+    let control = Join(parent, SUBTREE_CONTROL);
+    if !Path::new(&control).exists() {
+        return Ok(());
+    }
+    for ctrl in controllers {
+        let _ = SetValue(parent, SUBTREE_CONTROL, &format!("+{}", ctrl));
+    }
+    Ok(())
+}
+
+/// Create each level of a unified cgroup path, delegating controllers on parents only.
+pub fn create_unified_hierarchy(leaf_path: &str) -> Result<()> {
+    let rel = leaf_path
+        .strip_prefix(CGROUP_ROOT)
+        .unwrap_or(leaf_path)
+        .trim_start_matches('/');
+    if rel.is_empty() {
+        return Ok(());
+    }
+
+    let parts: Vec<&str> = rel.split('/').filter(|p| !p.is_empty()).collect();
+    let mut current = CGROUP_ROOT.to_string();
+    for (i, part) in parts.iter().enumerate() {
+        let parent = current.clone();
+        current = Join(&current, part);
+        if Path::new(&current).exists() {
+            continue;
+        }
+        enable_subtree_controllers(&parent, V2_CONTROLLERS)?;
+        fs::create_dir(&current).map_err(|e| {
+            Error::IOError(format!("create cgroup dir {}: {:?}", current, e))
+        })?;
+        // Leaf cgroups hold processes; enabling subtree_control on them returns EBUSY on join.
+        if i + 1 < parts.len() {
+            enable_subtree_controllers(&current, V2_CONTROLLERS)?;
+        }
+    }
+    Ok(())
+}
+
+// countCpuset returns the number of CPUs in a string like "0-2,7,12-14".
+pub fn count_cpuset(cpuset: &str) -> Result<usize> {
     let mut count: usize = 0;
-
-    let arr: Vec<&str> = cpuset.split(',').collect();
-    for p in arr {
+    for p in cpuset.split(',') {
         let interval: Vec<&str> = p.split('-').collect();
         match interval.len() {
             1 => {
-                match interval[0].parse::<usize>() {
-                    Ok(_i) => count += 1,
-                    Err(_e) => {
-                        return Err(Error::Common(format!("invalid cpuset: {}", p)));
-                    }
-                };
+                interval[0]
+                    .parse::<usize>()
+                    .map_err(|_| Error::Common(format!("invalid cpuset: {}", p)))?;
+                count += 1;
             }
             2 => {
-                let start = match interval[0].parse::<usize>() {
-                    Ok(i) => i,
-                    Err(_e) => {
-                        return Err(Error::Common(format!("invalid cpuset: {}", p)));
-                    }
-                };
-
-                let end = match interval[0].parse::<usize>() {
-                    Ok(i) => i,
-                    Err(_e) => {
-                        return Err(Error::Common(format!("invalid cpuset: {}", p)));
-                    }
-                };
-
+                let start = interval[0]
+                    .parse::<usize>()
+                    .map_err(|_| Error::Common(format!("invalid cpuset: {}", p)))?;
+                let end = interval[1]
+                    .parse::<usize>()
+                    .map_err(|_| Error::Common(format!("invalid cpuset: {}", p)))?;
                 if start > end {
                     return Err(Error::Common(format!("invalid cpuset: {}", p)));
                 }
-
                 count += end - start + 1;
             }
-            _ => {
-                return Err(Error::Common(format!("invalid cpuset: {}", p)));
-            }
+            _ => return Err(Error::Common(format!("invalid cpuset: {}", p))),
         }
     }
-
-    return Ok(count);
+    Ok(count)
 }
 
 pub struct CgroupCleanup<'a> {
@@ -255,330 +251,292 @@ impl<'a> Drop for CgroupCleanup<'a> {
     }
 }
 
-// Cgroup represents a group inside all controllers. For example: Name='/foo/bar'
-// maps to /sys/fs/cgroup/<controller>/foo/bar on all controllers.
-#[derive(Serialize, Deserialize, Debug, Default)]
+/// Host cgroup v2 handle for a sandbox or container (OCI `linux.cgroupsPath`).
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Cgroup {
     pub Name: String,
+    /// Legacy field from cgroup v1 era; ignored on v2 paths. Kept for serde compat.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub Parents: BTreeMap<String, String>,
     pub Own: bool,
+    /// When `Name` is a delegation parent (CRI pod cgroup), processes join this leaf.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ProcessPath: Option<String>,
+    #[serde(default)]
+    pub OwnProcess: bool,
 }
 
 impl Cgroup {
     pub fn New(spec: &Spec) -> Result<Option<Self>> {
-        if spec.linux.is_none() || spec.linux.as_ref().unwrap().cgroups_path.len() == 0 {
+        if spec.linux.is_none() || spec.linux.as_ref().unwrap().cgroups_path.is_empty() {
             return Ok(None);
         }
-
-        let cgroupsPath = spec.linux.as_ref().unwrap().cgroups_path.to_string();
-
-        let parents = if !IsAbs(&cgroupsPath) {
-            LoadPaths("self")?
-        } else {
-            BTreeMap::new()
-        };
-
-        return Ok(Some(Self {
-            Name: cgroupsPath,
-            Parents: parents,
+        Ok(Some(Self {
+            Name: spec.linux.as_ref().unwrap().cgroups_path.to_string(),
+            Parents: BTreeMap::new(),
             Own: false,
-        }));
+            ProcessPath: None,
+            OwnProcess: false,
+        }))
     }
 
-    // Install creates and configures cgroups according to 'res'. If cgroup path
-    // already exists, it means that the caller has already provided a
-    // pre-configured cgroups, and 'res' is ignored.
-    pub fn Install(&mut self, res: &Option<LinuxResources>) -> Result<()> {
-        if Path::new(&self.MakePath("memory")).exists() {
-            info!("Using pre-created cgroup {}", &self.Name);
+    pub fn path(&self) -> String {
+        unified_cgroup_path(&self.Name)
+    }
+
+    /// Directory where this process should be joined (leaf under delegation parents).
+    pub fn process_path(&self) -> String {
+        self.ProcessPath
+            .as_ref()
+            .map(|p| unified_cgroup_path(p))
+            .unwrap_or_else(|| self.path())
+    }
+
+    fn apply_resources(&self, res: &Option<LinuxResources>, path: &str) -> Result<()> {
+        Cpu2 {}.Set(res, path)?;
+        CpuSet2 {}.Set(res, path)?;
+        Memory2 {}.Set(res, path)?;
+        Ok(())
+    }
+
+    /// Ensure a leaf cgroup exists when `Name` points at a delegation parent.
+    fn ensure_process_cgroup(&mut self, res: &Option<LinuxResources>) -> Result<()> {
+        let parent = self.path();
+        if !subtree_control_active(&parent)? {
+            CpuSet2 {}.Set(res, &parent)?;
             return Ok(());
         }
 
-        info!("Creating cgroup {}", &self.Name);
-        self.Own = true;
+        let leaf_name = Join(self.Name.trim_start_matches('/'), PROCESS_LEAF);
+        let leaf_path = unified_cgroup_path(&leaf_name);
+        self.ProcessPath = Some(leaf_name);
 
-        let mut cgroupCleanup = CgroupCleanup {
-            cgroup: self,
-            enable: true,
-        };
+        if !Path::new(&leaf_path).exists() {
+            create_unified_hierarchy(&leaf_path)?;
+            self.OwnProcess = true;
+        }
+        self.apply_resources(res, &leaf_path)?;
+        Ok(())
+    }
 
-        for controller in &CONTROLLERS {
-            let path = cgroupCleanup.cgroup.MakePath(&controller.0);
-            MkdirAll(&path)?;
-            match res {
-                None => (),
-                Some(ref res) => {
-                    controller.1(res, &path)?;
-                }
-            }
+    pub fn Install(&mut self, res: &Option<LinuxResources>) -> Result<()> {
+        require_cgroup_v2()?;
+        let path = self.path();
+        if Path::new(&Join(&path, "cgroup.procs")).exists() {
+            info!("Using pre-created cgroup (v2) {}", &self.Name);
+            return self.ensure_process_cgroup(res);
         }
 
-        // The Cleanup object cleans up partially created cgroups when an error occurs.
-        // Errors occuring during cleanup itself are ignored.
-        cgroupCleanup.enable = false;
+        info!("Creating cgroup (v2) {}", &self.Name);
+        self.Own = true;
 
-        return Ok(());
+        if let Err(e) = self.install_owned(res) {
+            self.Uninstall();
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    fn install_owned(&mut self, res: &Option<LinuxResources>) -> Result<()> {
+        create_unified_hierarchy(&self.path())?;
+        self.apply_resources(res, &self.path())?;
+        self.ensure_process_cgroup(res)
     }
 
     pub fn Uninstall(&self) {
+        if self.OwnProcess {
+            if let Some(ref leaf) = self.ProcessPath {
+                let path = unified_cgroup_path(leaf);
+                info!("Deleting process cgroup (v2) {}", leaf);
+                for i in 0..7 {
+                    match fs::remove_dir(&path) {
+                        Ok(()) => break,
+                        Err(e) => {
+                            if e.raw_os_error() == Some(SysErr::ENOENT) {
+                                break;
+                            }
+                            error!("can't uninstall ({:?}) failed: {:?}", path, e);
+                        }
+                    }
+                    thread::sleep(time::Duration::from_millis(100 << i));
+                }
+            }
+        }
         if !self.Own {
             return;
         }
-
-        info!("Deleting cgroup {}", &self.Name);
-        for c in &CONTROLLERS {
-            let path = self.MakePath(c.0);
-            info!("Removing cgroup controller for key={} path={}", &c.0, &path);
-
-            // If we try to remove the cgroup too soon after killing the
-            // sandbox we might get EBUSY, so we retry for a few seconds
-            // until it succeeds.
-            for i in 0..7 {
-                match fs::remove_dir(&path) {
-                    Ok(()) => break,
-                    Err(e) => {
-                        if let Some(errno) = e.raw_os_error() {
-                            if errno == SysErr::ENOENT {
-                                continue;
-                            }
-
-                            error!("can't uninstall ({:?}) failed: {:?}", path, e);
-                            break;
-                        }
-                    }
-                }
-
-                //sleep 2^i * 100 ms
-                let millies = time::Duration::from_millis(100 << i);
-                thread::sleep(millies);
-            }
-        }
-    }
-
-    // Join adds the current process to the all controllers. Returns function that
-    // restores cgroup to the original state.
-    pub fn Join(&self) -> Result<impl Fn()> {
-        let paths = match LoadPaths("self") {
-            Ok(p) => p,
-            Err(e) => return Err(e),
-        };
-
-        let mut undoPaths = Vec::new();
-        //'outer:
-        for (ctrlr, path) in &paths {
-            for c in &CONTROLLERS {
-                if ctrlr == c.0 {
-                    let fullpath = Join(&Join(CGROUP_ROOT, ctrlr), path);
-                    undoPaths.push(fullpath);
-
-                    //break 'outer;
-                }
-            }
-        }
-
-        // Replace empty undo with the real thing before changes are made to cgroups.
-        let undo = move || {
-            for path in &undoPaths {
-                info!("Restoring cgroup {}", &path);
-                match SetValue(&path, "cgroup.procs", "0") {
-                    Ok(()) => (),
-                    Err(e) => info!("Error restoring cgroup {}: {:?}", &path, e),
-                }
-            }
-        };
-
-        // Now join the cgroups.
-        for c in &CONTROLLERS {
-            let path = self.MakePath(&c.0);
-            info!("Joining cgroup {}", &path);
-
-            match SetValue(&path, "cgroup.procs", "0") {
-                Ok(()) => (),
+        let path = self.path();
+        info!("Deleting cgroup (v2) {}", &self.Name);
+        for i in 0..7 {
+            match fs::remove_dir(&path) {
+                Ok(()) => return,
                 Err(e) => {
-                    info!("Error set cgroup {}: {:?}", &path, e);
-                    return Err(e);
+                    if e.raw_os_error() == Some(SysErr::ENOENT) {
+                        return;
+                    }
+                    error!("can't uninstall ({:?}) failed: {:?}", path, e);
                 }
             }
+            thread::sleep(time::Duration::from_millis(100 << i));
         }
-
-        return Ok(undo);
     }
 
-    // NumCPU returns the number of CPUs configured in 'cpuset/cpuset.cpus'.
+    pub fn Join(&self) -> Result<std::boxed::Box<dyn Fn()>> {
+        require_cgroup_v2()?;
+        let path = self.process_path();
+        let undo_path = self_cgroup_v2_path()?;
+
+        if undo_path == path {
+            return Ok(std::boxed::Box::new(|| {}));
+        }
+
+        let undo = move || {
+            info!("Restoring cgroup {}", &undo_path);
+            if let Err(e) = SetValue(&undo_path, "cgroup.procs", "0") {
+                info!("Error restoring cgroup {}: {:?}", &undo_path, e);
+            }
+        };
+
+        let pid = format!("{}", std::process::id());
+        info!("Joining cgroup (v2) {}", &path);
+        SetValue(&path, "cgroup.procs", &pid)?;
+
+        Ok(std::boxed::Box::new(undo))
+    }
+
     pub fn NumCPU(&self) -> Result<usize> {
-        let path = self.MakePath("cpuset");
-        let cpuset = GetValue(&path, "cpuset.cpus")?;
-        return CountCpuset(&cpuset);
+        let cpuset = GetValue(&self.process_path(), "cpuset.cpus")?;
+        count_cpuset(cpuset.trim())
     }
 
-    // MemoryLimit returns the memory limit.
     pub fn MemoryLimit(&self) -> Result<u64> {
-        let path = self.MakePath("memory");
-        let limStr = GetValue(&path, "memory.limit_in_bytes")?;
-        let limStr = limStr.trim();
-        return Ok(limStr.parse::<u64>().expect(&format!(
-            "MemoryLimit: can't parse limStr as u64 {}",
-            &limStr
-        )));
+        let lim_str = GetValue(&self.process_path(), "memory.max")?;
+        let lim_str = lim_str.trim();
+        if lim_str == "max" {
+            return Ok(0);
+        }
+        lim_str
+            .parse::<u64>()
+            .map_err(|e| Error::IOError(format!("MemoryLimit parse {:?}: {:?}", lim_str, e)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unified_cgroup_path_trims_leading_slash() {
+        assert_eq!(
+            unified_cgroup_path("/k8s.io/foo"),
+            "/sys/fs/cgroup/k8s.io/foo"
+        );
+        assert_eq!(
+            unified_cgroup_path("k8s.io/foo"),
+            "/sys/fs/cgroup/k8s.io/foo"
+        );
     }
 
-    pub fn MakePath(&self, controllerName: &str) -> String {
-        let mut path = self.Name.to_string();
-        match self.Parents.get(controllerName) {
-            None => (),
-            Some(parent) => {
-                path = Join(parent, &self.Name);
+    #[test]
+    fn count_cpuset_parses_ranges() {
+        assert_eq!(count_cpuset("0-2,7").unwrap(), 4);
+        assert_eq!(count_cpuset("1").unwrap(), 1);
+        assert!(count_cpuset("3-1").is_err());
+    }
+
+    #[test]
+    fn require_cgroup_v2_errors_when_unavailable() {
+        if cgroup_v2_available() {
+            assert!(require_cgroup_v2().is_ok());
+        } else {
+            assert!(require_cgroup_v2().is_err());
+        }
+    }
+
+    #[test]
+    fn subtree_control_active_reads_delegation_parent() {
+        if std::env::consts::OS != "linux" || !cgroup_v2_available() {
+            return;
+        }
+        let k8s = unified_cgroup_path("k8s.io");
+        if Path::new(&k8s).exists() {
+            let _ = subtree_control_active(&k8s);
+        }
+    }
+
+    /// Skips when not Linux, cgroup v2 unavailable, or quark log dir not writable.
+    #[test]
+    fn cgroup_v2_install_join_roundtrip() {
+        if std::env::consts::OS != "linux" || !cgroup_v2_available() {
+            return;
+        }
+        if std::fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(crate::print::LOG_FILE_DEFAULT)
+            .is_err()
+        {
+            return;
+        }
+
+        let pid = std::process::id();
+        let rel = self_cgroup_v2_path()
+            .ok()
+            .map(|p| {
+                p.strip_prefix(CGROUP_ROOT)
+                    .unwrap_or("")
+                    .trim_start_matches('/')
+                    .to_string()
+            })
+            .unwrap_or_default();
+        let name = if rel.is_empty() {
+            format!("quark-cgroup-test-{}", pid)
+        } else {
+            format!("{}/quark-cgroup-test-{}", rel, pid)
+        };
+
+        let mut cg = Cgroup {
+            Name: name,
+            Parents: BTreeMap::new(),
+            Own: false,
+            ProcessPath: None,
+            OwnProcess: false,
+        };
+
+        let mut memory = LinuxMemory::default();
+        memory.limit = Some(64 * 1024 * 1024);
+        let mut cpu = LinuxCPU::default();
+        cpu.shares = Some(512);
+        let res = LinuxResources {
+            memory: Some(memory),
+            cpu: Some(cpu),
+            ..Default::default()
+        };
+
+        if cg.Install(&Some(res)).is_err() {
+            return;
+        }
+
+        let path = cg.path();
+        let mem_max = fs::read_to_string(format!("{}/memory.max", path)).unwrap_or_default();
+        assert!(
+            mem_max.trim() == "67108864",
+            "unexpected memory.max: {:?}",
+            mem_max
+        );
+
+        let _restore = match cg.Join() {
+            Ok(r) => r,
+            Err(_) => {
+                cg.Uninstall();
+                return;
             }
-        }
+        };
 
-        return Join(CGROUP_ROOT, &Join(controllerName, &path));
+        let metrics = super::super::stats::MetricsFromCgroup(&cg).expect("stats from cgroup");
+        assert!(metrics.get_memory().has_usage());
+
+        cg.Uninstall();
+        assert!(!Path::new(&path).exists());
     }
-}
-
-fn Noop(_spec: &LinuxResources, _path: &str) -> Result<()> {
-    return Ok(());
-}
-
-fn Memory(spec: &LinuxResources, path: &str) -> Result<()> {
-    match spec.memory {
-        None => return Ok(()),
-        Some(ref m) => {
-            SetOptionalValueInt(path, "memory.limit_in_bytes", m.limit)?;
-            SetOptionalValueInt(path, "memory.soft_limit_in_bytes", m.reservation)?;
-            SetOptionalValueInt(path, "memory.memsw.limit_in_bytes", m.swap)?;
-            SetOptionalValueInt(path, "memory.kmem.limit_in_bytes", m.kernel)?;
-            SetOptionalValueInt(path, "memory.kmem.tcp.limit_in_bytes", m.kernel_tcp)?;
-            SetOptionalValueUint(path, "memory.swappiness", m.swappiness)?;
-
-            if m.disableOOMKiller.is_some() && *m.disableOOMKiller.as_ref().unwrap() {
-                SetValue(path, "memory.oom_control", "1")?;
-            }
-
-            return Ok(());
-        }
-    }
-}
-
-fn CPU(spec: &LinuxResources, path: &str) -> Result<()> {
-    match spec.cpu {
-        None => return Ok(()),
-        Some(ref c) => {
-            SetOptionalValueUint(path, "cpu.shares", c.shares)?;
-            SetOptionalValueInt(path, "cpu.cfs_quota_us", c.quota)?;
-            SetOptionalValueUint(path, "cpu.cfs_period_us", c.period)?;
-
-            return Ok(());
-        }
-    }
-}
-
-fn CpuSet(spec: &LinuxResources, path: &str) -> Result<()> {
-    if spec.cpu.is_none() || spec.cpu.as_ref().unwrap().cpus.len() == 0 {
-        FillFromAncestor(&Join(path, "cpuset.cpus"))?;
-    } else {
-        SetValue(path, "cpuset.cpus", &spec.cpu.as_ref().unwrap().cpus)?;
-    }
-
-    if spec.cpu.is_none() || spec.cpu.as_ref().unwrap().mems.len() == 0 {
-        FillFromAncestor(&Join(path, "cpuset.mems"))?;
-    } else {
-        SetValue(path, "cpuset.mems", &spec.cpu.as_ref().unwrap().mems)?;
-    }
-
-    return Ok(());
-}
-
-fn BlockIO(spec: &LinuxResources, path: &str) -> Result<()> {
-    match spec.block_io {
-        None => return Ok(()),
-        Some(ref b) => {
-            SetOptionalValueU16(path, "blkio.weight", b.weight)?;
-            SetOptionalValueU16(path, "blkio.leaf_weight", b.leaf_weight)?;
-
-            for dev in &b.weight_device {
-                let val = format!(
-                    "{}:{} {}",
-                    dev.major,
-                    dev.minor,
-                    dev.weight.expect("expect weight is not none")
-                );
-                SetValue(path, "blkio.weight_device", &val)?;
-
-                let val = format!(
-                    "{}:{} {}",
-                    dev.major,
-                    dev.minor,
-                    dev.leaf_weight.expect("expect leaf_weight is not none")
-                );
-                SetValue(path, "blkio.leaf_weight_device", &val)?;
-            }
-
-            SetThrottle(
-                path,
-                "blkio.throttle.read_bps_device",
-                &b.throttle_read_bps_device,
-            )?;
-            SetThrottle(
-                path,
-                "blkio.throttle.write_bps_device",
-                &b.throttle_write_bps_device,
-            )?;
-            SetThrottle(
-                path,
-                "blkio.throttle.read_iops_device",
-                &b.throttle_read_iops_device,
-            )?;
-            SetThrottle(
-                path,
-                "blkio.throttle.write_iops_device",
-                &b.throttle_write_iops_device,
-            )?;
-
-            return Ok(());
-        }
-    }
-}
-
-pub fn SetThrottle(path: &str, name: &str, devs: &[LinuxThrottleDevice]) -> Result<()> {
-    for dev in devs {
-        let val = format!("{}:{} {}", dev.major, dev.minor, dev.rate);
-        SetValue(path, name, &val)?;
-    }
-
-    return Ok(());
-}
-
-fn NetworkClass(spec: &LinuxResources, path: &str) -> Result<()> {
-    match spec.network {
-        None => return Ok(()),
-        Some(ref n) => {
-            SetOptionalValueU32(path, "net_cls.classid", n.class_id)?;
-
-            return Ok(());
-        }
-    }
-}
-
-fn NetworkPrio(spec: &LinuxResources, path: &str) -> Result<()> {
-    match spec.network {
-        None => return Ok(()),
-        Some(ref n) => {
-            for prio in &n.priorities {
-                let val = format!("{} {}", prio.name, prio.priority);
-                SetValue(path, "net_prio.ifpriomap", &val)?;
-            }
-        }
-    }
-
-    return Ok(());
-}
-
-pub trait Controller {
-    // optional controllers don't fail if not found.
-    fn Optional(&self) -> bool;
-    // set applies resource limits to controller.
-    fn Set(&self, linuxResource: &Option<LinuxResources>, s: &str) -> Result<()>;
-    // skip is called when controller is not found to check if it can be safely
-    // skipped or not based on the spec.
-    fn Skip(&self, linuxResource: &Option<LinuxResources>) -> Result<()>;
 }

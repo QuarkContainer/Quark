@@ -17,6 +17,7 @@ use std::io::prelude::*;
 use std::io::SeekFrom;
 
 use crate::qlib::common::*;
+use crate::qlib::path::Join;
 use crate::runc::oci::*;
 
 use super::cgroup::*;
@@ -28,22 +29,10 @@ pub const CGROUP2_KEY: &str = "cgroup2";
 // https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html
 pub const DEFAULT_PERIOD: u64 = 100000;
 
-/* pub trait Controllerv2 : Controller {
-    fn generateProperties(spec: &LinuxResources)
-} */
-
 pub struct Cpu2 {}
 
-impl Controller for Cpu2 {
-    fn Optional(&self) -> bool {
-        return false;
-    }
-
-    fn Skip(&self, _linuxResource: &Option<LinuxResources>) -> Result<()> {
-        panic!("cgroup controller is not optional");
-    }
-
-    fn Set(&self, spec: &Option<LinuxResources>, path: &str) -> Result<()> {
+impl Cpu2 {
+    pub fn Set(&self, spec: &Option<LinuxResources>, path: &str) -> Result<()> {
         match spec {
             None => return Ok(()),
             Some(ref spec) => match spec.cpu {
@@ -97,26 +86,28 @@ impl Controller for Cpu2 {
 
 pub struct CpuSet2 {}
 
-impl Controller for CpuSet2 {
-    fn Optional(&self) -> bool {
-        return false;
-    }
-
-    fn Skip(&self, _linuxResource: &Option<LinuxResources>) -> Result<()> {
-        panic!("cgroup controller is not optional");
-    }
-
-    fn Set(&self, spec: &Option<LinuxResources>, path: &str) -> Result<()> {
+impl CpuSet2 {
+    pub fn Set(&self, spec: &Option<LinuxResources>, path: &str) -> Result<()> {
         match spec {
-            None => return Ok(()),
+            None => {
+                inherit_cgroup_file(path, "cpuset.cpus")?;
+                inherit_cgroup_file(path, "cpuset.mems")?;
+            }
             Some(ref spec) => match spec.cpu {
-                None => return Ok(()),
+                None => {
+                    inherit_cgroup_file(path, "cpuset.cpus")?;
+                    inherit_cgroup_file(path, "cpuset.mems")?;
+                }
                 Some(ref cpu) => {
-                    if &cpu.cpus != "" {
+                    if cpu.cpus.is_empty() {
+                        inherit_cgroup_file(path, "cpuset.cpus")?;
+                    } else {
                         SetValue(path, "cpuset.cpus", &cpu.cpus)?;
                     }
 
-                    if &cpu.mems != "" {
+                    if cpu.mems.is_empty() {
+                        inherit_cgroup_file(path, "cpuset.mems")?;
+                    } else {
                         SetValue(path, "cpuset.mems", &cpu.mems)?;
                     }
                 }
@@ -129,16 +120,8 @@ impl Controller for CpuSet2 {
 
 pub struct Memory2 {}
 
-impl Controller for Memory2 {
-    fn Optional(&self) -> bool {
-        return false;
-    }
-
-    fn Skip(&self, _linuxResource: &Option<LinuxResources>) -> Result<()> {
-        panic!("cgroup controller is not optional");
-    }
-
-    fn Set(&self, spec: &Option<LinuxResources>, path: &str) -> Result<()> {
+impl Memory2 {
+    pub fn Set(&self, spec: &Option<LinuxResources>, path: &str) -> Result<()> {
         match spec {
             None => return Ok(()),
             Some(ref spec) => {
@@ -334,5 +317,33 @@ pub fn ParseUint(s: &str, base: u32, bitSize: u32) -> Result<u64> {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn convert_cpu_shares_to_v2_weight() {
+        assert_eq!(convertCPUSharesToCgroupV2Value(0), 0);
+        assert_eq!(convertCPUSharesToCgroupV2Value(2), 1);
+        assert_eq!(convertCPUSharesToCgroupV2Value(1024), 39);
+    }
+
+    #[test]
+    fn convert_memory_swap_to_v2() {
+        assert_eq!(ConvertMemorySwapToCgroupV2Value(-1, 1024).unwrap(), -1);
+        assert_eq!(ConvertMemorySwapToCgroupV2Value(0, 1024).unwrap(), 0);
+        assert_eq!(ConvertMemorySwapToCgroupV2Value(2048, 1024).unwrap(), 1024);
+        assert_eq!(ConvertMemorySwapToCgroupV2Value(0, -1).unwrap(), -1);
+        assert!(ConvertMemorySwapToCgroupV2Value(512, 1024).is_err());
+    }
+
+    #[test]
+    fn num_to_str_max_and_zero() {
+        assert_eq!(NumToStr(0), "");
+        assert_eq!(NumToStr(-1), "max");
+        assert_eq!(NumToStr(1024), "1024");
     }
 }

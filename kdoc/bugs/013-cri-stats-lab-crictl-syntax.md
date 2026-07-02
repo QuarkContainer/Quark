@@ -12,7 +12,7 @@ Lab H2 (`crictl stats`) failed with `load podSandboxConfig: config at <pod-id> n
 ## Fix
 
 - `lab/src/keska_lab/setup/containerd_cri.py`: regenerate v3 CRI config, pre-pull images via `ctr`, use `crictl run --no-pull container.json pod.json`, parse stats table output.
-- `lab/src/keska_lab/setup/quark_config.py`: `cri_bench_config_json()` (`ShimMode`, `Sandboxed`, cgroups on).
+- `lab/src/keska_lab/setup/quark_config.py`: `cri_bench_config_json()` (`Sandboxed`, cgroups on).
 - `QuarkCriStatsStep` wired into heavy/network setup pipelines.
 
 ## Files
