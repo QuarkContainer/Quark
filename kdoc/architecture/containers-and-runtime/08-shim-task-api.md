@@ -93,9 +93,9 @@ Detailed symptom/fix rows live in `kdoc/bugs/03*.md` and `043`. Summary:
 | 039 | Subcontainer rootfs path |
 | 043 | Subcontainer cgroup + stop sync |
 
-## Open production items (from roadmap)
+## Open production items
 
-From [`aaa-runtime-roadmap.md`](../../aaa-runtime-roadmap.md) Group 3:
+From [`future-plans.md`](../../future-plans.md#cri--shim-follow-ups-post-group-a):
 
 - **H2:** Implement shim `stats()` with CPU/memory visible in CRI JSON (partially addressed by cgroup reader; crictl display still weak on Quark)
 - **H1:** Graceful StopContainer for `crictl rm -f` without lab timeouts

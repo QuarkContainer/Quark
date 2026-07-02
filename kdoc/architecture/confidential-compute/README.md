@@ -45,7 +45,7 @@ flowchart TB
 ## See also
 
 - [Quark runc internals](../containers-and-runtime/06-quark-runc-internals.md) — VM boot overview
-- [production-cleanup-suggestions.md](../../production-cleanup-suggestions.md) — SEV feature gating notes
+- [future-plans.md](../../future-plans.md) — repo hygiene, SEV feature gating notes
 
 ---
 

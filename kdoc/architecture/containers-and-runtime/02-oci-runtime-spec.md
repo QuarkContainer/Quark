@@ -197,7 +197,7 @@ containerd’s snapshotter (overlayfs, devmapper for Kata on lab, etc.) produces
 | Lifecycle | `qvisor/src/runc/container/container.rs` |
 | Shim bundle path | `qvisor/src/runc/shim/container.rs` (`CreateTaskRequest.bundle`) |
 
-**Bundle path caveat:** when `Sandboxed` and containerd leaves `bundle` empty, Quark historically used `/{id}`; containerd 2.x normally passes the real path under `/run/containerd/...` ([031](../../../bugs/031-cri-shim-bundle-path-containerd2.md)).
+**Bundle path:** containerd 2.x CRI passes the real bundle under `/run/containerd/...`; the shim rejects an empty `bundle` ([031](../../../bugs/031-cri-shim-bundle-path-containerd2.md)).
 
 ---
 

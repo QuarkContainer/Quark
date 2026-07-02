@@ -75,7 +75,6 @@ class KataBackend(SandboxBackend):
         if crictl and kata:
             cri = self.remote.sh(
                 "test -S /run/containerd/containerd.sock && "
-                "sudo -n ctr plugins ls 2>/dev/null | grep -F 'io.containerd.grpc.v1' | grep -w 'cri' | grep -q ' ok ' && "
                 "sudo -n crictl info >/dev/null 2>&1 && "
                 "sudo -n grep -q 'io.containerd.kata.v2' /etc/containerd/config.toml",
                 timeout=30,

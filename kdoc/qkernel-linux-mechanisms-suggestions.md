@@ -347,7 +347,7 @@ Prefer mechanisms Linux apps **already call** (`fadvise`, `readahead`, `mmap` co
 
 ## Related docs
 
-- [production-cleanup-suggestions.md](production-cleanup-suggestions.md) — repo/dead-code scope
+- [future-plans.md](future-plans.md) — storage/disk fairness, repo scope
 - [bugs/004-postgres-oci-pgbench.md](bugs/004-postgres-oci-pgbench.md) — PGDATA harness
 - [lab/README.md](../lab/README.md) — measurement parity and storage caveats
 

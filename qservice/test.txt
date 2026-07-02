@@ -79,13 +79,15 @@ sudo chmod 777 /run/containerd/containerd.sock
 
 
 cat <<EOF | sudo tee /etc/containerd/config.toml
-version = 2
-[plugins."io.containerd.runtime.v1.linux"]
-  shim_debug = false
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
-  runtime_type = "io.containerd.runc.v2"
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quark]
-  runtime_type = "io.containerd.quark.v1"
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quarkd]
-  runtime_type = "io.containerd.quarkd.v1"
+# containerd 2.x — start from: containerd config default
+# Then add Quark runtimes under plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes:
+#
+#   [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.quark]
+#     runtime_type = 'io.containerd.quark.v1'
+#     sandboxer = 'podsandbox'
+#   [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.quarkd]
+#     runtime_type = 'io.containerd.quarkd.v1'
+#     sandboxer = 'podsandbox'
+#
+# See doc/k8s_setup.md for full steps.
 EOF

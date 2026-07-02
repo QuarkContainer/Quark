@@ -45,11 +45,11 @@ pub struct ContainerFactory {}
 
 impl ContainerFactory {
     pub fn Create(ns: &str, req: &CreateTaskRequest) -> Result<CommonContainer> {
-        let mut bundle = req.bundle.clone();
-        // containerd 2.x podsandboxer passes the real bundle path; legacy lab
-        // direct paths used "/{id}" only when bundle was unset.
-        if crate::QUARK_CONFIG.lock().Sandboxed && req.bundle.is_empty() {
-            bundle = format!("/{}", req.id);
+        let bundle = req.bundle.clone();
+        if bundle.is_empty() {
+            return Err(Error::Common(
+                "CreateTaskRequest: bundle path is required".to_string(),
+            ));
         }
 
         let mut opts = Options::new();

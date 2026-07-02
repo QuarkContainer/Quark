@@ -35,90 +35,34 @@ docker exec $MINIKUBE_DOCKER_ID chmod 755 /usr/local/bin/containerd-shim-runsc-v
 minikube cp /usr/local/bin/runsc minikube:/usr/local/bin/runsc
 docker exec $MINIKUBE_DOCKER_ID chmod 755 /usr/local/bin/runsc
 
-## clean and rewrite containerd config
-docker exec $MINIKUBE_DOCKER_ID rm /etc/containerd/config.toml
-cat  <<EOF > /tmp/containerd.toml
-version = 2
-root = "/var/lib/containerd"
-state = "/run/containerd"
-oom_score = 0
-[grpc]
-  address = "/run/containerd/containerd.sock"
-  uid = 0
-  gid = 0
-  max_recv_message_size = 16777216
-  max_send_message_size = 16777216
-
-[debug]
-  address = ""
-  uid = 0
-  gid = 0
-  level = "debug"
-
-[metrics]
-  address = ""
-  grpc_histogram = false
-
-[cgroup]
-  path = ""
-
-[proxy_plugins]
-# fuse-overlayfs is used for rootless
-[proxy_plugins."fuse-overlayfs"]
-  type = "snapshot"
-  address = "/run/containerd-fuse-overlayfs.sock"
-
-[plugins]
-  [plugins."io.containerd.runtime.v1.linux"]
-    shim_debug = true
-  [plugins."io.containerd.monitor.v1.cgroups"]
-    no_prometheus = false
-  [plugins."io.containerd.grpc.v1.cri"]
-    stream_server_address = ""
-    stream_server_port = "10010"
-    enable_selinux = false
-    sandbox_image = "k8s.gcr.io/pause:3.5"
-    stats_collect_period = 10
-    enable_tls_streaming = false
-    max_container_log_line_size = 16384
-    restrict_oom_score_adj = false
-      [plugins."io.containerd.grpc.v1.cri".containerd]
-            snapshotter = "overlayfs"
-            default_runtime_name = "runc"
-        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes]
-          [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
-            runtime_type = "io.containerd.runc.v2"
-            [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
-              SystemdCgroup = false
-              BinaryName = "quark_d"
-          [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]
-            runtime_type = "io.containerd.runsc.v1"
-            [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc.options]
-              TypeUrl = "io.containerd.runsc.v1.options"
-              ConfigPath = "/etc/containerd/runsc.toml"
-      [plugins."io.containerd.grpc.v1.cri".containerd.untrusted_workload_runtime]
-        runtime_type = ""
-        runtime_engine = ""
-        runtime_root = ""
-    [plugins."io.containerd.grpc.v1.cri".cni]
-      bin_dir = "/opt/cni/bin"
-      conf_dir = "/etc/cni/net.mk"
-      conf_template = ""
-    [plugins."io.containerd.grpc.v1.cri".registry]
-      [plugins."io.containerd.grpc.v1.cri".registry.mirrors]
-        [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-          endpoint = ["https://registry-1.docker.io"]
-  [plugins."io.containerd.gc.v1.scheduler"]
-    pause_threshold = 0.02
-    deletion_threshold = 0
-    mutation_threshold = 100
-    schedule_delay = "0s"
-    startup_delay = "100ms"
-  [plugins."io.containerd.service.v1.diff-service"]
-    default = ["walking"]
-EOF
-
-docker cp /tmp/containerd.toml $MINIKUBE_DOCKER_ID:/etc/containerd/config.toml
+## clean and rewrite containerd config (containerd 2.x)
+docker exec $MINIKUBE_DOCKER_ID bash -c 'containerd config default > /tmp/containerd.toml'
+docker exec $MINIKUBE_DOCKER_ID python3 << 'PY'
+from pathlib import Path
+p = Path("/tmp/containerd.toml")
+text = p.read_text()
+extra = """
+      [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.quark]
+        runtime_type = 'io.containerd.quark.v1'
+        sandboxer = 'podsandbox'
+      [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc]
+        runtime_type = 'io.containerd.runsc.v1'
+"""
+if "runtimes.quark" not in text:
+    runc_end = text.find("\n\n", text.find("runtimes.runc.options"))
+    if runc_end == -1:
+        raise SystemExit("could not locate end of runc runtime block")
+    text = text[:runc_end] + "\n" + extra + text[runc_end:]
+# Dev-only: run workload via runsc shim pointing at quark_d
+text = text.replace(
+    "runtime_type = 'io.containerd.runc.v2'",
+    "runtime_type = 'io.containerd.runc.v2'\n        [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc.options]\n          BinaryName = 'quark_d'",
+    1,
+)
+p.write_text(text)
+PY
+docker cp /tmp/containerd.toml $MINIKUBE_DOCKER_ID:/etc/containerd/config.toml 2>/dev/null || \
+  docker exec $MINIKUBE_DOCKER_ID cp /tmp/containerd.toml /etc/containerd/config.toml
 
 # runsc config
 docker exec $MINIKUBE_DOCKER_ID rm -f /etc/containerd/runsc.toml

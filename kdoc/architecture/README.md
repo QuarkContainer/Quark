@@ -66,6 +66,5 @@ Doc updates follow [`.cursor/rules/architecture-docs.mdc`](../../.cursor/rules/a
 
 | Doc | Role |
 |-----|------|
-| [`kdoc/aaa-runtime-roadmap.md`](../aaa-runtime-roadmap.md) | Production hardening batches |
-| [`kdoc/production-cleanup-suggestions.md`](../production-cleanup-suggestions.md) | Dead-code / config inventory |
+| [`kdoc/future-plans.md`](../future-plans.md) | Forward-looking checklist (storage, TSOT, CRI follow-ups) |
 | [`doc/k8s_setup.md`](../../doc/k8s_setup.md) | Install quark + containerd on a node |

@@ -61,7 +61,7 @@ def cri_bench_config_json() -> dict:
 # Group 5 (E2/E3): runtime config for lab A/B when the matching Cargo feature is enabled.
 EXPERIMENTAL_FLAG_KEYS = ("MmapRead", "UringStatx")
 
-# Unified lab matrix (see kdoc/aaa-runtime-roadmap.md Group 5).
+# Unified lab matrix (see kdoc/future-plans.md#other-forward-work).
 GROUP5_ITERATIONS = 5
 GROUP5_SUITES = ("light", "full", "db")
 

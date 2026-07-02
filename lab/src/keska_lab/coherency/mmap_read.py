@@ -1,4 +1,4 @@
-"""E2 MmapRead coherency checklist C1–C7 (see kdoc/aaa-runtime-roadmap.md)."""
+"""E2 MmapRead coherency checklist C1–C7 (see kdoc/future-plans.md)."""
 
 from __future__ import annotations
 

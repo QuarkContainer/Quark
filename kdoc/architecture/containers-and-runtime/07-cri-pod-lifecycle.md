@@ -75,7 +75,7 @@ sequenceDiagram
 containerd starts (or reuses) a shim and calls **Task.Create** for the pause container.
 
 1. `ShimTask::create` (`shim/shim_task.rs`)
-2. `ContainerFactory::Create` — bundle from request; if `Sandboxed && req.bundle.is_empty()` use `/{id}` else containerd’s path
+2. `ContainerFactory::Create` — bundle path from containerd (required; under `/run/containerd/...`)
 3. `Container::Create1` — because `SANDBOX.ID` is empty, take **VM create** branch (`IsRoot || Sandboxed`)
 4. `Sandbox::New1` → `SandboxProcess::Execv1` → child runs `quark boot`
 5. First create in empty map → set global `SANDBOX` (ID, Pid, Cgroup)

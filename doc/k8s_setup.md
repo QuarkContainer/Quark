@@ -25,21 +25,32 @@ make install
 
 `make install` copies the binary to both `quark` and `containerd-shim-quark-v1`.
 This step need to happen on every k8s node with kubelet running.
-open `/etc/containerd/config.toml` and add/modify the following entry in the containerd config
+
+**Requires containerd 2.x.** Start from the upstream default config, then register Quark:
+
 ```
-cat <<EOF | sudo tee /etc/containerd/config.toml
-version = 2
-[plugins."io.containerd.runtime.v1.linux"]
-  shim_debug = true
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
-  runtime_type = "io.containerd.runc.v2"
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]
-  runtime_type = "io.containerd.runsc.v1"
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quark]
-  runtime_type = "io.containerd.quark.v1"
-EOF
+sudo containerd config default | sudo tee /etc/containerd/config.toml
 ```
-And restart the containerd service with `sudo systemctl restart containerd`
+
+Add under `[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes]` (after the `runc` block):
+
+```
+      [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.quark]
+        runtime_type = 'io.containerd.quark.v1'
+        sandboxer = 'podsandbox'
+```
+
+If CRI image pull fails on a fresh install, ensure the transfer API lists overlayfs (containerd 2.x default may omit this):
+
+```
+    [[plugins.'io.containerd.transfer.v1.local'.unpack_config]]
+      platform = 'linux/amd64'
+      snapshotter = 'overlayfs'
+```
+
+Lab hosts can apply the full patch automatically via the `containerd-cri` setup step in [`lab/src/keska_lab/setup/containerd_cri.py`](../lab/src/keska_lab/setup/containerd_cri.py).
+
+Restart containerd: `sudo systemctl restart containerd`
 
 
 ### 4. Start a k8s cluster

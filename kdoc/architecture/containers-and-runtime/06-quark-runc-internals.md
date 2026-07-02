@@ -124,7 +124,7 @@ flowchart TD
 |---|----------|--------|
 | 1 | First container creates VM | `Sandbox::New1`, not subcontainer-only |
 | 2 | Later containers share VM | `CreateSubContainer` when `SANDBOX.ID` set |
-| 3 | Bundle path | Real path from containerd 2.x; legacy `/{id}` if empty ([031](../../bugs/031-cri-shim-bundle-path-containerd2.md)) |
+| 3 | Bundle path | Real path from containerd 2.x CRI ([031](../../bugs/031-cri-shim-bundle-path-containerd2.md)) |
 | 4 | vCPU | Pause pod → 1 vCPU; bootstrap on vCPU 0 ([035](../../bugs/035-cri-pause-sandbox-vcpu-count.md)–[037](../../bugs/037-single-vcpu-uring-wait-deadlock.md)) |
 | 5 | Pivot | Once per VM — `pivotOnce` ([038](../../bugs/038-cri-double-pivot-chdir-fail.md)) |
 

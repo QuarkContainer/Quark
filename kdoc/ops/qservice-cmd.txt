@@ -39,19 +39,22 @@ EOF
 sudo systemctl restart containerd
 sudo chmod 777 /run/containerd/containerd.sock
 
-2. config quark shim for containerd
+2. config quark shim for containerd (requires containerd 2.x)
 
-cat <<EOF | sudo tee /etc/containerd/config.toml
-version = 2
-[plugins."io.containerd.runtime.v1.linux"]
-  shim_debug = false
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
-  runtime_type = "io.containerd.runc.v2"
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quark]
-  runtime_type = "io.containerd.quark.v1"
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quarkd]
-  runtime_type = "io.containerd.quarkd.v1"
-EOF
+sudo containerd config default | sudo tee /etc/containerd/config.toml
+
+Add under [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes]:
+
+      [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.quark]
+        runtime_type = 'io.containerd.quark.v1'
+        sandboxer = 'podsandbox'
+      [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.quarkd]
+        runtime_type = 'io.containerd.quarkd.v1'
+        sandboxer = 'podsandbox'
+
+If CRI image pull fails, add unpack_config under transfer.v1.local (see doc/k8s_setup.md).
+
+sudo systemctl restart containerd
 
 3. CRI pod config (/etc/quark/config.json)
 
