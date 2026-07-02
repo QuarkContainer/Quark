@@ -128,7 +128,7 @@ Results → `~/.keska-lab/results/*.json` (schema v2).
 | `KESKA_LAB_ENABLE_TSOT` | — | Set `1` to deploy TSOT stack during Quark network setup (required for crictl-based Quark network probes) |
 | `KESKA_LAB_WORK` | `/tmp/keska-lab` | Cached OCI bundles |
 | `KESKA_LAB_IO_BENCH_DIR` | `/var/lib/keska-lab/io-bench` | Host disk bind-mount for `io_read`/`io_write` (not tmpfs) |
-| `KESKA_LAB_IMAGE_REGISTRY` | `europe-north1-docker.pkg.dev/keska-devops/base-images` | Pull mirror tried before Docker Hub; set empty to disable. Setup runs `image-registry-auth` (probe pull + `gcloud auth login` if needed). Verify with `keska-lab-registry-check`. |
+| `KESKA_LAB_IMAGE_REGISTRY` | `europe-north1-docker.pkg.dev/keska-devops/base-images` | Pull mirror tried before Docker Hub; set empty to disable. Setup runs `image-registry-auth` (probe pull + `gcloud auth login --no-launch-browser` on the lab host if needed). Verify with `keska-lab-registry-check`. |
 
 ---
 

@@ -2,12 +2,15 @@
 
 from keska_lab.setup.image_registry import (
     DEFAULT_IMAGE_REGISTRY,
+    GCLOUD_AUTH_LOGIN_CMD,
     check_registry_auth_script,
     ctr_pull_with_mirror_script,
     docker_auth_preamble,
     docker_pull_with_mirror_script,
+    gcloud_auth_login_script,
     gcloud_docker_login_script,
     lab_path_setup_script,
+    registry_auth_diagnostic_script,
 )
 
 
@@ -36,3 +39,12 @@ def test_gcloud_login_script_has_host():
     script = gcloud_docker_login_script("europe-north1-docker.pkg.dev")
     assert "europe-north1-docker.pkg.dev" in script
     assert lab_path_setup_script() in docker_auth_preamble(DEFAULT_IMAGE_REGISTRY)
+
+
+def test_gcloud_auth_login_uses_no_launch_browser():
+    script = gcloud_auth_login_script()
+    assert GCLOUD_AUTH_LOGIN_CMD in script
+    assert "--no-launch-browser" in script
+    assert lab_path_setup_script() in script
+    diag = registry_auth_diagnostic_script(DEFAULT_IMAGE_REGISTRY)
+    assert "--no-launch-browser" in diag

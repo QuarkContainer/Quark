@@ -101,8 +101,15 @@ class RemoteHost:
         timeout: int | None = None,
         stream: bool = True,
     ) -> RemoteResult:
-        """Interactive SSH session (no BatchMode) for gcloud login etc."""
-        return self.run(remote_cmd, timeout=timeout, stream=stream, tty=True)
+        """Interactive SSH session (no BatchMode) with TTY forwarded to the user."""
+        del stream  # always pass stdin/stdout/stderr through for auth prompts
+        cmd = [*self._base_ssh(batch=False), "-t", remote_cmd]
+        try:
+            proc = subprocess.run(cmd, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            raise
+        rc = proc.returncode if proc.returncode is not None else 1
+        return RemoteResult("", "", rc)
 
     def _run_streaming(self, cmd: list[str], *, timeout: int | None) -> RemoteResult:
         proc = subprocess.Popen(

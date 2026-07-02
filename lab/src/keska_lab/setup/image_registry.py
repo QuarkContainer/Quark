@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from keska_lab.remote import RemoteHost
 
 DEFAULT_IMAGE_REGISTRY = "europe-north1-docker.pkg.dev/keska-devops/base-images"
+GCLOUD_AUTH_LOGIN_CMD = "gcloud auth login --no-launch-browser"
 
 
 def ctr_image_ref(image: str) -> str:
@@ -82,6 +83,11 @@ def lab_path_setup_script() -> str:
         done
         """
     ).strip()
+
+
+def gcloud_auth_login_script() -> str:
+    """Interactive GCP login on the lab host (URL in terminal, paste code at prompt)."""
+    return f"{lab_path_setup_script()}\n{GCLOUD_AUTH_LOGIN_CMD}"
 
 
 def gcloud_docker_login_script(host: str) -> str:
@@ -164,7 +170,7 @@ def registry_auth_diagnostic_script(registry: str) -> str:
           exit 0
         fi
         if ! gcloud auth print-access-token >/dev/null 2>&1; then
-          echo "gcloud auth print-access-token failed — run: gcloud auth login"
+          echo "gcloud auth print-access-token failed — run: {GCLOUD_AUTH_LOGIN_CMD}"
         fi
         echo "--- docker pull ---"
         sg docker -c "docker pull \\"{probe}\\"" 2>&1 | tail -15
@@ -225,21 +231,16 @@ def ensure_image_registry_auth(
     if needs_login:
         print(
             f"\nKeska mirror auth required on {remote.ssh_target} ({host}).\n"
-            "A browser login URL will appear below — complete it, then return here.\n",
+            f"Running: {GCLOUD_AUTH_LOGIN_CMD}\n"
+            "Open the URL in your browser, then paste the verification code at the SSH prompt.\n",
             flush=True,
         )
         login = remote.run_tty(
-            "bash -lc 'gcloud auth login --no-launch-browser'",
-            stream=True,
+            f"bash -lc {shlex.quote(gcloud_auth_login_script())}",
             timeout=None,
         )
         if not login.ok:
-            raise RuntimeError(remote.format_failure(login) or "gcloud auth login failed")
-
-        try:
-            input("Press Enter after completing Google auth in the browser… ")
-        except EOFError:
-            pass
+            raise RuntimeError(remote.format_failure(login) or f"{GCLOUD_AUTH_LOGIN_CMD} failed")
 
         cfg = remote.sh_login(configure_gcp_docker_script(registry), timeout=120, stream=stream)
         if not cfg.ok:
