@@ -68,6 +68,18 @@ From [`08-shim-task-api.md`](architecture/containers-and-runtime/08-shim-task-ap
 
 ---
 
+## Guest kernel micro-performance (lab `micro` suite)
+
+Keska-lab `micro` suite (`getpid_ns`, `mmap_anon_fault_ms`, `pipe_throughput_mib_s`) runs identical in-guest Python on warm sandboxes — gaps vs Kata/Firecracker reflect **qkernel** syscall and MM paths, not KVM or the management stack. See [`workload.py`](../lab/src/keska_lab/harness/workload.py), [`qkernel/src/lib.rs`](../qkernel/src/lib.rs) (`syscall_handler`), [`vdso/`](../vdso/).
+
+- [ ] **`getpid_ns`** — vDSO `__kernel_getpid` (today VDSO only covers `clock_gettime`; every `os.getpid()` hits full syscall entry) and/or lighter syscall fast path: skip scheduler accounting, FP save/restore, and TLB shootdown on trivial syscalls
+- [ ] **`mmap_anon_fault_ms`** — anonymous precommit/`MAP_POPULATE`, cheaper page-fault handler, batch page install (extend adjacent prefault beyond 15 pages), THP-like behavior for sequential writes over large anonymous regions
+- [ ] **`pipe_throughput_mib_s`** — related syscall/IPC path tuning (same class of guest-kernel overhead)
+
+Related: [`qkernel-linux-mechanisms-suggestions.md`](qkernel-linux-mechanisms-suggestions.md) (fadvise/madvise/io_uring — separate from fault-path latency).
+
+---
+
 ## Other forward work
 
 - [ ] **Architecture stubs** (expand with approval): guest-kernel, vmm, confidential-compute
@@ -86,5 +98,6 @@ From [`08-shim-task-api.md`](architecture/containers-and-runtime/08-shim-task-ap
 | Bug fixes | [`bugs/`](bugs/) |
 | Lab harness | [`lab/README.md`](../lab/README.md) |
 | Guest I/O gaps | [`qkernel-linux-mechanisms-suggestions.md`](qkernel-linux-mechanisms-suggestions.md) |
+| Micro suite / qkernel perf | [`future-plans.md` § Guest kernel micro-performance](future-plans.md#guest-kernel-micro-performance-lab-micro-suite), [`workload.py`](../lab/src/keska_lab/harness/workload.py) |
 | Group 5 decisions | [`group5/`](group5/) |
 | K8s install | [`doc/k8s_setup.md`](../doc/k8s_setup.md) |
