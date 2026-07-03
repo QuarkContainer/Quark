@@ -1063,6 +1063,15 @@ impl Container {
             executeHooksBestEffort(&self.Spec.hooks.as_ref().unwrap().poststop, &self.State());
         }
 
+        if let Err(e) = fs::remove_dir_all(&self.Root) {
+            errs.push(format!(
+                "remove container metadata directory {}: {}",
+                &self.Root, e
+            ));
+        } else {
+            info!("removed container metadata directory {}", &self.Root);
+        }
+
         if errs.len() == 0 {
             return Ok(());
         }
