@@ -612,44 +612,75 @@ impl Sandbox {
 
     pub fn WaitForStopped(&mut self) -> Result<()> {
         info!("self child is {}, pid is {}", self.child, self.Pid);
-        let ms = 5 * 1000; //5 sec
-        for _i in 0..(ms / 10) as usize {
-            if self.child {
-                if self.Pid == 0 {
-                    return Ok(());
-                }
-
-                // The sandbox process is a child of the current process,
-                // so we can wait it and collect its zombie.
-                //info!("start to wait pid {}", self.Pid);
-                let ret = unsafe {
-                    wait4(
-                        self.Pid,
-                        &mut self.status as *mut _ as *mut i32,
-                        WNOHANG,
-                        0 as *mut rusage,
-                    )
-                };
-
-                if ret > 0 {
-                    self.Pid = 0;
-                    return Ok(());
-                }
-
-                if ret < 0 {
-                    info!("wait sandbox fail use error {}", errno::errno().0);
-                }
-            } else if self.IsRunning() {
-                continue;
-            } else {
+        if self.child {
+            if self.Pid == 0 {
                 return Ok(());
             }
 
-            let ten_millis = time::Duration::from_millis(10);
-            thread::sleep(ten_millis);
+            // The sandbox process is a child of the current process,
+            // so we can wait on it to terminate and collect its zombie.
+            let ret = unsafe {
+                wait4(
+                    self.Pid,
+                    &mut self.status as *mut _ as *mut i32,
+                    0,
+                    0 as *mut rusage,
+                )
+            };
+
+            if ret < 0 {
+                let err = errno::errno().0;
+                if err == ECHILD {
+                    self.Pid = 0;
+                    return Ok(());
+                }
+                return Err(Error::Common(format!(
+                    "error waiting sandbox {} process {}: {}",
+                    &self.ID, self.Pid, err
+                )));
+            }
+
+            self.Pid = 0;
+            return Ok(());
         }
 
-        return Err(Error::Common(format!("wait sandbox {} timeout", self.ID)));
+        let ms = 500;
+        for _i in 0..(ms / 10) as usize {
+            if self.IsRunning() {
+                let ten_millis = time::Duration::from_millis(10);
+                thread::sleep(ten_millis);
+            } else {
+                return Ok(());
+            }
+        }
+
+        if self.Pid != 0 {
+            info!(
+                "wait sandbox {} pid {} timed out after {}ms, force killing",
+                &self.ID, self.Pid, ms
+            );
+            let ret = unsafe { kill(self.Pid, SIGKILL) };
+            if ret < 0 && errno::errno().0 != ESRCH {
+                info!(
+                    "force kill sandbox {} pid {} failed: {}",
+                    &self.ID,
+                    self.Pid,
+                    errno::errno().0
+                );
+            }
+            thread::sleep(time::Duration::from_millis(50));
+            let _ = unsafe {
+                wait4(
+                    self.Pid,
+                    &mut self.status as *mut _ as *mut i32,
+                    WNOHANG,
+                    0 as *mut rusage,
+                )
+            };
+            self.Pid = 0;
+        }
+
+        Ok(())
     }
 
     pub fn SandboxConnect(&self) -> Result<UCallClient> {
