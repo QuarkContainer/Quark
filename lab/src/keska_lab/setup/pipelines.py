@@ -30,7 +30,7 @@ from keska_lab.setup.tsot import TsotBenchReadyStep
 class CleanupSandboxesStep(SetupStep):
     name = "cleanup-sandboxes"
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         cleanup_quark_sandboxes(remote)
         return StepResult(self.name, True, "stopped stray sandboxes")
 
@@ -41,7 +41,7 @@ class IoBenchDirStep(SetupStep):
     def __init__(self, config: LabConfig):
         self.config = config
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         import shlex
 
         path = self.config.io_bench_dir.rstrip("/")
@@ -61,7 +61,7 @@ class QuarkDirectCheckStep(SetupStep):
         self.config = config
         self.workload = workload
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         from keska_lab.backends.quark import QuarkBackend
         from keska_lab.setup.oci_bundle import bundle_dir, verify_bundle_markers
 
@@ -88,7 +88,7 @@ class KataCtrCheckStep(SetupStep):
         self.config = config
         self.workload = workload
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         from keska_lab.backends.kata import KataBackend
 
         spec = get_workload(self.workload)

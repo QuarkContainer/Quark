@@ -313,7 +313,7 @@ class EnsureWorkloadBundleStep(SetupStep):
         self.config = config
         self.workload = workload
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         try:
             path = ensure_workload_bundle(remote, self.config, self.workload)
             return StepResult(self.name, True, path)
@@ -327,7 +327,7 @@ class EnsurePostgresDataTemplateStep(SetupStep):
     def __init__(self, config: LabConfig):
         self.config = config
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         try:
             path = ensure_postgres_data_template(remote, self.config)
             return StepResult(self.name, True, path)
@@ -342,7 +342,7 @@ class EnsureOciBundleStep(SetupStep):
         self.config = config
         self.image = image
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         try:
             path = ensure_oci_bundle(remote, self.config, self.image)
             return StepResult(self.name, True, path)
@@ -373,7 +373,7 @@ class CtrImagePullStep(SetupStep):
         text = f"{r.stdout}\n{r.stderr}".lower()
         return "snapshot" in text and ("does not exist" in text or "already exists" in text)
 
-    def _docker_import(self, remote: RemoteHost, *, stream: bool) -> bool:
+    def _docker_import(self, remote: RemoteHost) -> bool:
         registry = self.config.image_registry if self.config else None
         base = shlex.quote(f"docker.io/library/{image_slug(self.image)}")
         fb = remote.sh(
@@ -381,37 +381,36 @@ class CtrImagePullStep(SetupStep):
             f"sg docker -c 'docker save {shlex.quote(self.image)}' | "
             f"sudo -n ctr images import --base-name {base} --digests -",
             timeout=900,
-            stream=stream,
         )
         return fb.ok
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         ref = ctr_image_ref(self.image)
         snap = self.config.kata_snapshotter if self.config else None
         purge = self._purge_refs()
         pull_cmd = self._pull_cmd(snap)
 
         if snap:
-            remote.sh(containerd_image_purge_script(*purge), timeout=120, stream=stream)
+            remote.sh(containerd_image_purge_script(*purge), timeout=120)
 
-        r = remote.sh(pull_cmd, timeout=600, stream=stream)
+        r = remote.sh(pull_cmd, timeout=600)
         if not r.ok and snap and self._snapshot_error(r):
-            remote.sh(containerd_image_purge_script(*purge), timeout=120, stream=stream)
-            remote.sh(containerd_devmapper_metadata_reset_script(), timeout=180, stream=stream)
-            r = remote.sh(pull_cmd, timeout=600, stream=stream)
+            remote.sh(containerd_image_purge_script(*purge), timeout=120)
+            remote.sh(containerd_devmapper_metadata_reset_script(), timeout=180)
+            r = remote.sh(pull_cmd, timeout=600)
 
         if r.ok:
             return StepResult(self.name, True, f"pulled {ref}")
 
         if snap:
-            remote.sh(containerd_image_purge_script(*purge), timeout=120, stream=stream)
-            if self._docker_import(remote, stream=stream):
-                r = remote.sh(pull_cmd, timeout=600, stream=stream)
+            remote.sh(containerd_image_purge_script(*purge), timeout=120)
+            if self._docker_import(remote):
+                r = remote.sh(pull_cmd, timeout=600)
                 if r.ok:
                     return StepResult(self.name, True, f"imported + devmapper unpack {ref}")
             return StepResult(self.name, False, remote.format_failure(r))
 
-        if self._docker_import(remote, stream=stream):
+        if self._docker_import(remote):
             return StepResult(self.name, True, f"imported {ref} via docker")
         check = remote.sh(
             f"sudo -n ctr images ls name | grep -F {shlex.quote(ref.split(':')[0])} || true",

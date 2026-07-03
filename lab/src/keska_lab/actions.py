@@ -10,6 +10,6 @@ if TYPE_CHECKING:
     from keska_lab.session import LabSession
 
 
-def build_quark(lab: LabSession, *, stream: bool = True) -> SetupReport:
+def build_quark(lab: LabSession) -> SetupReport:
     """Build and install Quark — same as ``lab.quark.run()``."""
-    return lab.quark.run(stream=stream)
+    return lab.quark.run()

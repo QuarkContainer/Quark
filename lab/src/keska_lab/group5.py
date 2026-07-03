@@ -265,14 +265,12 @@ def rebuild_quark(
     config: LabConfig,
     *,
     cargo_features: str = "",
-    stream: bool = True,
 ) -> None:
     ctx = ProvisionContext(
         remote=remote,
         config=config,
         repo=config.resolve_local_repo(),
         profile=config.quark_build_profile,
-        stream=stream,
     )
     sync_sources(ctx)
     build_quark(ctx, cargo_features=cargo_features)
@@ -281,8 +279,8 @@ def rebuild_quark(
 
 def prepare_group5(lab: LabSession) -> None:
     """One-time lab prep for light/full/db suites (bundles, io dir, postgres template)."""
-    lab.quark.prepare(stream=False, mode="full", workload="busybox")
-    lab.quark.prepare(stream=False, mode="db")
+    lab.quark.prepare(mode="full", workload="busybox")
+    lab.quark.prepare(mode="db")
 
 
 def _load_suite_report(path: Path) -> SuiteReport:
@@ -346,7 +344,6 @@ def run_group5_experimental_arm(
     flag: str,
     *,
     n: int = GROUP5_ITERATIONS,
-    stream: bool = True,
 ) -> dict[str, SuiteReport]:
     """Build experimental binary, deploy config, run suites (baseline must already exist)."""
     if flag not in GROUP5_BENCH_MATRIX:
@@ -354,8 +351,8 @@ def run_group5_experimental_arm(
     suites = GROUP5_BENCH_MATRIX[flag]
     lab = LabSession()
     features = ",".join(experimental_cargo_features(flag))
-    rebuild_quark(lab.remote, lab.config, cargo_features=features, stream=stream)
-    QuarkExperimentalConfigStep(flag).run(lab.remote, stream=stream)
+    rebuild_quark(lab.remote, lab.config, cargo_features=features)
+    QuarkExperimentalConfigStep(flag).run(lab.remote)
     return run_quark_suites(lab, suites, n=n, setup=False)
 
 
@@ -366,7 +363,6 @@ def run_group5_ab(
     skip_baseline_build: bool = False,
     experimental_only: bool = False,
     baseline_reports: dict[str, SuiteReport] | None = None,
-    stream: bool = True,
 ) -> AbCompareResult:
     """Run baseline then experimental Quark benches for one Group 5 flag."""
     if flag not in GROUP5_BENCH_MATRIX:
@@ -388,16 +384,16 @@ def run_group5_ab(
             baseline, baseline_paths = load_baseline_from_dir(flag)
     else:
         if not skip_baseline_build:
-            rebuild_quark(remote, config, cargo_features="", stream=stream)
-        QuarkBenchConfigStep().run(remote, stream=stream)
+            rebuild_quark(remote, config, cargo_features="")
+        QuarkBenchConfigStep().run(remote)
         baseline = run_quark_suites(lab, suites, n=n, setup=False)
         baseline_paths = _save_reports(baseline, f"baseline_{flag}")
 
     if experimental_only:
-        experimental = run_group5_experimental_arm(flag, n=n, stream=stream)
+        experimental = run_group5_experimental_arm(flag, n=n)
     else:
-        rebuild_quark(remote, config, cargo_features=features, stream=stream)
-        QuarkExperimentalConfigStep(flag).run(remote, stream=stream)
+        rebuild_quark(remote, config, cargo_features=features)
+        QuarkExperimentalConfigStep(flag).run(remote)
         experimental = run_quark_suites(lab, suites, n=n, setup=False)
     experimental_paths = _save_reports(experimental, f"experimental_{flag}")
 
@@ -466,7 +462,6 @@ def main() -> int:
             n=args.n,
             skip_baseline_build=args.skip_baseline_build,
             experimental_only=args.experimental_only,
-            stream=True,
         )
     except Exception as exc:
         print(f"group5 A/B failed: {exc}", file=__import__("sys").stderr)

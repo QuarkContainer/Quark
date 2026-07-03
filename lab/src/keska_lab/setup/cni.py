@@ -76,11 +76,11 @@ JSON
 class CniPluginsStep(SetupStep):
     name = "cni-plugins"
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
-        r = remote.sh(cni_install_script(), timeout=300, stream=stream)
+    def run(self, remote: RemoteHost) -> StepResult:
+        r = remote.sh(cni_install_script(), timeout=300)
         if not r.ok:
             return StepResult(self.name, False, remote.format_failure(r))
-        fwd = remote.sh(cni_forward_script(), timeout=60, stream=stream)
+        fwd = remote.sh(cni_forward_script(), timeout=60)
         if not fwd.ok:
             return StepResult(self.name, False, remote.format_failure(fwd))
         return StepResult(self.name, True, "cni bridge + conflist ready")

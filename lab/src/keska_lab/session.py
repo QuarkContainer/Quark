@@ -15,7 +15,7 @@ class LabSession:
     """
     Central object in the IPython lab shell.
 
-        lab.quark.run()              build + install on lab (streams logs)
+        lab.quark.run()              build + install on lab
         lab.quark.bench("light", n=5)
         lab.bench_all("light", n=5)
         lab.compare(results)
@@ -91,9 +91,9 @@ class LabSession:
         self.quark.cleanup()
         self.kata.cleanup()
 
-    def ssh(self, cmd: str, *, stream: bool = False) -> str:
+    def ssh(self, cmd: str) -> str:
         """Run a shell command on the lab host."""
-        return self.remote.sh(cmd, check=True, stream=stream).stdout
+        return self.remote.sh(cmd, check=True).stdout
 
     def run(self, cmd: str) -> str:
         """Alias for ssh — deprecated."""

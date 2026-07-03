@@ -51,7 +51,7 @@ class KeskaLabMagics(Magics):
         import time
 
         cfg = self.lab.config
-        ctx = ProvisionContext(self.lab.remote, cfg, cfg.resolve_local_repo(), stream=True)
+        ctx = ProvisionContext(self.lab.remote, cfg, cfg.resolve_local_repo())
         report = SetupReport(pipeline="bootstrap")
         for name, fn in [("ensure-apt-deps", lambda: ensure_apt_deps(ctx)), ("ensure-rust", lambda: ensure_rust(ctx))]:
             t0 = time.perf_counter()
@@ -67,7 +67,7 @@ class KeskaLabMagics(Magics):
     @line_magic
     def build(self, line: str = "") -> None:
         """Build/deploy Quark: %build"""
-        self.lab.quark.run(stream=True)
+        self.lab.quark.run()
 
     @magic_arguments()
     @argument("mode", nargs="?", default="tti")
@@ -98,9 +98,9 @@ class KeskaLabMagics(Magics):
         name = line.strip() or "quark"
         env = self.lab.use(name)
         if name == "quark":
-            env.prepare(stream=True)
+            env.prepare()
         else:
-            env.run(stream=True)
+            env.run()
 
     @line_magic
     def cleanup(self, line: str = "") -> None:
@@ -112,7 +112,7 @@ class KeskaLabMagics(Magics):
         if not line.strip():
             console.print("Usage: %remote <command>")
             return ""
-        out = self.lab.ssh(line, stream=True)
+        out = self.lab.ssh(line)
         console.print(out)
         return out
 

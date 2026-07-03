@@ -27,7 +27,7 @@ def _provision(*, qkernel: bool) -> int:
 
 
 def _deploy_cri_config(remote: RemoteHost) -> None:
-    r = remote.sh(deploy_config_script(cri_bench_config_json()), timeout=60, stream=False)
+    r = remote.sh(deploy_config_script(cri_bench_config_json()), timeout=60)
     if not r.ok:
         raise RuntimeError(f"cri config deploy failed: {r.stderr or r.stdout}")
 
@@ -60,7 +60,6 @@ def _prove_one(bug_id: str, *, skip_provision: bool) -> int:
             entry.layer,
             runtime="quark",
             deploy_quark_cri_config=False,
-            stream=True,
         )
         print(
             f"  without fix: {fail.layer} {'FAIL' if not fail.ok else 'UNEXPECTED PASS'} — {fail.message}"
@@ -81,7 +80,6 @@ def _prove_one(bug_id: str, *, skip_provision: bool) -> int:
             entry.layer,
             runtime="quark",
             deploy_quark_cri_config=False,
-            stream=True,
         )
         print(f"  with fix restored: {ok.layer} {'PASS' if ok.ok else 'FAIL'} — {ok.message}")
         if not ok.ok:

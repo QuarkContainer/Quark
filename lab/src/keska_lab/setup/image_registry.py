@@ -211,8 +211,6 @@ def registry_auth_diagnostic_script(registry: str) -> str:
 def ensure_image_registry_auth(
     remote: RemoteHost,
     config: LabConfig,
-    *,
-    stream: bool = False,
 ) -> str:
     """Verify Keska mirror access; run interactive gcloud login on lab if needed."""
     registry = config.image_registry
@@ -227,13 +225,13 @@ def ensure_image_registry_auth(
             f"cannot reach {remote.ssh_target}: {remote.format_failure(ping) or 'ssh failed'}"
         )
 
-    if remote.sh_login(check_registry_auth_script(registry), timeout=180, stream=stream).ok:
+    if remote.sh_login(check_registry_auth_script(registry), timeout=180).ok:
         return f"mirror pull ok ({probe})"
 
-    if remote.sh_login(check_registry_auth_ctr_script(registry), timeout=180, stream=stream).ok:
+    if remote.sh_login(check_registry_auth_ctr_script(registry), timeout=180).ok:
         return f"mirror ctr pull ok ({probe})"
 
-    diag = remote.sh_login(registry_auth_diagnostic_script(registry), timeout=120, stream=stream)
+    diag = remote.sh_login(registry_auth_diagnostic_script(registry), timeout=120)
     diag_text = remote.format_failure(diag) if diag.stdout or diag.stderr else diag.stdout.strip()
     has_gcloud = remote.which("gcloud")
 
@@ -242,10 +240,10 @@ def ensure_image_registry_auth(
             f"cannot pull {probe}: gcloud not on PATH over SSH (login shell).\n{diag_text}"
         )
 
-    retry = remote.sh_login(configure_gcp_docker_script(registry), timeout=120, stream=stream)
-    if retry.ok and remote.sh_login(check_registry_auth_script(registry), timeout=180, stream=stream).ok:
+    retry = remote.sh_login(configure_gcp_docker_script(registry), timeout=120)
+    if retry.ok and remote.sh_login(check_registry_auth_script(registry), timeout=180).ok:
         return f"mirror pull ok ({probe})"
-    if retry.ok and remote.sh_login(check_registry_auth_ctr_script(registry), timeout=180, stream=stream).ok:
+    if retry.ok and remote.sh_login(check_registry_auth_ctr_script(registry), timeout=180).ok:
         return f"mirror ctr pull ok ({probe})"
 
     needs_login = any(
@@ -272,18 +270,18 @@ def ensure_image_registry_auth(
         if not login.ok:
             raise RuntimeError(remote.format_failure(login) or f"{GCLOUD_AUTH_LOGIN_CMD} failed")
 
-        cfg = remote.sh_login(configure_gcp_docker_script(registry), timeout=120, stream=stream)
+        cfg = remote.sh_login(configure_gcp_docker_script(registry), timeout=120)
         if not cfg.ok:
             raise RuntimeError(remote.format_failure(cfg) or "gcloud auth configure-docker failed")
 
-        if remote.sh_login(check_registry_auth_script(registry), timeout=180, stream=stream).ok:
+        if remote.sh_login(check_registry_auth_script(registry), timeout=180).ok:
             return f"mirror auth ok ({probe})"
-        if remote.sh_login(check_registry_auth_ctr_script(registry), timeout=180, stream=stream).ok:
+        if remote.sh_login(check_registry_auth_ctr_script(registry), timeout=180).ok:
             return f"mirror ctr auth ok ({probe})"
 
     if "docker daemon" in diag_text.lower() or "docker.sock" in diag_text.lower():
-        start = remote.sh_login(ensure_docker_daemon_script(), timeout=90, stream=stream)
-        if start.ok and remote.sh_login(check_registry_auth_script(registry), timeout=180, stream=stream).ok:
+        start = remote.sh_login(ensure_docker_daemon_script(), timeout=90)
+        if start.ok and remote.sh_login(check_registry_auth_script(registry), timeout=180).ok:
             return f"mirror pull ok ({probe})"
 
     raise RuntimeError(f"cannot pull {probe} from Keska mirror.\n{diag_text}")
@@ -297,9 +295,9 @@ class ImageRegistryAuthStep(SetupStep):
     def __init__(self, config: LabConfig):
         self.config = config
 
-    def run(self, remote: "RemoteHost", *, stream: bool = False) -> StepResult:
+    def run(self, remote: "RemoteHost") -> StepResult:
         try:
-            msg = ensure_image_registry_auth(remote, self.config, stream=stream)
+            msg = ensure_image_registry_auth(remote, self.config)
             return StepResult(self.name, True, msg)
         except Exception as e:
             return StepResult(self.name, False, str(e))

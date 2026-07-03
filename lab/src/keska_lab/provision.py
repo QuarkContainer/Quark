@@ -42,7 +42,6 @@ class ProvisionContext:
     config: LabConfig
     repo: Path
     profile: str = "release"
-    stream: bool = True
 
 
 def _step(name: str, fn: Callable[[], str]) -> StepResult:
@@ -96,7 +95,7 @@ def ensure_apt_deps(ctx: ProvisionContext) -> str:
     sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $need
     echo deps_ok
     """
-    r = ctx.remote.sh(script, timeout=900, stream=ctx.stream)
+    r = ctx.remote.sh(script, timeout=900)
     if not r.ok:
         raise ProvisionError(ctx.remote.format_failure(r))
     return "apt packages OK"
@@ -118,7 +117,7 @@ def ensure_rust(ctx: ProvisionContext) -> str:
     test -f "$HOME/.rustup/toolchains/{tc}/lib/rustlib/src/rust/Cargo.lock"
     rustc +{tc} --version
     """
-    r = ctx.remote.sh(script, timeout=900, stream=ctx.stream)
+    r = ctx.remote.sh(script, timeout=900)
     if not r.ok:
         raise ProvisionError(ctx.remote.format_failure(r))
     lines = [ln for ln in r.stdout.splitlines() if ln.strip()]
@@ -126,7 +125,7 @@ def ensure_rust(ctx: ProvisionContext) -> str:
 
 
 def sync_sources(ctx: ProvisionContext) -> str:
-    ctx.remote.rsync_to_lab(ctx.repo, stream=ctx.stream)
+    ctx.remote.rsync_to_lab(ctx.repo)
     return f"rsync → {ctx.config.remote_repo}"
 
 
@@ -169,7 +168,7 @@ def build_quark(ctx: ProvisionContext, *, cargo_features: str | None = None) -> 
     make -C vdso clean
     {build_body}
     """
-    r = ctx.remote.sh(script, timeout=3600, stream=ctx.stream)
+    r = ctx.remote.sh(script, timeout=3600)
     if not r.ok:
         raise ProvisionError(ctx.remote.format_failure(r))
     tag = f" ({features})" if features else ""
@@ -187,7 +186,7 @@ def install_quark(ctx: ProvisionContext) -> str:
     sudo -n make install
     sudo -n mkdir -p /var/log/quark
     """
-    r = ctx.remote.sh(script, timeout=600, stream=ctx.stream)
+    r = ctx.remote.sh(script, timeout=600)
     if not r.ok:
         raise ProvisionError(ctx.remote.format_failure(r))
     return "installed quark + config"
@@ -196,7 +195,7 @@ def install_quark(ctx: ProvisionContext) -> str:
 def configure_docker(ctx: ProvisionContext) -> str:
     from keska_lab.setup.docker import DockerRuntimeStep
 
-    result = DockerRuntimeStep(ctx.config).run(ctx.remote, stream=ctx.stream)
+    result = DockerRuntimeStep(ctx.config).run(ctx.remote)
     if not result.ok:
         raise ProvisionError(result.message)
     return result.message or "docker runtimes OK"
@@ -206,8 +205,8 @@ def pull_bench_image(ctx: ProvisionContext) -> str:
     from keska_lab.setup.docker import DockerPullStep
     from keska_lab.setup.image_registry import ensure_image_registry_auth
 
-    ensure_image_registry_auth(ctx.remote, ctx.config, stream=ctx.stream)
-    result = DockerPullStep(ctx.config.bench_image, ctx.config).run(ctx.remote, stream=ctx.stream)
+    ensure_image_registry_auth(ctx.remote, ctx.config)
+    result = DockerPullStep(ctx.config.bench_image, ctx.config).run(ctx.remote)
     if not result.ok:
         raise ProvisionError(result.message)
     return result.message
@@ -232,7 +231,7 @@ def cleanup_sandboxes(ctx: ProvisionContext) -> str:
 def deploy_quark_bench_config(ctx: ProvisionContext) -> str:
     from keska_lab.setup.quark_config import QuarkBenchConfigStep
 
-    result = QuarkBenchConfigStep().run(ctx.remote, stream=ctx.stream)
+    result = QuarkBenchConfigStep().run(ctx.remote)
     if not result.ok:
         raise ProvisionError(result.message)
     return result.message or "quark bench config deployed"
@@ -266,7 +265,6 @@ def provision_quark(
     remote: RemoteHost,
     config: LabConfig | None = None,
     *,
-    stream: bool = True,
     skip_build: bool | None = None,
 ) -> SetupReport:
     """Full pristine Quark build + install on lab."""
@@ -280,7 +278,6 @@ def provision_quark(
         config=cfg,
         repo=cfg.resolve_local_repo(),
         profile=cfg.quark_build_profile,
-        stream=stream,
     )
 
     steps: list[tuple[str, Callable[[], str]]] = [
@@ -327,7 +324,7 @@ def main() -> int:
     from keska_lab.display import print_setup_report
 
     remote = RemoteHost()
-    report = provision_quark(remote, stream=True)
+    report = provision_quark(remote)
     print_setup_report(report)
     if not report.ok:
         failed = next(s for s in report.steps if not s.ok)

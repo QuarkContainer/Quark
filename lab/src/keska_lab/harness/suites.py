@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from keska_lab.harness.case import (
+    CASE_CPU_LOOP,
+    CASE_EXEC_HOT,
+    CASE_EXEC_NSENTER,
+    CASE_GETPID,
     CASE_INET_CONNECT,
     CASE_INET_DOWNLOAD,
     CASE_IO_CONCURRENT_READ,
@@ -10,22 +14,35 @@ from keska_lab.harness.case import (
     CASE_IO_WRITE,
     CASE_MEM_IDLE,
     CASE_MEM_PAUSED,
+    CASE_MMAP_FAULT,
     CASE_PAUSE,
     CASE_PGBENCH_TPS,
+    CASE_PIPE_IPC,
     CASE_RESUME,
     CASE_SANDBOX_IPERF,
     CASE_TTI,
     CASE_TTI_LOAD,
+    CASE_VM_BOOT,
     BenchCase,
 )
 
 LIGHT_CASES: tuple[BenchCase, ...] = (
+    CASE_VM_BOOT,
     CASE_TTI,
     CASE_TTI_LOAD,
     CASE_MEM_IDLE,
     CASE_PAUSE,
     CASE_RESUME,
     CASE_MEM_PAUSED,
+    CASE_CPU_LOOP,
+    CASE_EXEC_HOT,
+)
+
+MICRO_CASES: tuple[BenchCase, ...] = (
+    CASE_GETPID,
+    CASE_MMAP_FAULT,
+    CASE_PIPE_IPC,
+    CASE_EXEC_NSENTER,
 )
 
 WORKLOADS_CASES: tuple[BenchCase, ...] = (
@@ -61,6 +78,7 @@ DB_CASES: tuple[BenchCase, ...] = (
 
 SUITE_MODES: dict[str, tuple[BenchCase, ...]] = {
     "light": LIGHT_CASES,
+    "micro": MICRO_CASES,
     "full": FULL_CASES,
     "workloads": WORKLOADS_CASES,
     "network": NETWORK_CASES,

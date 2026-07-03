@@ -13,7 +13,7 @@ def main() -> int:
     cfg = LabConfig.from_env()
     remote = RemoteHost(cfg)
     try:
-        msg = ensure_image_registry_auth(remote, cfg, stream=True)
+        msg = ensure_image_registry_auth(remote, cfg)
     except RuntimeError as e:
         print(f"FAIL: {e}", file=sys.stderr)
         return 1

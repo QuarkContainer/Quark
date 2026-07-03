@@ -40,8 +40,8 @@ def kata_install_script(version: str = KATA_VERSION) -> str:
     ).strip()
 
 
-def ensure_kata(remote: RemoteHost, *, stream: bool = False) -> str:
-    r = remote.sh(kata_install_script(), timeout=900, stream=stream)
+def ensure_kata(remote: RemoteHost) -> str:
+    r = remote.sh(kata_install_script(), timeout=900)
     if not r.ok or "kata-runtime" not in (r.stdout + r.stderr).lower():
         raise RuntimeError(remote.format_failure(r) or "Kata install failed")
     lines = [ln for ln in r.stdout.splitlines() if ln.strip()]

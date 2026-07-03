@@ -237,7 +237,7 @@ print('H2 PASS: crictl stats')
 class CrictlInstallStep(SetupStep):
     name = "crictl-install"
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         script = textwrap.dedent(
             f"""
             set -euo pipefail
@@ -251,7 +251,7 @@ class CrictlInstallStep(SetupStep):
             crictl --version | head -1
             """
         ).strip()
-        r = remote.sh(script, timeout=120, stream=stream)
+        r = remote.sh(script, timeout=120)
         if not r.ok:
             return StepResult(self.name, False, remote.format_failure(r))
         ver = r.stdout.strip().splitlines()[-1]
@@ -261,14 +261,14 @@ class CrictlInstallStep(SetupStep):
 class ContainerdCriStep(SetupStep):
     name = "containerd-cri"
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
-        r = remote.sh(containerd_cri_config_script(), timeout=300, stream=stream)
+    def run(self, remote: RemoteHost) -> StepResult:
+        r = remote.sh(containerd_cri_config_script(), timeout=300)
         if not r.ok:
             return StepResult(self.name, False, remote.format_failure(r))
-        smoke = remote.sh(cri_smoke_script(), timeout=60, stream=stream)
+        smoke = remote.sh(cri_smoke_script(), timeout=60)
         if not smoke.ok:
             return StepResult(self.name, False, remote.format_failure(smoke))
-        run_smoke = remote.sh(cri_lifecycle_setup_smoke_script(), timeout=300, stream=stream)
+        run_smoke = remote.sh(cri_lifecycle_setup_smoke_script(), timeout=300)
         if not run_smoke.ok:
             return StepResult(self.name, False, remote.format_failure(run_smoke))
         msg = run_smoke.stdout.strip().splitlines()[-1]
@@ -280,14 +280,14 @@ class QuarkCriStatsStep(SetupStep):
 
     name = "quark-cri-stats"
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         from keska_lab.setup.quark_config import deploy_config_script, cri_bench_config_json
 
         cfg = cri_bench_config_json()
-        r = remote.sh(deploy_config_script(cfg), timeout=60, stream=stream)
+        r = remote.sh(deploy_config_script(cfg), timeout=60)
         if not r.ok:
             return StepResult(self.name, False, remote.format_failure(r))
-        r = remote.sh(cri_stats_smoke_script(), timeout=180, stream=stream)
+        r = remote.sh(cri_stats_smoke_script(), timeout=180)
         if not r.ok:
             return StepResult(self.name, False, remote.format_failure(r))
         line = r.stdout.strip().splitlines()[-1]

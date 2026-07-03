@@ -281,7 +281,6 @@ def ensure_kata_firecracker(
     remote: RemoteHost,
     *,
     image_registry: str | None = None,
-    stream: bool = False,
 ) -> str:
     registry = image_registry if image_registry is not None else remote.config.image_registry
     steps = [configure_kata_hypervisor_script("firecracker")]
@@ -289,14 +288,13 @@ def ensure_kata_firecracker(
         "grep -q \"pool_name = 'devpool'\" /etc/containerd/config.toml 2>/dev/null && "
         "sudo -n ctr plugins ls 2>/dev/null | grep -F devmapper | grep -q ' ok '",
         timeout=30,
-        stream=stream,
     )
     if not devmapper_ok.ok:
         steps.insert(0, containerd_devmapper_config_script())
     steps.append(devmapper_pool_script(registry))
     timeouts = (60, 180, 600) if len(steps) == 3 else (60, 600)
     for script, timeout in zip(steps, timeouts):
-        r = remote.sh(script, timeout=timeout, stream=stream)
+        r = remote.sh(script, timeout=timeout)
         if not r.ok:
             raise RuntimeError(remote.format_failure(r))
     return "kata firecracker + devmapper ready"
@@ -310,10 +308,10 @@ class KataFirecrackerStep(SetupStep):
     def __init__(self, config: LabConfig | None = None):
         self.config = config
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         try:
             registry = self.config.image_registry if self.config else remote.config.image_registry
-            msg = ensure_kata_firecracker(remote, image_registry=registry, stream=stream)
+            msg = ensure_kata_firecracker(remote, image_registry=registry)
             return StepResult(self.name, True, msg)
         except Exception as e:
             return StepResult(self.name, False, str(e))
@@ -328,11 +326,11 @@ class KataHypervisorStep(SetupStep):
         self.config = config
         self.hypervisor = config.kata_hypervisor
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         if self.hypervisor == "firecracker":
-            return KataFirecrackerStep(self.config).run(remote, stream=stream)
+            return KataFirecrackerStep(self.config).run(remote)
         script = configure_kata_hypervisor_script(self.hypervisor)
-        r = remote.sh(script, timeout=60, stream=stream)
+        r = remote.sh(script, timeout=60)
         ok = r.ok
         msg = r.stdout.strip().splitlines()[-1] if ok else remote.format_failure(r)
         return StepResult(self.name, ok, msg)

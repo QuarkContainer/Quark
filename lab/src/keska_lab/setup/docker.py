@@ -56,11 +56,10 @@ class DockerEnsureStep(SetupStep):
 
     name = "docker-ensure"
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         r = remote.sh(
             f"set -euo pipefail\n{ensure_docker_daemon_script()}",
             timeout=90,
-            stream=stream,
         )
         if r.ok:
             return StepResult(self.name, True, "dockerd running")
@@ -75,7 +74,7 @@ class DockerRuntimeStep(SetupStep):
     def __init__(self, config: LabConfig | None = None):
         self.config = config or LabConfig.from_env()
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         template = json.dumps(runtime_template(self.config))
         script = textwrap.dedent(
             f"""
@@ -116,7 +115,7 @@ class DockerRuntimeStep(SetupStep):
             fi
             """
         ).strip()
-        r = remote.sh(script, timeout=120, stream=stream)
+        r = remote.sh(script, timeout=120)
         if not r.ok:
             return StepResult(self.name, False, remote.format_failure(r))
         check = remote.docker_sh("docker info >/dev/null", timeout=60)
@@ -135,14 +134,13 @@ class DockerPullStep(SetupStep):
         self.image = image
         self.config = config
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         from keska_lab.setup.image_registry import docker_pull_with_mirror_script
 
         registry = self.config.image_registry if self.config and self.config.image_registry else None
         r = remote.sh(
             docker_pull_with_mirror_script(self.image, registry),
             timeout=600,
-            stream=stream,
         )
         return StepResult(self.name, r.ok, f"pulled {self.image}" if r.ok else remote.format_failure(r))
 
@@ -150,7 +148,7 @@ class DockerPullStep(SetupStep):
 class DockerSanityStep(SetupStep):
     name = "docker-sanity"
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         r = remote.docker_sh("docker run --rm hello-world 2>&1 | tail -3", timeout=120)
         ok = r.ok and "Hello from Docker" in r.stdout
         return StepResult(self.name, ok, r.stdout.strip()[-200:] if r.stdout else r.stderr.strip())
@@ -159,7 +157,7 @@ class DockerSanityStep(SetupStep):
 class QuarkRuntimeCheckStep(SetupStep):
     name = "quark-runtime-check"
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         r = remote.docker_sh("docker info 2>/dev/null | grep -E 'quark|quark_d' || true", timeout=30)
         ok = "quark" in r.stdout.lower()
         return StepResult(
@@ -174,11 +172,11 @@ class KataInstallStep(SetupStep):
 
     name = "kata-install"
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         from keska_lab.setup.kata import ensure_kata
 
         try:
-            msg = ensure_kata(remote, stream=stream)
+            msg = ensure_kata(remote)
             return StepResult(self.name, True, msg)
         except Exception as e:
             return StepResult(self.name, False, str(e))
@@ -192,7 +190,7 @@ class KataRuntimeCheckStep(SetupStep):
     def __init__(self, config: LabConfig | None = None):
         self.config = config or LabConfig.from_env()
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         from keska_lab.setup.pipelines import KataCtrCheckStep
 
-        return KataCtrCheckStep(self.config).run(remote, stream=stream)
+        return KataCtrCheckStep(self.config).run(remote)

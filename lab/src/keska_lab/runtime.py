@@ -97,12 +97,12 @@ class QuarkEnvironment(RuntimeEnvironment):
             ),
         )
 
-    def run(self, *, stream: bool = True) -> SetupReport:
+    def run(self) -> SetupReport:
         """Build and install Quark on lab: lab.quark.run()"""
         from keska_lab.display import console, print_setup_report
         from keska_lab.provision import provision_quark
 
-        report = provision_quark(self.remote, self.config, stream=stream)
+        report = provision_quark(self.remote, self.config)
         self.last_setup = report
         print_setup_report(report)
         if not report.ok:
@@ -116,7 +116,6 @@ class QuarkEnvironment(RuntimeEnvironment):
     def prepare(
         self,
         *,
-        stream: bool = False,
         mode: str | None = None,
         workload: str | None = None,
     ) -> SetupReport:
@@ -128,27 +127,27 @@ class QuarkEnvironment(RuntimeEnvironment):
                 from keska_lab.setup.pipelines import quark_heavy_ready_pipeline
 
                 report = quark_heavy_ready_pipeline(self.config, wl).run(
-                    self.remote, stream=stream
+                    self.remote
                 )
             elif mode == "full":
                 from keska_lab.setup.pipelines import quark_full_ready_pipeline
 
                 report = quark_full_ready_pipeline(self.config, wl).run(
-                    self.remote, stream=stream
+                    self.remote
                 )
             else:
                 extras = ["python"] if wl == "busybox" else []
                 report = workload_setup_pipeline(self.config, wl, extra_workloads=extras).run(
-                    self.remote, stream=stream
+                    self.remote
                 )
         elif mode == "network":
             report = quark_network_ready_pipeline(self.config, workload=wl).run(
-                self.remote, stream=stream
+                self.remote
             )
         elif mode == "db":
-            report = quark_db_ready_pipeline(self.config).run(self.remote, stream=stream)
+            report = quark_db_ready_pipeline(self.config).run(self.remote)
         else:
-            report = workload_setup_pipeline(self.config, wl).run(self.remote, stream=stream)
+            report = workload_setup_pipeline(self.config, wl).run(self.remote)
         self.last_setup = report
         print_setup_report(report)
         if not report.ok:
@@ -167,10 +166,10 @@ class KataEnvironment(RuntimeEnvironment):
             backend=get_backend("kata", remote),
         )
 
-    def run(self, *, stream: bool = False) -> SetupReport:
+    def run(self) -> SetupReport:
         from keska_lab.display import print_setup_report
 
-        report = kata_bench_ready_pipeline(self.config).run(self.remote, stream=stream)
+        report = kata_bench_ready_pipeline(self.config).run(self.remote)
         self.last_setup = report
         print_setup_report(report)
         if not report.ok:
@@ -180,7 +179,6 @@ class KataEnvironment(RuntimeEnvironment):
     def prepare(
         self,
         *,
-        stream: bool = False,
         mode: str | None = None,
         workload: str | None = None,
     ) -> SetupReport:
@@ -194,30 +192,30 @@ class KataEnvironment(RuntimeEnvironment):
 
         if mode == "network":
             report = kata_network_ready_pipeline(self.config, workload=workload).run(
-                self.remote, stream=stream
+                self.remote
             )
         elif mode == "db":
-            report = kata_db_ready_pipeline(self.config).run(self.remote, stream=stream)
+            report = kata_db_ready_pipeline(self.config).run(self.remote)
         elif mode in ("standard", "heavy", "full"):
             if mode == "heavy":
                 from keska_lab.setup.pipelines import kata_heavy_ready_pipeline
 
                 report = kata_heavy_ready_pipeline(self.config).run(
-                    self.remote, stream=stream
+                    self.remote
                 )
             elif mode == "full":
                 from keska_lab.setup.pipelines import kata_full_ready_pipeline
 
                 report = kata_full_ready_pipeline(self.config, workload or "busybox").run(
-                    self.remote, stream=stream
+                    self.remote
                 )
             else:
                 report = kata_multi_image_pipeline(self.config, ["busybox", "python"]).run(
-                    self.remote, stream=stream
+                    self.remote
                 )
         else:
             report = kata_bench_ready_pipeline(self.config, workload or "busybox").run(
-                self.remote, stream=stream
+                self.remote
             )
         self.last_setup = report
         print_setup_report(report)

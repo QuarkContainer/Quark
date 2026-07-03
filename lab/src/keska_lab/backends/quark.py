@@ -8,6 +8,15 @@ import textwrap
 from keska_lab.backends.base import SandboxBackend
 from keska_lab.config import LabConfig
 from keska_lab.harness.db import parse_pgbench_tps
+from keska_lab.harness.batch import remote_batch_loop, remote_batch_script
+from keska_lab.harness.metrics import (
+    MEMORY_RSS_SETTLE_SECS,
+    parse_float_lines,
+    parse_metric_samples,
+    parse_pause_resume_lines,
+    quark_rss_for_sandbox_shell,
+    rss_by_args_match_shell,
+)
 from keska_lab.harness.postgres import POSTGRES_STARTUP_SLEEP_SECS
 from keska_lab.harness.io_fs import (
     IO_BENCH_FILE,
@@ -28,7 +37,11 @@ from keska_lab.harness.network import (
     parse_iperf_mbps,
     python_exec_cmd,
 )
-from keska_lab.harness.workload import is_postgres_workload
+from keska_lab.harness.workload import (
+    is_postgres_workload,
+    micro_bench_script,
+    normalize_cpu_loop_inner,
+)
 from keska_lab.setup.oci_bundle import (
     bundle_dir,
     postgres_data_template_dir,
@@ -116,20 +129,47 @@ class QuarkBackend(SandboxBackend):
 
     def _quark_force_delete(self, id_ref: str = '"$ID"') -> str:
         """Delete sandbox with timeout; kill its VM if delete hangs."""
-        var = id_ref.strip('"').lstrip("$")
-        qlist = self._quark_cmd("list")
+        id_shell = id_ref.strip('"')  # e.g. $ID or $id — expanded by bash at runtime
         kill = (
-            f'__pid=$({qlist} 2>/dev/null | awk -v id="${var}" \'$1==id {{print $2; exit}}\'); '
-            f'if [ -n "${{__pid:-}}" ] && [ "$__pid" != "-1" ]; then '
+            f'__meta="/run/qvisor/{id_shell}/meta.json"; '
+            f'__pid=$(python3 -c "import json,sys; '
+            f'd=json.load(open(sys.argv[1])); '
+            f"print(d.get('Sandbox',{{}}).get('Pid',-1))\" "
+            f'"$__meta" 2>/dev/null || echo -1); '
+            f'if [ "$__pid" = "-1" ] || [ "$__pid" = "0" ] || [ -z "$__pid" ]; then '
+            f'__pid=""; fi; '
+            f'if [ -n "$__pid" ]; then '
             f"sudo -n kill -9 \"$__pid\" 2>/dev/null || true; fi"
         )
-        rm_meta = f'sudo rm -rf "/run/qvisor/${var}" "/var/lib/quark/${var}" 2>/dev/null || true'
-        qdel = f"timeout 20 {self._quark_cmd(f'delete --force {id_ref}')}"
+        rm_meta = (
+            f'sudo rm -rf "/run/qvisor/{id_shell}" "/var/lib/quark/{id_shell}" '
+            f"2>/dev/null || true"
+        )
+        qdel = f"timeout 5 {self._quark_cmd(f'delete --force {id_ref}')}"
         return (
             f"({qdel} >/dev/null 2>&1) || "
             f"{{ {kill}; "
-            f"timeout 15 {self._quark_cmd(f'delete --force {id_ref}')} >/dev/null 2>&1 || true; "
+            f"timeout 5 {self._quark_cmd(f'delete --force {id_ref}')} >/dev/null 2>&1 || true; "
             f"{rm_meta}; }}"
+        )
+
+    def _quark_timed_create_start(self, id_ref: str = '"$ID"') -> str:
+        q = self._quark_cmd
+        return (
+            f"timeout 30 {q(f'create {id_ref} -b \"$BUNDLE\"')}\n"
+            f"timeout 60 {q(f'start {id_ref}')}"
+        )
+
+    def _bench_exec_timeout(self, exec_cmd: str) -> int:
+        """Seconds for ``timeout`` wrapping ``quark exec`` in harness scripts."""
+        if exec_cmd.strip() in {"/bin/echo ok", "/bin/true"}:
+            return 15
+        return 60
+
+    def _bench_stale_metadata_wipe_shell(self) -> str:
+        return (
+            "sudo rm -rf /run/qvisor/keska-* /var/lib/quark/keska-* "
+            "/var/lib/quark/keska_* /run/qvisor/keska_* 2>/dev/null || true"
         )
 
     def _pg_ready_wait_secs(self, timeout: int, *, exec_timeout: int = 8) -> int:
@@ -259,6 +299,53 @@ class QuarkBackend(SandboxBackend):
             """
         ).strip()
 
+    def _direct_tti_iter_body(
+        self,
+        *,
+        exec_cmd: str,
+        id_prefix: str = "keska",
+    ) -> str:
+        """One timed TTI iteration; expects ``BUNDLE`` to be set by the preamble."""
+        q = self._quark_cmd
+        return textwrap.dedent(
+            f"""
+            ID={id_prefix}-$RANDOM
+            cleanup() {{ {self._quark_force_delete()}; }}
+            trap cleanup EXIT INT TERM
+            t0=$(date +%s%N)
+            {q('create "$ID" -b "$BUNDLE"')}
+            {q('start "$ID"')}
+            timeout 60 {q(f'exec --user 0:0 "$ID" -- {exec_cmd}')}
+            t1=$(date +%s%N)
+            echo $(( (t1 - t0) / 1000000 ))
+            cleanup
+            trap - EXIT INT TERM
+            """
+        ).strip()
+
+    def _direct_vm_boot_iter_body(self, *, id_prefix: str = "keska-boot") -> str:
+        """One timed create+start iteration; expects ``BUNDLE`` from the preamble."""
+        return textwrap.dedent(
+            f"""
+            ID={id_prefix}-$RANDOM
+            t0=$(date +%s%N)
+            {self._quark_timed_create_start()}
+            t1=$(date +%s%N)
+            echo $(( (t1 - t0) / 1000000 ))
+            {self._quark_force_delete()}
+            """
+        ).strip()
+
+    def _bundle_batch_preamble(self, image: str) -> str:
+        if is_postgres_workload(image):
+            return self._postgres_run_bundle_script()
+        path = self._bundle_path(image)
+        return (
+            f"{self._bench_stale_metadata_wipe_shell()}\n"
+            f"BUNDLE={shlex.quote(path)}\n"
+            f"{self._refresh_rootfs(image, bundle_var='BUNDLE')}"
+        )
+
     def _docker_tti_script(self, image: str, cmd: str) -> str:
         return textwrap.dedent(
             f"""
@@ -337,8 +424,8 @@ class QuarkBackend(SandboxBackend):
             {q('create "$ID" -b "$BUNDLE"')}
             {q('start "$ID"')}
             {pg_wait}
-            sleep 2
-            rss=$(ps -eo rss,comm | awk '$2 ~ /quark|qvisor|qemu|cloud-hypervisor|virtiofsd/ {{s+=$1}} END {{printf "%.2f", s/1024}}')
+            sleep {MEMORY_RSS_SETTLE_SECS}
+            {quark_rss_for_sandbox_shell(self._quark_cmd("list"))}
             cleanup
             echo "${{rss:-0}}"
             """
@@ -363,12 +450,12 @@ class QuarkBackend(SandboxBackend):
             trap cleanup EXIT INT TERM
             {q('create "$ID" -b "$BUNDLE"')}
             {q('start "$ID"')}
-            sleep 1
+            sleep {MEMORY_RSS_SETTLE_SECS}
             t0=$(date +%s%N)
             {q('pause "$ID"')} >/dev/null 2>&1
             t1=$(date +%s%N)
-            sleep 1
-            rss=$(ps -eo rss,comm | awk '$2 ~ /quark|qvisor|qemu|cloud-hypervisor|virtiofsd/ {{s+=$1}} END {{printf "%.2f", s/1024}}')
+            sleep {MEMORY_RSS_SETTLE_SECS}
+            {quark_rss_for_sandbox_shell(self._quark_cmd("list"))}
             t2=$(date +%s%N)
             {q('resume "$ID"')} >/dev/null 2>&1
             t3=$(date +%s%N)
@@ -426,6 +513,644 @@ class QuarkBackend(SandboxBackend):
         ).strip()
         r = self.remote.sh(script, timeout=360, check=True)
         return float(r.stdout.strip().splitlines()[-1])
+
+    def _quark_exec_sh_inner(self, id_ref: str, inner_sh: str) -> str:
+        q = self._quark_cmd
+        return q(f"exec --user 0:0 {id_ref} -- /bin/sh -c {shlex.quote(inner_sh)}")
+
+    def _cpu_loop_body(
+        self,
+        *,
+        image: str,
+        inner_sh: str,
+        id_prefix: str = "keska-cpu",
+    ) -> str:
+        q = self._quark_cmd
+        bundle_setup = self._bundle_setup_for_image(image)
+        cleanup_rm = 'sudo rm -rf "$BUNDLE" 2>/dev/null || true' if is_postgres_workload(image) else ""
+        pg_wait = self._postgres_startup_sleep() if is_postgres_workload(image) else ""
+        exec_line = self._quark_exec_sh_inner('"$ID"', inner_sh)
+        return textwrap.dedent(
+            f"""
+            {bundle_setup}
+            ID={id_prefix}-$RANDOM
+            cleanup() {{
+              {self._quark_force_delete()}
+              {cleanup_rm}
+            }}
+            trap cleanup EXIT INT TERM
+            {q('create "$ID" -b "$BUNDLE"')}
+            {q('start "$ID"')}
+            {pg_wait}
+            t0=$(date +%s%N)
+            timeout 120 {exec_line} >/dev/null
+            t1=$(date +%s%N)
+            cleanup
+            trap - EXIT INT TERM
+            echo $(( (t1 - t0) / 1000000 ))
+            """
+        ).strip()
+
+    def cpu_loop_once(
+        self,
+        *,
+        image: str = "busybox",
+        exec_cmd: str | None = None,
+    ) -> float:
+        if self.exec_mode == "docker":
+            raise NotImplementedError("cpu_loop_once requires direct OCI exec_mode")
+        inner = normalize_cpu_loop_inner(exec_cmd)
+        script = textwrap.dedent(
+            f"""
+            set -euo pipefail
+            {self._cpu_loop_body(image=image, inner_sh=inner)}
+            """
+        ).strip()
+        r = self.remote.sh(script, timeout=180, check=True)
+        return float(r.stdout.strip().splitlines()[-1])
+
+    def tti_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        exec_cmd: str = "/bin/echo ok",
+        timeout: int = 300,
+    ) -> list[float]:
+        if self.exec_mode == "docker":
+            raise NotImplementedError("tti_batch requires direct OCI exec_mode")
+        per = min(timeout, 30)
+        if is_postgres_workload(image, exec_cmd):
+            raise NotImplementedError("tti_batch for postgres not supported")
+        script = remote_batch_script(
+            preamble=self._bundle_batch_preamble(image),
+            n=n,
+            body=self._direct_tti_iter_body(exec_cmd=exec_cmd),
+        )
+        r = self.remote.sh(script, timeout=n * per + 60, check=True)
+        return parse_float_lines(r.stdout, expect=n)
+
+    def vm_boot_once(
+        self,
+        *,
+        image: str = "busybox",
+        idle_cmd: str = "/bin/sleep 600",
+    ) -> float:
+        del idle_cmd
+        return self.vm_boot_batch(1, image=image)[0]
+
+    def vm_boot_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        idle_cmd: str = "/bin/sleep 600",
+    ) -> list[float]:
+        del idle_cmd
+        if self.exec_mode == "docker":
+            raise NotImplementedError("vm_boot_batch requires direct OCI exec_mode")
+        if is_postgres_workload(image):
+            raise NotImplementedError("vm_boot_batch for postgres not supported")
+        script = remote_batch_script(
+            preamble=self._bundle_batch_preamble(image),
+            n=n,
+            body=self._direct_vm_boot_iter_body(),
+        )
+        r = self.remote.sh(script, timeout=n * 30 + 60, check=True)
+        return parse_float_lines(r.stdout, expect=n)
+
+    def memory_idle_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        idle_cmd: str = "/bin/sleep 600",
+    ) -> list[float]:
+        q = self._quark_cmd
+        pg_wait = self._postgres_startup_sleep() if is_postgres_workload(image) else ""
+        cleanup_rm = 'sudo rm -rf "$BUNDLE" 2>/dev/null || true' if is_postgres_workload(image) else ""
+        iter_body = textwrap.dedent(
+            f"""
+            ID=keska-mem-$RANDOM
+            cleanup() {{
+              {self._quark_force_delete()}
+              {cleanup_rm}
+            }}
+            trap cleanup EXIT INT TERM
+            {q('create "$ID" -b "$BUNDLE"')}
+            {q('start "$ID"')}
+            {pg_wait}
+            sleep {MEMORY_RSS_SETTLE_SECS}
+            {quark_rss_for_sandbox_shell(q("list"))}
+            cleanup
+            trap - EXIT INT TERM
+            echo "${{rss:-0}}"
+            """
+        ).strip()
+        script = remote_batch_script(
+            preamble=self._bundle_batch_preamble(image),
+            n=n,
+            body=iter_body,
+        )
+        r = self.remote.sh(script, timeout=n * 60 + 60, check=True)
+        return parse_float_lines(r.stdout, expect=n)
+
+    def pause_resume_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        idle_cmd: str = "/bin/sleep 600",
+    ) -> list[tuple[float, float, float]]:
+        q = self._quark_cmd
+        iter_body = textwrap.dedent(
+            f"""
+            ID=keska-pause-$RANDOM
+            cleanup() {{ {self._quark_force_delete()}; }}
+            trap cleanup EXIT INT TERM
+            {q('create "$ID" -b "$BUNDLE"')}
+            {q('start "$ID"')}
+            sleep {MEMORY_RSS_SETTLE_SECS}
+            t0=$(date +%s%N)
+            {q('pause "$ID"')} >/dev/null 2>&1
+            t1=$(date +%s%N)
+            {quark_rss_for_sandbox_shell(q("list"))}
+            t2=$(date +%s%N)
+            {q('resume "$ID"')} >/dev/null 2>&1
+            t3=$(date +%s%N)
+            cleanup
+            trap - EXIT INT TERM
+            pause_ms=$(( (t1 - t0) / 1000000 ))
+            resume_ms=$(( (t3 - t2) / 1000000 ))
+            printf '%s %s %s\\n' "$pause_ms" "$resume_ms" "$rss"
+            """
+        ).strip()
+        script = remote_batch_script(
+            preamble=self._bundle_batch_preamble(image),
+            n=n,
+            body=iter_body,
+        )
+        r = self.remote.sh(script, timeout=n * 60 + 60, check=True)
+        return parse_pause_resume_lines(r.stdout, expect=n)
+
+    def _light_suite_batch_script(
+        self,
+        n: int,
+        *,
+        image: str,
+        exec_cmd: str,
+        cpu_loop_inner: str,
+        load: int = 4,
+    ) -> str:
+        q = self._quark_cmd
+        qlist = q("list")
+        rss = quark_rss_for_sandbox_shell(qlist)
+        cpu_exec = self._quark_exec_sh_inner('"$ID"', cpu_loop_inner)
+        exec_line = q(f'exec --user 0:0 "$ID" -- {exec_cmd}')
+        exec_timeout = self._bench_exec_timeout(exec_cmd)
+        settle = MEMORY_RSS_SETTLE_SECS
+
+        tti_body = textwrap.dedent(
+            f"""
+            ID=keska-tti-$RANDOM
+            t0=$(date +%s%N)
+            {self._quark_timed_create_start()}
+            timeout 60 {exec_line} >/dev/null
+            t1=$(date +%s%N)
+            echo "METRIC tti_ms SAMPLE $__batch_i $(( (t1 - t0) / 1000000 ))"
+            {self._quark_force_delete()}
+            """
+        ).strip()
+
+        batch_warmup = textwrap.dedent(
+            f"""
+            ID=keska-warmup-$RANDOM
+            {self._quark_timed_create_start()}
+            timeout 60 {exec_line} >/dev/null || true
+            {self._quark_force_delete()}
+            """
+        ).strip()
+
+        vm_boot_body = textwrap.dedent(
+            f"""
+            ID=keska-boot-$RANDOM
+            t0=$(date +%s%N)
+            {self._quark_timed_create_start()}
+            t1=$(date +%s%N)
+            echo "METRIC vm_boot_ms SAMPLE $__batch_i $(( (t1 - t0) / 1000000 ))"
+            {self._quark_force_delete()}
+            """
+        ).strip()
+
+        tti_load_body = textwrap.dedent(
+            f"""
+            ID=keska-tti-$RANDOM
+            t0=$(date +%s%N)
+            {self._quark_timed_create_start()}
+            timeout 60 {exec_line} >/dev/null
+            t1=$(date +%s%N)
+            echo "METRIC tti_under_load_ms SAMPLE $__batch_i $(( (t1 - t0) / 1000000 ))"
+            {self._quark_force_delete()}
+            """
+        ).strip()
+
+        load_setup = textwrap.dedent(
+            f"""
+            LOAD_IDS=""
+            cleanup_load() {{
+              for id in $LOAD_IDS; do
+                {self._quark_force_delete('"$id"')}
+              done
+            }}
+            for i in $(seq 1 {load}); do
+              lid=keska-load-$RANDOM-$i
+              LOAD_IDS="$LOAD_IDS $lid"
+              timeout 30 {q('create "$lid" -b "$BUNDLE"')} >/dev/null
+              timeout 60 {q('start "$lid"')} >/dev/null
+            done
+            sleep {settle}
+            trap cleanup_load EXIT INT TERM
+            """
+        ).strip()
+
+        mem_body = textwrap.dedent(
+            f"""
+            ID=keska-mem-$RANDOM
+            cleanup() {{ {self._quark_force_delete()}; }}
+            trap cleanup EXIT INT TERM
+            {self._quark_timed_create_start()}
+            sleep {settle}
+            {rss}
+            echo "METRIC memory_idle_rss_mb SAMPLE $__batch_i ${{rss:-0}}"
+            cleanup
+            trap - EXIT INT TERM
+            """
+        ).strip()
+
+        pause_body = textwrap.dedent(
+            f"""
+            ID=keska-pause-$RANDOM
+            cleanup() {{ {self._quark_force_delete()}; }}
+            trap cleanup EXIT INT TERM
+            {self._quark_timed_create_start()}
+            sleep {settle}
+            t0=$(date +%s%N)
+            {q('pause "$ID"')} >/dev/null 2>&1
+            t1=$(date +%s%N)
+            {rss}
+            t2=$(date +%s%N)
+            {q('resume "$ID"')} >/dev/null 2>&1
+            t3=$(date +%s%N)
+            pause_ms=$(( (t1 - t0) / 1000000 ))
+            resume_ms=$(( (t3 - t2) / 1000000 ))
+            echo "METRIC pause_ms SAMPLE $__batch_i $pause_ms"
+            echo "METRIC resume_ms SAMPLE $__batch_i $resume_ms"
+            echo "METRIC memory_while_paused_rss_mb SAMPLE $__batch_i ${{rss:-0}}"
+            cleanup
+            trap - EXIT INT TERM
+            """
+        ).strip()
+
+        cpu_loop_body = textwrap.dedent(
+            f"""
+            t0=$(date +%s%N)
+            timeout 120 {cpu_exec} >/dev/null
+            t1=$(date +%s%N)
+            echo "METRIC cpu_loop_ms SAMPLE $__batch_i $(( (t1 - t0) / 1000000 ))"
+            """
+        ).strip()
+
+        cpu_preamble = textwrap.dedent(
+            f"""
+            ID=keska-cpu-$RANDOM
+            cleanup_cpu() {{ {self._quark_force_delete()}; }}
+            trap cleanup_cpu EXIT INT TERM
+            {self._quark_timed_create_start()}
+            """
+        ).strip()
+
+        exec_hot_body = textwrap.dedent(
+            f"""
+            t0=$(date +%s%N)
+            timeout {exec_timeout} {exec_line} >/dev/null
+            t1=$(date +%s%N)
+            echo "METRIC exec_in_running_ms SAMPLE $__batch_i $(( (t1 - t0) / 1000000 ))"
+            """
+        ).strip()
+
+        exec_hot_preamble = textwrap.dedent(
+            f"""
+            ID=keska-exec-hot-$RANDOM
+            cleanup_hot() {{ {self._quark_force_delete()}; }}
+            trap cleanup_hot EXIT INT TERM
+            {self._quark_timed_create_start()}
+            """
+        ).strip()
+
+        load_teardown = textwrap.dedent(
+            """
+            cleanup_load
+            trap - EXIT INT TERM
+            """
+        ).strip()
+
+        cpu_teardown = textwrap.dedent(
+            """
+            cleanup_cpu
+            trap - EXIT INT TERM
+            """
+        ).strip()
+
+        exec_hot_teardown = textwrap.dedent(
+            """
+            cleanup_hot
+            trap - EXIT INT TERM
+            """
+        ).strip()
+
+        return "\n".join(
+            [
+                "set -euo pipefail",
+                self._bundle_batch_preamble(image),
+                batch_warmup,
+                remote_batch_loop(n, vm_boot_body),
+                remote_batch_loop(n, tti_body),
+                load_setup,
+                remote_batch_loop(n, tti_load_body),
+                load_teardown,
+                remote_batch_loop(n, mem_body),
+                remote_batch_loop(n, pause_body),
+                cpu_preamble,
+                remote_batch_loop(n, cpu_loop_body),
+                cpu_teardown,
+                exec_hot_preamble,
+                remote_batch_loop(n, exec_hot_body),
+                exec_hot_teardown,
+            ]
+        )
+
+    def run_light_suite_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        exec_cmd: str = "/bin/echo ok",
+        cpu_loop_cmd: str | None = None,
+        idle_cmd: str = "/bin/sleep 600",
+    ) -> dict[str, list[float]]:
+        del idle_cmd
+        if self.exec_mode == "docker":
+            raise NotImplementedError("run_light_suite_batch requires direct OCI exec_mode")
+        if is_postgres_workload(image):
+            raise NotImplementedError("run_light_suite_batch for postgres not supported")
+        inner = normalize_cpu_loop_inner(cpu_loop_cmd)
+        script = self._light_suite_batch_script(
+            n, image=image, exec_cmd=exec_cmd, cpu_loop_inner=inner
+        )
+        timeout = n * 60 + 300
+        r = self.remote.sh(script, timeout=timeout, check=True)
+
+        grouped = parse_metric_samples(r.stdout)
+        expected = {
+            "vm_boot_ms": n,
+            "tti_ms": n,
+            "tti_under_load_ms": n,
+            "memory_idle_rss_mb": n,
+            "pause_ms": n,
+            "resume_ms": n,
+            "memory_while_paused_rss_mb": n,
+            "cpu_loop_ms": n,
+            "exec_in_running_ms": n,
+        }
+        for metric, count in expected.items():
+            got = grouped.get(metric, [])
+            if len(got) != count:
+                seen: set[int] = set()
+                for line in r.stdout.splitlines():
+                    parts = line.split()
+                    if (
+                        len(parts) >= 5
+                        and parts[0] == "METRIC"
+                        and parts[1] == metric
+                        and parts[2] == "SAMPLE"
+                    ):
+                        seen.add(int(parts[3]))
+                missing = [i for i in range(1, count + 1) if i not in seen]
+                raise ValueError(
+                    f"light suite expected {count} {metric} samples, "
+                    f"got {len(got)} (missing indices: {missing}) from:\n{r.stdout!r}"
+                )
+        return grouped
+
+    def tti_under_load_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        load: int = 4,
+        exec_cmd: str = "/bin/echo ok",
+    ) -> list[float]:
+        q = self._quark_cmd
+        iter_body = textwrap.dedent(
+            f"""
+            ID=keska-tti-$RANDOM
+            t0=$(date +%s%N)
+            {self._quark_timed_create_start()}
+            timeout 60 {q(f'exec --user 0:0 "$ID" -- {exec_cmd}')}
+            t1=$(date +%s%N)
+            echo $(( (t1 - t0) / 1000000 ))
+            {self._quark_force_delete()}
+            """
+        ).strip()
+        load_setup = textwrap.dedent(
+            f"""
+            LOAD_IDS=""
+            cleanup_load() {{
+              for id in $LOAD_IDS; do
+                {self._quark_force_delete('"$id"')}
+              done
+            }}
+            for i in $(seq 1 {load}); do
+              lid=keska-load-$RANDOM-$i
+              LOAD_IDS="$LOAD_IDS $lid"
+              timeout 30 {q('create "$lid" -b "$BUNDLE"')} >/dev/null
+              timeout 60 {q('start "$lid"')} >/dev/null
+            done
+            sleep {MEMORY_RSS_SETTLE_SECS}
+            trap cleanup_load EXIT INT TERM
+            """
+        ).strip()
+        script = remote_batch_script(
+            preamble=f"{self._bundle_batch_preamble(image)}\n{load_setup}",
+            n=n,
+            body=iter_body,
+        )
+        r = self.remote.sh(script, timeout=n * 120 + 120, check=True)
+        return parse_float_lines(r.stdout, expect=n)
+
+    def cpu_loop_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        exec_cmd: str | None = None,
+    ) -> list[float]:
+        inner = normalize_cpu_loop_inner(exec_cmd)
+        q = self._quark_cmd
+        pg_wait = self._postgres_startup_sleep() if is_postgres_workload(image) else ""
+        cleanup_rm = 'sudo rm -rf "$BUNDLE" 2>/dev/null || true' if is_postgres_workload(image) else ""
+        exec_line = self._quark_exec_sh_inner('"$ID"', inner)
+        iter_body = textwrap.dedent(
+            f"""
+            t0=$(date +%s%N)
+            timeout 120 {exec_line} >/dev/null
+            t1=$(date +%s%N)
+            echo $(( (t1 - t0) / 1000000 ))
+            """
+        ).strip()
+        preamble = textwrap.dedent(
+            f"""
+            {self._bundle_batch_preamble(image)}
+            ID=keska-cpu-$RANDOM
+            cleanup() {{
+              {self._quark_force_delete()}
+              {cleanup_rm}
+            }}
+            trap cleanup EXIT INT TERM
+            {q('create "$ID" -b "$BUNDLE"')}
+            {q('start "$ID"')}
+            {pg_wait}
+            """
+        ).strip()
+        script = remote_batch_script(preamble=preamble, n=n, body=iter_body)
+        r = self.remote.sh(script, timeout=n * 180 + 60, check=True)
+        return parse_float_lines(r.stdout, expect=n)
+
+    def exec_hot_once(
+        self,
+        *,
+        image: str = "busybox",
+        exec_cmd: str = "/bin/echo ok",
+    ) -> float:
+        return self.exec_hot_batch(1, image=image, exec_cmd=exec_cmd)[0]
+
+    def exec_hot_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        exec_cmd: str = "/bin/echo ok",
+    ) -> list[float]:
+        if self.exec_mode == "docker":
+            raise NotImplementedError("exec_hot_batch requires direct OCI exec_mode")
+        q = self._quark_cmd
+        pg_wait = self._postgres_startup_sleep() if is_postgres_workload(image) else ""
+        cleanup_rm = 'sudo rm -rf "$BUNDLE" 2>/dev/null || true' if is_postgres_workload(image) else ""
+        exec_line = q(f'exec --user 0:0 "$ID" -- {exec_cmd}')
+        iter_body = textwrap.dedent(
+            f"""
+            t0=$(date +%s%N)
+            {exec_line} >/dev/null
+            t1=$(date +%s%N)
+            echo $(( (t1 - t0) / 1000000 ))
+            """
+        ).strip()
+        preamble = textwrap.dedent(
+            f"""
+            {self._bundle_batch_preamble(image)}
+            ID=keska-exec-hot-$RANDOM
+            cleanup() {{
+              {self._quark_force_delete()}
+              {cleanup_rm}
+            }}
+            trap cleanup EXIT INT TERM
+            {q('create "$ID" -b "$BUNDLE"')}
+            {q('start "$ID"')}
+            {pg_wait}
+            """
+        ).strip()
+        script = remote_batch_script(preamble=preamble, n=n, body=iter_body)
+        r = self.remote.sh(script, timeout=n * 30 + 120, check=True)
+        return parse_float_lines(r.stdout, expect=n)
+
+    def micro_bench_once(
+        self,
+        *,
+        metric: str,
+        image: str = "python:3.12-slim",
+    ) -> float:
+        return self.micro_bench_batch(1, metric=metric, image=image)[0]
+
+    def micro_bench_batch(
+        self,
+        n: int,
+        *,
+        metric: str,
+        image: str = "python:3.12-slim",
+    ) -> list[float]:
+        if self.exec_mode == "docker":
+            raise NotImplementedError("micro_bench_batch requires direct OCI exec_mode")
+        code = micro_bench_script(metric)
+        py = python_exec_cmd(code)
+        q = self._quark_cmd
+        bundle = self._bundle_path(image)
+        iter_body = textwrap.dedent(
+            f"""
+            val=$({q('exec --user 0:0 "$ID" --')} {py})
+            echo "$val" | tail -1
+            """
+        ).strip()
+        preamble = textwrap.dedent(
+            f"""
+            BUNDLE={shlex.quote(bundle)}
+            {self._refresh_rootfs(image, bundle_var="BUNDLE")}
+            ID=keska-micro-$RANDOM
+            cleanup() {{ {self._quark_force_delete()}; }}
+            trap cleanup EXIT INT TERM
+            {q('create "$ID" -b "$BUNDLE"')}
+            {q('start "$ID"')}
+            """
+        ).strip()
+        script = remote_batch_script(preamble=preamble, n=n, body=iter_body)
+        per = 180 if metric == "mmap_anon_fault_ms" else 60
+        r = self.remote.sh(script, timeout=n * per + 120, check=True)
+        return parse_float_lines(r.stdout, expect=n)
+
+    def io_fs_batch(self, n: int, *, image: str = "busybox") -> tuple[list[float], list[float]]:
+        q = self._quark_cmd
+        prep = quark_io_bench_bundle_preamble(self.config, image)
+        cleanup_trap = quark_io_bench_cleanup_trap(
+            quark_delete_cmd=self._quark_force_delete(),
+        )
+        io_exec = q(f'exec --user 0:0 "$ID" -- sh -c {shlex.quote(dd_io_bench_sh())}')
+        body = textwrap.dedent(
+            f"""
+            set -euo pipefail
+            {prep}
+            {cleanup_trap}
+            ID=keska-io-$RANDOM
+            {q('create "$ID" -b "$BUNDLE"')}
+            {q('start "$ID"')}
+            out=$({io_exec})
+            cleanup_io_bench
+            trap - EXIT INT TERM
+            echo "$out"
+            """
+        ).strip()
+        script = remote_batch_loop(n, body)
+        r = self.remote.sh(script, timeout=n * 180 + 60, check=True)
+        writes: list[float] = []
+        reads: list[float] = []
+        for line in r.stdout.splitlines():
+            if line.startswith("WRITE "):
+                writes.append(parse_dd_mib_s(line))
+            elif line.startswith("READ "):
+                reads.append(parse_dd_mib_s(line))
+        if len(writes) != n or len(reads) != n:
+            raise ValueError(
+                f"io_fs_batch expected {n} write/read pairs, got {len(writes)}/{len(reads)}"
+            )
+        return writes, reads
 
     def cleanup(self) -> None:
         cleanup_quark_sandboxes(self.remote)

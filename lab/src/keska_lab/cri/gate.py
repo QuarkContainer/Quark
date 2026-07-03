@@ -47,7 +47,6 @@ def run_layer(
     *,
     runtime: str = "quark",
     deploy_quark_cri_config: bool = True,
-    stream: bool = False,
 ) -> GateResult:
     layer = layer.upper()
     if layer not in LAYER_SCRIPTS:
@@ -55,14 +54,14 @@ def run_layer(
 
     if deploy_quark_cri_config and runtime in ("quark", "default", ""):
         cfg = cri_bench_config_json()
-        r = remote.sh(deploy_config_script(cfg), timeout=60, stream=stream)
+        r = remote.sh(deploy_config_script(cfg), timeout=60)
         if not r.ok:
             return GateResult(layer, False, remote.format_failure(r))
 
     rt = runtime_flag(runtime)
     script = LAYER_SCRIPTS[layer](rt)
     timeout = LAYER_TIMEOUT[layer]
-    r = remote.sh(script, timeout=timeout, stream=stream)
+    r = remote.sh(script, timeout=timeout)
     if not r.ok:
         return GateResult(layer, False, remote.format_failure(r))
     msg = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else f"{layer} ok"
@@ -75,7 +74,6 @@ def run_layers_through(
     *,
     runtime: str = "quark",
     deploy_quark_cri_config: bool = True,
-    stream: bool = False,
 ) -> list[GateResult]:
     order = ["L1", "L2", "L3", "L5"]
     max_layer = max_layer.upper()
@@ -89,7 +87,6 @@ def run_layers_through(
             layer,
             runtime=runtime,
             deploy_quark_cri_config=deploy_quark_cri_config,
-            stream=stream,
         )
         results.append(res)
         if not res.ok:

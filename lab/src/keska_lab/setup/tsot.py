@@ -168,7 +168,7 @@ def tsot_ready_script() -> str:
     )
 
 
-def ensure_tsot_stack(remote: RemoteHost, *, stream: bool = False) -> str:
+def ensure_tsot_stack(remote: RemoteHost) -> str:
     repo = remote.config.remote_repo
     steps = [
         deploy_tsot_config_script(),
@@ -179,7 +179,7 @@ def ensure_tsot_stack(remote: RemoteHost, *, stream: bool = False) -> str:
         qservice_start_script(repo),
     ]
     for script in steps:
-        r = remote.sh(script, timeout=900, stream=stream)
+        r = remote.sh(script, timeout=900)
         if not r.ok:
             raise RuntimeError(remote.format_failure(r))
     return "tsot stack ready"
@@ -188,9 +188,9 @@ def ensure_tsot_stack(remote: RemoteHost, *, stream: bool = False) -> str:
 class TsotBenchReadyStep(SetupStep):
     name = "tsot-stack"
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         try:
-            msg = ensure_tsot_stack(remote, stream=stream)
+            msg = ensure_tsot_stack(remote)
             return StepResult(self.name, True, msg)
         except Exception as e:
             return StepResult(self.name, False, str(e))

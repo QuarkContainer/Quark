@@ -16,6 +16,28 @@ class WorkloadSpec:
     oci_mounts: tuple[dict, ...] = ()
     oci_user: tuple[int, int] | None = None
     tti_timeout: int = 300
+    cpu_loop_iters: int = 2_000_000
+    # Inner body for `/bin/sh -c` (not a full shell command — avoids $ expansion in harness scripts).
+    cpu_loop_cmd: str = "i=0; while [ $i -lt 2000000 ]; do i=$((i+1)); done; echo OK"
+
+
+def cpu_loop_inner(spec: WorkloadSpec) -> str:
+    """Return the sh -c script body for the CPU loop benchmark."""
+    return normalize_cpu_loop_inner(spec.cpu_loop_cmd, iters=spec.cpu_loop_iters)
+
+
+def normalize_cpu_loop_inner(exec_cmd: str | None = None, *, iters: int = 2_000_000) -> str:
+    """Normalize legacy full commands to an inner sh body safe for harness embedding."""
+    if not exec_cmd:
+        return f"i=0; while [ $i -lt {iters} ]; do i=$((i+1)); done; echo OK"
+    cmd = exec_cmd.strip()
+    if cmd.startswith("/bin/sh -c "):
+        rest = cmd[len("/bin/sh -c ") :].strip()
+        if len(rest) >= 2 and rest[0] == rest[-1] and rest[0] in "\"'":
+            cmd = rest[1:-1]
+    if "2000000" in cmd and iters != 2_000_000:
+        cmd = cmd.replace("2000000", str(iters), 1)
+    return cmd
 
 
 WORKLOADS: dict[str, WorkloadSpec] = {
@@ -91,3 +113,62 @@ def workload_images(names: list[str] | None = None) -> list[str]:
 
 def is_postgres_workload(image: str, exec_cmd: str = "") -> bool:
     return "postgres" in image.lower() or "pg_isready" in exec_cmd
+
+
+# Self-timed Python micro-benchmarks (stdout: one numeric line).
+MICRO_GETPID_PY = """
+import os, time
+t = time.monotonic()
+for _ in range(100_000):
+    os.getpid()
+print(int((time.monotonic() - t) * 1e9 / 100_000))
+""".strip()
+
+MICRO_MMAP_FAULT_PY = """
+import mmap, time
+SIZE = 64 * 1024 * 1024
+t = time.monotonic()
+m = mmap.mmap(-1, SIZE)
+m.write(b"x" * SIZE)
+m.close()
+print(f"{(time.monotonic() - t) * 1000:.1f}")
+""".strip()
+
+MICRO_PIPE_IPC_PY = """
+import os, time, threading
+r, w = os.pipe()
+CHUNK = 64 * 1024
+N = 512
+def writer():
+    buf = b"x" * CHUNK
+    for _ in range(N):
+        os.write(w, buf)
+    os.close(w)
+t0 = time.monotonic()
+t = threading.Thread(target=writer)
+t.start()
+received = 0
+while True:
+    chunk = os.read(r, CHUNK)
+    if not chunk:
+        break
+    received += len(chunk)
+t.join()
+os.close(r)
+elapsed = time.monotonic() - t0
+print(f"{received / elapsed / (1024 * 1024):.2f}")
+""".strip()
+
+MICRO_BENCH_SCRIPTS: dict[str, str] = {
+    "getpid_ns": MICRO_GETPID_PY,
+    "mmap_anon_fault_ms": MICRO_MMAP_FAULT_PY,
+    "pipe_throughput_mib_s": MICRO_PIPE_IPC_PY,
+}
+
+
+def micro_bench_script(metric: str) -> str:
+    key = metric.strip()
+    if key not in MICRO_BENCH_SCRIPTS:
+        known = ", ".join(sorted(MICRO_BENCH_SCRIPTS))
+        raise ValueError(f"unknown micro metric {metric!r}; choose from: {known}")
+    return MICRO_BENCH_SCRIPTS[key]

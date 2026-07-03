@@ -49,8 +49,8 @@ class EnsureQuarkBuildEnvStep(SetupStep):
 
     name = "ensure-build-env"
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
-        r = remote.sh(_install_script(), timeout=900, check=False, stream=stream)
+    def run(self, remote: RemoteHost) -> StepResult:
+        r = remote.sh(_install_script(), timeout=900, check=False)
         combined = (r.stdout or "") + (r.stderr or "")
         ok = r.ok and "rustc" in combined.lower()
         if ok:

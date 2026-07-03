@@ -85,7 +85,8 @@ When adding a new case, implement it on **both** backends with the same contract
 | Case | Aligned? | Notes |
 |------|----------|-------|
 | `tti_ms` | Mostly | Same warm PGDATA template, `pg_isready --user 70:70`, timeout 8, stop clock before teardown. Quark uses `create`+`start`; Kata uses `ctr run -d`. Both mount PGDATA + `/dev/shm` + `/var/run/postgresql`. |
-| `memory_idle_rss_mb` | Yes | Both use warm PGDATA, same tmpfs mounts, `sleep 3` after start (no pre-exec probe). RSS aggregation differs by design (Quark: qvisor/qemu; Kata: ctr task args). |
+| `memory_idle_rss_mb` | Yes | Both use warm PGDATA, same tmpfs mounts, `sleep 1` after start (no pre-exec probe). RSS is per-sandbox: Quark sums `quark list` PID tree (args-match fallback); Kata filters ctr task args by sandbox ID. |
+| `cpu_loop_ms` | Yes | Fixed 2M-iteration busybox shell loop; timer covers exec only (create/start and teardown outside). |
 | `pgbench_tps` | Partial | Both use warm PGDATA, `sleep 3`, then one `pgbench -c1 -T5`. **Storage still differs**: Quark PGDATA on host tmpfs bind mount; Kata on devmapper snapshot — expect Kata TPS higher, not a harness artifact. |
 
 Default Quark bench config uses plain io_uring (`UringIO=true`).

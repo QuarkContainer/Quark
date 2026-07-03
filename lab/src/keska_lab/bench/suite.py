@@ -87,7 +87,7 @@ class BenchmarkSuite:
         if self.mode in SUITE_MODES:
             return self._run_suite(env)
         if self.setup:
-            env.prepare(stream=False, mode=self.mode, workload=self.workload)
+            env.prepare(mode=self.mode, workload=self.workload)
 
         profile = self._profile(env.config)
         save_dir = None
@@ -108,7 +108,7 @@ class BenchmarkSuite:
         from keska_lab.display import print_suite_report
 
         if self.setup:
-            env.prepare(stream=False, mode=self.mode, workload=self.workload)
+            env.prepare(mode=self.mode, workload=self.workload)
 
         n = self.n or 10
         suite = self.mode
@@ -141,7 +141,6 @@ class BenchmarkSuite:
         if self.save:
             self._save_report(report)
         env.last_suite_report = report
-        env.backend.cleanup()
         return report
 
     def _save_report(self, report: SuiteReport, *, suffix: str = "") -> None:

@@ -42,8 +42,8 @@ def kata_cri_health_script() -> str:
 class CriKataImagesStep(SetupStep):
     name = "cri-kata-images"
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
-        r = remote.sh(cri_kata_pull_images_script(), timeout=300, stream=stream)
+    def run(self, remote: RemoteHost) -> StepResult:
+        r = remote.sh(cri_kata_pull_images_script(), timeout=300)
         if not r.ok:
             return StepResult(self.name, False, remote.format_failure(r))
         msg = r.stdout.strip().splitlines()[-1]
@@ -53,12 +53,10 @@ class CriKataImagesStep(SetupStep):
 def ensure_kata_cri_ready(
     remote: RemoteHost,
     config: LabConfig | None = None,
-    *,
-    stream: bool = False,
 ) -> list[StepResult]:
     """Install Kata + devmapper + CNI + CRI images if not already healthy."""
     cfg = config or remote.config
-    health = remote.sh(kata_cri_health_script(), timeout=120, stream=stream)
+    health = remote.sh(kata_cri_health_script(), timeout=120)
     if health.ok:
         return [StepResult("kata-cri-ready", True, "already healthy")]
 
@@ -69,7 +67,7 @@ def ensure_kata_cri_ready(
         CniPluginsStep(),
         CriKataImagesStep(),
     ):
-        res = step.run(remote, stream=stream)
+        res = step.run(remote)
         results.append(res)
         if not res.ok:
             break

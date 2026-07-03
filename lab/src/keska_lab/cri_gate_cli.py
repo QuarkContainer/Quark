@@ -16,9 +16,9 @@ def _needs_kata_setup(runtime: str, parity: bool) -> bool:
     return parity or runtime == "kata"
 
 
-def _run_kata_setup(cfg: LabConfig, remote: RemoteHost, *, stream: bool = True) -> int:
+def _run_kata_setup(cfg: LabConfig, remote: RemoteHost) -> int:
     print(f"Kata CRI setup on {cfg.ssh_target}…")
-    for res in ensure_kata_cri_ready(remote, cfg, stream=stream):
+    for res in ensure_kata_cri_ready(remote, cfg):
         print(f"  {res.name}: {'ok' if res.ok else 'FAIL'} — {res.message}")
         if not res.ok:
             return 1
@@ -60,16 +60,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.setup:
         print(f"CRI setup on {cfg.ssh_target}…")
         for step in (ContainerdCriStep(), CrictlInstallStep()):
-            res = step.run(remote, stream=True)
+            res = step.run(remote)
             print(f"  {step.name}: {'ok' if res.ok else 'FAIL'} — {res.message}")
             if not res.ok:
                 return 1
         if _needs_kata_setup(args.runtime, args.parity):
-            if _run_kata_setup(cfg, remote, stream=True):
+            if _run_kata_setup(cfg, remote):
                 return 1
 
     elif _needs_kata_setup(args.runtime, args.parity):
-        if _run_kata_setup(cfg, remote, stream=True):
+        if _run_kata_setup(cfg, remote):
             return 1
 
     deploy = not args.no_config
@@ -83,7 +83,6 @@ def main(argv: list[str] | None = None) -> int:
                 args.layer,
                 runtime=rt,
                 deploy_quark_cri_config=deploy and rt == "quark",
-                stream=True,
             )
             for r in results:
                 print(f"  {r.layer}: {'PASS' if r.ok else 'FAIL'} — {r.message}")
@@ -97,7 +96,6 @@ def main(argv: list[str] | None = None) -> int:
         args.layer,
         runtime=args.runtime,
         deploy_quark_cri_config=deploy,
-        stream=True,
     )
     for r in results:
         print(f"{r.layer}: {'PASS' if r.ok else 'FAIL'} — {r.message}")

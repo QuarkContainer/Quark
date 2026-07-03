@@ -17,3 +17,6 @@ class CaseContext:
     workload: WorkloadSpec
     verbose: bool = True
     extras: dict = field(default_factory=dict)
+    _pause_resume_cache: tuple[float, float, float] | None = field(
+        default=None, repr=False
+    )

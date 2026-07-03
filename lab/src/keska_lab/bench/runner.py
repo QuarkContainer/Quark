@@ -26,16 +26,28 @@ def run_benchmark(
     backend.cleanup()
 
     if profile.sequential:
-        for i in range(profile.iterations):
+        batch_fn = getattr(backend, "tti_batch", None)
+        if profile.name == "tti" and callable(batch_fn):
             try:
-                ms = backend.tti_once(image=image)
-                samples.append(ms)
+                samples = batch_fn(profile.iterations, image=image)
                 if verbose:
-                    print(f"  [{i + 1}/{profile.iterations}] {ms:.1f} ms")
+                    for i, ms in enumerate(samples, 1):
+                        print(f"  [{i}/{profile.iterations}] {ms:.1f} ms")
             except Exception as e:
                 errors.append(str(e))
                 if verbose:
-                    print(f"  [{i + 1}/{profile.iterations}] ERROR: {e}")
+                    print(f"  batch ERROR: {e}")
+        else:
+            for i in range(profile.iterations):
+                try:
+                    ms = backend.tti_once(image=image)
+                    samples.append(ms)
+                    if verbose:
+                        print(f"  [{i + 1}/{profile.iterations}] {ms:.1f} ms")
+                except Exception as e:
+                    errors.append(str(e))
+                    if verbose:
+                        print(f"  [{i + 1}/{profile.iterations}] ERROR: {e}")
     else:
         for wave in range(profile.waves):
             wave_samples: list[float] = []

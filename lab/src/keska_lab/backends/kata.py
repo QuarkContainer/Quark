@@ -7,7 +7,13 @@ import textwrap
 
 from keska_lab.backends.base import SandboxBackend
 from keska_lab.config import LabConfig
-from keska_lab.harness.db import parse_pgbench_tps
+from keska_lab.harness.batch import remote_batch_loop, remote_batch_script
+from keska_lab.harness.metrics import (
+    MEMORY_RSS_SETTLE_SECS,
+    parse_float_lines,
+    parse_pause_resume_lines,
+    rss_by_args_match_shell,
+)
 from keska_lab.harness.io_fs import (
     concurrent_read_bench_sh,
     concurrent_read_mib_s,
@@ -23,12 +29,17 @@ from keska_lab.harness.network import (
     crictl_python_exec_script,
     parse_dd_mib_s,
     parse_iperf_mbps,
+    python_exec_cmd,
 )
 from keska_lab.harness.postgres import (
     POSTGRES_STARTUP_SLEEP_SECS,
     kata_postgres_ctr_mounts_shell,
 )
-from keska_lab.harness.workload import is_postgres_workload
+from keska_lab.harness.workload import (
+    is_postgres_workload,
+    micro_bench_script,
+    normalize_cpu_loop_inner,
+)
 from keska_lab.setup.image_registry import ctr_image_ref
 from keska_lab.setup.quark_cleanup import cleanup_quark_sandboxes
 
@@ -208,6 +219,38 @@ class KataBackend(SandboxBackend):
             """
         ).strip()
 
+    def _vm_boot_iter_body(
+        self,
+        *,
+        image: str,
+        idle_cmd: str = "/bin/sleep 3600",
+        id_prefix: str = "keska-kata-boot",
+    ) -> str:
+        ref = self._image_ref(image)
+        env = self._ctr_env_flags(image)
+        return textwrap.dedent(
+            f"""
+            ID={id_prefix}-$RANDOM
+            cleanup() {{
+              {self._kata_kill_rm()}
+            }}
+            trap cleanup EXIT INT TERM
+            t0=$(date +%s%N)
+            sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()}{env} \\
+              {shlex.quote(ref)} "$ID" {idle_cmd} >/dev/null
+            t1=$(date +%s%N)
+            echo $(( (t1 - t0) / 1000000 ))
+            cleanup
+            trap - EXIT INT TERM
+            """
+        ).strip()
+
+    def _kata_task_pid_shell(self, id_ref: str = '"$ID"') -> str:
+        return (
+            f'__task_pid=$(sudo -n ctr task ls 2>/dev/null | awk -v id={id_ref} '
+            f"'$1==id {{print $2; exit}}')"
+        )
+
     def tti_once(
         self,
         *,
@@ -254,11 +297,7 @@ class KataBackend(SandboxBackend):
 
     def _rss_for_sandbox(self, id_shell_var: str = "$ID") -> str:
         """Awk snippet: sum RSS (MB) for processes tied to a sandbox ID."""
-        return (
-            f"ID_VAL={id_shell_var}\n"
-            f'rss=$(ps -eo rss,args | awk -v id="$ID_VAL" '
-            "'index($0, id) {s+=$1} END {printf \"%.2f\", s/1024}')"
-        )
+        return rss_by_args_match_shell(id_shell_var)
 
     def memory_idle_once(self, *, image: str = "busybox", idle_cmd: str = "/bin/sleep 600") -> float:
         ref = self._image_ref(image)
@@ -364,6 +403,393 @@ class KataBackend(SandboxBackend):
         ).strip()
         r = self.remote.sh(script, timeout=360, check=True)
         return float(r.stdout.strip().splitlines()[-1])
+
+    def _cpu_loop_iter_body(
+        self,
+        *,
+        image: str,
+        inner_sh: str,
+        id_prefix: str = "keska-kata-cpu",
+    ) -> str:
+        ref = self._image_ref(image)
+        return textwrap.dedent(
+            f"""
+            ID={id_prefix}-$RANDOM
+            cleanup() {{
+              {self._kata_kill_rm()}
+            }}
+            trap cleanup EXIT INT TERM
+            sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()} \\
+              {shlex.quote(ref)} "$ID" /bin/sleep 3600 >/dev/null
+            t0=$(date +%s%N)
+            timeout 120 sudo -n ctr task exec --exec-id cpu-$RANDOM "$ID" /bin/sh -c {shlex.quote(inner_sh)} >/dev/null
+            t1=$(date +%s%N)
+            cleanup
+            trap - EXIT INT TERM
+            echo $(( (t1 - t0) / 1000000 ))
+            """
+        ).strip()
+
+    def _cpu_loop_body(
+        self,
+        *,
+        image: str,
+        exec_cmd: str,
+        id_prefix: str = "keska-kata-cpu",
+    ) -> str:
+        inner = normalize_cpu_loop_inner(exec_cmd)
+        return textwrap.dedent(
+            f"""
+            set -euo pipefail
+            {self._cpu_loop_iter_body(image=image, inner_sh=inner, id_prefix=id_prefix)}
+            """
+        ).strip()
+
+    def cpu_loop_once(
+        self,
+        *,
+        image: str = "busybox",
+        exec_cmd: str | None = None,
+    ) -> float:
+        inner = normalize_cpu_loop_inner(exec_cmd)
+        script = textwrap.dedent(
+            f"""
+            set -euo pipefail
+            {self._cpu_loop_iter_body(image=image, inner_sh=inner)}
+            """
+        ).strip()
+        r = self.remote.sh(script, timeout=180, check=True)
+        return float(r.stdout.strip().splitlines()[-1])
+
+    def vm_boot_once(
+        self,
+        *,
+        image: str = "busybox",
+        idle_cmd: str = "/bin/sleep 600",
+    ) -> float:
+        return self.vm_boot_batch(1, image=image, idle_cmd=idle_cmd)[0]
+
+    def vm_boot_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        idle_cmd: str = "/bin/sleep 600",
+    ) -> list[float]:
+        if is_postgres_workload(image):
+            raise NotImplementedError("vm_boot_batch for postgres not supported")
+        body = self._vm_boot_iter_body(image=image, idle_cmd=idle_cmd)
+        iter_body = body.replace("set -euo pipefail\n", "", 1)
+        script = remote_batch_script(preamble="", n=n, body=iter_body)
+        r = self.remote.sh(script, timeout=n * 60 + 60, check=True)
+        return parse_float_lines(r.stdout, expect=n)
+
+    def tti_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        exec_cmd: str = "/bin/echo ok",
+        timeout: int = 300,
+    ) -> list[float]:
+        if is_postgres_workload(image, exec_cmd):
+            raise NotImplementedError("tti_batch for postgres not supported")
+        body = self._detached_lifecycle_script(image=image, probe=exec_cmd)
+        iter_body = body.replace("set -euo pipefail\n", "", 1)
+        script = remote_batch_script(preamble="", n=n, body=iter_body)
+        r = self.remote.sh(script, timeout=n * min(timeout, 30) + 60, check=True)
+        return parse_float_lines(r.stdout, expect=n)
+
+    def memory_idle_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        idle_cmd: str = "/bin/sleep 600",
+    ) -> list[float]:
+        ref = self._image_ref(image)
+        env = self._ctr_env_flags(image)
+        prep = ""
+        pg_mount_line = ""
+        pg_wait = ""
+        if is_postgres_workload(image):
+            prep = self._postgres_data_prep_script()
+            pg_mount_line = f"{self._kata_postgres_mount_flags()} \\"
+            pg_wait = f"sleep {POSTGRES_STARTUP_SLEEP_SECS}"
+        iter_body = textwrap.dedent(
+            f"""
+            ID=keska-kata-mem-$RANDOM
+            cleanup() {{
+              {self._kata_kill_rm()}
+            }}
+            trap cleanup EXIT INT TERM
+            sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()}{env} \\
+              {pg_mount_line}  {shlex.quote(ref)} "$ID" {idle_cmd} >/dev/null
+            {pg_wait}
+            sleep {MEMORY_RSS_SETTLE_SECS}
+            {self._rss_for_sandbox("$ID")}
+            cleanup
+            trap - EXIT INT TERM
+            echo "${{rss:-0}}"
+            """
+        ).strip()
+        script = remote_batch_script(preamble=prep, n=n, body=iter_body)
+        r = self.remote.sh(script, timeout=n * 60 + 60, check=True)
+        return parse_float_lines(r.stdout, expect=n)
+
+    def pause_resume_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        idle_cmd: str = "/bin/sleep 600",
+    ) -> list[tuple[float, float, float]]:
+        ref = self._image_ref(image)
+        iter_body = textwrap.dedent(
+            f"""
+            ID=keska-kata-pause-$RANDOM
+            sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()} \\
+              {shlex.quote(ref)} "$ID" {idle_cmd} >/dev/null
+            sleep {MEMORY_RSS_SETTLE_SECS}
+            t0=$(date +%s%N)
+            sudo -n ctr task pause "$ID" >/dev/null 2>&1
+            t1=$(date +%s%N)
+            sleep {MEMORY_RSS_SETTLE_SECS}
+            {self._rss_for_sandbox("$ID")}
+            t2=$(date +%s%N)
+            sudo -n ctr task resume "$ID" >/dev/null 2>&1
+            t3=$(date +%s%N)
+            sudo -n ctr task kill -s SIGKILL "$ID" >/dev/null 2>&1 || true
+            sudo -n ctr containers rm "$ID" >/dev/null 2>&1 || true
+            pause_ms=$(( (t1 - t0) / 1000000 ))
+            resume_ms=$(( (t3 - t2) / 1000000 ))
+            printf '%s %s %s\\n' "$pause_ms" "$resume_ms" "$rss"
+            """
+        ).strip()
+        script = remote_batch_script(preamble="", n=n, body=iter_body)
+        r = self.remote.sh(script, timeout=n * 60 + 60, check=True)
+        return parse_pause_resume_lines(r.stdout, expect=n)
+
+    def tti_under_load_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        load: int = 4,
+        exec_cmd: str = "/bin/echo ok",
+    ) -> list[float]:
+        ref = self._image_ref(image)
+        iter_body = textwrap.dedent(
+            f"""
+            ID=keska-kata-tti-$RANDOM
+            t0=$(date +%s%N)
+            sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()} \\
+              {shlex.quote(ref)} "$ID" /bin/sleep 3600 >/dev/null
+            timeout 60 sudo -n ctr task exec --exec-id probe-$RANDOM "$ID" {exec_cmd} >/dev/null
+            t1=$(date +%s%N)
+            echo $(( (t1 - t0) / 1000000 ))
+            {self._kata_kill_rm()}
+            """
+        ).strip()
+        load_setup = textwrap.dedent(
+            f"""
+            LOAD_IDS=""
+            cleanup_load() {{
+              for id in $LOAD_IDS; do
+                sudo -n ctr task kill -s SIGKILL "$id" >/dev/null 2>&1 || true
+                sudo -n ctr containers rm "$id" >/dev/null 2>&1 || true
+              done
+            }}
+            for i in $(seq 1 {load}); do
+              lid=keska-kata-load-$RANDOM-$i
+              LOAD_IDS="$LOAD_IDS $lid"
+              sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()} \\
+                {shlex.quote(ref)} "$lid" /bin/sleep 3600 >/dev/null
+            done
+            sleep 1
+            trap cleanup_load EXIT INT TERM
+            """
+        ).strip()
+        script = remote_batch_script(
+            preamble=load_setup,
+            n=n,
+            body=iter_body,
+        )
+        r = self.remote.sh(script, timeout=n * 120 + 120, check=True)
+        return parse_float_lines(r.stdout, expect=n)
+
+    def cpu_loop_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        exec_cmd: str | None = None,
+    ) -> list[float]:
+        inner = normalize_cpu_loop_inner(exec_cmd)
+        script = remote_batch_script(
+            preamble="",
+            n=n,
+            body=self._cpu_loop_iter_body(image=image, inner_sh=inner),
+        )
+        r = self.remote.sh(script, timeout=n * 180 + 60, check=True)
+        return parse_float_lines(r.stdout, expect=n)
+
+    def exec_hot_once(
+        self,
+        *,
+        image: str = "busybox",
+        exec_cmd: str = "/bin/echo ok",
+    ) -> float:
+        return self.exec_hot_batch(1, image=image, exec_cmd=exec_cmd)[0]
+
+    def exec_hot_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        exec_cmd: str = "/bin/echo ok",
+    ) -> list[float]:
+        ref = self._image_ref(image)
+        env = self._ctr_env_flags(image)
+        prep = ""
+        pg_mount_line = ""
+        pg_wait = ""
+        if is_postgres_workload(image):
+            prep = self._postgres_data_prep_script()
+            pg_mount_line = f"{self._kata_postgres_mount_flags()} \\"
+            pg_wait = f"sleep {POSTGRES_STARTUP_SLEEP_SECS}"
+        iter_body = textwrap.dedent(
+            f"""
+            t0=$(date +%s%N)
+            sudo -n ctr task exec --exec-id hot-$RANDOM "$ID" {exec_cmd} >/dev/null
+            t1=$(date +%s%N)
+            echo $(( (t1 - t0) / 1000000 ))
+            """
+        ).strip()
+        preamble = textwrap.dedent(
+            f"""
+            {prep}
+            ID=keska-kata-exec-hot-$RANDOM
+            cleanup() {{
+              {self._kata_kill_rm()}
+            }}
+            trap cleanup EXIT INT TERM
+            sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()}{env} \\
+              {pg_mount_line}  {shlex.quote(ref)} "$ID" /bin/sleep 3600 >/dev/null
+            {pg_wait}
+            """
+        ).strip()
+        script = remote_batch_script(preamble=preamble, n=n, body=iter_body)
+        r = self.remote.sh(script, timeout=n * 30 + 120, check=True)
+        return parse_float_lines(r.stdout, expect=n)
+
+    def exec_nsenter_once(
+        self,
+        *,
+        image: str = "busybox",
+        exec_cmd: str = "/bin/echo ok",
+    ) -> float:
+        return self.exec_nsenter_batch(1, image=image, exec_cmd=exec_cmd)[0]
+
+    def exec_nsenter_batch(
+        self,
+        n: int,
+        *,
+        image: str = "busybox",
+        exec_cmd: str = "/bin/echo ok",
+    ) -> list[float]:
+        ref = self._image_ref(image)
+        env = self._ctr_env_flags(image)
+        exec_timeout = 15
+        iter_body = textwrap.dedent(
+            f"""
+            {self._kata_task_pid_shell()}
+            if [ -z "${{__task_pid:-}}" ]; then
+              echo "ERR missing task pid for $ID" >&2
+              exit 1
+            fi
+            t0=$(date +%s%N)
+            timeout {exec_timeout} sudo -n nsenter --target "$__task_pid" --mount --pid -- {exec_cmd} >/dev/null
+            t1=$(date +%s%N)
+            echo $(( (t1 - t0) / 1000000 ))
+            """
+        ).strip()
+        preamble = textwrap.dedent(
+            f"""
+            ID=keska-kata-nsenter-$RANDOM
+            cleanup() {{
+              {self._kata_kill_rm()}
+            }}
+            trap cleanup EXIT INT TERM
+            sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()}{env} \\
+              {shlex.quote(ref)} "$ID" /bin/sleep 3600 >/dev/null
+            """
+        ).strip()
+        script = remote_batch_script(preamble=preamble, n=n, body=iter_body)
+        r = self.remote.sh(script, timeout=n * 30 + 120, check=True)
+        return parse_float_lines(r.stdout, expect=n)
+
+    def micro_bench_once(
+        self,
+        *,
+        metric: str,
+        image: str = "python:3.12-slim",
+    ) -> float:
+        return self.micro_bench_batch(1, metric=metric, image=image)[0]
+
+    def micro_bench_batch(
+        self,
+        n: int,
+        *,
+        metric: str,
+        image: str = "python:3.12-slim",
+    ) -> list[float]:
+        ref = self._image_ref(image)
+        env = self._ctr_env_flags(image)
+        code = micro_bench_script(metric)
+        py = python_exec_cmd(code)
+        iter_body = textwrap.dedent(
+            f"""
+            val=$(sudo -n ctr task exec --exec-id micro-$RANDOM "$ID" {py})
+            echo "$val" | tail -1
+            """
+        ).strip()
+        preamble = textwrap.dedent(
+            f"""
+            ID=keska-kata-micro-$RANDOM
+            cleanup() {{
+              {self._kata_kill_rm()}
+            }}
+            trap cleanup EXIT INT TERM
+            sudo -n ctr run -d --runtime {shlex.quote(self.ctr_runtime)}{self._ctr_snapshotter_flag()}{env} \\
+              {shlex.quote(ref)} "$ID" python3 -c "import time; time.sleep(3600)" >/dev/null
+            """
+        ).strip()
+        script = remote_batch_script(preamble=preamble, n=n, body=iter_body)
+        per = 180 if metric == "mmap_anon_fault_ms" else 60
+        r = self.remote.sh(script, timeout=n * per + 120, check=True)
+        return parse_float_lines(r.stdout, expect=n)
+
+    def io_fs_batch(self, n: int, *, image: str = "busybox") -> tuple[list[float], list[float]]:
+        body = self._kata_io_bench_script(
+            image=image,
+            guest_cmd=dd_io_bench_sh(),
+            id_prefix="keska-kata-io",
+        )
+        script = remote_batch_loop(n, body)
+        r = self.remote.sh(script, timeout=n * 180 + 60, check=True)
+        writes: list[float] = []
+        reads: list[float] = []
+        for line in r.stdout.splitlines():
+            if line.startswith("WRITE "):
+                writes.append(parse_dd_mib_s(line))
+            elif line.startswith("READ "):
+                reads.append(parse_dd_mib_s(line))
+        if len(writes) != n or len(reads) != n:
+            raise ValueError(
+                f"io_fs_batch expected {n} write/read pairs, got {len(writes)}/{len(reads)}"
+            )
+        return writes, reads
 
     def cleanup(self) -> None:
         cleanup_quark_sandboxes(self.remote)

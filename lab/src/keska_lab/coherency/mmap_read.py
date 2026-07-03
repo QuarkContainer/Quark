@@ -190,12 +190,11 @@ def _coherency_sandbox_script(
     ).strip()
 
 
-def _rss_mb_script(quark_bin: str) -> str:
-    return textwrap.dedent(
-        f"""
-        ps -eo rss,comm | awk '$2 ~ /{quark_bin}|qvisor|qemu|cloud-hypervisor|virtiofsd/ {{s+=$1}} END {{printf "%.2f", s/1024}}'
-        """
-    ).strip()
+from keska_lab.harness.metrics import quark_rss_for_sandbox_shell
+
+
+def _rss_mb_script(quark_list_cmd: str) -> str:
+    return quark_rss_for_sandbox_shell(quark_list_cmd) + '\necho "${rss:-0}"'
 
 
 class MmapReadCoherencyRunner:
@@ -322,8 +321,7 @@ class MmapReadCoherencyRunner:
 
         q = self.backend._quark_cmd
         prep = self.backend._postgres_run_bundle_script()
-        quark_bin = self.backend.quark_bin
-        rss = _rss_mb_script(quark_bin)
+        rss = _rss_mb_script(q("list"))
         duration = minutes * 60
         script = textwrap.dedent(
             f"""
@@ -380,8 +378,7 @@ class MmapReadCoherencyRunner:
         prep = quark_io_bench_bundle_preamble(self.config, COHERENCY_IMAGE)
         cleanup = quark_io_bench_cleanup_trap(quark_delete_cmd=self.backend._quark_force_delete())
         guest = python_exec_cmd(C7_GUEST_PY)
-        quark_bin = self.backend.quark_bin
-        rss = _rss_mb_script(quark_bin)
+        rss = _rss_mb_script(q("list"))
         script = textwrap.dedent(
             f"""
             set -euo pipefail
@@ -450,14 +447,13 @@ class MmapReadCoherencyRunner:
         return suite
 
 
-def rebuild_mmap_read(remote: RemoteHost, config: LabConfig, *, stream: bool = True) -> None:
+def rebuild_mmap_read(remote: RemoteHost, config: LabConfig) -> None:
     features = ",".join(experimental_cargo_features("MmapRead"))
     ctx = ProvisionContext(
         remote=remote,
         config=config,
         repo=config.resolve_local_repo(),
         profile=config.quark_build_profile,
-        stream=stream,
     )
     sync_sources(ctx)
     build_quark(ctx, cargo_features=features)
@@ -470,14 +466,13 @@ def run_mmap_read_coherency(
     include_c6: bool = False,
     c6_minutes: int = 30,
     skip_build: bool = False,
-    stream: bool = True,
 ) -> CoherencySuiteResult:
     """Build MmapRead experimental quark, deploy config, run C1–C7."""
     lab = LabSession()
-    lab.quark.prepare(stream=False, mode="full", workload="python")
+    lab.quark.prepare(mode="full", workload="python")
     if not skip_build:
-        rebuild_mmap_read(lab.remote, lab.config, stream=stream)
-    QuarkExperimentalConfigStep("MmapRead").run(lab.remote, stream=stream)
+        rebuild_mmap_read(lab.remote, lab.config)
+    QuarkExperimentalConfigStep("MmapRead").run(lab.remote)
     lab.backend.cleanup()
     runner = MmapReadCoherencyRunner(lab)
     suite = runner.run_all(cases=cases, include_c6=include_c6, c6_minutes=c6_minutes)
@@ -487,7 +482,7 @@ def run_mmap_read_coherency(
     suite.save(path)
     from keska_lab.setup.quark_config import QuarkBenchConfigStep
 
-    QuarkBenchConfigStep().run(lab.remote, stream=stream)
+    QuarkBenchConfigStep().run(lab.remote)
     from keska_lab.display import console
 
     console.print(f"\n[dim]Coherency report: {path}[/dim]")

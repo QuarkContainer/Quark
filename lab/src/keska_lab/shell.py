@@ -17,7 +17,7 @@ BANNER = """
 [bold cyan]Keska Lab[/bold cyan] — IPython sandbox laboratory @ lab.keska.vpn
 
   [bold]Quark[/bold]
-    lab.quark.run()              build + install on lab (streams logs)
+    lab.quark.run()              build + install on lab
     lab.quark.bench("tti", n=100)
 
   [bold]Kata[/bold]

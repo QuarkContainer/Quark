@@ -54,7 +54,7 @@ class SetupStep(ABC):
     name: str
 
     @abstractmethod
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         ...
 
 
@@ -81,16 +81,12 @@ class SetupPipeline:
         self._steps.extend(steps)
         return self
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> SetupReport:
-        from keska_lab.display import console
-
+    def run(self, remote: RemoteHost) -> SetupReport:
         report = SetupReport(pipeline=self.name)
         for step in self._steps:
-            if stream:
-                console.print(f"\n[bold cyan]→ {step.name}[/bold cyan]")
             t0 = time.perf_counter()
             try:
-                result = step.run(remote, stream=stream)
+                result = step.run(remote)
             except Exception as e:
                 result = StepResult(step.name, False, str(e), time.perf_counter() - t0)
             result.duration_s = time.perf_counter() - t0
@@ -107,7 +103,7 @@ class CallableStep(SetupStep):
         self.name = name
         self._fn = fn
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         try:
             msg = self._fn(remote)
             return StepResult(self.name, True, msg)

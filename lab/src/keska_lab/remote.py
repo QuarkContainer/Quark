@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import shlex
 import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -76,12 +75,16 @@ class RemoteHost:
         *,
         timeout: int | None = 600,
         check: bool = False,
-        stream: bool = False,
         tty: bool = False,
     ) -> RemoteResult:
         cmd = [*self._base_ssh(batch=not tty), *(["-t"] if tty else []), remote_cmd]
-        if stream or tty:
-            result = self._run_streaming(cmd, timeout=timeout)
+        if tty:
+            try:
+                proc = subprocess.run(cmd, timeout=timeout)
+            except subprocess.TimeoutExpired:
+                raise
+            rc = proc.returncode if proc.returncode is not None else 1
+            result = RemoteResult("", "", rc)
         else:
             proc = subprocess.run(
                 cmd,
@@ -99,42 +102,9 @@ class RemoteHost:
         remote_cmd: str,
         *,
         timeout: int | None = None,
-        stream: bool = True,
     ) -> RemoteResult:
         """Interactive SSH session (no BatchMode) with TTY forwarded to the user."""
-        del stream  # always pass stdin/stdout/stderr through for auth prompts
-        cmd = [*self._base_ssh(batch=False), "-t", remote_cmd]
-        try:
-            proc = subprocess.run(cmd, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            raise
-        rc = proc.returncode if proc.returncode is not None else 1
-        return RemoteResult("", "", rc)
-
-    def _run_streaming(self, cmd: list[str], *, timeout: int | None) -> RemoteResult:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
-        lines: list[str] = []
-        assert proc.stdout is not None
-        try:
-            for line in proc.stdout:
-                lines.append(line)
-                sys.stdout.write(line)
-                if not line.endswith("\n"):
-                    sys.stdout.write("\n")
-                sys.stdout.flush()
-            proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-            raise
-        out = "".join(lines)
-        return RemoteResult(out, "", proc.returncode or 0)
+        return self.run(remote_cmd, timeout=timeout, tty=True)
 
     def _run_script(
         self,
@@ -142,7 +112,6 @@ class RemoteHost:
         *,
         timeout: int | None = 600,
         check: bool = False,
-        stream: bool = False,
     ) -> RemoteResult:
         """Run a multiline script via SSH stdin (avoids ARG_MAX and ctr stdin steal)."""
         remote_cmd = (
@@ -151,42 +120,14 @@ class RemoteHost:
             "bash \"$tmp\"; ec=$?; rm -f \"$tmp\"; exit $ec"
         )
         cmd = [*self._base_ssh(), remote_cmd]
-        if stream:
-            proc = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-            )
-            assert proc.stdin is not None
-            assert proc.stdout is not None
-            proc.stdin.write(script)
-            proc.stdin.close()
-            lines: list[str] = []
-            try:
-                for line in proc.stdout:
-                    lines.append(line)
-                    sys.stdout.write(line)
-                    if not line.endswith("\n"):
-                        sys.stdout.write("\n")
-                    sys.stdout.flush()
-                proc.wait(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-                raise
-            result = RemoteResult("".join(lines), "", proc.returncode or 0)
-        else:
-            proc = subprocess.run(
-                cmd,
-                input=script,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
-            result = RemoteResult(proc.stdout, proc.stderr, proc.returncode)
+        proc = subprocess.run(
+            cmd,
+            input=script,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        result = RemoteResult(proc.stdout, proc.stderr, proc.returncode)
         if check:
             result.raise_if_failed("remote script")
         return result
@@ -197,12 +138,11 @@ class RemoteHost:
         *,
         timeout: int | None = 600,
         check: bool = False,
-        stream: bool = False,
     ) -> RemoteResult:
         if "\n" in script:
-            return self._run_script(script, timeout=timeout, check=check, stream=stream)
+            return self._run_script(script, timeout=timeout, check=check)
         remote_cmd = f"bash -c {shlex.quote(script)}"
-        return self.run(remote_cmd, timeout=timeout, check=check, stream=stream)
+        return self.run(remote_cmd, timeout=timeout, check=check)
 
     def sh_login(
         self,
@@ -210,7 +150,6 @@ class RemoteHost:
         *,
         timeout: int | None = 600,
         check: bool = False,
-        stream: bool = False,
     ) -> RemoteResult:
         """Profile PATH without bash -lc (multiline -lc breaks SSH exit codes)."""
         wrapped = (
@@ -219,7 +158,7 @@ class RemoteHost:
             "source ~/.bashrc 2>/dev/null || true\n"
             f"{script}"
         )
-        return self.sh(wrapped, timeout=timeout, check=check, stream=stream)
+        return self.sh(wrapped, timeout=timeout, check=check)
 
     def format_failure(self, result: RemoteResult) -> str:
         return format_cmd_output(result.stdout, result.stderr)
@@ -238,11 +177,10 @@ class RemoteHost:
         *,
         timeout: int | None = 600,
         check: bool = False,
-        stream: bool = False,
     ) -> RemoteResult:
         """Run docker commands via sg docker (works before group refresh in SSH session)."""
         quoted = shlex.quote(script)
-        return self.sh(f"sg docker -c {quoted}", timeout=timeout, check=check, stream=stream)
+        return self.sh(f"sg docker -c {quoted}", timeout=timeout, check=check)
 
     def in_docker_group(self) -> bool:
         r = self.sh("id -nG", timeout=15)
@@ -252,8 +190,6 @@ class RemoteHost:
         self,
         local_path: Path,
         remote_subpath: str = "",
-        *,
-        stream: bool = False,
     ) -> None:
         """Sync local directory to lab repo path."""
         dest = self.config.remote_repo
@@ -262,10 +198,7 @@ class RemoteHost:
         dest = f"{self.ssh_target}:{dest}/"
         local = str(local_path.resolve()) + "/"
         cmd = [*self._base_rsync(), local, dest]
-        if stream:
-            subprocess.run(cmd, check=True, timeout=3600)
-        else:
-            subprocess.run(cmd, check=True, timeout=3600, capture_output=True, text=True)
+        subprocess.run(cmd, check=True, timeout=3600, capture_output=True, text=True)
 
     def scp_to_lab(self, local_file: Path, remote_path: str) -> None:
         """Copy a single file to the lab host."""

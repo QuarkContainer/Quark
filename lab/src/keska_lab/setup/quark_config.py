@@ -109,8 +109,8 @@ class QuarkBenchConfigStep(SetupStep):
 
     name = "quark-bench-config"
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
-        r = remote.sh(deploy_config_script(bench_config_json()), timeout=60, stream=stream)
+    def run(self, remote: RemoteHost) -> StepResult:
+        r = remote.sh(deploy_config_script(bench_config_json()), timeout=60)
         if not r.ok:
             return StepResult(self.name, False, remote.format_failure(r))
         return StepResult(
@@ -128,10 +128,10 @@ class QuarkExperimentalConfigStep(SetupStep):
     def __init__(self, flag: str) -> None:
         self.flag = flag
 
-    def run(self, remote: RemoteHost, *, stream: bool = False) -> StepResult:
+    def run(self, remote: RemoteHost) -> StepResult:
         cfg = experimental_config_json(self.flag)
         features = " ".join(experimental_cargo_features(self.flag))
-        r = remote.sh(deploy_config_script(cfg), timeout=60, stream=stream)
+        r = remote.sh(deploy_config_script(cfg), timeout=60)
         if not r.ok:
             return StepResult(self.name, False, remote.format_failure(r))
         return StepResult(
