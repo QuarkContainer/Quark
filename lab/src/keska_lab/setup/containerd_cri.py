@@ -25,6 +25,7 @@ import subprocess
 from pathlib import Path
 
 OLD_MARKERS = __OLD_MARKERS__
+INCLUDE_KATA = __INCLUDE_KATA__
 
 cfg_path = Path("/etc/containerd/config.toml")
 backup = cfg_path.with_suffix(".toml.bak.keska")
@@ -45,10 +46,10 @@ base = base.replace(
     1,
 )
 
-# Default runtime + Quark/Kata shims
+default_runtime = "kata" if INCLUDE_KATA else "quark"
 base = base.replace(
     "default_runtime_name = 'runc'",
-    "default_runtime_name = 'quark'",
+    f"default_runtime_name = '{default_runtime}'",
 )
 
 extra_runtimes = """
@@ -58,6 +59,9 @@ extra_runtimes = """
       [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.quarkd]
         runtime_type = 'io.containerd.quarkd.v1'
         sandboxer = 'podsandbox'
+"""
+if INCLUDE_KATA:
+    extra_runtimes += """
       [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.kata]
         runtime_type = 'io.containerd.kata.v2'
         sandboxer = 'podsandbox'
@@ -69,7 +73,8 @@ if "runtimes.quark" not in base:
         raise SystemExit("could not locate end of runc runtime block")
     base = base[:runc_end] + "\n" + extra_runtimes + base[runc_end:]
 else:
-    for name in ("quark", "quarkd", "kata"):
+    runtime_names = ("quark", "quarkd", "kata") if INCLUDE_KATA else ("quark", "quarkd")
+    for name in runtime_names:
         block = f"runtimes.{name}]"
         if block not in base:
             continue
@@ -89,7 +94,7 @@ base = re.sub(
     base,
 )
 
-# containerd 2.x Transfer API needs explicit unpack platforms for CRI + ctr devmapper
+# containerd 2.x Transfer API needs explicit unpack platforms for CRI (+ devmapper when Kata)
 anchor = "[plugins.'io.containerd.transfer.v1.local']"
 idx = base.find(anchor)
 if idx == -1:
@@ -105,7 +110,7 @@ if "snapshotter = 'overlayfs'" not in transfer_tail:
       platform = 'linux/amd64'
       snapshotter = 'overlayfs'
 """
-if not re.search(
+if INCLUDE_KATA and not re.search(
     r"\\[\\[plugins\\.'io\\.containerd\\.transfer\\.v1\\.local'\\.unpack_config\\]\\][\\s\\S]*?snapshotter = 'devmapper'",
     base,
 ):
@@ -151,12 +156,13 @@ def containerd_restart_script() -> str:
     ).strip()
 
 
-def containerd_cri_config_script() -> str:
+def containerd_cri_config_script(*, include_kata: bool = False) -> str:
+    patch = CONTAINERD_PATCH_PY.replace("__INCLUDE_KATA__", repr(include_kata))
     return textwrap.dedent(
         f"""
         set -euo pipefail
         sudo -n python3 <<'PY'
-{CONTAINERD_PATCH_PY}
+{patch}
 PY
         {containerd_restart_script()}
         sudo -n ctr -n k8s.io images pull registry.k8s.io/pause:3.8 2>/dev/null | tail -1 || true
@@ -261,13 +267,19 @@ class CrictlInstallStep(SetupStep):
 class ContainerdCriStep(SetupStep):
     name = "containerd-cri"
 
+    def __init__(self, *, include_kata: bool = False, skip_lifecycle_smoke: bool = False):
+        self.include_kata = include_kata
+        self.skip_lifecycle_smoke = skip_lifecycle_smoke
+
     def run(self, remote: RemoteHost) -> StepResult:
-        r = remote.sh(containerd_cri_config_script(), timeout=300)
+        r = remote.sh(containerd_cri_config_script(include_kata=self.include_kata), timeout=300)
         if not r.ok:
             return StepResult(self.name, False, remote.format_failure(r))
         smoke = remote.sh(cri_smoke_script(), timeout=60)
         if not smoke.ok:
             return StepResult(self.name, False, remote.format_failure(smoke))
+        if self.skip_lifecycle_smoke:
+            return StepResult(self.name, True, "cri enabled (lifecycle smoke deferred)")
         run_smoke = remote.sh(cri_lifecycle_setup_smoke_script(), timeout=300)
         if not run_smoke.ok:
             return StepResult(self.name, False, remote.format_failure(run_smoke))

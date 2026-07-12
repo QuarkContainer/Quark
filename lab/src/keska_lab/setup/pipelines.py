@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from keska_lab.config import LabConfig
+from keska_lab.profile import NetworkMode
 from keska_lab.harness.workload import get_workload
 from keska_lab.remote import RemoteHost
 from keska_lab.setup.base import SetupPipeline, SetupStep, StepResult
@@ -23,8 +24,8 @@ from keska_lab.setup.oci_bundle import (
     EnsureWorkloadBundleStep,
 )
 from keska_lab.setup.quark_cleanup import cleanup_quark_sandboxes
-from keska_lab.setup.quark_config import QuarkBenchConfigStep
-from keska_lab.setup.tsot import TsotBenchReadyStep
+from keska_lab.setup.quark_config import QuarkBenchConfigStep, QuarkConfigStep
+from keska_lab.setup.tsot import TsotStackStep
 
 
 class CleanupSandboxesStep(SetupStep):
@@ -157,10 +158,10 @@ def quark_network_ready_pipeline(
     cfg = config or LabConfig.from_env()
     extras = _workloads_for_mode("network", workload)
     pipe = workload_setup_pipeline(cfg, extras[0], extra_workloads=extras[1:])
-    pipe.add(CniPluginsStep()).add(ContainerdCriStep()).add(CrictlInstallStep())
+    pipe.add(CniPluginsStep(cfg.network_mode)).add(ContainerdCriStep(include_kata=False)).add(CrictlInstallStep())
     pipe.add(QuarkCriStatsStep())
-    if cfg.enable_tsot:
-        pipe.add(TsotBenchReadyStep())
+    if cfg.network_mode == NetworkMode.tsot:
+        pipe.add(TsotStackStep(cfg.node_profile))
     for name in extras:
         spec = get_workload(name)
         pipe.add(DockerPullStep(spec.image, cfg))
@@ -220,10 +221,10 @@ def quark_heavy_ready_pipeline(
     pipe = workload_setup_pipeline(cfg, workload, extra_workloads=extras)
     pipe.name = "quark-heavy-ready"
     pipe.add(IoBenchDirStep(cfg))
-    pipe.add(CniPluginsStep()).add(ContainerdCriStep()).add(CrictlInstallStep())
+    pipe.add(CniPluginsStep(cfg.network_mode)).add(ContainerdCriStep(include_kata=False)).add(CrictlInstallStep())
     pipe.add(QuarkCriStatsStep())
-    if cfg.enable_tsot:
-        pipe.add(TsotBenchReadyStep())
+    if cfg.network_mode == NetworkMode.tsot:
+        pipe.add(TsotStackStep(cfg.node_profile))
     for name in extras:
         spec = get_workload(name)
         pipe.add(DockerPullStep(spec.image, cfg))
@@ -252,7 +253,7 @@ def kata_heavy_ready_pipeline(config: LabConfig | None = None) -> SetupPipeline:
     cfg = config or LabConfig.from_env()
     pipe = kata_full_ready_pipeline(cfg, "busybox")
     pipe.name = "kata-heavy-ready"
-    pipe.add(CniPluginsStep()).add(ContainerdCriStep()).add(CrictlInstallStep())
+    pipe.add(CniPluginsStep()).add(ContainerdCriStep(include_kata=True)).add(CrictlInstallStep())
     for name in ("python", "iperf"):
         spec = get_workload(name)
         pipe.add(CtrImagePullStep(spec.image, cfg))
@@ -271,7 +272,7 @@ def kata_network_ready_pipeline(
         .add(KataInstallStep())
         .add(KataHypervisorStep(cfg))
         .add(CniPluginsStep())
-        .add(ContainerdCriStep())
+        .add(ContainerdCriStep(include_kata=True))
         .add(CrictlInstallStep())
     )
     for name in extras:

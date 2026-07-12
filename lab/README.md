@@ -2,6 +2,8 @@
 
 IPython-native laboratory on **`lab@lab.keska.vpn`** — experiment with **Quark** and **Kata Containers**, build/deploy Quark from your Mac, and run benchmarks with automatic setup.
 
+**Docs:** [kdoc/lab/](../kdoc/lab/) — usage guide and architecture (profiles, install pipeline, verification pyramid).
+
 ## Install (Mac or Linux)
 
 ```bash
@@ -32,13 +34,33 @@ Default Quark binary is **release `quark`**, not debug `quark_d`. Kata default h
 ## Quark: build & deploy
 
 ```python
-lab.quark.run()
-lab.quark.bench("light", n=10)
-lab.quark.bench("workloads", workload="python", n=5)
-lab.quark.bench("network", n=3, setup=True)   # CRI stack; TSOT when KESKA_LAB_ENABLE_TSOT=1
+from keska_lab.profile import NodeProfile
+
+lab = LabSession(NodeProfile.quark_tsot())
+node = lab.install()              # install + verify + gate L1
+node.bench("network", n=3)
+node.teardown_all()
+lab.cleanup()
 ```
 
-Network suite setup (automatic with `setup=True`): CNI bridge plugins, containerd CRI with Quark/Kata shim, crictl, and iptables forward rules for `cni0`. With `KESKA_LAB_ENABLE_TSOT=1`, Quark setup also deploys the TSOT stack (etcd, cadvisor, qservice `na`) and network probes run via crictl with sandbox UIDs.
+Legacy path (still supported):
+
+```python
+lab.quark.run()
+lab.quark.bench("light", n=10)
+lab.quark.bench("network", n=3, setup=True)   # uses KESKA_LAB_NETWORK_MODE
+```
+
+CLI:
+
+```bash
+keska-lab-node install --profile quark_tsot
+keska-lab-node verify --profile quark_tsot
+keska-lab-node gate --profile quark_tsot
+keska-lab-node cleanup --profile quark_tsot
+```
+
+Network suite setup: CNI plugins, containerd CRI, crictl. Use `NodeProfile.quark_tsot()` (or `KESKA_LAB_NETWORK_MODE=tsot`) for TSOT — deploys na, etcd, ss, tsot CNI, and runs gates that pre-register pod UIDs before crictl.
 
 ---
 
@@ -126,7 +148,8 @@ Results → `~/.keska-lab/results/*.json` (schema v2).
 | `KESKA_LAB_QUARK_PROFILE` | `release` | `release` → `quark`, `debug` → `quark_d` |
 | `KESKA_LAB_QUARK_EXEC` | `direct` | `direct` or `docker` |
 | `KESKA_LAB_KATA_HYPERVISOR` | `firecracker` | Kata hypervisor |
-| `KESKA_LAB_ENABLE_TSOT` | — | Set `1` to deploy TSOT stack during Quark network setup (required for crictl-based Quark network probes) |
+| `KESKA_LAB_NETWORK_MODE` | `bridge` | `bridge`, `tsot`, or `rdma` (rdma not implemented) |
+| `KESKA_LAB_ENABLE_TSOT` | — | **Deprecated** — use `KESKA_LAB_NETWORK_MODE=tsot` |
 | `KESKA_LAB_WORK` | `/tmp/keska-lab` | Cached OCI bundles |
 | `KESKA_LAB_IO_BENCH_DIR` | `/var/lib/keska-lab/io-bench` | Host disk bind-mount for `io_read`/`io_write` (not tmpfs) |
 | `KESKA_LAB_IMAGE_REGISTRY` | `europe-north1-docker.pkg.dev/keska-devops/base-images` | Pull mirror tried before Docker Hub; set empty to disable. Setup runs `image-registry-auth` (probe pull + `gcloud auth login --no-launch-browser` on the lab host if needed). Verify with `keska-lab-registry-check`. |

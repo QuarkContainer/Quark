@@ -25,6 +25,7 @@ keska-lab-group5 = "keska_lab.group5:main"
 keska-lab-coherency = "keska_lab.coherency.mmap_read:main"
 keska-lab-cri-gate = "keska_lab.cri_gate_cli:main"
 keska-lab-cri-bisect = "keska_lab.cri_bisect_cli:main"
+keska-lab-node = "keska_lab.node_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

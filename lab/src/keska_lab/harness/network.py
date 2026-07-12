@@ -131,6 +131,8 @@ def crictl_python_exec_script(
     runtime_handler: str = "",
     idle_cmd: list[str] | None = None,
     image_registry: str | None = DEFAULT_IMAGE_REGISTRY,
+    tsot_repo: str | None = None,
+    pod_mgr_port: int = 8888,
 ) -> str:
     import json
     import uuid as uuid_mod
@@ -151,11 +153,17 @@ def crictl_python_exec_script(
     py = python_exec_cmd(code)
     pod_json = json.dumps(pod)
     container_json = json.dumps(container)
+    prereg = ""
+    if tsot_repo:
+        from keska_lab.gate.tsot_gate import tsot_register_uid_script
+
+        prereg = tsot_register_uid_script(tsot_repo, pod["metadata"]["uid"], pod_mgr_port=pod_mgr_port)
     return textwrap.dedent(
         f"""
         set -euo pipefail
         WD=/tmp/keska-cri-$RANDOM
         sudo -n mkdir -p "$WD"
+        {prereg}
         sudo -n tee "$WD/pod.json" >/dev/null <<'JSON'
 {pod_json}
 JSON
@@ -182,6 +190,8 @@ def crictl_iperf_script(
     runtime: str = "quark",
     runtime_handler: str = "",
     image_registry: str | None = DEFAULT_IMAGE_REGISTRY,
+    tsot_repo: str | None = None,
+    pod_mgr_port: int = 8888,
 ) -> str:
     import json
     import uuid as uuid_mod
@@ -210,11 +220,22 @@ def crictl_iperf_script(
         "command": ["/bin/sleep", "600"],
         "log_path": "iperf-c.log",
     }
+    prereg = ""
+    if tsot_repo:
+        from keska_lab.gate.tsot_gate import tsot_register_uid_script
+
+        prereg = "\n".join(
+            [
+                tsot_register_uid_script(tsot_repo, pod_s["metadata"]["uid"], pod_mgr_port=pod_mgr_port),
+                tsot_register_uid_script(tsot_repo, pod_c["metadata"]["uid"], pod_mgr_port=pod_mgr_port),
+            ]
+        )
     return textwrap.dedent(
         f"""
         set -euo pipefail
         WD=/tmp/keska-iperf-$RANDOM
         sudo -n mkdir -p "$WD"
+        {prereg}
         sudo -n tee "$WD/pod-s.json" >/dev/null <<'JSON'
 {json.dumps(pod_s)}
 JSON

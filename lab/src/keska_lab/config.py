@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+from keska_lab.profile import NetworkMode, NodeProfile
+
+
 @dataclass
 class LabConfig:
     host: str = "lab.keska.vpn"
@@ -29,7 +32,7 @@ class LabConfig:
     docker_runtime_kata: str = "kata"
     kata_ctr_runtime: str = "io.containerd.kata.v2"
     kata_hypervisor: str = "firecracker"
-    enable_tsot: bool = False
+    network_mode: NetworkMode = NetworkMode.bridge
     image_registry: str = "europe-north1-docker.pkg.dev/keska-devops/base-images"
     cargo_features: str = ""
     skip_registry_auth: bool = False
@@ -68,6 +71,17 @@ class LabConfig:
     def from_env(cls) -> LabConfig:
         key = os.environ.get("KESKA_LAB_SSH_KEY")
         local = os.environ.get("KESKA_LAB_LOCAL_REPO")
+        mode_str = os.environ.get("KESKA_LAB_NETWORK_MODE", "").strip().lower()
+        legacy_tsot = os.environ.get("KESKA_LAB_ENABLE_TSOT", "").lower() in ("1", "true", "yes")
+        if legacy_tsot and not mode_str:
+            network_mode = NetworkMode.tsot
+        elif mode_str:
+            try:
+                network_mode = NetworkMode(mode_str)
+            except ValueError:
+                network_mode = NetworkMode.bridge
+        else:
+            network_mode = NetworkMode.bridge
         return cls(
             host=os.environ.get("KESKA_LAB_HOST", "lab.keska.vpn"),
             user=os.environ.get("KESKA_LAB_USER", "lab"),
@@ -87,7 +101,7 @@ class LabConfig:
             sudo_password=os.environ.get("KESKA_LAB_SUDO_PASSWORD"),
             docker_runtime_quark=os.environ.get("KESKA_LAB_DOCKER_RUNTIME_QUARK", "quark"),
             kata_hypervisor=os.environ.get("KESKA_LAB_KATA_HYPERVISOR", "firecracker"),
-            enable_tsot=os.environ.get("KESKA_LAB_ENABLE_TSOT", "").lower() in ("1", "true", "yes"),
+            network_mode=network_mode,
             image_registry=os.environ.get(
                 "KESKA_LAB_IMAGE_REGISTRY",
                 "europe-north1-docker.pkg.dev/keska-devops/base-images",
@@ -96,6 +110,15 @@ class LabConfig:
             skip_registry_auth=os.environ.get("KESKA_LAB_SKIP_REGISTRY_AUTH", "").lower()
             in ("1", "true", "yes"),
         )
+
+    @property
+    def enable_tsot(self) -> bool:
+        """Deprecated — use network_mode or node_profile."""
+        return self.network_mode == NetworkMode.tsot
+
+    @property
+    def node_profile(self) -> NodeProfile:
+        return NodeProfile.from_lab_config(self)
 
     @property
     def kata_snapshotter(self) -> str | None:

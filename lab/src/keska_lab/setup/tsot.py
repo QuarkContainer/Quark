@@ -1,10 +1,11 @@
-"""TSOT stack setup for Quark network benchmarks (lab host only)."""
+"""TSOT stack setup scripts (lab host only)."""
 
 from __future__ import annotations
 
 import shlex
 import textwrap
 
+from keska_lab.profile import NetworkParams
 from keska_lab.remote import RemoteHost
 from keska_lab.setup.base import SetupStep, StepResult
 from keska_lab.setup.quark_config import QUARK_CONFIG, bench_config_json, deploy_config_script
@@ -13,35 +14,32 @@ QSERVICE_BIN = "target/debug"
 QLET_CONFIG_PATH = "/etc/quark/lab-qlet.json"
 ETCD_NAME = "keska-etcd"
 ETCD_IMAGE = "quay.io/coreos/etcd:v3.5.16"
+SS_NAME = "keska-ss"
 CADVISOR_NAME = "keska-cadvisor"
 CADVISOR_IMAGE = "gcr.io/cadvisor/cadvisor:v0.36.0"
 TSOT_SOCKET = "/var/run/quark/tsot-socket"
+GRPCURL_VERSION = "1.9.1"
+GRPCURL_URL = (
+    f"https://github.com/fullstorydev/grpcurl/releases/download/"
+    f"v{GRPCURL_VERSION}/grpcurl_{GRPCURL_VERSION}_linux_x86_64.tar.gz"
+)
 
 
-def tsot_config_json() -> dict:
-    return bench_config_json(enable_tsot=True)
-
-
-def deploy_tsot_config_script() -> str:
-    return deploy_config_script(tsot_config_json())
-
-
-def deploy_qlet_config_script() -> str:
-    """Lab qlet config — single-node, ports aligned with ss (8890) and etcd (2379)."""
+def deploy_qlet_config_script(params: NetworkParams) -> str:
     body = textwrap.dedent(
-        """
-        {
+        f"""
+        {{
           "nodeName": "node1",
           "etcdAddresses": ["127.0.0.1:2379"],
-          "nodeIp": "127.0.0.1",
-          "podMgrPort": 8888,
-          "tsotCniPort": 1234,
-          "tsotSvcPort": 1235,
-          "stateSvcPort": 8890,
-          "cidr": "10.1.1.0/8",
-          "stateSvcAddr": ["127.0.0.1:8890"],
+          "nodeIp": "{params.node_ip}",
+          "podMgrPort": {params.pod_mgr_port},
+          "tsotCniPort": {params.tsot_cni_port},
+          "tsotSvcPort": {params.tsot_svc_port},
+          "stateSvcPort": {params.state_svc_port},
+          "cidr": "{params.cidr}",
+          "stateSvcAddr": ["127.0.0.1:{params.state_svc_port}"],
           "singleNodeModel": true
-        }
+        }}
         """
     ).strip()
     return textwrap.dedent(
@@ -105,6 +103,55 @@ def etcd_start_script() -> str:
     ).strip()
 
 
+def ss_start_script(repo: str, port: int = 8890) -> str:
+    bindir = f"$REPO/qservice/{QSERVICE_BIN}"
+    return textwrap.dedent(
+        f"""
+        set -euo pipefail
+        REPO={shlex.quote(repo)}
+        BINDIR={bindir}
+        {etcd_ready_script()}
+        if {IPROUTE_SS} -lntp 2>/dev/null | grep -q ':{port}'; then
+          echo "ss already listening on {port}"
+          exit 0
+        fi
+        if [ ! -x "$BINDIR/ss" ]; then
+          echo "ss binary missing at $BINDIR/ss (build qservice first)" >&2
+          exit 1
+        fi
+        {_stop_qservice_ss_script()}
+        sleep 1
+        sudo -n nohup "$BINDIR/ss" {QLET_CONFIG_PATH} >/dev/null 2>&1 &
+        for i in $(seq 1 20); do
+          if {IPROUTE_SS} -lntp 2>/dev/null | grep -q ':{port}'; then
+            echo "ss ready on {port}"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "ss not ready on {port}" >&2
+        exit 1
+        """
+    ).strip()
+
+
+def grpcurl_install_script() -> str:
+    return textwrap.dedent(
+        f"""
+        set -euo pipefail
+        if command -v grpcurl >/dev/null 2>&1; then
+          echo "grpcurl present"
+          exit 0
+        fi
+        tmp=$(mktemp -d)
+        trap 'rm -rf "$tmp"' EXIT
+        curl -fsSL {GRPCURL_URL!r} -o "$tmp/grpcurl.tgz"
+        sudo -n tar -C /usr/local/bin -xzf "$tmp/grpcurl.tgz" grpcurl
+        test -x /usr/local/bin/grpcurl
+        """
+    ).strip()
+
+
 def qservice_build_script(repo: str) -> str:
     qdir = f"{shlex.quote(repo)}/qservice"
     lib = f"{qdir}/qshare/src/lib.rs"
@@ -116,13 +163,64 @@ def qservice_build_script(repo: str) -> str:
         if grep -q 'runtime.v1alpha2.rs' {lib}; then
           sed -i 's/runtime.v1alpha2.rs/runtime.v1.rs/' {lib}
         fi
-        if [ ! -x {QSERVICE_BIN}/na ] || [ ! -x {QSERVICE_BIN}/cni ]; then
-          make na cni
+        if [ ! -x {QSERVICE_BIN}/na ] || [ ! -x {QSERVICE_BIN}/cni ] || [ ! -x {QSERVICE_BIN}/ss ]; then
+          make na cni ss
         fi
         test -x {QSERVICE_BIN}/na
         test -x {QSERVICE_BIN}/cni
+        test -x {QSERVICE_BIN}/ss
         sudo -n cp -f {QSERVICE_BIN}/cni /opt/cni/bin/tsot
-        echo "qservice built (cri v1)"
+        echo "qservice built"
+        """
+    ).strip()
+
+
+IPROUTE_SS = "/bin/ss"
+
+
+def _stop_qservice_ss_script() -> str:
+    return textwrap.dedent(
+        """
+        sudo -n pkill -x ss 2>/dev/null || true
+        sudo -n pkill -f "qservice/target/.*/ss" 2>/dev/null || true
+        sudo -n pkill -f "/etc/quark/lab-qlet.json" 2>/dev/null || true
+        sudo -n pkill -f "/etc/quark/lab-ss.json" 2>/dev/null || true
+        sudo -n rm -f {TSOT_SOCKET}
+        """
+    ).strip()
+
+
+def etcd_ready_script() -> str:
+    return textwrap.dedent(
+        f"""
+        set -euo pipefail
+        for i in $(seq 1 15); do
+          if sudo -n docker ps --format '{{{{.Names}}}}' | grep -qx {ETCD_NAME}; then
+            if curl -sf http://127.0.0.1:2379/health >/dev/null 2>&1; then
+              echo "etcd ready"
+              exit 0
+            fi
+          fi
+          sleep 1
+        done
+        echo "etcd not ready" >&2
+        exit 1
+        """
+    ).strip()
+
+
+def na_stop_script(repo: str) -> str:
+    bindir = f"$REPO/qservice/{QSERVICE_BIN}"
+    return textwrap.dedent(
+        f"""
+        set -euo pipefail
+        REPO={shlex.quote(repo)}
+        BINDIR={bindir}
+        sudo -n pkill -x na 2>/dev/null || true
+        sudo -n pkill -f "$BINDIR/na" 2>/dev/null || true
+        {_stop_qservice_ss_script()}
+        sleep 2
+        echo "na/ss stopped"
         """
     ).strip()
 
@@ -134,63 +232,79 @@ def qservice_start_script(repo: str) -> str:
         set -euo pipefail
         REPO={shlex.quote(repo)}
         BINDIR={bindir}
-        sudo -n pkill -x na 2>/dev/null || true
-        sudo -n pkill -f "$BINDIR/na" 2>/dev/null || true
-        sudo -n pkill -f "$BINDIR/ss" 2>/dev/null || true
-        sleep 2
+        {na_stop_script(repo)}
         sudo -n mkdir -p /var/log/quark /var/run/quark
         sudo -n touch /var/log/quark/na.log
         sudo -n chmod 644 /var/log/quark/na.log
         sudo -n nohup "$BINDIR/na" {QLET_CONFIG_PATH} >/dev/null 2>&1 &
         sleep 8
+        {na_liveness_script()}
+        """
+    ).strip()
+
+
+def na_liveness_script(port: int = 8888) -> str:
+    return textwrap.dedent(
+        f"""
+        set -euo pipefail
         for i in $(seq 1 30); do
-          if [ -S {TSOT_SOCKET} ] && pgrep -f "$BINDIR/na" >/dev/null; then
-            ss -lntp | grep -q ':8888' || continue
-            echo "tsot stack ready"
+          if [ -S {TSOT_SOCKET} ] && pgrep -x na >/dev/null; then
+            {IPROUTE_SS} -lntp 2>/dev/null | grep -q ':{port}' || continue
+            echo "na ready"
             exit 0
           fi
           sleep 1
         done
-        echo "TSOT stack not ready after 30s" >&2
-        pgrep -af "$BINDIR" >&2 || true
+        echo "na not ready" >&2
+        pgrep -af na >&2 || true
         tail -20 /var/log/quark/na.log >&2 || true
         exit 1
         """
     ).strip()
 
 
-def tsot_ready_script() -> str:
-    return (
-        f"test -S {TSOT_SOCKET} && "
-        f"python3 -c \"import json; c=json.load(open('{QUARK_CONFIG}')); "
-        f"exit(0 if c.get('EnableTsot') else 1)\" && "
-        f"pgrep -f 'qservice/target/debug/na' >/dev/null"
-    )
+def tsot_stack_stop_script(repo: str) -> str:
+    return textwrap.dedent(
+        f"""
+        set -euo pipefail
+        {na_stop_script(repo)}
+        sudo -n docker rm -f {ETCD_NAME} {SS_NAME} 2>/dev/null || true
+        echo "tsot stack stopped"
+        """
+    ).strip()
 
 
-def ensure_tsot_stack(remote: RemoteHost) -> str:
-    repo = remote.config.remote_repo
-    steps = [
-        deploy_tsot_config_script(),
-        deploy_qlet_config_script(),
-        cadvisor_start_script(),
-        etcd_start_script(),
-        qservice_build_script(repo),
-        qservice_start_script(repo),
-    ]
-    for script in steps:
-        r = remote.sh(script, timeout=900)
-        if not r.ok:
-            raise RuntimeError(remote.format_failure(r))
-    return "tsot stack ready"
-
-
-class TsotBenchReadyStep(SetupStep):
+class TsotStackStep(SetupStep):
     name = "tsot-stack"
 
+    def __init__(self, profile: NodeProfile):
+        self.profile = profile
+
     def run(self, remote: RemoteHost) -> StepResult:
-        try:
-            msg = ensure_tsot_stack(remote)
-            return StepResult(self.name, True, msg)
-        except Exception as e:
-            return StepResult(self.name, False, str(e))
+        repo = remote.config.remote_repo
+        params = self.profile.net_params
+        steps = [
+            deploy_config_script(bench_config_json(self.profile)),
+            deploy_qlet_config_script(params),
+            grpcurl_install_script(),
+            cadvisor_start_script(),
+            etcd_start_script(),
+            qservice_build_script(repo),
+            ss_start_script(repo, params.state_svc_port),
+            qservice_start_script(repo),
+        ]
+        for script in steps:
+            r = remote.sh(script, timeout=900)
+            if not r.ok:
+                return StepResult(self.name, False, remote.format_failure(r))
+        return StepResult(self.name, True, "tsot stack ready")
+
+
+class TsotStackStopStep(SetupStep):
+    name = "tsot-stack-stop"
+
+    def run(self, remote: RemoteHost) -> StepResult:
+        r = remote.sh(tsot_stack_stop_script(remote.config.remote_repo), timeout=120)
+        if not r.ok:
+            return StepResult(self.name, False, remote.format_failure(r))
+        return StepResult(self.name, True, "tsot stack stopped")

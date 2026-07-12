@@ -48,7 +48,8 @@ from keska_lab.setup.oci_bundle import (
     refresh_bundle_rootfs_script,
 )
 from keska_lab.setup.quark_cleanup import cleanup_quark_sandboxes
-from keska_lab.setup.tsot import TSOT_SOCKET, tsot_ready_script
+from keska_lab.profile import NetworkMode
+from keska_lab.setup.tsot import TSOT_SOCKET, na_liveness_script
 
 
 class QuarkBackend(SandboxBackend):
@@ -96,8 +97,9 @@ class QuarkBackend(SandboxBackend):
         tsot = False
         cri_ready = False
         if quark:
-            tr = self.remote.sh(tsot_ready_script(), timeout=15)
-            tsot = tr.ok
+            if self.config.network_mode == NetworkMode.tsot:
+                tr = self.remote.sh(na_liveness_script(), timeout=15)
+                tsot = tr.ok
             cri = self.remote.sh(
                 "test -S /run/containerd/containerd.sock && "
                 "sudo -n crictl info >/dev/null 2>&1",
@@ -1304,6 +1306,11 @@ class QuarkBackend(SandboxBackend):
         r = self.remote.sh(script, timeout=timeout, check=True)
         return float(r.stdout.strip().splitlines()[-1])
 
+    def _tsot_crictl_kwargs(self) -> dict:
+        if self.config.network_mode == NetworkMode.tsot:
+            return {"tsot_repo": self.config.remote_repo}
+        return {}
+
     def _crictl_python_exec_sample(
         self,
         code: str,
@@ -1316,6 +1323,7 @@ class QuarkBackend(SandboxBackend):
             image=image,
             runtime=self.docker_runtime,
             image_registry=self.config.image_registry,
+            **self._tsot_crictl_kwargs(),
         )
         r = self.remote.sh(script, timeout=timeout, check=True)
         return float(r.stdout.strip().splitlines()[-1])
@@ -1325,6 +1333,7 @@ class QuarkBackend(SandboxBackend):
             image=image,
             runtime=self.docker_runtime,
             image_registry=self.config.image_registry,
+            **self._tsot_crictl_kwargs(),
         )
         r = self.remote.sh(script, timeout=180, check=True)
         mbps = parse_iperf_mbps(r.stdout)
