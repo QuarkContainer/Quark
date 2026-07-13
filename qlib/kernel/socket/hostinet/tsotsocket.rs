@@ -790,8 +790,9 @@ impl SockOperations for TsotSocketOperations {
                 }
 
                 SHARESPACE.tsotSocketMgr.Connect(ipAddr, addrPort, 123, self.fd, self)?;
-                
+
                 *self.socketType.lock() = TsotSocketType::Connecting;
+                self.SetConnErrno(-SysErr::EINPROGRESS);
                 if !blocking {
                     return Err(Error::SysError(SysErr::EINPROGRESS));
                 }
@@ -808,8 +809,6 @@ impl SockOperations for TsotSocketOperations {
                 return Err(Error::SysError(SysErr::EBADF));
             }
         }
-
-        self.SetConnErrno(-SysErr::EINPROGRESS);
         let general = task.blocker.generalEntry.clone();
         self.EventRegister(task, &general, EVENT_OUT);
         defer!(self.EventUnregister(task, &general));
@@ -826,8 +825,10 @@ impl SockOperations for TsotSocketOperations {
         }
 
         if self.ConnErrno() == 0 {
-            self.PostConnect();
-            return Ok(0)
+            if !self.SocketBufEnabled() {
+                self.PostConnect();
+            }
+            return Ok(0);
         }
 
         let errno = self.ConnErrno();

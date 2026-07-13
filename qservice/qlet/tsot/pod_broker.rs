@@ -140,25 +140,7 @@ impl PodBroker {
                         "Gateway register can't use PodRegisterReq".to_owned(),
                     ));
                 }
-                let podUid = uuid::Uuid::from_bytes(register.podUid).to_string();
-                let podSandbox = NAMESPACE_MGR.GetPodSandbox(&podUid)?;
-
-                *self.podSandbox.lock().unwrap() = Some(podSandbox.clone());
-
-                let inner = podSandbox.lock().unwrap();
-                POD_BRORKER_MGRS.AddPodBroker(
-                    &inner.namespace,
-                    inner.ip.0,
-                    &inner.name,
-                    self.clone(),
-                )?;
-
-                let resp = PodRegisterResp {
-                    containerIp: inner.ip.0,
-                    errorCode: ErrCode::None as _,
-                };
-
-                self.SendMsg(TsotMsg::PodRegisterResp(resp).into())?;
+                self.HandlePodRegister(register)?;
             }
             TsotMsg::GatewayRegisterReq(register) => {
                 if !gatewayRegister {
@@ -393,21 +375,43 @@ impl PodBroker {
         return Ok(());
     }
 
-    pub fn ProcessPodRegisterReq(&self, req: PodRegisterReq) -> Result<()> {
+    pub fn HandlePodRegister(&self, req: PodRegisterReq) -> Result<()> {
         let podUid = uuid::Uuid::from_bytes(req.podUid).to_string();
-        let resp = match NAMESPACE_MGR.GetPodSandbox(&podUid) {
-            Err(_e) => PodRegisterResp {
-                containerIp: 0,
-                errorCode: ErrCode::PodUidDonotExisit as _,
-            },
-            Ok(podSandbox) => PodRegisterResp {
-                containerIp: podSandbox.lock().unwrap().ip.0,
-                errorCode: ErrCode::PodUidDonotExisit as _,
-            },
+        let podSandbox = match NAMESPACE_MGR.GetPodSandbox(&podUid) {
+            Ok(ps) => ps,
+            Err(_) => {
+                let resp = PodRegisterResp {
+                    containerIp: 0,
+                    errorCode: ErrCode::PodUidDonotExisit as _,
+                };
+                self.SendMsg(TsotMsg::PodRegisterResp(resp).into())?;
+                return Ok(());
+            }
         };
 
+        *self.podSandbox.lock().unwrap() = Some(podSandbox.clone());
+        let inner = podSandbox.lock().unwrap();
+        match POD_BRORKER_MGRS.AddPodBroker(
+            &inner.namespace,
+            inner.ip.0,
+            &inner.name,
+            self.clone(),
+        ) {
+            Ok(()) => (),
+            Err(Error::Exist(_)) => (),
+            Err(e) => return Err(e),
+        }
+
+        let resp = PodRegisterResp {
+            containerIp: inner.ip.0,
+            errorCode: ErrCode::None as _,
+        };
         self.SendMsg(TsotMsg::PodRegisterResp(resp).into())?;
-        return Ok(());
+        Ok(())
+    }
+
+    pub fn ProcessPodRegisterReq(&self, req: PodRegisterReq) -> Result<()> {
+        self.HandlePodRegister(req)
     }
 
     pub fn ProcessCreateSocketReq(&self, _req: CreateSocketReq) -> Result<()> {
@@ -619,7 +623,7 @@ impl PodBroker {
             msg: TsotMsg::Wakeup(msg),
         };
 
-        return self.EnqMsg(message);
+        return self.SendMsg(message);
     }
 
     pub fn HandleNewPeerConnection(
@@ -657,7 +661,9 @@ impl PodBroker {
             msg: TsotMsg::PeerConnectNotify(msg),
         };
 
-        return self.EnqMsg(message);
+        // Send synchronously so the relay can close its copy of the accepted fd
+        // once the client has received TsotConnResp::Ok.
+        return self.SendMsg(message);
     }
 
     pub fn HandlePodConnectResp(&self, reqId: u32, errorCode: i32) -> Result<()> {

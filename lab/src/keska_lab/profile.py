@@ -27,6 +27,7 @@ class NetworkParams:
     tsot_cni_port: int = 1234
     tsot_svc_port: int = 1235
     state_svc_port: int = 8890
+    qlet_state_svc_port: int = 8892
 
 
 @dataclass(frozen=True)

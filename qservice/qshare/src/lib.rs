@@ -42,7 +42,7 @@ pub mod tsot_msg;
 pub mod types;
 
 pub mod crictl {
-    include!("pb_gen/runtime.v1alpha2.rs");
+    include!("pb_gen/runtime.v1.rs");
 }
 
 pub mod tsot {

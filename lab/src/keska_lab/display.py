@@ -81,6 +81,9 @@ def print_suite_report(report) -> None:
             console.print(f"[dim]{note}[/dim]")
     if report.errors:
         console.print(f"[yellow]{len(report.errors)} errors[/yellow] (see JSON)")
+    if getattr(report, "warnings", None):
+        for warning in report.warnings:
+            console.print(f"[yellow]WARNING:[/yellow] {warning}")
 
 
 def print_suite_compare(

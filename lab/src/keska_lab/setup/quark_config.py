@@ -65,6 +65,14 @@ def cri_bench_config_json() -> dict:
     return cfg
 
 
+def cri_tsot_bench_config_json() -> dict:
+    """CRI pod sandbox + TSOT for network bench (crictl + tsot CNI)."""
+    cfg = cri_bench_config_json()
+    cfg["EnableTsot"] = True
+    cfg["PerSandboxLog"] = True
+    return cfg
+
+
 EXPERIMENTAL_FLAG_KEYS = ("MmapRead", "UringStatx")
 GROUP5_ITERATIONS = 5
 GROUP5_SUITES = ("light", "full", "db")

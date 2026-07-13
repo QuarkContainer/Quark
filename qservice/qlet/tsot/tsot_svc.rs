@@ -127,8 +127,10 @@ impl TsotSvc {
 pub struct TostCniSvc {}
 
 impl TostCniSvc {
-    pub fn GetPodSandboxAddr(&self, _namespace: &str, uid: &str) -> Result<IpAddress> {
-        return NAMESPACE_MGR.GetPodSandboxAddr(uid);
+    pub fn EnsurePodNetwork(&self, namespace: &str, uid: &str, name: &str) -> Result<IpAddress> {
+        let ns = if namespace.is_empty() { "default" } else { namespace };
+        let pod_name = if name.is_empty() { uid } else { name };
+        NAMESPACE_MGR.EnsurePodSandbox(ns, uid, pod_name)
     }
 
     pub fn RemovePodSandbox(&self, _namespace: &str, uid: &str) -> Result<()> {
@@ -143,7 +145,7 @@ impl tsot_cni::tsot_cni_service_server::TsotCniService for TostCniSvc {
         request: tonic::Request<tsot_cni::GetPodSandboxAddrReq>,
     ) -> SResult<tonic::Response<tsot_cni::GetPodSandboxAddrResp>, tonic::Status> {
         let req = request.into_inner();
-        match self.GetPodSandboxAddr(&req.namespace, &req.pod_uid) {
+        match self.EnsurePodNetwork(&req.namespace, &req.pod_uid, &req.pod_name) {
             Ok(addr) => {
                 return Ok(tonic::Response::new(tsot_cni::GetPodSandboxAddrResp {
                     error: "".to_owned(),

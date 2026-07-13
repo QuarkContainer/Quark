@@ -129,11 +129,11 @@ def _io_concurrent_read(ctx: CaseContext) -> float:
 
 
 def _inet_connect(ctx: CaseContext) -> float:
-    return ctx.backend.inet_tcp_connect_once_ms(image=ctx.workload.image)
+    return ctx.backend.inet_tcp_connect_once_ms(image=get_workload("python").image)
 
 
 def _inet_download(ctx: CaseContext) -> float:
-    return ctx.backend.inet_download_mbps_once(image=ctx.workload.image)
+    return ctx.backend.inet_download_mbps_once(image=get_workload("python").image)
 
 
 def _sandbox_iperf(ctx: CaseContext) -> float:

@@ -22,6 +22,7 @@ class SuiteReport:
     image: str
     metrics: dict[str, MetricStats | float | str] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
 
@@ -37,6 +38,7 @@ class SuiteReport:
             "image": self.image,
             "metrics": {},
             "errors": self.errors,
+            "warnings": self.warnings,
             "notes": self.notes,
             "skipped": self.skipped,
         }

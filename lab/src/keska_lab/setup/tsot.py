@@ -35,7 +35,7 @@ def deploy_qlet_config_script(params: NetworkParams) -> str:
           "podMgrPort": {params.pod_mgr_port},
           "tsotCniPort": {params.tsot_cni_port},
           "tsotSvcPort": {params.tsot_svc_port},
-          "stateSvcPort": {params.state_svc_port},
+          "stateSvcPort": {params.qlet_state_svc_port},
           "cidr": "{params.cidr}",
           "stateSvcAddr": ["127.0.0.1:{params.state_svc_port}"],
           "singleNodeModel": true
@@ -155,21 +155,27 @@ def grpcurl_install_script() -> str:
 def qservice_build_script(repo: str) -> str:
     qdir = f"{shlex.quote(repo)}/qservice"
     lib = f"{qdir}/qshare/src/lib.rs"
+    na_bin = f"{qdir}/{QSERVICE_BIN}/na"
+    conn_src = f"{qdir}/qlet/tsot/conn_svc.rs"
     return textwrap.dedent(
         f"""
         set -euo pipefail
+        source "$HOME/.cargo/env" 2>/dev/null || true
         export PATH="$HOME/.cargo/bin:$PATH"
+        command -v cargo >/dev/null || {{ echo "cargo not in PATH" >&2; exit 1; }}
         cd {qdir}
         if grep -q 'runtime.v1alpha2.rs' {lib}; then
           sed -i 's/runtime.v1alpha2.rs/runtime.v1.rs/' {lib}
         fi
-        if [ ! -x {QSERVICE_BIN}/na ] || [ ! -x {QSERVICE_BIN}/cni ] || [ ! -x {QSERVICE_BIN}/ss ]; then
-          make na cni ss
+        make na cni ss
+        test -x {na_bin}
+        test -x {qdir}/{QSERVICE_BIN}/cni
+        test -x {qdir}/{QSERVICE_BIN}/ss
+        if [ "$(stat -c %Y {na_bin})" -lt "$(stat -c %Y {conn_src})" ]; then
+          echo "na binary older than conn_svc.rs — build did not pick up changes" >&2
+          exit 1
         fi
-        test -x {QSERVICE_BIN}/na
-        test -x {QSERVICE_BIN}/cni
-        test -x {QSERVICE_BIN}/ss
-        sudo -n cp -f {QSERVICE_BIN}/cni /opt/cni/bin/tsot
+        sudo -n cp -f {qdir}/{QSERVICE_BIN}/cni /opt/cni/bin/tsot
         echo "qservice built"
         """
     ).strip()
@@ -263,6 +269,27 @@ def na_liveness_script(port: int = 8888) -> str:
     ).strip()
 
 
+def tsot_egress_host_script(cidr: str) -> str:
+    """Host routes + SNAT so TSOT pod IPs can reach the internet."""
+    cidr_q = shlex.quote(cidr)
+    return textwrap.dedent(
+        f"""
+        set -euo pipefail
+        CIDR=$(python3 - <<'PY'
+import ipaddress
+print(ipaddress.ip_network({cidr_q!r}, strict=False))
+PY
+)
+        sudo -n sysctl -w net.ipv4.ip_forward=1 >/dev/null
+        sudo -n ip route replace local "$CIDR" dev lo
+        if ! sudo -n iptables -t nat -C POSTROUTING -s "$CIDR" ! -d "$CIDR" -j MASQUERADE 2>/dev/null; then
+          sudo -n iptables -t nat -A POSTROUTING -s "$CIDR" ! -d "$CIDR" -j MASQUERADE
+        fi
+        echo "tsot egress host routing for $CIDR"
+        """
+    ).strip()
+
+
 def tsot_stack_stop_script(repo: str) -> str:
     return textwrap.dedent(
         f"""
@@ -286,11 +313,12 @@ class TsotStackStep(SetupStep):
         steps = [
             deploy_config_script(bench_config_json(self.profile)),
             deploy_qlet_config_script(params),
+            tsot_egress_host_script(params.cidr),
             grpcurl_install_script(),
             cadvisor_start_script(),
             etcd_start_script(),
             qservice_build_script(repo),
-            ss_start_script(repo, params.state_svc_port),
+            ss_start_script(repo, port=params.state_svc_port),
             qservice_start_script(repo),
         ]
         for script in steps:

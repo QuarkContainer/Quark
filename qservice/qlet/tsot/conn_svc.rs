@@ -15,8 +15,8 @@
 use std::net::Ipv4Addr;
 use std::net::SocketAddrV4;
 use std::os::fd::AsRawFd;
-use std::os::fd::FromRawFd;
 use std::os::fd::IntoRawFd;
+use std::os::unix::io::FromRawFd;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -28,9 +28,15 @@ use tokio::sync::Notify;
 use qshare::common::*;
 use qshare::tsot_msg::ErrCode;
 
+use super::cidr_util::{IsEgressIp, IsPodIp};
 use super::peer_mgr::PEER_MGR;
 use super::pod_broker::PodBroker;
 use super::pod_broker_mgr::POD_BRORKER_MGRS;
+
+fn leak_connected_fd(stream: TcpStream) {
+    std::mem::forget(stream);
+}
+
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,10 +191,9 @@ impl TcpSvcConnection {
                 };
 
                 self.WriteConnResp(resp).await?;
-                let stdStream = self.stream.into_std().unwrap();
-
-                // take the ownership of the TcpStream to avoid fd close
-                let _fd = stdStream.into_raw_fd();
+                // PeerConnectNotify duplicates this fd to the server guest via SCM_RIGHTS.
+                // Drop our relay copy so TCP teardown (FIN) can propagate to the client.
+                drop(self.stream);
                 return Ok(());
             }
         }
@@ -243,14 +248,24 @@ pub struct TcpClientConnection {
 impl TcpClientConnection {
     pub async fn PodConnectProcess(self) {
         let podBroker = self.podBroker.clone();
-        match self.ProcessConnection().await {
-            Ok(_stream) => {
-                // drop the TcpStream and close the socket
+        let res = if IsEgressIp(self.dstIp) {
+            self.ConnectDirect().await
+        } else {
+            self.ProcessConnection()
+                .await
+                .map(|stream| leak_connected_fd(stream))
+        };
+        match res {
+            Ok(()) => {
                 podBroker
                     .HandlePodConnectResp(self.reqId, ErrCode::None as i32)
                     .unwrap();
             }
-            Err(_e) => {
+            Err(e) => {
+                error!(
+                    "PodConnectProcess reqId {} dst {:x}:{} failed {:?}",
+                    self.reqId, self.dstIp, self.dstPort, e
+                );
                 podBroker
                     .HandlePodConnectResp(self.reqId, ErrCode::ECONNREFUSED as i32)
                     .unwrap();
@@ -260,9 +275,15 @@ impl TcpClientConnection {
 
     pub async fn GatewayConnectProcess(self) {
         let podBroker = self.podBroker.clone();
-        match self.ProcessConnection().await {
-            Ok(_stream) => {
-                // drop the TcpStream and close the socket
+        let res = if IsEgressIp(self.dstIp) {
+            self.ConnectDirect().await
+        } else {
+            self.ProcessConnection()
+                .await
+                .map(|stream| leak_connected_fd(stream))
+        };
+        match res {
+            Ok(()) => {
                 podBroker
                     .HandleGatewayConnectResp(self.reqId, ErrCode::None as i32)
                     .unwrap();
@@ -303,22 +324,53 @@ impl TcpClientConnection {
         return Ok(stream);
     }
 
-    pub async fn Connect(&self) -> Result<TcpStream> {
-        let peer = PEER_MGR.LookforPeer(self.dstIp)?;
-        let ip = Ipv4Addr::from(peer.hostIp);
-
-        let socketv4Addr = SocketAddrV4::new(ip, peer.port);
-
+    /// Connect the guest fd directly to an external (non-pod) destination.
+    ///
+    /// The fd was created by tokio (`TcpSocket::new_v4`) and is already non-blocking.
+    /// We reconstruct a `TcpSocket` from it so tokio's async connect drives the
+    /// EINPROGRESS → ready cycle properly without any blocking-mode gymnastics.
+    pub async fn ConnectDirect(&self) -> Result<()> {
         let socket = unsafe { TcpSocket::from_raw_fd(self.socket) };
 
-        //let addr = "127.0.0.1:1235".parse().unwrap();
-        let stream = match socket.connect(socketv4Addr.into()).await {
-            Err(e) => {
-                error!("TcpClientConnection::Connect 4 {:?}", &e);
-                return Err(e.into());
-            }
-            Ok(s) => s,
-        };
+        if self.srcIp != 0 {
+            let src_addr = SocketAddrV4::new(Ipv4Addr::from(self.srcIp), 0);
+            socket.bind(src_addr.into()).map_err(|e| {
+                error!("ConnectDirect bind pod src {:x} failed {:?}", self.srcIp, e);
+                Error::from(e)
+            })?;
+        }
+
+        let dst_addr = SocketAddrV4::new(Ipv4Addr::from(self.dstIp), self.dstPort);
+        let stream = socket.connect(dst_addr.into()).await.map_err(|e| {
+            error!(
+                "ConnectDirect to {:x}:{} failed {:?}",
+                self.dstIp, self.dstPort, e
+            );
+            Error::from(e)
+        })?;
+
+        leak_connected_fd(stream);
+        Ok(())
+    }
+
+    pub async fn Connect(&self) -> Result<TcpStream> {
+        if !IsPodIp(self.dstIp) {
+            return Err(Error::NotExist(format!(
+                "Connect relay requires pod dst ip {:x}",
+                self.dstIp
+            )));
+        }
+        let peer = PEER_MGR.LookforPeer(self.dstIp)?;
+        let relay_addr = SocketAddrV4::new(Ipv4Addr::from(peer.hostIp), peer.port);
+
+        let socket = unsafe { TcpSocket::from_raw_fd(self.socket) };
+        let stream = socket.connect(relay_addr.into()).await.map_err(|e| {
+            error!(
+                "Connect relay to {:x}:{} for pod dst {:x}:{} failed {:?}",
+                peer.hostIp, peer.port, self.dstIp, self.dstPort, e
+            );
+            Error::from(e)
+        })?;
         return Ok(stream);
     }
 

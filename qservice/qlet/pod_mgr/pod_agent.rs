@@ -172,6 +172,17 @@ impl PodAgent {
         }
          */
 
+        {
+            let podSpec = pod.read().unwrap();
+            if podSpec.init_containers.is_empty() && podSpec.containers.is_empty() {
+                info!(
+                    "Skip pod sandbox for register-only pod {} (crictl/CNI will create sandbox)",
+                    &podId
+                );
+                return Ok(());
+            }
+        }
+
         let namespace = pod.read().unwrap().namespace.clone();
 
         info!("Create pod sandbox {}", &podId);

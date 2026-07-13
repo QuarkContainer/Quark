@@ -148,14 +148,11 @@ class NodeInstaller:
         if opts.network_only:
             if self.profile.runtime == "quark":
                 pipe.add(QuarkConfigStep(self.profile))
-            if self.profile.network == NetworkMode.tsot:
-                pipe.add(TsotStackStopStep())
+            pipe.add(TsotStackStopStep())
             pipe.add(CniPluginsStep(self.profile.network))
             pipe.add(CrictlInstallStep())
             if self.profile.network == NetworkMode.tsot:
                 pipe.add(TsotStackStep(self.profile))
-            else:
-                pipe.add(TsotStackStopStep())
             return pipe
 
         pipe.add(DockerEnsureStep())
@@ -170,8 +167,7 @@ class NodeInstaller:
             pipe.add(KataInstallStep())
             pipe.add(KataHypervisorStep(self.config))
 
-        if self.profile.network == NetworkMode.tsot:
-            pipe.add(TsotStackStopStep())
+        pipe.add(TsotStackStopStep())
         pipe.add(CniPluginsStep(self.profile.network))
 
         if opts.skip_containerd:
@@ -184,8 +180,6 @@ class NodeInstaller:
 
         if self.profile.network == NetworkMode.tsot:
             pipe.add(TsotStackStep(self.profile))
-        else:
-            pipe.add(TsotStackStopStep())
 
         if not opts.skip_containerd and self.profile.runtime == "quark":
             if self.profile.network != NetworkMode.tsot:

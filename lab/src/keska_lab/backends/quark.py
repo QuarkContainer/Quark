@@ -30,7 +30,9 @@ from keska_lab.harness.io_fs import (
 )
 from keska_lab.harness.network import (
     INET_CONNECT_PY,
-    INET_DOWNLOAD_PY,
+    INET_DOWNLOAD_HOST,
+    INET_DOWNLOAD_PATH,
+    inet_download_py,
     crictl_iperf_script,
     crictl_python_exec_script,
     parse_dd_mib_s,
@@ -1279,37 +1281,13 @@ class QuarkBackend(SandboxBackend):
         if "OK " not in r.stdout:
             raise RuntimeError(f"file I/O integrity check failed: {r.stdout!r}")
 
-    def _python_exec_sample(
-        self,
-        code: str,
-        *,
-        image: str = "python:3.12-slim",
-        timeout: int = 120,
-    ) -> float:
-        py = python_exec_cmd(code)
-        q = self._quark_cmd
-        bundle = self._bundle_path(image)
-        script = textwrap.dedent(
-            f"""
-            set -euo pipefail
-            ID=keska-py-$RANDOM
-            BUNDLE={shlex.quote(bundle)}
-            cleanup() {{ {self._quark_force_delete()}; }}
-            trap cleanup EXIT INT TERM
-            {q('create "$ID" -b "$BUNDLE"')}
-            {q('start "$ID"')}
-            val=$({q('exec --user 0:0 "$ID" --')} {py})
-            cleanup
-            echo "$val" | tail -1
-            """
-        ).strip()
-        r = self.remote.sh(script, timeout=timeout, check=True)
-        return float(r.stdout.strip().splitlines()[-1])
+    def _cri_image_registry(self) -> str | None:
+        if self.config.skip_registry_auth:
+            return None
+        return self.config.image_registry
 
-    def _tsot_crictl_kwargs(self) -> dict:
-        if self.config.network_mode == NetworkMode.tsot:
-            return {"tsot_repo": self.config.remote_repo}
-        return {}
+    def _tsot_dns(self) -> bool:
+        return self.config.network_mode == NetworkMode.tsot
 
     def _crictl_python_exec_sample(
         self,
@@ -1322,8 +1300,8 @@ class QuarkBackend(SandboxBackend):
             code,
             image=image,
             runtime=self.docker_runtime,
-            image_registry=self.config.image_registry,
-            **self._tsot_crictl_kwargs(),
+            image_registry=self._cri_image_registry(),
+            tsot_dns=self._tsot_dns(),
         )
         r = self.remote.sh(script, timeout=timeout, check=True)
         return float(r.stdout.strip().splitlines()[-1])
@@ -1332,8 +1310,8 @@ class QuarkBackend(SandboxBackend):
         script = crictl_iperf_script(
             image=image,
             runtime=self.docker_runtime,
-            image_registry=self.config.image_registry,
-            **self._tsot_crictl_kwargs(),
+            image_registry=self._cri_image_registry(),
+            tsot_dns=self._tsot_dns(),
         )
         r = self.remote.sh(script, timeout=180, check=True)
         mbps = parse_iperf_mbps(r.stdout)
@@ -1341,71 +1319,32 @@ class QuarkBackend(SandboxBackend):
             raise RuntimeError("no iperf throughput parsed")
         return mbps
 
-    def _network_exec_mode(self) -> str:
-        probe = self.probe()
+    def _require_network_cri(self, probe: dict) -> None:
         if probe.get("tsot_ready") or probe.get("cri_ready"):
-            return "crictl"
-        return self.exec_mode
+            return
+        raise RuntimeError(
+            "Quark network bench requires CRI or TSOT stack. "
+            "Run: keska-lab-node install --profile quark_tsot (or quark_bridge)"
+        )
 
     def inet_tcp_connect_once_ms(self, *, image: str = "python:3.12-slim") -> float:
         probe = self.probe()
-        if not probe.get("tsot_ready") and not probe.get("cri_ready"):
-            raise RuntimeError(
-                f"Quark network not ready (TSOT/CRI). Run: lab.quark.bench('network', setup=True)"
-            )
-        if self._network_exec_mode() == "crictl":
-            return self._crictl_python_exec_sample(INET_CONNECT_PY, image=image)
-        return self._python_exec_sample(INET_CONNECT_PY, image=image)
+        self._require_network_cri(probe)
+        return self._crictl_python_exec_sample(INET_CONNECT_PY, image=image)
 
     def inet_download_mbps_once(self, *, image: str = "python:3.12-slim") -> float:
         probe = self.probe()
-        if not probe.get("tsot_ready") and not probe.get("cri_ready"):
-            raise RuntimeError(
-                f"Quark network not ready (TSOT/CRI). Run: lab.quark.bench('network', setup=True)"
-            )
-        if self._network_exec_mode() == "crictl":
-            return self._crictl_python_exec_sample(INET_DOWNLOAD_PY, image=image, timeout=120)
-        return self._python_exec_sample(INET_DOWNLOAD_PY, image=image, timeout=120)
+        self._require_network_cri(probe)
+        return self._crictl_python_exec_sample(
+            inet_download_py("", INET_DOWNLOAD_HOST, INET_DOWNLOAD_PATH),
+            image=image,
+            timeout=120,
+        )
 
     def sandbox_iperf_mbps_once(self, *, image: str = "networkstatic/iperf3") -> float:
         probe = self.probe()
-        if not probe.get("tsot_ready") and not probe.get("cri_ready"):
-            raise RuntimeError(
-                f"Quark network not ready (TSOT/CRI). Run: lab.quark.bench('network', setup=True)"
-            )
-        if self._network_exec_mode() == "crictl":
-            return self._crictl_iperf_sample(image=image)
-        q = self._quark_cmd
-        server_bundle = self._bundle_path(image)
-        script = textwrap.dedent(
-            f"""
-            set -euo pipefail
-            SRV=keska-iperf-s-$RANDOM
-            CLI=keska-iperf-c-$RANDOM
-            BUNDLE={shlex.quote(server_bundle)}
-            cleanup() {{
-              {q('delete --force "$SRV"')} >/dev/null 2>&1 || true
-              {q('delete --force "$CLI"')} >/dev/null 2>&1 || true
-            }}
-            trap cleanup EXIT INT TERM
-            {q('create "$SRV" -b "$BUNDLE"')}
-            {q('start "$SRV"')}
-            {q('exec --user 0:0 "$SRV" -- sh -c')} "iperf3 -s -D && sleep 2"
-            IP=$({q('exec --user 0:0 "$SRV" -- ip -4 -o addr show scope global')} \\
-              | awk '{{print $4}}' | head -1 | cut -d/ -f1)
-            test -n "$IP"
-            {q('create "$CLI" -b "$BUNDLE"')}
-            {q('start "$CLI"')}
-            out=$({q('exec --user 0:0 "$CLI" -- iperf3 -c "$IP" -t 5 -f m')} 2>&1 || true)
-            cleanup
-            echo "$out"
-            """
-        ).strip()
-        r = self.remote.sh(script, timeout=180, check=True)
-        mbps = parse_iperf_mbps(r.stdout)
-        if mbps is None:
-            raise RuntimeError("no iperf throughput parsed")
-        return mbps
+        self._require_network_cri(probe)
+        return self._crictl_iperf_sample(image=image)
 
     def pgbench_tps_once(
         self,

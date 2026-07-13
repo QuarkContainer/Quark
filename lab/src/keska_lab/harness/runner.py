@@ -9,6 +9,34 @@ from keska_lab.harness.report import SuiteReport
 from keska_lab.harness.stats import MetricStats
 from keska_lab.harness.suites import resolve_suite
 from keska_lab.harness.workload import WorkloadSpec, get_workload
+from keska_lab.setup.quark_cleanup import OrphanReport, cleanup_quark_sandboxes, scan_orphans
+
+
+def _record_orphans(
+    report: SuiteReport,
+    orphans: OrphanReport,
+    *,
+    when: str,
+    verbose: bool,
+) -> None:
+    if orphans.is_empty():
+        return
+    report.warnings.extend(orphans.warning_lines(when=when))
+    if verbose:
+        for line in report.warnings[-len(orphans.warning_lines(when=when)) :]:
+            print(f"  WARNING: {line}")
+
+
+def _check_orphans(
+    backend: SandboxBackend,
+    report: SuiteReport,
+    *,
+    when: str,
+    verbose: bool,
+) -> None:
+    orphans = scan_orphans(backend.remote)
+    _record_orphans(report, orphans, when=when, verbose=verbose)
+
 
 IO_FS_GROUP = frozenset({"io_write_mib_s", "io_read_mib_s"})
 
@@ -207,7 +235,8 @@ def run_suite(
     _append_notes(report, backend)
     ctx = CaseContext(backend=backend, workload=spec, verbose=verbose)
 
-    backend.cleanup()
+    orphans = cleanup_quark_sandboxes(backend.remote)
+    _record_orphans(report, orphans, when="before suite", verbose=verbose)
 
     if verbose:
         print(f"Suite {suite!r} ({spec.name}) × {n} on {backend.name}")
@@ -244,6 +273,8 @@ def run_suite(
             backend.cleanup()
         else:
             backend.cleanup()
+            orphans = scan_orphans(backend.remote)
+            _record_orphans(report, orphans, when="after suite", verbose=verbose)
         return report
 
     idx = 0
@@ -335,7 +366,9 @@ def run_suite(
             )
 
         report.metrics[case.name] = MetricStats.from_values(samples, case.unit)
+        _check_orphans(backend, report, when=f"after {case.name}", verbose=verbose)
         idx += 1
 
-    backend.cleanup()
+    orphans = cleanup_quark_sandboxes(backend.remote)
+    _record_orphans(report, orphans, when="after suite", verbose=verbose)
     return report

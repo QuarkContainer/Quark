@@ -612,7 +612,7 @@ impl TsotSocketMgr {
                     };
 
                     connectingSocket.SetConnErrno(-m.errorCode as _);
-                    if m.errorCode == 0 {
+                    if m.errorCode == 0 && !connectingSocket.SocketBufEnabled() {
                         connectingSocket.PostConnect();
                     }
                     connectingSocket.queue.Notify(EVENT_OUT)

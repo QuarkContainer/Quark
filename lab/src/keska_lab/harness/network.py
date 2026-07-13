@@ -54,7 +54,10 @@ s.close()
 print(int((time.perf_counter() - t0) * 1000))
 """
 
-INET_DOWNLOAD_PY = """
+
+def inet_download_py(host_ip: str, host_header: str, path: str) -> str:
+    del host_ip, host_header, path
+    return """
 import time, urllib.request
 url = "http://speedtest.tele2.net/10MB.zip"
 req = urllib.request.Request(url, headers={"User-Agent": "keska-lab"})
@@ -64,12 +67,29 @@ elapsed = time.perf_counter() - t0
 print(len(data) * 8 / elapsed / 1e6)
 """
 
-POD_DNS = {"servers": ["8.8.8.8", "1.1.1.1"]}
+
+INET_DOWNLOAD_HOST = "speedtest.tele2.net"
+INET_DOWNLOAD_PATH = "/10MB.zip"
+INET_DOWNLOAD_PY = inet_download_py("", INET_DOWNLOAD_HOST, INET_DOWNLOAD_PATH)
+
+TSOT_POD_DNS = {"servers": ["127.0.0.53"]}
+BRIDGE_POD_DNS = {"servers": ["8.8.8.8", "1.1.1.1"]}
+
+
+def _cri_resolv_conf_script(*, tsot_dns: bool, cid_var: str = "CID") -> str:
+    """TSOT guests need resolv.conf pointed at na's DNS proxy; bridge uses pod dns_config."""
+    if not tsot_dns:
+        return ""
+    body = "\\n".join(f"nameserver {s}" for s in TSOT_POD_DNS["servers"])
+    return (
+        f'sudo -n crictl exec "${cid_var}" sh -c '
+        f'"printf \\"{body}\\\\n\\" > /etc/resolv.conf" 2>/dev/null || true'
+    )
 
 
 def _ensure_cri_image(image: str, registry: str | None) -> str:
-    """Shell prep: ctr pull (mirror-first) so crictl finds the canonical ref."""
-    return ctr_pull_with_mirror_script(image, registry or DEFAULT_IMAGE_REGISTRY)
+    """Shell prep: ctr pull (mirror-first when registry set) so crictl finds the canonical ref."""
+    return ctr_pull_with_mirror_script(image, registry)
 
 
 def _sandbox_id_from_cid(var: str = "POD", cid_var: str = "CID") -> str:
@@ -94,6 +114,47 @@ def _sandbox_ip_from_inspect(var: str = "IP", pod_var: str = "POD") -> str:
     )
 
 
+def _wait_sandbox_ip_script(
+    ip_var: str = "IP",
+    pod_var: str = "POD",
+    *,
+    timeout_s: int = 30,
+) -> str:
+    inspect = _sandbox_ip_from_inspect(ip_var, pod_var)
+    return textwrap.dedent(
+        f"""
+        for _keska_ip_wait in $(seq 1 {timeout_s * 2}); do
+          {inspect}
+          if [ -n "${{{ip_var}}}" ]; then
+            break
+          fi
+          sleep 0.5
+        done
+        test -n "${{{ip_var}}}" || {{
+          echo "sandbox ${{{pod_var}}} has no pod ip after {timeout_s}s" >&2
+          exit 1
+        }}
+        """
+    ).strip()
+
+
+def _wait_cri_exec_ready_script(cid_var: str = "CID", *, timeout_s: int = 30) -> str:
+    return textwrap.dedent(
+        f"""
+        for _keska_exec_wait in $(seq 1 {timeout_s * 2}); do
+          if sudo -n crictl exec "${{{cid_var}}}" true 2>/dev/null; then
+            break
+          fi
+          sleep 0.5
+        done
+        sudo -n crictl exec "${{{cid_var}}}" true || {{
+          echo "container ${{{cid_var}}} not exec-ready after {timeout_s}s" >&2
+          exit 1
+        }}
+        """
+    ).strip()
+
+
 def crictl_config_script() -> str:
     return textwrap.dedent(
         """
@@ -111,12 +172,13 @@ def _pod_spec(
     name: str,
     uid: str,
     runtime_handler: str = "",
+    tsot_dns: bool = False,
 ) -> dict:
     pod: dict = {
         "metadata": {"name": name, "uid": uid, "namespace": "default"},
         "log_directory": "/tmp",
         "linux": {},
-        "dns_config": POD_DNS,
+        "dns_config": TSOT_POD_DNS if tsot_dns else BRIDGE_POD_DNS,
     }
     if runtime_handler:
         pod["runtime_handler"] = runtime_handler
@@ -131,8 +193,7 @@ def crictl_python_exec_script(
     runtime_handler: str = "",
     idle_cmd: list[str] | None = None,
     image_registry: str | None = DEFAULT_IMAGE_REGISTRY,
-    tsot_repo: str | None = None,
-    pod_mgr_port: int = 8888,
+    tsot_dns: bool = False,
 ) -> str:
     import json
     import uuid as uuid_mod
@@ -143,6 +204,7 @@ def crictl_python_exec_script(
         name=pod_name,
         uid=str(uuid_mod.uuid4()),
         runtime_handler=runtime_handler,
+        tsot_dns=tsot_dns,
     )
     container = {
         "metadata": {"name": "keska-c"},
@@ -153,17 +215,12 @@ def crictl_python_exec_script(
     py = python_exec_cmd(code)
     pod_json = json.dumps(pod)
     container_json = json.dumps(container)
-    prereg = ""
-    if tsot_repo:
-        from keska_lab.gate.tsot_gate import tsot_register_uid_script
-
-        prereg = tsot_register_uid_script(tsot_repo, pod["metadata"]["uid"], pod_mgr_port=pod_mgr_port)
+    resolv = _cri_resolv_conf_script(tsot_dns=tsot_dns)
     return textwrap.dedent(
         f"""
         set -euo pipefail
         WD=/tmp/keska-cri-$RANDOM
         sudo -n mkdir -p "$WD"
-        {prereg}
         sudo -n tee "$WD/pod.json" >/dev/null <<'JSON'
 {pod_json}
 JSON
@@ -171,8 +228,9 @@ JSON
 {container_json}
 JSON
         {_ensure_cri_image(image, image_registry)}
-        CID=$(sudo -n crictl run "$WD/container.json" "$WD/pod.json" 2>/dev/null)
+        CID=$(sudo -n crictl run "$WD/container.json" "$WD/pod.json")
         sleep 2
+        {resolv}
         val=$(sudo -n crictl exec "$CID" {py})
         {_sandbox_id_from_cid()}
         sudo -n crictl rm -f "$CID" 2>/dev/null || true
@@ -190,8 +248,7 @@ def crictl_iperf_script(
     runtime: str = "quark",
     runtime_handler: str = "",
     image_registry: str | None = DEFAULT_IMAGE_REGISTRY,
-    tsot_repo: str | None = None,
-    pod_mgr_port: int = 8888,
+    tsot_dns: bool = False,
 ) -> str:
     import json
     import uuid as uuid_mod
@@ -202,16 +259,18 @@ def crictl_iperf_script(
         name="keska-iperf-s",
         uid=str(uuid_mod.uuid4()),
         runtime_handler=runtime_handler,
+        tsot_dns=tsot_dns,
     )
     pod_c = _pod_spec(
         name="keska-iperf-c",
         uid=str(uuid_mod.uuid4()),
         runtime_handler=runtime_handler,
+        tsot_dns=tsot_dns,
     )
     ctr_s = {
         "metadata": {"name": "iperf-s"},
         "image": {"image": img},
-        "command": ["/bin/sh", "-c", "iperf3 -s & exec sleep 600"],
+        "command": ["iperf3", "-s", "-p", "5201", "-1", "-B", "0.0.0.0"],
         "log_path": "iperf-s.log",
     }
     ctr_c = {
@@ -220,22 +279,12 @@ def crictl_iperf_script(
         "command": ["/bin/sleep", "600"],
         "log_path": "iperf-c.log",
     }
-    prereg = ""
-    if tsot_repo:
-        from keska_lab.gate.tsot_gate import tsot_register_uid_script
-
-        prereg = "\n".join(
-            [
-                tsot_register_uid_script(tsot_repo, pod_s["metadata"]["uid"], pod_mgr_port=pod_mgr_port),
-                tsot_register_uid_script(tsot_repo, pod_c["metadata"]["uid"], pod_mgr_port=pod_mgr_port),
-            ]
-        )
+    resolv_c = _cri_resolv_conf_script(tsot_dns=tsot_dns, cid_var="CID_C")
     return textwrap.dedent(
         f"""
         set -euo pipefail
         WD=/tmp/keska-iperf-$RANDOM
         sudo -n mkdir -p "$WD"
-        {prereg}
         sudo -n tee "$WD/pod-s.json" >/dev/null <<'JSON'
 {json.dumps(pod_s)}
 JSON
@@ -249,14 +298,28 @@ JSON
 {json.dumps(ctr_c)}
 JSON
         {_ensure_cri_image(image, image_registry)}
-        CID_S=$(sudo -n crictl run "$WD/ctr-s.json" "$WD/pod-s.json" 2>/dev/null)
-        sleep 3
+        CID_S=$(sudo -n crictl run "$WD/ctr-s.json" "$WD/pod-s.json")
         {_sandbox_id_from_cid("POD_S", "CID_S")}
-        {_sandbox_ip_from_inspect("IP", "POD_S")}
-        test -n "$IP"
-        CID_C=$(sudo -n crictl run "$WD/ctr-c.json" "$WD/pod-c.json" 2>/dev/null)
-        sleep 2
-        out=$(sudo -n crictl exec "$CID_C" iperf3 -c "$IP" -t 5 -f m 2>&1 || true)
+        {_wait_sandbox_ip_script("IP", "POD_S")}
+        CID_C=$(sudo -n crictl run "$WD/ctr-c.json" "$WD/pod-c.json")
+        {_wait_cri_exec_ready_script("CID_C")}
+        {resolv_c}
+        sleep 5
+        sudo -n crictl exec "$CID_C" iperf3 -c "$IP" -p 5201 -t 5 -f m >/dev/null 2>&1 &
+        _keska_iperf_client=$!
+        out=""
+        for _keska_iperf_poll in $(seq 1 20); do
+          out=$(sudo -n crictl logs "$CID_S" 2>&1 || true)
+          if echo "$out" | grep -qi Mbits; then
+            break
+          fi
+          sleep 1
+        done
+        kill "$_keska_iperf_client" 2>/dev/null || true
+        if ! echo "$out" | grep -qi Mbits; then
+          echo "iperf produced no throughput in server logs" >&2
+          exit 1
+        fi
         CID="$CID_S"
         {_sandbox_id_from_cid("POD_S", "CID_S")}
         CID="$CID_C"

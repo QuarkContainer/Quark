@@ -107,8 +107,9 @@ impl NodeRegister {
                     return Ok(());
                 }
                 _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {
-                    // keepalive for each 500 ms
-                    store.LeaseKeepalive(leaseId).await?;
+                    if let Err(e) = store.LeaseKeepalive(leaseId).await {
+                        error!("NodeRegister lease keepalive failed {:?}, retrying", e);
+                    }
                 }
             }
         }

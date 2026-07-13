@@ -29,6 +29,7 @@ class KNode:
         self.remote = remote
         self.profile = profile
         self.config = remote.config
+        self.config.network_mode = profile.network
 
     @classmethod
     def install(

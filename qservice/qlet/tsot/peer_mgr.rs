@@ -32,7 +32,12 @@ lazy_static::lazy_static! {
         if QLET_CONFIG.singleNodeModel {
             let localIp : u32 = ipnetwork::Ipv4Network::from_str(&QLET_CONFIG.nodeIp).unwrap().ip().into();
             let localPort = QLET_CONFIG.tsotSvcPort;
-            pm.AddPeer(localIp, localPort, ipv4.ip().into()).unwrap();
+            pm.AddPeer(
+                localIp,
+                localPort,
+                super::cidr_util::PodCidrNetworkAddr(),
+            )
+            .unwrap();
         }
         pm
     };
@@ -90,7 +95,11 @@ impl Deref for PeerMgr {
 impl PeerMgr {
     pub fn New(maskbits: usize) -> Self {
         assert!(maskbits < 32);
-        let mask = !((1 << maskbits) - 1);
+        let mask = if maskbits == 0 {
+            0
+        } else {
+            u32::MAX << (32 - maskbits)
+        };
         let inner = PeerMgrInner {
             peers: HashMap::new(),
             maskbits: maskbits,
@@ -129,13 +138,19 @@ impl PeerMgr {
     }
 
     pub fn LookforPeer(&self, ip: u32) -> Result<Peer> {
+        if !super::cidr_util::IsPodIp(ip) {
+            return Err(Error::NotExist(format!(
+                "PeerMgr::LookforPeer ip {:x} is not in pod cidr",
+                ip
+            )));
+        }
         let inner = self.read().unwrap();
-        let cidrAddr = ip & inner.mask;
-        match inner.peers.get(&cidrAddr).cloned() {
+        let network = super::cidr_util::PodCidrNetworkAddr();
+        match inner.peers.get(&network).cloned() {
             None => {
                 return Err(Error::NotExist(format!(
-                    "PeerMgr::LookforPeer peer {:x} doesn't exist",
-                    ip
+                    "PeerMgr::LookforPeer peer for network {:x} doesn't exist",
+                    network
                 )))
             }
             Some(peer) => return Ok(peer.clone()),

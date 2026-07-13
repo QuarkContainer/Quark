@@ -13,7 +13,7 @@ def minimal_pod_def(uid: str) -> dict:
         "tenant": "lab",
         "namespace": "default",
         "funcname": "gate",
-        "id": "1",
+        "id": uid,
         "uid": uid,
         "resource_version": "",
         "labels": {},

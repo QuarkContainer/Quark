@@ -39,6 +39,44 @@ def test_cleanup_script_preserves_awk_braces():
     script = cleanup_script(io_bench_dir="/var/lib/keska-lab/io-bench")
     assert "awk 'NR>1 {print $1}'" in script
     assert "/var/lib/keska-lab/io-bench/run-*" in script
+    assert "[c]rictl exec.*iperf3 -c" in script
+    assert "[q]uark create" in script
+
+
+def test_parse_orphan_scan():
+    from keska_lab.setup.quark_cleanup import OrphanReport, parse_orphan_scan
+
+    raw = "\n".join(
+        [
+            "quark_create|471725|/usr/local/bin/quark create tip3 -b /tmp/bundle",
+            "crictl_iperf|2035658|sudo crictl exec cid iperf3 -c 10.1.1.1 -t 5",
+        ]
+    )
+    report = parse_orphan_scan(raw)
+    assert report.total == 2
+    assert report.by_category()["quark_create"][0].pid == "471725"
+    lines = report.warning_lines(when="after sandbox_iperf_mbps")
+    assert any("orphan processes detected" in ln for ln in lines)
+    assert OrphanReport().is_empty()
+
+
+def test_crictl_iperf_uses_background_client_with_server_logs():
+    from keska_lab.harness.network import crictl_iperf_script
+
+    script = crictl_iperf_script(image="networkstatic/iperf3", tsot_dns=True)
+    assert "iperf3 -c \"$IP\"" in script
+    assert "crictl logs" in script
+    assert " _keska_iperf_client=$!" in script
+
+
+def test_crictl_tsot_dns_gating():
+    from keska_lab.harness.network import crictl_python_exec_script
+
+    tsot = crictl_python_exec_script("print(1)", image="python:3.12-slim", tsot_dns=True)
+    bridge = crictl_python_exec_script("print(1)", image="python:3.12-slim", tsot_dns=False)
+    assert "127.0.0.53" in tsot
+    assert "127.0.0.53" not in bridge
+    assert "8.8.8.8" in bridge
 
 
 def test_remote_batch_loop_contains_seq():

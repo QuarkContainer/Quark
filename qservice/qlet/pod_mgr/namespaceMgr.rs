@@ -171,6 +171,14 @@ impl NamespaceMgr {
         return Ok(addr);
     }
 
+    /// Idempotent IP allocation: return existing sandbox IP or create one.
+    pub fn EnsurePodSandbox(&self, namespace: &str, uid: &str, name: &str) -> Result<IpAddress> {
+        match self.GetPodSandboxAddr(uid) {
+            Ok(addr) => Ok(addr),
+            Err(_) => self.NewPodSandbox(namespace, uid, name),
+        }
+    }
+
     pub fn RemovePodSandbox(&self, uid: &str) -> Result<()> {
         return self.lock().unwrap().RemovePodSandbox(uid);
     }

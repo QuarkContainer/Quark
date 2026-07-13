@@ -126,6 +126,17 @@ class BenchmarkSuite:
             return reports
 
         workload = self.workload or ("postgres" if suite == "db" else "busybox")
+        if suite == "network" and env.name == "quark":
+            from keska_lab.profile import NetworkMode
+            from keska_lab.setup.quark_config import (
+                cri_tsot_bench_config_json,
+                deploy_config_script,
+            )
+
+            if env.config.network_mode == NetworkMode.tsot:
+                r = env.remote.sh(deploy_config_script(cri_tsot_bench_config_json()), timeout=60)
+                if not r.ok:
+                    raise RuntimeError(f"TSOT CRI config deploy failed: {env.remote.format_failure(r)}")
         report = run_suite(
             env.backend,
             suite=suite,

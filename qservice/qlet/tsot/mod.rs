@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under
 
+pub mod cidr_util;
 pub mod conn_svc;
 pub mod dns_proxy;
 pub mod peer_mgr;

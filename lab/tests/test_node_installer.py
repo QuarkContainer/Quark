@@ -50,6 +50,18 @@ def test_install_pipeline_bridge_has_no_tsot_stack():
     names = [s.name for s in inst._install_pipeline(InstallOptions())._steps]
     assert "cni-bridge" in names
     assert "tsot-stack" not in names
+    assert names.index("tsot-stack-stop") < names.index("cni-bridge")
+
+
+def test_install_pipeline_kata_stops_tsot_before_cni():
+    from keska_lab.config import LabConfig
+    from keska_lab.remote import RemoteHost
+
+    prof = NodeProfile.kata_bridge()
+    inst = NodeInstaller(RemoteHost(LabConfig()), prof)
+    names = [s.name for s in inst._install_pipeline(InstallOptions())._steps]
+    assert names.index("tsot-stack-stop") < names.index("cni-bridge")
+    assert "tsot-stack" not in names
 
 
 def test_install_pipeline_tsot_defers_containerd_lifecycle_smoke():

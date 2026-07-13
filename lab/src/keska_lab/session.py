@@ -27,6 +27,7 @@ class LabSession:
         self.config = config or LabConfig.from_env()
         if profile is not None:
             self._profile = profile
+            self.config.network_mode = profile.network
         else:
             self._profile = self.config.node_profile
         self.remote = RemoteHost(self.config)
