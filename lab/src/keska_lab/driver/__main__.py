@@ -56,8 +56,8 @@ def op_network_inet_connect(inp: dict) -> dict:
     import uuid
 
     from keska_lab.driver.cri_client import CriClient
-    from keska_lab.harness.cri_pair import pod_spec
     from keska_lab.harness.network import INET_CONNECT_PY
+    from keska_lab.driver.cri_specs import pod_spec
 
     budget_s = float(inp.get("op_budget_s", OP_BUDGET_INET_CONNECT_S))
     runtime_handler = str(inp.get("runtime_handler", "") or "")
@@ -71,6 +71,12 @@ def op_network_inet_connect(inp: dict) -> dict:
     try:
         wd = Path(tmpdir.name)
         uid = uuid.uuid4().hex[:12]
+        if tsot_dns:
+            # TSOT requires CreatePod before CRI runp so the relay knows the UID.
+            from keska_lab.gate.tsot_gate import minimal_pod_def
+            from keska_lab.tsot.client import TsotClient
+
+            TsotClient().create_pod(pod_def=minimal_pod_def(f"net-{uid}"))
         pod_json = wd / "pod.json"
         ctr_json = wd / "ctr.json"
 
@@ -177,8 +183,8 @@ def op_network_inet_download(inp: dict) -> dict:
     import uuid
 
     from keska_lab.driver.cri_client import CriClient
-    from keska_lab.harness.cri_pair import pod_spec
     from keska_lab.harness.network import INET_DOWNLOAD_PY
+    from keska_lab.driver.cri_specs import pod_spec
 
     budget_s = float(inp.get("op_budget_s", OP_BUDGET_INET_DOWNLOAD_S))
     runtime_handler = str(inp.get("runtime_handler", "") or "")
@@ -192,6 +198,11 @@ def op_network_inet_download(inp: dict) -> dict:
     try:
         wd = Path(tmpdir.name)
         uid = uuid.uuid4().hex[:12]
+        if tsot_dns:
+            from keska_lab.gate.tsot_gate import minimal_pod_def
+            from keska_lab.tsot.client import TsotClient
+
+            TsotClient().create_pod(pod_def=minimal_pod_def(f"netdl-{uid}"))
         pod_json = wd / "pod.json"
         ctr_json = wd / "ctr.json"
 

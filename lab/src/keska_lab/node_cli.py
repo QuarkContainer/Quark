@@ -170,7 +170,8 @@ def cmd_driver(args) -> int:
         f"{venv_python} -m keska_lab.driver run --protocol 1 --request-id {req} "
         f"--op {op} --input \"$tmp/in.json\""
     )
-    r = remote.run(remote_cmd, timeout=120, check=False)
+    # Driver operations are bounded internally; this SSH timeout is an outer cap.
+    r = remote.run(remote_cmd, timeout=420, check=False)
     if not r.ok:
         console.print(f"[red]driver failed[/red] exit={r.returncode}")
         if r.stderr.strip():
