@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 
 from keska_lab.config import LabConfig
@@ -10,6 +11,7 @@ from keska_lab.display import console
 from keska_lab.gate.runner import NodeGateRunner
 from keska_lab.installer import InstallOptions, NodeInstaller
 from keska_lab.knode import KNode, install_node
+from keska_lab.perf_matrix import MATRIX_PROFILES
 from keska_lab.profile import NetworkMode, NodeProfile
 
 
@@ -108,6 +110,79 @@ def cmd_status(args) -> int:
     return 0 if st.ok else 1
 
 
+def cmd_matrix(args) -> int:
+    cfg = LabConfig.from_env()
+    if getattr(args, "skip_registry_auth", False):
+        cfg.skip_registry_auth = True
+    from keska_lab.perf_matrix import run_perf_matrix
+
+    rows = run_perf_matrix(
+        cfg,
+        skip_install=getattr(args, "skip_install", False),
+        restore_profile=args.restore,
+    )
+    ok = all(r.install_ok and r.bench_ok for r in rows)
+    return 0 if ok else 1
+
+
+def cmd_bench(args) -> int:
+    cfg = LabConfig.from_env()
+    if getattr(args, "skip_registry_auth", False):
+        cfg.skip_registry_auth = True
+    profile = _profile_from_args(args)
+    from keska_lab.perf_matrix import _wait_for_node_ready
+    from keska_lab.remote import RemoteHost
+    from keska_lab.setup.quark_cleanup import cleanup_quark_sandboxes
+
+    remote = RemoteHost(cfg)
+    cleanup_quark_sandboxes(remote)
+    node = KNode(remote, profile)
+    if args.wait_ready:
+        _wait_for_node_ready(node)
+    rep = node.bench(args.suite, n=args.n, verbose=not args.quiet)
+    if rep.errors:
+        for err in rep.errors:
+            console.print(f"[red]error[/red] {err}")
+    for name, stats in rep.to_json().get("metrics", {}).items():
+        console.print(f"  {name}: p50={stats.get('p50')} {stats.get('unit', '')}")
+    if rep.skipped:
+        console.print(f"[dim]skipped[/dim] {', '.join(rep.skipped)}")
+    return 0 if not rep.errors else 1
+
+
+def cmd_driver(args) -> int:
+    from keska_lab.driver.protocol import DriverEnvelope
+    from keska_lab.remote import RemoteHost
+
+    cfg = LabConfig.from_env()
+    remote = RemoteHost(cfg)
+    req = args.request_id or "req-1"
+    op = args.op
+    input_json = args.input_json or "{}"
+    venv_python = f"{cfg.remote_repo}/lab/.venv/bin/python"
+    remote_cmd = (
+        "set -euo pipefail; "
+        "tmp=/tmp/keska-driver-$RANDOM; "
+        "mkdir -p \"$tmp\"; "
+        "cat >\"$tmp/in.json\" <<'JSON'\n"
+        f"{input_json}\n"
+        "JSON\n"
+        f"{venv_python} -m keska_lab.driver run --protocol 1 --request-id {req} "
+        f"--op {op} --input \"$tmp/in.json\""
+    )
+    r = remote.run(remote_cmd, timeout=120, check=False)
+    if not r.ok:
+        console.print(f"[red]driver failed[/red] exit={r.returncode}")
+        if r.stderr.strip():
+            console.print(r.stderr.strip())
+        if r.stdout.strip():
+            console.print(r.stdout.strip())
+        return 1
+    env = DriverEnvelope.model_validate(json.loads(r.stdout))
+    console.print_json(data=env.to_json())
+    return 0 if env.status.value == "ok" else 2 if env.status.value == "platform_blocked" else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Keska lab node install / verify")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -160,6 +235,57 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("status", help="Show node status")
     add_common(sp)
     sp.set_defaults(func=cmd_status)
+
+    sp = sub.add_parser("matrix", help="Run network perf matrix across profiles")
+    sp.add_argument(
+        "--skip-install",
+        action="store_true",
+        help="Only run network bench on current host config (no profile switch)",
+    )
+    sp.add_argument(
+        "--skip-registry-auth",
+        action="store_true",
+        help="Skip GCP artifact registry login (non-interactive CI)",
+    )
+    sp.add_argument(
+        "--restore",
+        default="quark_tsot",
+        choices=MATRIX_PROFILES,
+        help="Profile to restore after matrix completes",
+    )
+    sp.set_defaults(func=cmd_matrix)
+
+    sp = sub.add_parser("bench", help="Run a benchmark suite on the lab host")
+    add_common(sp)
+    sp.add_argument(
+        "suite",
+        nargs="?",
+        default="network",
+        help="Suite name (network, light, full, db, …)",
+    )
+    sp.add_argument("-n", type=int, default=1, help="Iterations per case")
+    sp.add_argument(
+        "--wait-ready",
+        action="store_true",
+        help="Wait for node health before bench (recommended for quark_tsot)",
+    )
+    sp.add_argument(
+        "--skip-registry-auth",
+        action="store_true",
+        help="Skip GCP artifact registry login",
+    )
+    sp.add_argument("--quiet", action="store_true", help="Less console output from harness")
+    sp.set_defaults(func=cmd_bench)
+
+    sp = sub.add_parser("driver", help="Run a single colocated driver op on the lab host")
+    sp.add_argument("--op", default="host.scan_orphans")
+    sp.add_argument("--request-id", default="req-1")
+    sp.add_argument(
+        "--input-json",
+        default="{}",
+        help='Inline JSON object string for op input (e.g. \'{"x":1}\')',
+    )
+    sp.set_defaults(func=cmd_driver)
 
     args = p.parse_args(argv)
     try:
